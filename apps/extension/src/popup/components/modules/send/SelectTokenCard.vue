@@ -6,6 +6,9 @@ import { Skeleton } from "@nulo/design"
 /** Composables */
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 
+/** Utils */
+import { dashIfBlank } from "@/utils/string"
+
 /** Store */
 import { usePopupStore } from "@/stores/popup.store"
 const popupStore = usePopupStore()
@@ -101,17 +104,17 @@ onBeforeUnmount(() => {
 		<template v-if="token">
 			<Flex align="center" gap="12">
 				<Flex align="center" justify="center" :class="$style.token_icon_box">
-					<span :class="$style.token_initial">{{ token.symbol?.charAt(0) }}</span>
+					<span :class="$style.token_initial">{{ dashIfBlank(token.symbol).charAt(0) }}</span>
 					<Icon v-if="isTokenBlocked" name="warning" size="10" color="red" :class="$style.type_icon" />
 				</Flex>
 
 				<Flex direction="column" gap="2">
-					<span :class="$style.token_symbol" data-testid="send-token-symbol">{{ token.symbol }}</span>
-					<span :class="$style.token_name">{{ token.name }}</span>
+					<span :class="$style.token_symbol" data-testid="send-token-symbol">{{ dashIfBlank(token.symbol) }}</span>
+					<span :class="$style.token_name">{{ dashIfBlank(token.name) }}</span>
 				</Flex>
 			</Flex>
 
-			<MaterialIcon name="chevron_right" :size="20" color="primary" />
+			<Icon name="chevron" :size="20" color="primary" />
 		</template>
 
 		<Flex v-else-if="isLoading" align="center" gap="12" :class="$style.loading_row">
@@ -214,7 +217,7 @@ onBeforeUnmount(() => {
 }
 
 .import_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-accent);
 }
 </style>

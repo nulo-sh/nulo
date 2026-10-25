@@ -281,6 +281,25 @@ onBeforeUnmount(() => {
 	composes: type from "../../../../../components/modules/settings/record-card.module.css";
 }
 
+/* Below the popup's width a note's type wraps rather than end in an ellipsis, and its contract goes
+ * under it, at the right, when the two do not fit side by side. */
+@media (width < 359px) {
+	.card > .header {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+
+	.header > .type {
+		flex: 1 1 auto;
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
+
+	.header > .contract {
+		margin-left: auto;
+	}
+}
+
 .contract {
 	composes: type--meta from global;
 	flex-shrink: 0;
@@ -299,8 +318,8 @@ onBeforeUnmount(() => {
 }
 
 .location {
-	composes: type--data from global;
-	color: var(--nulo-outline);
+	composes: type--meta from global;
+	color: var(--nulo-secondary);
 	line-height: 1.4;
 	word-break: break-all;
 }
@@ -328,7 +347,7 @@ onBeforeUnmount(() => {
 }
 
 .raw_line {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
@@ -349,13 +368,13 @@ onBeforeUnmount(() => {
 }
 
 .render_error_label {
-	composes: type--label from global;
-	color: var(--red);
+	composes: type--label-section from global;
+	color: var(--txt-danger);
 }
 
 .render_error_msg {
 	composes: type--body from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
 }

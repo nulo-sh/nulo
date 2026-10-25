@@ -2,6 +2,7 @@
 import { z } from "zod"
 import type { FnImpl } from "@/wallet/utils/fn"
 import type { OperationContext } from "@/wallet/services/operation-journal/spec"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const TOKEN_SERVICE_NAME = "token"
 
@@ -9,13 +10,21 @@ export const TOKEN_SERVICE_NAME = "token"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"
 
+/** Sealed root of the default-token seeder's markers, one row per profile at the profile's id
+ *  (`${root}@${profileId}`). */
+export const TOKEN_SEEDED_STORAGE_ROOT = "nulo:core:token-seeded"
+
+/** A marker row as its store reads it: any JSON. The seeder's own decoder is its read, so a corrupt
+ *  entry drops only itself, never the profile's tombstones. */
+export const SeedMarkerRowSchema = z.unknown()
+
 export type Token = {
 	id: number
 	profileId: string
 
 	chainId: number
 	contract: string
-	/** Absent on a row added before classes were recorded. */
+	/** Absent on a row added before classes were recorded, and on a restored row until its refresh reads one. */
 	classId?: string
 
 	name: string
@@ -66,8 +75,8 @@ export type TokenInfo = {
 	/** Token contract address. */
 	contract: string
 	/**
-	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
-	 * when restored, so a reader compares it only as a field element.
+	 * The class the wallet resolved from the chain, when the token was added or a restored row was
+	 * refreshed: trust on first use, so a reader compares it only as a field element.
 	 */
 	classId?: string
 	/** Token name. */
@@ -219,9 +228,9 @@ export type Methods = {
 	 * adding the token to storage. Used by the dApp `register_token` popup so
 	 * the user can see what they're about to add before clicking Allow.
 	 *
-	 * Also returns the parsed `TokenInterface` for display. It is never handed
-	 * back to the executor: what `executeRegisterToken` persists is always its
-	 * own `parseTokenInterface` result.
+	 * Also returns the parsed `TokenInterface` for display. Only its class id
+	 * goes back to the executor, as the commit's pin: what `executeRegisterToken`
+	 * persists is always its own `parseTokenInterface` result.
 	 *
 	 * Returns `{ name: "<name>", symbol: "<symbol>", decimals: 0 }` placeholder
 	 * strings when the contract's interface is incomplete. Callers must NOT
@@ -261,6 +270,14 @@ export type Methods = {
 	 * network's seed list, or a retry already accepted for the same default.
 	 */
 	retrySeed(chainId: number, contract: string): boolean
+
+	/**
+	 * After a full-backup restore, reads each token of `fence`'s profile from its chain and keeps
+	 * the chain's class, interface, name, symbol and decimals where the row differs. It updates and
+	 * never adds, so no trust follows. A token whose read fails or ends after `deadlineAt` (epoch
+	 * ms) keeps the backup's name, symbol and decimals, with no class.
+	 */
+	refreshRestoredTokens(fence: RunFence, deadlineAt: number): void
 }
 
 /**
@@ -274,11 +291,15 @@ export type TokenDeleted = TokenInfo & { profileId: string }
 /** `onTokenAdded` payload, carrying `profileId` too: an add can finish after a profile switch. */
 export type TokenAdded = TokenInfo & { profileId: string }
 
+export type TokenUpdated = TokenInfo & { profileId: string }
+
 export type Events = {
 	/** Emitted when a new token is created */
 	onTokenAdded: TokenAdded
 	/** Emitted when an existing token is deleted */
 	onTokenDeleted: TokenDeleted
+	/** An existing token's metadata changed. Not an add: nothing trusts the token on it. */
+	onTokenUpdated: TokenUpdated
 	/** A default's status changed in this scope. An invalidation: consumers refetch `getSeedStatus`. */
 	onSeedStatusChanged: SeedScope
 }

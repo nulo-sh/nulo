@@ -2,9 +2,21 @@ import { describe, expect, test } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import type { DecodedValue } from "@/wallet/services/execution/client"
+import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
-import { amountLabel, callName, callSurface, nonceValue, rawRows, tokenAt, valueText, valueTitle } from "./call-surface"
+import {
+	amountLabel,
+	authwitLine,
+	authwitTitle,
+	callSurface,
+	nonceValue,
+	rawRows,
+	readableGrants,
+	rowTitle,
+	tokenAt,
+	valueText,
+	valueTitle,
+} from "./call-surface"
 
 const OWNER = `0x${"a".repeat(64)}`
 const TO = `0x${"b".repeat(64)}`
@@ -90,6 +102,7 @@ describe("callSurface", () => {
 			kind: "decoded",
 			fn: "transfer",
 			params: swapped.params,
+			labels: "unchecked",
 		})
 		const wrongKind = {
 			...abi("transfer", ["to", "amount"]),
@@ -106,10 +119,33 @@ describe("callSurface", () => {
 		})
 	})
 
+	test("a registered token's call that claims the vocabulary but fails it marks its labels as the contract's", () => {
+		const args = [TO, OWNER, field(5n), field(0n)]
+		const p2p = sel("transfer_private_to_private", 4)
+		const marked = (fn: string, roles: string[], selector: string, tokenKnown = true) =>
+			callSurface(ctx, { name: fn, to: TOKEN, selector, args }, abi(fn, roles), tokenKnown)
+		const reversed = ["to", "from", "amount", "_nonce"]
+		expect(marked("transfer_private_to_private", reversed, p2p)).toMatchObject({ kind: "decoded", labels: "unchecked" })
+		expect(marked("claim_x", reversed, p2p)).toMatchObject({ kind: "decoded", fn: "claim_x", labels: "unchecked" })
+		expect(marked("transfer_private_to_private", reversed, "0x11223344")).toMatchObject({ kind: "decoded", labels: "unchecked" })
+		expect(marked("transfer_private_to_public", ["to", "amount", "memo"], "0x11223344")).toMatchObject({ labels: "unchecked" })
+		expect(marked("transfer_private_to_private", ["from", "to", "amount", "_nonce"], p2p)).toMatchObject({ kind: "transfer" })
+		expect(marked("transfer_private_to_private", reversed, p2p, false)).not.toHaveProperty("labels")
+		expect(marked("claim_x", reversed, "0x11223344")).toEqual({
+			kind: "decoded",
+			fn: "claim_x",
+			params: abi("claim_x", reversed).params,
+		})
+	})
+
 	test("a hidden msg_sender or a missing caller context falls through to the decode instead of claiming a sender", () => {
 		const two = abi("transfer", ["to", "amount"])
 		const call = { name: "transfer", selector: sel("transfer", 2), args: [TO, field(5n)] }
-		expect(callSurface(ctx, { ...call, hideMsgSender: true }, two, true)).toMatchObject({ kind: "decoded" })
+		expect(callSurface(ctx, { ...call, hideMsgSender: true }, two, true)).toEqual({
+			kind: "decoded",
+			fn: "transfer",
+			params: two.params,
+		})
 		expect(callSurface(undefined, call, two, true)).toMatchObject({ kind: "decoded" })
 		const tip = abi("transfer_in_private", FOUR)
 		const tipCall = { name: "transfer_in_private", selector: sel("transfer_in_private", 4), args: [OWNER, TO, field(5n), field(0n)] }
@@ -137,15 +173,15 @@ describe("callSurface", () => {
 		)
 	})
 
-	test("callName prefers the ABI's name once decoded, sanitizes it, and keeps protocol labels on their contract", () => {
+	test("rowTitle prefers the ABI's name once decoded, sanitizes it, and keeps protocol labels on their contract", () => {
 		const call = { name: "claim_lie", to: TO, selector: "0x11223344", args: [] }
-		expect(callName(call, { kind: "pending" })).toBe(callName({ name: "claim_lie", to: TO, args: [] }, { kind: "pending" }))
-		expect(callName(call, { kind: "decoded", fn: "claim_private", params: [] })).not.toContain("lie")
-		expect(callName(call, { kind: "decoded", fn: `claim${RLO}_private`, params: [] })).not.toContain(RLO)
-		expect(callName(call, { kind: "decoded", fn: "x".repeat(200), params: [] }).length).toBeLessThan(80)
+		expect(rowTitle(call, { kind: "pending" })).toBe(rowTitle({ name: "claim_lie", to: TO, args: [] }, { kind: "pending" }))
+		expect(rowTitle(call, { kind: "decoded", fn: "claim_private", params: [] })).not.toContain("lie")
+		expect(rowTitle(call, { kind: "decoded", fn: `claim${RLO}_private`, params: [] })).not.toContain(RLO)
+		expect(rowTitle(call, { kind: "decoded", fn: "x".repeat(200), params: [] }).length).toBeLessThan(80)
 		// A third-party `claim` is not the fee-juice claim, decoded or app-named.
-		expect(callName({ name: "claim", to: TO, args: [] }, { kind: "pending" })).toBe("Claim")
-		expect(callName(call, { kind: "decoded", fn: "claim", params: [] })).toBe("Claim")
+		expect(rowTitle({ name: "claim", to: TO, args: [] }, { kind: "pending" })).toBe("Claim")
+		expect(rowTitle(call, { kind: "decoded", fn: "claim", params: [] })).toBe("Claim")
 	})
 
 	test("a transfer row is titled by the function its selector runs, whatever the app labels it", () => {
@@ -155,7 +191,7 @@ describe("callSurface", () => {
 			const call = { name, to: TOKEN, selector, args }
 			const surface = callSurface(ctx, call, abi("transfer_in_public", FOUR), true)
 			expect(surface.kind).toBe("transfer")
-			expect(callName(call, surface)).toBe("Transfer (public)")
+			expect(rowTitle(call, surface)).toBe("Transfer (public)")
 		}
 	})
 })
@@ -165,7 +201,7 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		const { rows, hidden } = rawRows([...Array.from({ length: 33 }, (_, i) => field(BigInt(i))), "x"])
 		expect(rows).toHaveLength(32)
 		expect(hidden).toBe(2)
-		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab" }, { kind: "opaque" }])
+		expect(rawRows([`a${RLO}b`, {}]).rows).toEqual([{ kind: "text", value: "ab", full: "ab" }, { kind: "opaque" }])
 	})
 
 	test("tokenAt matches contract and chain case-blind", () => {
@@ -317,5 +353,90 @@ describe("nonceValue", () => {
 		expect(valueText(a)).toBe("0x0f3c7a91..c07e2a")
 		expect(valueText(b)).toBe(valueText(a))
 		expect(valueTitle(b)).not.toBe(valueTitle(a))
+	})
+})
+
+describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on what it read", () => {
+	const transfer = {
+		kind: "transfer" as const,
+		fn: "transfer_public_to_public",
+		to: TO,
+		amount: "5",
+		sender: { kind: "explicit" as const, address: OWNER },
+	}
+	const decoded = (fn: string) => ({ kind: "decoded" as const, fn, params: [] })
+
+	test("a transfer or mint label names only a call the wallet read as one; the same name read otherwise is its own", () => {
+		const call = { name: "transfer_public_to_public", to: TOKEN, args: [] }
+		expect(rowTitle(call, transfer)).toBe("Transfer (public)")
+		expect(rowTitle(call, decoded("transfer_public_to_public"))).toBe("Transfer Public To Public")
+		expect(rowTitle(call, { kind: "pending" })).toBe("Transfer Public To Public")
+		expect(rowTitle({ name: "mint_to_private", to: TOKEN }, { kind: "raw", reason: "unknown-contract", rows: [], hidden: 0 })).toBe(
+			"Mint To Private",
+		)
+		expect(rowTitle(call, { kind: "mint", fn: "mint_to_private", to: TO, amount: "5" })).toBe("Mint (private)")
+	})
+
+	test("every other name reads by its curated label on its contract, else as its contract spells it", () => {
+		for (const [name, surface, title] of [
+			["shield", decoded("shield"), "Shield"],
+			["claim", decoded("claim"), "Claim"],
+			["exit_to_l1", decoded("exit_to_l1"), "Exit To L1"],
+			["checkpoint", { kind: "pending" as const }, "Checkpoint"],
+		] as const) {
+			expect(rowTitle({ name, to: TO, args: [] }, surface)).toBe(title)
+		}
+	})
+
+	test("an authorization is titled by its decoded name under the same rule, by its selector until then", () => {
+		expect(authwitTitle("0x1234abcd", TOKEN, transfer)).toBe("Transfer (public)")
+		expect(authwitTitle("0x1234abcd", TOKEN, decoded("transfer_public_to_public"))).toBe("Transfer Public To Public")
+		expect(authwitTitle("0x1234abcd", TOKEN, decoded("withdraw_for"))).toBe("Withdraw For")
+		expect(authwitTitle(`0x1234${RLO}abcd`, TOKEN, { kind: "pending" })).toBe("0x1234abcd")
+	})
+
+	test("an authorization reads as moving tokens only when the wallet read a transfer from a named sender", () => {
+		expect(authwitLine(transfer, "Transfer (public)")).toEqual({ kind: "move", amount: "5", from: OWNER, to: TO })
+		const others = [
+			{ ...transfer, sender: { kind: "account" as const, address: OWNER } },
+			{ ...transfer, sender: { kind: "none" as const } },
+			{ kind: "mint" as const, fn: "mint_to_private", to: TO, amount: "5" },
+			decoded("withdraw_for"),
+			{ kind: "pending" as const },
+		]
+		for (const surface of others) expect(authwitLine(surface, "F")).toEqual({ kind: "call", fn: "F" })
+	})
+})
+
+describe("readableGrants", () => {
+	const TOKEN = `0x${"2f".repeat(32)}`
+	const grantWith = (...params: { name: string; value: DecodedValue }[]): DecodedGrant => ({
+		kind: "decoded",
+		call: { to: TOKEN, selector: "0x12345678", args: [] },
+		decoded: { kind: "decoded", contract: "Registry", fn: "set", params },
+	})
+	const memo = (value: string) => grantWith({ name: "memo", value: { kind: "string", value } })
+
+	test("a grant whose every value prints whole is read as decoded", () => {
+		const shown = memo("pay alice 25")
+		expect(readableGrants([shown], 1)).toEqual([shown])
+	})
+
+	test("a string the whole print would alter is unreadable: a control or direction character, a lone surrogate, a cut", () => {
+		const nested = grantWith({ name: "notes", value: { kind: "array", items: [{ kind: "string", value: "pay\u0000alice" }] } })
+		for (const grant of [
+			memo("pay\u0000alice"),
+			memo(`ab${String.fromCharCode(0x202e)}cd`),
+			memo("\ud800"),
+			memo("x".repeat(4097)),
+			nested,
+		]) {
+			expect(readableGrants([grant], 1)).toEqual([{ kind: "undecoded", reason: "arguments" }])
+		}
+	})
+
+	test("a grant the batch left out is unavailable, so a short batch cannot read as complete", () => {
+		const shown = memo("ok")
+		expect(readableGrants([shown], 2)).toEqual([shown, { kind: "undecoded", reason: "unavailable" }])
 	})
 })

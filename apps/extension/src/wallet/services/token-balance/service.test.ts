@@ -11,12 +11,14 @@
  * over an in-memory chrome.storage shim (the established repo-test pattern).
  */
 
-import { beforeEach, describe, expect, test, vi } from "vitest"
-import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { deferred } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { EntityStorage } from "@/wallet/storage"
 import { ACCOUNT_SERVICE_NAME } from "@/wallet/services/account/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
@@ -25,11 +27,23 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { TASK_SERVICE_NAME } from "@/wallet/services/task/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import { awaitedBus } from "../../../../tests/helpers/held-read"
 import { svc } from "../composition-harness"
 import { BalanceRepository } from "./balance-repository"
 import { reconcilePlan } from "./reconcile-pairs"
 import { TokenBalanceService } from "./service"
 import type { TokenBalanceRaw } from "./spec"
+import { rowKeysForEveryProfile, readsKey } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const { rowKeys: ROW_KEYS } = await rowKeysForEveryProfile()
+
+/** A service built without `init()` still seals: its repository reads the profile service's keys.
+ *  A test that starts the service replaces this with the registered profile service. */
+function withRowKeys(service: TokenBalanceService): TokenBalanceService {
+	;(service as unknown as { profileService: unknown }).profileService = { rowKeys: ROW_KEYS }
+	return service
+}
 
 const balance = (id: number, token: number, overrides: Partial<TokenBalanceRaw> = {}): TokenBalanceRaw => ({
 	id,
@@ -50,11 +64,145 @@ const balance = (id: number, token: number, overrides: Partial<TokenBalanceRaw> 
 const tokenInfo = (id: number) =>
 	({ id, profileId: "A", chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}` }) as never
 
+const accountA = { address: "0xa", chainId: 1, index: 0, profileId: "A" }
+
+interface WorldOptions {
+	/** The active profile `init` reads; `null` for none. */
+	profile?: { id: string; name: string } | null
+	/** Seeded through the repository before the service is built. */
+	rows?: TokenBalanceRaw[]
+	/** Seeded as raw storage entries before the service is built. */
+	raw?: Record<string, string>
+	/** The account service's `getAccountsRaw` answer. */
+	accounts?: unknown[]
+	getAccounts?: (...args: never[]) => Promise<unknown>
+	/** The token service's `getTokensRaw`: a fixed answer, or the read itself. */
+	tokens?: unknown[] | ((profileId: string) => Promise<unknown>)
+	getTokenRaw?: (id: number) => Promise<unknown>
+	/** The task service stub; by default it mints task `t1`. */
+	task?: Record<string, unknown>
+	deletionState?: ProfileDeletionState
+}
+
+/**
+ * The real service and repository over seeded storage and stub peers, built but not started, so a
+ * test acts before `init` between `world` and `start`. Each peer event is an awaited bus. A no-op
+ * ticker keeps the balance queue from scheduling a real interval.
+ */
+async function world(opts: WorldOptions = {}) {
+	const api = new FakeBrowserApi()
+	api.reset()
+	const repo = new BalanceRepository(api, ROW_KEYS)
+	for (const row of opts.rows ?? []) await repo.set(row)
+	if (opts.raw) await api.storage.local.set(opts.raw)
+	const bus = {
+		onActiveProfileChanged: awaitedBus<never>(),
+		onAccountAdded: awaitedBus<never>(),
+		onTokenAdded: awaitedBus<never>(),
+		onTokenDeleted: awaitedBus<never>(),
+		onTokenUpdated: awaitedBus<never>(),
+		onTransactionUpdated: awaitedBus<never>(),
+	}
+	const tokens = opts.tokens ?? []
+	const rowKeysReady = new EventHandler<string>()
+	const services = new ServiceCollection()
+	services.add(
+		svc(PROFILE_SERVICE_NAME, {
+			rowKeys: ROW_KEYS,
+			onRowKeysReady: rowKeysReady,
+			onActiveProfileChanged: bus.onActiveProfileChanged,
+			getActiveProfile: async () => (opts.profile === null ? undefined : (opts.profile ?? { id: "A", name: "A" })),
+			getDeletionState: () => opts.deletionState ?? new ProfileDeletionState(),
+		}),
+	)
+	services.add(svc(NETWORK_SERVICE_NAME, {}))
+	services.add(
+		svc(ACCOUNT_SERVICE_NAME, {
+			registerAccountPurgeSubscriber: () => {},
+			onAccountAdded: bus.onAccountAdded,
+			getAccountsRaw: async () => opts.accounts ?? [],
+			...(opts.getAccounts && { getAccounts: opts.getAccounts }),
+		}),
+	)
+	services.add(
+		svc(TOKEN_SERVICE_NAME, {
+			onTokenAdded: bus.onTokenAdded,
+			onTokenDeleted: bus.onTokenDeleted,
+			onTokenUpdated: bus.onTokenUpdated,
+			getTokensRaw: typeof tokens === "function" ? tokens : async () => tokens,
+			...(opts.getTokenRaw && { getTokenRaw: opts.getTokenRaw }),
+		}),
+	)
+	services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: bus.onTransactionUpdated }))
+	services.add(svc(EXECUTION_SERVICE_NAME, {}))
+	services.add(svc(TASK_SERVICE_NAME, opts.task ?? { createNewTask: () => ({ id: "t1" }) }))
+	const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
+	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
+	services.add(service)
+	return { api, repo, service, bus, rowKeysReady, start: () => services.start() }
+}
+
+describe("TokenBalanceService sealing at rest", () => {
+	const key = (id: number) => `nulo:core:token-balances@${id}`
+	const token100 = { id: 100, profileId: "A", chainId: 1, name: "T100", symbol: "T100", decimals: 18, contract: "0xtok100" }
+
+	test("conversion against purge: the purge waits for the row's sealed commit, then no row remains", async () => {
+		const legacy = JSON.stringify(balance(1, 100, { privateBalance: "123456789" }))
+		const { api, service, rowKeysReady, start } = await world({ raw: { [key(1)]: legacy }, tokens: [token100] })
+		await start()
+		const area = api.storage.local
+		const realGet = area.get.bind(area)
+		const realSet = area.set.bind(area)
+		const reached = deferred()
+		const release = deferred()
+		let parkFinalRead = true
+		// The conversion's only read naming the row's key is its last one, inside its hold.
+		area.get = async (keys) => {
+			const got = await realGet(keys)
+			if (parkFinalRead && readsKey(keys, key(1))) {
+				parkFinalRead = false
+				reached.resolve()
+				await release.promise
+			}
+			return got
+		}
+		const sealedWrites: string[] = []
+		area.set = async (items) => {
+			for (const [k, v] of Object.entries(items)) if (typeof v === "string" && v.includes('"sealed"')) sealedWrites.push(k)
+			return realSet(items)
+		}
+
+		rowKeysReady.invoke("A")
+		await reached.promise
+		let purged = false
+		const purge = service.purgeForTokens([100], "A").then(() => {
+			purged = true
+		})
+		for (let turn = 0; turn < 5; turn++) await new Promise((r) => setTimeout(r, 0))
+		expect(purged).toBe(false)
+		expect((await realGet(key(1)))[key(1)]).toBe(legacy)
+
+		release.resolve()
+		await purge
+		expect(sealedWrites).toEqual([key(1)])
+		expect(Object.keys(await realGet()).filter((k) => k.startsWith("nulo:core:token-balances@"))).toEqual([])
+	})
+
+	test("the startup sweep removes a pre-identity row and never matches a sealed one", async () => {
+		const preIdentity = { id: 2, token: 100, account: "0xa", updatedAt: 0 }
+		const { api, start } = await world({ rows: [balance(1, 100)], raw: { [key(2)]: JSON.stringify(preIdentity) }, tokens: [token100] })
+		await start()
+		const stored = await api.storage.local.get()
+		expect(stored[key(2)]).toBeUndefined()
+		expect(JSON.parse(stored[key(1)] as string)).toEqual({ profileId: "A", sealed: expect.any(String) })
+	})
+})
+
 describe("TokenBalanceService.requestBalanceRefresh — missing-pair contract", () => {
 	test("an absent (token, account) balance pair returns {missing:true} (NOT a throw)", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api)
+		const service = withRowKeys(new TokenBalanceService(new LoggerStore(new ConfigStore()), api))
 		// Empty repo → no balance row for the pair. The old contract THREW here; the drain could not
 		// distinguish that from a transient storage failure and would discard the durable outbox row.
 		const result = await service.requestBalanceRefresh(999, "0xnobody")
@@ -73,8 +221,8 @@ describe("TokenBalanceService.onTokenDeleted purge cascade", () => {
 		// reaching into privates.
 		api = new FakeBrowserApi()
 		api.reset()
-		seedRepo = new BalanceRepository(api)
-		service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api)
+		seedRepo = new BalanceRepository(api, ROW_KEYS)
+		service = withRowKeys(new TokenBalanceService(new LoggerStore(new ConfigStore()), api))
 	})
 
 	const invokeDelete = (id: number) =>
@@ -132,12 +280,12 @@ describe("TokenBalanceService.purgeForTokens — raw second pass, profile scopin
 	function bareWorld() {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api)
+		const service = withRowKeys(new TokenBalanceService(new LoggerStore(new ConfigStore()), api))
 		// purgeForTokens gates on ensureInitialized; init() wires the projector +
 		// event subs, none of which the storage purge touches — flip the flag
 		// instead of stubbing seven services for one purge pin.
 		;(service as unknown as { initialized: boolean }).initialized = true
-		return { api, service, seedRepo: new BalanceRepository(api) }
+		return { api, service, seedRepo: new BalanceRepository(api, ROW_KEYS) }
 	}
 
 	test("removes a malformed balance row for a purged token; spares another token's and an unattributable one", async () => {
@@ -184,52 +332,30 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 	let rawApi: FakeBrowserApi
 
 	beforeEach(async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
-		rawApi = api
 		deletionState = new ProfileDeletionState()
-		seedRepo = new BalanceRepository(api)
-		// restore() gates on ensureInitialized(), so run the real lifecycle over
-		// stub peers. A no-op ticker keeps the balance queue from scheduling a real
-		// interval (no open handle / background poll in the unit run).
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => undefined,
-				getDeletionState: () => deletionState,
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				// restore() derives identity from the profile's OWN token table — the
-				// explicit-profileId read, not the (empty pre-activation) active map.
-				getTokensRaw: async (profileId: string) =>
-					profileId === "p1"
-						? ([
-								{ id: 1, profileId: "p1", chainId: 1, contract: "0xtok1" },
-								{ id: 2, profileId: "p1", chainId: 1, contract: "0xtok2" },
-							] as never[])
-						: [],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, {}))
-		service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		// restore() gates on ensureInitialized(), so run the real lifecycle over stub peers.
+		const w = await world({
+			profile: null,
+			deletionState,
+			// restore() derives identity from the profile's OWN token table — the
+			// explicit-profileId read, not the (empty pre-activation) active map.
+			tokens: async (profileId: string) =>
+				profileId === "p1"
+					? [
+							{ id: 1, profileId: "p1", chainId: 1, contract: "0xtok1" },
+							{ id: 2, profileId: "p1", chainId: 1, contract: "0xtok2" },
+						]
+					: [],
+			task: {},
+		})
+		rawApi = w.api
+		seedRepo = w.repo
+		service = w.service
+		await w.start()
+	})
+
+	afterEach(() => {
+		vi.restoreAllMocks()
 	})
 
 	test("fenced-id incarnation guard: allocation SKIPS ids fenced this lifetime, so a reused id can neither eat a stale write nor stay suppressed", async () => {
@@ -342,6 +468,37 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 		expect(restored[1].restoreError).toMatch(/duplicate balance pair/)
 		expect(await seedRepo.getAll()).toHaveLength(1)
 	})
+
+	test("a batch whose rows all name a token the profile does not own lists no balance keys and writes nothing", async () => {
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore([balance(1, 3), balance(2, 4), balance(3, 3)], "p1")
+		expect(restored).toHaveLength(3)
+		for (const r of restored) expect(r.restoreError).toMatch(/does not own/)
+		expect(listings).not.toHaveBeenCalled()
+		expect(await seedRepo.getAll()).toEqual([])
+	})
+
+	test("one valid row followed by repeats of its pair lists the balance keys once and writes once", async () => {
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore([balance(1, 1), balance(2, 1), balance(3, 1), balance(4, 1)], "p1")
+		expect(restored[0].restoreError).toBeUndefined()
+		for (const r of restored.slice(1)) expect(r.restoreError).toMatch(/duplicate balance pair/)
+		expect(listings).toHaveBeenCalledOnce()
+		expect(await seedRepo.getAll()).toHaveLength(1)
+	})
+
+	test("valid rows restore under distinct fresh ids after exactly one listing (control)", async () => {
+		await seedRepo.set(balance(7, 2, { account: "0xseeded" }))
+		const listings = vi.spyOn(EntityStorage.prototype, "getKeys")
+		const restored = await service.restore(
+			[balance(1, 1), balance(2, 2), balance(3, 1, { account: "0xother" }), balance(4, 2, { account: "0xother" })],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined, undefined, undefined])
+		expect(restored.map((r) => r.id)).toEqual([8, 9, 10, 11])
+		expect(listings).toHaveBeenCalledOnce()
+		expect((await seedRepo.getAll()).map((b) => b.id).sort((a, b) => a - b)).toEqual([7, 8, 9, 10, 11])
+	})
 })
 
 describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild generation fence", () => {
@@ -349,13 +506,12 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		({ id, profileId, chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}` }) as never
 
 	test("(REBUILD-FENCE PIN) a slow rebuild for a switched-away profile never repopulates the active map", async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
-		const seedRepo = new BalanceRepository(api)
 		// Two profiles, one token each; a balance row per token so getTokenBalances
 		// (which filters by the in-memory active-token map) can observe the map.
-		await seedRepo.set(balance(1, 100)) // profile A's token
-		await seedRepo.set(balance(2, 200, { profileId: "B" })) // profile B's token
+		const rows = [
+			balance(1, 100), // profile A's token
+			balance(2, 200, { profileId: "B" }), // profile B's token
+		]
 
 		// A's raw-token fetch is slow (resolves LAST); B's is immediate. The bug: A's
 		// late rebuild sets its token into the map that now belongs to active profile B.
@@ -366,36 +522,8 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			return Promise.resolve([])
 		})
 
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => undefined,
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw,
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, {}))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start() // active profile undefined → empty map
+		const { service, start } = await world({ profile: null, rows, tokens: getTokensRaw, task: {} })
+		await start() // active profile undefined → empty map
 
 		const handler = (service as unknown as { onActiveProfileChanged: (p?: { id: string; name: string }) => Promise<void> })
 			.onActiveProfileChanged
@@ -412,179 +540,77 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	})
 
 	test("(FAN-OUT PIN) onTokenAdded aborts after a mid-fan-out profile switch — no cross-context balance persisted", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
-
 		// The account fan-out parks here so a switch can land mid-flight.
-		let resolveAccounts!: (v: unknown) => void
-		const getAccounts = vi.fn().mockImplementation(() => new Promise((r) => (resolveAccounts = r)))
-		const onTokenAdded = new EventHandler<never>()
-		const onActiveProfileChanged = new EventHandler<never>()
-
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged,
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccounts,
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded,
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [],
-				getTokenRaw: async () => tokenRaw(100, "A"),
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start() // active profile A, empty token map
+		const accounts = deferred<unknown>()
+		const accountsReached = deferred()
+		const getAccounts = vi.fn().mockImplementation(() => {
+			accountsReached.resolve()
+			return accounts.promise
+		})
+		const { service, bus, start } = await world({ getAccounts, getTokenRaw: async () => tokenRaw(100, "A") })
+		await start() // active profile A, empty token map
 
 		const setSpy = vi.spyOn((service as never as { repo: { set: (...a: unknown[]) => Promise<void> } }).repo, "set")
 
 		// A token is added under A; its account fan-out parks on getAccounts.
-		void onTokenAdded.invoke(tokenRaw(100, "A"))
-		await flush()
+		const added = bus.onTokenAdded.dispatch(tokenRaw(100, "A"))
+		await accountsReached.promise
 		expect(getAccounts).toHaveBeenCalled()
 
 		// The user switches profile mid-fan-out — bumps the generation.
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
+		await bus.onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
 
 		// Release the accounts; onTokenAdded resumes and must bail on the generation
 		// check before persisting any balance for the now-departed context.
-		resolveAccounts([{ address: "0xa", chainId: 1 }])
-		await flush()
+		accounts.resolve([{ address: "0xa", chainId: 1 }])
+		await added
 
 		expect(setSpy).not.toHaveBeenCalled()
 	})
 
 	test("(CREATE-BALANCE PIN) a switch DURING the balance write skips the emit/enqueue for the departed context", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
-
-		const onTokenAdded = new EventHandler<never>()
-		const onActiveProfileChanged = new EventHandler<never>()
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged,
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccounts: async () => [{ address: "0xa", chainId: 1 }],
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded,
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [],
-				getTokenRaw: async () => tokenRaw(100, "A"),
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		const { service, bus, start } = await world({
+			getAccounts: async () => [{ address: "0xa", chainId: 1 }],
+			getTokenRaw: async () => tokenRaw(100, "A"),
+		})
+		await start()
 
 		// Park inside the id ALLOCATION (before repo.set) so a switch lands past the
 		// loop-level fence but inside createTokenBalance's own await window.
-		let resolveAlloc!: (id: number) => void
+		const alloc = deferred<number>()
+		const allocReached = deferred()
 		vi.spyOn(
 			(service as never as { repo: { allocateIdAvoiding: (avoid: ReadonlySet<number>) => Promise<number> } }).repo,
 			"allocateIdAvoiding",
-		).mockImplementation(() => new Promise((r) => (resolveAlloc = r as never)))
+		).mockImplementation(() => {
+			allocReached.resolve()
+			return alloc.promise
+		})
 		const setSpy = vi.spyOn((service as never as { repo: { set: (b: unknown) => Promise<void> } }).repo, "set")
 
-		void onTokenAdded.invoke(tokenRaw(100, "A"))
-		await flush() // reaches createTokenBalance, parks in allocateId
+		const added = bus.onTokenAdded.dispatch(tokenRaw(100, "A"))
+		await allocReached.promise
 
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
-		resolveAlloc(5)
-		await flush()
+		// The switch's own reconcile queues behind the parked creation's lock hold.
+		const switched = bus.onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
+		alloc.resolve(5)
+		await Promise.all([added, switched])
 
 		// The context departed mid-allocation: the write must be skipped entirely.
 		expect(setSpy).not.toHaveBeenCalled()
 	})
 
 	test("boot sweep creates the row a worker death left missing, and re-queues one it never projected", async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
-		const seedRepo = new BalanceRepository(api)
 		// Token 100 has no row at all (died before repo.set); token 200 has a row
 		// stuck at updatedAt 0 (died before enqueue — the card spins forever).
-		await seedRepo.set({
-			id: 7,
-			token: 200,
-			account: "0xa",
-			profileId: "A",
-			chainId: 1,
-			contract: "0xtok200",
-			publicBalance: "0",
-			privateBalance: "0",
-			updatedAt: 0,
+		const { api, start } = await world({
+			rows: [balance(7, 200, { account: "0xa" })],
+			accounts: [accountA],
+			tokens: [tokenRaw(100, "A"), tokenRaw(200, "A")],
 		})
+		await start()
 
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [tokenRaw(100, "A"), tokenRaw(200, "A")],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
-
-		const rows = await new BalanceRepository(api).getAll()
+		const rows = await new BalanceRepository(api, ROW_KEYS).getAll()
 		// One row per (token, account) — the missing one created, the stale one
 		// left in place rather than duplicated.
 		expect(rows).toHaveLength(2)
@@ -593,56 +619,17 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	})
 
 	test("boot sweep writes NOTHING when every desired row already exists", async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
-		const seedRepo = new BalanceRepository(api)
-		await seedRepo.set({
-			id: 1,
-			token: 100,
-			account: "0xa",
-			profileId: "A",
-			chainId: 1,
-			contract: "0xtok100",
-			publicBalance: "0",
-			privateBalance: "0",
-			updatedAt: 123,
+		const { start } = await world({
+			rows: [balance(1, 100, { account: "0xa", updatedAt: 123 })],
+			accounts: [accountA],
+			tokens: [tokenRaw(100, "A")],
 		})
-
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
 
 		// The steady state is what runs on EVERY service-worker wake, so it must
 		// cost zero writes.
 		const setSpy = vi.spyOn(BalanceRepository.prototype, "set")
 		try {
-			await services.start()
+			await start()
 			expect(setSpy).not.toHaveBeenCalled()
 		} finally {
 			setSpy.mockRestore()
@@ -650,54 +637,26 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	})
 
 	test("a key/id mismatched row is hidden and replaced; its physical bytes survive", async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
 		// A valid-shaped row stored under the WRONG key. Served by getAll() before
 		// the numeric identity guard, it would suppress repair for that pair.
-		await api.storage.local.set({
-			"nulo:core:token-balances@99": JSON.stringify({
-				id: 1,
-				token: 100,
-				account: "0xa",
-				publicBalance: "0",
-				privateBalance: "0",
-				updatedAt: 5,
-			}),
+		const { api, start } = await world({
+			raw: {
+				"nulo:core:token-balances@99": JSON.stringify({
+					id: 1,
+					token: 100,
+					account: "0xa",
+					publicBalance: "0",
+					privateBalance: "0",
+					updatedAt: 5,
+				}),
+			},
+			accounts: [accountA],
+			tokens: [tokenRaw(100, "A")],
 		})
-
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		await start()
 
 		// Exactly one VISIBLE canonical row, freshly created and unresolved.
-		const visible = await new BalanceRepository(api).getAll()
+		const visible = await new BalanceRepository(api, ROW_KEYS).getAll()
 		expect(visible).toHaveLength(1)
 		expect(visible[0].updatedAt).toBe(0)
 		expect(String(visible[0].id)).not.toBe("99")
@@ -709,7 +668,7 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	test("a well-formed row at its own key stays visible under the identity guard", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const repo = new BalanceRepository(api)
+		const repo = new BalanceRepository(api, ROW_KEYS)
 		await repo.set({
 			id: 1,
 			token: 100,
@@ -730,46 +689,16 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		// happen inside the same hold as the write. A sweep can be parked on its
 		// read while a handler queues for the lock, then both create the pair.
 		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
-
-		const onTokenAdded = new EventHandler<never>()
-		const onAccountAdded = new EventHandler<never>()
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded,
-				getAccounts: async () => [{ address: "0xa", chainId: 1 }],
-				// Empty for the boot sweep so the pair does NOT exist when the two
-				// handlers race — otherwise both take the already-present skip path
-				// and the race window is never entered.
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded,
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-				getTokenRaw: async () => tokenRaw(100, "A"),
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		const { api, service, bus, start } = await world({
+			getAccounts: async () => [{ address: "0xa", chainId: 1 }],
+			// Empty for the boot sweep so the pair does NOT exist when the two
+			// handlers race — otherwise both take the already-present skip path
+			// and the race window is never entered.
+			accounts: [],
+			tokens: [tokenRaw(100, "A")],
+			getTokenRaw: async () => tokenRaw(100, "A"),
+		})
+		await start()
 
 		const repo = service as never as {
 			repo: { allocateIdAvoiding: (a: ReadonlySet<number>) => Promise<number> }
@@ -781,12 +710,14 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			return id
 		})
 
-		// Both handlers target token 100 on account 0xa — the SAME pair.
-		void onAccountAdded.invoke({ address: "0xa", chainId: 1 } as never)
-		void onTokenAdded.invoke(tokenRaw(100, "A") as never)
-		for (let i = 0; i < 40; i++) await flush()
+		// Both handlers target token 100 on account 0xa — the SAME pair — and both are in flight
+		// before either is awaited.
+		await Promise.all([
+			bus.onAccountAdded.dispatch({ address: "0xa", chainId: 1 } as never),
+			bus.onTokenAdded.dispatch(tokenRaw(100, "A") as never),
+		])
 
-		const rows = await new BalanceRepository(api).getAll()
+		const rows = await new BalanceRepository(api, ROW_KEYS).getAll()
 		expect(rows.filter((r) => r.token === 100 && r.account === "0xa")).toHaveLength(1)
 		// Exactly one allocation: the second holder must observe the first's write,
 		// which only holds if the existence check runs inside the same hold.
@@ -796,119 +727,62 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	test("a creation parked mid-write cannot survive a token deletion", async () => {
 		// Deletion queues behind an in-flight creation, so its snapshot includes
 		// and sweeps the completed write.
-		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
-
-		const onAccountAdded = new EventHandler<never>()
-		const onTokenDeleted = new EventHandler<never>()
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded,
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted,
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		const { api, service, bus, start } = await world({ tokens: [tokenRaw(100, "A")] })
+		await start()
 
 		// Park the creation inside its physical write, then delete the token.
-		const repo = service as never as { repo: { set: (b: unknown) => Promise<void> } }
-		let releaseWrite!: () => void
-		const realSet = repo.repo.set.bind(repo.repo)
-		vi.spyOn(repo.repo, "set").mockImplementationOnce(async (b) => {
-			await new Promise<void>((r) => (releaseWrite = r))
-			return realSet(b)
+		const repo = service as never as { repo: BalanceRepository }
+		const writeReached = deferred()
+		const releaseWrite = deferred()
+		const realPrepare = repo.repo.prepare.bind(repo.repo)
+		vi.spyOn(repo.repo, "prepare").mockImplementationOnce(async (b) => {
+			const write = await realPrepare(b)
+			return {
+				...write,
+				commit: async () => {
+					writeReached.resolve()
+					await releaseWrite.promise
+					return write.commit()
+				},
+			}
 		})
 
-		void onAccountAdded.invoke({ address: "0xa", chainId: 1 } as never)
-		await flush()
-		void onTokenDeleted.invoke(tokenRaw(100, "A") as never)
-		await flush()
-		releaseWrite()
-		for (let i = 0; i < 40; i++) await flush()
+		const creation = bus.onAccountAdded.dispatch({ address: "0xa", chainId: 1 } as never)
+		await writeReached.promise
+		// The deletion's lock acquisition is queued synchronously, behind the parked write's hold.
+		const deletion = bus.onTokenDeleted.dispatch(tokenRaw(100, "A") as never)
+		releaseWrite.resolve()
+		await Promise.all([creation, deletion])
 
 		// The deletion is serialized behind the creation, so it sweeps the row the
 		// creation just wrote — nothing for the deleted token survives.
-		const rows = await new BalanceRepository(api).getAll()
+		const rows = await new BalanceRepository(api, ROW_KEYS).getAll()
 		expect(rows.filter((r) => r.token === 100)).toHaveLength(0)
 	})
 
 	test("(init fence) a switch while init's token read is parked cannot repopulate the old profile", async () => {
-		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
-
-		const onActiveProfileChanged = new EventHandler<never>()
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		let releaseInitRead!: (rows: unknown[]) => void
+		const initRead = deferred<unknown[]>()
+		const initReadReached = deferred()
 		let initReadSeen = false
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged,
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async (profileId: string) => {
-					// Park ONLY init's read (profile A, first call).
-					if (!initReadSeen && profileId === "A") {
-						initReadSeen = true
-						return new Promise((r) => (releaseInitRead = r as never))
-					}
-					return []
-				},
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
+		const { service, bus, start } = await world({
+			tokens: async (profileId: string) => {
+				// Park ONLY init's read (profile A, first call).
+				if (!initReadSeen && profileId === "A") {
+					initReadSeen = true
+					initReadReached.resolve()
+					return initRead.promise
+				}
+				return []
+			},
+		})
 
-		const starting = services.start()
-		await flush()
+		const starting = start()
+		await initReadReached.promise
 		// Subscriptions are live before init finishes awaiting, so the switch lands
 		// mid-init and bumps the generation.
-		void onActiveProfileChanged.invoke({ id: "B", name: "B" } as never)
-		await flush()
-		releaseInitRead([tokenRaw(100, "A")])
-		await starting
-		for (let i = 0; i < 20; i++) await flush()
+		const switched = bus.onActiveProfileChanged.dispatch({ id: "B", name: "B" } as never)
+		initRead.resolve([tokenRaw(100, "A")])
+		await Promise.all([starting, switched])
 
 		// A's token must not be in the map after the switch to B.
 		const balances = service as never as { tokens: Map<number, unknown> }
@@ -918,51 +792,14 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 	test("a never-projected row is re-queued at start, not just left alone", async () => {
 		// A row that exists but was never projected must be queued for projection
 		// at start; row-count assertions alone cannot observe that.
-		const api = new FakeBrowserApi()
-		api.reset()
-		await new BalanceRepository(api).set({
-			id: 7,
-			token: 100,
-			account: "0xa",
-			profileId: "A",
-			chainId: 1,
-			contract: "0xtok100",
-			publicBalance: "0",
-			privateBalance: "0",
-			updatedAt: 0,
-		})
-
 		const createNewTask = vi.fn(() => ({ id: "t1" }))
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
+		const { start } = await world({
+			rows: [balance(7, 100, { account: "0xa" })],
+			accounts: [accountA],
+			tokens: [tokenRaw(100, "A")],
+			task: { createNewTask },
+		})
+		await start()
 
 		// The queue mints one TaskService record per enqueued row, so the task
 		// call is the observable proof the stale row was re-queued.
@@ -976,48 +813,15 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		// space, compute the same id, and the later repo.set silently overwrites
 		// the earlier row — a balance disappears with no onTokenBalanceDeleted.
 		const flush = () => new Promise((r) => setTimeout(r, 0))
-		const api = new FakeBrowserApi()
-		api.reset()
+		const { api, service, bus, start } = await world({
+			getAccounts: async () => [{ address: "0xa", chainId: 1 }],
+			// Token 100 is already mapped, so the account-added path has work.
+			tokens: [tokenRaw(100, "A")],
+			getTokenRaw: async () => tokenRaw(200, "A"),
+		})
+		await start()
 
-		const onTokenAdded = new EventHandler<never>()
-		const onAccountAdded = new EventHandler<never>()
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded,
-				getAccounts: async () => [{ address: "0xa", chainId: 1 }],
-				getAccountsRaw: async () => [],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded,
-				onTokenDeleted: new EventHandler(),
-				// Token 100 is already mapped, so the account-added path has work.
-				getTokensRaw: async () => [tokenRaw(100, "A")],
-				getTokenRaw: async () => tokenRaw(200, "A"),
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
-
-		const repo = service as never as {
-			repo: { allocateIdAvoiding: (a: ReadonlySet<number>) => Promise<number>; set: (b: { id: number }) => Promise<void> }
-		}
+		const repo = service as never as { repo: BalanceRepository }
 		// Every allocation resolves on the NEXT tick, so an unserialized second
 		// caller has a window to read the same key space before the first writes.
 		const real = repo.repo.allocateIdAvoiding.bind(repo.repo)
@@ -1027,22 +831,28 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 			return id
 		})
 		const written: number[] = []
-		const realSet = repo.repo.set.bind(repo.repo)
-		vi.spyOn(repo.repo, "set").mockImplementation(async (b) => {
-			written.push(b.id)
-			return realSet(b)
+		const realPrepare = repo.repo.prepare.bind(repo.repo)
+		vi.spyOn(repo.repo, "prepare").mockImplementation(async (b) => {
+			const write = await realPrepare(b)
+			return {
+				...write,
+				commit: () => {
+					written.push(b.id)
+					return write.commit()
+				},
+			}
 		})
 
-		// Both creators in flight at once, the way independent RPCs produce them.
-		// `invoke` dispatches un-awaited (that is the property under test), so the
-		// handlers are drained by flushing rather than by awaiting the invokes.
-		void onAccountAdded.invoke({ address: "0xb", chainId: 1 } as never)
-		void onTokenAdded.invoke(tokenRaw(200, "A") as never)
-		for (let i = 0; i < 40; i++) await flush()
+		// Both creators in flight at once, the way independent RPCs produce them: `invoke` does not
+		// await its subscribers, so neither dispatch is awaited before the other starts.
+		await Promise.all([
+			bus.onAccountAdded.dispatch({ address: "0xb", chainId: 1 } as never),
+			bus.onTokenAdded.dispatch(tokenRaw(200, "A") as never),
+		])
 
 		expect(written).toHaveLength(2)
 		expect(new Set(written).size).toBe(2)
-		const rows = await new BalanceRepository(api).getAll()
+		const rows = await new BalanceRepository(api, ROW_KEYS).getAll()
 		expect(rows).toHaveLength(2)
 		expect(new Set(rows.map((r) => `${r.token}:${r.account}`)).size).toBe(2)
 	})
@@ -1050,8 +860,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 
 describe("TokenBalanceService legacy sweep + schema transition", () => {
 	test("200 legacy rows are swept at init, non-legacy debris survives, the live pair is recreated once, bounded", async () => {
-		const api = new FakeBrowserApi()
-		api.reset()
 		// 200 legacy-shape rows (no identity fields) for ONE live pair, plus two
 		// survivors the sweep must NOT touch: a partial-new row (carries profileId —
 		// different provenance) and a legacy-shaped row at a mismatched key.
@@ -1061,41 +869,13 @@ describe("TokenBalanceService legacy sweep + schema transition", () => {
 		}
 		seed["nulo:core:token-balances@300"] = JSON.stringify({ id: 300, token: 100, account: "0xa", profileId: "A", updatedAt: 0 })
 		seed["nulo:core:token-balances@301"] = JSON.stringify({ id: 999, token: 100, account: "0xa", updatedAt: 0 })
-		await api.storage.local.set(seed)
-
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => [
-					{ id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 } as never,
-				],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
+		const { api, start } = await world({
+			raw: seed,
+			accounts: [accountA],
+			tokens: [{ id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 }],
+		})
 		const startedAt = Date.now()
-		await services.start()
+		await start()
 		const elapsed = Date.now() - startedAt
 
 		const raw = await api.storage.local.get(null)
@@ -1105,7 +885,7 @@ describe("TokenBalanceService legacy sweep + schema transition", () => {
 		for (let i = 1; i <= 200; i++) {
 			expect(raw[`nulo:core:token-balances@${i}`]).toBeUndefined()
 		}
-		const rows = await new BalanceRepository(api).getAll()
+		const rows = await new BalanceRepository(api, ROW_KEYS).getAll()
 		expect(rows).toHaveLength(1)
 		expect(rows[0]).toMatchObject({ token: 100, account: "0xa", profileId: "A", chainId: 1, contract: "0xtok100" })
 		// The whole init (sweep + reconcile + projection enqueue) over a 200-row
@@ -1115,51 +895,15 @@ describe("TokenBalanceService legacy sweep + schema transition", () => {
 })
 
 describe("TokenBalanceService reconcile — identity hardening", () => {
-	// Composition world: real service + repo over seeded rows and stub peers.
-	async function startWorld(opts: { rows: TokenBalanceRaw[]; tokens: unknown[] }) {
-		const api = new FakeBrowserApi()
-		api.reset()
-		const seedRepo = new BalanceRepository(api)
-		for (const row of opts.rows) await seedRepo.set(row)
-		const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-		const services = new ServiceCollection()
-		services.add(
-			svc(PROFILE_SERVICE_NAME, {
-				onActiveProfileChanged: new EventHandler(),
-				getActiveProfile: async () => ({ id: "A", name: "A" }),
-				getDeletionState: () => new ProfileDeletionState(),
-			}),
-		)
-		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		services.add(
-			svc(ACCOUNT_SERVICE_NAME, {
-				registerAccountPurgeSubscriber: () => {},
-				onAccountAdded: new EventHandler(),
-				getAccountsRaw: async () => [{ address: "0xa", chainId: 1, index: 0, profileId: "A" }],
-			}),
-		)
-		services.add(
-			svc(TOKEN_SERVICE_NAME, {
-				onTokenAdded: new EventHandler(),
-				onTokenDeleted: new EventHandler(),
-				getTokensRaw: async () => opts.tokens as never[],
-			}),
-		)
-		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
-		services.add(svc(EXECUTION_SERVICE_NAME, {}))
-		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
-		services.add(service)
-		await services.start()
-		return { api, service, repo: new BalanceRepository(api) }
-	}
 	const liveToken = { id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 }
 
 	test("a dead incarnation's row at a reused token id is deleted, fenced, and replaced by the canonical pair", async () => {
-		const { service, repo } = await startWorld({
+		const { service, repo, start } = await world({
 			rows: [balance(7, 100, { contract: "0xdeadbeef", updatedAt: 5 })],
 			tokens: [liveToken],
+			accounts: [accountA],
 		})
+		await start()
 		const rows = await repo.getAll()
 		expect(rows).toHaveLength(1)
 		expect(rows[0]).toMatchObject({ token: 100, account: "0xa", contract: "0xtok100" })
@@ -1171,10 +915,12 @@ describe("TokenBalanceService reconcile — identity hardening", () => {
 	})
 
 	test("a row whose token id has NO live token is left in place — but never rendered", async () => {
-		const { service, repo } = await startWorld({
+		const { service, repo, start } = await world({
 			rows: [balance(7, 999, { contract: "0xwhatever", updatedAt: 5 })],
 			tokens: [liveToken],
+			accounts: [accountA],
 		})
+		await start()
 		const rows = await repo.getAll()
 		// The possibly-codec-hidden-token case: deletion here would destroy
 		// recoverable data, so the row survives; identity filtering hides it.
@@ -1184,19 +930,22 @@ describe("TokenBalanceService reconcile — identity hardening", () => {
 	})
 
 	test("shared address across profiles: only the active profile's row renders, the foreign row is untouched", async () => {
-		const { service, repo } = await startWorld({
+		const { service, repo, start } = await world({
 			rows: [
 				balance(1, 100, { account: "0xa", updatedAt: 5 }),
 				balance(2, 555, { account: "0xa", profileId: "B", contract: "0xtok555", updatedAt: 5 }),
 			],
 			tokens: [liveToken],
+			accounts: [accountA],
 		})
+		await start()
 		expect((await service.getTokenBalances()).map((b) => b.id)).toEqual([1])
 		expect((await repo.getAll()).map((r) => r.id).sort()).toEqual([1, 2])
 	})
 
 	test("the queue's emit gate answers a strict false for a row whose token is absent from the map", async () => {
-		const { service } = await startWorld({ rows: [], tokens: [liveToken] })
+		const { service, start } = await world({ accounts: [accountA], tokens: [liveToken] })
+		await start()
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the queue's callbacks
 		const gate = (service as any).queue.callbacks.isRowEmittable as (row: TokenBalanceRaw) => unknown
 		expect(gate(balance(1, 100, { contract: "0xtok100" }))).toBe(true)
@@ -1211,12 +960,12 @@ describe("TokenBalanceService row↔token checks — every entry point serves on
 	const dead = balance(2, 100, { account: "0xa", contract: "0xdead" })
 	const absent = balance(3, 999, { account: "0xa", contract: "0xtok999" })
 
-	async function world() {
+	async function primed() {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const repo = new BalanceRepository(api)
+		const repo = new BalanceRepository(api, ROW_KEYS)
 		for (const row of [good, dead, absent]) await repo.set(row)
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api)
+		const service = withRowKeys(new TokenBalanceService(new LoggerStore(new ConfigStore()), api))
 		const enqueued: number[] = []
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-ins replacing what init would wire
 		const internals = service as any
@@ -1227,7 +976,7 @@ describe("TokenBalanceService row↔token checks — every entry point serves on
 			hasPendingTask: () => false,
 			getPendingTaskId: () => "t1",
 		}
-		internals.profileService = { getActiveProfile: async () => ({ id: "A", name: "A", type: "password" }) }
+		internals.profileService = { rowKeys: ROW_KEYS, getActiveProfile: async () => ({ id: "A", name: "A", type: "password" }) }
 		internals.tokenService = { getTokensRaw: async () => [liveToken] }
 		const emitted: number[] = []
 		service.onTokenBalanceDeleted.add((b) => {
@@ -1237,7 +986,7 @@ describe("TokenBalanceService row↔token checks — every entry point serves on
 	}
 
 	test("reads and refreshes", async () => {
-		const { service, enqueued } = await world()
+		const { service, enqueued } = await primed()
 		expect((await service.getTokenBalance(1)).id).toBe(1)
 		for (const id of [2, 3]) {
 			await expect(service.getTokenBalance(id)).rejects.toThrow(/^unknown token balance id$/)
@@ -1252,14 +1001,14 @@ describe("TokenBalanceService row↔token checks — every entry point serves on
 	})
 
 	test("the narrowed tx refresh and the backup export", async () => {
-		const { service, internals, enqueued } = await world()
+		const { service, internals, enqueued } = await primed()
 		await internals.enqueueNarrowedBalances(new Set(["0xa"]), new Set([100, 999]))
 		expect(enqueued).toEqual([1])
 		expect((await service.backup()).map((b) => b.id)).toEqual([1])
 	})
 
 	test("pair occupancy: a dead incarnation does not hold the pair's slot", async () => {
-		const { internals } = await world()
+		const { internals } = await primed()
 		const pair = [{ token: liveToken, account: { address: "0xa" } }]
 		await internals.lock.withLock(async () => {
 			expect(await internals.ensurePairsHoldingLock(pair, internals.profileGeneration, [good])).toBe(0)
@@ -1268,11 +1017,11 @@ describe("TokenBalanceService row↔token checks — every entry point serves on
 	})
 
 	test("both purges delete every scoped row but emit only for the row matching its token", async () => {
-		const a = await world()
+		const a = await primed()
 		await a.service.purgeForTokens([100, 999], "A")
 		expect(a.emitted).toEqual([1])
 		expect(await a.repo.getAll()).toEqual([])
-		const b = await world()
+		const b = await primed()
 		await b.service.purgeForAccounts([{ chainId: 1, address: "0xa" }], "A")
 		expect(b.emitted).toEqual([1])
 		expect(await b.repo.getAll()).toEqual([])
@@ -1285,9 +1034,9 @@ describe("TokenBalanceService.purgeForAccounts — tuple-scoped account purge", 
 	function bareService() {
 		const api = new FakeBrowserApi()
 		api.reset()
-		const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api)
+		const service = withRowKeys(new TokenBalanceService(new LoggerStore(new ConfigStore()), api))
 		;(service as unknown as { initialized: boolean }).initialized = true
-		return { api, service, repo: new BalanceRepository(api) }
+		return { api, service, repo: new BalanceRepository(api, ROW_KEYS) }
 	}
 	const fenced = (service: TokenBalanceService, id: number) =>
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the private fence
@@ -1353,5 +1102,43 @@ describe("TokenBalanceService.purgeForAccounts — tuple-scoped account purge", 
 			expect(row.updatedAt).toBe(0)
 			expect(fenced(service, row.id)).toBe(false)
 		}
+	})
+})
+
+describe("TokenBalanceService.onTokenUpdated — a balance carries its token's current metadata", () => {
+	const tokenRaw = (id: number, profileId: string, over: Record<string, unknown> = {}) =>
+		({ id, profileId, chainId: 1, name: `T${id}`, symbol: `T${id}`, decimals: 18, contract: `0xtok${id}`, ...over }) as never
+	async function boot(stored: Record<number, unknown>) {
+		const getTokenRaw = vi.fn(async (id: number) => stored[id] ?? Promise.reject(new Error("unknown token id")))
+		const w = await world({ rows: [balance(1, 100)], tokens: [tokenRaw(100, "A", { symbol: "FAKE", decimals: 6 })], getTokenRaw })
+		await w.start()
+		const updated: { id: number; token: { decimals: number } }[] = []
+		w.service.onTokenBalanceUpdated.add((b) => updated.push(b))
+		const enqueue = vi.spyOn((w.service as never as { queue: { enqueue: (row: unknown) => void } }).queue, "enqueue")
+		return { service: w.service, api: w.api, onTokenUpdated: w.bus.onTokenUpdated, getTokenRaw, updated, enqueue }
+	}
+
+	test("an updated token re-sends its balances with the new metadata at once and queues them for a re-read", async () => {
+		const chain = tokenRaw(100, "A", { symbol: "TST", decimals: 18 })
+		const { service, onTokenUpdated, updated, enqueue } = await boot({ 100: chain })
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
+
+		await onTokenUpdated.dispatch(chain)
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "TST", decimals: 18 })
+		expect(updated.map((b) => [b.id, b.token.decimals])).toEqual([[1, 18]])
+		expect(enqueue).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: 1, token: 100 }))
+	})
+
+	test("an update for a token the map does not hold, or for another token at its id, changes and creates nothing", async () => {
+		const foreign = tokenRaw(200, "B")
+		const successor = tokenRaw(100, "A", { contract: "0xother", decimals: 18 })
+		const { service, api, onTokenUpdated, getTokenRaw, updated, enqueue } = await boot({ 100: successor, 200: foreign })
+
+		await Promise.all([onTokenUpdated.dispatch(foreign), onTokenUpdated.dispatch(successor)])
+		expect(getTokenRaw.mock.calls).toEqual([[200], [100]])
+		expect((await service.getTokenBalances())[0].token).toMatchObject({ symbol: "FAKE", decimals: 6 })
+		expect(await new BalanceRepository(api, ROW_KEYS).getAll()).toHaveLength(1)
+		expect(updated).toEqual([])
+		expect(enqueue).not.toHaveBeenCalled()
 	})
 })

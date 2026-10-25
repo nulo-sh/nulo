@@ -11,7 +11,7 @@ const hasConfig = aztecConfig !== undefined
 /**
  * A dApp connecting on a chain the wallet has never activated.
  *
- * The e2e build seeds Testnet as the active network and the playground's default chainInfo
+ * A new profile starts on Mainnet, the default network, and the playground's default chainInfo
  * resolves to Local Network, so NOT switching first (every other connect fixture does) is exactly
  * the mismatch a user hits when the wallet is on one network and the app on another. The wallet
  * must provision the Local Network default account on demand, list it, name the chain, and let the
@@ -30,7 +30,7 @@ async function requestAccountsCapability(ctx: Parameters<typeof connectPlaygroun
 	await popup.waitForSelector('[data-testid="cap-chain-banner"][data-state="mismatch"]', { timeout: 60_000 })
 	const bannerText = await popup.$eval('[data-testid="cap-chain-banner"]', (el) => el.textContent ?? "")
 	expect(bannerText).toContain("Connecting on Local Network")
-	expect(bannerText).toContain("Your wallet is on Testnet")
+	expect(bannerText).toContain("Your wallet is on Mainnet")
 	const accountIds = await popup.$$eval('[data-testid="cap-account-item"]', (rows) => rows.map((r) => r.getAttribute("data-account-id")))
 	expect(accountIds).toHaveLength(1)
 	return { popup, fromSeq, address: accountIds[0]! }
@@ -49,13 +49,13 @@ async function approveAndAssertGranted(page: Page, popup: Page, fromSeq: number,
 }
 
 test.skipIf(!hasConfig)(
-	"cap-chain-mismatch — approve as is: the wallet stays on Testnet, the app gets the Local Network account",
+	"cap-chain-mismatch — approve as is: the wallet stays on Mainnet, the app gets the Local Network account",
 	{ timeout: 180_000 },
 	async ({ registeredExtensionPerTest }) => {
 		const page = await connectPlayground(registeredExtensionPerTest)
 		const { popup, fromSeq, address } = await requestAccountsCapability(registeredExtensionPerTest, page)
 		// The window closes on approve — read the strip before deciding.
-		expect(await stripNetwork(popup)).toBe("Testnet")
+		expect(await stripNetwork(popup)).toBe("Mainnet")
 		await approveAndAssertGranted(page, popup, fromSeq, address)
 	},
 )

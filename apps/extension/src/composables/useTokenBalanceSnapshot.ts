@@ -1,4 +1,4 @@
-import type { Ref } from "vue"
+import { type Ref, ref } from "vue"
 import { createRunFence } from "@/composables/runFence"
 import { type LiveTokenScope, forChain, isActiveScopeRow } from "@/utils/token-order"
 import type { TokenBalanceInfo, TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
@@ -6,37 +6,76 @@ import type { TokenBalanceInfo, TokenBalanceServiceClient } from "@/wallet/servi
 /** `loading` and `unavailable` both mean "not known yet": only `loaded` may say the list is empty. */
 export type TokenBalanceSnapshotState = "loading" | "unavailable" | "loaded"
 
-interface TokenBalanceSnapshotDeps<T> {
+interface TokenBalanceEventRules {
+	/** An in-scope add for a listed id keeps the listed row (the default) or replaces it. */
+	added?: "keep" | "replace"
+}
+
+interface TokenBalanceSnapshotDeps<T> extends TokenBalanceEventRules {
 	/** Connected and disconnected by the parent; the snapshot only requests and listens. */
 	client: Pick<TokenBalanceServiceClient, "getTokenBalances" | "onConnected">
 	live: LiveTokenScope
 	rows: Ref<T[]>
-	state: Ref<TokenBalanceSnapshotState>
-	/** Captured at run start; a run whose fence goes false lands nothing. For a parent whose scope
-	 *  change awaits before refetching, so the run's own generation cannot fence the old scope yet. */
+	/** Omitted by a parent that shows no state of its own. */
+	state?: Ref<TokenBalanceSnapshotState>
+	/** Captured at run start; a run whose fence is false when it settles lands nothing and arms no
+	 *  retry. For a parent whose own reads or scope changes the run's generation cannot see. */
 	scopeFence?: () => () => boolean
-	/** Applied to each landed row, after the chain filter. */
+	/** Applied to each row a read or an event lists; an update that replaces a listed row writes it
+	 *  as received. */
 	mapRow?: (row: TokenBalanceInfo) => T
 }
 
 /** A rejected snapshot is retried once on a timer; after that a reconnect or a scope change retries. */
 const RETRY_MS = 2_000
 
+function tokenBalanceEvents<T>(
+	live: LiveTokenScope,
+	rows: Ref<T[]>,
+	mapRow: ((row: TokenBalanceInfo) => T) | undefined,
+	markDirty: () => void,
+	rules: TokenBalanceEventRules,
+) {
+	const inActiveScope = (tb: TokenBalanceInfo) => isActiveScopeRow(live, tb)
+	const indexOf = (id: unknown) => rows.value.findIndex((row) => (row as { id: unknown }).id === id)
+	const mapped = (tb: TokenBalanceInfo) => (mapRow ? mapRow(tb) : (tb as T))
+
+	/** The default keeps a listed row: an add carries its row as created, and where deletes are
+	 *  applied the listed row is that row or a newer one. */
+	function onBalanceAdded(tb: TokenBalanceInfo) {
+		if (!inActiveScope(tb)) return
+		markDirty()
+		const idx = indexOf(tb.id)
+		if (idx === -1) rows.value.push(mapped(tb))
+		else if (rules.added === "replace") rows.value[idx] = mapped(tb)
+	}
+
+	/** An unseen id waits for the next read. */
+	function onBalanceUpdated(tb: TokenBalanceInfo) {
+		if (inActiveScope(tb)) markDirty()
+		const idx = indexOf(tb.id)
+		if (idx !== -1) rows.value[idx] = tb as T
+	}
+
+	function onBalanceDeleted(tb: TokenBalanceInfo) {
+		if (inActiveScope(tb)) markDirty()
+		rows.value = rows.value.filter((row) => (row as { id: unknown }).id !== tb.id)
+	}
+
+	return { inActiveScope, onBalanceAdded, onBalanceUpdated, onBalanceDeleted }
+}
+
 /**
  * The active account's token-balance rows on the active chain, fetched latest-wins. A snapshot in
  * flight is older than any in-scope event that lands meanwhile: the event marks it dirty and the
- * run refetches instead of overwriting the event. A rejection never reads as an empty list, and a
- * refetch within a scope keeps the rows already shown; clearing them on a scope change is the
- * parent's. The parent calls `dispose()` before it disconnects the client.
+ * run refetches instead of overwriting the event. A rejection never reads as an empty
+ * list, and a refetch within a scope keeps the rows already shown; clearing them on a scope change
+ * is the parent's. The parent subscribes the returned handlers and calls `dispose()` before it
+ * disconnects the client.
  */
-export function useTokenBalanceSnapshot<T = TokenBalanceInfo>({
-	client,
-	live,
-	rows,
-	state,
-	scopeFence,
-	mapRow,
-}: TokenBalanceSnapshotDeps<T>) {
+export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalanceSnapshotDeps<T>) {
+	const { client, live, rows, scopeFence, mapRow } = deps
+	const state = deps.state ?? ref<TokenBalanceSnapshotState>("loading")
 	const fence = createRunFence()
 	let dirty = false
 	let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -44,7 +83,6 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>({
 	// may have been missed and the request in flight was rejected, so resnapshot.
 	let connectsSeen = 0
 
-	const inActiveScope = (tb: TokenBalanceInfo) => isActiveScopeRow(live, tb)
 	const markDirty = () => {
 		dirty = true
 	}
@@ -85,46 +123,35 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>({
 		land(fetched, chainId)
 	}
 
-	const isListed = (id: unknown) => rows.value.some((row) => (row as { id: unknown }).id === id)
-
-	/** An add carries its row as created, so a listed id already holds that row or a newer one. */
-	function onBalanceAdded(tb: TokenBalanceInfo) {
-		if (!inActiveScope(tb)) return
-		markDirty()
-		if (isListed(tb.id)) return
-		rows.value.push(mapRow ? mapRow(tb) : (tb as T))
-	}
-
-	function onBalanceUpdated(tb: TokenBalanceInfo) {
-		if (inActiveScope(tb)) markDirty()
-		const idx = rows.value.findIndex((row) => (row as { id: unknown }).id === tb.id)
-		if (idx !== -1) rows.value[idx] = tb as T
-	}
-
-	function onBalanceDeleted(tb: TokenBalanceInfo) {
-		if (inActiveScope(tb)) markDirty()
-		rows.value = rows.value.filter((row) => (row as { id: unknown }).id !== tb.id)
-	}
-
 	function onReconnected() {
 		connectsSeen++
-		if (connectsSeen > 1) void fetchTokenBalances()
+		if (connectsSeen >= 2) void fetchTokenBalances()
 	}
 	client.onConnected.add(onReconnected)
 
-	function dispose() {
+	/** Drops the run in flight and the pending retry; the next run starts clean. */
+	function invalidate() {
 		fence.invalidate()
 		clearTimeout(retryTimer)
+	}
+
+	/** For a parent mounted once and shown many times: its next show's first connect is again its own. */
+	function reset() {
+		invalidate()
+		connectsSeen = 0
+	}
+
+	function dispose() {
+		invalidate()
 		client.onConnected.remove(onReconnected)
 	}
 
 	return {
 		fetchTokenBalances,
 		markDirty,
-		inActiveScope,
-		onBalanceAdded,
-		onBalanceUpdated,
-		onBalanceDeleted,
+		...tokenBalanceEvents(live, rows, mapRow, markDirty, deps),
+		invalidate,
+		reset,
 		dispose,
 	}
 }

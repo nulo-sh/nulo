@@ -1,32 +1,34 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
-<script setup>
+<script setup lang="ts">
+import type { GlyphName } from "@nulo/design"
+
 const route = useRoute()
 
 // The Home tab keeps the `general` route name and path: the manifest cold-opens it, two
 // redirect pages and the sub-page-header fallback point at it, and every e2e asserts its hash.
-const navigationLinks = [
+const navigationLinks: { name: string; path: string; icon: GlyphName; label: string }[] = [
 	{
 		name: "general",
 		path: "/popup/general",
-		materialIcon: "home",
+		icon: "home",
 		label: "HOME",
 	},
 	{
 		name: "holdings",
 		path: "/popup/holdings",
-		materialIcon: "account_balance_wallet",
+		icon: "holdings",
 		label: "HOLDINGS",
 	},
 	{
 		name: "activity",
 		path: "/popup/activity",
-		materialIcon: "history",
+		icon: "history",
 		label: "HISTORY",
 	},
 	{
 		name: "settings",
 		path: "/popup/settings",
-		materialIcon: "settings",
+		icon: "settings",
 		label: "SETTINGS",
 	},
 ]
@@ -40,7 +42,7 @@ const navigationLinks = [
 			:data-testid="`nav-${link.name}`"
 			:class="[$style.tab, route.path.includes(link.path) && $style.active]"
 		>
-			<MaterialIcon :name="link.materialIcon" :size="22" :color="route.path.includes(link.path) ? 'primary' : 'tertiary'" />
+			<Icon :name="link.icon" :size="24" :color="route.path.includes(link.path) ? 'primary' : 'tertiary'" />
 			<span :class="$style.label">{{ link.label }}</span>
 		</RouterLink>
 	</nav>
@@ -48,6 +50,7 @@ const navigationLinks = [
 
 <style module>
 .wrapper {
+	user-select: none;
 	position: absolute;
 	bottom: 0;
 	left: 0;

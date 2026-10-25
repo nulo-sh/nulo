@@ -16,7 +16,7 @@
 /** Core (L1) primitives */
 export { default as Flex } from "./core/Flex.vue"
 export { default as Icon } from "./core/Icon.vue"
-export { default as MaterialIcon } from "./core/MaterialIcon.vue"
+export type { GlyphName } from "./core/glyphs"
 export { default as Text } from "./core/Text.vue"
 
 /** UI primitives */

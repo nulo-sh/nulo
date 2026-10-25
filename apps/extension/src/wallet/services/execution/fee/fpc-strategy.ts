@@ -59,10 +59,10 @@
  *
  * ## Finalization fidelity (both paths)
  *
- * `finalizeGasLimits(node, txRequest, sim, padding, baseFees)` — the
- * multiplier is pre-baked into `baseFees`, and there is deliberately NO
- * `customLimits`/`feeMultiplier` argument (fjwc's arg list would double-apply
- * the multiplier and newly honor `op.fee.gasLimits`).
+ * `finalizeGasLimits` gets `gasPadding`, `maxFeesPerGas: baseFees` and
+ * `txsLimits` — the multiplier is pre-baked into `baseFees`, and there is
+ * deliberately NO `customLimits`/`feeMultiplier` option (fjwc's options would
+ * double-apply the multiplier and newly honor `op.fee.gasLimits`).
  *
  * ## Action array mutation (CAUTION)
  *
@@ -86,8 +86,8 @@ import type { Action, FeeOptions } from "../spec"
 import { feeCapFor, type FeeCapRule } from "./fee-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
-	appPriorityOf,
 	assertCustomGasLimitsWithinCap,
+	buildFor,
 	DEFAULT_FEE_MULTIPLIER,
 	finalizeGasLimits,
 	isInitWrapped,
@@ -150,13 +150,7 @@ export class FpcStrategy implements FeeStrategy {
 			// Payload included from the start (`maxFee` inert — args: []), so the
 			// single sim measures app + FPC together, mirroring Pass 2's coverage.
 			ctx.op.actions.unshift(...fpc.getFeePayload(ctx.op.accountAddress, Fr.ZERO))
-			let built = await this.deps.txBuilder.buildStandard(
-				ctx.op,
-				ctx.fence,
-				AccountFeePaymentMethodOptions.EXTERNAL,
-				task,
-				appPriorityOf(ctx.op.fee),
-			)
+			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 			// The row's chain must equal the operation's resolved network —
 			// `isProtocol` was decorated against the row's OWN chain, so a
 			// cross-chain row selection would ride a stale eligibility signal.
@@ -182,13 +176,7 @@ export class FpcStrategy implements FeeStrategy {
 				if (discovered.length || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
-					built = await this.deps.txBuilder.buildStandard(
-						ctx.op,
-						ctx.fence,
-						AccountFeePaymentMethodOptions.EXTERNAL,
-						task,
-						appPriorityOf(ctx.op.fee),
-					)
+					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
@@ -202,16 +190,11 @@ export class FpcStrategy implements FeeStrategy {
 				...originalActions,
 				...discovered,
 			)
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				baseFees,
-				undefined,
-				undefined,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				maxFeesPerGas: baseFees,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return {
 				...built,
@@ -231,13 +214,7 @@ export class FpcStrategy implements FeeStrategy {
 		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
 
 		try {
-			let built = await this.deps.txBuilder.buildStandard(
-				ctx.op,
-				ctx.fence,
-				AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
-				task,
-				appPriorityOf(ctx.op.fee),
-			)
+			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 			// FPC finalization deliberately IGNORES dApp custom limits in the
 			// committed gasSettings (they only shape the sims via
 			// suggestGasLimits) — but the clamp contract still applies: over-cap
@@ -265,13 +242,7 @@ export class FpcStrategy implements FeeStrategy {
 					// would fail the real-account authwit check here). A cancel landing
 					// during the stubbed discovery must not start this second full sim.
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
-					built = await this.deps.txBuilder.buildStandard(
-						ctx.op,
-						ctx.fence,
-						AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
-						task,
-						appPriorityOf(ctx.op.fee),
-					)
+					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
@@ -285,13 +256,7 @@ export class FpcStrategy implements FeeStrategy {
 			// precise estimation (rebuild — the rebinding of `built` is the
 			// two-pass shape the byte-parity constraint freezes; the
 			// gasSettings below deliberately reads the FIRST pass's sim)
-			built = await this.deps.txBuilder.buildStandard(
-				ctx.op,
-				ctx.fence,
-				AccountFeePaymentMethodOptions.EXTERNAL,
-				task,
-				appPriorityOf(ctx.op.fee),
-			)
+			built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 			built.txRequest.txContext.gasSettings = new GasSettings(
 				simulatedTx.gasUsed.totalGas.add(fpc.getTotalGas()),
 				simulatedTx.gasUsed.teardownGas.add(fpc.getTeardownGas()),
@@ -307,16 +272,11 @@ export class FpcStrategy implements FeeStrategy {
 				...originalActions,
 				...discovered,
 			)
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				baseFees,
-				undefined,
-				undefined,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				maxFeesPerGas: baseFees,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return {
 				...built,

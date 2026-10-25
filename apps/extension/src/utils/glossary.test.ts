@@ -3,7 +3,7 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "./glossary"
 
 // Every entry the owner signed, word for word, in section order.
 const SPEC = [
-	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a padlock.", "Home · tokens · send"],
+	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a shield.", "Home · tokens · send"],
 	[
 		"Balances",
 		"public-balance",
@@ -30,6 +30,13 @@ const SPEC = [
 		"Permission window · Connected apps",
 	],
 	["Apps", "name-for-this-app", "Name for this app", "A private name for this account visible only to this app.", "Permission window"],
+	[
+		"Apps",
+		"interface",
+		"Interface",
+		"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
+		"Approval window",
+	],
 	[
 		"Transactions",
 		"proving",

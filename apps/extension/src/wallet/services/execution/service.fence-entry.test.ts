@@ -4,10 +4,13 @@
  * when its caller passed none — which no production caller does, because a
  * capture taken after any await can observe a session the user never acted in.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { callsTo } from "../../../../scripts/type-roles/source-code"
+import { REPO_ROOT, sourceFiles, TEST_FILE } from "../../../../scripts/type-roles/source-scan"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { type LocalTxOrigin, OriginType } from "@/wallet/services/transaction/spec"
 import { ExecutionService } from "./service"
 
@@ -25,7 +28,7 @@ const SEND_OP = {
 
 /** The real facade methods on a bare prototype, over a capture that reports a later session. */
 function makeFacade() {
-	const task = { startSubtask: vi.fn(), complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
+	const task = { startSubtask: vi.fn(), complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	const captureExecutionFence = vi.fn(async () => LIVE)
 	const executeSendTransaction = vi.fn(async () => "0xhash")
 	const startNewTask = vi.fn(() => task)
@@ -80,6 +83,27 @@ describe("ExecutionService: no broadcasting entry point runs without a current T
 		const batch = [{ kind: "aztec_simulateTx", networkId: "net-1", accountAddress: "0xacct" }] as never
 		expect(await facade.executeOperations(batch, UI)).toEqual([{ status: "ok", result: "done" }])
 		expect(assertCurrent).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService.executeOperations: a profile switch during dispatch (real TaskService)", () => {
+	async function dispatchUnderSwitch(kind: string) {
+		const { facade } = makeFacade()
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const dispatchOperation = vi.fn(async () => {
+			switchToProfile("p2")
+			return "0xhash"
+		})
+		Object.assign(facade, { taskService: tasks, dispatchOperation })
+		return facade.executeOperations([{ ...(SEND_OP as object), kind }] as never, UI)
+	}
+
+	test.each(["send_transaction", "aztec_sendTx"])("a %s whose dispatch broadcast is reported ok", async (kind) => {
+		expect(await dispatchUnderSwitch(kind)).toEqual([{ status: "ok", result: "0xhash" }])
+	})
+
+	test("control: an operation that broadcasts nothing still fails on its cleared task", async () => {
+		await expect(dispatchUnderSwitch("aztec_simulateTx")).rejects.toThrow("Invalid task id")
 	})
 })
 
@@ -206,40 +230,7 @@ describe("ExecutionService.executeAztecCreateAuthWit: the sign runs under the fe
 	})
 })
 
-const SRC = join(__dirname, "..", "..", "..")
-const OPENERS = new Set(["(", "[", "{"])
-const CLOSERS = new Set([")", "]", "}"])
-const QUOTES = new Set(['"', "'", "`"])
-
-function productionSources(dir: string): string[] {
-	return readdirSync(dir).flatMap((name) => {
-		const path = join(dir, name)
-		if (statSync(path).isDirectory()) return productionSources(path)
-		return /\.(ts|vue)$/.test(name) && !name.endsWith(".test.ts") ? [path] : []
-	})
-}
-
-/** The top-level argument texts of the call whose `(` sits at `open`; string contents are skipped. */
-function callArguments(source: string, open: number): string[] {
-	const parts: string[] = []
-	let depth = 0
-	let start = open + 1
-	for (let i = open; i < source.length; i++) {
-		const ch = source[i] as string
-		if (QUOTES.has(ch)) {
-			i = source.indexOf(ch, i + 1)
-			continue
-		}
-		if (OPENERS.has(ch)) depth++
-		if (CLOSERS.has(ch)) depth--
-		if (depth === 0) return [...parts, source.slice(start, i)].map((part) => part.trim()).filter(Boolean)
-		if (ch === "," && depth === 1) {
-			parts.push(source.slice(start, i))
-			start = i + 1
-		}
-	}
-	throw new Error(`unbalanced call at offset ${open}`)
-}
+const SRC = "apps/extension/src"
 
 /** Whether the nearest declaration of `name` before `offset` admits an absent value; an
  *  expression or an undeclared name counts as possibly absent. */
@@ -251,22 +242,43 @@ function mayBeAbsent(source: string, name: string, offset: number): boolean {
 	return nearest[1] === "?" || /\|\s*undefined/.test(nearest[2] ?? "")
 }
 
+/** Each `….executeSendTransaction(…)` in `text` but the executor's own, whose fence parameter is required. A
+ *  call the reader cannot place in the file has no declaration to read, so its fence counts as absent. */
+function facadeCalls(path: string, text: string): { site: string; args: number; absent: boolean }[] {
+	return callsTo(path, text, /\.executeSendTransaction$/)
+		.filter((call) => !/\bdappSendExecutor\.executeSendTransaction$/.test(call.callee))
+		.map(({ line, offset, args }) => {
+			const fence = args[4]
+			const absent = !fence || offset === undefined || mayBeAbsent(text, fence.getText(), offset)
+			return { site: `${path}:${line}`, args: args.length, absent }
+		})
+}
+
 test("no production caller relies on that capture: every facade call passes a fence", () => {
-	const calls: { site: string; args: string[]; absent: boolean }[] = []
-	for (const file of productionSources(SRC)) {
-		const source = readFileSync(file, "utf8")
-		for (const match of source.matchAll(/(\w+)\.executeSendTransaction\(/g)) {
-			// The executor's own method takes the fence as a required parameter.
-			if (match[1] === "dappSendExecutor") continue
-			const open = (match.index ?? 0) + match[0].length - 1
-			const args = callArguments(source, open)
-			calls.push({ site: `${relative(SRC, file)}@${open}`, args, absent: mayBeAbsent(source, args[4] ?? "undefined", open) })
-		}
-	}
-	// The dispatch arm and the two registry sends, at least.
+	const calls = sourceFiles({ roots: [SRC], exts: ["ts", "vue"], skip: [TEST_FILE] }).flatMap((file) =>
+		facadeCalls(relative(SRC, file), readFileSync(join(REPO_ROOT, file), "utf8")),
+	)
+	// The dispatch arm and the two registry sends, at least. The fence is the fifth argument; the
+	// dispatch arm adds the popup's approval envelope after it.
 	expect(calls.length).toBeGreaterThanOrEqual(3)
 	for (const { site, args, absent } of calls) {
-		expect(args, site).toHaveLength(5)
+		expect([5, 6], site).toContain(args)
 		expect(absent, `${site}: the fence argument may be undefined`).toBe(false)
 	}
+})
+
+test("a fence's declaration is looked up in the whole file before its call, never inside it", () => {
+	const inArgs = "function f(fence?: Fence) {\n\tsvc.executeSendTransaction(op, { fence: live }, task, hooks, fence)\n}\n"
+	expect(facadeCalls("x.ts", inArgs)).toEqual([{ site: "x.ts:2", args: 5, absent: true }])
+	const vue = [
+		'<script lang="ts">',
+		"const fence = live",
+		"</script>",
+		'<script setup lang="ts">',
+		"svc.executeSendTransaction(op, o, task, hooks, fence)",
+		"</script>",
+	].join("\n")
+	expect(facadeCalls("x.vue", vue)).toEqual([{ site: "x.vue:5", args: 5, absent: false }])
+	const decoded = `${vue}\n<template>\n  <b @click="say(&quot;&quot;); svc.executeSendTransaction(op, o, task, hooks, fence)" />\n</template>`
+	expect(facadeCalls("x.vue", decoded)[1]).toEqual({ site: "x.vue:8", args: 5, absent: true })
 })

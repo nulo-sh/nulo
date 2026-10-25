@@ -2,6 +2,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import NetworksIndex from "./index.vue"
@@ -20,19 +21,10 @@ vi.mock("@/wallet/services/config/client", () => ({
 // The app store's setup runs `useSyncedRef` → `chrome.storage.local` on instantiation; stub it.
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_k: unknown, cb?: (r: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -59,7 +51,6 @@ function mountList(activeId: string) {
 				Text: { template: "<span><slot /></span>" },
 				// Badge is the @nulo/design purple chip; stub keeps the data-testid + text assertions deterministic.
 				Badge: { inheritAttrs: false, template: "<span v-bind='$attrs'><slot /></span>" },
-				MaterialIcon: true,
 				SubPageHeader: true,
 				SectionLabel: true,
 				ItemsContainer: { template: "<div><slot /></div>" },
@@ -109,8 +100,8 @@ describe("Settings › Networks list (item 4 — active badge, keyboard-activata
 		const { wrapper } = mountList("tn")
 		await nextTick()
 		const html = wrapper.html()
-		expect(html).not.toContain("check-circle")
-		expect(html).not.toContain('name="circle"')
+		expect(html).not.toContain("square-check")
+		expect(html).not.toContain('name="square"')
 	})
 })
 

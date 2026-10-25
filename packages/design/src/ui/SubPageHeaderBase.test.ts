@@ -10,7 +10,7 @@ const SOURCE = readFileSync(join(process.cwd(), "src/ui/SubPageHeaderBase.vue"),
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class"><slot /></div>', inheritAttrs: false },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 }
 
 const mountHeader = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
@@ -35,7 +35,7 @@ describe("SubPageHeaderBase (router-free)", () => {
 		expect(mountHeader({ title: "X", showBack: false }).find("button[aria-label='Back']").exists()).toBe(false)
 	})
 
-	test("leadingIcon renders a MaterialIcon before the title", () => {
+	test("leadingIcon renders an Icon before the title", () => {
 		expect(mountHeader({ title: "Settings", leadingIcon: "settings" }).find('[data-name="settings"]').exists()).toBe(true)
 	})
 
@@ -45,6 +45,26 @@ describe("SubPageHeaderBase (router-free)", () => {
 
 	test("a keyboard-focused back button draws the accent ring inside its box", () => {
 		expect(SOURCE).toMatch(/&:focus-visible \{\s*outline: 2px solid var\(--nulo-accent\);\s*outline-offset: -2px;\s*\}/)
+	})
+
+	test("focusTitle focuses the default title, which draws no ring", () => {
+		const w = mount(SubPageHeaderBase, { props: { title: "Proving" }, global: { stubs: STUBS }, attachTo: document.body })
+		w.vm.focusTitle()
+		expect(document.activeElement?.textContent).toBe("Proving")
+		expect(SOURCE).toMatch(/\.title \{[^}]*&:focus \{\s*outline: none;\s*\}/)
+		w.unmount()
+	})
+
+	test("focusTitle leaves a slotted title alone", () => {
+		const slotted = mount(SubPageHeaderBase, {
+			props: { title: "X" },
+			slots: { title: '<span tabindex="-1">Custom</span>' },
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		slotted.vm.focusTitle()
+		expect(document.activeElement).toBe(document.body)
+		slotted.unmount()
 	})
 
 	test("clicking back emits @back (no router coupling)", async () => {

@@ -4,16 +4,25 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { trimAddress } from "@/utils/string"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
-import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
+import {
+	clickByTestId,
+	launchExtension,
+	openPopup,
+	registerOnListChain,
+	test,
+	waitForHash,
+	type ExtensionContext,
+} from "./fixtures/extension"
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { savedFeePicks } from "./helpers/ui-preferences"
 import { activeTestId, coveredAt, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -110,6 +119,30 @@ async function readSuggestionList(page: Page) {
 	)
 }
 
+/** The line under a capped list: below the rows, inside the box and the popup, and not covered. */
+async function readMoreLine(page: Page) {
+	return page.evaluate(
+		(line: string, list: string, box: string) => {
+			const el = document.querySelector(line)
+			if (!el) return null
+			const r = el.getBoundingClientRect()
+			const rows = document.querySelector(list)?.getBoundingClientRect()
+			const frame = document.querySelector(box)?.getBoundingClientRect()
+			const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+			return {
+				text: el.textContent?.trim(),
+				below: Boolean(rows) && r.height > 0 && r.top >= (rows?.bottom ?? 0) - 1,
+				inBox: Boolean(frame) && r.bottom <= (frame?.bottom ?? 0) + 1,
+				inPopup: r.top >= 0 && r.bottom <= window.innerHeight,
+				uncovered: Boolean(hit && el.contains(hit)),
+			}
+		},
+		sel("send-destination-more"),
+		sel("send-destination-suggestions"),
+		sel("send-destination-popover"),
+	)
+}
+
 async function waitForAmountMode(page: Page, mode: "token" | "usd"): Promise<void> {
 	await page.waitForSelector(sel(mode === "usd" ? "send-amount-fiat-input" : "send-amount-input"), { timeout: 5_000 })
 }
@@ -119,7 +152,9 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
 	// Three contacts and the profile's own "Account 1" match "Acc": four rows, more than the list shows.
-	const page = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C"] })
+	// Fifty-one more match "z" alone: one more than the list draws.
+	const zeds = Array.from({ length: 51 }, (_, i) => `Zed ${i + 1}`)
+	const page = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C", ...zeds] })
 	const account = await getAccountAddress(page)
 
 	await page.focus(DESTINATION_INPUT)
@@ -132,7 +167,7 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.waitForFunction(
 		(s: string) => document.querySelector(s)?.getAnimations().length === 0,
 		{ timeout: 5_000 },
-		sel("send-destination-suggestions"),
+		sel("send-destination-popover"),
 	)
 	await shotSend(page, "send-suggestion-highlighted", "send-destination-field")
 
@@ -144,9 +179,45 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	// Up from no highlight goes to the last row, which the list scrolls to.
 	await page.keyboard.press("ArrowUp")
 	expect((await readSuggestionList(page)).active).toMatchObject({ row: 3, shown: true })
-	await page.keyboard.press("Enter")
+	// A held Enter: its auto-repeat reaches the Change button the pick focuses, and must not clear it.
+	await page.keyboard.down("Enter")
+	await page.keyboard.down("Enter")
+	await page.keyboard.up("Enter")
 	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
+	await waitForFocus(page, "recipient-card-change")
+	await expectAccentRing(page, "recipient-card-change")
+	expect(await tabAround(page, 1)).toEqual(["send-token-trigger"])
+
+	// The line shares the box with the scrolling rows: Up still reveals the last drawn row whole.
+	await clickByTestId(page, "recipient-card-change")
+	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
+	await page.focus(DESTINATION_INPUT)
+	await page.keyboard.type("z")
+	await waitForSuggestionRows(page, 50)
+	expect(await readMoreLine(page)).toEqual({
+		text: "Keep typing to narrow 1 more match.",
+		below: true,
+		inBox: true,
+		inPopup: true,
+		uncovered: true,
+	})
+	await page.keyboard.press("ArrowUp")
+	expect((await readSuggestionList(page)).active).toMatchObject({ row: 49, shown: true })
+	const lastDrawn = await page.$eval(
+		DESTINATION_INPUT,
+		(field, address: string) =>
+			document
+				.getElementById(field.getAttribute("aria-activedescendant") ?? "")
+				?.querySelector(address)
+				?.textContent?.trim(),
+		sel("recipient-suggestion-address"),
+	)
+	await page.keyboard.press("Enter")
+	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
+	const picked = (await readSendInputs(page)).destination
+	expect(zeds.map((_, i) => `0x${String(i + 4).padStart(64, "0")}`)).toContain(picked)
+	expect(trimAddress(picked)).toBe(lastDrawn)
 
 	await clickByTestId(page, "recipient-card-change")
 	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
@@ -234,19 +305,9 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 		row.replace("send-fee-method-", ""),
 	)
 	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
-	await page.waitForFunction(
-		async (key: string, address: string, want: string) => {
-			const saved = (await chrome.storage.local.get(key))[key] as
-				| Record<string, { private?: { type?: string; fpc?: { id?: string } | null } }>
-				| undefined
-			const pick = saved?.[address]?.private
-			return pick?.type === "fpc" && pick.fpc?.id === want
-		},
-		{ timeout: 10_000 },
-		sendFeePicksKey(await captureSoleProfileId(page)),
-		account,
-		SEEDED_SPONSOR_FPC_ID,
-	)
+	await expect
+		.poll(async () => (await savedFeePicks(page)).send[account]?.private, { timeout: 10_000, interval: 200 })
+		.toMatchObject({ type: "fpc", fpc: { id: SEEDED_SPONSOR_FPC_ID } })
 	await waitForFocus(page, "send-fee-method-trigger")
 
 	await page.keyboard.press(" ")
@@ -277,7 +338,7 @@ async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	try {
 		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
 		try {
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await pickSeededSponsorByKeyboard(ctx)
 			// Read before `stop()`, which drops Firefox's tally.
 			expect(await node.failures(), "testnet interception failures").toEqual([])

@@ -39,9 +39,9 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 			<span v-else :class="$style.reason" data-testid="token-seed-reason">{{ reason }}</span>
 		</Flex>
 
-		<Flex v-if="isWorking" direction="column" align="end" justify="center" gap="5" :class="$style.loading_block">
+		<Flex v-if="isWorking" direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
 			<Skeleton :width="64" :height="13" />
-			<Skeleton :width="92" :height="9" />
+			<Skeleton :width="92" :height="11" />
 		</Flex>
 		<button v-else-if="isFailed" type="button" @click="emit('retry')" data-testid="token-seed-retry" :class="$style.retry">
 			RETRY
@@ -75,15 +75,15 @@ const reason = computed(() => (isFailed.value ? "Couldn't set up" : "Couldn't ve
 
 .reason {
 	composes: type--caption from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 
 .loading_block {
-	min-height: 32px;
+	composes: loading_block from "./token-row.module.css";
 }
 
 .retry {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	height: 28px;
 	padding: 0 12px;
 	background: transparent;

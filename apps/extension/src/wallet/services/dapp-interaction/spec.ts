@@ -1,14 +1,27 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { DappSession, DappMetadata } from "@/wallet/services/dapp-session/spec"
 import type { OperationApprovalDelta } from "./approval-delta"
-import type { CapabilityParams, CapabilityResult, ExecutionParams, ExecutionResult, IExecutionHooks } from "@nulo/wallet-bridge"
+import type {
+	CapabilityParams,
+	CapabilityResult,
+	DiscoveredAuthwit,
+	ExecutionParams,
+	ExecutionResult,
+	FeeSettings,
+	IExecutionHooks,
+	OperationRequest,
+} from "@nulo/wallet-bridge"
+import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
+import type { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { WindowEnd } from "./window-end"
 
 /** Protocol-shape types (`ExecutionParams`, `ExecutionResult`,
  *  `CapabilityParams`, `CapabilityResult`, all `OperationRequest`
  *  variants, `CaipChain`, `CaipAccount`) live in `@nulo/wallet-bridge`.
  *  Re-exported here so extension consumers can keep importing them via
  *  this path. */
-export type { OperationApprovalDelta } from "./approval-delta"
+export type { OperationApprovalDelta, ShownTokenMetadata } from "./approval-delta"
+export type { WindowEnd } from "./window-end"
 export type {
 	AztecCreateAuthWitRequest,
 	AztecExecuteUtilityRequest,
@@ -79,6 +92,9 @@ export type DappInteraction = {
 	 * verify, discover).
 	 */
 	hooks?: ExecutionHooks
+	/** The first refusal an estimate or preview of this request met. The request can no longer be
+	 *  approved, and the window's own end of it (Reject, unload, close) answers this refusal. */
+	refusal?: ScopeViolationError
 }
 
 export type ExecutionPayload = {
@@ -105,11 +121,6 @@ export type DiscoveryResult = {
 	approved: boolean
 }
 
-/** What `discover()` resolves with: the page's answer plus, for an approval, the window the
- *  connection flow now owns and `expiredUrl`, the same page marked expired, which the window shows
- *  if the connection is never established. Both are set by the service, never by the page. */
-export type DiscoveryOutcome = DiscoveryResult & { windowId?: number; expiredUrl?: string }
-
 /** A discovery for a chain the profile has no network for. Its window only informs: it can be
  *  dismissed, never resolved, so nothing it answers approves a connection. */
 export type NetworkUnavailablePayload = {
@@ -121,7 +132,27 @@ export type NetworkUnavailableParams = {
 	dappMetadata: DappMetadata
 }
 
-export type InteractionPayload = ExecutionPayload | CapabilityPayload | DiscoveryPayload | NetworkUnavailablePayload
+/** What a held send's question window shows: the one operation it holds, as the dApp asked for it,
+ *  and the figures. It has no `params`, so no approval route ever reads it as a request to execute. */
+export type FeeQuestionPayload = {
+	feeQuestion: {
+		/** The new fee and the one the person approved, in base units. */
+		fee: string
+		approved: string
+		payer: QueuedFeePayer
+		/** The fee settings the person approved the send with. */
+		feeSettings?: FeeSettings
+		/** The authorizations the approval window listed for the operation. */
+		discoveredAuthwits?: readonly DiscoveredAuthwit[]
+	}
+	operation: OperationRequest
+	session: DappSession
+}
+
+/** The window's answer: only `accepted: true` sends; anything else cancels the send. */
+export type FeeQuestionResult = { accepted: boolean }
+
+export type InteractionPayload = ExecutionPayload | CapabilityPayload | DiscoveryPayload | NetworkUnavailablePayload | FeeQuestionPayload
 
 export type Methods = {
 	getInteractionPayload(id: string): InteractionPayload
@@ -133,8 +164,10 @@ export type Methods = {
 	 * claim when the interaction is not an executable one or the lengths differ.
 	 */
 	approveInteraction(id: string, deltas: OperationApprovalDelta[]): void
-	resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult): void
-	rejectInteraction(id: string, reason: string): void
+	resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult): void
+	/** Ends a live interaction before any approval. `end` names how its window ended; one this
+	 *  service does not know rejects as an unnamed Reject. */
+	rejectInteraction(id: string, reason: string, end: WindowEnd): void
 	/** Replay read for popups that mount after the cancel broadcast fired. */
 	isInteractionCancelled(id: string): boolean
 	/** Bring the approval popup of the live interaction for `journalId` to the

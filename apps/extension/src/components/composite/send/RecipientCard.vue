@@ -7,7 +7,8 @@
  * Reveal is OPTIONAL by design (user decision); the masked form is a glance
  * summary, the reveal is for 100% certainty (select the text to copy if needed).
  */
-import { computed, ref } from "vue"
+import { computed, ref, useTemplateRef } from "vue"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { maskAddress } from "./masked-address"
 
 /** Macros */
@@ -16,9 +17,12 @@ const props = defineProps<{
 	address: string
 }>()
 const emit = defineEmits<{ change: [] }>()
+// `focusVisible`: a script focus carries no keyboard event a browser could infer the ring from.
+defineExpose({ focusChange: () => changeBtn.value?.focus({ focusVisible: true }) })
 
 /** Reactive state */
 const revealed = ref(false)
+const changeBtn = useTemplateRef<HTMLButtonElement>("changeBtn")
 
 const masked = computed(() => maskAddress(props.address))
 
@@ -30,14 +34,14 @@ const toggleReveal = () => {
 
 <template>
 	<Flex direction="column" gap="10" :class="$style.card" data-testid="recipient-card" :data-address="address">
-		<Flex align="center" justify="between" gap="10" wide>
+		<Flex align="center" justify="between" gap="10" wide :class="$style.head">
 			<Flex align="center" gap="10" :class="$style.identity">
 				<AccountAvatar :name="name" :size="36" />
 				<Flex direction="column" gap="2" :class="$style.text">
 					<Text variant="name" color="primary" noWrap :class="[$style.name, $style.name_size]">
 						{{ name || "Address" }}
 					</Text>
-					<Text variant="data" color="tertiary" noWrap data-testid="recipient-card-masked">
+					<Text variant="meta" color="tertiary" noWrap data-testid="recipient-card-masked">
 						{{ masked }}
 					</Text>
 				</Flex>
@@ -53,11 +57,13 @@ const toggleReveal = () => {
 					<Icon :name="revealed ? 'eye-off' : 'eye'" size="16" color="secondary" />
 				</button>
 				<button
+					ref="changeBtn"
 					type="button"
 					:class="$style.icon_btn"
 					data-testid="recipient-card-change"
 					aria-label="Change recipient"
 					@click="emit('change')"
+					@keydown.enter="refuseRepeatEnter"
 				>
 					<Icon name="close" size="16" color="secondary" />
 				</button>
@@ -65,7 +71,7 @@ const toggleReveal = () => {
 		</Flex>
 
 		<Flex v-if="revealed" :class="$style.reveal" data-testid="recipient-card-full">
-			<Text variant="data" color="primary" selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
+			<Text variant="meta" color="primary" selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
 				{{ address }}
 			</Text>
 		</Flex>
@@ -119,6 +125,12 @@ const toggleReveal = () => {
 	background: var(--nulo-surface-high);
 }
 
+/* Restores the focus indication the base `button` reset removes. */
+.icon_btn:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+
 .reveal {
 	padding-top: 10px;
 	border-top: 1px solid var(--nulo-border);
@@ -127,5 +139,29 @@ const toggleReveal = () => {
 .full_addr {
 	word-break: break-all;
 	line-height: 1.4 !important;
+}
+
+/* Below the popup's width the head wraps: the identity keeps its whole width where the line has it,
+ * so the buttons go under it, at the right, rather than cut the shortened address, and a name wraps
+ * rather than end in an ellipsis. Two classes outrank the global `gap--10`. */
+@media (width < 359px) {
+	.card > .head {
+		flex-wrap: wrap;
+		row-gap: 8px;
+	}
+
+	.head > .identity {
+		flex: 1 1 auto;
+		max-width: 100%;
+	}
+
+	.head > .actions {
+		margin-left: auto;
+	}
+
+	.head .name {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
 }
 </style>

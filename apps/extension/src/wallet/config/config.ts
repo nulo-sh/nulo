@@ -2,6 +2,11 @@
 import { z } from "zod"
 import { BLOCK_EXPLORER_IDS } from "@/wallet/constants/explorers"
 
+/** ValueStorage key holding the whole serialized `Config` object. Frozen:
+ *  renaming detaches every install's settings; the backup-migration registry
+ *  pins it. */
+export const CONFIG_STORAGE_KEY = "nulo:config"
+
 /**
  * The wallet config schema is the single source of truth for `Config`, its
  * defaults, and persisted-value validation. Loading validates each stored prop
@@ -14,7 +19,6 @@ export const ConfigSchema = z.object({
 	theme: z.enum(["dark", "light", "system"]).default("system"),
 	sidePanel: z.boolean().default(false),
 	showNode: z.boolean().default(true),
-	showPopupFullscreen: z.boolean().default(true),
 	disableAnimations: z.boolean().default(false),
 
 	// Wallet

@@ -7,6 +7,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
+import { isBlank } from "@/utils/string"
 import { usdToTokenAmount, tokenAmountToUsdMicro, formatUsdMicro, usdMicroToPlainString } from "@/wallet/services/price/convert"
 import { caretAfter, nextAmountText, restingAmount } from "./amount-field"
 
@@ -24,6 +25,8 @@ const props = defineProps({
 	liveQuote: { type: Object, required: false, default: null },
 	/** Proxy ticker for honest labeling (e.g. "USDC" → `≈ $12.34 via USDC`). */
 	proxyTicker: { type: String, required: false, default: null },
+	/** The page's amount gate found the amount above a balance it read; the card only draws it. */
+	exceedsBalance: { type: Boolean, default: false },
 })
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
@@ -50,6 +53,7 @@ let commaPoint = false
 /** The text the card last wrote or the page last set: the prior text of the next edit. */
 let lastText = String(model.value ?? "")
 
+const overBalanceId = useId()
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
 const amountRow = useTemplateRef("amountRow")
@@ -57,6 +61,7 @@ const conversionEl = useTemplateRef("conversionEl")
 const derivedRuler = useTemplateRef("derivedRuler")
 
 const tokenDecimals = computed(() => (typeof props.token?.decimals === "number" ? props.token.decimals : undefined))
+const symbolBlank = computed(() => isBlank(props.token?.symbol))
 
 /** True when the user typed more decimal places than the token supports
  *  and the input was clamped on the most recent keystroke. Drives the
@@ -170,11 +175,11 @@ function fitField() {
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
 }
 
-/** `.derived_type`'s full size, and the type scale's smallest step. */
-const DERIVED_PX = 11
+/** `.derived_type`'s full size, its meta line's. */
+const DERIVED_PX = 13
 const DERIVED_MIN_PX = 8
 
-/** The derived token line's type as a fraction of its 11 px: the largest that keeps it on one line
+/** The derived token line's type as a fraction of its 13 px: the largest that keeps it on one line
  *  beside the balance and Max or, where that is under 8 px, in its own row under the amount. */
 const derivedScale = ref(1)
 const derivedOwnRow = ref(false)
@@ -224,7 +229,7 @@ const modelRaw = computed(() => {
 const unitRateLabel = computed(() => {
 	if (!props.liveQuote || tokenDecimals.value === undefined) return null
 	const unitMicro = tokenAmountToUsdMicro(10n ** BigInt(tokenDecimals.value), tokenDecimals.value, props.liveQuote.usd)
-	return `1 ${props.token?.symbol ?? "token"} ≈ ${formatUsdMicro(unitMicro)}`
+	return `1 ${symbolBlank.value ? "token" : props.token.symbol} ≈ ${formatUsdMicro(unitMicro)}`
 })
 
 const tokenModeFiatLabel = computed(() => {
@@ -435,6 +440,8 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-invalid="exceedsBalance"
+						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
 						data-testid="send-amount-fiat-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -448,6 +455,8 @@ const handleFiatBalanceAction = (divisor) => {
 						@blur="handleAmountBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
+						:aria-invalid="exceedsBalance"
+						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
 						data-testid="send-amount-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -461,10 +470,10 @@ const handleFiatBalanceAction = (divisor) => {
 					@click.stop="toggleFiatMode"
 					@keydown.enter="refuseRepeatEnter"
 					data-testid="send-amount-fiat-toggle"
-					:title="fiatMode ? `Type in ${token?.symbol || 'token'}` : 'Type in USD'"
+					:title="fiatMode ? `Type in ${symbolBlank ? 'token' : token.symbol}` : 'Type in USD'"
 					:class="$style.unit_pair"
 				>
-					<span :class="!fiatMode && $style.unit_on">{{ token?.symbol || "Token" }}</span>
+					<span :class="!fiatMode && $style.unit_on">{{ symbolBlank ? "Token" : token.symbol }}</span>
 					<span :class="$style.unit_sep">/</span>
 					<span :class="fiatMode && $style.unit_on">USD</span>
 				</button>
@@ -477,7 +486,8 @@ const handleFiatBalanceAction = (divisor) => {
 				}}</span>
 			</span>
 
-			<Flex align="center" justify="between" gap="8">
+			<!-- Fiat mode's span has a zero basis, so its line wraps only when the balance and Max alone overflow it. -->
+			<Flex align="center" justify="between" gap="8" wrap="wrap">
 				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
 						<template v-if="!derivedOwnRow">
@@ -486,11 +496,11 @@ const handleFiatBalanceAction = (divisor) => {
 								derivedTokenLabel
 							}}</span>
 						</template>
-						<!-- Here wherever the line is drawn, in the meta line's own mono 11 px, so a shortened line is fitted again. -->
+						<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
 						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
-						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label">{{
+						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label" :class="$style.fiat_label">{{
 							tokenModeFiatLabel
 						}}</span>
 					</template>
@@ -518,8 +528,20 @@ const handleFiatBalanceAction = (divisor) => {
 				Type it without the comma.
 			</span>
 			<span v-else-if="wasClamped && tokenDecimals !== undefined" :class="$style.clamp_hint" data-testid="send-amount-clamp-hint">
-				{{ token.symbol || "Token" }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
+				{{ symbolBlank ? "Token" : token.symbol }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
 			</span>
+			<!-- Last, so a hint keeps its place; an alert, so the line is heard as it appears. -->
+			<Text
+				v-if="exceedsBalance"
+				:id="overBalanceId"
+				variant="body"
+				color="txt-danger"
+				role="alert"
+				:class="$style.over_balance"
+				data-testid="send-amount-over-balance"
+			>
+				More than your balance
+			</Text>
 		</Flex>
 	</Flex>
 </template>
@@ -587,7 +609,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .unit_pair {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	line-height: inherit;
 	background: none;
@@ -616,6 +638,11 @@ const handleFiatBalanceAction = (divisor) => {
 	color: var(--nulo-secondary);
 }
 
+/* "≈" stays with its figure: the balance and Max wrap under it instead. */
+.fiat_label {
+	white-space: nowrap;
+}
+
 /* The derived line's room is all the row leaves beside the balance and Max, drawn there or not. */
 .conversion_fit {
 	flex: 1;
@@ -623,7 +650,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .derived_type {
-	font-size: calc(11px * var(--hero-scale, 1));
+	font-size: calc(13px * var(--hero-scale, 1));
 	white-space: nowrap;
 }
 
@@ -633,8 +660,12 @@ const handleFiatBalanceAction = (divisor) => {
 	padding-top: 4px;
 }
 
+.over_balance {
+	padding-top: 4px;
+}
+
 .action_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

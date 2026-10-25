@@ -21,6 +21,7 @@ import { type AwaitingTx, txBelongsToScope, txScope, useActivityStore } from "@/
 import { approvedSendsInFlight as countApprovedSendsInFlight, hasInFlightSend as inFlightHasSend } from "@/utils/in-flight-send"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { journalAdded, journalDeleted, journalUpdated } from "@/utils/journal-mirror"
 import { createContactImportGuard } from "./contact-import-guard"
 
 /**
@@ -44,10 +45,11 @@ export const useAppStore = defineStore("app", () => {
 	const isLogined = ref<boolean>(false)
 	const isSessionChecked = ref<boolean>(false)
 	const pageAwaitingAuth = ref<string>("")
-	/** Identity-keyed record of a DEFINITIVE bootstrap failure. The unlock
-	 *  flow's activation wait joins on it so a failed bootstrap releases the
-	 *  waiter immediately instead of burning the full timeout; cleared at the
-	 *  start of every unlock attempt and on any successful bootstrap. */
+	/** Identity-keyed record of a DEFINITIVE bootstrap failure. The activation
+	 *  waits (unlock, create, import) join on it so a failed bootstrap releases the
+	 *  waiter immediately instead of burning the full timeout; cleared at the start
+	 *  of every unlock attempt, when a new activation of its profile starts, and on
+	 *  any successful bootstrap. */
 	const bootstrapFailure = ref<{ profileId: string; message: string } | null>(null)
 	/** Bumped by the shell on every lock and on every profile, network or account change. A
 	 *  result that settles under another value belongs to a screen that is gone: it announces
@@ -92,6 +94,7 @@ export const useAppStore = defineStore("app", () => {
 		network,
 		networkStatus,
 		syncNetworkStatus: networkActions.syncNetworkStatus,
+		markNetworkInactive: networkActions.markNetworkInactive,
 		networks,
 		staleNetwork: stale.staleNetwork,
 		syncStaleNetwork: stale.syncStaleNetwork,
@@ -334,21 +337,14 @@ function publishInFlight(state: InFlightState, rows: OperationRecord[]): void {
 }
 
 function subscribeInFlight(state: InFlightState, profile: Ref<ProfileInfo | undefined>): void {
-	const upsertInFlight = (op: OperationRecord) => {
+	const applyInFlight = (reduce: (rows: OperationRecord[], op: OperationRecord) => OperationRecord[]) => (op: OperationRecord) => {
 		if (state.suspended) return
 		state.revision++
-		const idx = state.ops.value.findIndex((row) => row.id === op.id)
-		if (idx === -1) state.ops.value.push(op)
-		else state.ops.value.splice(idx, 1, op)
+		state.ops.value = reduce(state.ops.value, op)
 	}
-	const dropInFlight = (op: OperationRecord) => {
-		if (state.suspended) return
-		state.revision++
-		state.ops.value = state.ops.value.filter((row) => row.id !== op.id)
-	}
-	state.journal.onOperationAdded.add(upsertInFlight)
-	state.journal.onOperationUpdated.add(upsertInFlight)
-	state.journal.onOperationDeleted.add(dropInFlight)
+	state.journal.onOperationAdded.add(applyInFlight((rows, op) => journalAdded(rows, op, "back")))
+	state.journal.onOperationUpdated.add(applyInFlight((rows, op) => journalUpdated(rows, op, "back")))
+	state.journal.onOperationDeleted.add(applyInFlight(journalDeleted))
 	// A reconnect can drop events, so re-read rather than trusting the cache.
 	state.journal.onConnected?.add(() => void refreshInFlightOps(state, profile))
 }
@@ -386,10 +382,10 @@ interface AccountActionDeps extends ScopeRefs {
  *
  * Stale-activation fence: a monotonic activation epoch plus the (profile,
  * network) scope captured at entry, re-checked before EVERY account
- * assignment and the durable pointer write. A run superseded mid-await
+ * assignment and the durable selection write. A run superseded mid-await
  * (rapid profile switch, network flip) refuses instead of landing the
- * loser's account after the winner's — and instead of poisoning the global
- * `nulo:ui:activeAccount` key, which survives into the next bootstrap.
+ * loser's account after the winner's — and instead of recording it as the
+ * device's selection, which survives into the next bootstrap.
  * The epoch is the load-bearing half: scope IDs alone are ABA-unsafe (an
  * A→B→A flip makes the parked run's capture match again); any
  * LATER entry into this action supersedes every parked one. The id checks
@@ -404,9 +400,7 @@ function createAccountActions(deps: AccountActionDeps) {
 	const setupActiveAccount = (): Promise<boolean> => setupActiveAccountRun(deps, activation)
 	const selectAccount = async (acc: Account) => {
 		account.value = acc
-		await storageLocalSet({
-			"nulo:ui:activeAccount": acc.address,
-		})
+		await rememberSelection(profile.value?.id, acc.address)
 	}
 	const changeAccountVisibility = async (acc: Account, value: boolean): Promise<boolean> => {
 		if (!profile.value || !network.value) return false
@@ -426,9 +420,7 @@ function createAccountActions(deps: AccountActionDeps) {
 				account.value = next
 			})
 			if (!moved) return false
-			await storageLocalSet({
-				"nulo:ui:activeAccount": account.value?.address,
-			})
+			await rememberSelection(profile.value.id, account.value?.address)
 		}
 		return true
 	}
@@ -479,18 +471,15 @@ async function setupActiveAccountRun(deps: AccountActionDeps, activation: { epoc
 	const scopeNetworkId = network.value?.id
 	const superseded = () => activation.epoch !== myEpoch || profile.value?.id !== scopeProfileId || network.value?.id !== scopeNetworkId
 
-	const activeAccountResult = await storageLocalGet("nulo:ui:activeAccount")
+	const selection = scopeProfileId === undefined ? undefined : await managers.uiPreference.getSelectedAccount(scopeProfileId)
 	// INVARIANT: no await between this check and commitAccountTarget's
 	// synchronous fast-path assignment (an async call runs synchronously up
 	// to its first await) — that synchronous span is what lets the fast path
 	// skip its own superseded() re-check. Inserting an await in it (here or
 	// before the helper's fast-path check) reopens the race.
 	if (superseded()) return false
-	if ("nulo:ui:activeAccount" in activeAccountResult) {
-		const activeAccountAddress = activeAccountResult["nulo:ui:activeAccount"]
-		const remembered = accounts.value.find((a) => a.address === activeAccountAddress)
-		if (remembered) return (await commitAccountTarget(deps, remembered, superseded)) !== "refused"
-	}
+	const remembered = selection === undefined ? undefined : accounts.value.find((a) => a.address === selection)
+	if (remembered) return (await commitAccountTarget(deps, remembered, superseded)) !== "refused"
 
 	const first = accounts.value[0]
 	const outcome = await commitAccountTarget(deps, first, superseded)
@@ -499,12 +488,15 @@ async function setupActiveAccountRun(deps: AccountActionDeps, activation: { epoc
 	if (outcome === "refused") return false
 	// Re-check across the await boundary between the commit and the durable
 	// write: a supersede landing in that gap must not let the loser stamp the
-	// global pointer (it outlives this run — the next bootstrap reads it).
+	// device's selection (it outlives this run — the next bootstrap reads it).
 	if (superseded()) return false
-	await storageLocalSet({
-		"nulo:ui:activeAccount": account.value?.address,
-	})
+	await rememberSelection(scopeProfileId, account.value?.address)
 	return true
+}
+
+async function rememberSelection(profileId: string | undefined, address: string | undefined): Promise<void> {
+	if (profileId === undefined || address === undefined) return
+	await managers.uiPreference.setSelectedAccount(profileId, address)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -517,15 +509,26 @@ function createNetworkActions(refs: {
 	networks: Ref<Network[]>
 }) {
 	const { network, networkStatus, networks } = refs
+	let statusReads = 0
 	const syncNetworkStatus = async () => {
 		if (!network.value) return
 		networkStatus.value = "sync"
-		const oldNetworkId = network.value?.id
-		const status = await requireNetwork().getNodeStatus(network.value.id)
+		const oldNetworkId = network.value.id
+		const read = ++statusReads
+		// Any rejected read shows Inactive, as the service's own failed probe does; otherwise the dot
+		// stays "sync".
+		const status = await requireNetwork()
+			.getNodeStatus(oldNetworkId)
+			.catch(() => NodeStatus.Inactive)
 
-		if (oldNetworkId !== network.value?.id) return
+		// A silent node's read rejects only at the popup's deadline, after any newer read has landed.
+		if (read !== statusReads || oldNetworkId !== network.value?.id) return
 
 		networkStatus.value = NodeStatus[status]
+	}
+	/** A caller's own read of `networkId`'s node just failed; a later status read still overwrites it. */
+	const markNetworkInactive = (networkId: string) => {
+		if (network.value?.id === networkId) networkStatus.value = NodeStatus[NodeStatus.Inactive]
 	}
 	const renameNetwork = async (id: string, name: string) => {
 		await requireNetwork().renameNetwork(id, name)
@@ -535,7 +538,7 @@ function createNetworkActions(refs: {
 		await requireNetwork().deleteNetwork(target.id)
 		networks.value = networks.value.filter((n) => n.id !== target.id)
 	}
-	return { syncNetworkStatus, renameNetwork, removeNetwork }
+	return { syncNetworkStatus, markNetworkInactive, renameNetwork, removeNetwork }
 }
 
 // ---------------------------------------------------------------------------------------------

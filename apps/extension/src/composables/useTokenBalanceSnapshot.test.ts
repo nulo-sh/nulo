@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { type Ref, reactive, ref } from "vue"
 import type { TokenBalanceInfo } from "@/wallet/services/token-balance/client"
@@ -5,17 +6,7 @@ import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "./useTo
 
 const row = (id: number, chainId = 1, account = "0xa") => ({ id, account, token: { chainId } }) as unknown as TokenBalanceInfo
 
-function held<T>() {
-	let resolve!: (v: T) => void
-	let reject!: (e: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
-
-function setup(over: { scopeFence?: () => () => boolean; mapRow?: (r: TokenBalanceInfo) => TokenBalanceInfo } = {}) {
+function setup(over: Partial<Parameters<typeof useTokenBalanceSnapshot<TokenBalanceInfo>>[0]> = {}) {
 	const listeners = new Set<() => void>()
 	const client = {
 		getTokenBalances: vi.fn<(id?: number, account?: string) => Promise<TokenBalanceInfo[]>>(),
@@ -65,7 +56,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("only the latest run lands", async () => {
 		const s = setup()
-		const first = held<TokenBalanceInfo[]>()
+		const first = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(first.promise).mockResolvedValueOnce([row(2)])
 		const p1 = s.snap.fetchTokenBalances()
 		await s.snap.fetchTokenBalances()
@@ -77,7 +68,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("a scope fence gone false drops the run on resolve and on reject", async () => {
 		let current = true
 		const s = setup({ scopeFence: () => () => current })
-		const ok = held<TokenBalanceInfo[]>()
+		const ok = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(ok.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		current = false
@@ -87,7 +78,7 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.state.value).toBe("loading")
 
 		current = true
-		const bad = held<TokenBalanceInfo[]>()
+		const bad = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(bad.promise)
 		const p2 = s.snap.fetchTokenBalances()
 		current = false
@@ -99,7 +90,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("a run marked dirty in flight refetches instead of landing", async () => {
 		const s = setup()
-		const first = held<TokenBalanceInfo[]>()
+		const first = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(first.promise).mockResolvedValueOnce([row(1), row(2)])
 		const p = s.snap.fetchTokenBalances()
 		s.snap.markDirty()
@@ -120,11 +111,16 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
 	})
 
-	test("a rejection after a load keeps the rows and the loaded state", async () => {
+	test("a re-read keeps the rows and the loaded state while it is out, and when it is refused", async () => {
 		const s = setup()
-		s.client.getTokenBalances.mockResolvedValueOnce([row(1)]).mockRejectedValue(new Error("port closed"))
+		s.client.getTokenBalances.mockResolvedValueOnce([row(1)])
 		await s.snap.fetchTokenBalances()
-		await s.snap.fetchTokenBalances()
+		const refused = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(refused.promise)
+		const p = s.snap.fetchTokenBalances()
+		expect(s.state.value).toBe("loaded")
+		refused.reject(new Error("port closed"))
+		await p
 		expect(ids(s.rows)).toEqual([1])
 		expect(s.state.value).toBe("loaded")
 	})
@@ -156,7 +152,7 @@ describe("useTokenBalanceSnapshot", () => {
 		s.snap.onBalanceUpdated(moved)
 		expect(s.rows.value).toEqual([moved])
 
-		const quiet = held<TokenBalanceInfo[]>()
+		const quiet = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceUpdated(row(9, 2))
@@ -164,13 +160,22 @@ describe("useTokenBalanceSnapshot", () => {
 		await p1
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
 
-		const stale = held<TokenBalanceInfo[]>()
+		const stale = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(stale.promise)
 		const p2 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceUpdated(row(9))
 		stale.resolve([row(1)])
 		await p2
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
+	})
+
+	test("an update for an unseen id waits for the next read, in scope or not", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		s.snap.onBalanceUpdated(row(8, 2))
+		s.snap.onBalanceUpdated(row(9))
+		expect(ids(s.rows)).toEqual([1])
 	})
 
 	test("an add for a listed id adds nothing; a new id lands through mapRow", async () => {
@@ -186,17 +191,18 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("an out-of-scope add lands nothing and leaves a run in flight clean; an in-scope one marks it", async () => {
 		const s = setup()
-		const quiet = held<TokenBalanceInfo[]>()
+		const quiet = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
 		const p1 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceAdded(row(7, 2))
 		s.snap.onBalanceAdded(row(8, 1, "0xother"))
+		expect(ids(s.rows)).toEqual([])
 		quiet.resolve([row(1)])
 		await p1
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 		expect(ids(s.rows)).toEqual([1])
 
-		const stale = held<TokenBalanceInfo[]>()
+		const stale = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(stale.promise).mockResolvedValueOnce([row(1), row(9)])
 		const p2 = s.snap.fetchTokenBalances()
 		s.snap.onBalanceAdded(row(9))
@@ -219,7 +225,7 @@ describe("useTokenBalanceSnapshot", () => {
 		const s = setup()
 		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
 		await s.snap.fetchTokenBalances()
-		const late = held<TokenBalanceInfo[]>()
+		const late = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(late.promise)
 		const p = s.snap.fetchTokenBalances()
 		s.snap.dispose()
@@ -233,7 +239,7 @@ describe("useTokenBalanceSnapshot", () => {
 
 	test("the chain id is read when the run starts", async () => {
 		const s = setup()
-		const pending = held<TokenBalanceInfo[]>()
+		const pending = deferred<TokenBalanceInfo[]>()
 		s.client.getTokenBalances.mockReturnValueOnce(pending.promise)
 		const p = s.snap.fetchTokenBalances()
 		;(s.live.network as { chainId: number }).chainId = 2
@@ -249,5 +255,59 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.state.value).toBe("loading")
 		await Promise.resolve()
 		expect(s.state.value).toBe("loaded")
+	})
+})
+
+describe("useTokenBalanceSnapshot — the rules a view keeps over the defaults", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("added: replace swaps a listed row for the add, through mapRow; a new id is appended", async () => {
+		const s = setup({ added: "replace", mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1), row(2)])
+		await s.snap.fetchTokenBalances()
+		const newer = { ...row(1), marker: "newer" } as never
+		s.snap.onBalanceAdded(newer)
+		s.snap.onBalanceAdded(row(3))
+		expect(s.rows.value).toEqual([
+			{ ...(newer as object), mapped: true },
+			{ ...row(2), mapped: true },
+			{ ...row(3), mapped: true },
+		])
+	})
+
+	test("invalidate drops the pending retry and the run in flight, and keeps the connect count", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+		await s.snap.fetchTokenBalances()
+		s.snap.invalidate()
+		await vi.advanceTimersByTimeAsync(5_000)
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		const late = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(late.promise).mockResolvedValue([row(2)])
+		const p = s.snap.fetchTokenBalances()
+		s.connect()
+		s.snap.invalidate()
+		late.resolve([row(1)])
+		await p
+		expect(s.rows.value).toEqual([])
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("reset also makes the next connect the first again", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		s.connect()
+		s.snap.reset()
+		s.connect()
+		expect(s.client.getTokenBalances).not.toHaveBeenCalled()
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
 	})
 })

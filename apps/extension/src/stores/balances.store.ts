@@ -49,6 +49,19 @@ import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 export type BalanceScope = ActivityScope
+
+/** The popup's selected scope, or `null` until a profile, a network and an account are all set. */
+export function selectedBalanceScope(app: {
+	profile?: { id: string } | null
+	network?: { id: string; chainId: number } | null
+	account?: { address: string } | null
+}): BalanceScope | null {
+	const { profile, network, account } = app
+	return profile?.id && network?.id && account?.address
+		? { profileId: profile.id, networkId: network.id, chainId: network.chainId, accountAddress: account.address }
+		: null
+}
+
 export type SliceStatus = "idle" | "fetching" | "ready" | "degraded"
 
 export interface GasSlice {

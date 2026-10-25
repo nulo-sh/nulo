@@ -233,6 +233,9 @@ export class WalletSdkDispatcher {
 		// payload; before the scope check, so no checker, handler or window reads an unparsed value.
 		await assertWalletSchemaArgs(method, args)
 		this.enforceScopeFor(method, args, grants, dappSession)
+		// Every call past those checks answers CHAIN_NOT_SUPPORTED on a chain the wallet does not serve,
+		// a quarantined one included, even when its handler never reads a network.
+		await this.resolveNetwork(ctx)
 
 		// Methods that don't go through ExecutionService return the handler's
 		// own promise, un-awaited here (rejection timing unchanged).
@@ -247,7 +250,8 @@ export class WalletSdkDispatcher {
 		const operation = await this.buildOperation(kind, args, ctx, dappSession)
 		const origin: LocalTxOrigin = { type: OriginType.DAPP, name: ctx.origin }
 
-		const results = await this.executionService.executeOperations([operation], origin)
+		// Under the admission fence, so a registration counts against the session that authorized it.
+		const results = await this.executionService.executeOperations([operation], origin, undefined, undefined, undefined, ctx.fence)
 		return unwrapOperationResult(results[0])
 	}
 
@@ -765,7 +769,6 @@ export class WalletSdkDispatcher {
 			: undefined
 		plan.availableAccounts = availableAccounts
 		const consent = readConsent(dappSession.authorizationsWithoutAsking)
-		const heldAccounts = await this.heldAccountsOf(dappSession, ctx)
 		try {
 			return await this.dappInteractionService.requestCapabilities({
 				sessionId: dappSession.id,
@@ -773,7 +776,6 @@ export class WalletSdkDispatcher {
 				delta: plan.delta,
 				existingGrants: plan.existingCaps,
 				heldGrants: plan.existingGrants.map((g) => g.capability),
-				heldAccounts,
 				...(consent !== undefined ? { authorizationsWithoutAsking: consent } : {}),
 				reRequested: reRequestedTypes(plan),
 				availableAccounts,
@@ -809,20 +811,6 @@ export class WalletSdkDispatcher {
 				held,
 			),
 		)
-	}
-
-	/** The session's members on its chain, named only by the wallet's own account records: never
-	 *  by a per-app alias or anything the request carries. A member the wallet no longer lists stays,
-	 *  unnamed, so the window never counts two members as one. */
-	private async heldAccountsOf(dappSession: IDappSessionRef, ctx: SessionContext): Promise<Array<{ address: string; name?: string }>> {
-		const members = new Map([...this.getSessionAccountAddresses(dappSession, ctx.chainId)].map((a) => [a.toLowerCase(), a]))
-		if (members.size === 0) return []
-		const named = (await this.accountService.getAccounts(ctx.profileId, ctx.chainId))
-			.filter((acc) => members.has(acc.address.toLowerCase()))
-			.map((acc) => ({ address: acc.address, ...(acc.name ? { name: acc.name } : {}) }))
-		const namedKeys = new Set(named.map((acc) => acc.address.toLowerCase()))
-		const unnamed = [...members].filter(([key]) => !namedKeys.has(key)).map(([, address]) => ({ address }))
-		return [...named, ...unnamed]
 	}
 
 	/** The dApp's chain may be one the user has never activated, so its default account may not
@@ -983,7 +971,8 @@ export class WalletSdkDispatcher {
 		// see another session.
 		if (NETWORK_ONLY_KINDS.has(kind)) {
 			const network = await this.resolveNetwork(ctx)
-			return this.buildNetworkOperation(kind, args, network.id)
+			const sessionAccounts = dappSession ? [...this.getSessionAccountAddresses(dappSession, ctx.chainId)] : []
+			return this.buildNetworkOperation(kind, args, network.id, sessionAccounts)
 		}
 
 		if (ACCOUNT_KINDS.has(kind)) {
@@ -1010,14 +999,19 @@ export class WalletSdkDispatcher {
 	 *   - getAddressBook(): []
 	 *   - registerContract(instance, artifact?, secretKey?): [ContractInstanceWithAddress, ContractArtifact?, Fr?]
 	 */
-	private buildNetworkOperation(kind: Operation["kind"], args: unknown[], networkId: string): Operation {
+	private buildNetworkOperation(
+		kind: Operation["kind"],
+		args: unknown[],
+		networkId: string,
+		sessionAccounts: readonly string[],
+	): Operation {
 		switch (kind) {
 			case "aztec_getChainInfo":
 				return { kind, networkId }
 			case "aztec_getContractClassMetadata":
 				return { kind, networkId, id: args[0] as AztecGetContractClassMetadataOperation["id"] }
 			case "aztec_getContractMetadata":
-				return { kind, networkId, address: args[0] as AztecGetContractMetadataOperation["address"] }
+				return { kind, networkId, address: args[0] as AztecGetContractMetadataOperation["address"], sessionAccounts }
 			case "aztec_getPrivateEvents":
 				return {
 					kind,
@@ -1054,7 +1048,6 @@ export class WalletSdkDispatcher {
 	 *   - simulateTx(exec, opts): [ExecutionPayload, SimulateOptions]
 	 *   - executeUtility(call, opts): [FunctionCall, ExecuteUtilityOptions]
 	 *   - profileTx(exec, opts): [ExecutionPayload, ProfileOptions]
-	 *   - createAuthWit(messageHashOrIntent): [IntentInnerHash | CallIntent]
 	 *
 	 * registerToken / sendTx are handled separately via handleRegisterToken /
 	 * handleSendTx, which route through DappInteractionService for the popup gate.
@@ -1087,14 +1080,6 @@ export class WalletSdkDispatcher {
 					accountAddress,
 					exec: args[0] as AztecProfileTxOperation["exec"],
 					opts: { ...((args[1] as Record<string, unknown>) ?? {}), from: accountAddress } as AztecProfileTxOperation["opts"],
-				}
-			case "aztec_createAuthWit":
-				// WalletSchema: createAuthWit(from: AztecAddress, messageHashOrIntent) — args[0] is from, args[1] is the intent
-				return {
-					kind,
-					networkId,
-					accountAddress,
-					messageHashOrIntent: args[1] as AztecCreateAuthWitOperation["messageHashOrIntent"],
 				}
 			default:
 				throw new Error(`Unknown account operation: ${kind}`)

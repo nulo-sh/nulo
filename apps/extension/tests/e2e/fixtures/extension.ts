@@ -1,52 +1,55 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { existsSync, readdirSync } from "node:fs"
-import { TimeoutError, type Browser, type Page, type ConsoleMessage } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { test as base, expect, inject } from "vitest"
 import path from "node:path"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { DEFAULT_SEEDS } from "@/wallet/services/network/seeds"
 import {
 	type LaunchedBrowser,
 	browserTraffic,
 	discoverExtensionId,
 	extensionUrl,
 	gotoExtensionPage,
-	isTargetGone,
 	launchBrowser,
 	newPage,
 	openScratchPage,
-	pickFile,
-	prepareClick,
 	stopBackground,
 } from "./browser"
-import {
-	captureBalanceBaseline,
-	createAccount,
-	getAccountAddress,
-	importToken,
-	readLivenessBaseline,
-	switchToLocalNetwork,
-	waitForFreshBalanceRow,
-	waitForWorkerLiveness,
-} from "./helpers"
-import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
+import { createAccount, getAccountAddress, waitForSelectedAccount } from "./accounts"
+import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
+import { switchToLocalNetwork, switchToNetwork } from "./networks"
+import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
+import { importTokenAndWaitForBalance } from "./tokens"
+import { closeConfirmed, openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
+import { assertPgOk, openPlayground, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { approveCapabilities, approveConnect, approveVerify, waitForPopup, waitForPopupClosed } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
-import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
-import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
+import type { LegalSeed } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
 import {
 	type EgressCanary,
 	type EgressGuard,
 	type HeldNode,
+	CRS_HOSTS,
 	LIVE_LIST_HOST,
 	LIVE_NODE_HOST,
 	guardArmed,
 	ownGuardedLaunch,
 } from "./egress-guard"
-import { holdNodeStub } from "./node-stub"
-import { pageErrorOf } from "./page-errors"
+import { holdNodeStubs } from "./node-stub"
+import { readSealedRows } from "./sealed-rows"
 import { heldListStorage } from "./token-list"
+import { PollTimeoutError, pollUntil } from "./poll"
+
+/** Every seeded remote node, which a guarded launch holds a stand-in for unless it sends that host
+ *  direct: the default network's node, and the one a spec switches to, both answer at once. */
+const SEEDED_NODE_URLS: readonly string[] = DEFAULT_SEEDS.filter((seed) => seed.kind !== "local").map((seed) => seed.rpcUrl)
+
+// Specs reach the page primitives and the popup openers through this hub; they live in leaves so
+// the modules the hub imports can use them without importing the hub back.
+export * from "./dom"
+export * from "./wallet-pages"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -59,23 +62,9 @@ export interface ExtensionContext {
 	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
-	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
-	 *  no guard is armed, and no stand-in in a `live` launch. */
-	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
-}
-
-/**
- * Chrome reports a refused loopback probe as a "Failed to load resource" console error. The
- * wallet probes Presto on the onboarding step and on every settings open, and a box without
- * Presto (every smoke runner, the plaintext-only CI prover on the HTTPS port) refuses it by
- * design — that is the browser's report of a probe the wallet expects to fail, not an
- * extension error. Only a refused connection to the two exact health URLs is exempt; a 500,
- * a certificate failure, or any other URL still counts.
- */
-function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
-	if (!msg.text().startsWith("Failed to load resource") || !msg.text().includes("net::ERR_CONNECTION_REFUSED")) return false
-	const url = msg.location().url
-	return url === PRESTO_HTTPS_HEALTH_URL || url === PRESTO_HTTP_HEALTH_URL
+	/** The launch's egress guard, canary and a stand-in for each seeded remote node; absent where no
+	 *  guard is armed, and no stand-in for a node a `live` launch sends direct. */
+	egress?: { guard: EgressGuard; canary: EgressCanary; nodes: readonly HeldNode[] }
 }
 
 /** Launch a fresh browser with the extension and wait for SW liveness.
@@ -96,6 +85,9 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *
  *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
  *
+ *  `grantPermissionRequests: true` grants a permission request from a real click with no prompt
+ *  (`LaunchOptions`; Firefox only).
+ *
  *  `live: true` sends the Testnet node's host and the token list's host direct instead of holding
  *  the stand-in, and fails the close if the guard sees either. Only a run that provides `liveLeg` may
  *  ask: elsewhere the launch would make a gate depend on a live host.
@@ -110,19 +102,26 @@ export async function launchExtension(
 		fixedWindowSize?: boolean
 		live?: true
 		tokenList?: "held"
+		grantPermissionRequests?: true
+		/** A build other than the run's: a release's or an update candidate's. */
+		extensionPath?: string
+		installInSession?: true
+		/** The build carries no CSP violation recorder, as a release build does not. */
+		cspRecorder?: false
 	} = {},
 ): Promise<ExtensionContext> {
-	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
-	const extensionPath = inject("extensionPath")
-	// Read before Chrome writes the profile: `onInstalled` fires with reason "install" — the only
-	// reason that opens the first-run tab — exactly when the profile has never held the extension.
-	// A caller's freshly created empty `userDataDir` is therefore a fresh install, not a reuse.
+	const { userDataDir, waitForLiveness = true, fixedWindowSize, grantPermissionRequests, installInSession } = opts
+	const extensionPath = opts.extensionPath ?? inject("extensionPath")
+	const cspArmed = CSP_REPORT_ARMED && opts.cspRecorder !== false
+	// Read before the browser writes the profile. An absent or empty directory has never held the
+	// wallet, so its onboarding cannot be complete: the launch requires its first-run tab and defaults
+	// to seeding the current Terms.
 	const freshProfile = !userDataDir || !existsSync(userDataDir) || readdirSync(userDataDir).length === 0
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
 	const launch = (egress?: { guardPort: number; liveHosts?: readonly string[] }) =>
-		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress, grantPermissionRequests, installInSession })
 	const settle = (browser: Browser) =>
 		settleLaunchedExtension(browser, {
 			freshProfile,
@@ -133,13 +132,13 @@ export async function launchExtension(
 	if (opts.live && inject("liveLeg") !== true) {
 		throw new Error("a live launch reaches the live Testnet node and list host, which only an artifact run's live spec may do")
 	}
-	const liveHosts = opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : undefined
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, liveHosts)
+	const directHosts = [...CRS_HOSTS, ...(opts.live ? [LIVE_NODE_HOST, LIVE_LIST_HOST] : [])]
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, directHosts, cspArmed)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
 		const extensionId = await settle(browser)
-		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser) }
+		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser, cspArmed) }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
 		await closeBrowser().catch(() => {})
@@ -153,8 +152,9 @@ function cspLatch(
 	browser: Browser,
 	extensionId: string,
 	closeBrowser: () => Promise<void>,
+	armed: boolean,
 ): Pick<ExtensionContext, "close" | "checkCspViolations"> {
-	let checked = !CSP_REPORT_ARMED
+	let checked = !armed
 	const read = () => readCspViolations(browser, extensionId)
 	return {
 		checkCspViolations: async () => {
@@ -173,22 +173,28 @@ function cspLatch(
 async function launchBehindEgressGuard(
 	launch: (egress: { guardPort: number; liveHosts?: readonly string[] }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
-	liveHosts: readonly string[] | undefined,
+	directHosts: readonly string[],
+	cspArmed: boolean,
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
 		traffic: browserTraffic,
-		liveHosts,
+		liveHosts: directHosts,
 		launch: async (egress) => {
 			const launched = await launch(egress)
 			return { value: launched.browser, close: launched.close }
 		},
 		settle,
 		probeCanary: fireCanary,
-		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
-		holdNode: liveHosts === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
+		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser, cspArmed),
+		holdNodes: (browser, extensionId) =>
+			holdNodeStubs(
+				browser,
+				extensionId,
+				SEEDED_NODE_URLS.filter((url) => !directHosts.includes(new URL(url).hostname)),
+			),
 	})
-	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
+	const { value: browser, settled: extensionId, wrapped, guard, canary, nodes } = guarded
 	return {
 		browser,
 		extensionId,
@@ -196,7 +202,7 @@ async function launchBehindEgressGuard(
 		pageErrors: [],
 		close: guarded.close,
 		checkCspViolations: wrapped.checkCspViolations,
-		egress: { guard, canary, node },
+		egress: { guard, canary, nodes },
 	}
 }
 
@@ -215,15 +221,24 @@ async function fireCanary(browser: Browser, extensionId: string, url: string, re
 		await page.evaluate((target: string) => {
 			fetch(target, { mode: "no-cors", cache: "no-store" }).catch(() => {})
 		}, url)
-		const deadline = Date.now() + budgetMs
-		while (!recorded() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+		await pollUntil(
+			async () => recorded(),
+			(seen) => seen,
+			{
+				label: "the guard recording the canary",
+				timeoutMs: budgetMs,
+				intervalMs: 100,
+			},
+		).catch((error: unknown) => {
+			if (!(error instanceof PollTimeoutError)) throw error
+		})
 	} finally {
 		await page.close().catch(() => {})
 	}
 }
 
-/** Discover the extension id, wait for the worker, close the first-run tab and mark onboarding
- *  complete. Returns the extension id. */
+/** Discover the extension id, wait for the worker, close the first-run tab (or the window it became)
+ *  and mark onboarding complete. Returns the extension id. */
 async function settleLaunchedExtension(
 	browser: Browser,
 	{
@@ -270,34 +285,11 @@ async function settleLaunchedExtension(
 					return false
 				}
 			},
-			{ timeout: 30_000, polling: 500 },
+			{ timeout: 30_000 },
 		)
 	}
 
-	// `onInstalled` opens the extension's first-run tab and stores its id in session storage. Nothing
-	// in the worker's boot awaits that open, so the id can land after liveness; on a fresh profile
-	// the install is certain, so the id is REQUIRED — a launch that cannot find it would hand the
-	// test an untracked extension page, and that is a setup failure, not a warning. A reused profile
-	// was installed by an earlier launch and opens no tab; there the poll is only a courtesy. Close
-	// the tab BEFORE marking onboarding complete: an onboarding page that mounts and reads the
-	// completed flag replaces itself with a popup window and drops the tracked id. Every e2e drives
-	// the popup flows directly; the tab-flow specs open their own tab.
-	const firstRunTabClosed = await blankPage.evaluate(async () => {
-		const key = "nulo:onboarding:tab-id"
-		for (let attempt = 0; attempt < 20; attempt++) {
-			const id = (await chrome.storage.session.get(key))[key]
-			if (typeof id === "number") {
-				await chrome.tabs.remove(id).catch(() => {})
-				await chrome.storage.session.remove(key)
-				return true
-			}
-			await new Promise((r) => setTimeout(r, 250))
-		}
-		return false
-	})
-	if (!firstRunTabClosed && freshProfile) {
-		throw new Error("launchExtension: the first-run onboarding tab never registered its id within 5s of liveness")
-	}
+	await closeFirstRunSurface(browser, blankPage, extensionId, freshProfile)
 
 	// Default: bypass the new onboarding tab flow for all e2e tests. Existing
 	// tests (registration, import-paths, passkey-paths, etc.) drive the
@@ -315,6 +307,39 @@ async function settleLaunchedExtension(
 	await blankPage.close()
 
 	return extensionId
+}
+
+/**
+ * Chrome's `--load-extension` and Firefox's temporary add-on report `install` on every launch, so the
+ * first-run tab opens each time and its id can land after liveness; over a completed onboarding the
+ * page turns into a popup window instead, often before the first read. Close whichever is left; fail
+ * on neither. A fresh profile cannot convert until the caller sets the flag, so there the id is
+ * required. An id read while the page is creating its window can still leave that window.
+ */
+async function closeFirstRunSurface(browser: Browser, page: Page, extensionId: string, freshProfile: boolean): Promise<void> {
+	// `chrome.windows` hides the window's tab URL without the `tabs` permission; its page target does not.
+	const popupDocument = extensionUrl(extensionId, "/src/popup/index.html")
+	await pollUntil(
+		async () => {
+			const tabClosed = await page.evaluate(async () => {
+				const key = "nulo:onboarding:tab-id"
+				const id = (await chrome.storage.session.get(key))[key]
+				if (typeof id !== "number") return false
+				await chrome.tabs.remove(id).catch(() => {})
+				await chrome.storage.session.remove(key)
+				return true
+			})
+			const converted = freshProfile ? [] : browser.targets().filter((t) => t.type() === "page" && t.url().startsWith(popupDocument))
+			for (const target of converted) await closeConfirmed(await target.asPage(), "launchExtension: the first-run popup window")
+			return tabClosed || converted.length > 0
+		},
+		(settled) => settled,
+		{
+			label: freshProfile ? "launchExtension: the first-run tab's id" : "launchExtension: the first-run tab's id or its popup window",
+			timeoutMs: 5_000,
+			intervalMs: 250,
+		},
+	)
 }
 
 /**
@@ -343,56 +368,6 @@ async function rebootOverHeldList(browser: Browser, extensionId: string, scratch
 	return next
 }
 
-/** Put the acceptance record in the named state, from any extension page. The service reads storage
- *  on every call, so a write here is seen by the very next admission check. */
-export async function seedLegalAcceptance(page: Page, seed: Exclude<LegalSeed, "keep">): Promise<void> {
-	await page.evaluate(
-		async ({ key, value }: { key: string; value: unknown }) => {
-			if (value === undefined) await chrome.storage.local.remove(key)
-			else await chrome.storage.local.set({ [key]: value })
-		},
-		{ key: LEGAL_ACCEPTANCE_KEY, value: legalSeedValue(seed) },
-	)
-}
-
-/** Open the onboarding tab directly. Use in tests that exercise the tab
- *  flow; complementary to `openPopup` which targets the popup HTML.
- *  Clears the `onboardingCompleted` flag first so the redirect predicates
- *  in register/import/profile-new behave as they would on a fresh install. */
-export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Exclude<LegalSeed, "keep"> } = {}): Promise<Page> {
-	// Reset onboardingCompleted=false so the onboarding flow runs as on
-	// fresh install (launchExtension seeded it to true by default).
-	const setupPage = await newPage(ctx.browser)
-	patchPagePolling(setupPage)
-	await gotoExtensionPage(setupPage, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
-	// A real fresh install has no acceptance; specs that are about the gate ask for that. Left alone,
-	// the launch's `current` seed stands and a spec about a later step can still jump to it.
-	// Seeded BEFORE the flag flips: the popup reads the flag while it mounts, and on a profile with
-	// no wallet a `false` makes it open the onboarding tab and close itself — so the flip is the
-	// last thing evaluated in it, and it may already be gone when this closes it.
-	if (opts.legal) await seedLegalAcceptance(setupPage, opts.legal)
-	await setupPage.evaluate(async () => {
-		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
-	})
-	await setupPage.close().catch(() => {})
-
-	const page = await newPage(ctx.browser)
-	patchPagePolling(page)
-	await page.setViewport({ width: 720, height: 900 })
-	await page.bringToFront()
-
-	ctx.consoleErrors = []
-	ctx.pageErrors = []
-
-	recordPageErrors(ctx, page)
-
-	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
-	await gotoExtensionPage(page, url)
-	// Wait for Vue mount: welcome CTA must render.
-	await page.waitForSelector('[data-testid="onboarding-welcome-create"]', { visible: true, timeout: 30_000 })
-	return page
-}
-
 /** Register a profile with a test password. Leaves the extension on #/popup/general.
  *  Exported so a cold-shard warm-up tap (and any other test infra that
  *  drives the full register flow outside the fixture pipeline) can reuse it. */
@@ -414,6 +389,8 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	// A fresh install's first profile has no name field; it is created as "Main".
 	await expectNoNameField(page, "register-page", "register-name-input")
 
+	// New profile opens on Passkey.
+	await clickByTestId(page, "register-method-password")
 	await page.waitForSelector('input[placeholder="Strong password"]', {
 		visible: true,
 		timeout: 30_000,
@@ -430,24 +407,37 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 	await page.close()
 }
 
+/** Registers a profile and moves it to Testnet, the chain every entry of the held list names; a new
+ *  profile starts on Mainnet. */
+export async function registerOnListChain(ctx: ExtensionContext): Promise<void> {
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToNetwork(page, "Testnet")
+	await page.close()
+}
+
 /**
  * Drive the wallet-sdk handshake through the local @nulo/playground page:
- *   1) Open the playground (?test=1 disables HMR + persistence)
+ *   1) Open the playground (?test=1 disables HMR + persistence), on `opts.chainInfo`'s chain if given
  *   2) Click `pg-btn-connect` — fires `WalletManager.getAvailableWallets`
  *   3) Approve at `/windows/discover` (testid `discover-allow-btn`)
- *   4) After ECDH key exchange, approve the emoji check the same window shows
+ *   4) After ECDH key exchange, approve the emoji check, which opens in its own window as the
+ *      connect window closes
  *   5) Wait for the playground status pill to flip to `connected`
  *
  * Returns the dApp Page so the caller can keep driving it; the caller is
- * responsible for closing it (or letting the browser teardown handle it).
+ * responsible for closing it (or letting the browser teardown handle it). `approve` is step 3 and
+ * resolves with the check's page; a release build whose check opens elsewhere passes its own.
  *
  * Exported alongside `registerProfile` so a cold-shard warm-up tap
  * can perform the same setup without going through the fixture pipeline.
  */
-export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
-	const { openPlayground } = await import("./playground")
-	const { waitForPopup, approveConnect, approveVerify } = await import("./popups")
-
+export async function connectPlayground(
+	ctx: ExtensionContext,
+	opts: Parameters<typeof openPlayground>[1] = {},
+	approve: (discoverPage: Page) => Promise<Page> = (discoverPage) => approveConnect(ctx, discoverPage),
+): Promise<Page> {
 	// Internal phase-tag so the outer `[dappConnectedExtensionPerTest:connectPlayground]`
 	// error tells us WHICH step inside this function fails. Without this we
 	// only know "30s timeout somewhere in here" — useless for triage.
@@ -460,7 +450,7 @@ export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
 		}
 	}
 
-	const dappPage = await step("openPlayground", () => openPlayground(ctx))
+	const dappPage = await step("openPlayground", () => openPlayground(ctx, opts))
 
 	// Set up popup listeners BEFORE the click so we don't miss the events.
 	const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
@@ -474,7 +464,7 @@ export async function connectPlayground(ctx: ExtensionContext): Promise<Page> {
 	await step("clickConnect", () => clickByTestId(dappPage, "pg-btn-connect"))
 
 	const discoverPage = await step("awaitDiscoverPopup", () => discoverP)
-	const verifyPage = await step("approveConnect", () => approveConnect(ctx, discoverPage))
+	const verifyPage = await step("approveConnect", () => approve(discoverPage))
 	await step("approveVerify", () => approveVerify(verifyPage))
 
 	await step("waitForConnectedStatus", () =>
@@ -566,20 +556,15 @@ const pickFirstAccount = async (accountIds: (string | null)[]): Promise<string[]
 
 type TwoAccountDapp = ExtensionContext & { playgroundPage: Page; accountAddresses: string[] }
 
-/** Ground truth from the wallet's own storage — every account and network row, raw (values may
- *  be serialized strings) — so a "<2 accounts exposed" failure discriminates wrong-chain creation
- *  from popup-side filtering. */
-function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
-	return popup.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		const out: string[] = []
-		for (const [k, v] of Object.entries(all)) {
-			if (k.startsWith("nulo:core:accounts") || k.startsWith("nulo:core:networks")) {
-				out.push(`${k} => ${(typeof v === "string" ? v : JSON.stringify(v)).slice(0, 400)}`)
-			}
-		}
-		return out.join(" ||| ")
-	})
+/** Ground truth from the wallet: every account row it reads and each network's chain, so a "<2
+ *  accounts exposed" failure discriminates wrong-chain creation from popup-side filtering. A network's
+ *  endpoints stay out: a node URL may carry a provider key. */
+async function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
+	const accounts = (await readSealedRows(popup, "accounts").catch(() => [])).map(({ row }) => JSON.stringify(row))
+	const networks = (await readSealedRows<Record<string, unknown>>(popup, "networks").catch(() => [])).map(
+		({ row: { id, name, kind, chainId, profileId } }) => JSON.stringify({ id, name, kind, chainId, profileId }),
+	)
+	return [...accounts, ...networks].join(" ||| ")
 }
 
 /** The two-account dApp fixture body, shared by its `transaction` and `transaction-contracts`
@@ -601,13 +586,7 @@ function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transac
 			// Persistence assertion: the row rendering proves only the optimistic
 			// appStore push; verify the SERVICE write landed before moving on.
 			await phase("assertSecondAccountPersisted", async () => {
-				postCreateDump = await setupPage.evaluate(async () => {
-					const all = await chrome.storage.local.get(null)
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith("nulo:core:accounts"))
-						.map(([, v]) => (typeof v === "string" ? v : JSON.stringify(v)))
-						.join(" ||| ")
-				})
+				postCreateDump = (await readSealedRows(setupPage, "accounts")).map(({ row }) => JSON.stringify(row)).join(" ||| ")
 				if (!postCreateDump.includes('"Second"')) {
 					throw new Error(`account "Second" not in storage immediately after creation. Stored: ${postCreateDump.slice(0, 600)}`)
 				}
@@ -637,6 +616,25 @@ function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transac
 	}
 }
 
+/** The sandbox config the network setup provides; throws where none is, as on a smoke run. */
+export function requireAztecConfig(): AztecTestConfig {
+	const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
+	if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+	return aztecConfig
+}
+
+/** What the funded network fixtures mint to the wallet's account, and so expect on its token row. */
+const FIXTURE_TOKEN_RAW = 1000n * 10n ** 18n
+
+async function launchOnLocalNetwork(): Promise<{ ctx: ExtensionContext; page: Page }> {
+	const ctx = await launchExtension()
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToLocalNetwork(page)
+	return { ctx, page }
+}
+
 export const test = base.extend<{
 	/** Fresh browser with extension loaded, no profile. */
 	extension: ExtensionContext
@@ -646,9 +644,10 @@ export const test = base.extend<{
 	 *  for tests that wipe profile/account state mid-flow (reset-profile,
 	 *  destructive recovery flows) so the wipe doesn't leak into siblings. */
 	registeredExtensionPerTest: ExtensionContext
-	/** `registeredExtension` over a held signed list, whose price ids price its tokens. */
+	/** `registeredExtension` over a held signed list, whose price ids price its tokens, on Testnet:
+	 *  the list, like the published one, names Testnet tokens only. */
 	listedExtension: ExtensionContext
-	/** `registeredExtensionPerTest` over a held signed list. */
+	/** `registeredExtensionPerTest` over a held signed list, on Testnet. */
 	listedExtensionPerTest: ExtensionContext
 	/** Registered extension + Local Network + dapp connected via @nulo/playground.
 	 *  File-scoped: shared across tests in the same file. Use `dappConnectedExtensionPerTest`
@@ -675,13 +674,7 @@ export const test = base.extend<{
 	 *  cap-popup round-trip during the test budget — the cap-popup work happens
 	 *  in fixture setup, which has hookTimeout=300s. The exposed `accountAddress`
 	 *  is the first account from the cap popup (the one the fixture selected on
-	 *  the dApp's behalf).
-	 *
-	 *  Mirrors the `dappConnectedExtensionWithAccountsCap` pattern; the
-	 *  cap-grant inner helper is intentionally duplicated rather than abstracted
-	 *  to keep the two fixtures independently auditable. Refactor once we have
-	 *  three or more such fixtures (CLAUDE.md "same code in 3 places" threshold).
-	 *  See implementations-plan/archive/e2e-stabilization/plan.md (Cap fixtures). */
+	 *  the dApp's behalf). */
 	dappConnectedExtensionWithTransactionCap: ExtensionContext & { playgroundPage: Page; accountAddress: string }
 	/** Same as `dappConnectedExtensionWithTransactionCap` BUT pre-grants the
 	 *  `transaction` bundle for up to the FIRST TWO accounts the cap popup
@@ -689,9 +682,7 @@ export const test = base.extend<{
 	 *  behavior (multi-account-from) without paying the cap-popup cold tax
 	 *  during the test budget. The exposed `accountAddresses` is the array
 	 *  of granted accounts (1 or 2 entries depending on what the wallet
-	 *  exposed). Mirrors the `dappConnectedExtensionWithTransactionCap`
-	 *  pattern; the cap-grant inner helper is intentionally duplicated
-	 *  rather than abstracted for the same independence reason. */
+	 *  exposed). */
 	dappConnectedExtensionWithFirstTwoAccountsCap: ExtensionContext & {
 		playgroundPage: Page
 		accountAddresses: string[]
@@ -754,7 +745,7 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension({ tokenList: "held" })
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await use(ctx)
 			await ctx.close()
 		},
@@ -765,7 +756,7 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension({ tokenList: "held" })
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await use(ctx)
 			await ctx.close()
 		},
@@ -785,8 +776,8 @@ export const test = base.extend<{
 	dappConnectedExtension: [
 		async ({ registeredExtension }, use) => {
 			// Switch to Local Network BEFORE connecting the playground. The playground passes
-			// Fr.ZERO chainInfo (= chainId 0 = Local Network) while the e2e build seeds Testnet as
-			// the active network. The wallet now provisions a chain's default account on a dApp's
+			// Fr.ZERO chainInfo (= chainId 0 = Local Network) while a new profile starts on Mainnet,
+			// the default network. The wallet now provisions a chain's default account on a dApp's
 			// request, so the mismatch alone no longer empties the account picker (pinned by
 			// cap-chain-mismatch.test.ts) — but sendTx/sim tests need the ACTIVE network on the
 			// sandbox (funded accounts, fee estimation, sync), which only the switch provides.
@@ -856,11 +847,7 @@ export const test = base.extend<{
 	localNetworkExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 			await page.close()
 			await use(ctx)
 			await ctx.close()
@@ -871,15 +858,9 @@ export const test = base.extend<{
 	tokenReadyExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[tokenReady] Extension account address:", accountAddress)
@@ -896,7 +877,7 @@ export const test = base.extend<{
 					wallet,
 					aztecConfig.tokenAddress,
 					accountAddress,
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -904,25 +885,12 @@ export const test = base.extend<{
 				await walletCleanup?.()
 			}
 
-			await importToken(page, aztecConfig.tokenAddress)
-
-			// The extension's PXE syncs blocks independently and may take 30-60s on
-			// a fresh node; each refresh advances the sync. Fail-HARD: a fixture
-			// that quietly degrades just moves the failure downstream into
-			// whichever consumer reads the balance first, with worse evidence —
-			// the freshness-gated row wait throws with a storage census instead.
-			// Budget: 60s. Token-scoped, so fiat/superstring text cannot satisfy it.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 60_000,
-				})
-				console.log(`[tokenReady] balance row fresh + exact`)
-			}
+			// The extension's PXE syncs blocks independently and may take 30-60s on a fresh node; each
+			// refresh advances the sync. Fail-HARD: a fixture that quietly degrades moves the failure into
+			// whichever consumer reads the balance first, with worse evidence. Token-scoped, so fiat or
+			// superstring text cannot satisfy it.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString(), 60_000)
+			console.log(`[tokenReady] balance row fresh + exact`)
 
 			await page.close()
 
@@ -935,15 +903,9 @@ export const test = base.extend<{
 	feeJuiceReadyExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
-			const ctx = await launchExtension()
-			await registerProfile(ctx)
-
-			const page = await openPopup(ctx)
-			await waitForHash(page, "#/popup/general", 30_000)
-			await switchToLocalNetwork(page)
+			const { ctx, page } = await launchOnLocalNetwork()
 
 			const accountAddress = await getAccountAddress(page)
 			console.log("[feeJuiceReady] Extension account address:", accountAddress)
@@ -957,12 +919,11 @@ export const test = base.extend<{
 				const minterAddress = accounts[0]
 				const feeOptions = await createSponsoredFeeOptions(wallet)
 
-				// Mint tokens (same as tokenReadyExtension)
 				await mintPublicTokens(
 					wallet,
 					aztecConfig.tokenAddress,
 					accountAddress,
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -1000,21 +961,9 @@ export const test = base.extend<{
 				await walletCleanup?.()
 			}
 
-			await importToken(page, aztecConfig.tokenAddress)
-
-			// Fail-HARD freshness-gated row wait — see tokenReadyExtension's note.
-			// Budget: 90s.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 90_000,
-				})
-				console.log(`[feeJuiceReady] balance row fresh + exact`)
-			}
+			// Fail-HARD, as tokenReadyExtension's.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString())
+			console.log(`[feeJuiceReady] balance row fresh + exact`)
 
 			await page.close()
 			await use(Object.assign(ctx, { accountAddress }))
@@ -1026,8 +975,7 @@ export const test = base.extend<{
 	feeJuiceImportedExtension: [
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
-			const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-			if (!aztecConfig) throw new Error("aztecTestConfig not provided — is the local Aztec node running?")
+			const aztecConfig = requireAztecConfig()
 
 			// Phase 1: setup pre-funded account on-chain (script-side).
 			const { createTestWallet, setupPreFundedAccount, createSponsoredFeeOptions, mintPublicTokens } = await import("./aztec")
@@ -1045,13 +993,12 @@ export const test = base.extend<{
 				})
 				console.log(`[feeJuiceImported] pre-funded account: ${prefunded.accountAddress.toString()}`)
 
-				// Mint test tokens for the imported account so transfer flows have
-				// something to send (matches feeJuiceReadyExtension's pattern at :330).
+				// Mint test tokens for the imported account so transfer flows have something to send.
 				await mintPublicTokens(
 					wallet,
 					aztecConfig.tokenAddress,
 					prefunded.accountAddress.toString(),
-					1000n * 10n ** 18n,
+					FIXTURE_TOKEN_RAW,
 					aztecConfig.minterAddress,
 					feeOptions,
 				)
@@ -1074,7 +1021,8 @@ export const test = base.extend<{
 			})
 			await waitForHash(page, "#/popup/import", 5_000)
 
-			// Loaded at call time: the import drivers import this module.
+			// Loaded at call time: a static import would load `@nulo/wallet-crypto`, and bb.js through
+			// it, into every spec that imports this hub.
 			const { importSeed, POPUP_IMPORT_SHELL } = await import("../helpers/import-drivers")
 			await importSeed(page, prefunded.words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 
@@ -1082,16 +1030,9 @@ export const test = base.extend<{
 			// with the SAME address the script pre-funded.
 			await switchToLocalNetwork(page)
 
-			// Wait for nulo:ui:activeAccount to settle on the Local-chain address.
+			// Wait for the selection to settle on the Local-chain address.
 			const accountAddress = prefunded.accountAddress.toString()
-			await page.waitForFunction(
-				async (expected: string) => {
-					const r = await chrome.storage.local.get("nulo:ui:activeAccount")
-					return r["nulo:ui:activeAccount"] === expected
-				},
-				{ timeout: 30_000, polling: 500 },
-				accountAddress,
-			)
+			await waitForSelectedAccount(page, (addr) => addr === accountAddress, "the selection is the prefunded Local account", 30_000)
 			console.log(`[feeJuiceImported] extension account on Local: ${accountAddress}`)
 
 			// Trigger gas-balance-card render by visiting general; both balances
@@ -1108,22 +1049,10 @@ export const test = base.extend<{
 			)
 			console.log("[feeJuiceImported] gas-balance card shows non-zero public + private FJ")
 
-			// Import the test token + wait for it to render in the balance list,
-			// matching feeJuiceReadyExtension's :356-371 pattern. The send flow
-			// needs a token registered before send-from-type is selectable.
-			await importToken(page, aztecConfig.tokenAddress)
-			// Fail-HARD freshness-gated row wait — see tokenReadyExtension's note.
-			{
-				const baseline = await captureBalanceBaseline(page, accountAddress, aztecConfig.tokenAddress)
-				await waitForFreshBalanceRow(page, {
-					account: accountAddress,
-					tokenContract: aztecConfig.tokenAddress,
-					expectedPublicRaw: (1000n * 10n ** 18n).toString(),
-					baselineUpdatedAt: baseline,
-					timeoutMs: 90_000,
-				})
-				console.log(`[feeJuiceImported] token balance row fresh + exact`)
-			}
+			// The send flow needs a token registered before send-from-type is selectable. Fail-HARD, as
+			// tokenReadyExtension's.
+			await importTokenAndWaitForBalance(page, accountAddress, aztecConfig.tokenAddress, FIXTURE_TOKEN_RAW.toString())
+			console.log(`[feeJuiceImported] token balance row fresh + exact`)
 
 			await page.close()
 			await use(Object.assign(ctx, { accountAddress }))
@@ -1132,505 +1061,3 @@ export const test = base.extend<{
 		{ scope: "file" },
 	],
 })
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Patch a Page so its waiters default to time-based (`polling: 200`)
- * instead of Puppeteer's default `'raf'` (rAF-based) polling.
- *
- * `'raf'` polling is throttled in offscreen / unfocused tabs in modern
- * Chrome. The popup tab can lose focus during async flows when the SW
- * pushes a navigation while another popup window has focus — the page
- * state actually advances, but the waiter never observes it.
- *
- * `waitForFunction` directly accepts `polling`. `waitForSelector` does
- * NOT — it converts to a `waitForFunction` internally with rAF polling
- * baked in. To work around that we re-implement `waitForSelector` on top
- * of `waitForFunction` (running the standard "exists + visible if
- * requested + enabled if requested" predicate in-page). The new
- * implementation honours the same options shape: `{ visible, hidden,
- * timeout }` plus our forced `polling: 200`.
- */
-export function patchPagePolling(page: Page): void {
-	// ── waitForFunction passthrough ──────────────────────────────────────
-	const originalWaitForFunction = page.waitForFunction.bind(page) as Page["waitForFunction"]
-	// biome-ignore lint/suspicious/noExplicitAny: signature passthrough for Puppeteer overloads
-	;(page as any).waitForFunction = (...args: any[]) => {
-		const optionsIdx = args.findIndex((a) => a && typeof a === "object" && ("timeout" in a || "polling" in a))
-		if (optionsIdx >= 0) {
-			const opts = args[optionsIdx]
-			if (!("polling" in opts)) {
-				args[optionsIdx] = { ...opts, polling: 200 }
-			}
-		} else {
-			args.splice(1, 0, { polling: 200 })
-		}
-		return (originalWaitForFunction as unknown as (...a: unknown[]) => unknown)(...args)
-	}
-
-	// ── waitForSelector replacement ──────────────────────────────────────
-	// Only intercept plain-CSS selectors. Puppeteer also supports prefixed
-	// selectors (`text/...`, `xpath/...`, `aria/...`, `pierce/...`); those go
-	// through specialized QueryHandlers we don't reimplement. Delegate them
-	// to Puppeteer's original waitForSelector.
-	const originalWaitForSelector = page.waitForSelector.bind(page) as Page["waitForSelector"]
-	const PUPPETEER_PREFIXED_SELECTOR_RE = /^(?:text|xpath|aria|pierce)\//
-	// biome-ignore lint/suspicious/noExplicitAny: passthrough for Puppeteer overloads
-	;(page as any).waitForSelector = async (selector: string, options: { visible?: boolean; hidden?: boolean; timeout?: number } = {}) => {
-		if (PUPPETEER_PREFIXED_SELECTOR_RE.test(selector)) {
-			return originalWaitForSelector(selector, options)
-		}
-		const { visible = false, hidden = false, timeout = 30_000 } = options
-		// Use our patched waitForFunction (polling: 200) under the hood.
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic invocation on the patched method
-		await (page as any).waitForFunction(
-			// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 29 — the predicate implements Puppeteer's exact exists / visible / hidden selector semantics in-page
-			(args: { sel: string; visible: boolean; hidden: boolean }) => {
-				const el = document.querySelector<HTMLElement>(args.sel)
-				if (args.hidden) {
-					if (!el) return true
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return true
-					const rect = el.getBoundingClientRect()
-					return rect.width === 0 || rect.height === 0
-				}
-				if (!el) return false
-				if (args.visible) {
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-				}
-				return true
-			},
-			{ timeout, polling: 200 },
-			{ sel: selector, visible, hidden },
-		)
-		// Original waitForSelector returns an ElementHandle. The replacement
-		// returns null because our callers all immediately discard it (and
-		// element-handle methods are broken by the same CDP regression that
-		// motivated this whole approach).
-		return null
-	}
-}
-
-/** Await a puppeteer wait and, on TIMEOUT ONLY, replace it with a diagnostic
- *  that names what never happened. Every other failure — frame detach, CDP
- *  disconnect, page crash — keeps its own identity and message, because
- *  relabelling those as "the state never settled" is exactly how a real fault
- *  gets buried under a plausible-looking flake. The original is preserved as
- *  `cause`. Pass a function when the diagnostic has to read live page state. */
-export async function withTimeoutMessage<T>(wait: Promise<T>, message: string | (() => string | Promise<string>)): Promise<T> {
-	try {
-		return await wait
-	} catch (err) {
-		if (!(err instanceof TimeoutError)) throw err
-		let text: string
-		try {
-			text = typeof message === "function" ? await message() : message
-		} catch (diagErr) {
-			// A diagnostic that reads a dead page must never replace the timeout
-			// it was meant to explain.
-			text = `<diagnostic failed: ${diagErr instanceof Error ? diagErr.message : String(diagErr)}>`
-		}
-		throw new Error(text, { cause: err })
-	}
-}
-
-/**
- * Detect puppeteer detach errors that can occur during the brief CDP race
- * between `browser.newPage()` and the first `page.goto(...)`. These signal
- * a half-initialized frame, not a wallet-side problem — retrying with a
- * fresh page resolves them. Symptom string varies across puppeteer-core
- * versions and timing; match on any of the known phrases.
- */
-function isFrameDetachError(err: unknown): boolean {
-	const msg = err instanceof Error ? err.message : String(err)
-	// "Attempted to use detached Frame/Page" is puppeteer's OTHER detach wording
-	// (thrown by the handle decorators rather than the navigation path). Without
-	// it the retry above cannot see the very failure it exists to absorb.
-	return /Navigating frame was detached|frame got detached|Attempted to use detached (Frame|Page)|Session closed|Target closed|Connection closed/i.test(
-		msg,
-	)
-}
-
-/** Open the extension popup in a new page with error collection. */
-export async function openPopup(ctx: ExtensionContext): Promise<Page> {
-	// One bounded retry on frame-detach errors: under accumulated suite load,
-	// `browser.newPage()` can return a page whose CDP frame is in a half-
-	// initialized state, causing the first `page.goto(popupUrl)` to throw
-	// "Navigating frame was detached" immediately. The mitigation is simply
-	// to close and re-create the page. A broader catch would mask real
-	// crashes — match only on known detach-error signatures.
-	let attempt = 0
-	const maxAttempts = 2
-	for (;;) {
-		try {
-			return await openPopupOnce(ctx)
-		} catch (err) {
-			attempt += 1
-			if (attempt >= maxAttempts || !isFrameDetachError(err)) throw err
-			if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") {
-				console.log(`[openPopup] retry-on-detach attempt=${attempt}`)
-			}
-		}
-	}
-}
-
-async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
-	const page = await newPage(ctx.browser)
-	try {
-		return await setUpPopupPage(ctx, page)
-	} catch (err) {
-		// The retry in `openPopup` re-creates the page, so this one must not be
-		// left behind: a live target keeps its listeners and its extension
-		// connections, which the next attempt then races.
-		await page.close().catch(() => {})
-		throw err
-	}
-}
-
-const recorded = new WeakSet<Page>()
-
-/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
- *  `asPage()` hands every caller resolving one target the same `Page`. */
-export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
-	if (recorded.has(page)) return
-	recorded.add(page)
-	const onConsole = (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
-		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
-		// App `console.*` never reaches this listener on the success path: the console sniffer reroutes
-		// it to the background's log ring (`fixtures/journal.ts` readSwLogTrail). Browser-emitted entries
-		// do ("Unchecked runtime.lastError", on Chrome). `pageerror` holds every uncaught throw and
-		// unhandled rejection on both browsers, Firefox's through the driver's relay (FIREFOX.md). An
-		// error the app catches and logs reaches neither array: prefer DOM, storage or stage evidence.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	}
-	const onPageError = (payload: unknown) => {
-		const err = pageErrorOf(payload)
-		if (err) ctx.pageErrors.push(err)
-	}
-	page.on("console", onConsole)
-	page.on("pageerror", onPageError)
-}
-
-/** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
-async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
-	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
-	// Bring the new page to the front so the tab is "focused" — defense in
-	// depth against rAF throttling. Combined with `--disable-renderer-
-	// backgrounding` it prevents Chrome from suspending the offscreen
-	// renderer.
-	await page.bringToFront()
-	recordPageErrors(ctx, page)
-	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
-}
-
-/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
-async function closeConfirmed(page: Page): Promise<void> {
-	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const refused = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
-	})
-	try {
-		await Promise.race([page.close().then(() => closed), refused])
-	} finally {
-		clearTimeout(timer)
-	}
-}
-
-/** Until the shell has heard the background's Ready: before it, every call the page makes waits. */
-export async function waitForServiceReady(page: Page, timeout = 30_000): Promise<void> {
-	await page.waitForSelector('[data-service-ready="true"]', { timeout })
-}
-
-const popupReady = (page: Page, timeout: number, polling: number) =>
-	page.waitForFunction(
-		() => window.location.hash !== "#/" && window.location.hash !== "" && document.querySelector('[data-service-ready="true"]'),
-		{ timeout, polling },
-	)
-
-async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
-	ctx.consoleErrors = []
-	ctx.pageErrors = []
-
-	// Fast-path-then-fallback for the SW-handshake workaround.
-	//
-	// Background: the SW's FIRST popup connection on a brand-new tab can
-	// lose the wallet-bridge handshake (popup logs "Client disconnected"
-	// from `client-*.js` and Vue never mounts; hash stays at "#/" with an
-	// empty body). The historical workaround was an unconditional
-	// triple-nav (popup → about:blank → popup); it now loads the popup again in
-	// a fresh tab — the second load sees a fully-warm SW.
-	//
-	// Readiness predicate: hash leaves "#/" AND the shell has heard the
-	// background's Ready (`data-service-ready`). The hash alone fires too
-	// early: past the start grace the guard routes before the service
-	// answers, and a route decided then is replayed once Ready comes.
-	//
-	// Budget: 2s is provisional and tuned for the prewarmed SW that
-	// `launchExtension()` produces (the SW liveness wait at line 70-80
-	// runs before any test even starts). On a genuinely cold SW + slow CI,
-	// this may need to lengthen — revisit if fallback-count > 0 ever
-	// appears in CI logs. P99 of the fast-path was 811ms in smoke,
-	// 238ms in network in the spike.
-	//
-	// Catch: TimeoutError only. A broader catch would mask page crashes,
-	// CDP disconnects, etc. as "fast-path failed → try fallback" and bury
-	// the real fault.
-	//
-	// Logging is env-gated so the per-call line doesn't pollute default
-	// test output. Set NULO_E2E_OPENPOPUP_LOG=1 to re-emit (useful for
-	// counting fallback occurrences in CI artifacts).
-	const FAST_PATH_BUDGET_MS = 2_000
-	const t0 = Date.now()
-	await loadPopup(ctx, page)
-	try {
-		await popupReady(page, FAST_PATH_BUDGET_MS, 100)
-		if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fast totalMs=${Date.now() - t0}`)
-		return page
-	} catch (err) {
-		if (!(err instanceof TimeoutError)) throw err
-	}
-	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
-	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
-	await closeConfirmed(page)
-	const fresh = await newPage(ctx.browser)
-	try {
-		await loadPopup(ctx, fresh)
-		await popupReady(fresh, 30_000, 200)
-	} catch (err) {
-		await fresh.close().catch(() => {})
-		throw err
-	}
-	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fallback totalMs=${Date.now() - t0}`)
-	return fresh
-}
-
-/** Wait for Vue hash router to reach the expected hash.
- *
- *  Explicit `polling: 200` matters: Puppeteer's default is `'raf'`
- *  (requestAnimationFrame) which is THROTTLED in offscreen / unfocused tabs
- *  in modern Chrome. The popup tab is technically focused, but during async
- *  flows where the SW pushes a navigation while another popup window has
- *  focus, the rAF-driven poll can stall — the hash transition lands but
- *  this `waitForFunction` never observes it. Time-based polling avoids
- *  the throttling regardless of focus state.
- *
- *  The 15s default budgets for the bare-default call sites, which are all
- *  cold-boot openers (`openPopup` → first route): SW start + Vue mount +
- *  session hydration exceeds 5s under parallel-agent host load, which made
- *  the alphabetically-last files (the `sw-*` family, paying a fresh cold
- *  boot per single-test file at peak accumulated load) the suite's dominant
- *  flake. A genuinely broken route fails at any timeout; call sites that
- *  need a tighter bound pass one explicitly. */
-export async function waitForHash(page: Page, expectedHash: string, timeout = 15_000): Promise<void> {
-	await page.waitForFunction((hash: string) => window.location.hash === hash, { timeout, polling: 200 }, expectedHash)
-}
-
-/** Waits for a profile-creating page, found by its root testid, to settle whether it shows the
- *  Profile-name field: `hidden` for a first profile, `shown` for a later one. */
-export async function waitForNameField(page: Page, pageTestId: string, timeout = 15_000): Promise<"hidden" | "shown"> {
-	const handle = await withTimeoutMessage(
-		page.waitForFunction(
-			(id: string) => {
-				const state = document.querySelector(`[data-testid="${id}"]`)?.getAttribute("data-name-field")
-				return state === "hidden" || state === "shown" ? state : null
-			},
-			{ timeout, polling: 100 },
-			pageTestId,
-		),
-		`${pageTestId} never settled its name field`,
-	)
-	return (await handle.jsonValue()) as "hidden" | "shown"
-}
-
-/** A first profile: the page settles `hidden` and renders no name input. */
-export async function expectNoNameField(page: Page, pageTestId: string, nameInputTestId: string): Promise<void> {
-	const state = await waitForNameField(page, pageTestId)
-	if (state !== "hidden") throw new Error(`${pageTestId}: a first profile must show no name field, got "${state}"`)
-	if (await page.$(`[data-testid="${nameInputTestId}"]`)) throw new Error(`${pageTestId}: ${nameInputTestId} rendered on a first profile`)
-}
-
-/** A later profile: the page settles `shown` with the name input prefilled `expected`. */
-export async function expectNameFieldPrefill(page: Page, pageTestId: string, nameInputTestId: string, expected: string): Promise<void> {
-	const state = await waitForNameField(page, pageTestId)
-	if (state !== "shown") throw new Error(`${pageTestId}: a later profile must show the name field, got "${state}"`)
-	const value = await page.$eval(`[data-testid="${nameInputTestId}"] input`, (el) => (el as HTMLInputElement).value)
-	if (value !== expected) throw new Error(`${nameInputTestId}: expected the prefill "${expected}", got "${value}"`)
-}
-
-/** Type into an input found by placeholder.
- *
- *  History: previously used `elementHandle.click({ clickCount: 3 })` + `.type()`,
- *  which routes through Puppeteer's CDP element-handle path. Recent
- *  Chrome/Puppeteer combos (24.4x against Chrome 128+) hang on that path with
- *  `Runtime.callFunctionOn timed out`, even though synthetic in-page clicks
- *  work fine. Now we go through the same page.evaluate + prototype-setter
- *  path that `replaceInputValue` uses — robust across CDP regressions and
- *  also faster because there's no real-mouse-event sequence. */
-export async function typeIntoInput(page: Page, placeholder: string, text: string): Promise<void> {
-	await replaceInputValue(page, `input[placeholder="${placeholder}"]`, text)
-}
-
-/** Click a visible enabled button by its text content.
- *  Uses page.evaluate to find the actual <button> element, avoiding
- *  stale references from Puppeteer's text/ selector matching descendant nodes. */
-export async function clickButtonByText(page: Page, text: string, timeout = 10_000): Promise<void> {
-	await page.waitForFunction(
-		(label: string) => {
-			const button = [...document.querySelectorAll("button")].find((b) => {
-				const normalized = b.textContent?.replace(/\s+/g, " ").trim()
-				if (normalized !== label) return false
-				const style = window.getComputedStyle(b)
-				const rect = b.getBoundingClientRect()
-				return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0
-			})
-			if (!button) return false
-			button.click()
-			return true
-		},
-		{ timeout },
-		text,
-	)
-}
-
-/** Replace the full value of an `<input>` identified by a CSS selector,
- *  firing the proper `input` event so Vue v-model updates. Puppeteer's
- *  triple-click → type dance is unreliable on some custom Input wrappers
- *  (the selection gets lost before typing lands).
- *
- *  Picks the LAST matching visible element — Vue often keeps the old popup
- *  mounted for transitions, and the topmost popup is what the user sees.
- *
- *  If the matched element is not itself an `<input>` (e.g., a `data-testid`
- *  forwarded via Vue's `inheritAttrs` lands on the Input component's wrapper
- *  div), descend to the first `<input>` underneath. */
-export async function replaceInputValue(page: Page, selector: string, value: string): Promise<void> {
-	await page.waitForSelector(selector, { visible: true, timeout: 5_000 })
-	await page.evaluate(
-		async ({ sel, val }: { sel: string; val: string }) => {
-			const candidates = [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => el.offsetParent !== null)
-			const matched = candidates[candidates.length - 1]
-			if (!matched) throw new Error(`replaceInputValue: no visible match for ${sel}`)
-			const input = matched instanceof HTMLInputElement ? matched : (matched.querySelector("input") as HTMLInputElement | null)
-			if (!input) throw new Error(`replaceInputValue: no <input> reachable from ${sel}`)
-			input.focus()
-			// Use the prototype setter so Vue's v-model listener fires
-			const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-			setter?.call(input, val)
-			input.dispatchEvent(new Event("input", { bubbles: true }))
-			input.dispatchEvent(new Event("change", { bubbles: true }))
-			// Vue's reactivity flush is microtask-based. Without an explicit
-			// flush before this evaluate returns, a quick chain like
-			//   replaceInputValue(a) -> replaceInputValue(b) -> clickByTestId(submit)
-			// can race the form's :disabled binding — the click sometimes lands
-			// while disabled is still true (button stays gated) AND sometimes
-			// fires the click handler with stale values, so the submit handler
-			// fast-fails silently. Awaiting two microtasks is enough to flush
-			// nested computeds in practice.
-			await Promise.resolve()
-			await Promise.resolve()
-		},
-		{ sel: selector, val: value },
-	)
-}
-
-/** Click a visible, enabled element by an arbitrary CSS selector. Same
- *  in-page synthetic-click pattern as `clickByTestId`, just unscoped from
- *  testids — use this when the target's only stable handle is a class
- *  combo, ARIA role, or other non-testid selector. */
-export async function clickSelector(page: Page, selector: string, timeout = 10_000): Promise<void> {
-	await prepareClick(page)
-	try {
-		await page.waitForFunction(
-			(sel: string) => {
-				const candidates = [...document.querySelectorAll<HTMLElement>(sel)].filter((el) => {
-					if ((el as HTMLButtonElement).disabled) return false
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
-				})
-				const target = candidates[candidates.length - 1]
-				if (!target) return false
-				target.click()
-				return true
-			},
-			{ timeout },
-			selector,
-		)
-	} catch (err) {
-		if (!isTargetDetachError(err)) throw err
-	}
-}
-
-/** Click a visible enabled element by `data-testid`. Preferred over text
- *  matching — survives copy/case/i18n churn.
- *
- *  When multiple elements share the same testid (e.g., a stacked popup
- *  transition where the old card is still in the DOM), this picks the LAST
- *  visible+enabled candidate — that's the topmost / freshest one. Empirically
- *  the right choice for popup chains; matches the same pattern in
- *  `replaceInputValue`. */
-export async function clickByTestId(page: Page, testId: string, timeout = 10_000): Promise<void> {
-	await prepareClick(page)
-	try {
-		await page.waitForFunction(
-			(id: string) => {
-				const candidates = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)].filter((el) => {
-					// Skip natively-disabled AND aria-disabled elements (eg. DropdownItem,
-					// which is a <div> that can't carry native `disabled`). Both mean "not
-					// clickable yet" — wait for the element to enable rather than firing a
-					// programmatic click that bypasses CSS `pointer-events: none`.
-					if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
-					const style = window.getComputedStyle(el)
-					if (style.display === "none" || style.visibility === "hidden") return false
-					const rect = el.getBoundingClientRect()
-					if (rect.width === 0 || rect.height === 0) return false
-					return true
-				})
-				const target = candidates[candidates.length - 1]
-				if (!target) return false
-				target.click()
-				return true
-			},
-			{ timeout },
-			testId,
-		)
-	} catch (err) {
-		// Approval popups auto-close themselves on the click that resolves the
-		// interaction (e.g. cap-approve-btn → resolveInteraction → window.remove).
-		// page.waitForFunction is still polling when the Chrome target detaches,
-		// throwing nested errors: outer "Waiting failed" / "Error: Waiting failed"
-		// with `cause: TargetCloseError("Target closed")` underneath. The click
-		// already fired (otherwise the popup wouldn't be closing), so swallow
-		// target-detach errors. Re-raise everything else.
-		if (!isTargetDetachError(err)) throw err
-	}
-}
-
-/** Click the control that opens a file picker and answer it with `filePath`. */
-export const pickFileByTestId = (page: Page, testId: string, filePath: string): Promise<void> =>
-	pickFile(page, () => clickByTestId(page, testId), filePath)
-
-export function isTargetDetachError(err: unknown): boolean {
-	const messages: string[] = []
-	let current: unknown = err
-	let depth = 0
-	while (current && typeof current === "object" && "message" in current && depth < 5) {
-		messages.push(String((current as { message?: string }).message ?? ""))
-		current = (current as { cause?: unknown }).cause
-		depth++
-	}
-	const stack = err instanceof Error && typeof err.stack === "string" ? err.stack : ""
-	const haystack = `${messages.join(" ")} ${stack}`
-	return /Target ?Close(d)?|frame was detached|frame got detached|Session closed/i.test(haystack) || isTargetGone(haystack)
-}

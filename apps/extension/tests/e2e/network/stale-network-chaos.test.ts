@@ -13,10 +13,12 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { type AztecTestConfig, mintPublicTokensForAccount, waitForTxMined } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, lockWallet } from "../fixtures/helpers"
+import { switchToLocalNetwork, switchToNetwork } from "../fixtures/networks"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { SESSION_KEY_PREFIX } from "../fixtures/dappSession"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
@@ -78,6 +80,10 @@ describe("stale network beside a live one", () => {
 
 			const page = await openPopup(ctx)
 			await waitForHash(page, "#/popup/general", 30_000)
+			// A reset re-creates only the accounts its chain held, and a new profile starts on Mainnet.
+			await switchToNetwork(page, "Testnet")
+			expect(await readAccounts(page, CHAIN_IDS.TESTNET)).not.toEqual([])
+			await switchToLocalNetwork(page)
 			const local = await readNetwork(page, "local")
 			const localBefore = await snapshotChain(page, local.chainId, local.id)
 			const sessionsBefore = await sessionRows(page)
@@ -146,7 +152,7 @@ describe("stale network beside a live one", () => {
 			expect(await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)).toEqual([])
 			const localAfter = await snapshotChain(page, local.chainId, local.id)
 			expect(Object.keys(localBefore).filter((key) => !(key in localAfter))).toEqual([])
-			expect(Object.keys(localAfter).some((key) => key.startsWith("nulo:core:txs@"))).toBe(true)
+			expect((await readSealedRows<{ chainId: number }>(page, "txs")).some(({ row }) => row.chainId === local.chainId)).toBe(true)
 			expect(await sessionRows(page)).toEqual(sessionsBefore)
 		},
 	)

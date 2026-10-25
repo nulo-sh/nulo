@@ -15,7 +15,13 @@ import { TimeoutError } from "@aztec-labs/foundation/error"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { Fr } from "@aztec-labs/aztec.js/fields"
-import { NO_WAIT, type NoWait, getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import {
+	NO_WAIT,
+	type NoWait,
+	type SendInteractionOptions,
+	type WaitOpts,
+	getContractInstanceFromInstantiationParams,
+} from "@aztec-labs/aztec.js/contracts"
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
 import { BaseWallet } from "@aztec-labs/wallet-sdk/base-wallet"
 import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing"
@@ -23,12 +29,12 @@ import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
 import { isL1ToL2MessageReady } from "@aztec-labs/aztec.js/messaging"
 import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
-import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
 import { SponsoredFPCContractArtifact } from "@aztec-labs/noir-contracts.js/SponsoredFPC"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import type { Logger } from "@aztec-labs/foundation/log"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import type { Chain } from "@aztec/viem"
+import { createFixtureL1Client } from "./l1-signer"
+import { PollTimeoutError, pollUntil } from "./poll"
 
 /**
  * Aztec L2 node URL. Defaults to http://localhost:8080 (the standard sandbox port).
@@ -71,16 +77,15 @@ export async function checkNodeHealth(url = LOCAL_NODE_URL): Promise<boolean> {
 /** Wait for the local node to become healthy (with timeout). */
 export async function waitForLocalNode(url = LOCAL_NODE_URL, timeoutMs = 60_000): Promise<void> {
 	const node = createAztecNodeClient(url)
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		try {
-			await node.getNodeInfo()
-			return
-		} catch {
-			await new Promise((r) => setTimeout(r, 2_000))
-		}
-	}
-	throw new Error(`Local Aztec node at ${url} did not become healthy within ${timeoutMs}ms`)
+	await pollUntil(
+		() =>
+			node.getNodeInfo().then(
+				() => true,
+				() => false,
+			),
+		(healthy) => healthy,
+		{ label: `Local Aztec node at ${url} healthy`, timeoutMs, intervalMs: 2_000 },
+	)
 }
 
 /**
@@ -208,15 +213,25 @@ export async function createSponsoredFeeOptions(wallet: InstanceType<typeof Embe
 		salt: new Fr(SPONSORED_FPC_SALT),
 	})
 
-	// Register the SponsoredFPC contract so the wallet can use it for fee payment
-	try {
-		await wallet.registerContract(instance, SponsoredFPCContractArtifact)
-	} catch {
-		// Already registered — ignore
-	}
+	await wallet.registerContract(instance, SponsoredFPCContractArtifact)
 
 	const paymentMethod = new SponsoredFeePaymentMethod(instance.address)
 	return { paymentMethod, address: instance.address.toString() }
+}
+
+/** Registers the deployed token with the test wallet's PXE, which private execution needs and
+ *  `TokenContract.at` alone does not do. Re-registering is a no-op on the pinned line, so an error
+ *  here is the real cause and propagates. */
+export async function registerTokenOnWallet(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+): Promise<AztecAddress> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	await wallet.registerContract(instance, TokenContract.artifact)
+	return addr
 }
 
 /** Mint public tokens to an address. Waits for the balance to be readable via the test wallet's PXE.
@@ -274,14 +289,7 @@ export async function mintPrivateTokens(
 	minterAddress: string,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<string> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 
 	const token = await TokenContract.at(addr, wallet)
 	// `send()` waits for the checkpointed receipt by default (300 s); this bounds it at 120 s, and the
@@ -309,14 +317,7 @@ export async function transferPrivateTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<string> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 
 	const token = await TokenContract.at(addr, wallet)
 	const sent = await token.methods
@@ -385,14 +386,7 @@ export async function transferPrivateToPublicTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<void> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 	const from = AztecAddress.fromStringUnsafe(fromAddress)
 	const token = await TokenContract.at(addr, wallet)
 	await token.methods
@@ -414,14 +408,7 @@ export async function transferPublicToPrivateTokens(
 	amount: bigint,
 	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
 ): Promise<void> {
-	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
-	const instance = await node.getContract(addr)
-	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
-	try {
-		await wallet.registerContract(instance, TokenContract.artifact)
-	} catch {
-		// Already registered — ignore.
-	}
+	const addr = await registerTokenOnWallet(wallet, node, tokenAddress)
 	const from = AztecAddress.fromStringUnsafe(fromAddress)
 	const token = await TokenContract.at(addr, wallet)
 	await token.methods
@@ -436,13 +423,12 @@ export async function transferPublicToPrivateTokens(
  * for parallel runs (e.g. `ANVIL_URL=http://localhost:18545`).
  */
 const ANVIL_URL = process.env.ANVIL_URL ?? "http://localhost:8545"
-const ANVIL_MNEMONIC = "test test test test test test test test test test test junk"
 
 /** Bridge FeeJuice from L1 (Anvil) to an L2 address. Mints test FJ on L1, deposits to portal.
  *  Note: the L1 FeeAssetHandler has a fixed mint amount of 1000 FJ per call. */
 export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
 	const nodeInfo = await node.getNodeInfo()
-	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" } as Chain)
+	const l1Client = createFixtureL1Client([ANVIL_URL], nodeInfo.l1ChainId)
 	// Console stand-ins for the only part of a Logger the portal manager reads: its level methods.
 	const logger = {
 		info: console.log,
@@ -474,28 +460,35 @@ export async function waitForL1ToL2Message(
 ): Promise<void> {
 	const hash = Fr.fromString(messageHash)
 	const start = Date.now()
-	let messageIndex: bigint | undefined
-	while (Date.now() - start < timeoutMs) {
-		messageIndex = await node.getL1ToL2MessageIndex(hash)
-		if (messageIndex !== undefined) {
-			console.log(`[waitForL1ToL2Message] message at leaf ${messageIndex} after ${Date.now() - start}ms`)
-			break
-		}
-		await new Promise((r) => setTimeout(r, 2_000))
-	}
-	if (messageIndex === undefined) throw new Error(`[waitForL1ToL2Message] ${messageHash} not seen by the node within ${timeoutMs}ms`)
+	const messageIndex = await pollUntil(
+		() => node.getL1ToL2MessageIndex(hash),
+		(index) => index !== undefined,
+		{ label: `[waitForL1ToL2Message] ${messageHash} seen by the node`, timeoutMs, intervalMs: 2_000 },
+	)
+	console.log(`[waitForL1ToL2Message] message at leaf ${messageIndex} after ${Date.now() - start}ms`)
 
 	// The node-admin `mineBlock` is not RPC-exposed, so callers pass `forceBlock` (a cheap sponsored
 	// tx), which runs until the latest block's message tree covers the message.
-	while (Date.now() - start < timeoutMs) {
-		if (await isL1ToL2MessageReady(node, hash)) {
-			console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
-			return
-		}
-		if (forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
-		await new Promise((r) => setTimeout(r, 1_500))
-	}
-	console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
+	const remainingMs = start + timeoutMs - Date.now()
+	const claimable =
+		remainingMs > 0 &&
+		(await pollUntil(
+			() => isL1ToL2MessageReady(node, hash),
+			(ready) => ready,
+			{
+				label: `[waitForL1ToL2Message] leaf ${messageIndex} claimable`,
+				timeoutMs: remainingMs,
+				intervalMs: 1_500,
+				between: async () => {
+					if (forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
+				},
+			},
+		).catch((error: unknown) => {
+			if (error instanceof PollTimeoutError) return false
+			throw error
+		}))
+	if (claimable) console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
+	else console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
 }
 
 /** Claim bridged FeeJuice on L2. Uses SponsoredFPC to pay for the claim tx itself.
@@ -774,10 +767,10 @@ export async function deployExtraTokensForAccount(
  * Crowdfunding consumer whose `donate` pulls the donor's tokens via
  * `transfer_in_private` (msg.sender = crowdfunding ≠ from = donor), so the
  * token asserts a call authwit against the DONOR's account — the shape the
- * wallet's estimate-time discovery must detect and sign. The donor gets a
- * private balance minted so the pull can execute. Returns the two addresses
- * (instances are fetched from the node by the test driver for dApp-side
- * `registerContract`).
+ * wallet's estimate-time discovery must detect and sign. Publishes the standard
+ * `PublicChecks` contract the consumer calls, then mints the donor a private
+ * balance so the pull can execute. Returns the two addresses (instances are
+ * fetched from the node by the test driver for dApp-side `registerContract`).
  */
 export async function deployDelegatedPullRig(
 	aztecConfig: AztecTestConfig,
@@ -791,6 +784,7 @@ export async function deployDelegatedPullRig(
 		const feeOptions = await createSponsoredFeeOptions(wallet)
 		const minter = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
 		const fee = { ...feeOptions, gasSettings: E2E_FEE_GAS }
+		await ensureStandardPublicChecks(wallet, { from: minter, fee, wait: { timeout: 120 } })
 
 		const tokenDeploy = await PullTokenContract.deploy(wallet as never, minter, "PullToken", "PULL", 18).send({
 			from: minter,
@@ -824,26 +818,21 @@ export async function deployDelegatedPullRig(
 /**
  * Publishes the standard `PublicChecks` contract at its canonical address, which the local network
  * leaves unpublished (it publishes only the standard AuthRegistry, by the same two steps, and seeds
- * neither at genesis). The Crowdfunding consumer of `deployDelegatedPullRig` calls it, so its pull
- * cannot simulate, and no authwit is discovered, until it exists. Idempotent.
+ * neither at genesis). The pull cannot simulate, and no authwit is discovered, until it exists.
+ * Check-then-publish is enough: network files run one at a time on a network. Idempotent.
  */
-export async function ensureStandardPublicChecks(aztecConfig: AztecTestConfig): Promise<void> {
+async function ensureStandardPublicChecks(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	send: SendInteractionOptions<WaitOpts>,
+): Promise<void> {
 	const { publishContractClass, publishInstance } = await import("@aztec-labs/aztec.js/deployment")
 	const { PublicChecksArtifact, getStandardPublicChecks } = await import("@aztec-labs/standard-contracts/public-checks")
 	const { instance, contractClass } = await getStandardPublicChecks()
-	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
-	try {
-		const from = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
-		const fee = { ...(await createSponsoredFeeOptions(wallet)), gasSettings: E2E_FEE_GAS }
-		const send = { from, fee, wait: { timeout: 120 } } as never
-		if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
-			await (await publishContractClass(wallet as never, PublicChecksArtifact)).send(send)
-		}
-		if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
-			await publishInstance(wallet as never, instance).send(send)
-		}
-	} finally {
-		await cleanup()
+	if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
+		await (await publishContractClass(wallet, PublicChecksArtifact)).send(send)
+	}
+	if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
+		await publishInstance(wallet, instance).send(send)
 	}
 }
 
@@ -879,14 +868,11 @@ async function mineL1Blocks(count: number): Promise<void> {
 /** Mines empty L1 blocks until the node's finalized L2 block reaches `block`. The local anvil mines
  *  only on a transaction, so on a quiet chain the finalized tip stands still. */
 export async function finalizeThrough(node: ReturnType<typeof createAztecNodeClient>, block: number, timeoutMs = 180_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const finalized = await node.getBlockData("finalized")
-		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
-		if (Date.now() > deadline) throw new Error(`finalizeThrough: the finalized block stayed below ${block} for ${timeoutMs} ms`)
-		await mineL1Blocks(3)
-		await new Promise((resolve) => setTimeout(resolve, 2_000))
-	}
+	await pollUntil(
+		async () => (await node.getBlockData("finalized"))?.header.getBlockNumber() ?? 0,
+		(finalized) => finalized >= block,
+		{ label: `finalizeThrough: the finalized block at ${block}`, timeoutMs, intervalMs: 2_000, between: () => mineL1Blocks(3) },
+	)
 }
 
 /**

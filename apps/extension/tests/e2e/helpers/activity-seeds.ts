@@ -6,7 +6,17 @@
 import type { Page } from "puppeteer"
 import type { TokenListEntry } from "@nulo/token-list"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
+import { readActiveNetwork } from "../fixtures/networks"
+import { SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 import { E2E_LIST_TOKENS, heldListEntries } from "../fixtures/token-list"
+
+/** Writes `value` under `key` as the wallet's storage layer does, JSON-encoded. */
+async function storeRow(page: Page, key: string, value: unknown): Promise<void> {
+	await page.evaluate((k: string, v: string) => chrome.storage.local.set({ [k]: v }), key, JSON.stringify(value))
+}
+
+/** The block every seeded receipt is on. */
+const RECEIPT_BLOCK = 1
 
 /** The active profile, network and account, and the token the seeded rows name. */
 export type ActivityScope = {
@@ -21,13 +31,8 @@ export type ActivityScope = {
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
-	const { networkId, chainId } = await page.evaluate(async (pid: string) => {
-		const all = await chrome.storage.local.get(null)
-		const networkId = all[`nulo:core:active-network@${pid}`] as string
-		const network = JSON.parse(all[`nulo:core:networks@${networkId}`] as string) as { chainId: number }
-		return { networkId, chainId: network.chainId }
-	}, profileId)
-	return { profileId, networkId, chainId, account }
+	const network = await readActiveNetwork(page)
+	return { profileId, networkId: network.id, chainId: network.chainId, account }
 }
 
 /**
@@ -62,17 +67,28 @@ export type TransferSeed = {
 	transferType?: number
 	/** Sent by a dApp: its name is the row's second chip. */
 	dapp?: string
+	/** The called function's name, `transfer` unless set. Any other name makes the row a call titled by
+	 *  its function, with no transfer and so no amount, as the wallet records one. */
+	method?: string
 	/** Base units of Fee Juice the send was built to pay at most. */
 	estimatedFee?: string
 	/** The wire's fee option: 0 a fee contract (the default), 1 public Fee Juice, 2 Fee Juice with a claim. */
 	feePaymentMethod?: number
 	priorityLevel?: "normal" | "fast" | "urgent"
+	/** The recipient; by default the scope's own account, which an `AddressDisplay` shows by name. */
+	to?: string
+	/** The block the transfer landed in. */
+	block?: { number: number; hash: string }
+	/** A chunk nonce on the call, which the row codec keeps verbatim and only the debug panel reads. */
+	chunkNonce?: string
 }
 
 /** A finalized transfer under the tx root, with every field the row codec branches on. */
 export async function seedTransaction(page: Page, scope: ActivityScope, seed: TransferSeed): Promise<void> {
 	const at = seed.at ?? Date.now()
 	const { contract, ...token } = scope.token
+	const method = seed.method ?? "transfer"
+	const transfer = { token, type: seed.transferType ?? 0, from: scope.account, to: seed.to ?? scope.account, amount: seed.amount }
 	const tx = {
 		chainId: scope.chainId,
 		profileId: scope.profileId,
@@ -85,23 +101,21 @@ export async function seedTransaction(page: Page, scope: ActivityScope, seed: Tr
 		updatedAt: at,
 		status: 5,
 		executionResult: 0,
+		...(seed.block === undefined ? {} : { block: seed.block }),
 		...(seed.estimatedFee === undefined ? {} : { estimatedFee: seed.estimatedFee }),
 		...(seed.priorityLevel === undefined ? {} : { priorityLevel: seed.priorityLevel }),
 		origin: seed.dapp === undefined ? { type: 0 } : { type: 1, name: seed.dapp },
 		calls: [
 			{
 				contract,
-				method: "transfer",
+				method,
 				args: [],
-				transfers: [{ token, type: seed.transferType ?? 0, from: scope.account, to: scope.account, amount: seed.amount }],
+				...(seed.chunkNonce === undefined ? {} : { chunkNonce: seed.chunkNonce }),
+				transfers: method.startsWith("transfer") ? [transfer] : [],
 			},
 		],
 	}
-	await page.evaluate(
-		(key: string, row: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(row) }),
-		`nulo:core:txs@${seed.hash}`,
-		tx,
-	)
+	await storeRow(page, `nulo:core:txs@${seed.hash}`, tx)
 }
 
 /** A registered token row, the scope's token unless `token` names another: a receipt shows its amount
@@ -114,43 +128,95 @@ export async function seedTokenRow(
 ): Promise<void> {
 	const getter = opts.decimalsGetter === false ? {} : { getDecimalsFn: { name: "decimals", impl: 0 } }
 	const row = { id, profileId: scope.profileId, chainId: scope.chainId, ...(opts.token ?? scope.token), ...getter }
-	await page.evaluate(
-		(key: string, value: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(value) }),
-		`nulo:core:tokens@${id}`,
-		row,
-	)
+	await storeRow(page, `nulo:core:tokens@${id}`, row)
 }
 
-export type ReceiptSeed = { tokenId: number; amount: string; nullifier: string; at?: number }
+export type ReceiptSeed = { tokenId: number; amount: string; uniqueNoteHash: string; at?: number }
 
-/** A visible note receipt of the registered token. Block 1 keeps it history: it never plays as an arrival. */
-export async function seedReceipt(page: Page, scope: ActivityScope, seed: ReceiptSeed): Promise<string> {
-	const id = `note:${scope.profileId}|${scope.networkId}|${seed.nullifier}`
+/** Wire-shaped and under the field modulus: `byte` repeated, its first below 0x30. */
+const field = (byte: string) => `0x${byte.repeat(32)}`
+
+type NoteReceipt = ReceiptSeed & { contract: string; hidden: boolean }
+
+/** A note receipt as the incoming service records one. Block 1 keeps it history: it never plays as an arrival. */
+async function storeNoteReceipt(page: Page, scope: Omit<ActivityScope, "token">, seed: NoteReceipt): Promise<string> {
+	const id = `note:${scope.profileId}|${scope.networkId}|${seed.uniqueNoteHash}`
 	const record = {
 		kind: "note",
 		id,
-		siloedNullifier: seed.nullifier,
-		noteHash: `0x${"ab".repeat(32)}`,
+		noteHash: field("0b"),
 		owner: scope.account,
 		profileId: scope.profileId,
 		networkId: scope.networkId,
 		accountAddress: scope.account,
-		contract: scope.token.contract,
+		contract: seed.contract,
 		tokenId: seed.tokenId,
 		amountRaw: seed.amount,
-		txHash: `0x${"7c".repeat(32)}`,
-		l2BlockNumber: 1,
+		txHash: field("1c"),
+		l2BlockNumber: RECEIPT_BLOCK,
 		txIndexInBlock: 0,
 		indexInTx: 0,
-		hidden: false,
+		hidden: seed.hidden,
 		discoveredAt: seed.at ?? Date.now(),
 	}
-	await page.evaluate(
-		(key: string, value: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(value) }),
-		`nulo:core:incoming-transfers@${id}`,
-		record,
-	)
+	await storeRow(page, `nulo:core:incoming-transfers@${id}`, record)
 	return id
+}
+
+/** A visible note receipt of the registered token. */
+export async function seedReceipt(page: Page, scope: ActivityScope, seed: ReceiptSeed): Promise<string> {
+	return storeNoteReceipt(page, scope, { ...seed, contract: scope.token.contract, hidden: false })
+}
+
+/**
+ * A first receipt of the registered token at `contract` still waiting on the person's trust, as a
+ * restored token's first discovery leaves it: the trust row pending and the receipt hidden. A popup
+ * opened on its scope replays the prompt. The receipt is in storage only, so the incoming service's
+ * next verified scans strike it and then delete it.
+ */
+export async function seedPendingTrust(
+	page: Page,
+	scope: Omit<ActivityScope, "token">,
+	token: { id: number; contract: string },
+): Promise<void> {
+	const naturalId = `${scope.profileId}|${scope.networkId}|${token.contract}`
+	// An added token is trusted, then given its arrival floor, by two writes that land after the add;
+	// the second rewrites the state it read, so a seed before it would be overwritten. The trust row
+	// is sealed at a keyed id, so it is found through the e2e reader by the id it answers to.
+	const sealedAt = await page.waitForFunction(
+		async (message: string, id: string) => {
+			type Row = {
+				naturalId: string
+				storageKey: string
+				row: { state?: string; arrivalFloor?: number; arrivalFloorPending?: boolean }
+			}
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "incomingTrust" })) ?? []) as Row[]
+			const found = rows.find((r) => r.naturalId === id)
+			const settled =
+				found?.row.state === "trusted" && (found.row.arrivalFloor !== undefined || found.row.arrivalFloorPending === true)
+			return settled ? found.storageKey : false
+		},
+		{ timeout: 15_000, polling: 200 },
+		SEALED_READ_MESSAGE,
+		naturalId,
+	)
+	// A keyed root prefers its sealed copy, so the plaintext replacement lands first and the sealed
+	// row it replaces goes after it.
+	await storeRow(page, `nulo:core:incoming-trust@${naturalId}`, {
+		profileId: scope.profileId,
+		networkId: scope.networkId,
+		contract: token.contract,
+		state: "pending",
+		updatedAt: Date.now(),
+	})
+	await page.evaluate((key: string) => chrome.storage.local.remove(key), (await sealedAt.jsonValue()) as string)
+	await storeNoteReceipt(page, scope, {
+		tokenId: token.id,
+		amount: "100",
+		uniqueNoteHash: field("1a"),
+		contract: token.contract,
+		hidden: true,
+	})
 }
 
 export type PublicReceiptSeed = { tokenId: number; amount: string; txHash: string; at?: number }
@@ -171,45 +237,53 @@ export async function seedPublicReceipt(page: Page, scope: ActivityScope, seed: 
 		tokenId: seed.tokenId,
 		amountRaw: seed.amount,
 		txHash: seed.txHash,
-		l2BlockNumber: 1,
+		l2BlockNumber: RECEIPT_BLOCK,
 		txIndexInBlock: 0,
 		indexInTx: 0,
 		hidden: false,
 		discoveredAt: seed.at ?? Date.now(),
 	}
-	await page.evaluate(
-		(key: string, value: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(value) }),
-		`nulo:core:incoming-transfers@${id}`,
-		record,
-	)
+	await storeRow(page, `nulo:core:incoming-transfers@${id}`, record)
 	return id
 }
 
-export type JournalSeed = {
+type JournalSeedBase = {
 	/** 16 hex characters, as the journal mints them. */
 	id: string
-	tokenId: number
-	/** Base units of the token. */
-	amount: string
 	progress: { stage: "failed" | "cancelled"; [field: string]: unknown }
 	errorKind?: string
 	at?: number
 }
 
-/** A Send-page transfer that ended without a settled transaction, stamped with the scope. */
+/** A Send-page transfer: `amount` is in the token's base units. */
+type TransferJournalSeed = JournalSeedBase & { tokenId: number; amount: string }
+
+/** A dApp's call, as the queued-journal path writes it: `title` is the function's name as the dApp
+ *  sent it, `subtitle` the name the dApp gave itself. */
+type DappJournalSeed = JournalSeedBase & { kind: "dapp_execute"; title: string; subtitle: string }
+
+export type JournalSeed = TransferJournalSeed | DappJournalSeed
+
+/** An operation that ended without a settled transaction, stamped with the scope. */
 export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: JournalSeed): Promise<void> {
 	const at = seed.at ?? Date.now()
+	const shape =
+		"kind" in seed
+			? { kind: seed.kind, origin: "dapp", title: seed.title, subtitle: seed.subtitle }
+			: {
+					kind: "transfer",
+					origin: "popup",
+					tokenId: seed.tokenId,
+					amountRaw: seed.amount,
+					recipientAddress: scope.account,
+					transferType: 0,
+				}
 	const record = {
 		id: seed.id,
-		kind: "transfer",
-		origin: "popup",
+		...shape,
 		profileId: scope.profileId,
 		accountAddress: scope.account,
 		networkId: scope.networkId,
-		tokenId: seed.tokenId,
-		amountRaw: seed.amount,
-		recipientAddress: scope.account,
-		transferType: 0,
 		progress: seed.progress,
 		error: seed.errorKind === undefined ? null : { kind: seed.errorKind, message: "seeded", normalizedRaw: null },
 		terminalAt: at,
@@ -217,9 +291,30 @@ export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: 
 		createdAt: at,
 		updatedAt: at,
 	}
-	await page.evaluate(
-		(key: string, row: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(row) }),
-		`nulo:journal@${seed.id}`,
-		record,
-	)
+	await storeRow(page, `nulo:journal@${seed.id}`, record)
+}
+
+/**
+ * A token import still in flight, as the token service opens one, for a contract whose name is not
+ * known yet. Write it after the worker's last start: the start fails every record still in flight
+ * that was opened before it.
+ */
+export async function seedTokenImport(page: Page, scope: ActivityScope, seed: { id: string; contract: string }): Promise<void> {
+	const at = Date.now()
+	const record = {
+		id: seed.id,
+		kind: "token_import",
+		origin: "popup",
+		profileId: scope.profileId,
+		accountAddress: scope.account,
+		networkId: scope.networkId,
+		contractAddress: seed.contract,
+		progress: { stage: "pending" },
+		error: null,
+		terminalAt: null,
+		attempts: 0,
+		createdAt: at,
+		updatedAt: at,
+	}
+	await storeRow(page, `nulo:journal@${seed.id}`, record)
 }

@@ -86,24 +86,17 @@ const handleCopyAddress = (target) => {
 					@click="handleSelectAccount(account)"
 					:title="account.name"
 					titleVariant="name"
-					:icon="account?.address === appStore.account?.address ? 'check-circle' : 'circle'"
+					:icon="account?.address === appStore.account?.address ? 'square-check' : 'square'"
 					:iconFillColor="account?.address === appStore.account?.address ? 'primary' : 'tertiary'"
 					data-testid="manage-accounts-row"
 					:data-account-name="account.name"
 				>
-					<!-- Imported marker on the DESCRIPTION line in the address's own mono voice (owner
-					     pick: option B + V4). Exactly ONE truncation mechanism: the address's head span
-					     clips with a CSS ellipsis while the marker and the 4-char tail never shrink, so
-					     the line adapts to whatever width the action icons leave instead of a guessed
-					     trim length fighting the wrapper's own ellipsis. -->
+					<!-- The head is the only part that may clip, with an ellipsis; the tail never does. -->
 					<template #description>
+						<Text v-if="account.type === AccountType.Imported" variant="meta" color="tertiary" data-testid="account-imported-badge" :class="$style.marker">imported</Text>
 						<Text variant="meta" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
-							<template v-if="account.type === AccountType.Imported">
-								<span data-testid="account-imported-badge" :class="$style.desc_fixed">imported</span>
-								<span :class="$style.desc_fixed">&nbsp;&#183;&nbsp;</span>
-							</template>
-							<span :class="$style.addr_head">{{ account.address.slice(0, -4) }}</span>
-							<span :class="$style.desc_fixed">{{ account.address.slice(-4) }}</span>
+							<span :class="$style.addr_head" data-testid="manage-accounts-address-head">{{ account.address.slice(0, -4) }}</span>
+							<span :class="$style.desc_fixed" data-testid="manage-accounts-address-tail">{{ account.address.slice(-4) }}</span>
 						</Text>
 					</template>
 					<template #right>
@@ -118,7 +111,7 @@ const handleCopyAddress = (target) => {
 
 							<Tooltip v-if="canExportAccounts" position="end" delay="350">
 								<RowAction label="Export account" data-testid="account-export-btn" @click="handleExportAccount(account)">
-									<Icon name="upload-outline" size="14" color="tertiary" />
+									<Icon name="upload" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content>Export account</template>
@@ -140,7 +133,7 @@ const handleCopyAddress = (target) => {
 									:class="accounts.length === 1 && $style.disabled"
 									@click="handleHideAccount(account)"
 								>
-									<Icon name="close-circle" size="14" color="tertiary" />
+									<Icon name="close" size="14" color="tertiary" />
 								</RowAction>
 
 								<template #content> Hide account </template>
@@ -150,7 +143,7 @@ const handleCopyAddress = (target) => {
 				</SettingItem>
 			</ItemsContainer>
 
-			<Flex gap="10">
+			<Flex gap="10" :class="$style.account_actions">
 				<Button
 					@click="popupStore.open('new_account')"
 					wide
@@ -188,7 +181,7 @@ const handleCopyAddress = (target) => {
 					:title="account.name"
 					titleVariant="name"
 					:description="account.address"
-					descriptionVariant="data"
+					descriptionVariant="meta"
 					data-testid="manage-accounts-hidden-row"
 					:data-account-name="account.name"
 				>
@@ -196,7 +189,7 @@ const handleCopyAddress = (target) => {
 						<AccountAvatar :name="account.name" :address="account.address" :size="20" />
 					</template>
 					<template #right>
-						<Icon name="arrow-back-up" size="14" color="secondary" />
+						<Icon name="undo" size="14" color="secondary" />
 					</template>
 				</SettingItem>
 			</ItemsContainer>
@@ -214,6 +207,10 @@ const handleCopyAddress = (target) => {
 	flex-shrink: 0;
 }
 
+.marker {
+	display: block;
+}
+
 /* Shrink-only (no grow), so on wide rows the tail sits flush against the head. */
 .addr_head {
 	flex: 0 1 auto;
@@ -225,5 +222,11 @@ const handleCopyAddress = (target) => {
 
 .disabled {
 	opacity: 0.3;
+}
+
+@media (width < 359px) {
+	.account_actions {
+		flex-direction: column;
+	}
 }
 </style>

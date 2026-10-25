@@ -23,7 +23,7 @@ function params(overrides: Partial<CapabilityWindowParams>): CapabilityWindowPar
 		accountsMembershipOnly: false,
 		consent: undefined,
 		networkName: "Testnet",
-		heldAccounts: [],
+		knownContracts: [],
 		...overrides,
 	}
 }
@@ -98,6 +98,16 @@ describe("the new rows", () => {
 	test("contract classes name the dApp's network", () => {
 		const [row] = buildCapabilityItems(params({ delta: [cap({ type: "contractClasses", classes: "*" })], networkName: "Sandbox" }))
 		expect(row.entry.title).toBe("Look up contract code on Sandbox")
+	})
+
+	test("new and held rows name a contract only from the wallet's names", () => {
+		const knownContracts = [{ address: A, name: "Test USDC" }]
+		const heldTx = cap({ type: "transaction", scope: [{ contract: B, function: "transfer" }] })
+		const rows = buildCapabilityItems(params({ delta: [txListed], heldGrants: [heldTx], existingGrants: [heldTx], knownContracts }))
+		expect(rows.map((row) => [row.isNew, row.entry.title])).toEqual([
+			[true, "Every transaction, on Test USDC"],
+			[false, "Every transaction, on 1 contract"],
+		])
 	})
 
 	test("a contracts permission with neither flag draws no row", () => {
@@ -177,13 +187,27 @@ describe("the new rows", () => {
 		expect(rows.map(line)).toEqual(["Every name and address you saved.", "Not shared. The app may ask again later."])
 	})
 
-	test("private events from listed contracts start On", () => {
+	test("private events from contracts outside every call scope start Off", () => {
 		const [row] = buildCapabilityItems(params({ delta: [cap({ type: "data", privateEvents: { contracts: [A] } })] }))
 		expect([row.entry.title, row.selected, line(row)]).toEqual([
-			"See private events from its contracts",
+			"See private events from 1 contract",
+			false,
+			"Not shared. The app may ask again later.",
+		])
+	})
+
+	test("private events from contracts its calls reach start On, from the request or a held grant", () => {
+		const events = cap({ type: "data", privateEvents: { contracts: [A] } })
+		const asked = newRow(buildCapabilityItems(params({ delta: [events, simListed] })), "private-events")
+		const held = newRow(
+			buildCapabilityItems(params({ delta: [events], heldGrants: [txListed], existingGrants: [txListed] })),
+			"private-events",
+		)
+		expect([asked.selected, line(asked)]).toEqual([
 			true,
 			"Private messages its contracts sent to your accounts, like a transfer you received.",
 		])
+		expect(held.selected).toBe(true)
 	})
 
 	test("private events held in another case add no row: only the address book is new", () => {
@@ -233,32 +257,21 @@ describe("the held rows", () => {
 				delta: [cap({ type: "data", addressBook: true })],
 				heldGrants: toolsApp,
 				consent: { broad: false },
-				heldAccounts: [{ name: "Account 1" }],
 			}),
 		)
 		expect(keys(fresh(rows))).toEqual(["address-book"])
 		expect(held(rows).map((row) => [row.entry.key, row.entry.title, line(row)])).toEqual([
-			["account-address", "See Account 1's address", ""],
+			["account-address", "Let this app list all your accounts", "It always knows the account you connect with."],
 			["simulation", "Run simulations and read the results", "Results can include your private balances."],
 			["contracts", "Add contracts to your wallet", ""],
 			["authorizations", "Act for you in transactions you approve", "Nulo signs its authorizations without asking."],
-			["transaction", "Every transaction", ""],
+			["transaction", "Every transaction, on 1 contract", ""],
 		])
 		expect(held(rows).every((row) => row.entry.switchLabel === undefined && row.selected && !row.reRequested)).toBe(true)
 	})
 
-	test("the folded address row names the session's accounts by their wallet names", () => {
-		const shown = (heldAccounts: CapabilityWindowParams["heldAccounts"]) =>
-			held(buildCapabilityItems(params({ heldGrants: [accounts(false)], heldAccounts })))[0].entry.title
-		expect(shown([{ name: "Savings" }])).toBe("See Savings's address")
-		expect(shown([{ name: "Account 1" }, { name: "Account 2" }])).toBe("See the addresses of the accounts you share")
-		expect(shown([{}])).toBe("See the addresses of the accounts you share")
-	})
-
 	test("a held accounts grant without canGet folds no address row", () => {
-		const rows = buildCapabilityItems(
-			params({ heldGrants: [cap({ ...accounts(true), canGet: false }), txListed], heldAccounts: [{ name: "Account 1" }] }),
-		)
+		const rows = buildCapabilityItems(params({ heldGrants: [cap({ ...accounts(true), canGet: false }), txListed] }))
 		expect(keys(held(rows))).toEqual(["authorizations", "transaction"])
 	})
 
@@ -276,7 +289,7 @@ describe("the held rows", () => {
 		expect(rows.map((row) => [row.entry.key, row.entry.title, row.isNew, row.reRequested])).toEqual([
 			["private-events", "See private events from any contract", true, true],
 			["address-book", "See your address book", false, false],
-			["private-events", "See private events from its contracts", false, false],
+			["private-events", "See private events from 1 contract", false, false],
 		])
 	})
 

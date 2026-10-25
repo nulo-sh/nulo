@@ -61,8 +61,9 @@ if [ -z "$NULO_E2E_RUN_ID" ]; then
   exit 2
 fi
 export NULO_E2E_RUN_ID
-# Inherited by every process the run starts (forks, Chrome, the sandbox), so a SIGKILLed run's
-# survivors can be found and stopped by marker once this shell, the run's owner, is gone.
+# Inherited by every process the run starts, so a SIGKILLed run's survivors can be found and
+# stopped by marker once this shell, the run's owner, is gone. Not Chrome: it overwrites its
+# environ, so its survivors are found by the dist they load.
 NULO_E2E_RUN=$(jq -r '.runMarker // empty' "$PORTS_JSON")
 NULO_E2E_RUN_OWNER=$(jq -r '.runOwner // empty' "$PORTS_JSON")
 NULO_E2E_WORKTREE=$(jq -r '.worktree // empty' "$PORTS_JSON")
@@ -98,6 +99,12 @@ echo "[e2e:agent] building $BROWSER wallet with VITE_LOCAL_NETWORK_RPC_URL=$AZTE
 # VITE_NULO_E2E_CSP_REPORT builds in the e2e-only violation recorder
 # (src/e2e/csp-report.ts); the run below arms the launch fixture's check, which
 # fails every launch that recorded a violation.
+# VITE_NULO_E2E_SEALED_READ builds in the e2e-only reader of the sealed roots
+# (src/e2e/sealed-read.ts), through which the journal and transaction helpers
+# read rows the wallet stores encrypted.
+# VITE_NULO_E2E_WALLET_CLOCKS shortens the incoming scan and the finality re-read
+# (src/e2e/wallet-clocks.ts) in the proverless build only; the prover-ON build
+# passes 0, which outranks any .env line, so the canary keeps the users' cadence.
 if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   if [ "${VITE_NULO_PRESTO_REQUIRED:-}" = "1" ]; then
     echo "[e2e:agent] FATAL: NULO_E2E_PROVERLESS and VITE_NULO_PRESTO_REQUIRED are mutually exclusive" >&2
@@ -110,8 +117,10 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
   VITE_NULO_E2E_CSP_REPORT=1 \
+  VITE_NULO_E2E_SEALED_READ=1 \
   VITE_NULO_E2E_PROVERLESS=1 \
   VITE_NULO_E2E_PROVERLESS_CONFIRM=1 \
+  VITE_NULO_E2E_WALLET_CLOCKS=1 \
     bun run "build:$BROWSER"
 else
   # Scrub any inherited proverless flags so a non-proverless build (e.g. the
@@ -124,6 +133,8 @@ else
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
   VITE_NULO_E2E_CSP_REPORT=1 \
+  VITE_NULO_E2E_SEALED_READ=1 \
+  VITE_NULO_E2E_WALLET_CLOCKS=0 \
     bun run "build:$BROWSER"
 fi
 
@@ -169,6 +180,14 @@ if ! grep -rq "nulo:e2e:csp-violations" "$DIST_DIR" 2>/dev/null; then
 fi
 echo "[e2e:agent] bundle contains the CSP violation recorder ✓"
 
+# Positive sealed-read assertion: without the reader every journal helper times
+# out on rows it cannot read, far from the cause.
+if ! grep -rq "nulo:e2e:sealed-read" "$DIST_DIR" 2>/dev/null; then
+  echo "[e2e:agent] FATAL: VITE_NULO_E2E_SEALED_READ did not propagate (reader message absent from $DIST_DIR)" >&2
+  exit 2
+fi
+echo "[e2e:agent] bundle contains the sealed-root reader ✓"
+
 # Parallel bundle assertion for VITE_NULO_PRESTO_REQUIRED: if the env var ever
 # stops propagating from the workflow into the build, the chain-runtime
 # required-mode throw silently disappears and tests can pass on WASM even when
@@ -197,6 +216,14 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
     exit 2
   fi
   echo "[e2e:agent] bundle contains NULO_E2E_PROVERLESS_BUILD_STAMP ✓"
+  if ! grep -rq "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" "$DIST_DIR" 2>/dev/null; then
+    echo "[e2e:agent] FATAL: wallet-clocks build stamp absent from $DIST_DIR: the suite would wait on the production cadence" >&2
+    exit 2
+  fi
+  echo "[e2e:agent] bundle contains NULO_E2E_WALLET_CLOCKS_BUILD_STAMP ✓"
+elif grep -rq "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" "$DIST_DIR" 2>/dev/null; then
+  echo "[e2e:agent] FATAL: a prover-ON build carries the wallet-clocks stamp; it must run the users' cadence" >&2
+  exit 2
 fi
 
 # Fail loudly if VITE_NULO_FEE_MULTIPLIER didn't propagate into the bundle.

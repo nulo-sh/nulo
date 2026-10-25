@@ -1,0 +1,26 @@
+{
+  "ivHex": "aaaaaaaaaaaaaaaaaaaaaaaa",
+  "rowSeal": {
+    "masterHex": "0000000000000000000000000000000000000000000000000000000000000042",
+    "profileId": "profile-fixture-1",
+    "pxeGeneration": "generation-fixture-1",
+    "root": "nulo:core:contacts",
+    "storageKey": "nulo:core:contacts@contact-1",
+    "row": "{\"id\":\"contact-1\",\"profileId\":\"profile-fixture-1\",\"name\":\"Ada\",\"address\":\"0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b\"}",
+    "expectedFrameB64": "AaqqqqqqqqqqqqqqqkOFIijzGETY7JhN3ppyq3aifz/lfNktjZ4RQo6g3SePxMxzA/dJYmHGgmTYLCuWUSamokV8oOGSHAzXH4h1b7bgSQvVicdeVSBpkkzqP9wPhbdaY0coCX7/1uoNfVCmIKvaWsDN3ORCl3opqarOEb7DzP5PHMsdRb6Cy5L2yEtacPko5yy9wvlnAKGAF7m/N00ujBhoyndQAiqhJm15",
+    "segment": "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "expectedKeyedSegment": "Q2hy5kE9zYMQ8gsZNJG80M6KU1jYmcFXV-60LxBlXiQ"
+  },
+  "importedSigningKey": {
+    "dekHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "chainId": 11155111,
+    "address": "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "signingKeyHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+    "expectedFrameB64": "AaqqqqqqqqqqqqqqqrwqBwTOb4aVMTtNTiUZX48dwP4oliLSL/l3sOyF80Vm0uuXQMxGC7tvVPJTv58V1g=="
+  },
+  "importedKeysDek": {
+    "wrapKeyHex": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+    "dekHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "expectedFrameB64": "Aaqqqqqqqqqqqqqqqi3bD02pgqgntOcUMtTabJCpIJY35Sv4mXxOssRohEQtZSWck8iSHLVBffWW/WAzCA=="
+  }
+}

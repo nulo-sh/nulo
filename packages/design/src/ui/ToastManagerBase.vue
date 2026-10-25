@@ -7,7 +7,6 @@ import { type ToastState, useToast } from "../composables/toast"
 
 /** Components */
 import Icon from "../core/Icon.vue"
-import MaterialIcon from "../core/MaterialIcon.vue"
 
 // Host-DOM contract: teleports the snack regions to `teleportTo` (default `#toast`); the consuming
 // app must declare that root. `bottomInset` is the gap above the viewport's bottom edge. `inColumn`
@@ -27,6 +26,8 @@ defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
+/** The shown card was relabelled in place, so its title stops taking the region's politeness. */
+const relabelled = ref(false)
 let leaveWaiting = false
 
 // One card at a time, across both regions: when the old card must leave before the new one rises
@@ -58,6 +59,7 @@ const show = (next: ToastState | null) => {
 		focusWithin.value = false
 		if (target instanceof HTMLElement && target.isConnected) target.focus()
 	}
+	relabelled.value = next !== null && next.id === shown.value?.id
 	shown.value = next
 }
 
@@ -89,8 +91,19 @@ const onPointerMove = (event: PointerEvent) => {
 	if (Math.abs(event.clientX - previous.x) >= 1 || Math.abs(event.clientY - previous.y) >= 1) hovered.value = true
 }
 
+// The card's `focusin` names a shadow root's host, which `focus()` cannot enter, for the element
+// inside it that focus left; the document's capturing `focusout` still sees that element.
+let departed: Element | null = null
+const trackDeparture = (event: FocusEvent) => {
+	const from = event.composedPath()[0]
+	departed = from instanceof Element ? from : null
+}
+
 const onFocusIn = (event: FocusEvent) => {
-	if (!focusWithin.value) returnFocusTo = event.relatedTarget instanceof Element ? event.relatedTarget : null
+	if (!focusWithin.value) {
+		const from = event.relatedTarget instanceof Element ? event.relatedTarget : null
+		returnFocusTo = from && (departed?.getRootNode() as ShadowRoot | undefined)?.host === from ? departed : from
+	}
 	focusWithin.value = true
 }
 
@@ -113,10 +126,14 @@ const selectFor = (id: number) => () => {
 	action?.onSelect()
 }
 
-onMounted(() => document.addEventListener("pointermove", trackPointer, { capture: true, passive: true }))
+onMounted(() => {
+	document.addEventListener("pointermove", trackPointer, { capture: true, passive: true })
+	document.addEventListener("focusout", trackDeparture, { capture: true })
+})
 
 onBeforeUnmount(() => {
 	document.removeEventListener("pointermove", trackPointer, { capture: true })
+	document.removeEventListener("focusout", trackDeparture, { capture: true })
 	hovered.value = false
 	focusWithin.value = false
 	holdToast(false)
@@ -146,9 +163,9 @@ onBeforeUnmount(() => {
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon name="check-circle" size="16" color="green" aria-hidden="true" />
+						<Icon name="square-check" size="16" color="green" aria-hidden="true" />
 						<div :class="$style.text">
-							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
+							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
 						</div>
 						<button v-if="shown.action" type="button" :class="$style.action" data-testid="snackbar-action" :onClick="selectFor(shown.id)">
@@ -177,17 +194,17 @@ onBeforeUnmount(() => {
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
-						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
+						<Icon v-if="shown.kind === 'info'" name="square-half" size="16" color="secondary" aria-hidden="true" />
+						<Icon v-else name="square-cross" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
-							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
+							<span :class="$style.title" data-testid="snackbar-title" :aria-live="relabelled ? 'off' : undefined">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
 						</div>
 						<button v-if="shown.action" type="button" :class="$style.action" data-testid="snackbar-action" :onClick="selectFor(shown.id)">
 							{{ shown.action.label }}
 						</button>
 						<button type="button" :class="$style.close" aria-label="Close" data-testid="snackbar-close" :onClick="closeFor(shown.id)">
-							<MaterialIcon name="close" :size="16" color="secondary" />
+							<Icon name="close" :size="16" color="secondary" />
 						</button>
 					</div>
 				</Transition>
@@ -253,7 +270,7 @@ onBeforeUnmount(() => {
 }
 
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	flex: none;
 	padding: 6px 4px;
 	color: var(--nulo-accent);

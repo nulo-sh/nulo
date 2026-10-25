@@ -29,6 +29,7 @@ import {
 	waitForLockScreen,
 	waitForToast,
 } from "../fixtures/helpers"
+import { switchToNetwork } from "../fixtures/networks"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { TEST_PASSWORD } from "../helpers/import-drivers"
 import {
@@ -86,6 +87,8 @@ describe("stale network reset after a background death", () => {
 				await registerProfile(ctx)
 				page = await openPopup(ctx)
 				await waitForHash(page, "#/popup/general", 30_000)
+				// A new profile starts on Mainnet; the stale seeds move Testnet's rows.
+				await switchToNetwork(page, "Testnet")
 				await createAccount(page, "Savings")
 				await closeStuckPopup(page)
 				const testnetBefore = (await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)
@@ -126,8 +129,11 @@ describe("stale network reset after a background death", () => {
 				await ensureUnlocked(page)
 				await startHeld(page, "new-addresses", "network-reset-account")
 				page = await killAndReopen(ctx, page, "network-reset-account")
-				await ensureUnlocked(page, TEST_PASSWORD, { decisionBudgetMs: 120_000 })
-				await waitForToast(page, "Your accounts have new addresses.", 120_000, { kind: "success" })
+				// Armed before the unlock that resumes the run: its end can fall inside the unlock's wait.
+				await Promise.all([
+					waitForToast(page, "Your accounts have new addresses.", 120_000, { kind: "success" }),
+					ensureUnlocked(page, TEST_PASSWORD, { decisionBudgetMs: 120_000 }),
+				])
 				expect((await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)).toEqual(testnetBefore)
 			} finally {
 				if (page && !page.isClosed()) await clearRestoreGate(page)

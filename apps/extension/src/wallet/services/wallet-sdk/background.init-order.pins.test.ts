@@ -1,5 +1,5 @@
 /**
- * Pre-extraction pins for `initWalletSdkHandler`
+ * Pins for `initWalletSdkHandler`
  * and its discovery handler, driven through a mocked SDK `BackgroundConnectionHandler`
  * that captures the wired callbacks:
  *   - every listener/subscription installs ONCE, in the frozen order, with
@@ -76,7 +76,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
-		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }) },
+		profile: { onActiveProfileChanged, getActiveProfile: async () => ({ id: "p1" }), setRestartPreparation: () => {} },
 		"dapp-interaction": {
 			discover: async () => {
 				log.push("discover")

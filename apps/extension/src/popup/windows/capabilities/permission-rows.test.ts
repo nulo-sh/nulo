@@ -15,6 +15,7 @@ import {
 	privateEventsDefault,
 	privateEventsRow,
 	ROW_ORDER,
+	reachOf,
 	simulationRow,
 	transactionRow,
 	unknownRow,
@@ -22,6 +23,8 @@ import {
 
 const A = `0x${"0a".repeat(32)}`
 const B = `0x${"0b".repeat(32)}`
+const A_UPPER = `0x${A.slice(2).toUpperCase()}`
+const NAMES = [{ address: A, name: "Test USDC" }]
 const GROUP_WORDS = { "without-asking": "Without asking", "if-you-allow": "If you allow", "always-asks": "Always asks you first" }
 
 /** A row as the design's row list prints it: group, title (with its chip), and the line under it. */
@@ -44,16 +47,12 @@ const accounts = (canCreateAuthWit: boolean) => ({ type: "accounts", canGet: tru
 const listed = [{ contract: A, function: "transfer" }]
 
 describe("the row list, row by row", () => {
-	test("one account's address", () => {
-		expect(cells(accountAddressRow([{ name: "Account 1" }]))).toEqual(["Without asking", "See Account 1's address", "—"])
-	})
-
-	test("several accounts, none selected, and one the wallet no longer names, name no account", () => {
-		const row = ["Without asking", "See the addresses of the accounts you share", "—"]
-		expect(cells(accountAddressRow([{ name: "Account 1" }, { name: "Account 2" }]))).toEqual(row)
-		expect(cells(accountAddressRow([]))).toEqual(row)
-		expect(cells(accountAddressRow([{}]))).toEqual(row)
-		expect(cells(accountAddressRow([{ name: "Account 1" }, {}]))).toEqual(row)
+	test("listing your accounts, and the account the app always knows", () => {
+		expect(cells(accountAddressRow())).toEqual([
+			"Without asking",
+			"Let this app list all your accounts",
+			"It always knows the account you connect with.",
+		])
 	})
 
 	test("simulations on listed contracts", () => {
@@ -74,31 +73,53 @@ describe("the row list, row by row", () => {
 	})
 
 	test("adding listed contracts, and any contract", () => {
-		expect(cells(contractsRow({ type: "contracts", contracts: [A], canRegister: true })!)).toEqual([
+		expect(cells(contractsRow({ type: "contracts", contracts: [A], canRegister: true }, NAMES)!)).toEqual([
 			"Without asking",
 			"Add contracts to your wallet",
 			"—",
 		])
-		const any = contractsRow({ type: "contracts", contracts: "*", canRegister: true })!
+		const any = contractsRow({ type: "contracts", contracts: "*", canRegister: true }, [])!
 		expect(cells(any)).toEqual(["Without asking", "Add any contract to your wallet · Any contract", "—"])
 		expect(any.flagged).toBe(true)
 	})
 
 	test("contract details only, and a request with both flags shows only the add row", () => {
-		const details = contractsRow({ type: "contracts", contracts: "*", canGetMetadata: true })!
-		expect(details.key).toBe("contract-details")
-		expect(cells(details)).toEqual(["Without asking", "See details of contracts in your wallet", "—"])
+		const details = (contracts: "*" | string[], names = NAMES) =>
+			contractsRow({ type: "contracts", contracts, canGetMetadata: true }, names)!
+		expect(details([A]).key).toBe("contract-details")
+		expect(cells(details([A], []))).toEqual(["Without asking", "See details of 1 contract in your wallet", "—"])
+		expect(details([A, B]).title).toBe("See details of 2 contracts in your wallet")
+		expect(details([A]).title).toBe("See details of Test USDC in your wallet")
+		expect(details([A]).flagged).toBe(false)
 		const both: ContractsCapability = { type: "contracts", contracts: [A], canRegister: true, canGetMetadata: true }
-		expect(contractsRow(both)?.key).toBe("contracts")
-		expect(contractsRow({ type: "contracts", contracts: [A] })).toBeUndefined()
+		expect(contractsRow(both, NAMES)?.key).toBe("contracts")
+		expect(contractsRow({ type: "contracts", contracts: [A] }, NAMES)).toBeUndefined()
 	})
 
-	test("contract classes name the network", () => {
-		expect(cells(contractClassesRow("Testnet"))).toEqual([
+	test("contract details of any contract are flagged like adding any contract", () => {
+		const any = contractsRow({ type: "contracts", contracts: "*", canGetMetadata: true }, NAMES)!
+		expect(cells(any)).toEqual(["Without asking", "See details of any contract in your wallet · Any contract", "—"])
+		expect(any.flagged).toBe(true)
+	})
+
+	test("contract classes name the network, count a list, and name both answers a lookup gives", () => {
+		expect(cells(contractClassesRow("Testnet", [A]))).toEqual([
 			"Without asking",
-			"Look up contract code on Testnet",
-			"Public information any node can give it.",
+			"Look up the code of 1 contract class on Testnet",
+			"Whether it is on chain, and if this wallet has its code.",
 		])
+		expect(contractClassesRow("Testnet", [A, A_UPPER, B]).title).toBe("Look up the code of 2 contract classes on Testnet")
+		expect(contractClassesRow("Testnet", [A]).flagged).toBe(false)
+	})
+
+	test("every class is flagged like adding any contract", () => {
+		const any = contractClassesRow("Testnet", "*")
+		expect(cells(any)).toEqual([
+			"Without asking",
+			"Look up contract code on Testnet · Any class",
+			"Whether it is on chain, and if this wallet has its code.",
+		])
+		expect(any.flagged).toBe(true)
 	})
 
 	test("authorizations, with the B lines and their switch", () => {
@@ -149,21 +170,23 @@ describe("the row list, row by row", () => {
 	})
 
 	test("private events from listed contracts", () => {
-		const row = privateEventsRow([A])
+		const row = privateEventsRow([A], [])
 		expect(cells(row)).toEqual([
 			"If you allow",
-			"See private events from its contracts",
+			"See private events from 1 contract",
 			"On: Private messages its contracts sent to your accounts, like a transfer you received. · Off: Not shared. The app may ask again later.",
 		])
 		expect(row.switchLabel).toBe("Share private events")
-		expect(row.icon).toBe("mail_lock")
+		expect(row.icon).toBe("mail-lock")
 		expect(row.flagged).toBe(false)
+		expect(privateEventsRow([A, B], NAMES).title).toBe("See private events from 2 contracts")
+		expect(privateEventsRow([A], NAMES).title).toBe("See private events from Test USDC")
 	})
 
 	test("private events from any contract: the chip, the flag and the listed row's lines", () => {
-		const row = privateEventsRow("*")
+		const row = privateEventsRow("*", NAMES)
 		expect(cells(row).slice(0, 2)).toEqual(["If you allow", "See private events from any contract · Any contract"])
-		expect(cells(row)[2]).toBe(cells(privateEventsRow([A]))[2])
+		expect(cells(row)[2]).toBe(cells(privateEventsRow([A], []))[2])
 		expect(row.flagged).toBe(true)
 	})
 
@@ -178,34 +201,44 @@ describe("the row list, row by row", () => {
 	})
 
 	test("transactions on listed contracts, and on any contract", () => {
-		expect(cells(transactionRow(tx(listed)))).toEqual(["Always asks you first", "Every transaction", "—"])
-		expect(cells(transactionRow(tx("*")))).toEqual(["Always asks you first", "Every transaction, on any contract", "—"])
+		expect(cells(transactionRow(tx(listed), []))).toEqual(["Always asks you first", "Every transaction, on 1 contract", "—"])
+		expect(transactionRow(tx(listed), NAMES).title).toBe("Every transaction, on Test USDC")
+		expect(transactionRow(tx([...listed, { contract: B, function: "*" }]), NAMES).title).toBe("Every transaction, on 2 contracts")
+		expect(cells(transactionRow(tx("*"), NAMES))).toEqual(["Always asks you first", "Every transaction, on any contract", "—"])
+		expect(transactionRow(tx([...listed, { contract: "*", function: "f" }]), NAMES).title).toBe("Every transaction, on any contract")
+	})
+
+	test("reach names one contract the wallet names, and counts anything else once per address", () => {
+		expect(reachOf([A, A_UPPER], NAMES)).toBe("Test USDC")
+		expect(reachOf([A, A_UPPER], [])).toBe("1 contract")
+		expect(reachOf([A, B], [...NAMES, { address: B, name: "Fee Juice" }])).toBe("2 contracts")
+		expect(reachOf(["not-an-address", A], NAMES)).toBe("2 contracts")
 	})
 
 	test("each row's icon: the drawn ones, and add_circle, info and mail_lock for the three new rows", () => {
 		const icons = [
-			accountAddressRow([]),
+			accountAddressRow(),
 			simulationRow(sim("*")),
-			contractsRow({ type: "contracts", contracts: "*", canRegister: true })!,
-			contractsRow({ type: "contracts", contracts: [A], canGetMetadata: true })!,
-			contractClassesRow("Testnet"),
+			contractsRow({ type: "contracts", contracts: "*", canRegister: true }, [])!,
+			contractsRow({ type: "contracts", contracts: [A], canGetMetadata: true }, [])!,
+			contractClassesRow("Testnet", "*"),
 			authorizationsRow({ broad: false, noScope: false }),
 			addressBookRow({ broadRequest: false }),
-			privateEventsRow("*"),
+			privateEventsRow("*", []),
 			unknownRow(1, { broadRequest: false }),
-			transactionRow(tx("*")),
+			transactionRow(tx("*"), []),
 		].map((row) => [row.key, row.icon])
 		expect(icons).toEqual([
-			["account-address", "visibility"],
-			["simulation", "play_circle"],
-			["contracts", "add_circle"],
+			["account-address", "eye"],
+			["simulation", "play"],
+			["contracts", "add"],
 			["contract-details", "info"],
-			["contract-classes", "code_blocks"],
+			["contract-classes", "code"],
 			["authorizations", "signature"],
 			["address-book", "contacts"],
-			["private-events", "mail_lock"],
+			["private-events", "mail-lock"],
 			["unknown", "help"],
-			["transaction", "task_alt"],
+			["transaction", "check"],
 		])
 		expect(icons.map(([key]) => key)).toEqual([...ROW_ORDER])
 	})
@@ -223,13 +256,27 @@ describe("defaults", () => {
 	test("any contract defaults Off: authorizations on a first grant, and private events", () => {
 		expect(authorizationsDefault({ firstGrant: true, consent: undefined, resulting: [accounts(true), tx("*")] })).toBe(false)
 		expect(authorizationsDefault({ firstGrant: true, consent: undefined, resulting: [accounts(true), sim("*")] })).toBe(false)
-		expect(privateEventsDefault("*")).toBe(false)
 	})
 
 	test("a first grant over listed scopes starts On, and utilities alone never make it broad", () => {
 		expect(authorizationsDefault({ firstGrant: true, consent: undefined, resulting: [accounts(true), tx(listed)] })).toBe(true)
 		expect(authorizationsDefault({ firstGrant: true, consent: undefined, resulting: [tx(listed), sim(undefined, "*")] })).toBe(true)
-		expect(privateEventsDefault([A, B])).toBe(true)
+	})
+
+	test.each([
+		["a contract outside every call scope", [A, B], [tx(listed)], false],
+		["no call scope at all", [A], [accounts(true)], false],
+		["a utilities-only scope on the contract", [A], [sim(undefined, listed)], false],
+		["an entry that is not an address", ["0xA"], [tx("*")], false],
+		["a malformed scope naming the contract", [A], [tx([...listed, { contract: B }])], false],
+		["a scope that is neither any nor a list", [A], [tx({ contract: A })], false],
+		["events from any contract", "*", [tx("*")], false],
+		["inside a transaction scope, in another case", [A_UPPER], [tx(listed)], true],
+		["inside a simulated-transactions scope", [A], [sim(listed)], true],
+		["inside an any-contract call scope", [A, B], [tx([{ contract: "*", function: "transfer" }])], true],
+		["inside two scopes together", [A, B], [tx(listed), sim([{ contract: B, function: "f" }])], true],
+	] as const)("private events start %s: %j", (_label, contracts, resulting, on) => {
+		expect(privateEventsDefault(contracts as "*" | string[], resulting)).toBe(on)
 	})
 
 	test("a re-request starts from the snapshot's effective consent over the resulting grants", () => {

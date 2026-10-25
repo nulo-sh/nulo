@@ -12,7 +12,6 @@ import { LogLevel } from "../../logger"
 import { topRightOf } from "../window-manager/placement"
 import { createPlaced } from "../window-manager/window-manager"
 import { isPendingVerificationDead, type PendingVerificationEntry, settlePendingVerification } from "./pending-verification"
-import type { VerificationHold } from "./verification-hold"
 import type { WindowReservation } from "./verify-admission"
 import { describeExternalId } from "@nulo/wallet-bridge"
 
@@ -49,7 +48,7 @@ export interface SessionEstablishedDeps {
 		tryGetDappSessionByOriginAndChain(
 			origin: string,
 			chainId: string,
-		): Promise<{ id: string; profileId: string; trustedVerification?: boolean } | undefined>
+		): Promise<{ id: string; profileId: string; verificationHash?: string } | undefined>
 		setVerificationHash(sessionId: string, verificationHash: string): Promise<unknown>
 	}
 	/** Ends this very session object; a same-id successor is never ended. */
@@ -64,11 +63,9 @@ export interface SessionEstablishedDeps {
 	 *  the dispatch guard and the switch-teardown listener consume this. */
 	stampSessionProfile: (sessionId: string, profileId: string) => void
 	/** The port the check is shown on; a window's `onRemoved` is what frees its slot. */
-	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused" | "navigate" | "update">
-	/** The verify-window slot admission reserved for this session id, if the handshake needed one. */
+	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused">
+	/** The verify-window slot admission reserved for this session id; termination can free it first. */
 	reservations: { reservation(sessionId: string): WindowReservation | undefined }
-	/** The session's gate on dispatch: released here only when no check is shown. */
-	hold: Pick<VerificationHold, "release">
 	logger: ILogger
 }
 
@@ -82,13 +79,13 @@ export function verifyWindowUrl(dappSessionId: string, verificationHash: string,
 
 /**
  * Handle an established wallet-SDK session: persist its verification hash for the settings and
- * reconnect views and, for a new or untrusted connection, show the emoji check.
+ * reconnect views and show the emoji check, on a reconnect as on a new connection.
  *
  * The check's grid comes from this session's own hash in the window URL, never from the shared
  * row a concurrent session for the same `(origin, chainId)` can overwrite. A session whose
  * hash could not be persisted or whose check could not be shown is terminated and resolves
- * `false`, and the caller dispatches no message before this resolves `true`. A session that needs
- * no check has its hold released here; one shown the check stays held until the person confirms.
+ * `false`, and the caller dispatches no message before this resolves `true`. Nothing here releases
+ * the session's hold: only the person's They match does.
  */
 export async function handleSessionEstablished(
 	session: { origin: string; sessionId: string; verificationHash: string } & Parameters<typeof chainInfoToChainId>[0],
@@ -156,8 +153,14 @@ export async function handleSessionEstablished(
 			)
 			return false
 		}
-		// Persist for the settings/reconnect view (informational). The verify window
-		// does NOT rely on this — it gets the per-session snapshot via its URL.
+		// A window without a reserved slot would be one the origin's budget never counted: admission
+		// at discovery is the only place the cap is enforced, so fail closed.
+		if (!reservation) throw new Error("verify window has no reserved slot")
+		// A row no key exchange has reached was allowed but never connected: its check reads as a
+		// first connection's. Read before the write below gives it a hash.
+		const firstCheck = isNewConnection || dappSession.verificationHash === undefined
+		// The row's hash is what Settings reads as connected, so a refusal known before it is written
+		// comes above. The verify window reads its own snapshot from its URL.
 		await deps.dappSessionService.setVerificationHash(dappSession.id, session.verificationHash)
 		// Second liveness gate: the await above is itself a window the
 		// switch-teardown can land in — a session confirmed dead here must not
@@ -183,14 +186,8 @@ export async function handleSessionEstablished(
 		deps.stampSessionProfile(session.sessionId, dappSession.profileId)
 		stamped = true
 
-		const needsVerification = isNewConnection || !dappSession.trustedVerification
-		if (needsVerification) {
-			// A window without a reserved slot would be one the origin's budget never counted:
-			// admission at discovery is the only place the cap is enforced, so fail closed.
-			if (!reservation) throw new Error("verify window has no reserved slot")
-			const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
-			await showVerifyWindow(url, session.sessionId, reservation, deps)
-		} else deps.hold.release()
+		const url = verifyWindowUrl(dappSession.id, session.verificationHash, !firstCheck)
+		await openVerifyWindow(url, session.sessionId, reservation, deps)
 		established = true
 		return true
 	} catch (err) {
@@ -200,7 +197,7 @@ export async function handleSessionEstablished(
 		return terminate()
 	} finally {
 		// A failed exit leaves a tombstone: the SDK restores the discovery, and a marker-less retry of
-		// this id would pass as a reconnect, which skips the check on a row since marked trusted.
+		// this id would pass as a reconnect, past the approval's profile and staleness checks.
 		settleCapturedMarker(deps.pendingVerification, session.sessionId, marker, established)
 		// Every exit that opened no window gives the slot back; an issued creation keeps it.
 		reservation?.releaseIfUnstarted()
@@ -247,34 +244,6 @@ function settleCapturedMarker(
 	established: boolean,
 ): void {
 	if (marker !== undefined && markers.get(id) === marker) settlePendingVerification(markers, id, established)
-}
-
-function showVerifyWindow(url: string, sessionId: string, reservation: WindowReservation, deps: SessionEstablishedDeps): Promise<void> {
-	const standby = reservation.claimStandby()
-	return standby === undefined
-		? openVerifyWindow(url, sessionId, reservation, deps)
-		: showVerifyInConnectWindow(url, standby, reservation, deps)
-}
-
-/** Load the check in the claimed connect window. A failed navigation adopts the window before
- *  closing it, so the slot frees on its removal and never while the window still shows. */
-async function showVerifyInConnectWindow(
-	url: string,
-	windowId: number,
-	reservation: WindowReservation,
-	deps: SessionEstablishedDeps,
-): Promise<void> {
-	// The browser's rejection can carry the URL, and with it the hash and the row id: it is dropped
-	// here so no log line or error ever holds it.
-	const shown = await deps.windows.navigate(windowId, url).then(
-		() => true,
-		() => false,
-	)
-	if (reservation.adopt(windowId) === "abort" || !shown) {
-		await deps.windows.remove(windowId).catch(() => undefined)
-		throw new Error(shown ? "session ended while its verify window was loading" : "verify window could not be shown")
-	}
-	void deps.windows.update(windowId, { focused: true }).catch(() => undefined)
 }
 
 /** Open the verify window against its reservation. The slot is held from the moment `create` is

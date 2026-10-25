@@ -7,6 +7,8 @@
  * both channels stay open against the same session for the life of a launch.
  */
 
+import { pollUntil } from "../poll"
+
 export interface SessionCapabilities {
 	browserVersion: string
 	/** BiDi endpoint, present because the session was requested with `webSocketUrl: true`. */
@@ -57,15 +59,13 @@ export class WebDriverSession {
 		running: () => boolean,
 		timeoutMs = 20_000,
 	): Promise<WebDriverSession> {
-		const deadline = Date.now() + timeoutMs
-		let up = false
-		while (!up && running() && Date.now() < deadline) {
-			up = await fetch(`${base}/status`, { signal: AbortSignal.timeout(2_000) }).then(
+		const status = async () =>
+			running() &&
+			(await fetch(`${base}/status`, { signal: AbortSignal.timeout(2_000) }).then(
 				(r) => r.ok,
 				() => false,
-			)
-			if (!up) await new Promise((resolve) => setTimeout(resolve, 100))
-		}
+			))
+		await pollUntil(status, (up) => up || !running(), { label: `geckodriver serving ${base}`, timeoutMs, intervalMs: 100 })
 		if (!running()) throw new Error(`geckodriver exited before serving ${base} — most likely another launch took its port; retry`)
 		const value = await request(base, "POST", "/session", { capabilities: { alwaysMatch: capabilities } })
 		const { sessionId, capabilities: caps } = value as { sessionId?: string; capabilities?: SessionCapabilities }
@@ -123,6 +123,32 @@ export class WebDriverSession {
 				const [handle] = await this.windowHandles()
 				await this.switchToWindow(handle)
 				return (await this.send("POST", "/execute/async", { script, args }, 30_000)) as T
+			} finally {
+				await this.send("POST", "/moz/context", { context: "content" })
+			}
+		})
+	}
+
+	/**
+	 * Perform WebDriver `actions` in the scope `chromeScript` runs in, at that browser window's viewport
+	 * coordinates, then release every input. This reaches a document no protocol addresses, such as the
+	 * sidebar's. Its window switch first focuses the window's selected tab, as `chromeScript`'s does,
+	 * so an input and the step it starts belong in one call.
+	 */
+	chromeActions(actions: unknown[]): Promise<void> {
+		return this.exclusive(async () => {
+			await this.send("POST", "/moz/context", { context: "chrome" })
+			try {
+				const [handle] = await this.windowHandles()
+				await this.switchToWindow(handle)
+				try {
+					await this.send("POST", "/actions", { actions })
+				} catch (err) {
+					// Released on the way out, but the actions' own failure is the one to report.
+					await this.send("DELETE", "/actions").catch(() => {})
+					throw err
+				}
+				await this.send("DELETE", "/actions")
 			} finally {
 				await this.send("POST", "/moz/context", { context: "content" })
 			}

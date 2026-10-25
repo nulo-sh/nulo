@@ -21,8 +21,17 @@ import {
 	waitForLockScreen,
 	waitForToast,
 } from "./fixtures/helpers"
+import { switchToNetwork } from "./fixtures/networks"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
-import { addNetwork, DEAD_NODE, seedStaleMainnet, seedStaleNetwork, takeoverScreen } from "./helpers/stale-network"
+import {
+	addNetwork,
+	DEAD_NODE,
+	type NetworkRow,
+	readNetworkRows,
+	seedStaleMainnet,
+	seedStaleNetwork,
+	takeoverScreen,
+} from "./helpers/stale-network"
 import { CAPTURE_VIEWPORT, CAPTURES_ENABLED, capture } from "./helpers/stale-network-capture"
 import {
 	armHold,
@@ -50,9 +59,12 @@ async function lockAnywhere(page: Page): Promise<void> {
 	}
 }
 
-async function relock(page: Page, seed: () => Promise<unknown>): Promise<void> {
+/** Locks, seeds, unlocks. The seed gets the networks read before the lock: the network service
+ *  serves none to a locked profile, and a sealed row opens only in the background. */
+async function relock(page: Page, seed: (networks: NetworkRow[]) => Promise<unknown>): Promise<void> {
+	const networks = await readNetworkRows(page)
 	await lockAnywhere(page)
-	await seed()
+	await seed(networks)
 	await ensureUnlocked(page)
 }
 
@@ -64,6 +76,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 			await registerProfile(donor)
 			const donorPage = await openPopup(donor)
 			await waitForHash(donorPage, "#/popup/general", 30_000)
+			await switchToNetwork(donorPage, "Testnet")
 			foreignBody = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
 		} finally {
 			await donor.close()
@@ -72,11 +85,13 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		const page = await openPopup(ctx)
 		await page.setViewport(CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
+		// A new profile starts on Mainnet; every takeover below is Testnet's.
+		await switchToNetwork(page, "Testnet")
 		await createAccount(page, "Account 2")
 		await closeStuckPopup(page)
 
 		// A1, A3, then A4b, A4 and A5 from one held run.
-		await relock(page, () => seedStaleNetwork(page, "network-reset"))
+		await relock(page, (networks) => seedStaleNetwork(page, "network-reset", { networks }))
 		await takeoverScreen(page, "network-reset")
 		await capture(page, "A1-network-reset")
 		await clickByTestId(page, "stale-network-reset")
@@ -94,9 +109,9 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await capture(page, "A5b-as-built")
 
 		// A15: Networks over a quarantined Testnet; A1b: the user's node does not serve the new chain.
-		await relock(page, async () => {
-			await seedStaleNetwork(page, "network-reset")
-			await setTestnetPrimary(page, DEAD_NODE)
+		await relock(page, async (networks) => {
+			await seedStaleNetwork(page, "network-reset", { networks })
+			await setTestnetPrimary(page, DEAD_NODE, networks)
 		})
 		await takeoverScreen(page, "network-reset")
 		await page.waitForSelector('[data-testid="stale-network-node-line"]', { visible: true, timeout: 30_000 })
@@ -110,17 +125,21 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		// R2: the new Testnet chain is already a network of the profile.
 		const held = await (async () => {
 			let id = ""
-			await relock(page, async () => {
-				await setTestnetPrimary(page, null)
+			await relock(page, async (networks) => {
+				await setTestnetPrimary(page, null, networks)
 				id = (
-					await addNetwork(page, {
-						name: "My Testnet",
-						kind: "custom",
-						chainId: CHAIN_IDS.TESTNET,
-						l1ChainId: TESTNET_L1_CHAIN_ID,
-						movedAccount: false,
-						active: false,
-					})
+					await addNetwork(
+						page,
+						{
+							name: "My Testnet",
+							kind: "custom",
+							chainId: CHAIN_IDS.TESTNET,
+							l1ChainId: TESTNET_L1_CHAIN_ID,
+							movedAccount: false,
+							active: false,
+						},
+						networks,
+					)
 				).networkId
 			})
 			return id
@@ -129,7 +148,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await capture(page, "R2-already-added")
 
 		// R1 and the Full Backup notice: a run whose purge record is refused stops, and its journal stays.
-		await relock(page, () => removeNetwork(page, held))
+		await relock(page, (networks) => removeNetwork(page, held, networks))
 		await takeoverScreen(page, "network-reset")
 		await armHold(ctx, "fail-purged")
 		await clickByTestId(page, "stale-network-reset")
@@ -144,7 +163,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await takeoverScreen(page, "paused")
 
 		// R3: Local is stale too, and Testnet's reset has not finished (the hold refuses its resume).
-		await relock(page, () => seedStaleLocal(page))
+		await relock(page, (networks) => seedStaleLocal(page, networks))
 		await takeoverScreen(page, "one-at-a-time")
 		await capture(page, "R3-one-at-a-time")
 		await releaseHold(ctx)
@@ -154,7 +173,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await waitForToast(page, "Testnet is ready", 120_000)
 
 		// A2, then A3b: an imported key that no longer opens.
-		await relock(page, () => seedStaleNetwork(page, "address-change"))
+		await relock(page, (networks) => seedStaleNetwork(page, "address-change", { networks }))
 		await takeoverScreen(page, "new-addresses")
 		await capture(page, "A2-new-addresses")
 		await clickByTestId(page, "stale-network-reset")
@@ -163,8 +182,31 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		expect(await previewImport(page, foreignBody)).toBeTruthy()
 		await confirmImport(page, "Imported 1")
 		await closeStuckPopup(page)
-		await relock(page, async () => {
-			await seedStaleNetwork(page, "network-reset")
+
+		// R1b: a paused reset whose journal holds an imported key: export leads, at both scroll
+		// positions, and the export page lists the held account. An address change keeps the chain, so
+		// the key still opens; the network-reset seed renames its chain, which its seal binds.
+		await relock(page, (networks) => seedStaleNetwork(page, "address-change", { networks }))
+		await takeoverScreen(page, "new-addresses")
+		await armHold(ctx, "fail-purged")
+		await clickByTestId(page, "stale-network-reset")
+		await clickByTestId(page, "stale-confirm-submit")
+		await takeoverScreen(page, "paused")
+		await page.waitForSelector('[data-testid="stale-network-export"]', { visible: true, timeout: 15_000 })
+		await capture(page, "R1b-paused-export")
+		await page.evaluate(() => document.querySelector('[data-testid="stale-network-note"]')?.scrollIntoView({ block: "end" }))
+		await capture(page, "R1b-paused-export-scrolled")
+		await clickByTestId(page, "stale-network-export")
+		await waitForHash(page, "#/popup/settings/security/export/account")
+		await page.waitForSelector('[data-testid="export-account-row"][data-account-name="Imported 1"]', { visible: true, timeout: 15_000 })
+		await capture(page, "R1b-export-held")
+		await releaseHold(ctx)
+		await navigateByHash(page, "#/popup/general", 15_000)
+		await takeoverScreen(page, "paused")
+		await clickByTestId(page, "stale-network-retry")
+		await waitForToast(page, "Your accounts have new addresses.", 120_000)
+		await relock(page, async (networks) => {
+			await seedStaleNetwork(page, "network-reset", { networks })
 			expect(await corruptImportedKeys(page)).toBe(1)
 		})
 		await takeoverScreen(page, "network-reset")
@@ -175,16 +217,20 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 
 		// R4: a custom network whose addresses moved, on a node that does not answer.
 		let devnet = ""
-		await relock(page, async () => {
+		await relock(page, async (networks) => {
 			devnet = (
-				await addNetwork(page, {
-					name: "My Devnet",
-					kind: "custom",
-					chainId: 31337 ^ 7,
-					l1ChainId: 31337,
-					movedAccount: true,
-					active: true,
-				})
+				await addNetwork(
+					page,
+					{
+						name: "My Devnet",
+						kind: "custom",
+						chainId: 31337 ^ 7,
+						l1ChainId: 31337,
+						movedAccount: true,
+						active: true,
+					},
+					networks,
+				)
 			).networkId
 		})
 		await takeoverScreen(page, "new-addresses")
@@ -194,9 +240,9 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		await capture(page, "R4-node-down")
 
 		// A6: Mainnet, whose addresses moved.
-		await relock(page, async () => {
-			await removeNetwork(page, devnet)
-			await seedStaleMainnet(page)
+		await relock(page, async (networks) => {
+			await removeNetwork(page, devnet, networks)
+			await seedStaleMainnet(page, networks)
 		})
 		await takeoverScreen(page, "blocked")
 		await capture(page, "A6-mainnet-blocked")
@@ -223,9 +269,9 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 
 		// A1c and A3c: a Testnet this profile never opened, whose only change is the move off the
 		// user's node.
-		await relock(page, async () => {
-			await forgetTestnetAccounts(page)
-			await setTestnetPrimary(page, DEAD_NODE)
+		await relock(page, async (networks) => {
+			await forgetTestnetAccounts(page, networks)
+			await setTestnetPrimary(page, DEAD_NODE, networks)
 		})
 		await takeoverScreen(page, "network-reset")
 		await page.waitForSelector('[data-testid="stale-network-node-line"]', { visible: true, timeout: 30_000 })

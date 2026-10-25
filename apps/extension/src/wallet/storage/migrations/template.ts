@@ -39,10 +39,17 @@
  *      or `retype`ing a schema-REQUIRED field, and — when a release ADDS a new
  *      required field — failing to `addDefault` it (old rows won't have it).
  *      Your colocated test MUST assert `Schema.parse(migratedRow)` succeeds
- *      for every before→after fixture. (There is no automatic gate that a
- *      migration's old→new output matches the schema — only your test.)
- *   8. Import it into `index.ts`'s `realMigrations` array.
- *   9. Add a colocated `*.test.ts` with before→after fixtures.
+ *      for every before→after fixture. The stored-shape guard
+ *      (`stored-shapes/snapshot.test.ts`, R3) also runs the real engine over
+ *      every frozen golden row and reads each back through its service's read
+ *      path, so an output the codec hides fails CI there too.
+ *   8. Import it into `index.ts`'s `realMigrations` array, then run
+ *      `bun run baseline:storage`: it appends the stamp this migration
+ *      justifies and the decoded value of every golden after it; review that
+ *      diff, and add the pin it prints to `stored-shapes/pins.ts`.
+ *   9. Add a colocated `*.test.ts` with before→after fixtures. R3 holds every
+ *      older golden to the expectations the generator wrote, so a value your
+ *      migration changes by accident shows in the stamp's diff.
  *
  * `breaking` defaults to `true` (the new code REQUIRES this shape; a failed
  * migration blocks with recovery). Set `false` ONLY if the code genuinely
@@ -51,10 +58,12 @@
  * A `root` is an EntityStorage namespace (rows keyed `${root}@${id}`); a `value`
  * is a single ValueStorage key. NEVER migrate the encrypted secret / KDF here —
  * the migrator runs pre-unlock and has no password (see wallet-crypto/README.md).
+ * Nor a sealed root (`STORES` entries marked `sealed`): the registry refuses it, and
+ * its rows convert at the profile's unlock instead.
  */
 import { defineMigration } from "@nulo/wallet-core/migration"
 import { defineRowMapMigration } from "@/wallet/services/backup/row-map-migration"
-import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
+import { PROFILE_TOMBSTONE_ROOT } from "@/wallet/services/profile/tombstone-repository"
 
 /** PREFERRED: the backup-safe declarative form. Finite data-only clauses
  *  (`rename` / `drop` / `retype` / `remapValues` / `addDefault`), applied per
@@ -63,9 +72,9 @@ import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
  *  idempotency is inherent (and still harness-verified). */
 export const exampleRowMapMigration = defineRowMapMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every account row",
+	description: "example: add a default `attempts` count to every deletion tombstone",
 	rowMaps: {
-		[ACCOUNT_STORAGE_ROOT]: { addDefault: { pinned: false } },
+		[PROFILE_TOMBSTONE_ROOT]: { addDefault: { attempts: 0 } },
 	},
 })
 
@@ -74,18 +83,18 @@ export const exampleRowMapMigration = defineRowMapMigration({
  *  per the hostile-input rule. */
 export const exampleMigration = defineMigration({
 	version: 2,
-	description: "example: add a default `pinned` flag to every account row",
-	reads: [{ kind: "root", root: "nulo:core:accounts" }],
-	writes: [{ kind: "root", root: "nulo:core:accounts" }],
+	description: "example: add a default `attempts` count to every deletion tombstone",
+	reads: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
+	writes: [{ kind: "root", root: "nulo:core:profile-tombstones" }],
 	up: async (ctx) => {
 		// Declare the PRE-migration shape once via the type parameter. It is an
 		// assertion over untrusted JSON, not a validation — keep field access
 		// guarded (spread + default below is presence-safe and idempotent).
-		type AccountRow = { pinned?: boolean; [k: string]: unknown }
-		const rows = await ctx.local.rows<AccountRow>("nulo:core:accounts")
-		await ctx.local.setRows<AccountRow>(
-			"nulo:core:accounts",
-			rows.map(([id, row]) => [id, { pinned: false, ...row }]),
+		type TombstoneRow = { attempts?: number; [k: string]: unknown }
+		const rows = await ctx.local.rows<TombstoneRow>("nulo:core:profile-tombstones")
+		await ctx.local.setRows<TombstoneRow>(
+			"nulo:core:profile-tombstones",
+			rows.map(([id, row]) => [id, { attempts: 0, ...row }]),
 		)
 	},
 })

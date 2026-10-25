@@ -25,10 +25,12 @@ import { FpcType } from "@/wallet/services/fpc/spec"
 import { TransactionService, TransferType, TxStatus } from "@/wallet/services/transaction/service"
 import { OriginType, TxExecutionResult } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import type { ExecutionLane } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
@@ -48,6 +50,7 @@ const SLOT = `p1:${NETWORK.chainId}`
 const ORIGIN_KEY = "https://dapp.example"
 const DAPP = { type: OriginType.DAPP, name: "dapp" } as never
 const ACCOUNT_2 = AztecAddress.fromNumberUnsafe(0x2222).toString()
+const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 
 async function makeHarness() {
 	const api = new FakeBrowserApi()
@@ -98,6 +101,7 @@ async function makeHarness() {
 		svc(ProfileService.name, {
 			getActiveProfile: async () => ({ id: "p1" }),
 			getProfiles: async () => [{ id: "p1" }],
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence,
 			assertFence: async () => {
@@ -115,7 +119,7 @@ async function makeHarness() {
 		svc(TransactionService.name, {
 			getPendingForAccount: (account: string) => pending.filter((row) => row.account.toLowerCase() === account.toLowerCase()),
 			// One mined tx: the account is initialized, so a public send here holds only its fee contract.
-			getTransactions: async () => [
+			transactionsOf: async () => [
 				{ chainId: NETWORK.chainId, status: TxStatus.Proposed, executionResult: TxExecutionResult.Success, calls: [] },
 				pendingRow,
 			],
@@ -123,7 +127,7 @@ async function makeHarness() {
 			onTransactionUpdated: { add: () => {} },
 		}),
 	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: "0xtoken" }) }))
+	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
 	collection.add(
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
@@ -142,6 +146,7 @@ async function makeHarness() {
 	)
 	collection.add(svc(ContactService.name, {}))
 	collection.add(svc(AuthRegistryService.name, {}))
+	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
 	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: async () => {} }))
 	collection.add(journal)
 	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }) }))
@@ -187,6 +192,7 @@ const request = (fpcId: string) => {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT,
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
@@ -207,7 +213,16 @@ describe("send ordering composition: a restarted worker still orders by the reco
 		const h = await makeHarness()
 		const r = request("fpc-f")
 		const run = h.service
-			.executeTransfer(r.networkId, r.accountAddress, r.tokenId, r.transferType, r.recipientAddress, r.amount, r.feeSettings)
+			.executeTransfer(
+				r.networkId,
+				r.accountAddress,
+				r.tokenId,
+				r.tokenContract,
+				r.transferType,
+				r.recipientAddress,
+				r.amount,
+				r.feeSettings,
+			)
 			.catch((e: unknown) => e)
 		let id = ""
 		await waitFor(async () => {
@@ -235,13 +250,14 @@ describe("send ordering composition: a restarted worker still orders by the reco
 				f.networkId,
 				f.accountAddress,
 				f.tokenId,
+				f.tokenContract,
 				f.transferType,
 				f.recipientAddress,
 				f.amount,
 				f.feeSettings,
 			),
 		).toEqual({ queued: true, tokenSpent: false })
-		const onG = await h.internals.transferExecutor.sequence(request("fpc-g"))
+		const onG = await h.internals.transferExecutor.sequence(request("fpc-g"), "p1")
 		expect([...onG.keys]).toEqual([`fpc:${G.toLowerCase()}`])
 		expect(h.internals.sendSequencer.isBlocked(onG.scope, onG.keys)).toBe(false)
 		expect(h.getPXE).not.toHaveBeenCalled()
@@ -327,7 +343,8 @@ describe("send ordering composition: a dApp send waits outside the slot for the 
 	test("a silent-path record reads queued while it waits, and its claim takes it back", async () => {
 		const h = await makeHarness()
 		const { id, run } = await parkedSend(h, "pending")
-		expect((await h.journal.getOperation(id))?.progress.stage).toBe("queued")
+		// Nothing orders the record's `queued` write before the slot's hand-on.
+		await waitFor(async () => (await h.journal.getOperation(id))?.progress.stage === "queued")
 		h.pending.length = 0
 		expect(await run).toEqual(CLAIMED_THEN_FAILED)
 		expect(stagesOf(h, id)).toEqual(["pending", "queued", "pending", "failed"])

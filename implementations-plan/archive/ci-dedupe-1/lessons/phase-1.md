@@ -1,0 +1,6 @@
+# Phase 1: the lane beside today's callers
+
+- **Commit** `93fbf0eb`: `.github/workflows/_extension-network-e2e-lane.yml` (new, the only `.github` change since `093fa10d`: `git diff --stat 093fa10d -- .github` lists it alone) and `suiteCalls`, `LANE_CALLERS` and the migration pin in `scripts/ci-cd/behavior-gating.test.ts`.
+- **Gate**: `bun run lint:actions && bun run lint && bun run typecheck:all && bun run test:ci-gating`, exit 0 (578 pass, 0 fail). The first `lint` run failed on a Biome format diff in the new pin; reformatted, no rule touched.
+- **Migration pin output**: `network lane migration`, 2 pass. Calls compared per caller, after the two normalizations: PR Chrome 11, PR Firefox 11 (5 shards, 3 heavy, canary, 2 chaos seeds), nightly Chrome 10, nightly Firefox 10 (5 shards, 3 heavy, canary, `chaos / sends`; the wasm leg stays a direct call), release 11 legs. Every caller job's `needs` and `if` equal its row.
+- **Mutations** (each applied to the lane alone, then restored): a changed seed, two swapped exclusions, `proverless: "true"` as a string, `retry` dropped from one heavy job, `disable_presto` dropped from the canary, an `if` the expander does not evaluate, a renamed job. Each turned the pin red (1 pass, 1 fail).

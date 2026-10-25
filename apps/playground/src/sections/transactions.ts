@@ -16,14 +16,16 @@ import { Fr } from "@aztec-labs/aztec.js/fields"
 import { mergeExecutionPayloads } from "@aztec-labs/aztec.js/tx"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { getWallet } from "../lib/wallet"
-import { logCall } from "../lib/log"
-import { getInput, getState, setState } from "../state"
+import { guarded } from "../lib/log"
+import { getInput, getState } from "../state"
 
 const TRANSFER_FNS = [
 	"transfer_public_to_public",
 	"transfer_private_to_private",
 	"transfer_private_to_public",
 	"transfer_public_to_private",
+	// The reference Token's private transfer, which spends from the calling account and names no `from`.
+	"transfer",
 ] as const
 type TransferFn = (typeof TRANSFER_FNS)[number]
 
@@ -94,7 +96,10 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 	const amount = getInput("amount") || "1"
 	if (!tokenAddress || !recipient) throw new Error("tokenAddress + recipient inputs required")
 
-	const { TokenContract } = await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
+	const { TokenContract } =
+		fn === "transfer"
+			? await import("@aztec-labs/noir-contracts.js/Token")
+			: await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
 	const wallet = getWallet()!
 	// biome-ignore lint/suspicious/noExplicitAny: structural typing across SDK boundary
 	const token: any = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet as any)
@@ -107,10 +112,13 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
-	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
+	// Nonce 0 on every four-argument call: `from` is the sending account, and the Token refuses any
+	// other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n).request()
+		const method =
+			fn === "transfer" ? token.methods.transfer(toAddr, BigInt(amount)) : token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n)
+		const exec = await method.request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
@@ -132,21 +140,6 @@ async function sendAppSponsored() {
 	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
-function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
-	return async () => {
-		const wallet = getWallet()
-		if (!wallet) {
-			setState({ lastError: "Not connected — call connect() first" })
-			return
-		}
-		try {
-			await logCall(method, fn)
-		} catch (err) {
-			setState({ lastError: err instanceof Error ? err.message : String(err) })
-		}
-	}
-}
-
 export function bindTransactions(root: HTMLElement): void {
 	// All sendTx buttons below use `wait: "NO_WAIT"` so the dApp's promise
 	// settles immediately after the wallet submits the tx (txHash + offchain
@@ -157,7 +150,7 @@ export function bindTransactions(root: HTMLElement): void {
 	// >180s and exceeded the test budget repeatedly.
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-default"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
@@ -167,7 +160,7 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			const { exec } = await buildTransferExec(1)
 			// The wallet sends `from: "NO_FROM"` through the default entrypoint, not the account contract.
@@ -178,7 +171,7 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom-sponsored"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			// The default entrypoint runs one private call with no caller, which must pay its own fee:
 			// the canonical sponsor's `sponsor_unconditionally` reads no sender and makes itself the payer.
 			const wallet = getWallet()!
@@ -193,7 +186,7 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-feePayer"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(1)
 			// dispatcher.ts:368-369 + execute/index.vue:202: when exec.feePayer is set,
@@ -212,12 +205,12 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-appSponsored"]')?.addEventListener(
 		"click",
-		safe("sendTx", sendAppSponsored),
+		guarded("sendTx", sendAppSponsored),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-multicall"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(3)
 			// biome-ignore lint/suspicious/noExplicitAny: structural cast
@@ -227,7 +220,7 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-delegated"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			// Delegated pull: the consumer contract (Crowdfunding) pulls the
 			// caller's tokens via `transfer_in_private` — msg.sender ≠ from, so
 			// the token asserts a call authwit against the CALLER's account. The
@@ -265,7 +258,7 @@ export function bindTransactions(root: HTMLElement): void {
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-multicall-chunked"]')?.addEventListener(
 		"click",
-		safe("sendTx", async () => {
+		guarded("sendTx", async () => {
 			const wallet = getWallet()!
 			// >5 calls triggers nulo-account.ts recursive chunking (CLAUDE.md mentions this).
 			const { exec, fromAddr } = await buildTransferExec(7)

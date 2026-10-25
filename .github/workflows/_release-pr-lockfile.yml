@@ -9,11 +9,6 @@ on:
         description: release-please-action's `pr` output, the Release PR it created or updated, as JSON.
         required: true
         type: string
-    secrets:
-      RELEASE_PLEASE_APP_ID:
-        required: true
-      RELEASE_PLEASE_APP_PRIVATE_KEY:
-        required: true
 
 # The write goes through the App token; the job token only checks the script out.
 permissions:
@@ -24,13 +19,16 @@ jobs:
     name: bun.lock records the Release PR's version
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The App's id and key are secrets of this environment. They reach this job only when the caller
+    # passes `secrets: inherit`; otherwise they resolve empty here, with no error.
+    environment: release-app
     steps:
       # A commit made with the App token is GitHub-signed, as main requires, and re-runs the PR's CI
       # at once; a GITHUB_TOKEN commit's runs would wait for approval. Scoped to contents: the job
       # writes one file.
       - name: Mint App token
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}

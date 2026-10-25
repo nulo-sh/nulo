@@ -1,18 +1,25 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { runInNewContext } from "node:vm"
+import * as puppeteer from "puppeteer"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
 	FIREFOX_LAUNCH_PREFS,
 	type SilentCloseWatch,
 	abandonSession,
+	capabilities,
 	egressGuardPrefs,
 	firefoxDirFor,
+	permissionRequestPrefs,
 	silentlyClosed,
 	stopBackgroundWith,
 	uuidFromPrefs,
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
+import { E2E_FIREFOX_REVISION } from "../../tests/e2e/fixtures/browser/firefox-revision"
 import {
 	RELAY_HELPERS,
 	checkPageErrorRelay,
@@ -45,6 +52,7 @@ describe("egress guard prefs", () => {
 			"network.proxy.autoconfig_url": expect.stringMatching(/^data:text\/javascript,/),
 			"network.proxy.failover_direct": false,
 			"network.dns.localDomains": "egress-canary.test",
+			"browser.newtabpage.trainhopAddon.xpiBaseURL": "",
 		})
 	})
 
@@ -72,6 +80,29 @@ describe("egress guard prefs", () => {
 	})
 })
 
+/** Users answer Firefox's permission prompt; only a launch that asks skips it. */
+describe("permission request prefs", () => {
+	const prefsOf = (grantPermissionRequests?: true) => {
+		vi.stubEnv("FIREFOX_PATH", process.execPath)
+		try {
+			const caps = capabilities({ profileDir: "profile", headless: true, grantPermissionRequests })
+			return (caps["moz:firefoxOptions"] as { prefs: Record<string, unknown> }).prefs
+		} finally {
+			vi.unstubAllEnvs()
+		}
+	}
+
+	test("skip only the prompt, and stay out of the prefs users run with", () => {
+		expect(permissionRequestPrefs).toEqual({ "extensions.webextOptionalPermissionPrompts": false })
+		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("extensions."))).toEqual([])
+	})
+
+	test("join a launch only when it asks", () => {
+		expect(prefsOf()).toEqual(FIREFOX_LAUNCH_PREFS)
+		expect(prefsOf(true)).toEqual({ ...FIREFOX_LAUNCH_PREFS, ...permissionRequestPrefs })
+	})
+})
+
 /**
  * Puppeteer's own `executablePath({ browser: "firefox" })` composes the Firefox path from the
  * CHROME build id, so it returns a directory that was never installed and geckodriver rejects the
@@ -90,6 +121,33 @@ describe("firefox cache directory selection", () => {
 	test("a cache without the locked revision has no answer, so the caller can say what to install", () => {
 		expect(firefoxDirFor(["linux-stable_154.0.1"], "stable_153.0.4")).toBeUndefined()
 		expect(firefoxDirFor([], "stable_153.0.4")).toBeUndefined()
+	})
+})
+
+describe("the pinned Firefox", () => {
+	test("is the one launched, with Puppeteer's own revision installed beside it", () => {
+		const own = (puppeteer as unknown as { PUPPETEER_REVISIONS: { firefox: string } }).PUPPETEER_REVISIONS.firefox
+		const cache = mkdtempSync(path.join(tmpdir(), "nulo-firefox-pin-test-"))
+		try {
+			for (const revision of [E2E_FIREFOX_REVISION, own]) {
+				mkdirSync(path.join(cache, "firefox", `linux-${revision}`, "firefox"), { recursive: true })
+				writeFileSync(path.join(cache, "firefox", `linux-${revision}`, "firefox", "firefox"), "")
+			}
+			vi.stubEnv("FIREFOX_PATH", "")
+			vi.stubEnv("PUPPETEER_CACHE_DIR", cache)
+			const { binary } = capabilities({ profileDir: "profile", headless: true })["moz:firefoxOptions"] as { binary: string }
+			expect(binary).toBe(path.join(cache, "firefox", `linux-${E2E_FIREFOX_REVISION}`, "firefox", "firefox"))
+		} finally {
+			vi.unstubAllEnvs()
+			rmSync(cache, { recursive: true, force: true })
+		}
+	})
+
+	test("is what CI installs, and what its cache is keyed on", () => {
+		const action = readFileSync(path.join(import.meta.dirname, "../../../../.github/actions/setup-puppeteer/action.yml"), "utf8")
+		expect(action).toContain("run: bun scripts/e2e/install-firefox.ts")
+		expect(action).toContain("hashFiles('apps/extension/tests/e2e/fixtures/browser/firefox-revision.ts')")
+		expect(action).not.toMatch(/browsers install firefox/)
 	})
 })
 
@@ -255,7 +313,7 @@ describe("a page error's location", () => {
 		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
 	})
 
-	test("the close reports each recent exception with its context and first frame, 1-based as Firefox prints a stack", () => {
+	test("the close reports each recent exception with its context and kept frame, 1-based as Firefox prints a stack", () => {
 		const frame = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
 		const recent = [
 			{ context: "w1", text: "InternalError: too much recursion", frame },
@@ -265,6 +323,17 @@ describe("a page error's location", () => {
 			`w1: InternalError: too much recursion at ${reported.sourceName}:5:812`,
 			"no context: TypeError: x is undefined",
 		])
+	})
+
+	const builtIn = { url: "self-hosted", functionName: "forEach", lineNumber: 3601, columnNumber: 20 }
+	const addon = { url: "moz-extension://5c9e/assets/client.js", functionName: "walk", lineNumber: 0, columnNumber: 99 }
+	const addonReported = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
+	test.each([
+		["its first add-on frame under a built-in's", [builtIn, addon], addonReported, addon],
+		["the add-on location it reports when no frame is the add-on's", [builtIn], addonReported, addonReported],
+		["its top frame when neither is the add-on's", [builtIn], { ...addonReported, url: "https://dapp.example/x.js" }, builtIn],
+	])("the close reports an exception at %s", (_, frames, reported, expected) => {
+		expect(runSerialised(RELAY_HELPERS, "recentFrame(frames, reported)", { frames, reported })).toEqual(expected)
 	})
 })
 

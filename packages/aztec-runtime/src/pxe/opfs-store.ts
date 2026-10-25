@@ -18,9 +18,11 @@
  * refuse-and-preserve flip (5.0.0's `initStoreForRollupAndSchemaVersion` WIPED; 5.0.1 does not) and
  * the decision that the store holds user-owned state and the rollupAddress input is
  * node-derived, so wiping on it would let a lying RPC loop-destroy local stores). A mismatch throws
- * `PxeStoreVersionMismatch` and the caller fails chain-init; pre-production remediation = profile
- * purge. `PXE_DATA_SCHEMA_VERSION_PIN` mirrors upstream's non-exported constant; `opfs-store.test.ts`
- * asserts it against the installed package so a silent upstream bump fails the build.
+ * `PxeStoreVersionMismatch` and the caller fails chain-init. Every chain's store checks the one pin,
+ * and a network reset purges only its own chain's, so an update must not move the pin while any
+ * other chain holds a store. `PXE_DATA_SCHEMA_VERSION_PIN`
+ * mirrors upstream's non-exported constant; `opfs-store.test.ts` asserts it against the installed
+ * package so a silent upstream bump fails the build.
  * A wrong store key surfaces as `SqliteEncryptionError` from upstream — mapped to a typed
  * `WrongStoreKeyError` (never confused with corruption or absence).
  */
@@ -30,7 +32,6 @@ import { AztecSQLiteOPFSStore } from "@aztec-labs/kv-store/sqlite-opfs"
 import { SqliteEncryptionError } from "@aztec-labs/kv-store/sqlite-opfs"
 import { DatabaseVersion } from "@aztec-labs/stdlib/database-version/version"
 import { chainDataDir, PXE_DATA_DIR_ROOT, type ChainCoordinates } from "./chain-coordinates"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
 /** The store key did not decrypt the existing store — a wrong/rotated per-profile key, NOT
  *  corruption and NOT absence. Fail-closed and distinct so callers never silently re-create. */
@@ -198,7 +199,7 @@ const UNPARSEABLE_STAMP = "stamp failed to parse"
  * REFUSE-and-preserve (`initStoreForRollupAndSchemaVersion` no longer clears), and the flip is right
  * here: the store holds user state whose backup is optional, and the rollupAddress input is node-derived (a lying RPC could wipe-loop). So
  * on a schema/rollup/parse mismatch we THROW `PxeStoreVersionMismatch` (the caller closes the store
- * and fails chain-init; pre-production remediation = profile purge) — NEVER `store.clear()`.
+ * and fails chain-init) — NEVER `store.clear()`.
  */
 export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupAddress: string | undefined, log: Logger): Promise<void> {
 	const target = new DatabaseVersion(PXE_DATA_SCHEMA_VERSION_PIN, rollupAddress ? EthAddress.fromString(rollupAddress) : EthAddress.ZERO)
@@ -206,7 +207,7 @@ export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupA
 	const stored = await dbVersion.getAsync()
 	if (stored) {
 		let mismatch: string | undefined
-		let unparseable = false
+		let parseFailure: { cause: unknown } | undefined
 		try {
 			const storedVersion = DatabaseVersion.fromBuffer(Buffer.from(stored, "utf-8"))
 			const cmp = storedVersion.cmp(target)
@@ -216,15 +217,16 @@ export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupA
 				mismatch = `schema version changed (stored ${storedVersion.schemaVersion} != current ${PXE_DATA_SCHEMA_VERSION_PIN})`
 			}
 		} catch (err) {
-			unparseable = true
-			mismatch = `${UNPARSEABLE_STAMP} (${errorMessageFromUnknown(err)})`
+			parseFailure = { cause: err }
+			mismatch = UNPARSEABLE_STAMP
 		}
 		if (mismatch) {
 			// REFUSE, do not wipe (D-B2v3). The store's bytes are preserved for the operator.
-			// The parser's message quotes the stored stamp, so its branch logs the category alone.
-			const data = unparseable ? { reason: UNPARSEABLE_STAMP } : { detail: mismatch }
+			// The parser's message quotes the stored stamp, so it rides only as the `cause`, which
+			// neither the log nor the offscreen hop reads.
+			const data = parseFailure ? { reason: UNPARSEABLE_STAMP } : { detail: mismatch }
 			log.warn("PXE store version mismatch — refusing to open (preserving data)", data)
-			throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`)
+			throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`, parseFailure)
 		}
 	}
 	await dbVersion.set(target.toBuffer().toString("utf-8"))

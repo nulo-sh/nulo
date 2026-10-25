@@ -1,6 +1,8 @@
 import { expect } from "vitest"
+import type { Page } from "puppeteer"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
+import { navigateToSettings, openNetworkDetail, rewriteActiveNetwork } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 // Scope note: `addEndpoint` / `updateEndpoint` probe the candidate URL
 // via Aztec `getNodeInfo()` and reject on chainId mismatch — the
@@ -9,20 +11,22 @@ import { navigateToSettings, openNetworkDetail } from "./fixtures/helpers"
 // add → setPrimary → delete cycle requires a live Aztec node and
 // lives in the network suite.
 
-test("network detail page renders chain info + endpoints section", async ({ registeredExtension }) => {
-	const page = await openPopup(registeredExtension)
-	await waitForHash(page, "#/popup/general")
-
+async function openFirstNetworkDetail(page: Page): Promise<void> {
 	await navigateToSettings(page, "networks")
 	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
 	const firstName = await page.evaluate(() => {
 		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
 		return row?.getAttribute("data-network-name") ?? null
 	})
 	expect(firstName).toBeTruthy()
-
 	await openNetworkDetail(page, firstName as string)
+}
+
+test("network detail page renders chain info + endpoints section", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+
+	await openFirstNetworkDetail(page)
 
 	// Chain section: rename row + chain-id row
 	await page.waitForSelector('[data-testid="network-detail-rename"]', { visible: true, timeout: 5_000 })
@@ -33,6 +37,7 @@ test("network detail page renders chain info + endpoints section", async ({ regi
 
 	const endpointCount = (await page.$$('[data-testid="endpoint-row"]')).length
 	expect(endpointCount).toBeGreaterThanOrEqual(1)
+	await shotSend(page, "network-detail", "network-detail-rename")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -42,16 +47,7 @@ test("NewEndpointPopup keeps submit disabled with empty URL", async ({ registere
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await clickByTestId(page, "endpoint-add-btn")
 	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
 
@@ -70,16 +66,7 @@ test("EditEndpointPopup pre-fills with current values + isDirty guard keeps save
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 
 	// Click the edit icon on the first endpoint row. The icon is rendered
 	// inside the `#right` slot Tooltip, so click via dispatchEvent on the
@@ -114,16 +101,7 @@ test("Single-endpoint network hides the delete-endpoint icon (last-endpoint guar
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
 
 	const endpointCount = (await page.$$('[data-testid="endpoint-row"]')).length
@@ -143,16 +121,7 @@ test("NewEndpointPopup invalid URL surfaces inline RPC-didn't-respond error", as
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "networks")
-	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
-
-	const firstName = await page.evaluate(() => {
-		const row = document.querySelector('[data-testid="network-row"]') as HTMLElement | null
-		return row?.getAttribute("data-network-name") ?? null
-	})
-	expect(firstName).toBeTruthy()
-
-	await openNetworkDetail(page, firstName as string)
+	await openFirstNetworkDetail(page)
 	await clickByTestId(page, "endpoint-add-btn")
 	await page.waitForSelector('[data-testid="add-endpoint-submit"]', { visible: true, timeout: 5_000 })
 
@@ -206,4 +175,29 @@ test("seeded dRPC endpoint row is titled 'dRPC', never the raw provider URL", as
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+// A stored URL the transport rule refuses (plain HTTP to [::1]) must not stop the popup from
+// starting: the person fixes it in Settings, which they could not reach otherwise.
+test("a saved http://[::1] node URL leaves the popup starting and the endpoint listed", async ({ registeredExtensionPerTest }) => {
+	const first = await openPopup(registeredExtensionPerTest)
+	await waitForHash(first, "#/popup/general")
+	const rewritten = await rewriteActiveNetwork(first, (row) => {
+		const primary = row.endpoints.find((e) => e.id === row.primaryEndpointId)
+		if (!primary) return false
+		primary.rpcUrl = "http://[::1]:8080"
+		return true
+	})
+	expect(rewritten?.name).toBeTruthy()
+	await first.close()
+
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	await navigateToSettings(page, "networks")
+	await openNetworkDetail(page, rewritten?.name as string)
+	await page.waitForSelector('[data-testid="endpoint-row"]', { visible: true, timeout: 5_000 })
+	const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="endpoint-row"]')].map((r) => r.textContent ?? ""))
+	expect(rows.some((text) => text.includes("http://[::1]:8080"))).toBe(true)
+
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 })

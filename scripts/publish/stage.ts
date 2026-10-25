@@ -52,7 +52,6 @@ export function packageNameOf(specifier: string): string {
 	return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
 }
 
-/** The Aztec line's scopes; `@aztec/viem` is not part of the line and is never a peer. */
 const AZTEC_SCOPES = ["@aztec-labs/", "@aztec-foundation/"]
 
 function isBundledExternal(name: string): boolean {

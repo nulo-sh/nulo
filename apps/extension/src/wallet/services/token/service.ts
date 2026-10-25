@@ -2,12 +2,14 @@
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { normalizeError } from "@nulo/wallet-core/jobs"
 import type { ILogger } from "@/wallet/logger"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { OperationContext, OperationOrigin } from "@/wallet/services/operation-journal/spec"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import { type ExecutionFence, type ProfileDeletionState, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
@@ -20,24 +22,26 @@ import { TaskService, StepContent, type WrappedTask } from "@/wallet/services/ta
 import { canonicalNumericStorageId, purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { ContractResolver, ensureRegistered } from "@/wallet/services/execution/contract-resolver"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
-import { EntityStorage } from "@/wallet/storage"
+import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
 import { TokenListService } from "@/wallet/services/token-list/service"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { type DefaultTokenSeed, seedsFromList } from "./default-tokens"
-import { PinMismatchError, TokenSeeder } from "./seeder"
+import { NAME_MAX_LENGTH, PinMismatchError, SYMBOL_MAX_LENGTH, TokenSeeder } from "./seeder"
 import {
 	type Token,
 	type TokenAdded,
 	type TokenInfo,
 	type TokenDeleted,
+	type TokenUpdated,
 	type SeedScope,
 	type SeedStatusSnapshot,
 	TOKEN_SERVICE_NAME,
-	TOKEN_STORAGE_ROOT,
 	TokenSchema,
 	type TokenInterface,
 	type Methods,
@@ -65,6 +69,9 @@ import { getTokenInfo, isTokenComplete } from "./utils"
 
 type TokenMetadata = { name: string; symbol: string; decimals: number }
 
+/** What a token-import record shows when the commit's read differs from what the approval window showed. */
+export const TOKEN_DETAILS_CHANGED = "Token details changed after you approved them."
+
 type PersistTokenInput = {
 	/** Deletion fence captured at the AUTHORIZING entry (addToken /
 	 *  addSeededToken), never minted here — a post-deletion mint would
@@ -74,7 +81,9 @@ type PersistTokenInput = {
 	networkId: string
 	tokenInterface: TokenInterface
 	journal: { origin: OperationOrigin; accountAddress: string; title: string | undefined; subtitle: string }
-	metadata: ({ kind: "seeded" } & TokenMetadata) | { kind: "live"; fetch: () => Promise<[string, string, number]> }
+	metadata:
+		| ({ kind: "seeded" } & TokenMetadata)
+		| { kind: "live"; fetch: () => Promise<[string, string, number]>; expected?: TokenMetadata }
 }
 
 /** How far a token add got under the tickets it held; the next attempt resumes from it. */
@@ -82,7 +91,7 @@ type AddProgress =
 	| { stage: "start" }
 	| { stage: "started" }
 	| { stage: "fetched"; metadata: TokenMetadata }
-	| { stage: "written"; token: Token }
+	| { stage: "written"; token: Token; stored: string }
 	| { stage: "done"; info: TokenInfo }
 type ResumableProgress = Exclude<AddProgress, { stage: "done" }>
 
@@ -121,6 +130,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		"getSeedStatus",
 		"ensureSeeding",
 		"retrySeed",
+		"refreshRestoredTokens",
 	)
 	public static name = TOKEN_SERVICE_NAME
 
@@ -129,10 +139,15 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
+	public readonly onTokenUpdated = new EventHandler<TokenUpdated>()
 	public readonly onSeedStatusChanged = new EventHandler<SeedScope>()
 
-	private readonly tokens: EntityStorage<Token>
+	private readonly tokens: SealedEntityStorage<Token>
 	private readonly lock = new Lock()
+	/** Chain sweeps running, and sweeps ever begun: the sweep takes no token lock, so a conversion
+	 *  commits a row only while none has run since its section began. */
+	private chainSweeps = 0
+	private chainSweepEpoch = 0
 	/** Token-row writes, and a token add's journal writes, not yet settled. A holder the lock's
 	 *  watchdog released keeps running, so every admission waits for these before it reads. */
 	private readonly pendingWrites = new Set<Promise<unknown>>()
@@ -160,7 +175,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.browserApi = browserApi
 		this.seederOverrides = seederOverrides
 		this.contractResolver = new ContractResolver(logger)
-		this.tokens = new EntityStorage<Token>(TOKEN_STORAGE_ROOT, browserApi.storage.local, (raw) => TokenSchema.parse(raw))
+		this.tokens = sealedEntityStorage("tokens", browserApi.storage.local, (profileId) => this.profiles?.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -173,6 +188,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
+		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 
 		// Default-token seeding: lazy, single-flight, TOFU-pinned (see
 		// default-tokens.ts + seeder.ts). Triggered on unlock, on active-network
@@ -194,7 +210,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				},
 				onStatusChanged: (scope) => this.emit("onSeedStatusChanged", scope),
 			},
-			this.browserApi.storage.local,
+			sealedEntityStorage("tokenSeeded", this.browserApi.storage.local, (profileId) => this.profiles.rowKeys(profileId)),
 			this.logger,
 			// A new list is a new version, so a default it re-pinned gets a fresh round.
 			this.seederOverrides?.getVersion ??
@@ -205,6 +221,26 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			this.profiles.onActiveProfileChanged.add(this.onActiveProfileChangedSeed)
 			this.networks.onActiveNetworkChanged.add(this.onActiveNetworkChangedSeed)
 			this.accounts.onAccountAdded.add(this.onAccountAddedSeed)
+		}
+	}
+
+	/**
+	 * Seals the profile's plaintext tokens, each under the token lock, and its seeder marker under
+	 * the marker lock. The chain sweep takes neither, so a token commits only while no sweep has run
+	 * since its section began: a sweep's delete landing between the row's last read and its sealed
+	 * write would otherwise be undone.
+	 */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.tokens.sealLegacy(profileId, (fn) =>
+				this.withTokenLock((ownsLock) => {
+					const sweeps = this.chainSweepEpoch
+					return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
+				}),
+			)
+			await this.seeder.sealLegacyMarker(profileId)
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext tokens failed; the next worker retries", { error })
 		}
 	}
 
@@ -243,6 +279,16 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 */
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {
 		await this.ensureInitialized()
+		this.chainSweeps++
+		this.chainSweepEpoch++
+		try {
+			await this.sweepChain(profileId, chainId)
+		} finally {
+			this.chainSweeps--
+		}
+	}
+
+	private async sweepChain(profileId: string, chainId: number): Promise<void> {
 		// Seeder fence FIRST, and OUTSIDE the token lock: it bumps the seeder's
 		// purge epoch and waits on the marker lock, so an in-flight seed pass
 		// either aborts or fully commits BEFORE the row purge below. (Taking it
@@ -327,9 +373,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		/** The details the approval window showed: the add stores only a read equal to them. */
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		await this.ensureInitialized()
-		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext)
+		return await this.addTokenWithFence(fence, profileId, networkId, accountAddress, tokenInterface, opContext, expected)
 	}
 
 	private async addTokenWithFence(
@@ -339,6 +387,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		accountAddress: string,
 		tokenInterface: TokenInterface,
 		opContext: OperationContext,
+		expected?: TokenMetadata,
 	): Promise<TokenInfo> {
 		// A caller-supplied profileId that isn't the fence's fails closed.
 		if (fence.profileId !== profileId) throw new Error("unauthorized profile")
@@ -360,6 +409,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			metadata: {
 				kind: "live",
 				fetch: () => this.fetchTokenMetadata(profileId, networkId, accountAddress, tokenInterface),
+				expected,
 			},
 		})
 	}
@@ -445,7 +495,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	private async advanceAdd(attempt: AddAttempt, progress: ResumableProgress): Promise<AddProgress> {
-		if (progress.stage === "written") return await this.resumeWritten(attempt, progress.token)
+		if (progress.stage === "written") return await this.resumeWritten(attempt, progress.token, progress.stored)
 		const { input } = attempt
 		if (progress.stage === "start") await attempt.track(this.journal.transitionOperation(attempt.opId, { stage: "simulating" }))
 		const carried: ResumableProgress = progress.stage === "start" ? { stage: "started" } : progress
@@ -454,7 +504,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		const existing = await this.findToken(input.profileId, input.tokenInterface.chainId, input.tokenInterface.contract)
 		if (existing) return attempt.ownsLock() ? await this.journalSucceeded(attempt, existing) : carried
 		const metadata = carried.stage === "fetched" ? carried.metadata : await this.addMetadata(attempt)
-		const token = buildToken(input, metadata, await nextNumericId(this.tokens))
+		const token = buildToken(input.profileId, input.tokenInterface, metadata, await nextNumericId(this.tokens))
+		const write = await this.tokens.prepare(`${token.id}`, token)
 		// Assert authority flush against the write: the metadata fetch
 		// can span a profile deletion or the network's purge cascade —
 		// landing the row afterwards creates an orphan the cascade's own
@@ -464,7 +515,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			throw new Error("network deleted")
 		}
 		if (!attempt.ownsLock()) return { stage: "fetched", metadata }
-		await attempt.track(this.tokens.set(`${token.id}`, token))
+		this.profiles.getDeletionState().assertCurrent(input.fence.profileId, input.fence.epoch)
+		await attempt.track(write.commit())
+		const stored = storedText(write)
 		// The set itself awaits — re-check before making the row observable. Released during it,
 		// the add leaves the row to the purge, which drains this set before its snapshot.
 		const { fence } = input
@@ -472,18 +525,23 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			if (attempt.ownsLock()) await attempt.track(this.tokens.delete(`${token.id}`))
 			throw profileDeletedError(fence.profileId)
 		}
-		return await this.finishAdd(attempt, token)
+		return await this.finishAdd(attempt, token, stored)
 	}
 
 	private async addMetadata({ input, opId, track }: AddAttempt): Promise<TokenMetadata> {
 		const { metadata } = input
 		if (metadata.kind === "seeded") return { name: metadata.name, symbol: metadata.symbol, decimals: metadata.decimals }
 		const [name, symbol, decimals] = await metadata.fetch()
+		// Compared raw and before the title shows any of it; a resumed attempt reuses this read.
+		const { expected } = metadata
+		if (expected && (expected.name !== name || expected.symbol !== symbol || expected.decimals !== decimals)) {
+			throw new Error(TOKEN_DETAILS_CHANGED)
+		}
 		// Backfill the title with the resolved symbol so the in-flight
 		// TokenImportRow stops falling back to the short contract
 		// address. Safe to call even if the row has already vanished
 		// (setOperationMeta tolerates terminal records).
-		await track(this.journal.setOperationMeta(opId, { title: symbol }))
+		await track(this.journal.setOperationMeta(opId, { title: cleanSymbol(symbol) }))
 		return { name, symbol, decimals }
 	}
 
@@ -493,10 +551,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 * during the set may have snapshotted before this row existed. Self-compensating here is what
 	 * makes the lockless sweep complete.
 	 */
-	private async finishAdd(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async finishAdd(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const { fence, networkId } = attempt.input
-		if (!(await this.networks.isNetworkLive(networkId))) return await this.dropOnDeadChain(attempt, token)
-		if (!attempt.ownsLock()) return { stage: "written", token }
+		if (!(await this.networks.isNetworkLive(networkId))) return await this.dropOnDeadChain(attempt, token, stored)
+		if (!attempt.ownsLock()) return { stage: "written", token, stored }
 		// A deletion that began meanwhile: the add's handlers would act for the successor incarnation.
 		if (!this.profiles.getDeletionState().isCurrent(fence.profileId, fence.epoch)) {
 			await attempt.track(this.tokens.delete(`${token.id}`))
@@ -508,24 +566,24 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Deletes only under an owned ticket and only when no live network holds the chain: a
 	 *  replacement network's restore can hold a row byte-identical to the add's own. */
-	private async dropOnDeadChain(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async dropOnDeadChain(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const chainLive = await this.networks.isChainLive(token.profileId, token.chainId)
-		if (!attempt.ownsLock()) return { stage: "written", token }
+		if (!attempt.ownsLock()) return { stage: "written", token, stored }
 		if (!chainLive) await attempt.track(this.tokens.delete(`${token.id}`))
 		throw new Error("network deleted")
 	}
 
 	/** A fresh ticket after a release that followed the set: a sweep or the person may have removed
 	 *  the row since, and its id may hold a successor's token. */
-	private async resumeWritten(attempt: AddAttempt, token: Token): Promise<AddProgress> {
+	private async resumeWritten(attempt: AddAttempt, token: Token, stored: string): Promise<AddProgress> {
 		const { fence, networkId } = attempt.input
 		// The purge owns a deleted profile's rows.
 		if (!this.profiles.getDeletionState().isCurrent(fence.profileId, fence.epoch)) throw profileDeletedError(fence.profileId)
-		const [own] = Object.values(this.tokens.item(`${token.id}`, token))
-		if ((await this.tokens.rawValue(`${token.id}`)) === own) return await this.finishAdd(attempt, token)
+		// The exact sealed value the add wrote: a successor's row at the id never matches it.
+		if ((await this.tokens.rawValue(`${token.id}`)) === stored) return await this.finishAdd(attempt, token, stored)
 		// The add completed and whatever removed its row announced that itself.
 		if (!(await this.networks.isNetworkLive(networkId))) throw new Error("network deleted")
-		return attempt.ownsLock() ? await this.journalSucceeded(attempt, token) : { stage: "written", token }
+		return attempt.ownsLock() ? await this.journalSucceeded(attempt, token) : { stage: "written", token, stored }
 	}
 
 	/** Success means "token added to watchlist"; the balance load is the caller's (NewTokenPopup's
@@ -630,7 +688,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			profileId,
 			networkId,
 			tokenInterface,
-			journal: { origin: "seed", accountAddress, title: symbol, subtitle: "Default token" },
+			journal: { origin: "seed", accountAddress, title: cleanSymbol(symbol), subtitle: "Default token" },
 			metadata: { kind: "seeded", name, symbol, decimals },
 		})
 	}
@@ -704,7 +762,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			const canonical = address.toString()
 			const instance = await pxe.getContractInstance(address)
 			if (!instance) {
-				throw new Error("contract instance not found")
+				throw new ContractNotFoundError()
 			}
 
 			if (expectedClassId !== undefined) {
@@ -907,6 +965,56 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		}
 	}
 
+	public async refreshRestoredTokens(fence: RunFence, deadlineAt: number): Promise<void> {
+		await this.ensureInitialized()
+		await this.profiles.assertRunFence(fence)
+		if (!(deadlineAt > Date.now())) return
+		const rows = (await this.tokens.getValues()).filter((token) => token.profileId === fence.profileId)
+		await Promise.all(rows.map((row) => this.refreshRestoredToken(fence, row, deadlineAt)))
+	}
+
+	/** Unpinned: a restored row holds no class, so its class comes from this read alone. */
+	private async refreshRestoredToken(fence: RunFence, row: Token, deadlineAt: number): Promise<void> {
+		const read = await settleBy(this.readChainToken(fence, row), deadlineAt)
+		if (read.kind !== "read") {
+			this.logDebug("a restored token kept its backup metadata", { category: read.kind })
+			return
+		}
+		await this.withTokenLock(async (ownsLock) => {
+			const current = await this.tokens.get(`${row.id}`)
+			// Deleted, or its id given to another token, during the read.
+			if (!current || current.profileId !== row.profileId || current.chainId !== row.chainId || current.contract !== row.contract)
+				return
+			const next = { ...current, ...read.value }
+			if (!refreshedFieldsDiffer(current, next) || !(await this.networks.isChainLive(row.profileId, row.chainId))) return
+			const write = await this.tokens.prepare(`${row.id}`, next)
+			// A read that landed after the deadline, or a session that ended since, writes nothing.
+			if (!ownsLock() || Date.now() >= deadlineAt || !this.profiles.isFenceLive(fence)) return
+			await this.track(write.commit())
+			// The chain sweep takes no token lock, so its delete can land before this set.
+			if (!(await this.networks.isChainLive(row.profileId, row.chainId))) {
+				if (ownsLock()) await this.track(this.tokens.delete(`${row.id}`))
+				return
+			}
+			this.emit("onTokenUpdated", { ...getTokenInfo(next), profileId: next.profileId })
+		})
+	}
+
+	private async readChainToken(fence: RunFence, row: Token): Promise<RefreshedFields> {
+		const network = (await this.networks.getNetworksRaw(fence.profileId, row.chainId))[0]
+		const account = (await this.accounts.getAccounts(fence.profileId, row.chainId, true))[0]
+		if (!network || !account) throw new Error("no network or account on the token's chain")
+		const { interface: ti, ...metadata } = await this.previewTokenMetadata(network.id, account.address, row.contract)
+		const {
+			id: _id,
+			profileId: _profileId,
+			chainId: _chainId,
+			contract: _contract,
+			...fields
+		} = buildToken(fence.profileId, ti, metadata, row.id)
+		return fields
+	}
+
 	public async backup(): Promise<Token[]> {
 		const profile = await requireActiveProfile(this.profiles)
 
@@ -944,7 +1052,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// `chainId: "1:"` would otherwise "succeed", have a balance
 		// relinked to it, then be rejected by the read codec — leaving an
 		// orphaned balance. Parsing here records it as a restoreError instead.
-		const row = TokenSchema.parse({ ...token, id })
+		// A backup's class is only its claim; the row holds none until the refresh reads one from the chain.
+		const { classId: _claimed, ...parsed } = TokenSchema.parse({ ...token, id })
+		const row: Token = { ...parsed, name: cleanName(parsed.name), symbol: cleanSymbol(parsed.symbol) }
 		assertRestoreEpoch(deletion, epochs, row.profileId)
 		// The chain sweep is LOCKLESS (see clearChainState), so a purge can
 		// interleave this batch despite the token lock — a row written after
@@ -955,8 +1065,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		if (!(await this.networks.isChainLive(row.profileId, row.chainId))) {
 			throw new Error("network deleted")
 		}
+		const write = await this.tokens.prepare(`${id}`, row)
 		if (!ownsLock()) throw tokenLockLost()
-		await this.track(this.tokens.set(`${id}`, row))
+		assertRestoreEpoch(deletion, epochs, row.profileId)
+		await this.track(write.commit())
 		// The set awaits — a purge whose reservation + snapshot landed during
 		// it would miss this row; self-compensate, mirroring persistToken. A
 		// released restore leaves it: listed again if its chain comes back.
@@ -967,16 +1079,53 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 }
 
-function buildToken(input: PersistTokenInput, metadata: TokenMetadata, id: number): Token {
-	const { tokenInterface } = input
+function storedText(write: PreparedWrite): string {
+	const [stored] = Object.values(write.items)
+	if (stored === undefined) throw new Error("a sealed token write stores one value")
+	return stored
+}
+
+/** The fields a restored row takes from its chain; its identity stays the row's. */
+type RefreshedFields = Omit<Token, "id" | "profileId" | "chainId" | "contract">
+
+function refreshedFieldsDiffer(row: Token, next: Token): boolean {
+	const keys = new Set([...Object.keys(row), ...Object.keys(next)] as Array<keyof Token>)
+	return [...keys].some((key) => JSON.stringify(row[key]) !== JSON.stringify(next[key]))
+}
+
+/** `read`'s value; `failed` once it rejects, `late` once `deadlineAt` passes first. Its rejection
+ *  is contained either way. */
+async function settleBy<T>(
+	read: Promise<T>,
+	deadlineAt: number,
+): Promise<{ kind: "read"; value: T } | { kind: "failed" } | { kind: "late" }> {
+	const outcome = read.then(
+		(value) => ({ kind: "read" as const, value }),
+		() => ({ kind: "failed" as const }),
+	)
+	const remaining = deadlineAt - Date.now()
+	if (!(remaining > 0)) return { kind: "late" }
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const late = new Promise<{ kind: "late" }>((resolve) => {
+		timer = setTimeout(() => resolve({ kind: "late" }), remaining)
+	})
+	return await Promise.race([outcome, late]).finally(() => clearTimeout(timer))
+}
+
+/** A token's name and symbol are contract or backup text: every row and import title stores them
+ *  with no control, format or bidirectional character, within the seeder's bounds. */
+const cleanName = (name: string): string => sanitizeWireString(name, NAME_MAX_LENGTH)
+const cleanSymbol = (symbol: string): string => sanitizeWireString(symbol, SYMBOL_MAX_LENGTH)
+
+function buildToken(profileId: string, tokenInterface: TokenInterface, metadata: TokenMetadata, id: number): Token {
 	return {
 		id,
-		profileId: input.profileId,
+		profileId,
 		chainId: tokenInterface.chainId,
 		contract: tokenInterface.contract,
 		classId: tokenInterface.classId,
-		name: metadata.name,
-		symbol: metadata.symbol,
+		name: cleanName(metadata.name),
+		symbol: cleanSymbol(metadata.symbol),
 		decimals: metadata.decimals,
 		getNameFn: tokenInterface.getNameFn,
 		getSymbolFn: tokenInterface.getSymbolFn,

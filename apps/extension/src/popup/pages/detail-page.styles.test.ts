@@ -33,9 +33,34 @@ describe("the detail pages share one look", () => {
 		},
 	)
 
+	test("a Details link underlines on hover only, so the dark accent is never its sole cue", () => {
+		const shared = readFileSync(resolve(__dirname, "detail-page.module.css"), "utf8")
+			.replace(/\/\*[\s\S]*?\*\//g, "")
+			.replace(/\s+/g, " ")
+		expect(shared).toContain(
+			".detail_link { text-decoration: none; cursor: pointer; transition: color 0.2s var(--bezier); &:hover { color: var(--nulo-accent); text-decoration: underline; } }",
+		)
+	})
+
+	test.each(["tx/[id].vue", "journal/[id].vue"])(
+		"%s: its App row's label and value are the shared ones, with no rule of their own",
+		(page) => {
+			const r = rules(page)
+			expect(r.get(".app_key")).toBe('composes: app_key from "../detail-page.module.css";')
+			expect(r.get(".app_value")).toBe('composes: app_value from "../detail-page.module.css";')
+		},
+	)
+
 	test("journal: the To link draws as the shared mono value, as the Tx hash link does", () => {
 		expect(rules("journal/[id].vue").get(".recipient_link")).toBe(
 			'composes: detail_value_mono from "../detail-page.module.css"; composes: detail_link from "../detail-page.module.css";',
 		)
+	})
+
+	test("the hero line's classes are the shared ones, with no rule of their own", () => {
+		const r = rules("../components/modules/tx/DetailHeroMeta.vue")
+		const names = ["hero_meta", "tx_time", "meta_sep", "hero_link"]
+		expect([...r.keys()]).toEqual(names.map((name) => `.${name}`))
+		for (const name of names) expect(r.get(`.${name}`)).toBe(`composes: ${name} from "../../../pages/detail-page.module.css";`)
 	})
 })

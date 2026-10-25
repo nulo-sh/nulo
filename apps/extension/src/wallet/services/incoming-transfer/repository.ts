@@ -14,9 +14,20 @@
  * Idempotent inserts are an emergent property of keying by a stable PK. Cleanup hooks
  * (`clearProfile`, `clearChain`) iterate the full key space and filter — fine at the cardinality we
  * expect (hundreds of rows per profile, not millions).
+ *
+ * Every row is sealed under its profile's row keys, and each stored key keeps its kind, profile and
+ * network while the keyed hash of the profile replaces what follows (`stores.ts`). A write with a
+ * `fence` seals first, then reads the fence, then dispatches with no await between: false writes
+ * nothing.
  */
 
-import { EntityStorage } from "@/wallet/storage"
+import {
+	commitSealedTogether,
+	type ConversionLock,
+	type RowKeysSource,
+	type SealedEntityStorage,
+} from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { MinimalStorageArea } from "@nulo/wallet-core/storage"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
@@ -25,20 +36,10 @@ import {
 	type IncomingTrustRecord,
 	type IncomingTrustState,
 	type PublicScanCursor,
-	IncomingBalanceOutboxRowSchema,
-	IncomingTransferRecordSchema,
-	IncomingTrustRecordSchema,
-	PublicScanCursorSchema,
 	balanceOutboxKey,
 	publicCursorKey,
 } from "./spec"
-import { type ArrivalRow, ArrivalRowSchema, arrivalKey } from "./arrival-state"
-
-const RECORDS_KEY = "nulo:core:incoming-transfers"
-const TRUST_KEY = "nulo:core:incoming-trust"
-const CURSORS_KEY = "nulo:core:incoming-public-cursors"
-const OUTBOX_KEY = "nulo:core:incoming-balance-outbox"
-const ARRIVALS_KEY = "nulo:core:incoming-arrivals"
+import { type ArrivalRow, arrivalKey } from "./arrival-state"
 
 /** Build a stable key for the trust table. Profile + network + contract are
  *  all stringified to defend against numeric drift. */
@@ -48,27 +49,43 @@ export function trustKey(profileId: string, networkId: string, contract: string)
 
 export class IncomingTransferRepository {
 	private readonly local: MinimalStorageArea
-	private readonly records: EntityStorage<IncomingTransferRecord>
-	private readonly trust: EntityStorage<IncomingTrustRecord>
-	private readonly cursors: EntityStorage<PublicScanCursor>
-	private readonly outbox: EntityStorage<IncomingBalanceOutboxRow>
-	private readonly arrivals: EntityStorage<ArrivalRow>
+	private readonly records: SealedEntityStorage<IncomingTransferRecord>
+	private readonly trust: SealedEntityStorage<IncomingTrustRecord>
+	private readonly cursors: SealedEntityStorage<PublicScanCursor>
+	private readonly outbox: SealedEntityStorage<IncomingBalanceOutboxRow>
+	private readonly arrivals: SealedEntityStorage<ArrivalRow>
 
-	public constructor(browserApi: BrowserApi) {
+	public constructor(browserApi: BrowserApi, rowKeys: RowKeysSource) {
 		this.local = browserApi.storage.local
-		this.records = new EntityStorage<IncomingTransferRecord>(RECORDS_KEY, browserApi.storage.local, (raw) =>
-			IncomingTransferRecordSchema.parse(raw),
-		)
-		this.trust = new EntityStorage<IncomingTrustRecord>(TRUST_KEY, browserApi.storage.local, (raw) =>
-			IncomingTrustRecordSchema.parse(raw),
-		)
-		this.cursors = new EntityStorage<PublicScanCursor>(CURSORS_KEY, browserApi.storage.local, (raw) =>
-			PublicScanCursorSchema.parse(raw),
-		)
-		this.outbox = new EntityStorage<IncomingBalanceOutboxRow>(OUTBOX_KEY, browserApi.storage.local, (raw) =>
-			IncomingBalanceOutboxRowSchema.parse(raw),
-		)
-		this.arrivals = new EntityStorage<ArrivalRow>(ARRIVALS_KEY, browserApi.storage.local, (raw) => ArrivalRowSchema.parse(raw))
+		this.records = sealedEntityStorage("incomingTransfers", this.local, rowKeys)
+		this.trust = sealedEntityStorage("incomingTrust", this.local, rowKeys)
+		this.cursors = sealedEntityStorage("incomingPublicCursors", this.local, rowKeys)
+		this.outbox = sealedEntityStorage("incomingBalanceOutbox", this.local, rowKeys)
+		this.arrivals = sealedEntityStorage("incomingArrivals", this.local, rowKeys)
+	}
+
+	/** Seals `profileId`'s plaintext rows of all five tables, one `withLock` section per row; a row
+	 *  commits only while `stillHeld` holds at its commit. */
+	public async sealLegacy(profileId: string, withLock: ConversionLock, stillHeld: () => boolean): Promise<void> {
+		for (const store of [this.trust, this.records, this.cursors, this.outbox, this.arrivals] as const) {
+			await (store as SealedEntityStorage<unknown>).sealLegacy(profileId, withLock, () => !stillHeld())
+		}
+	}
+
+	/** Seals `row` at `id`, then writes it while `fence` (when given) still holds. */
+	private async write<T>(store: SealedEntityStorage<T>, id: string, row: T, fence?: () => boolean): Promise<boolean> {
+		const prepared = await store.prepare(id, row)
+		if (fence && !fence()) return false
+		await prepared.commit()
+		return true
+	}
+
+	/** Removes `id`'s row while `fence` (when given) still holds once its storage keys are resolved. */
+	private async remove<T>(store: SealedEntityStorage<T>, id: string, fence?: () => boolean): Promise<boolean> {
+		const prepared = await store.prepareDelete(id)
+		if (fence && !fence()) return false
+		await prepared.commit()
+		return true
 	}
 
 	// --- Records (keyed by `id`) ---
@@ -81,12 +98,12 @@ export class IncomingTransferRepository {
 		return this.records.contains(id)
 	}
 
-	public async upsertRecord(record: IncomingTransferRecord): Promise<void> {
-		await this.records.set(record.id, record)
+	public upsertRecord(record: IncomingTransferRecord, fence?: () => boolean): Promise<boolean> {
+		return this.write(this.records, record.id, record, fence)
 	}
 
-	public async deleteRecord(id: string): Promise<void> {
-		await this.records.delete(id)
+	public deleteRecord(id: string, fence?: () => boolean): Promise<boolean> {
+		return this.remove(this.records, id, fence)
 	}
 
 	public async listRecords(): Promise<IncomingTransferRecord[]> {
@@ -116,7 +133,8 @@ export class IncomingTransferRepository {
 
 	/** A state change keeps the stored arrival floor: a floor that moved with the state could fall. */
 	public async setTrust(profileId: string, networkId: string, contract: string, state: IncomingTrustState): Promise<IncomingTrustRecord>
-	/** With a `fence`: read after the stored row is, and false writes nothing and returns undefined. */
+	/** With a `fence`: read after the stored row is read and the new one sealed; false writes nothing
+	 *  and returns undefined. */
 	public async setTrust(
 		profileId: string,
 		networkId: string,
@@ -132,33 +150,35 @@ export class IncomingTransferRepository {
 		fence?: () => boolean,
 	): Promise<IncomingTrustRecord | undefined> {
 		const stored = await this.getTrust(profileId, networkId, contract)
-		if (fence && !fence()) return undefined
 		const record: IncomingTrustRecord = { profileId, networkId, contract, state, updatedAt: Date.now() }
 		if (stored?.arrivalFloor !== undefined) record.arrivalFloor = stored.arrivalFloor
 		if (stored?.arrivalFloorPending) record.arrivalFloorPending = true
-		await this.trust.set(trustKey(profileId, networkId, contract), record)
-		return record
+		return (await this.write(this.trust, trustKey(profileId, networkId, contract), record, fence)) ? record : undefined
 	}
 
 	/** Rewrites a trust row the caller has just read, with new floor fields. No read of its own: the
-	 *  caller checks its fences between its read and this write. */
-	public async setArrivalFloor(
+	 *  caller's `fence` is read between the seal and the write. */
+	public setArrivalFloor(
 		stored: IncomingTrustRecord,
 		floor: { arrivalFloor: number | undefined; pending: boolean },
-	): Promise<void> {
+		fence?: () => boolean,
+	): Promise<boolean> {
 		const { profileId, networkId, contract } = stored
 		const record: IncomingTrustRecord = { profileId, networkId, contract, state: stored.state, updatedAt: stored.updatedAt }
 		if (floor.arrivalFloor !== undefined) record.arrivalFloor = floor.arrivalFloor
 		if (floor.pending) record.arrivalFloorPending = true
-		await this.trust.set(trustKey(profileId, networkId, contract), record)
+		return this.write(this.trust, trustKey(profileId, networkId, contract), record, fence)
 	}
 
-	/** Writes `trust` and every record in ONE `storage.local.set` call, dispatched before this returns.
-	 *  The area applies one call as one batch, so a rejected write leaves none of the rows written. */
-	public commitAcceptance(trust: IncomingTrustRecord, records: IncomingTransferRecord[]): Promise<void> {
-		const items = this.trust.item(trustKey(trust.profileId, trust.networkId, trust.contract), trust)
-		for (const record of records) Object.assign(items, this.records.item(record.id, record))
-		return this.local.set(items)
+	/** Seals `trust` and every record; the returned commit writes them all in ONE `storage.local.set`
+	 *  call, dispatched before it returns. The area applies one call as one batch, so a rejected write
+	 *  leaves none of the rows written. */
+	public async prepareAcceptance(trust: IncomingTrustRecord, records: IncomingTransferRecord[]): Promise<() => Promise<void>> {
+		const writes = await Promise.all([
+			this.trust.prepare(trustKey(trust.profileId, trust.networkId, trust.contract), trust),
+			...records.map((record) => this.records.prepare(record.id, record)),
+		])
+		return () => commitSealedTogether(this.local, writes)
 	}
 
 	public async listTrust(): Promise<IncomingTrustRecord[]> {
@@ -171,8 +191,14 @@ export class IncomingTransferRepository {
 		return this.cursors.get(publicCursorKey(profileId, networkId, contract))
 	}
 
-	public async setCursor(profileId: string, networkId: string, contract: string, cursor: PublicScanCursor): Promise<void> {
-		await this.cursors.set(publicCursorKey(profileId, networkId, contract), cursor)
+	public setCursor(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		cursor: PublicScanCursor,
+		fence?: () => boolean,
+	): Promise<boolean> {
+		return this.write(this.cursors, publicCursorKey(profileId, networkId, contract), cursor, fence)
 	}
 
 	public async deleteCursor(profileId: string, networkId: string, contract: string): Promise<void> {
@@ -194,18 +220,25 @@ export class IncomingTransferRepository {
 		return this.outbox.get(balanceOutboxKey(profileId, networkId, accountAddress, tokenId))
 	}
 
-	public async setOutbox(
+	public setOutbox(
 		profileId: string,
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
 		row: IncomingBalanceOutboxRow,
-	): Promise<void> {
-		await this.outbox.set(balanceOutboxKey(profileId, networkId, accountAddress, tokenId), row)
+		fence?: () => boolean,
+	): Promise<boolean> {
+		return this.write(this.outbox, balanceOutboxKey(profileId, networkId, accountAddress, tokenId), row, fence)
 	}
 
-	public async deleteOutbox(profileId: string, networkId: string, accountAddress: string, tokenId: number): Promise<void> {
-		await this.outbox.delete(balanceOutboxKey(profileId, networkId, accountAddress, tokenId))
+	public deleteOutbox(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		tokenId: number,
+		fence?: () => boolean,
+	): Promise<boolean> {
+		return this.remove(this.outbox, balanceOutboxKey(profileId, networkId, accountAddress, tokenId), fence)
 	}
 
 	public async listOutbox(): Promise<Array<[string, IncomingBalanceOutboxRow]>> {
@@ -218,8 +251,14 @@ export class IncomingTransferRepository {
 		return this.arrivals.get(arrivalKey(profileId, networkId, accountAddress))
 	}
 
-	public async setArrivalRow(profileId: string, networkId: string, accountAddress: string, row: ArrivalRow): Promise<void> {
-		await this.arrivals.set(arrivalKey(profileId, networkId, accountAddress), row)
+	public setArrivalRow(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		row: ArrivalRow,
+		fence?: () => boolean,
+	): Promise<boolean> {
+		return this.write(this.arrivals, arrivalKey(profileId, networkId, accountAddress), row, fence)
 	}
 
 	public async deleteArrivalRow(profileId: string, networkId: string, accountAddress: string): Promise<void> {
@@ -240,7 +279,8 @@ export class IncomingTransferRepository {
 
 	/** The five tables, in order, by key prefix and never by value: `get()` returns `undefined` for a
 	 *  codec-invalid row and keeps it, so a value sweep would leave it behind. Record ids carry a
-	 *  `note:`/`pub:` kind prefix; every other key starts with the scope. */
+	 *  `note:`/`pub:` kind prefix; every other key starts with the scope, sealed or not, so the wipe
+	 *  needs no row key. */
 	private async clearScope(prefix: string): Promise<void> {
 		await this.deleteKeysWhere(this.records, (key) => key.startsWith(`note:${prefix}`) || key.startsWith(`pub:${prefix}`))
 		await this.deleteKeysWhere(this.trust, (key) => key.startsWith(prefix))
@@ -255,9 +295,9 @@ export class IncomingTransferRepository {
 	 * survives a row that failed codec validation (which `get` reads as `undefined`), where a
 	 * value-predicate sweep would silently skip it.
 	 */
-	private async deleteKeysWhere<T>(store: EntityStorage<T>, pred: (key: string) => boolean): Promise<void> {
+	private async deleteKeysWhere<T>(store: SealedEntityStorage<T>, pred: (key: string) => boolean): Promise<void> {
 		for (const key of await store.getKeys()) {
-			if (pred(key)) await store.delete(key)
+			if (pred(key)) await store.deleteStorageId(key)
 		}
 	}
 }

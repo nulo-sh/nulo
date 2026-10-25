@@ -41,6 +41,12 @@ on:
       firefox_artifact_url:
         description: Download URL of the uploaded Firefox build (empty when not uploaded).
         value: ${{ jobs.build.outputs.firefox_artifact_url }}
+      chrome_artifact_id:
+        description: Id of the uploaded Chrome build, which a consumer downloads by (empty when not uploaded).
+        value: ${{ jobs.build.outputs.chrome_artifact_id }}
+      firefox_artifact_id:
+        description: Id of the uploaded Firefox build, which a consumer downloads by (empty when not uploaded).
+        value: ${{ jobs.build.outputs.firefox_artifact_id }}
 
 jobs:
   build:
@@ -50,6 +56,8 @@ jobs:
     outputs:
       chrome_artifact_url: ${{ steps.upload-chrome.outputs.artifact-url }}
       firefox_artifact_url: ${{ steps.upload-firefox.outputs.artifact-url }}
+      chrome_artifact_id: ${{ steps.upload-chrome.outputs.artifact-id }}
+      firefox_artifact_id: ${{ steps.upload-firefox.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,30 +83,25 @@ jobs:
             console.log('patched extension version to', p.version);
           "
 
-      # Vite bakes any VITE_* env into the bundle, so fail FAST if one of these
-      # is even set — stronger than only grepping the artifact afterwards (which
-      # we also do below). The CoinGecko key is a local/CI convenience that must
-      # never ship; the e2e flags would ship a wallet that misprices or stops
-      # seeding defaults entirely.
+      # Vite bakes any VITE_* env into the bundle, so fail FAST if one is even set — stronger than
+      # only grepping the artifact afterwards (which we also do below). Only the production build
+      # options pass: every other VITE_* is a secret (the CoinGecko key) or a test flag that would
+      # ship a wallet that misprices, skips proving, stops seeding defaults or widens its fee caps,
+      # and an allowlist refuses a new test flag without an edit here.
       - name: Assert no test-only or secret VITE_* flags in the build env
         run: |
-          if [ -n "${VITE_COINGECKO_API_KEY:-}" ]; then
-            echo "::error::VITE_COINGECKO_API_KEY is set in the build environment — release builds must be keyless" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_PRICE_MAP:-}" ]; then
-            echo "::error::VITE_NULO_E2E_PRICE_MAP is set in the build environment — e2e-only price mapping must never arm a release build" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_TOKEN_SEEDS:-}" ] || [ -n "${VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM:-}" ]; then
-            echo "::error::VITE_NULO_E2E_TOKEN_SEEDS(_CONFIRM) is set in the build environment — an armed token-seed source REPLACES the default seed list, so a release build carrying it would ship a wallet that never seeds defaults" >&2
-            exit 1
-          fi
-          if [ -n "${VITE_NULO_E2E_CSP_REPORT:-}" ]; then
-            echo "::error::VITE_NULO_E2E_CSP_REPORT is set in the build environment — the e2e-only CSP violation recorder must never ship" >&2
-            exit 1
-          fi
-          echo "✓ build env carries no CoinGecko key and no e2e price-map, token-seed or CSP-report flags"
+          fail=0
+          for name in $(compgen -e); do
+            case "$name" in
+              VITE_FEE_JUICE_BRIDGE_URL | VITE_NULO_ALLOW_IFRAME_DAPPS) ;;
+              VITE_*)
+                echo "::error::$name is set in the build environment — only VITE_FEE_JUICE_BRIDGE_URL and VITE_NULO_ALLOW_IFRAME_DAPPS may reach this build" >&2
+                fail=1
+                ;;
+            esac
+          done
+          if [ "$fail" != 0 ]; then exit 1; fi
+          echo "✓ build env carries no VITE_* flag beyond the production build options"
 
       - name: Build Chrome
         if: inputs.target == 'chrome' || inputs.target == 'both'
@@ -136,7 +139,7 @@ jobs:
           fail=0
           for d in apps/extension/dist/chrome apps/extension/dist/firefox; do
             [ -d "$d" ] || continue
-            for marker in "NULO_PRESTO_REQUIRED_BUILD_STAMP" "NULO_E2E_PROVERLESS_BUILD_STAMP" "NULO_E2E_PRICE_MAP_BUILD_STAMP" "nulo:e2e:proof-gate" "nulo:e2e:restore-gate" "nulo:e2e:incoming-poll-hold" "nulo:e2e:incoming-poll-status" "nulo:e2e:projection-hold" "SHALLOW_PXE_FAKE_BUNDLE_MARKER" "nulo:e2e:mig-fixture" "nulo:e2e:backup-mig-fixture" "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds" "NULO_E2E_TOKEN_LIST_BUILD_STAMP" "nulo:e2e:token-list" "nulo:e2e:csp-"; do
+            for marker in "NULO_PRESTO_REQUIRED_BUILD_STAMP" "NULO_E2E_PROVERLESS_BUILD_STAMP" "NULO_E2E_PRICE_MAP_BUILD_STAMP" "nulo:e2e:proof-gate" "nulo:e2e:restore-gate" "nulo:e2e:incoming-poll-hold" "nulo:e2e:incoming-poll-status" "nulo:e2e:projection-hold" "SHALLOW_PXE_FAKE_BUNDLE_MARKER" "nulo:e2e:mig-fixture" "nulo:e2e:backup-mig-fixture" "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds" "NULO_E2E_TOKEN_LIST_BUILD_STAMP" "nulo:e2e:token-list" "nulo:e2e:csp-" "NULO_E2E_WALLET_CLOCKS_BUILD_STAMP" "nulo:e2e:sealed-read"; do
               if grep -rq "$marker" "$d"; then
                 echo "::error::test-only marker '$marker' leaked into $d" >&2
                 fail=1
@@ -158,6 +161,26 @@ jobs:
           if [ "$fail" = 0 ]; then echo "✓ no test-only markers in production build"; fi
           exit "$fail"
 
+      # `style-src` admits no inline style attribute, so markup that carries one renders unstyled.
+      # Vue's compiler writes such markup when it stringifies a long static run of a template into
+      # innerHTML; a constant `style` there must become a class.
+      - name: Assert no inline style attribute in the bundle
+        run: |
+          fail=0
+          for d in apps/extension/dist/chrome apps/extension/dist/firefox; do
+            [ -d "$d" ] || continue
+            # The leading space keeps `font-style="` and other `*-style` attributes, which CSP allows, out.
+            for marker in ' style="' " style='" ' style=\"'; do
+              hits=$(grep -rlF --include='*.js' --include='*.html' "$marker" "$d" || true)
+              if [ -n "$hits" ]; then
+                echo "::error::markup with an inline style attribute ($marker) in: $hits" >&2
+                fail=1
+              fi
+            done
+          done
+          if [ "$fail" = 0 ]; then echo "✓ no inline style attribute in the bundle"; fi
+          exit "$fail"
+
       # MIT, BSD and Apache-2.0 all require their notice to travel INSIDE the distributed artifact.
       # The generator already fails the build on a disallowed or unreviewed licence; this catches
       # the other failure — a file that is absent, or that silently lost a whole class of input
@@ -170,7 +193,7 @@ jobs:
       - name: Upload Chrome build
         id: upload-chrome
         if: inputs.upload_artifacts && (inputs.target == 'chrome' || inputs.target == 'both')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: extension-chrome
           path: apps/extension/dist/chrome
@@ -182,7 +205,7 @@ jobs:
       - name: Upload Firefox build
         id: upload-firefox
         if: inputs.upload_artifacts && (inputs.target == 'firefox' || inputs.target == 'both')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: extension-firefox
           path: apps/extension/dist/firefox

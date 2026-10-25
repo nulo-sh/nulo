@@ -1,6 +1,7 @@
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import type { RetryOptions } from "../utils/fetch"
 
 /**
  * Construct an `AztecNode` RPC client from a URL.
@@ -23,7 +24,7 @@ import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
  * adapter against a test node.
  */
 export interface NodeFactory {
-	createNode(rpcUrl: string): AztecNode
+	createNode(rpcUrl: string, options?: RetryOptions): AztecNode
 
 	/**
 	 * A client whose every call is ONE non-retrying attempt, aborted at `timeoutMs`: for a caller

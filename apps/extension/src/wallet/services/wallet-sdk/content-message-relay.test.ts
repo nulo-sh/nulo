@@ -6,6 +6,8 @@
  * every case re-imports a fresh module via vi.resetModules().
  */
 
+// Loaded during collection, so each case's re-import only re-evaluates it.
+import "./content-message-relay"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { OPEN_TOOLBAR_POPUP } from "@/wallet/utils/onboarding-tab"
 
@@ -13,7 +15,6 @@ type Listener = (message: unknown, sender: unknown) => undefined
 let chromeListeners: Listener[]
 let relay: typeof import("./content-message-relay")
 
-// Loading is not the behaviour under test, so it runs in the hook, not on a test's own budget.
 beforeEach(async () => {
 	vi.resetModules()
 	vi.useRealTimers()
@@ -36,10 +37,9 @@ const topFrameSender = (origin = "https://dapp.example") => ({ frameId: 0, origi
 const discovery = (requestId = "r1") => ({
 	origin: "content-script",
 	type: "discovery-request",
-	requestId,
-	appId: "app",
-	chainInfo: { chainId: "1" },
+	content: { type: "aztec-wallet-discovery", requestId, appId: "app", chainInfo: { chainId: "1", version: "1" } },
 })
+type Seen = { content?: { requestId?: string } }
 
 describe("content-message-relay", () => {
 	test("post-attach: content messages forward synchronously; exactly once", () => {
@@ -59,12 +59,12 @@ describe("content-message-relay", () => {
 		dispatch(discovery("a"), topFrameSender())
 		dispatch(discovery("b"), topFrameSender("https://other.example"))
 
-		const seen: Array<{ requestId?: string }> = []
+		const seen: Seen[] = []
 		attachContentListener((m) => {
-			seen.push(m as { requestId?: string })
+			seen.push(m as Seen)
 		})
 
-		expect(seen.map((m) => m.requestId)).toEqual(["a", "b"])
+		expect(seen.map((m) => m.content?.requestId)).toEqual(["a", "b"])
 		// A second attach must not replay (snapshot-and-clear semantics).
 		const seen2: unknown[] = []
 		attachContentListener((m) => {
@@ -103,6 +103,18 @@ describe("content-message-relay", () => {
 		expect(seen).toHaveLength(0)
 	})
 
+	test("pre-attach admission: a discovery over a field bound takes no slot; a valid one buffers", () => {
+		const { attachContentListener, dispatch } = freshRelay()
+		dispatch(discovery("x".repeat(129)), topFrameSender())
+		dispatch(discovery("ok"), topFrameSender())
+
+		const seen: Seen[] = []
+		attachContentListener((m) => {
+			seen.push(m as Seen)
+		})
+		expect(seen.map((m) => m.content?.requestId)).toEqual(["ok"])
+	})
+
 	test("caps mirror the connect-popup caps: 4 per origin, 32 global, reject-new", () => {
 		const { attachContentListener, dispatch, CONTENT_RELAY_GLOBAL_CAP, CONTENT_RELAY_PER_ORIGIN_CAP } = freshRelay()
 		// Per-origin: 6 from one origin → only 4 admitted.
@@ -110,12 +122,12 @@ describe("content-message-relay", () => {
 		// Fill toward the global cap from distinct origins.
 		for (let i = 0; i < 40; i++) dispatch(discovery(`spread-${i}`), topFrameSender(`https://o${i}.example`))
 
-		const seen: Array<{ requestId?: string }> = []
+		const seen: Seen[] = []
 		attachContentListener((m) => {
-			seen.push(m as { requestId?: string })
+			seen.push(m as Seen)
 		})
 
-		expect(seen.filter((m) => m.requestId?.startsWith("same-"))).toHaveLength(CONTENT_RELAY_PER_ORIGIN_CAP)
+		expect(seen.filter((m) => m.content?.requestId?.startsWith("same-"))).toHaveLength(CONTENT_RELAY_PER_ORIGIN_CAP)
 		expect(seen).toHaveLength(CONTENT_RELAY_GLOBAL_CAP)
 	})
 
@@ -132,12 +144,12 @@ describe("content-message-relay", () => {
 		vi.advanceTimersByTime(CONTENT_RELAY_MAX_AGE_MS + 1_000)
 		dispatch(discovery("fresh"), topFrameSender("https://other.example"))
 
-		const seen: Array<{ requestId?: string }> = []
+		const seen: Seen[] = []
 		attachContentListener((m) => {
-			seen.push(m as { requestId?: string })
+			seen.push(m as Seen)
 		})
 
-		expect(seen.map((m) => m.requestId)).toEqual(["fresh"])
+		expect(seen.map((m) => m.content?.requestId)).toEqual(["fresh"])
 	})
 
 	test("idempotent re-attach: the newest listener wins for live traffic", () => {

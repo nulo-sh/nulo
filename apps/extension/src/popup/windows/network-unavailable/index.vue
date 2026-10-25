@@ -14,7 +14,7 @@ import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { type NetworkUnavailablePayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type NetworkUnavailablePayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -24,7 +24,6 @@ const appStore = useAppStore()
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
@@ -45,14 +44,12 @@ const {
 	dappOf: (p) => p.params.dappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 // init/dismiss are referenced lazily (thunks): they are declared below and only run from
 // start()/dispose()/the guard at runtime.
 const {
 	start: startWindow,
 	dispose: disposeWindow,
-	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 } = useDappApprovalWindow({
@@ -68,7 +65,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => dismiss(),
+	reject: (end) => dismiss(end),
 })
 
 const init = async () => {
@@ -80,16 +77,13 @@ const init = async () => {
 	}
 }
 
-const dismiss = () => {
-	rejectViaInteractionService("Closed")
-	closeWindow(true)
-}
+const dismiss = (end: WindowEnd) => endAndClose(() => rejectViaInteractionService("Closed", end))
 
 /** The keyboard twin of Close. Handled, so the browser does not act on it as well. */
 const onKeydown = (event: KeyboardEvent) => {
 	if (event.key !== "Escape" || event.defaultPrevented) return
 	event.preventDefault()
-	dismiss()
+	dismiss("reject")
 }
 
 const profileService = new ProfileServiceClient()
@@ -117,8 +111,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				actionLabel="wants to connect to your wallet"
 				hostnameTestId="network-unavailable-hostname"
 				nameTestId="network-unavailable-dapp-name"
@@ -135,7 +127,7 @@ onUnmounted(() => {
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
 			<Button
 				data-testid="network-unavailable-close-btn"
-				@click="dismiss"
+				@click="dismiss('reject')"
 				@keydown.enter="refuseRepeatEnter"
 				wide
 				variant="primary"

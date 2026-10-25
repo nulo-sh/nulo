@@ -23,7 +23,7 @@ const props = defineProps({
 <template>
 	<Flex align="center" justify="center" gap="16" :class="[$style.wrapper, disabled && $style.disabled]">
 		<Flex direction="column" gap="6" wide>
-			<Text variant="label" color="secondary">{{ label }}</Text>
+			<Text variant="label-section" color="secondary">{{ label }}</Text>
 			<Text variant="name" color="primary" :class="[$style.value, $style.value_size]">{{ value }}</Text>
 		</Flex>
 
@@ -34,6 +34,7 @@ const props = defineProps({
 <style module>
 .wrapper {
 	composes: divider from "./settings-row.module.css";
+	user-select: none;
 
 	cursor: pointer;
 	background: transparent;

@@ -1,7 +1,8 @@
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
-import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
+import { afterAll, beforeAll, describe, expect, inject, test, vi } from "vitest"
+import { isFinalRefusal } from "@/wallet/services/operation-journal/final-refusal"
 import {
 	type AztecTestConfig,
 	createSponsoredFeeOptions,
@@ -27,9 +28,25 @@ describe.skipIf(!aztecConfig)("waitForTxMined", { timeout: 240_000 }, () => {
 		await script?.cleanup()
 	})
 
-	test("resolves on a successful public mint", async () => {
-		const hash = await mintPublicTokens(script.wallet, config.tokenAddress, await randomAztecAddress(), 1n, config.minterAddress, fee)
+	// The resend proves the node's own words still match the list a refused send is read against.
+	test("resolves on a successful public mint, which the node then refuses with a final refusal", async () => {
+		const sendTx = vi.spyOn(script.node, "sendTx")
+		let hash: string
+		let tx: Parameters<typeof script.node.sendTx>[0] | undefined
+		try {
+			hash = await mintPublicTokens(script.wallet, config.tokenAddress, await randomAztecAddress(), 1n, config.minterAddress, fee)
+			expect(sendTx).toHaveBeenCalledOnce()
+			tx = sendTx.mock.calls[0]?.[0]
+		} finally {
+			sendTx.mockRestore()
+		}
 		await expect(waitForTxMined(config, hash)).resolves.toBeUndefined()
+		if (!tx) throw new Error("the mint sent no tx")
+		const refusal = await script.node.sendTx(tx).then(
+			() => undefined,
+			(err: Error) => err.message,
+		)
+		expect(isFinalRefusal(refusal), `the node's refusal: ${refusal}`).toBe(true)
 	})
 
 	// More than any balance a run mints: the node includes the transfer, and its public execution reverts.

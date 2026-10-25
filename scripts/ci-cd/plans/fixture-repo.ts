@@ -16,6 +16,8 @@ const GIT_CONFIG = [
 	"-c",
 	"tag.gpgsign=false",
 	"-c",
+	"merge.verifySignatures=false",
+	"-c",
 	"core.hooksPath=/dev/null",
 	"-c",
 	"init.defaultBranch=dev",

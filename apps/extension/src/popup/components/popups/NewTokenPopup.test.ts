@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
+import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -270,24 +271,36 @@ describe("NewTokenPopup", () => {
 		expect(w.emitted("onClose")).toBeUndefined()
 	})
 
-	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text.
+	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text,
+	// or a WalletError rebuilt by its code.
 	test.each([
 		[
 			"a PXE store refusal",
-			"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
+			new Error(
+				"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
+			),
+			"Something went wrong. Try again.",
 		],
-		["a node refusal", "contract instance not found"],
-	])("%s reads the generic line under Submit, never its own text, and goes to the debug log", async (_, message) => {
+		[
+			"a contract the network does not hold",
+			walletErrorFromPayload(new ContractNotFoundError().toPayload()),
+			"There is no token at this address on this network.",
+		],
+		["a quarantined chain", walletErrorFromPayload(new ChainNotSupportedError().toPayload()), "Something went wrong. Try again."],
+	])("%s reads its line under Submit, never the error's own text, and goes to the debug log", async (_, refusal, line) => {
 		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
-		const refusal = new Error(message)
-		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
-		tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
+		const { message } = refusal
+		if (refusal instanceof WalletError) tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(refusal)
+		else {
+			tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
+			tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
+		}
 		const w = await mountAndOpen()
 		await typeAddress(w, validHex)
 		await submitBtn(w).trigger("click")
 		await flushPromises()
 
-		expect(w.find('[data-testid="new-token-error"]').text()).toBe("Something went wrong. Try again.")
+		expect(w.find('[data-testid="new-token-error"]').text()).toBe(line)
 		expect(w.text()).not.toContain(message)
 		expect(debug).toHaveBeenCalledWith("[new-token] add refused", { reason: refusal })
 		expect(w.emitted("onClose")).toBeUndefined()

@@ -45,8 +45,9 @@ export function isTerminal(stage: JobStage): stage is TerminalStage {
 
 /** What the network answered for a failed send that may have reached it. `unconfirmed`: no
  *  answer within the check's window. `expired`: the finalized chain is past the send's expiry and
- *  holds none of it. */
-export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired"
+ *  holds none of it. `refused`: the node refused it for a reason a later block rarely lifts, and a
+ *  read inside the window found it neither pooled nor mined on the node it reached. */
+export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired" | "refused"
 
 /** What proves a send can never be included: its expiry in chain seconds, and its first
  *  nullifier, which every block that includes it inserts, reverted or not. */
@@ -125,22 +126,25 @@ export type JobProgress =
  * to `never` (consumers MUST keep a `default` arm). The literals exist for
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
- * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
- * "network" | "unknown")`, `popup_bound`, `scope_refused`, `malformed_request`, `terms_refused` and
- * `wallet_refused` (wallet-sdk; `scope_refused` also from execution's `markFailedUnlessCancelled`,
- * `terms_refused` also from the dApp interaction service), the reaper
+ * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" | "network" | "unknown")`,
+ * `popup_bound`, `user_rejected`, `scope_refused`, `registry_refused`, `malformed_request`,
+ * `terms_refused`, `session_ended` and `wallet_refused` (wallet-sdk; `scope_refused` and
+ * `registry_refused` also from execution's `markFailedUnlessCancelled`, `terms_refused` also from the
+ * dApp interaction service), `too_many_pending` (execution's waiting-sends cap), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
- * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
- * switched-on / documented but not all produced on HEAD.
+ * `metadata_fetch` | `unknown`). `network` | `simulation` are switched-on / documented but not all
+ * produced on HEAD.
  */
 export type KnownJobErrorKind =
 	| "user_rejected"
 	| "popup_bound"
 	| "scope_refused"
+	| "registry_refused"
 	| "malformed_request"
 	| "terms_refused"
 	| "wallet_refused"
+	| "too_many_pending"
 	| "sw_restart_post_prove"
 	| "stale_on_resume"
 	| "stuck_proving"
@@ -170,9 +174,11 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	user_rejected: true,
 	popup_bound: true,
 	scope_refused: true,
+	registry_refused: true,
 	malformed_request: true,
 	terms_refused: true,
 	wallet_refused: true,
+	too_many_pending: true,
 	sw_restart_post_prove: true,
 	stale_on_resume: true,
 	stuck_proving: true,

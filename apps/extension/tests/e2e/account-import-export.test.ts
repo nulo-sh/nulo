@@ -16,7 +16,6 @@
  * `registerProfile`), NOT the in-session profile picker: that in-page path has never been driven
  * end-to-end by a test (`auth-flows.test.ts` only asserts its route).
  */
-import { rmSync } from "node:fs"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import {
@@ -63,22 +62,28 @@ test("account export → import into a SECOND profile (plaintext + encrypted rou
 		await targetPage.waitForSelector('[data-testid="account-imported-badge"]', { visible: true, timeout: 20_000 })
 
 		// Single-truncation pin at the REAL popup width (e2e tabs are otherwise wide enough to
-		// make overflow assertions vacuous): the description line may clip ONLY inside the
-		// address's head span. The marker, the 4-char tail, the line, and the wrapper must all
-		// fit — a second (wrapper-level) ellipsis is exactly the double-truncation bug.
+		// make overflow assertions vacuous): the description may clip ONLY inside the address's
+		// head span. The marker, the 4-char tail, the line, and the wrapper must all fit — a
+		// second (wrapper-level) ellipsis is exactly the double-truncation bug. The marker sits on
+		// its own line above the address, which leaves the head room to show.
 		await targetPage.setViewport({ width: 360, height: 600 })
 		const fit = await targetPage.evaluate(() => {
 			const badge = document.querySelector('[data-testid="account-imported-badge"]') as HTMLElement | null
-			if (!badge?.parentElement?.parentElement) return null
-			const line = badge.parentElement
-			const wrapper = line.parentElement as HTMLElement
-			const tail = line.lastElementChild as HTMLElement
+			const row = badge?.closest('[data-testid="manage-accounts-row"]')
+			const line = row?.querySelector<HTMLElement>('[data-testid="manage-accounts-address"]')
+			const head = line?.querySelector<HTMLElement>('[data-testid="manage-accounts-address-head"]')
+			const wrapper = row?.querySelector<HTMLElement>('[data-testid="setting-description"]')
+			const tail = line?.querySelector<HTMLElement>('[data-testid="manage-accounts-address-tail"]')
+			if (!badge || !line || !head || !wrapper || !tail) return null
 			return {
 				badgeClipped: badge.scrollWidth > badge.clientWidth,
 				tailClipped: tail.scrollWidth > tail.clientWidth,
 				lineClipped: line.scrollWidth > line.clientWidth + 1,
 				wrapperClipped: wrapper.scrollWidth > wrapper.clientWidth + 1,
 				tailLength: (tail.textContent ?? "").length,
+				badgeAbove: badge.getBoundingClientRect().bottom <= line.getBoundingClientRect().top + 0.5,
+				headShown: head.clientWidth,
+				tailShown: tail.clientWidth,
 			}
 		})
 		expect(fit).not.toBeNull()
@@ -87,6 +92,8 @@ test("account export → import into a SECOND profile (plaintext + encrypted rou
 		expect(fit?.lineClipped).toBe(false)
 		expect(fit?.wrapperClipped).toBe(false)
 		expect(fit?.tailLength).toBe(4)
+		expect(fit?.badgeAbove, JSON.stringify(fit)).toBe(true)
+		expect(fit?.headShown, JSON.stringify(fit)).toBeGreaterThanOrEqual(fit?.tailShown ?? Number.POSITIVE_INFINITY)
 
 		// The imported address equals the source account's address (the round-trip's point).
 		const importedAddress = previewed as string
@@ -141,43 +148,38 @@ test("the file-chooser import path accepts a written export file", { timeout: 18
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general", 30_000)
 	const body = await exportAccountBody(page, FIRST_ACCOUNT_NAME, false)
-	// A plaintext export carries a REAL signing key — clean the temp file up.
 	const filePath = writeBackupToTemp(body, "account-export.json")
-	try {
-		// Enter the page the way a user does: the Manage Accounts button routes to it.
-		await gotoAccounts(page)
-		await clickByTestId(page, "accounts-import-btn")
-		await page.waitForSelector('[data-testid="import-account-pick-file"]', { visible: true, timeout: 15_000 })
-		await pickFileByTestId(page, "import-account-pick-file", filePath)
-		// The chip reflects the picked file; Continue then decodes it.
-		await page.waitForFunction(
-			(name: string) => (document.querySelector('[data-testid="import-account-pick-file"]')?.textContent ?? "").includes(name),
-			{ timeout: 15_000, polling: 200 },
-			"account-export.json",
-		)
-		await clickByTestId(page, "import-account-submit")
-		await page.waitForFunction(
-			() =>
-				document.querySelector('[data-testid="import-account-preview"]') !== null ||
-				document.querySelector('[data-testid="import-account-error"]') !== null,
-			{ timeout: 30_000, polling: 200 },
-		)
-		// Same profile ⇒ the account already exists, so this previews fine and would reject at
-		// write; the point here is that the FILE PATH produced a decodable body.
-		const previewed = await page.evaluate(() => {
-			const row = document.querySelector('[data-testid="import-account-preview"]')
-			const el = document.querySelector('[data-testid="import-account-preview-address"]') as HTMLElement | null
-			return {
-				address: row?.getAttribute("data-account-address") ?? null,
-				text: el?.textContent?.trim() ?? null,
-				clipped: el ? el.scrollWidth > el.clientWidth : null,
-			}
-		})
-		expect(previewed.address).toBeTruthy()
-		// The preview renders the WHOLE address, wrapped, at the popup's width — never an ellipsis.
-		expect(previewed.text).toBe(previewed.address)
-		expect(previewed.clipped).toBe(false)
-	} finally {
-		rmSync(filePath, { force: true })
-	}
+	// Enter the page the way a user does: the Manage Accounts button routes to it.
+	await gotoAccounts(page)
+	await clickByTestId(page, "accounts-import-btn")
+	await page.waitForSelector('[data-testid="import-account-pick-file"]', { visible: true, timeout: 15_000 })
+	await pickFileByTestId(page, "import-account-pick-file", filePath)
+	// The chip reflects the picked file; Continue then decodes it.
+	await page.waitForFunction(
+		(name: string) => (document.querySelector('[data-testid="import-account-pick-file"]')?.textContent ?? "").includes(name),
+		{ timeout: 15_000, polling: 200 },
+		"account-export.json",
+	)
+	await clickByTestId(page, "import-account-submit")
+	await page.waitForFunction(
+		() =>
+			document.querySelector('[data-testid="import-account-preview"]') !== null ||
+			document.querySelector('[data-testid="import-account-error"]') !== null,
+		{ timeout: 30_000, polling: 200 },
+	)
+	// Same profile ⇒ the account already exists, so this previews fine and would reject at
+	// write; the point here is that the FILE PATH produced a decodable body.
+	const previewed = await page.evaluate(() => {
+		const row = document.querySelector('[data-testid="import-account-preview"]')
+		const el = document.querySelector('[data-testid="import-account-preview-address"]') as HTMLElement | null
+		return {
+			address: row?.getAttribute("data-account-address") ?? null,
+			text: el?.textContent?.trim() ?? null,
+			clipped: el ? el.scrollWidth > el.clientWidth : null,
+		}
+	})
+	expect(previewed.address).toBeTruthy()
+	// The preview renders the WHOLE address, wrapped, at the popup's width — never an ellipsis.
+	expect(previewed.text).toBe(previewed.address)
+	expect(previewed.clipped).toBe(false)
 })

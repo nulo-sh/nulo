@@ -12,13 +12,15 @@
 import RowTarget from "@/components/ui/RowTarget.vue"
 
 /** Utils */
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
-import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
-const { openToast } = useToast()
+import { useSettingUpdate } from "@/composables/useSettingUpdate"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
+const { vSettingsRow } = useSettingsRowHighlight()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -27,8 +29,6 @@ const appStore = useAppStore()
 const cacheStore = useCacheStore()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const developerRead = useConfigRead(configService, () => configService.getProps(), landDeveloperConfig)
 
 const openLogs = async () => {
 	if (appStore.loggerWindowId) {
@@ -71,37 +71,20 @@ const isIndicationFailuresEnabled = ref(defaultConfig.indicateFailures)
 const isDebugModeEnabled = ref(defaultConfig.debugMode)
 
 const settings = {
-	developerMode: {
-		title: "Developer Mode",
-		description: "Access to entity metadata, etc",
-		model: isDeveloperModeEnabled,
-		visible: ref(true),
-	},
+	developerMode: { ...settingsRow("developer-mode"), model: isDeveloperModeEnabled, visible: ref(true) },
 	indicateFailures: {
-		title: "Indicate Failures",
-		description: "Highlight errors and warnings in the header",
+		...settingsRow("developer-indicate-failures"),
 		model: isIndicationFailuresEnabled,
 		visible: isDeveloperModeEnabled,
 	},
-	debugMode: {
-		title: "Debug Mode",
-		description: "Collect debug level logs",
-		model: isDebugModeEnabled,
-		visible: isDeveloperModeEnabled,
-	},
+	debugMode: { ...settingsRow("developer-debug"), model: isDebugModeEnabled, visible: isDeveloperModeEnabled },
 }
+const logsRow = settingsRow("developer-logs")
+const accountStateRow = settingsRow("developer-account-state")
 
-async function updateSetting(key, value) {
-	if (!settings[key]) return
-	if (settings[key].model.value === value) return
-
-	try {
-		await configService.setValue(key, value)
-		applySetting(key, value)
-	} catch (err) {
-		openToast({ kind: "error", label: "Failed to update setting" })
-	}
-}
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onSettingUpdate)
+const developerRead = useConfigRead(configService, () => configService.getProps(), landDeveloperConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -119,22 +102,8 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
-}
-
-// Copies the values only: `applySetting` would write `indicateFailures` and `debugMode` on a reread.
-function landDeveloperConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (settings[s.key] && !updatedSince(s.key)) {
-			settings[s.key].model.value = s.value
-		}
-	})
-
+function landDeveloperConfig(stored, updatedSince) {
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -149,14 +118,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32">
+	<SettingsPageShell title="Developer" :backTo="'/popup/settings'" gap="32" data-testid="settings-developer-page">
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
 			<template v-for="sk in Object.keys(settings)" :key="sk">
-				<Flex v-if="settings[sk].visible.value" align="center" justify="between">
+				<Flex v-if="settings[sk].visible.value" align="center" justify="between" :data-testid="settings[sk].testid" v-settings-row="settings[sk].id">
 					<Flex direction="column" justify="center" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings[sk].title }}</Text>
+						<Text :class="$style.title" color="primary">{{ settings[sk].title }}</Text>
 						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
 					</Flex>
 
@@ -169,13 +138,13 @@ onBeforeUnmount(() => {
 			</template>
 
 			<!-- Logs (developer mode only) -->
-			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" data-testid="settings-logs-row">
+			<div v-if="isDeveloperModeEnabled" @click="handleOpenLogs" :class="$style.logs_row" :data-testid="logsRow.testid" v-settings-row="logsRow.id">
 				<RowTarget :labelledby="logsTitleId" data-testid="settings-logs-open" />
 
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
 						<Flex align="center" gap="8">
-							<Text :id="logsTitleId" variant="row-title" :class="$style.title_size" color="primary">Logs</Text>
+							<Text :id="logsTitleId" :class="$style.title" color="primary">{{ logsRow.title }}</Text>
 							<div
 								v-if="cacheStore.failureLog?.color"
 								:class="$style.failure_dot"
@@ -183,10 +152,10 @@ onBeforeUnmount(() => {
 							/>
 						</Flex>
 						<Text variant="caption" color="tertiary">
-							{{ cacheStore.failureLog ? '1 recent failure' : 'Open the log viewer window' }}
+							{{ cacheStore.failureLog ? '1 recent failure' : logsRow.description }}
 						</Text>
 					</Flex>
-					<MaterialIcon name="open_in_new" :size="18" color="secondary" />
+					<Icon name="open" :size="18" color="secondary" />
 				</Flex>
 			</div>
 
@@ -194,14 +163,15 @@ onBeforeUnmount(() => {
 			<RouterLink
 				to="/popup/settings/developer/account-state"
 				:class="$style.state_link"
-				data-testid="setting-nav-advanced-account-state"
+				:data-testid="accountStateRow.testid"
+				v-settings-row="accountStateRow.id"
 			>
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
-						<Text variant="row-title" :class="$style.title_size" color="primary">Account State</Text>
-						<Text variant="caption" color="tertiary">Notes, authwits, contracts, senders</Text>
+						<Text :class="$style.title" color="primary">{{ accountStateRow.title }}</Text>
+						<Text variant="caption" color="tertiary">{{ accountStateRow.description }}</Text>
 					</Flex>
-					<MaterialIcon name="chevron_right" :size="18" color="secondary" />
+					<Icon name="chevron" :size="18" color="secondary" />
 				</Flex>
 			</RouterLink>
 		</template>
@@ -210,6 +180,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .state_link {
+	user-select: none;
 	text-decoration: none;
 	transition: opacity 0.2s var(--bezier);
 
@@ -220,6 +191,7 @@ onBeforeUnmount(() => {
 
 /* The box reaches 8px past the text so the ring clears it; the fade stays off the ring. */
 .logs_row {
+	user-select: none;
 	position: relative;
 	margin: -6px -8px;
 	padding: 6px 8px;
@@ -244,7 +216,7 @@ onBeforeUnmount(() => {
 	flex-shrink: 0;
 }
 
-.title_size {
-	font-size: 13px;
+.title {
+	composes: control_title from "../../../../components/ui/Settings/settings-row.module.css";
 }
 </style>

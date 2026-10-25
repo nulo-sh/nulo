@@ -24,7 +24,16 @@ exists at all:
 
 - **The disk reader.** Has the ciphertexts, no password.
 - **The same-phrase sibling.** Legitimately owns a second profile created from the *same* recovery
-  phrase, so they hold the same master, and want to reach the first profile's imported keys.
+  phrase, so they hold the same master, and want to reach the first profile's imported keys. The
+  row-seal key derives from the master alone, so they can read every sealed row of the first
+  profile: its contacts, accounts, tokens, networks, fee payers, dApp sessions, history, balances,
+  authwits, incoming receipts, pins and fee picks, and the device's last account selection when
+  the first profile made it. They cannot forge a dApp grant, whose MAC takes the DEK, nor open
+  an imported signing key, sealed again under it.
+
+Code execution inside the extension stays out of scope, with one consequence worth stating: a
+running service worker holds, even while locked, the row-seal keys of every profile it has opened,
+until it ends or the profile is deleted. Never the master.
 
 ## What is on disk
 
@@ -37,9 +46,13 @@ exists at all:
 | `profiles@<id>.envelopeMac` | HMAC-SHA256 over all four slots | keyed `HKDF(master ‖ dek)` |
 | `profiles@<id>.walletFingerprint` | `sha256("nulo:wallet-fingerprint:v1" ‖ master)` | **nothing — plaintext by design** |
 | `profiles@<id>.credentialId` | WebAuthn credential id (passkey profiles) | nothing — it is a public identifier |
-| imported-key rows | an external account's Grumpkin signing key | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
+| imported-key rows | an external account's Grumpkin signing key, inside the row seal below | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
+| contact, dApp-session and registration-count, journal, transaction, account, imported-key, token and seeder-marker, network, fee-payer, balance, authwit and incoming rows, the pinned-token and fee-pick maps, and the device's selected-account row | the row, as `{ profileId, sealed }`: names, addresses, origins, grants, amounts, balances, fees, endpoints, errors, hashes | AES-256-GCM under `HKDF(master, profileId ‖ pxeGeneration)`, the AAD binding root, storage key and profile; a transaction row's key is the HMAC of its hash, an account or imported-key key the HMAC of its address, and an incoming or authwit-flag key the HMAC of what follows its scope, under the same derivation's index key; a session also keeps its `HKDF(master ‖ dek)` MAC inside |
+| account-integrity stamp, stale-network record | the account set's digest, never its addresses | `HMAC(K_idx, accountSetDigest)` under the same index key |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
-| full backup file | plaintext master + entropy + DEK, unless encrypted | the backup password, if the user chose one |
+| password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
+| passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, everything but the keys is readable |
+| passkey full backup's `backup-mac` | HMAC-SHA256 over the body's checksum | keyed by the passkey's PRF (`nulo:backup-mac:v1`); a body restores only under it |
 
 ## Cost to invert each one
 
@@ -82,10 +95,14 @@ the master and still cannot reach them: the master is not an input to that key. 
 property the DEK exists for, and it is the one place this design goes beyond what a standard wallet
 does.
 
-**The passkey path has no offline attack at all.** The master comes from the authenticator's PRF
-output, which never leaves the device and requires user verification to produce. A disk reader gets
-`credentialId` (a public identifier) and ciphertext they cannot key. There is no password to guess.
-This is strictly the strongest profile type on offer.
+**The passkey path has no offline attack.** The master comes from the passkey's PRF output, which
+only the authenticator computes, after user verification; nothing on disk lets anyone compute it. A
+disk reader gets `credentialId` (a public identifier) and ciphertext they cannot key; there is no
+password to guess. The same design makes the passkey the whole secret: the wallet holds no second
+factor, so a fresh install recovers the master and every derived account from the passkey alone
+(imported keys come back only with a full backup). Against what is on disk, it is the strongest
+profile type on offer; beyond that, it is no stronger than the control the browser and the
+authenticator keep over who may use the passkey for its RP ID.
 
 **The session bearer is an admission, made only in lenient mode.** `storage.session` holds the
 random token *and* the ciphertext it opens, side by side — so whoever reads it recovers the master
@@ -95,9 +112,9 @@ attacker with code execution in the extension, or a read of its memory, compromi
 wallet anyway; what the bearer adds is a copy that needs neither and outlives the worker. Strict
 mode, the default, writes no bearer for that reason.
 
-**An unencrypted backup file is plaintext.** Master, entropy, and DEK, in the clear. Encrypting the
-backup moves it to the same footing as the profile row — i.e. onto the strength of the backup
-password.
+**A decrypted password backup is plaintext.** Master, entropy and the backup's own imported-keys
+key, in the clear. Since v0.31.0 the wallet writes the file only encrypted, which puts it on the
+strength of the profile's password; see the known limit below for older files.
 
 ## Known limitations, stated rather than buried
 
@@ -111,9 +128,20 @@ password.
   600k-iteration PBKDF2, so it does not lower the guessing cost. It would be password-equivalent if
   it ever leaked; that is why it is no longer persisted anywhere (the session bearer used to store
   it and no longer does).
-- **A full backup carries the long-lived profile DEK**, so a backup holder who later regains read
-  access to the source profile can open imported-key rows created *after* the export. Narrower than
-  what the same file already gives up (the plaintext master), and tracked as a follow-up.
+- **A password full backup made before PR #51 (2026-10-08; v0.30.2 and earlier) still restores and
+  carries the profile's long-lived DEK; one made before PR #55 (2026-10-09) may also be
+  unencrypted.** A password change rewraps the DEK and never rotates it, so whoever can open such a
+  file and later reads the source profile's storage can open imported-key rows created after the
+  export. Since v0.31.0 the file is always encrypted under the profile's password and carries a key
+  made for that backup alone. Kept as a known limit at 1.0.0 (#709): such files still restore,
+  only builds before PR #51 made them (v0.30.2 the last release), and the limit reopens only if
+  such a file is known to have leaked.
+- **A sealed row authenticates where it is, not when it was written.** Someone who can write the
+  disk offline can delete a sealed row, put back an earlier sealed value at the same key, or plant a
+  plaintext row, which the wallet reads and seals at the next unlock (a dApp session's MAC refuses
+  a planted grant; a planted transaction row that names no profile is shown to every profile until
+  one that alone holds its account adopts it). The envelope's profile id, the row ids and each
+  row's size stay visible, and an incoming key also shows its profile and network.
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for
@@ -132,3 +160,5 @@ password.
 | Derived addresses never drift | `packages/aztec-runtime/src/account/derivation-vectors.test.ts` |
 | Secrets are wiped after use | `src/zeroize.test.ts` |
 | A sibling profile cannot reach imported keys | `src/imported-account-key-box.test.ts`, `src/entropy-mac.test.ts` |
+| A sealed row opens only at its own root, key, profile and incarnation | `src/row-seal.test.ts`, `apps/extension/src/wallet/storage/sealed-entity-storage.test.ts` |
+| The row-seal labels and frame never drift | `apps/extension/src/wallet/crypto/key-vectors.test.ts` (V12, V13) |

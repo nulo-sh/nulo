@@ -3,20 +3,19 @@
  * that names the transaction, and only a press of "Show fee" sends the lookup; with it off, opening
  * the page sends it. Component tests mock the client, so only here does a request visibly leave.
  *
- * Testnet is the seeded active network; its origin is redirected to a stub that logs every method
+ * The default network is active; its node's origin is redirected to a stub that logs every method
  * and answers each with `null`, a reply every caller refuses at once, so no lookup hangs or retries
  * and each one is one logged request.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings } from "./fixtures/helpers"
+import { DEFAULT_NODE_ORIGIN } from "./fixtures/networks"
 import { readActivityScope, seedPublicReceipt, seedTokenRow } from "./helpers/activity-seeds"
 import { startStub } from "./helpers/rpc-stub"
 
-const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 const RECEIPT_LOOKUP = "aztec_getTxReceipt"
 const TOKEN_ID = 911
 /** Below the BN254 modulus, so the lookup's hash parse accepts it. */
@@ -49,7 +48,7 @@ test("privacy mode holds the receipt fee lookup until Show fee; with it off, ope
 	const stub = await startStub(() => null)
 	const lookups = () => stub.methods.filter((m) => m === RECEIPT_LOOKUP).length
 	try {
-		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
+		const node = await interceptRpc(ctx.browser, ctx.extensionId, DEFAULT_NODE_ORIGIN, { kind: "redirect", to: stub.url })
 		try {
 			const page = await openPopup(ctx)
 			await waitForHash(page, "#/popup/general", 30_000)

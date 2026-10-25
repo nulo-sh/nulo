@@ -11,6 +11,8 @@ const { openToast } = useToast()
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
+import { dashIfBlank } from "@/utils/string"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -55,7 +57,8 @@ function onTokenDeleted(token) {
 	}
 }
 
-const handleCopyAddress = () => {
+const handleCopyAddress = (e) => {
+	if (endsSelection(e)) return
 	void copyWithToast(token.value.contract, openToast, "Contract address is copied")
 }
 
@@ -82,17 +85,17 @@ watch(
 
 				<Flex direction="column" gap="16">
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Id </Text>
+						<Text variant="label-section" color="tertiary"> Id </Text>
 
-						<Text variant="data" color="secondary" data-testid="token-metadata-id">
+						<Text variant="meta" color="secondary" data-testid="token-metadata-id">
 							{{ token?.id }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Contract Address </Text>
+						<Text variant="label-section" color="tertiary"> Contract Address </Text>
 
-						<Text @click="handleCopyAddress" variant="data" color="secondary" class="copyable" data-testid="token-metadata-address">
+						<Text @click="handleCopyAddress" variant="meta" color="secondary" class="copyable" data-testid="token-metadata-address">
 							{{ token.contract.slice(0, 6) }}
 							<Text color="tertiary">•••</Text>
 							{{ token.contract.slice(-4) }}
@@ -100,27 +103,27 @@ watch(
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Name </Text>
+						<Text variant="label-section" color="tertiary"> Name </Text>
 
 						<Text variant="value" color="secondary">
-							{{ token.name }}
+							{{ dashIfBlank(token.name) }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Symbol </Text>
+						<Text variant="label-section" color="tertiary"> Symbol </Text>
 
 						<Text variant="value" color="secondary">
-							{{ token.symbol }}
+							{{ dashIfBlank(token.symbol) }}
 						</Text>
 					</Flex>
 
 					<Flex align="center" justify="between">
-						<Text variant="label" color="tertiary"> Chain ID </Text>
+						<Text variant="label-section" color="tertiary"> Chain ID </Text>
 
 						<Tooltip position="end">
 							<Flex align="center" gap="4">
-								<Text variant="data" color="secondary" data-testid="token-metadata-chain-id">
+								<Text variant="meta" color="secondary" data-testid="token-metadata-chain-id">
 									{{ token.chainId }}
 								</Text>
 								<Icon name="info" size="12" color="secondary" />
@@ -138,13 +141,18 @@ watch(
 							<Text variant="label-section" color="secondary">{{ section.title }}</Text>
 						</Flex>
 
-						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between">
+						<Flex v-for="row in section.rows" :key="row.key" align="center" justify="between" :class="$style.capability">
 							<Flex direction="column" gap="6">
-								<Text variant="label" color="tertiary"> {{ row.label }} </Text>
-								<Text variant="data" color="secondary"> {{ row.key }} </Text>
+								<Text variant="label-section" color="tertiary"> {{ row.label }} </Text>
+								<Text variant="meta" color="secondary"> {{ row.key }} </Text>
 							</Flex>
 
-							<Icon :name="token[row.key] ? 'check-circle' : 'close-circle'" size="12" :color="token[row.key] ? 'green' : 'red'" />
+							<Icon
+								:name="token[row.key] ? 'square-check' : 'square-cross'"
+								size="12"
+								:color="token[row.key] ? 'green' : 'red'"
+								:class="$style.mark"
+							/>
 						</Flex>
 					</template>
 				</Flex>
@@ -158,5 +166,18 @@ watch(
 <style module>
 .wrapper {
 	composes: body from "./popup-shared.module.css";
+}
+
+/* Below the popup's width a capability's mark goes under its key, at the right, when the two do not
+ * fit side by side. */
+@media (width < 359px) {
+	.capability {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+
+	.capability > .mark {
+		margin-left: auto;
+	}
 }
 </style>

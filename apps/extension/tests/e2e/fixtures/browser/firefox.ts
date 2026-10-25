@@ -2,12 +2,12 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import * as puppeteer from "puppeteer"
 import type { Browser, ElementHandle, Page, Target } from "puppeteer"
 import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
+import { E2E_FIREFOX_REVISION } from "./firefox-revision"
 import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
@@ -24,6 +24,7 @@ import {
 } from "./ownership"
 import { WebDriverSession } from "./webdriver-classic"
 import { EGRESS_CANARY_HOST } from "../egress-guard"
+import { PollTimeoutError, pollUntil } from "../poll"
 
 const SCHEME = "moz-extension://"
 
@@ -63,7 +64,8 @@ function contextFor(browser: Browser): LaunchContext {
 
 export const classicSessionFor = (browser: Browser): WebDriverSession => contextFor(browser).session
 
-/** What reaching the toolbar popup takes: the privileged channel, and the id Firefox files the add-on under. */
+/** What reaching a document outside every tab (the toolbar popup, the sidebar) takes: the privileged
+ *  channel, and the id Firefox files the add-on under. */
 export const actionPopupContext = (browser: Browser): Pick<LaunchContext, "session" | "addonId"> => contextFor(browser)
 
 /**
@@ -92,7 +94,7 @@ export async function abandonSession(
 /** One sweep per process, before the first launch claims ports or writes a record. */
 let sweep: Promise<string[]> | undefined
 
-async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOptions): Promise<LaunchedBrowser> {
+async function launch({ extensionPath, userDataDir, headless, egress, grantPermissionRequests }: LaunchOptions): Promise<LaunchedBrowser> {
 	sweep ??= reapOrphanLaunches()
 	const reaped = await sweep
 	if (reaped.length) console.warn(`[firefox] reaped ${reaped.length} orphaned launch(es): ${reaped.join(", ")}`)
@@ -123,7 +125,7 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 		recordLaunch(record)
 
 		const running = () => gecko.exitCode === null && gecko.signalCode === null
-		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless, egress }), running)
+		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless, egress, grantPermissionRequests }), running)
 		try {
 			assertVersion(session.capabilities.browserVersion)
 			// Teardown owns a process by the marker in its environment. A Firefox that did not inherit
@@ -221,15 +223,6 @@ function geckodriverPath(): string {
 export const firefoxDirFor = (dirs: readonly string[], revision: string): string | undefined =>
 	dirs.find((dir) => dir.endsWith(`-${revision}`))
 
-/** The revision the locked Puppeteer installs. Exported at runtime but absent from the typings,
- *  so an upgrade that moves it fails here by name rather than as "no Firefox installed". */
-function lockedFirefoxRevision(): string {
-	const revision = (puppeteer as unknown as { PUPPETEER_REVISIONS?: { firefox?: string } }).PUPPETEER_REVISIONS?.firefox
-	if (!revision)
-		throw new Error("puppeteer no longer exports PUPPETEER_REVISIONS.firefox — set FIREFOX_PATH, or update lockedFirefoxRevision")
-	return revision
-}
-
 /**
  * Puppeteer's `executablePath({ browser: "firefox" })` builds the path from the CHROME build id,
  * so it names a directory that was never installed and geckodriver rejects it as "not a Firefox
@@ -243,11 +236,10 @@ function resolveFirefoxBinary(): string {
 	}
 	const root = path.join(process.env.PUPPETEER_CACHE_DIR ?? path.join(homedir(), ".cache", "puppeteer"), "firefox")
 	const installed = (existsSync(root) ? readdirSync(root) : []).filter((dir) => existsSync(path.join(root, dir, "firefox", "firefox")))
-	const revision = lockedFirefoxRevision()
-	const pinned = firefoxDirFor(installed, revision)
+	const pinned = firefoxDirFor(installed, E2E_FIREFOX_REVISION)
 	if (!pinned) {
 		throw new Error(
-			`Firefox ${revision} is not installed under ${root} — run \`bun x puppeteer browsers install firefox\` from apps/extension, or set FIREFOX_PATH`,
+			`Firefox ${E2E_FIREFOX_REVISION} is not installed under ${root} — run \`bun scripts/e2e/install-firefox.ts\` from apps/extension, or set FIREFOX_PATH`,
 		)
 	}
 	return path.join(root, pinned, "firefox", "firefox")
@@ -269,8 +261,10 @@ export const FIREFOX_LAUNCH_PREFS = {
  * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
  * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
  * loopback, which only a direct path would use. Each live host, compared exactly, goes direct and
- * resolves as usual. All prefs, since `failover_direct` and `localDomains` have no capability form,
- * and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
+ * resolves as usual. An empty train-hop base URL is New Tab's off state for the add-on update a Nimbus
+ * enrollment names, which Firefox 158 fetches from archive.mozilla.org on a fresh profile. All prefs,
+ * since `failover_direct` and `localDomains` have no capability form, and kept out of
+ * `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
  */
 export function egressGuardPrefs(guardPort: number, liveHosts: readonly string[] = []): Record<string, string | number | boolean> {
 	const live = liveHosts.map((host) => `\n\tif (host === ${JSON.stringify(host)}) return "DIRECT";`).join("")
@@ -283,17 +277,26 @@ export function egressGuardPrefs(guardPort: number, liveHosts: readonly string[]
 		"network.proxy.autoconfig_url": `data:text/javascript,${encodeURIComponent(pac)}`,
 		"network.proxy.failover_direct": false,
 		"network.dns.localDomains": EGRESS_CANARY_HOST,
+		"browser.newtabpage.trainhopAddon.xpiBaseURL": "",
 	}
 }
+
+/**
+ * `permissions.request` still needs the click's user input under this pref; it only skips the
+ * doorhanger. Kept out of `FIREFOX_LAUNCH_PREFS`, since users are asked.
+ */
+export const permissionRequestPrefs = { "extensions.webextOptionalPermissionPrompts": false }
 
 export function capabilities({
 	profileDir,
 	headless,
 	egress,
+	grantPermissionRequests,
 }: {
 	profileDir: string
 	headless: boolean
 	egress?: LaunchOptions["egress"]
+	grantPermissionRequests?: LaunchOptions["grantPermissionRequests"]
 }): Record<string, unknown> {
 	return {
 		// Asks geckodriver for a BiDi endpoint on the session it owns, which is what makes one
@@ -302,7 +305,11 @@ export function capabilities({
 		"moz:firefoxOptions": {
 			binary: resolveFirefoxBinary(),
 			args: ["-profile", profileDir, ...(headless ? ["-headless"] : [])],
-			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort, egress.liveHosts) } : FIREFOX_LAUNCH_PREFS,
+			prefs: {
+				...FIREFOX_LAUNCH_PREFS,
+				...(egress ? egressGuardPrefs(egress.guardPort, egress.liveHosts) : {}),
+				...(grantPermissionRequests ? permissionRequestPrefs : {}),
+			},
 		},
 	}
 }
@@ -345,13 +352,12 @@ async function hostFromWindows({ session }: LaunchContext): Promise<string | und
 
 async function discoverExtensionId(browser: Browser): Promise<string> {
 	const context = contextFor(browser)
-	const deadline = Date.now() + 30_000
-	while (Date.now() < deadline) {
-		const host = hostFromPrefs(context) ?? (await hostFromWindows(context).catch(() => undefined))
-		if (host) return host
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	throw new Error(`no per-profile UUID for ${context.addonId} in prefs.js and no open ${SCHEME} window after 30s`)
+	const host = await pollUntil(
+		async () => hostFromPrefs(context) ?? (await hostFromWindows(context).catch(() => undefined)),
+		(host) => Boolean(host),
+		{ label: `a per-profile UUID for ${context.addonId} in prefs.js or an open ${SCHEME} window`, timeoutMs: 30_000, intervalMs: 250 },
+	)
+	return host as string
 }
 
 /**
@@ -395,6 +401,34 @@ async function openScratchPage(browser: Browser, extensionId: string): Promise<P
  */
 const prepareClick = (page: Page): Promise<void> => page.bringToFront().catch(() => {})
 
+type BiDiPointerAction =
+	| { type: "pointerMove"; x: number; y: number }
+	| { type: "pointerDown" | "pointerUp"; button: number }
+	| { type: "pause"; duration: number }
+
+/** Puppeteer's BiDi mouse sends every `down` and `up` as a chain of its own, which Firefox never
+ *  counts as one double-click, so the whole sequence goes out as one chain on the page's context. */
+async function doubleClick(page: Page, x: number, y: number, gapMs: number): Promise<void> {
+	const frame = page.mainFrame() as unknown as {
+		browsingContext?: { performActions(sources: { type: "pointer"; id: string; actions: BiDiPointerAction[] }[]): Promise<void> }
+	}
+	if (!frame.browsingContext) throw new Error("doubleClick: the page's frame has no BiDi browsing context")
+	const press: BiDiPointerAction[] = [
+		{ type: "pointerDown", button: 0 },
+		{ type: "pointerUp", button: 0 },
+	]
+	// Through Puppeteer's mouse first, so its record of where the pointer stands stays true; the chain
+	// then drives the same input source, and a move to where it already stands changes nothing.
+	await page.mouse.move(x, y)
+	await frame.browsingContext.performActions([
+		{
+			type: "pointer",
+			id: "__puppeteer_mouse",
+			actions: [{ type: "pointerMove", x: Math.round(x), y: Math.round(y) }, ...press, { type: "pause", duration: gapMs }, ...press],
+		},
+	])
+}
+
 const KEYS_FOCUS_BUDGET_MS = 5_000
 const KEYS_FOCUS_ATTEMPT_MS = 500
 
@@ -403,18 +437,20 @@ const KEYS_FOCUS_ATTEMPT_MS = 500
  * a bringToFront made in between; so `page` is brought forward again until it reports focus.
  */
 async function prepareKeys(page: Page): Promise<void> {
-	const deadline = Date.now() + KEYS_FOCUS_BUDGET_MS
-	while (Date.now() < deadline) {
+	const focus = async () => {
 		await page.bringToFront()
-		const focused = await page
+		return page
 			.waitForFunction(() => document.hasFocus(), { timeout: KEYS_FOCUS_ATTEMPT_MS, polling: 50 })
 			.then(
 				() => true,
 				() => false,
 			)
-		if (focused) return
 	}
-	throw new Error(`prepareKeys: the page did not take focus within ${KEYS_FOCUS_BUDGET_MS / 1000}s`)
+	await pollUntil(focus, (focused) => focused, {
+		label: "prepareKeys: the page taking focus",
+		timeoutMs: KEYS_FOCUS_BUDGET_MS,
+		intervalMs: 0,
+	})
 }
 
 const BACKGROUND_NOT_RUNNING = "the background page is not running"
@@ -634,14 +670,19 @@ async function holdNextCredentialGet(page: Page): Promise<void> {
 
 /** `targets()` is a synchronous read of Puppeteer's own map, so a tight poll costs no round trip. */
 async function waitForTarget(browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target> {
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		const match = browser.targets().find(predicate)
-		if (match) return match
-		await new Promise((resolve) => setTimeout(resolve, 100))
+	try {
+		const match = await pollUntil(
+			async () => browser.targets().find(predicate),
+			(match) => match !== undefined,
+			{ label: "waitForTarget: a matching target", timeoutMs: timeout, intervalMs: 100 },
+		)
+		return match as Target
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		// The e2e-testing skill's triage rows key on this exact text.
+		const failure = `waitForTarget: no matching target after ${timeout}ms`
+		throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 	}
-	const failure = `waitForTarget: no matching target after ${timeout}ms`
-	throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 }
 
 const INVENTORY_BUDGET_MS = 5_000
@@ -696,13 +737,12 @@ async function waitForNewTab(browser: Browser, open: () => Promise<void>, timeou
 	const session = classicSessionFor(browser)
 	const before = new Set(await session.listWindows())
 	await open()
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		const handle = (await session.listWindows()).find((listed) => !before.has(listed))
-		if (handle) return { close: () => closeTab(session, handle) }
-		await pause(100)
-	}
-	throw new Error(`waitForNewTab: no new tab or window after ${timeout}ms`)
+	const handle = await pollUntil(
+		async () => (await session.listWindows()).find((listed) => !before.has(listed)),
+		(handle) => handle !== undefined,
+		{ label: "waitForNewTab: a new tab or window", timeoutMs: timeout, intervalMs: 100 },
+	)
+	return { close: () => closeTab(session, handle as string) }
 }
 
 /** By handle, from Firefox's own scope: a classic close would switch to the tab first, which selects it. */
@@ -721,11 +761,11 @@ async function closeTab(session: WebDriverSession, handle: string): Promise<void
 	)
 	if (outcome !== "removing" && outcome !== "gone") throw new Error(`closeTab: ${outcome}`)
 	// `removeTab` can return with the tab still open: a refused unload, or a last tab's window closing.
-	const deadline = Date.now() + 5_000
-	while ((await session.listWindows()).includes(handle)) {
-		if (Date.now() >= deadline) throw new Error(`closeTab: ${handle} is still open 5s after removeTab`)
-		await pause(100)
-	}
+	await pollUntil(
+		async () => (await session.listWindows()).includes(handle),
+		(open) => !open,
+		{ label: `closeTab: ${handle} closed after removeTab`, timeoutMs: 5_000, intervalMs: 100 },
+	)
 }
 
 /**
@@ -804,6 +844,10 @@ export const firefoxDriver: BrowserDriver = {
 	credentialOutlivesPage: true,
 	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
+	// A temporary install over the installed add-on is an update to it; the UUID and storage stay.
+	reinstallExtension: async (browser, extensionPath) => {
+		await contextFor(browser).session.installAddon(extensionPath)
+	},
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	discoverExtensionId,
 	gotoExtensionPage,
@@ -815,11 +859,15 @@ export const firefoxDriver: BrowserDriver = {
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,
 	prepareKeys,
+	doubleClick,
 	pickFile,
 	virtualAuthenticator: sessionAuthenticator,
 	holdNextCredentialGet,
 	pxeHostState: (page) => evaluateInBackgroundPage<PxeHostState>(page.browser(), PXE_HOST_STATE),
+	closePxeHost: async () => {},
 	stopBackground,
+	allowSelfRestart: async () => {},
+	backgroundOrigin: (browser) => backgroundTimeOrigin(browser),
 	backgroundAlive: async (browser) => (await backgroundTimeOrigin(browser)) !== undefined,
 	evaluateInBackground: (browser, _extensionId, body) => evaluateInBackgroundPage(browser, inPageRealm(body)),
 	// Firefox reports a closed window as a missing browsing context, per command.

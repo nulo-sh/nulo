@@ -1,9 +1,16 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import ConnectedApps from "./index.vue"
 
-type Session = { id: string; expiry: number; dappMetadata: { name: string; url: string } }
+type Session = {
+	id: string
+	expiry: number
+	dappMetadata: { name: string; url: string }
+	verificationHash?: string
+	capabilityGrants?: Array<{ capability: { type: string } }>
+}
 
 const mocks = vi.hoisted(() => ({
 	getDappSessions: vi.fn(),
@@ -26,12 +33,10 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -61,7 +66,6 @@ async function mountPage(sessions: Session[]) {
 				Tooltip: { template: "<div><slot /></div>" },
 				RowAction: { template: "<button><slot /></button>" },
 				Icon: true,
-				MaterialIcon: true,
 			},
 		},
 	})
@@ -88,5 +92,24 @@ describe("Settings › Connected apps — session delete reducer", () => {
 		mocks.deleted[0](session("s9", "zeta", 9))
 		await flushPromises()
 		expect(w.findAll('[data-testid="connected-app-row"]')).toHaveLength(1)
+	})
+})
+
+describe("Settings › Connected apps — a row no connection reached", () => {
+	const NOT_CONNECTED = '[data-testid="connected-app-row-not-connected"]'
+
+	test("reads as allowed and not connected yet; a row a connection reached shows its grants instead (control)", async () => {
+		const w = await mountPage([
+			{ ...session("s1", "alpha", 1) },
+			{
+				...session("s2", "beta", 2),
+				verificationHash: "ab".repeat(32),
+				capabilityGrants: [{ capability: { type: "accounts" } }],
+			} as Session,
+		])
+		const rows = w.findAll('[data-testid="connected-app-row"]').map((row) => row.element.parentElement as HTMLElement)
+		expect(rows[0].querySelector(NOT_CONNECTED)?.textContent?.trim()).toBe("Allowed. Not connected yet.")
+		expect(rows[1].querySelector(NOT_CONNECTED)).toBeNull()
+		expect(rows[1].textContent).toContain("Accounts")
 	})
 })

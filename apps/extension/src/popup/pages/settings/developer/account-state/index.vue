@@ -18,7 +18,6 @@
 				to="/popup/settings/developer/account-state/notes"
 				title="Notes"
 				description="View all notes"
-				materialIcon="note_alt"
 				chevron
 				data-testid="setting-nav-advanced-account-state-notes"
 			/>
@@ -27,7 +26,6 @@
 				to="/popup/settings/developer/account-state/authwits"
 				title="Authwits"
 				description="View all authwits"
-				materialIcon="verified_user"
 				chevron
 				data-testid="setting-nav-advanced-account-state-authwits"
 			/>
@@ -36,7 +34,6 @@
 				to="/popup/settings/developer/account-state/contracts"
 				title="Contracts"
 				description="View all contracts"
-				materialIcon="receipt_long"
 				chevron
 				data-testid="setting-nav-advanced-account-state-contracts"
 			/>
@@ -45,7 +42,6 @@
 				to="/popup/settings/developer/account-state/senders"
 				title="Senders"
 				description="View all senders"
-				materialIcon="inbox"
 				chevron
 				data-testid="setting-nav-advanced-account-state-senders"
 			/>

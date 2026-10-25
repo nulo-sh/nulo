@@ -34,13 +34,14 @@ const cacheStoreState: {
 } = { importContacts: [], importPromise: null }
 
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock, updateToast: vi.fn() }),
+	useToast: () => ({ toast: { value: null }, openToast: openToastMock, updateToast: vi.fn() }),
 }))
-vi.mock("@/utils", () => ({
+vi.mock("@/utils", async (importOriginal) => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
+	profileFileNameSegment: (await importOriginal<typeof import("@/utils")>()).profileFileNameSegment,
 	sanitizeString: (s: unknown, max: number) =>
 		String(s ?? "")
 			.trim()

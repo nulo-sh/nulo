@@ -5,7 +5,8 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { BUNDLED_TOKEN_CLASS_IDS } from "@nulo/token-list"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
@@ -65,7 +66,13 @@ vi.mock("@/wallet/services/fpc/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return {
+			disconnect: vi.fn(),
+			onTokenAdded: new EventHandler(),
+			onTokenUpdated: new EventHandler(),
+			onTokenDeleted: new EventHandler(),
+			getTokens: mocks.getTokens,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -73,6 +80,7 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 		return {
 			connect: vi.fn(),
 			disconnect: vi.fn(),
+			onConnected: new EventHandler(),
 			onTokenBalanceAdded: new EventHandler(),
 			onTokenBalanceUpdated: new EventHandler(),
 			onTokenBalanceDeleted: new EventHandler(),
@@ -108,9 +116,13 @@ vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
 		return { connect: vi.fn(), disconnect: vi.fn(), onTransactionAdded: new EventHandler(), onTransactionUpdated: new EventHandler() }
 	}),
 }))
+const { readFeePicks } = await vi.hoisted(() => import("../../../tests/helpers/ui-preference-fake"))
 vi.mock("@/utils/core", () => ({
 	managers: {
-		profile: { saveFeePick: vi.fn(async () => true) },
+		uiPreference: {
+			getFeePicks: (profileId: string) => readFeePicks(chrome.storage.local, profileId),
+			saveFeePick: vi.fn(async () => true),
+		},
 		legal: {
 			onAcceptanceChanged: new EventHandler(),
 			onConnected: new EventHandler(),
@@ -137,6 +149,7 @@ import { INIT_RETRY_BACKOFF_MS } from "@/stores/balances.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { PriceServiceClient } from "@/wallet/services/price/client"
+import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import Send from "./send.vue"
 
@@ -144,7 +157,6 @@ const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i />" },
-	MaterialIcon: { template: "<i />" },
 	Tooltip: { template: '<div><slot /><slot name="content" /></div>' },
 	SubPageHeader: { template: "<header />" },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },
@@ -162,16 +174,26 @@ const STUBS = {
 	},
 	AmountCard: {
 		template: '<input data-testid="stub-amount" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote() {} },
 	},
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "isQueued", "queuedCap"],
+		props: ["estimate", "isEstimating", "isQueued", "queuedCap", "payer"],
 		template:
-			'<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" :data-cap="queuedCap?.cap.amount" />',
+			'<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" :data-cap="queuedCap?.cap.amount" :data-payer="payer" />',
 	},
 	FeePriorityRow: { template: '<div data-testid="stub-fee-priority" />' },
 	DropdownRoot: { template: '<div data-testid="stub-dropdown"><slot name="trigger" /><slot name="popup" /></div>' },
@@ -214,17 +236,8 @@ const FUNDING = {
 	},
 } satisfies Record<string, Funding>
 
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
-function deferred<T>(): Deferred<T> {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
-
 /** What a landed estimate answers when a test names none. */
-const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const LANDED = { maxFee: "1000", gasDetails: {} }
 
 /** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
 async function estimateLands() {
@@ -232,7 +245,10 @@ async function estimateLands() {
 	await flushPromises()
 }
 
-async function mountSend(funding: Funding, opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean } = {}) {
+async function mountSend(
+	funding: Funding,
+	opts: { storage?: Record<string, unknown>; holdGas?: boolean; realTokenCard?: boolean; realFeeRow?: boolean } = {},
+) {
 	vi.useFakeTimers()
 	installChromeStorage(opts.storage ?? funding.storage ?? {})
 	mocks.getFpcs.mockResolvedValue(funding.fpcs)
@@ -251,7 +267,7 @@ async function mountSend(funding: Funding, opts: { storage?: Record<string, unkn
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realFeeRow && { FeeCostReadout: false }) },
 		},
 	})
 	await flushPromises()
@@ -285,7 +301,16 @@ function settled(w: W) {
 	return { action, you, to: strip(w).attributes("data-to"), amount: strip(w).attributes("data-amount") }
 }
 
-const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[6] as { paymentMethod: unknown } | undefined)?.paymentMethod
+function balanceUpdated() {
+	const client = vi.mocked(TokenBalanceServiceClient).mock.results.at(-1)?.value as unknown as {
+		onTokenBalanceUpdated: EventHandler<unknown>
+	}
+	return client.onTokenBalanceUpdated
+}
+
+const submittedFee = () => (mocks.executeTransfer.mock.calls[0]?.[7] as { paymentMethod: unknown } | undefined)?.paymentMethod
+/** The submitted estimate id, queued cap and shown fee, in their positions. */
+const submittedFigures = () => mocks.executeTransfer.mock.calls[0]?.slice(8)
 
 beforeEach(() => {
 	document.body.innerHTML = '<div id="popup"></div>'
@@ -352,6 +377,9 @@ describe.each(SWEEP)("send page with the real fee card — %s, %s origin", (fund
 		} else {
 			expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 			expect(submittedFee()).toMatchObject(fee)
+			// Only a fee the person pays (Fee Juice, or the PrivateFPC `p1`) is held to the figure shown.
+			const ownFee = fee.kind === "fj" || fee.fpcId === "p1"
+			expect(submittedFigures()).toEqual([undefined, undefined, ownFee ? LANDED.maxFee : undefined])
 			expect(sheetOpen(w)).toBe(false)
 		}
 		w.unmount()
@@ -379,6 +407,37 @@ describe("send page with the real fee card — nothing to send", () => {
 		expect(w.find('[data-testid="send-submit"]').exists()).toBe(false)
 		expect(w.get('[data-testid="send-get-fee-juice"]').text()).toBe("Get private gas")
 		expect(strip(w).attributes("data-you")).toBe("unknown")
+		w.unmount()
+	})
+})
+
+describe("send page — the caveat under the strip for a token outside the validated classes", () => {
+	const caveat = (w: W) => w.find('[data-testid="send-token-caveat"]')
+
+	test.each([
+		["another class", `0x${"1".repeat(64)}`],
+		["no class", undefined],
+	])("a token of %s carries the caveat under the strip", async (_case, classId) => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(true)
+		expect(caveat(w).text()).toBe("Nulo can't check this token's contract. What a send publishes depends on its code.")
+		w.unmount()
+	})
+
+	test("a token of a validated class carries none (control)", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId: BUNDLED_TOKEN_CLASS_IDS[0] }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(true)
+		expect(caveat(w).exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("a token that cannot send has no strip and no caveat", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, hasPrivateTransfers: false, hasPublicTransfers: false }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		expect(w.find('[data-testid="send-publish-strip"]').exists()).toBe(false)
+		expect(caveat(w).exists()).toBe(false)
 		w.unmount()
 	})
 })
@@ -525,6 +584,21 @@ describe("send page with the real fee card — transitions", () => {
 		w.unmount()
 	})
 
+	test("a send the person pays that was not queued carries its estimate id and the fee the estimate showed", async () => {
+		vi.useFakeTimers()
+		mocks.estimateTransferFee.mockResolvedValue({ ...LANDED, estimateId: "est-9" })
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		await fillForm(w)
+		await estimateLands()
+		await submit(w).trigger("click")
+		vi.advanceTimersByTime(REVIEW_ARM_MS)
+		await nextTick()
+		await w.get('[data-testid="send-review-submit"]').trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		expect(submittedFigures()).toEqual(["est-9", undefined, LANDED.maxFee])
+		w.unmount()
+	})
+
 	test("an account switch while the sheet is open closes it, and its send event then sends nothing", async () => {
 		vi.useFakeTimers()
 		const { w, appStore } = await mountSend(FUNDING["public Fee Juice only"])
@@ -569,7 +643,7 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 		fpcs: [PRIVATE_FPC, { ...SPONSOR, address: SPONSOR_AT }],
 		storage: { [SEND_PICKS]: { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "s1" } } } } },
 	}
-	const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+	const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 	const SHORT = { ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded: false } }
 	const notice = (w: W) => w.find('[data-testid="fee-sponsor-short"]')
 	/** The menu item is unresolved here, so its `disabled` prop lands as an attribute. */
@@ -622,9 +696,23 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 	})
 })
 
+describe("send page with the real fee card — its price reads", () => {
+	test("the page and its fee card each ask for a stale-on-connect refresh, at mount and after a reconnect", async () => {
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		const clients = vi.mocked(PriceServiceClient).mock.results.map(({ value }) => value)
+		const refreshes = () => clients.map((client) => vi.mocked(client.refreshIfStale).mock.calls.length)
+		// The page's own client, then the card's.
+		expect(refreshes()).toEqual([1, 1])
+		for (const client of clients) client.onConnected.invoke()
+		await flushPromises()
+		expect(refreshes()).toEqual([2, 2])
+		w.unmount()
+	})
+})
+
 describe("send page with the real fee card — the review sheet's fee", () => {
 	test("repeats the card's dollars, never the page's own quote", async () => {
-		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, maxFeeFormatted: "1", gasDetails: {} })
+		mocks.estimateTransferFee.mockResolvedValue({ maxFee: HELD, gasDetails: {} })
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
 		await fillForm(w)
 		await estimateLands()
@@ -664,7 +752,7 @@ describe("send page — the real token card while the tokens load", () => {
 })
 
 describe("send page — an estimate queued behind an earlier send", () => {
-	const ESTIMATE = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+	const ESTIMATE = { maxFee: "1000", gasDetails: {} }
 	const QUEUED = { queued: true, tokenSpent: false }
 	const queuedRow = (w: W) => w.get('[data-testid="stub-fee-cost"]').attributes("data-queued") === "true"
 	const sendDisabled = (w: W) => submit(w).attributes("disabled") !== undefined
@@ -718,21 +806,44 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(sendDisabled(w)).toBe(false)
 		await strip(w).trigger("click")
 		expect(w.get('[data-testid="send-review-fee-cap"]').text()).toBe(
-			"Fee up to 4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
+			"Fee up to ~4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
 		)
 		await closeSheet(w)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
-		expect(args[7]).toBeUndefined()
-		expect(args[8]).toBe("4472280000000000000")
+		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBe("4472280000000000000")
+		expect(args[10]).toBeUndefined()
 		w.unmount()
 	})
 
-	test("with a cap and a sponsor paying: the queued row stays, Send stays disabled, nothing is sent", async () => {
+	test("Nulo's sponsor paying: the answered row and Queue send, which sends no cap and no estimate to reuse", async () => {
+		// The answer carries a cap, as one for a self-paid shape would: a send nobody caps must not take it.
 		const { w } = await queuedPrivately(FUNDING["no gas, a sponsor"])
 		expect(queuedRow(w)).toBe(true)
+		expect(w.get('[data-testid="stub-fee-cost"]').attributes("data-payer")).toBe("sponsor")
 		expect(capShown(w)).toBeUndefined()
+		expect(submit(w).text()).toBe("Queue send")
+		expect(sendDisabled(w)).toBe(false)
+		await strip(w).trigger("click")
+		expect(w.get('[data-testid="send-review-fee-queued"]').text()).toBe("Fee · Goes out after your earlier send.")
+		expect(w.get('[data-testid="send-review-submit"]').text()).toBe("Queue send")
+		await closeSheet(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
+		expect(args[7]).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		expect(args[8]).toBeUndefined()
+		expect(args[9]).toBeUndefined()
+		expect(args[10]).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a sponsor added by hand: the queued row stays, Send stays disabled, nothing is sent", async () => {
+		const { w } = await queuedPrivately(FUNDING["no gas, a hand-added sponsor picked"])
+		expect(queuedRow(w)).toBe(true)
+		expect(w.get('[data-testid="stub-fee-cost"]').attributes("data-payer")).toBe("unvouched")
 		expect(submit(w).text()).toBe("Confirm Transaction")
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")
@@ -822,7 +933,7 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		const { w } = await mountSend(PUBLIC_FJ)
 		await fillForm(w)
 		await estimateLands()
-		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to ~0.0021 FJ. You have 0.0015 FJ.")
 		expect(sendDisabled(w)).toBe(true)
 		await submit(w).trigger("click")
 		expect(mocks.executeTransfer).not.toHaveBeenCalled()
@@ -831,6 +942,42 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		await estimateLands()
 		expect(w.find('[data-testid="fee-juice-shortfall"]').exists()).toBe(false)
 		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("an amount over the balance asks nothing; the balance rising to cover it asks for that amount and turns it on", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"])
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		expect(sendDisabled(w)).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(6_000_000n)
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("the fee row reads the same hint for an amount typed over the balance and for a landed amount the balance falls below", async () => {
+		const { w } = await mountSend(FUNDING["no gas, a sponsor"], { realFeeRow: true })
+		const row = () => w.getComponent({ name: "FeeCostReadout" })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("6")
+		await estimateLands()
+		expect(row().text()).toBe("Fee estimated after simulation")
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await estimateLands()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(row().find('[data-testid="fee-estimate"]').exists()).toBe(false)
+		expect(row().text()).toBe("Fee estimated after simulation")
 		w.unmount()
 	})
 

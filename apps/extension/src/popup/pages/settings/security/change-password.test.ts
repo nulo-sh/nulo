@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 
 const profileClient = vi.hoisted(() => ({ changeProfilePassword: vi.fn(async () => undefined), disconnect: vi.fn() }))
 vi.mock("@/wallet/services/profile/client", () => ({
@@ -12,7 +13,7 @@ const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
-import { Flex, Icon, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../../../tests/helpers/press-key"
 import {
 	enterOn,
@@ -34,7 +35,7 @@ async function mountWithValidFields() {
 			plugins: [
 				createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: { id: "p1", name: "Main", type: "password" } } } }),
 			],
-			components: { Flex, Icon, Input, MaterialIcon, SubPageHeader, Text },
+			components: { Flex, Icon, Input, SubPageHeader, Text },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
 				ItemsContainer: { template: "<div><slot /></div>" },
@@ -54,11 +55,7 @@ const submit = (w: VueWrapper) => w.get('[data-testid="change-password-submit-bt
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -93,8 +90,7 @@ describe("change password — Enter does what the focused control says", () => {
 
 	test("(preservation) Enter in the repeat field changes the password once", async () => {
 		const w = await mountWithValidFields()
-		const field = w.get('[data-testid="new-password-repeat-input"] input').element
-		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+		enterOn(w.get('[data-testid="new-password-repeat-input"] input').element)
 		await flushPromises()
 		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
 	})
@@ -130,7 +126,7 @@ describe("change password — the credential fields' controls", () => {
 						initialState: { app: { profile: { id: "p1", name: "Main", type: "password" } } },
 					}),
 				],
-				components: { Flex, Icon, Input, MaterialIcon, SubPageHeader, Text },
+				components: { Flex, Icon, Input, SubPageHeader, Text },
 				stubs: {
 					Button: { template: "<button><slot /></button>" },
 					ItemsContainer: { template: "<div><slot /></div>" },

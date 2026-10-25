@@ -15,6 +15,7 @@ import { usePopupStore } from "@/stores/popup.store.ts"
 
 /** Utils */
 import { copyWithToast } from "@/utils/clipboard"
+import { endsSelection } from "@/utils/selection"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("receive")
@@ -26,7 +27,8 @@ const props = defineProps({
 
 const account = computed(() => appStore.account)
 
-const handleCopyAddress = () => {
+const handleCopyAddress = (e) => {
+	if (endsSelection(e)) return
 	void copyWithToast(appStore.account.address, openToast, "Address is copied")
 }
 
@@ -48,7 +50,7 @@ watch(
 		<PopupCard :displaceIdx="depth">
 			<Flex wide align="center" direction="column" gap="24" :class="$style.wrapper">
 				<Flex align="center" gap="6">
-					<Icon name="arrow-bottom-circle" size="16" color="primary" />
+					<Icon name="receive" size="16" color="primary" />
 					<Text variant="title-page" color="primary"> Receive </Text>
 				</Flex>
 

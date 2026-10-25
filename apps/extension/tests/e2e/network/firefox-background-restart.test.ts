@@ -5,23 +5,21 @@ import { type BackgroundIdentity, backgroundIdentity } from "../fixtures/browser
 import { openPopup, test, type ExtensionContext } from "../fixtures/extension"
 import { unlockAfterBackgroundDeath } from "../fixtures/helpers"
 import { openPlayground } from "../fixtures/playground"
+import { pollUntil } from "../fixtures/poll"
 import { reconnectPlayground, sendDefaultTx } from "../fixtures/send"
 import { mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
 /** Resolves with the identity of a background page newer than `previous`, or rejects after `timeout` ms. */
 async function waitForNewBackground(browser: Browser, previous: BackgroundIdentity, timeout: number): Promise<BackgroundIdentity> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const identity = await backgroundIdentity(browser).catch(() => undefined)
-		if (identity && identity.timeOrigin !== previous.timeOrigin) return identity
-		if (Date.now() > deadline) throw new Error(`no new background page after ${timeout}ms`)
-		await sleep(250)
-	}
+	const identity = await pollUntil(
+		() => backgroundIdentity(browser).catch(() => undefined),
+		(identity) => identity !== undefined && identity.timeOrigin !== previous.timeOrigin,
+		{ label: "a new background page", timeoutMs: timeout, intervalMs: 250 },
+	)
+	return identity as BackgroundIdentity
 }
 
 /** Assert the lock on `popup`, unlock, open a fresh dApp page, connect, and re-request the granted bundle. */

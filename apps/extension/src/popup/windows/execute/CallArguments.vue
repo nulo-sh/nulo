@@ -5,7 +5,20 @@
  */
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { safeWire } from "./humanize"
-import { type CallSurface, RAW_NOTICE, amountLabel, nonceValue, rawToggleLabel, valueText, valueTitle } from "./call-surface"
+import {
+	type CallSurface,
+	amountLabel,
+	LABELS_LINE,
+	LABELS_TITLE,
+	nonceValue,
+	RAW_LINE,
+	RAW_TITLE,
+	rawToggleLabel,
+	valueText,
+	valueTitle,
+} from "./call-surface"
+import ArgsNotice from "./ArgsNotice.vue"
+import DetailsToggle from "./DetailsToggle.vue"
 
 const props = defineProps<{
 	surface: CallSurface
@@ -17,9 +30,15 @@ const props = defineProps<{
 	prefix: string
 	/** Whether the request's JSON view carries this call, so capped rows can point there. */
 	jsonView?: boolean
+	/** Every value prints whole, an address as its own text with no name in its place; the
+	 *  `this account` sender, which only a surface read with caller context carries, is not covered. */
+	full?: boolean
+	/** Carries the window's closing advice; `OperationCard` picks the one notice. */
+	advice?: boolean
 }>()
 
 const rawOpen = ref(false)
+const rawArgsId = useId()
 const amount = computed(() =>
 	props.surface.kind === "transfer" || props.surface.kind === "mint"
 		? amountLabel(props.tokens, props.chainId, props.contract, props.surface.amount)
@@ -37,50 +56,61 @@ const nonce = computed(() =>
 		:data-intent-kind="surface.kind"
 		direction="column"
 		gap="2"
-		:class="$style.block"
+		:class="[$style.block, full && $style.full]"
 	>
 		<!-- The sender is rendered even when the call carries none: a dApp can spend from another
 		     account it names, and the entrypoint spends from nobody. -->
 		<Flex v-if="surface.kind === 'transfer'" :data-testid="`${prefix}-transfer-sender`" :data-sender-kind="surface.sender.kind" justify="between" :class="$style.row">
 			<template v-if="surface.sender.kind === 'none'">
-				<Text variant="label" color="secondary">Caller:</Text>
+				<Text variant="label-section" color="secondary">Caller:</Text>
 				<Text variant="value" color="primary">none</Text>
 			</template>
 			<template v-else-if="surface.sender.kind === 'account'">
-				<Text variant="label" color="secondary">From:</Text>
+				<Text variant="label-section" color="secondary">From:</Text>
 				<Text variant="value" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />)</Text></Text>
 			</template>
 			<template v-else>
-				<Text variant="label" color="secondary">From:</Text>
-				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
+				<Text variant="label-section" color="secondary">From:</Text>
+				<Text v-if="full" :data-testid="`${prefix}-transfer-sender-address`" variant="meta" color="primary">{{ surface.sender.address }}</Text>
+				<AddressDisplay v-else :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
-			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
+			<Text variant="label-section" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
+			<Text v-if="full" :data-testid="`${prefix}-transfer-to`" variant="meta" color="primary">{{ surface.to }}</Text>
+			<AddressDisplay v-else :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">Amount:</Text>
-			<Text :data-testid="`${prefix}-amount`" variant="data" color="primary">
+			<Text variant="label-section" color="secondary">Amount:</Text>
+			<Text :data-testid="`${prefix}-amount`" variant="meta" color="primary">
 				{{ amount?.text }}
 				<Text v-if="amount?.symbol" variant="meta">{{ amount.symbol }}</Text>
 				<Text v-else color="tertiary">base units</Text>
 			</Text>
 		</Flex>
 		<Flex v-if="nonce" :data-testid="`${prefix}-transfer-nonce`" justify="between" :class="$style.row">
-			<Text variant="label" color="secondary">Authwit nonce:</Text>
+			<Text variant="label-section" color="secondary">Authwit nonce:</Text>
 			<Text
 				:data-testid="`${prefix}-transfer-nonce-value`"
-				variant="data"
+				variant="meta"
 				color="primary"
 				:title="valueTitle(nonce)"
 			>
-				{{ valueText(nonce) }}
+				{{ valueText(nonce, full) }}
 			</Text>
 		</Flex>
 	</Flex>
 
-	<Flex v-else-if="surface.kind === 'decoded'" :data-testid="`${prefix}-decoded-args`" direction="column" gap="2" :class="$style.block">
+	<Flex
+		v-else-if="surface.kind === 'decoded'"
+		:data-testid="`${prefix}-decoded-args`"
+		direction="column"
+		gap="2"
+		:class="[$style.block, full && $style.full]"
+	>
+		<Flex v-if="surface.labels === 'unchecked'" direction="column" gap="4" :class="$style.notice">
+			<ArgsNotice :title="LABELS_TITLE" :body="LABELS_LINE" :prefix="prefix" kind="labels" />
+		</Flex>
 		<Flex
 			v-for="(p, m) in surface.params"
 			:key="m"
@@ -90,16 +120,16 @@ const nonce = computed(() =>
 			justify="between"
 			:class="$style.row"
 		>
-			<Text variant="label" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
-			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
+			<Text :data-testid="`${prefix}-decoded-param-name`" variant="label-section" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
+			<AddressDisplay v-if="p.value.kind === 'address' && !full" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
 				:data-testid="`${prefix}-decoded-param-value`"
-				variant="data"
+				variant="meta"
 				color="primary"
 				:title="valueTitle(p.value)"
 			>
-				{{ valueText(p.value) }}
+				{{ valueText(p.value, full) }}
 			</Text>
 		</Flex>
 	</Flex>
@@ -108,30 +138,30 @@ const nonce = computed(() =>
 		Reading arguments…
 	</Text>
 
-	<Flex v-else :data-testid="`${prefix}-unverified-args`" :data-reason="surface.reason" direction="column" gap="4" :class="$style.block">
-		<Flex align="center" gap="4">
-			<Icon name="warning" size="12" color="orange" />
-			<Text :data-testid="`${prefix}-unverified-warning`" variant="body" color="orange">Can't read the arguments</Text>
-		</Flex>
-		<Text variant="body" color="tertiary">{{ RAW_NOTICE[surface.reason] }} Check what the app says this does before approving.</Text>
-		<button
+	<Flex
+		v-else
+		:data-testid="`${prefix}-unverified-args`"
+		:data-reason="surface.reason"
+		direction="column"
+		gap="4"
+		:class="[$style.block, full && $style.full]"
+	>
+		<ArgsNotice :title="RAW_TITLE" :body="RAW_LINE[surface.reason]" :prefix="prefix" kind="unverified" :advice="advice" />
+		<DetailsToggle
 			v-if="surface.rows.length"
-			type="button"
 			:data-testid="`${prefix}-raw-toggle`"
-			:aria-expanded="rawOpen"
-			:class="$style.toggle"
+			:open="rawOpen"
+			:controls="rawArgsId"
+			:label="rawToggleLabel(surface.rows.length + surface.hidden, rawOpen)"
 			@click="rawOpen = !rawOpen"
-		>
-			<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, rawOpen && $style.chevron_open]" />
-			<Text variant="label" color="secondary">{{ rawToggleLabel(surface.rows.length + surface.hidden, rawOpen) }}</Text>
-		</button>
-		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
+		/>
+		<Flex v-if="rawOpen" :id="rawArgsId" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
-				<Text variant="label" color="secondary">#{{ m }}</Text>
-				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="data" color="primary" :title="row.full">
-					{{ row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
+				<Text variant="label-section" color="secondary">#{{ m }}</Text>
+				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="meta" color="primary" :title="row.full">
+					{{ full ? row.full : row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
 				</Text>
-				<Text v-else-if="row.kind === 'text'" variant="data" color="primary">{{ row.value }}</Text>
+				<Text v-else-if="row.kind === 'text'" variant="meta" color="primary">{{ full ? row.full : row.value }}</Text>
 				<Text v-else variant="value" color="tertiary">(unreadable)</Text>
 			</Flex>
 			<Text v-if="surface.hidden" :data-testid="`${prefix}-args-more`" variant="meta" color="tertiary">
@@ -144,6 +174,10 @@ const nonce = computed(() =>
 <style module>
 .block {
 	width: 100%;
+}
+
+.notice {
+	margin-bottom: 6px;
 }
 
 /* A dApp's artifact names each parameter and supplies its value; either may run long and unbroken. */
@@ -161,23 +195,30 @@ const nonce = computed(() =>
 	}
 }
 
-.toggle {
-	display: inline-flex;
-	align-items: center;
-	align-self: flex-start;
-	gap: 4px;
-	padding: 2px 0;
-	border: 0;
-	background: none;
-	cursor: pointer;
-	font: inherit;
+/* A whole value takes the row's full width, under its name, not the width its name leaves. */
+.full .row {
+	flex-direction: column;
+	gap: 2px;
+
+	> :last-child {
+		text-align: left;
+	}
 }
 
-.chevron {
-	transition: transform 120ms ease;
-}
+/* Below the popup's width a value goes under its name, at the right, when the two do not fit side by
+ * side, so a name breaks only inside a word wider than the card. */
+@media (width < 359px) {
+	.block:not(.full) .row {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
 
-.chevron_open {
-	transform: rotate(90deg);
+	.block:not(.full) .row > :first-child {
+		overflow-wrap: break-word;
+	}
+
+	.block:not(.full) .row > :last-child {
+		margin-left: auto;
+	}
 }
 </style>

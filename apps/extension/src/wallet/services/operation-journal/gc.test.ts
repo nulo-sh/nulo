@@ -18,6 +18,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { JournalGC } from "./gc"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
 import type { NewOperationInput } from "./spec"
 
@@ -34,6 +35,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("p-a", "p-b", "profile-a", "profile-b"))
 	services.add(service)
 	await services.start()
 	return { api, service, logger }
@@ -54,6 +56,44 @@ async function makeFailed(service: OperationJournalService, input: NewOperationI
 	await service.transitionOperation(rec.id, { stage: "failed" }, { kind: "simulation", message: "boom", normalizedRaw: null })
 	return rec.id
 }
+
+const DAPP_SEND: NewOperationInput = {
+	kind: "dapp_execute",
+	origin: "dapp",
+	profileId: "profile-a",
+	accountAddress: "0xacc1",
+	sessionId: "session-1",
+	initialStage: { stage: "queued" },
+}
+
+/** A dApp request the wallet failed before claiming it, as the wallet-sdk ingress records one. */
+async function makeRefused(service: OperationJournalService, kind: string): Promise<string> {
+	const rec = await service.createOperation(DAPP_SEND)
+	await service.transitionOperation(rec.id, { stage: "failed" }, { kind, message: "refused", normalizedRaw: null })
+	return rec.id
+}
+
+/** A dApp send the node was handed, then failed with `kind`. */
+async function makeFailedAfterSubmit(service: OperationJournalService, kind = "network"): Promise<string> {
+	const rec = await service.createOperation(DAPP_SEND)
+	await service.transitionOperation(rec.id, { stage: "pending" })
+	await service.transitionOperation(rec.id, { stage: "simulating" })
+	await service.transitionOperation(rec.id, { stage: "proving", enteredProveAt: Date.now() })
+	await service.transitionOperation(rec.id, { stage: "submitting", txHash: `0x${rec.id}` })
+	await service.transitionOperation(rec.id, { stage: "failed" }, { kind, message: "dropped", normalizedRaw: null })
+	return rec.id
+}
+
+/** Gives `ids` distinct, increasing `terminalAt` in their order: transitions within one tick collide. */
+async function restamp(api: FakeBrowserApi, service: OperationJournalService, ids: string[]): Promise<void> {
+	for (let i = 0; i < ids.length; i++) {
+		const op = await service.getOperation(ids[i])
+		if (!op) throw new Error("setup: record vanished")
+		await api.storage.local.set({ [`nulo:journal@${op.id}`]: JSON.stringify({ ...op, terminalAt: 1_000_000 + i * 10 }) })
+	}
+}
+
+const REFUSAL_KINDS = ["scope_refused", "registry_refused", "malformed_request", "terms_refused", "wallet_refused", "too_many_pending"]
 
 async function makeCancelled(service: OperationJournalService, input: NewOperationInput): Promise<string> {
 	const rec = await service.createOperation(input)
@@ -141,8 +181,8 @@ describe("JournalGC.sweep", () => {
 
 	test("failed records are preserved past the cap (user-visible history)", async () => {
 		// Failed records are pure journal artifacts — no on-chain truth
-		// elsewhere. Losing them is data loss. The new policy: only
-		// `succeeded` records count toward eviction candidates.
+		// elsewhere. Losing them is data loss: only a failure refused before
+		// sending is ever an eviction candidate.
 		for (let i = 0; i < 5; i++) await makeFailed(service, TRANSFER)
 		const gc = new JournalGC(service, api.alarms, logger, { capPerScope: 2 })
 
@@ -183,6 +223,68 @@ describe("JournalGC.sweep", () => {
 		expect(byStage.succeeded).toBe(2)
 		expect(byStage.failed).toBe(2)
 		expect(byStage.cancelled).toBe(2)
+	})
+
+	test("60 requests refused before sending keep the newest 50", async () => {
+		const ids: string[] = []
+		for (let i = 0; i < 60; i++) ids.push(await makeRefused(service, "scope_refused"))
+		await restamp(api, service, ids)
+
+		await new JournalGC(service, api.alarms, logger).sweep()
+
+		const remaining = await service.getOperations({ isTerminal: true })
+		expect(remaining.map((r) => r.id).sort()).toEqual(ids.slice(10).sort())
+	})
+
+	test("refused requests never push out completed sends: 60 refused beside 10 completed keep all 10", async () => {
+		const completed: string[] = []
+		for (let i = 0; i < 10; i++) completed.push(await makeSucceeded(service, TRANSFER))
+		for (let i = 0; i < 60; i++) await makeRefused(service, "terms_refused")
+
+		await new JournalGC(service, api.alarms, logger).sweep()
+
+		const remaining = await service.getOperations({ isTerminal: true })
+		expect(
+			remaining
+				.filter((r) => r.progress.stage === "succeeded")
+				.map((r) => r.id)
+				.sort(),
+		).toEqual(completed.sort())
+		expect(remaining.filter((r) => r.progress.stage === "failed")).toHaveLength(50)
+	})
+
+	test("failed sends the node was handed are never evicted, however many", async () => {
+		for (let i = 0; i < 60; i++) await makeFailedAfterSubmit(service)
+
+		await new JournalGC(service, api.alarms, logger).sweep()
+
+		const remaining = await service.getOperations({ isTerminal: true })
+		expect(remaining).toHaveLength(60)
+		expect(remaining.every((r) => r.progress.stage === "failed" && r.progress.txHash)).toBe(true)
+	})
+
+	test.each(REFUSAL_KINDS)("a request refused as %s is under the refused cap", async (kind) => {
+		for (let i = 0; i < 3; i++) await makeRefused(service, kind)
+
+		await new JournalGC(service, api.alarms, logger, { capPerScope: 1 }).sweep()
+
+		expect(await service.getOperations({ isTerminal: true })).toHaveLength(1)
+	})
+
+	test("a refusal kind on a send that reached submitting is never evicted", async () => {
+		for (let i = 0; i < 3; i++) await makeFailedAfterSubmit(service, "terms_refused")
+
+		await new JournalGC(service, api.alarms, logger, { capPerScope: 1 }).sweep()
+
+		expect(await service.getOperations({ isTerminal: true })).toHaveLength(3)
+	})
+
+	test.each(["popup_bound", "session_ended"])("a request that failed as %s is never evicted", async (kind) => {
+		for (let i = 0; i < 3; i++) await makeRefused(service, kind)
+
+		await new JournalGC(service, api.alarms, logger, { capPerScope: 1 }).sweep()
+
+		expect(await service.getOperations({ isTerminal: true })).toHaveLength(3)
 	})
 
 	test("alarm tick fires sweep; stop() removes alarm + listener", async () => {

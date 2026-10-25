@@ -1,6 +1,7 @@
 import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, clickSelector, replaceInputValue } from "./fixtures/extension"
-import { closeStuckPopup, navigateToSettings, waitForToast } from "./fixtures/helpers"
+import { closeStuckPopup, navigateToSettings, selectedAccount, waitForToast } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 
 test("accounts page shows initial account", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -64,11 +65,8 @@ test("switch between accounts", async ({ registeredExtension }) => {
 	await page.waitForSelector(targetSelector, { visible: true, timeout: 5_000 })
 	await clickSelector(page, targetSelector)
 
-	// Verify active account changed in chrome storage
-	const address = await page.evaluate(async () => {
-		const result = await chrome.storage.local.get("nulo:ui:activeAccount")
-		return result["nulo:ui:activeAccount"]
-	})
+	// Verify an account is selected, as the worker answers it
+	const address = await selectedAccount(page)
 	expect(address).toBeTruthy()
 	expect(typeof address).toBe("string")
 
@@ -196,6 +194,7 @@ test("header avatar opens the account switcher", async ({ registeredExtension })
 
 	await clickByTestId(page, "account-avatar-btn")
 	await page.waitForSelector('[data-testid="accounts-popup"]', { visible: true, timeout: 5_000 })
+	await shotSend(page, "accounts-popup", "accounts-popup")
 	await closeStuckPopup(page)
 
 	expect(registeredExtension.consoleErrors).toEqual([])

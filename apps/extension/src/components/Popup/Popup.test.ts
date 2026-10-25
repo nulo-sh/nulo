@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h, nextTick, ref } from "vue"
+import { sendEvent } from "../../../tests/helpers/send-event"
 
 type Options = Record<string, unknown>
 type FakeTrap = {
@@ -217,5 +218,51 @@ describe("Popup", () => {
 		expect(inset.value).toBe(76)
 		w.unmount()
 		host.unmount()
+	})
+
+	test("a multi-click whose first press came before the sheet opened does nothing inside it; one begun inside, and a key, pass", async () => {
+		const w = await openPopup()
+		const inside = document.querySelector<HTMLElement>('[data-testid="inside"]')
+		const closeArea = inside?.parentElement?.firstElementChild
+		expect(closeArea).toBeTruthy()
+		const clicks: number[] = []
+		inside?.addEventListener("click", (event) => clicks.push(event.detail))
+		const press = (el: Element | null | undefined, type: "mousedown" | "click", detail: number, button = 0) => {
+			const event = new MouseEvent(type, { bubbles: true, cancelable: true, detail, button })
+			el?.dispatchEvent(event)
+			return event
+		}
+
+		expect(press(inside, "click", 2).defaultPrevented).toBe(true)
+		press(inside, "click", 3)
+		expect(press(closeArea, "click", 2).defaultPrevented).toBe(true)
+		expect(w.emitted("onClose")).toBeUndefined()
+		press(inside, "mousedown", 1, 2)
+		press(inside, "click", 2)
+		press(inside, "click", 0)
+
+		press(inside, "mousedown", 1)
+		press(inside, "click", 1)
+		press(inside, "mousedown", 2)
+		press(inside, "click", 2)
+		expect(clicks).toEqual([0, 1, 2])
+		// The close area's own listener comes after the sheet's, so a raw click in this render's
+		// millisecond would never reach it.
+		sendEvent(closeArea!, "click")
+		expect(w.emitted("onClose")).toEqual([[]])
+		w.unmount()
+	})
+
+	test("re-opened, the sheet forgets a press it saw while open before", async () => {
+		const w = await openPopup()
+		const inside = () => document.querySelector<HTMLElement>('[data-testid="inside"]')
+		inside()?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }))
+		await w.setProps({ show: false })
+		await w.setProps({ show: true })
+		await settle()
+		const carried = new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 })
+		inside()?.dispatchEvent(carried)
+		expect(carried.defaultPrevented).toBe(true)
+		w.unmount()
 	})
 })

@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from "pinia"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
 vi.mock("@/utils/core", () => {
 	const profileMock = {
@@ -35,6 +36,7 @@ vi.mock("@/utils/core", () => {
 		network: networkMock,
 		account: accountMock,
 		networkReset: networkResetMock,
+		uiPreference: { getSelectedAccount: vi.fn(async () => undefined), setSelectedAccount: vi.fn(async () => true) },
 	}
 	return {
 		managers,
@@ -64,11 +66,11 @@ const netMock = vi.hoisted(() => ({
 	getNodeStatus: vi.fn(),
 	getNetworks: vi.fn(),
 }))
-vi.mock("@/wallet/services/network/client", () => ({
+vi.mock("@/wallet/services/network/client", async () => ({
 	NetworkServiceClient: vi.fn(function () {
 		return netMock
 	}),
-	NodeStatus: { Online: 0 },
+	NodeStatus: (await import("@/wallet/services/network/spec")).NodeStatus,
 }))
 
 vi.mock("@/wallet/services/account/client", () => ({
@@ -83,6 +85,7 @@ vi.mock("@/wallet/services/account/client", () => ({
 	DEFAULT_ACCOUNT_NAME: "Account 1",
 }))
 
+import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { managers, initTransactionService } from "@/utils/core"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -111,25 +114,13 @@ beforeEach(() => {
 	// Extend the global chrome stub from tests/vitest.setup.ts to include
 	// the `storage.local` surface that useSyncedRef calls at store init.
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_key: string | string[], cb?: (result: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: {
-				addListener: vi.fn(),
-				removeListener: vi.fn(),
-			},
-		},
+		storage: {},
 		runtime: {
 			connect: vi.fn(),
 			onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
 		},
 	})
+	installChromeStorage({}, { persist: false })
 	setActivePinia(createPinia())
 	vi.clearAllMocks()
 	// Default network-client behavior (an ACTIVE pointer exists → no fallback); fallback tests override.
@@ -194,7 +185,7 @@ describe("useProfileBootstrap", () => {
 	})
 
 	test("a failed automatic run re-reads the view, so its paused journal shows R1 instead of nothing", async () => {
-		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0 } })
+		const paused = staleView({ accounts: [], reset: { running: false, purged: true, doneCount: 0, imported: [] } })
 		reset.getStaleNetwork.mockResolvedValueOnce(staleView({ accounts: [] })).mockResolvedValue(paused)
 		reset.resetStaleNetwork.mockImplementationOnce(async (networkId: string) => {
 			queueMicrotask(() => reset.onStaleNetworkChanged.invoke({ profileId: "prof-1", networkId, failed: true }))
@@ -568,5 +559,49 @@ describe("useProfileBootstrap", () => {
 
 		expect(router.currentRoute.value.name).toBe("popup-auth")
 		expect(appStore.isLogined).toBe(false)
+	})
+})
+
+describe("useProfileBootstrap — a custom node that does not answer its identity read", () => {
+	const IMPORTED = { address: "0ximported", index: 0, visible: true }
+	const withAccountClient = (ensureDefaultAccount: () => Promise<unknown>) => {
+		const getAccounts = vi.fn(async () => [IMPORTED])
+		vi.mocked(AccountServiceClient).mockImplementationOnce(function () {
+			return { disconnect: vi.fn(), ensureDefaultAccount, getAccounts }
+		} as never)
+		return getAccounts
+	}
+
+	beforeEach(() => {
+		;(managers.profile.getActiveProfile as ReturnType<typeof vi.fn>).mockResolvedValue(fakeProfile)
+		netMock.getNodeStatus.mockReturnValue(new Promise(() => {}))
+	})
+
+	test("start finishes on the chain's own rows with the dot already inactive", async () => {
+		const getAccounts = withAccountClient(async () => {
+			throw new NodeUnreachableError()
+		})
+		const appStore = useAppStore()
+		appStore.account = { address: "0xearlier" } as typeof appStore.account
+		await expect(useProfileBootstrap().bootstrapActiveProfile(fakeProfile)).resolves.toBe(true)
+		expect(appStore.isLogined).toBe(true)
+		expect(appStore.networkStatus).toBe("Inactive")
+		expect(getAccounts).toHaveBeenCalledWith("prof-1", 1, true)
+		expect(appStore.accounts).toEqual([IMPORTED])
+		expect(appStore.account?.address).toBe("0ximported")
+	})
+
+	test("a node that answers leaves the dot to its status read; any other failure still stops start", async () => {
+		withAccountClient(async () => undefined)
+		const appStore = useAppStore()
+		await useProfileBootstrap().bootstrapActiveProfile(fakeProfile)
+		expect(appStore.networkStatus).toBe("sync")
+
+		setActivePinia(createPinia())
+		withAccountClient(async () => {
+			throw new Error("L1 identity mismatch")
+		})
+		await expect(useProfileBootstrap().bootstrapActiveProfile(fakeProfile)).rejects.toThrow("L1 identity mismatch")
+		expect(useAppStore().isLogined).toBe(false)
 	})
 })

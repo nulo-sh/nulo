@@ -1,6 +1,8 @@
 import type { ChildProcess } from "node:child_process"
-import { readFileSync, readdirSync, readlinkSync } from "node:fs"
+import { readFileSync, readdirSync, readlinkSync, realpathSync } from "node:fs"
 import { createServer } from "node:net"
+import path from "node:path"
+import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { type EnvironReader, ownedProcesses, readEnviron } from "./owned-processes"
 
 /**
@@ -62,18 +64,28 @@ function listeningInodes(port: number): Set<string> | undefined {
 	return readable ? inodes : undefined
 }
 
-function socketInodes(pid: number): string[] {
+/** What each of `pid`'s open fds points at; `unreadable` when `/proc` refuses a live process's
+ *  list. */
+function fdTargets(pid: number, read: EnvironReader): string[] | "gone" | "unreadable" {
+	let fds: string[]
 	try {
-		return readdirSync(`/proc/${pid}/fd`).flatMap((fd) => {
-			try {
-				return readlinkSync(`/proc/${pid}/fd/${fd}`).match(/^socket:\[(\d+)\]$/)?.[1] ?? []
-			} catch {
-				return []
-			}
-		})
+		fds = readdirSync(`/proc/${pid}/fd`)
 	} catch {
-		return []
+		return read(pid) === "gone" ? "gone" : "unreadable"
 	}
+	return fds.flatMap((fd) => {
+		try {
+			return readlinkSync(`/proc/${pid}/fd/${fd}`)
+		} catch {
+			// Closed between the listing and the read.
+			return []
+		}
+	})
+}
+
+function socketInodes(pid: number): string[] {
+	const targets = fdTargets(pid, readEnviron)
+	return typeof targets === "string" ? [] : targets.flatMap((target) => target.match(/^socket:\[(\d+)\]$/)?.[1] ?? [])
 }
 
 /**
@@ -86,6 +98,37 @@ export function listenerIsOurs(port: number, marker: string, read: EnvironReader
 	if (!listening) return undefined
 	const ours = new Set(ownedProcesses(marker, read).flatMap(socketInodes))
 	return listening.size > 0 && [...listening].every((inode) => ours.has(inode))
+}
+
+export interface NodeStores {
+	inside: string[]
+	outside: string[]
+	/** Marked processes whose open files `/proc` would not list. */
+	unreadable: number[]
+}
+
+const DELETED = " (deleted)"
+
+/** The LMDB files among fd targets; `/proc` appends ` (deleted)` to an unlinked file's path. */
+const lmdbFiles = (targets: string[]) =>
+	targets.map((target) => (target.endsWith(DELETED) ? target.slice(0, -DELETED.length) : target)).filter((file) => file.endsWith(".mdb"))
+
+/**
+ * The LMDB files held open by every process carrying `marker` (the node and the children it
+ * spawns), split by whether they lie under `dir`. Paths compare as real paths: `/proc` reports a
+ * file's canonical one.
+ */
+export function nodeStores(dir: string, marker: string, read: EnvironReader = readEnviron): NodeStores {
+	const root = `${realpathSync(dir)}${path.sep}`
+	const files = new Set<string>()
+	const unreadable: number[] = []
+	for (const pid of ownedProcesses(marker, read)) {
+		const targets = fdTargets(pid, read)
+		if (targets === "unreadable") unreadable.push(pid)
+		else if (targets !== "gone") for (const file of lmdbFiles(targets)) files.add(file)
+	}
+	const all = [...files]
+	return { inside: all.filter((file) => file.startsWith(root)), outside: all.filter((file) => !file.startsWith(root)), unreadable }
 }
 
 const hasExited = (child: ChildProcess) => child.exitCode !== null || child.signalCode !== null
@@ -126,18 +169,17 @@ export async function waitWhileAlive(
 	pollMs: number,
 	ours: () => boolean | undefined = () => undefined,
 ): Promise<void> {
+	const label = `Timed out waiting for ${what}`
 	const deadline = Date.now() + timeoutMs
-	for (;;) {
+	const probe = async () => {
 		const answer = await answerBefore(child, ready, deadline)
 		if (answer === "exited" || hasExited(child))
 			throw new Error(
 				`${what}: the process this run started exited (code ${child.exitCode}, signal ${child.signalCode}) before it answered`,
 			)
-		if (answer === true) {
-			if (ours() === false) throw new Error(`${what}: answered by a listener this run did not start`)
-			return
-		}
-		if (answer === "timeout" || Date.now() >= deadline) throw new Error(`Timed out waiting for ${what} (${timeoutMs}ms)`)
-		await new Promise((resolve) => setTimeout(resolve, pollMs))
+		if (answer === "timeout") throw new PollTimeoutError(label, timeoutMs, answer, "no answer")
+		if (answer && ours() === false) throw new Error(`${what}: answered by a listener this run did not start`)
+		return answer
 	}
+	await pollUntil(probe, (answer) => answer, { label, timeoutMs: deadline - Date.now(), intervalMs: pollMs })
 }

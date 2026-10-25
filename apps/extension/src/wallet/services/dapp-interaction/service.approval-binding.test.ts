@@ -153,9 +153,53 @@ describe("approveInteraction — the popup cannot substitute what executes", () 
 		const args = executedArgs(internals)
 		expect(args[1]).toEqual({ type: OriginType.DAPP, name: "dapp.example" })
 		expect(args[4]).toEqual([
-			{ interactionId: "i-9", index: 0, estimateId: "est", previewId: "prev" },
-			{ interactionId: "i-9", index: 1, estimateId: undefined, previewId: undefined },
+			{ interactionId: "i-9", index: 0, estimateId: "est", previewId: "prev", feeCeiling: undefined },
+			{ interactionId: "i-9", index: 1, estimateId: undefined, previewId: undefined, feeCeiling: undefined },
 		])
+	})
+
+	test("the figure the window showed reaches the envelope; a malformed one is refused before the claim", async () => {
+		const { svc, internals } = makeService()
+		store(internals, "i-1", execPayload([sendTxRequest({ calls: [] })]))
+		for (const figure of ["0.016", "-1", "0x10", ""]) {
+			await expect(
+				svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: figure }]),
+			).rejects.toThrow("Invalid fee figure")
+		}
+		expect(internals.storage.has("i-1")).toBe(true)
+		expect(internals.executionService.executeOperations).not.toHaveBeenCalled()
+
+		await svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: "16000000000000000" }])
+		await flush()
+		expect((executedArgs(internals)[4] as Array<{ feeCeiling?: string }>)[0]?.feeCeiling).toBe("16000000000000000")
+	})
+
+	const SHOWN = { name: "Test USDC", symbol: "USDC", decimals: 6, classId: `0x${"c1".repeat(32)}` }
+	test("the token details the window showed reach the envelope", async () => {
+		const { svc, internals } = makeService()
+		store(internals, "i-1", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await svc.approveInteraction("i-1", [{ tokenMetadata: SHOWN }])
+		await flush()
+		expect((executedArgs(internals)[4] as Array<{ tokenMetadata?: unknown }>)[0]?.tokenMetadata).toEqual(SHOWN)
+	})
+
+	test.each([
+		["not an object", "USDC"],
+		["a name that is not a string", { ...SHOWN, name: 1 }],
+		["a name past 256 units", { ...SHOWN, name: "n".repeat(257) }],
+		["a symbol that is not a string", { ...SHOWN, symbol: null }],
+		["a symbol past 256 units", { ...SHOWN, symbol: "s".repeat(257) }],
+		["decimals that are not an integer", { ...SHOWN, decimals: 1.5 }],
+		["negative decimals", { ...SHOWN, decimals: -1 }],
+		["decimals past the safe range", { ...SHOWN, decimals: 2 ** 53 }],
+		["a class id that is not a lower-case field", { ...SHOWN, classId: `0x${"C1".repeat(32)}` }],
+		["no class id", { name: "Test USDC", symbol: "USDC", decimals: 6 }],
+	])("token details with %s are refused before the claim", async (_label, tokenMetadata) => {
+		const { svc, internals } = makeService()
+		store(internals, "i-1", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await expect(svc.approveInteraction("i-1", [{ tokenMetadata: tokenMetadata as never }])).rejects.toThrow("Invalid token details")
+		expect(internals.storage.has("i-1")).toBe(true)
+		expect(internals.executionService.executeOperations).not.toHaveBeenCalled()
 	})
 
 	test("a capability- or discovery-shaped id is refused BEFORE the claim; the record survives for resolveInteraction", async () => {
@@ -200,5 +244,107 @@ describe("materializeStoredOperation — estimate and preview read the stored re
 		await expect(svc.materializeStoredOperation("cap", 0)).rejects.toThrow("Invalid id")
 		await expect(svc.materializeStoredOperation("i-1", 3)).rejects.toThrow("Invalid id")
 		await expect(svc.materializeStoredOperation("i-1", 0, { paymentMethod: { kind: "fj" } })).rejects.toThrow("Wallet locked")
+	})
+})
+
+describe("askFeeAgain — the question a held send asks in its own window", () => {
+	const REASK = { fee: "21000000000000000", cap: "16000000000000000", payer: { type: "fj", isProtocol: false } } as const
+	const LISTED = [{ consumer: "0xc", caller: "0xd", selector: "0xsel", args: [], innerHash: "0xih", messageHash: "0xmh" }]
+	const question = (over: Record<string, unknown> = {}) => ({
+		interactionId: "i-1",
+		index: 0,
+		journalId: "j-1",
+		reask: REASK,
+		discoveredAuthwits: LISTED,
+		deadline: Date.now() + 60_000,
+		...over,
+	})
+
+	/** An approval whose execution asks `ask` and holds until the test lets it finish. */
+	function asking() {
+		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
+		const h = makeService()
+		const window = { settle: (_: unknown) => {}, fail: (_: unknown) => {} }
+		const openAndAwait = vi.fn(() => ({
+			handleId: "h-fee",
+			promise: new Promise((resolve, reject) => Object.assign(window, { settle: resolve, fail: reject })),
+		}))
+		Object.assign(h.windowManager, { openAndAwait })
+		Object.assign(h.internals, { operationJournal: { getOperation: async () => ({ progress: { stage: "queued" } }) } })
+		let finish!: () => void
+		const asked: Array<Promise<boolean>> = []
+		h.internals.executionService.executeOperations.mockImplementation(async () => {
+			asked.push(h.svc.askFeeAgain(question() as never))
+			await new Promise<void>((resolve) => {
+				finish = resolve
+			})
+			return []
+		})
+		const feeId = () => [...h.internals.storage.keys()].find((id) => id !== "i-1") as string
+		return { ...h, window, openAndAwait, asked, feeId, finish: () => finish() }
+	}
+
+	test("opens a window over the approved request, the two figures, its payer and the fee choice, and an accept answers yes", async () => {
+		const h = asking()
+		const request = sendTxRequest({ calls: [{ name: "swap" }] })
+		store(h.internals, "i-1", execPayload([request]))
+		await h.svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: REASK.cap }])
+		await vi.waitFor(() => expect(h.openAndAwait).toHaveBeenCalledTimes(1))
+
+		const opened = (h.openAndAwait.mock.calls[0] as unknown[])[0] as { url: string; kind: string; timeoutMs: number }
+		expect(opened.kind).toBe("fee")
+		expect(opened.url).toContain("/windows/fee")
+		expect(opened.timeoutMs).toBeGreaterThan(59_000)
+		expect(opened.timeoutMs).toBeLessThanOrEqual(60_000)
+		const stored = h.internals.storage.get(h.feeId())!
+		expect(stored.payload).toEqual({
+			feeQuestion: {
+				fee: REASK.fee,
+				approved: REASK.cap,
+				payer: REASK.payer,
+				feeSettings: { paymentMethod: { kind: "fj" } },
+				discoveredAuthwits: LISTED,
+			},
+			operation: request,
+			session: SESSION,
+		})
+		expect(stored.hooks).toEqual({ queuedJournalId: "j-1" })
+
+		await h.svc.resolveInteraction(h.feeId(), { accepted: true })
+		h.window.settle({ accepted: true })
+		expect(await h.asked[0]).toBe(true)
+		h.finish()
+	})
+
+	test("is no execution request: neither approvable nor materializable", async () => {
+		const h = asking()
+		store(h.internals, "i-1", execPayload([sendTxRequest({ calls: [] })]))
+		await h.svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: REASK.cap }])
+		await vi.waitFor(() => expect(h.openAndAwait).toHaveBeenCalledTimes(1))
+		await expect(h.svc.approveInteraction(h.feeId(), [])).rejects.toThrow("Invalid id")
+		await expect(h.svc.materializeStoredOperation(h.feeId(), 0)).rejects.toThrow("Invalid id")
+		expect(h.internals.executionService.executeOperations).toHaveBeenCalledTimes(1)
+		h.finish()
+	})
+
+	test("any answer but an accept is a no", async () => {
+		const h = asking()
+		store(h.internals, "i-1", execPayload([sendTxRequest({ calls: [] })]))
+		await h.svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: REASK.cap }])
+		await vi.waitFor(() => expect(h.openAndAwait).toHaveBeenCalledTimes(1))
+		h.window.settle({ accepted: "yes" })
+		expect(await h.asked[0]).toBe(false)
+		h.finish()
+	})
+
+	test("once the approval has finished executing, nothing is asked and the answer is no", async () => {
+		const h = asking()
+		h.internals.executionService.executeOperations.mockImplementation(async () => [])
+		store(h.internals, "i-1", execPayload([sendTxRequest({ calls: [] })]))
+		await h.svc.approveInteraction("i-1", [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: REASK.cap }])
+		await flush()
+		expect(await h.svc.askFeeAgain(question() as never)).toBe(false)
+		expect(await h.svc.askFeeAgain(question({ interactionId: "nope" }) as never)).toBe(false)
+		expect(h.openAndAwait).not.toHaveBeenCalled()
 	})
 })

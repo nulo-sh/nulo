@@ -19,18 +19,27 @@
 import { describe, expect, test, vi } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { AuthRegistryRefusalError, JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
+import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
+import type { CollectingDiscoveryProbe } from "./discovery-probe"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import { AUTHWITS_CHANGED_MESSAGE, ESTIMATE_INCOMPLETE_MESSAGE, PREVIEW_FOREIGN_MESSAGE, PreviewSnapshots } from "./preview-snapshots"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
+import { QueuedFeeAnswers } from "./queued-fee-cap"
+import { FEE_RISE_ASKS, personalPayerOf } from "./fee-reask"
+import type { FeeQuestion } from "./models"
+import { feeLimitOf } from "./tx-fee-details"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
@@ -78,6 +87,8 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 })
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
+/** The canonical SponsoredFPC's address as the harness derives it. */
+const PROTOCOL_SPONSOR = `0x${"0a".repeat(32)}`
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 
 /** The lane's earlier-sends seams for a send that never has to wait. */
@@ -87,12 +98,18 @@ const clearLine = () => ({
 	}),
 	joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: vi.fn() })),
 	failUnclaimed: vi.fn(async () => {}),
+	reclaimParked: vi.fn(async () => {}),
+	beginQueuedWait: vi.fn(),
+	endQueuedWait: vi.fn(),
 })
 const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
 
+/** The fee `makeTxRequest` commits: gas limits × max fees per gas. */
+const BUILT_FEE = "800"
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
- *  for a bound standard estimate, so a real approval always pairs the two equal. */
-const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId })
+ *  for a bound standard estimate, so a real approval always pairs the two equal. It carries the
+ *  figure its window showed. */
+const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId, feeCeiling: BUILT_FEE })
 
 function makeTxRequest() {
 	return {
@@ -156,8 +173,14 @@ function makeHarness(
 	const authwit = overrides.authwit ?? {
 		discoverPrivateAuthwits: vi.fn(async () => ({ actions: [] as unknown[], discovered: [] as unknown[] })),
 	}
-	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? vi.fn(async () => built as never)
-	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? vi.fn(async () => built as never)
+	// As the real pipelines do, the last build hands its calls to the hook a send passes.
+	const handOver = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(built.txCalls)
+			return built as never
+		})
+	const buildAndEstimateValidated = overrides.buildAndEstimateValidated ?? handOver(5)
+	const buildAndEstimateFolded = overrides.buildAndEstimateFolded ?? handOver(6)
 	const estimateWithDiscovery = new DiscoveryAwareEstimator({
 		authwit: authwit as never,
 		buildAndEstimateValidated: buildAndEstimateValidated as never,
@@ -183,6 +206,7 @@ function makeHarness(
 			acquireSlot: vi.fn(async () => ({ release: releaseSlot, preController: undefined })),
 			claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: new AbortController() })),
 			beginJournal: vi.fn(async () => "j1"),
+			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
 			...clearLine(),
@@ -201,12 +225,15 @@ function makeHarness(
 		sequenceEpoch: vi.fn(() => 0),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
+		protocolSponsorAddress: vi.fn(async () => PROTOCOL_SPONSOR),
 		recordPendingAuthwits: vi.fn(async () => {}),
 		noteSent: vi.fn(),
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 }),
 		chainTip: { unconfirmed: () => false, wait: async () => "confirmed" },
 		logDebug: vi.fn(),
 		readPublicStorageOnce: vi.fn(async () => new Fr(0n)),
+		answers: new QueuedFeeAnswers(),
+		askInWindow: vi.fn(),
 		...overrides,
 	}
 	return {
@@ -249,6 +276,7 @@ const RECORD_FIELDS = [
 	"gasDetails",
 	"fence",
 	"networkId",
+	"feeChoice",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -475,6 +503,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				acquireSlot: vi.fn(async () => ({ release: vi.fn(), preController: undefined })),
 				claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: aborted })),
 				beginJournal: vi.fn(),
+				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
 				...clearLine(),
@@ -832,6 +861,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 					throw new Error("claim broke")
 				}),
 				beginJournal: vi.fn(),
+				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
 				...clearLine(),
@@ -873,6 +903,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			}),
 			claimOrCreateJournal: vi.fn(async () => claimBehavior(map)),
 			beginJournal: vi.fn(),
+			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			...clearLine(),
 		}
@@ -1524,6 +1555,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: `mh:ih:${tag}` } })
 				probe.discovered.push(record(tag))
 			}
+			await (args[6] as ((txCalls: unknown) => Promise<void>) | undefined)?.((built as { txCalls: unknown }).txCalls)
 			return built
 		})
 	const harnessDiscovering = (tags: string[], overrides: Parameters<typeof makeHarness>[0] = {}) => {
@@ -1540,7 +1572,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		expect(result.previewId).toBe(result.estimateId)
 		expect(snapshots(deps).take(result.previewId, identity)).toEqual({
 			kind: "found",
-			snapshot: expect.objectContaining({ ...CTX, discoveredHashes: ["mh:ih:a"] }),
+			snapshot: expect.objectContaining({ ...CTX, discoveredHashes: ["mh:ih:a"], discoveredAuthwits: [record("a")] }),
 		})
 		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect(stash[1]).toMatchObject({ discoveredHashes: ["mh:ih:a"] })
@@ -1620,6 +1652,8 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			changed.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
 		).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
 		expect(changed.proveAndSend).not.toHaveBeenCalled()
+		// The refused build still names its record: it ran, and its class is what the row reads.
+		expect(changed.deps.lane.recordBuiltCall).toHaveBeenCalledTimes(1)
 	})
 
 	test("a popup pairing one interaction's estimateId with another's previewId is refused before either id is consumed", async () => {
@@ -1763,6 +1797,80 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 		})
 	})
 
+	describe("a request from the authorization registry, through the real decoder", () => {
+		const registryEffect = { data: ["r"], contractAddress: STANDARD_AUTH_REGISTRY_ADDRESS }
+		const noFromOp = () => makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
+		const FJWC = { paymentMethod: { kind: "fjwc" } } as never
+		const FJ = { paymentMethod: { kind: "fj" } } as never
+		const standalone = () => makeHarness({ authwit: new AuthwitDiscoverer({} as never) as never })
+		/** The fee strategies' folded first sim: the probe reads the sim's effects. */
+		const folded = () => {
+			const base = makeHarness()
+			const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
+				const probe = args[3] as CollectingDiscoveryProbe
+				await probe.extractEffects({ privateExecutionResult: {} }, { node: base.node as never, network: base.built.network })
+				return base.built as never
+			})
+			return makeHarness({ buildAndEstimateFolded })
+		}
+
+		test("standalone discovery refuses it: the validated build, which signs the discovered witnesses, never runs", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a"), registryEffect])
+			const h = standalone()
+			await expect(h.executor.estimateOperationFee(makeAztecOp(), FJWC, undefined, CTX)).rejects.toBeInstanceOf(
+				AuthRegistryRefusalError,
+			)
+			expect(h.buildAndEstimateValidated).not.toHaveBeenCalled()
+		})
+
+		test("standalone discovery hands another contract's request to the validated build once", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a")])
+			const h = standalone()
+			const result = await h.executor.estimateOperationFee(makeAztecOp(), FJWC, undefined, CTX)
+			expect(result.discoveredAuthwits).toEqual([record("a")])
+			const [op] = h.buildAndEstimateValidated.mock.calls[0] as [{ actions: { kind: string }[] }]
+			expect(op.actions.filter((a) => a.kind === "add_private_authwit")).toEqual([
+				{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:a" } },
+			])
+		})
+
+		test("the folded probe refuses it and the estimate rejects; another contract's request is listed", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			const refused = folded()
+			await expect(refused.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)).rejects.toBeInstanceOf(
+				AuthRegistryRefusalError,
+			)
+
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("a")])
+			const allowed = folded()
+			const result = await allowed.executor.estimateOperationFee(makeAztecOp(), FJ, undefined, CTX)
+			expect(result.discoveredAuthwits).toEqual([record("a")])
+		})
+
+		test("the NO_FROM preview refuses it", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([registryEffect])
+			const { executor } = makeHarness()
+			await expect(executor.previewOperationAuthwits(noFromOp(), CTX)).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		})
+
+		test("a NO_FROM Confirm refuses it with nothing signed or sent, and History records registry_refused", async () => {
+			collectOffchainEffectsMock.mockReturnValueOnce([effect("n"), registryEffect])
+			const { executor, deps, account, proveAndSend } = makeHarness()
+			snapshots(deps).stash("pv", { ...identity, discoveredHashes: ["mh:ih:n"] })
+			await expect(
+				executor.executeAztecSendTx(noFromOp(), ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: "pv" }),
+			).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+			expect(account.createAuthWit).not.toHaveBeenCalled()
+			expect(proveAndSend).not.toHaveBeenCalled()
+			expect(deps.lane.markJournal).toHaveBeenCalledWith(
+				"j1",
+				{ stage: "failed" },
+				expect.objectContaining({ kind: "registry_refused" }),
+				undefined,
+			)
+		})
+	})
+
 	describe("NO_FROM preview cancellation through the service RPC (previewOperationAuthwits + cancelEstimate)", () => {
 		const noFromOp = () => makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } })
 		type Rpc = {
@@ -1792,7 +1900,13 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				resolver: {},
 				logger: {},
 				ensureInitialized: async () => {},
-				services: { get: () => ({ materializeStoredOperation: async () => noFromOp() }) },
+				services: {
+					get: () => ({
+						materializeStoredOperation: async () => noFromOp(),
+						refusalOf: () => undefined,
+						recordRefusal: () => {},
+					}),
+				},
 				dappSendExecutor: h.executor,
 				logDebug: () => {},
 				logError: () => {},
@@ -2004,12 +2118,11 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		},
 	)
 
-	test("the priority part of the figure is set, with its formatted pair, only when it shows as more than zero", async () => {
+	test("the priority part of the figure is set only when the fee readout shows it as more than zero; neither figure comes formatted", async () => {
 		const { executor, built } = appPaidHarness(true)
 		const op = () => makeAztecOp({ feeSettings: EMBEDDED })
 		const plain = await executor.estimateOperationFee(op(), EMBEDDED)
 		expect(plain).not.toHaveProperty("priorityFee")
-		expect(plain).not.toHaveProperty("priorityFeeFormatted")
 
 		// 100 · 2e12 + 200 · 3e12 = 8e14 (0.0008 FJ), of which 100 · 1e12 + 200 · 1e12 = 3e14 is priority.
 		const gasSettings = new GasSettings(
@@ -2020,8 +2133,9 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		)
 		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings } } })
 		const result = await executor.estimateOperationFee(op(), EMBEDDED)
-		expect([result.maxFee, result.maxFeeFormatted]).toEqual(["800000000000000", "0.0008"])
-		expect([result.priorityFee, result.priorityFeeFormatted]).toEqual(["300000000000000", "0.0003"])
+		expect([result.maxFee, result.priorityFee]).toEqual(["800000000000000", "300000000000000"])
+		expect(result).not.toHaveProperty("maxFeeFormatted")
+		expect(result).not.toHaveProperty("priorityFeeFormatted")
 
 		// 300 · 1e9 = 3e11 rounds to "0" at six decimals: the row would read "includes a 0 FJ priority fee".
 		const tiny = new GasSettings(
@@ -2033,7 +2147,6 @@ describe("DappSendExecutor.estimateOperationFee: an operation the app pays for",
 		Object.assign(built, { txRequest: { authWitnesses: [], txContext: { gasSettings: tiny } } })
 		const rounded = await executor.estimateOperationFee(op(), EMBEDDED)
 		expect(rounded).not.toHaveProperty("priorityFee")
-		expect(rounded).not.toHaveProperty("priorityFeeFormatted")
 	})
 })
 
@@ -2072,6 +2185,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2091,6 +2205,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "wallet",
 		})
 	})
 
@@ -2125,10 +2240,11 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
+			feeChoice: "wallet",
 		})
 	})
 
-	test("NO_FROM: nonce zero, external payment, the op's networkId", async () => {
+	test("NO_FROM: nonce zero, external payment, the app's fee choice, the op's networkId", async () => {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const { executor, deps, built } = makeHarness()
 		await executor.executeAztecSendTx(NO_FROM({ networkId: "net-op" }), ORIGIN, undefined, undefined, FENCE)
@@ -2145,17 +2261,23 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
+			feeChoice: "app",
 		})
 	})
 
 	test("the recorder awaits addTransaction before it writes the pending authwits", async () => {
 		const authwits = [{ account: "0xacct", hash: "0xph", content: { kind: "message_hash", messageHash: "0xm" } }]
 		let resolveAdd: (v: unknown) => void = () => {}
-		const addTransaction = vi.fn(() => new Promise((r) => (resolveAdd = r)))
+		let reachAdd: () => void = () => {}
+		const added = new Promise<void>((r) => (reachAdd = r))
+		const addTransaction = vi.fn(() => {
+			reachAdd()
+			return new Promise((r) => (resolveAdd = r))
+		})
 		const { executor, deps, built } = makeHarness({ addTransaction: addTransaction as never })
 		Object.assign(built, { pendingPublicAuthwits: authwits })
 		const sending = executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
-		for (let i = 0; i < 50 && addTransaction.mock.calls.length === 0; i++) await Promise.resolve()
+		await added
 		expect(addTransaction).toHaveBeenCalledTimes(1)
 		for (let i = 0; i < 20; i++) await Promise.resolve()
 		expect(deps.recordPendingAuthwits).not.toHaveBeenCalled()
@@ -2178,6 +2300,59 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(recorded).toBe(expected)
+	})
+
+	const SPONSOR_CALL = { contract: PROTOCOL_SPONSOR, method: "sponsor_unconditionally", args: [] }
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } }
+	const sendTransaction = (feeSettings: unknown) =>
+		({
+			kind: "send_transaction",
+			networkId: "net-op",
+			accountAddress: "0xacct",
+			feeSettings,
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+		}) as never
+	type Harness = ReturnType<typeof makeHarness>
+
+	test.each([
+		[
+			"aztec_sendTx",
+			(h: Harness) => h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE),
+		],
+		["send_transaction", (h: Harness) => h.executor.executeSendTransaction(sendTransaction(EMBEDDED), ORIGIN, undefined, FENCE)],
+		["NO_FROM", (h: Harness) => h.executor.executeAztecSendTx(NO_FROM(), ORIGIN, undefined, undefined, FENCE)],
+	])("%s: the app's own fee payment through the protocol sponsor, its address asked for before the prove", async (_kind, send) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
+		let askedBeforeProve = false
+		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (hash: string) => Promise<unknown> }) => {
+			askedBeforeProve = vi.mocked(h.deps.protocolSponsorAddress).mock.calls.length > 0
+			await ctx.recordTransaction("0xhash")
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		})
+		Object.assign(h.deps.coordinator, { proveAndSend })
+		await send(h)
+		expect(h.deps.protocolSponsorAddress).toHaveBeenCalledWith(7)
+		expect(askedBeforeProve).toBe(true)
+		expect(recordedTx(h.deps).feeChoice).toBe("app_protocol_sponsor")
+	})
+
+	test("the person's pick records the wallet's and never asks for the sponsor's address, even when its calls name it", async () => {
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("wallet")
+		expect(h.deps.protocolSponsorAddress).not.toHaveBeenCalled()
+	})
+
+	test("an address the wallet cannot derive still records the row, as the app's plain pick", async () => {
+		const failure = new Error("derivation failed")
+		const h = makeHarness({ protocolSponsorAddress: vi.fn(async () => Promise.reject(failure)) })
+		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(makeAztecOp({ feeSettings: EMBEDDED }), ORIGIN, undefined, undefined, FENCE)
+		expect(recordedTx(h.deps).feeChoice).toBe("app")
+		expect(h.deps.logDebug).toHaveBeenCalledWith("fee chooser: the protocol sponsor's address is unavailable", { error: failure })
 	})
 })
 
@@ -2339,11 +2514,21 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 		["NO_FROM", true],
 	])("%s: the claimed title per call list", async (_label, noFrom) => {
 		collectOffchainEffectsMock.mockReturnValue([])
+		const token = `0x${"0d".repeat(32)}`
 		const cases: Array<[unknown, unknown]> = [
 			[undefined, undefined],
 			[[], undefined],
-			[[{ name: "claim_and_end_setup" }, { name: "claim_public" }], [{ method: "claim_public" }]],
-			[[{ name: "dapp_method" }], [{ method: "dapp_method" }]],
+			[[{ name: "claim_and_end_setup" }, { name: "claim_public" }], [{ method: "claim_public", call: undefined }]],
+			[[{ name: "dapp_method" }], [{ method: "dapp_method", call: undefined }]],
+			[[{ name: "transfer", method: "approve_all" }], [{ method: "transfer", call: undefined }]],
+			[[{ name: `trans\u200bfer\u0007${"f".repeat(70)}` }], [{ method: `transfer${"f".repeat(56)}…`, call: undefined }]],
+			[
+				[
+					{ name: "claim_and_end_setup", to: addr(`0x${"0f".repeat(32)}`), args: [] },
+					{ name: "transfer_in_public", to: addr(token), args: [1, 2, 3, 4] },
+				],
+				[{ method: "transfer_in_public", call: { contract: token, argCount: 4 } }],
+			],
 		]
 		for (const [calls, expected] of cases) {
 			const { executor, deps } = makeHarness()
@@ -2398,6 +2583,120 @@ describe("DappSendExecutor: the journal title thunk and the offchain output", ()
 		Object.assign(h.deps.coordinator, { proveAndSend })
 		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(extractOffchainOutputSpy.mock.calls).toStrictEqual([[effects, 5n]])
+	})
+})
+
+describe("DappSendExecutor: every build names its record before the send", () => {
+	const reusedCalls = [{ contract: "0xc", method: "reused_method", args: [] }]
+	const sendTransaction = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+	const paths: Array<[string, (executor: DappSendExecutor, deps: DappSendExecutorDeps) => Promise<unknown>, boolean]> = [
+		["send_transaction", (executor) => executor.executeSendTransaction(sendTransaction, ORIGIN, undefined, FENCE), false],
+		["a fresh standard build", (executor) => executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE), false],
+		[
+			"an estimate reuse",
+			(executor, deps) => {
+				deps.previewSnapshots.stash("est-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
+				return executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+			},
+			true,
+		],
+		[
+			"a no-from build",
+			(executor) =>
+				executor.executeAztecSendTx(
+					makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } } }),
+					ORIGIN,
+					undefined,
+					undefined,
+					FENCE,
+				),
+			false,
+		],
+	]
+
+	test.each(paths)("%s", async (_label, send, reuse) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const entry = {
+			txRequest: makeTxRequest(),
+			nonce: { toString: () => "77" },
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+			txCalls: reusedCalls,
+			pendingPublicAuthwits: [],
+			discoveredHashes: [],
+		}
+		const { executor, deps, proveAndSend, built } = makeHarness(
+			reuse ? { operationEstimateReuse: { tryConsume: vi.fn(async () => entry), stash: vi.fn(), evict: vi.fn() } as never } : {},
+		)
+		await send(executor, deps)
+		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
+		expect(record.mock.calls).toEqual([["j1", reuse ? reusedCalls : built.txCalls]])
+		expect(record.mock.invocationCallOrder[0]).toBeLessThan(proveAndSend.mock.invocationCallOrder[0])
+	})
+})
+
+describe("DappSendExecutor: a send whose simulation fails keeps the call its build named", () => {
+	const builtCalls = [{ contract: "0xc", method: "transfer_public_to_public", args: [], classId: "0x0c1a55" }]
+	const simulationFailure = new Error("Assertion failed: balance too low")
+	/** A pipeline that builds, hands the build's calls to the hook at argument `at`, then fails simulating. */
+	const failsAfterBuild = (at: number) =>
+		vi.fn(async (...args: unknown[]) => {
+			await (args[at] as ((txCalls: unknown) => Promise<void>) | undefined)?.(builtCalls)
+			throw simulationFailure
+		})
+	const embeddedPlanner = {
+		processAztecJsPayload: vi.fn(async () => ({
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+			feePaymentMethod: undefined,
+			feeOptions: { embeddedFeePayment: "fpc" },
+		})),
+	} as never
+	const sendTransaction = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+	const paths: Array<[string, Parameters<typeof makeHarness>[0], (executor: DappSendExecutor) => Promise<unknown>]> = [
+		[
+			"a fresh standard build",
+			{ buildAndEstimateFolded: failsAfterBuild(6) },
+			(executor) => executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE),
+		],
+		[
+			"an embedded build",
+			{ planner: embeddedPlanner, buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) =>
+				executor.executeAztecSendTx(
+					makeAztecOp({ feeSettings: { paymentMethod: { kind: "embedded" } } }),
+					ORIGIN,
+					undefined,
+					undefined,
+					FENCE,
+				),
+		],
+		[
+			"send_transaction",
+			{ buildAndEstimateValidated: failsAfterBuild(5) },
+			(executor) => executor.executeSendTransaction(sendTransaction, ORIGIN, undefined, FENCE),
+		],
+	]
+
+	test.each(paths)("%s: the record is named before it is failed", async (_label, overrides, send) => {
+		const { executor, deps } = makeHarness(overrides)
+		expect(await send(executor).catch((error: unknown) => error)).toBe(simulationFailure)
+		const record = deps.lane.recordBuiltCall as ReturnType<typeof vi.fn>
+		const mark = deps.lane.markJournal as ReturnType<typeof vi.fn>
+		expect(record.mock.calls).toEqual([["j1", builtCalls]])
+		const failedAt = mark.mock.calls.findIndex(([, patch]) => (patch as { stage?: string }).stage === "failed")
+		expect(failedAt).toBeGreaterThanOrEqual(0)
+		expect(record.mock.invocationCallOrder[0]).toBeLessThan(mark.mock.invocationCallOrder[failedAt] ?? 0)
 	})
 })
 
@@ -2595,5 +2894,316 @@ describe("DappSendExecutor — a sponsor row edited after the build read it", ()
 		expect(h.feeNode.getPredictedMinFees).not.toHaveBeenCalled()
 		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(2)
 		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappSendExecutor: a popup-approved send whose fee came out above the approved figure", () => {
+	const APPROVED = 16_000_000_000_000_000n // 0.016 FJ
+	const ROSE = 21_000_000_000_000_000n // 0.021 FJ
+	const TOLERATED = APPROVED + (APPROVED * FEE_RISE_ASKS.percent) / 100n
+	const HOOKS = { queuedJournalId: "q-1", originKey: "https://dapp.example" } as never
+	const PRIVATE_ROW = { id: "pfj", type: FpcType.PrivateFpc, address: "0xpfj", chainId: 7, isProtocol: true }
+	const { EXTERNAL, FEE_JUICE_WITH_CLAIM, PREEXISTING_FEE_JUICE } = AccountFeePaymentMethodOptions
+	type Route = {
+		feePaymentMethod: AccountFeePaymentMethodOptions
+		fpcIdentity?: typeof PRIVATE_ROW
+		appPayer?: { address: AztecAddress; callsFeeJuice: boolean }
+	}
+	/** An app's own payment, as the final simulation's kernel names its payer. */
+	const appPays = (address: string): Route => ({
+		feePaymentMethod: EXTERNAL,
+		appPayer: { address: AztecAddress.fromStringUnsafe(address), callsFeeJuice: false },
+	})
+	const FJ: Route = { feePaymentMethod: PREEXISTING_FEE_JUICE }
+	const PRIVATE: Route = { feePaymentMethod: EXTERNAL, fpcIdentity: PRIVATE_ROW }
+
+	/** A request whose fee limit is exactly `fee`. */
+	const txAt = (fee: bigint) =>
+		({
+			authWitnesses: [],
+			txContext: {
+				gasSettings: {
+					gasLimits: { daGas: 1, l2Gas: 0 },
+					teardownGasLimits: { daGas: 0, l2Gas: 0 },
+					maxFeesPerGas: { feePerDaGas: fee, feePerL2Gas: 0n },
+					maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
+				},
+			},
+		}) as never
+	const approval = (over: Record<string, unknown> = {}) => ({
+		interactionId: "i-1",
+		index: 0,
+		previewId: "pv-1",
+		feeCeiling: APPROVED.toString(),
+		...over,
+	})
+	const sendTransaction = () =>
+		({
+			kind: "send_transaction",
+			networkId: "net-1",
+			accountAddress: "0xacct",
+			feeSettings: { paymentMethod: { kind: "fj" } },
+			actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+		}) as never
+
+	/** A reuse cache that hands back what it holds, once. */
+	function reuseCache() {
+		const entries = new Map<string, unknown>()
+		return {
+			entries,
+			tryConsume: vi.fn(async (id: string) => {
+				const entry = entries.get(id)
+				entries.delete(id)
+				return entry
+			}),
+			stash: vi.fn((id: string, entry: unknown) => void entries.set(id, entry)),
+			evict: vi.fn((id: string) => void entries.delete(id)),
+		}
+	}
+
+	/**
+	 * Builds at `fees` in turn over `route`. A park gives the slot back, runs its wait and is granted
+	 * a fresh slot; the window answers each question with `answer`, an accept by default.
+	 */
+	function holding(fees: bigint[], route: Route, answer: "accept" | "refuse" | "none" = "accept") {
+		const shape = makeHarness().built
+		const builds = fees.map((fee) => ({ ...shape, ...route, txRequest: txAt(fee) }))
+		const build = vi.fn(async () => {
+			const next = builds.shift()
+			if (!next) throw new Error("no build left")
+			return next as never
+		})
+		const reuse = reuseCache()
+		const controller = new AbortController()
+		const askInWindow = vi.fn((question: FeeQuestion) => {
+			if (answer === "accept") h.deps.answers.accept(question.journalId, question.reask.fee)
+			if (answer === "refuse") controller.abort()
+		})
+		const h = makeHarness({
+			buildAndEstimateFolded: build,
+			buildAndEstimateValidated: build,
+			operationEstimateReuse: reuse as never,
+			askInWindow,
+		})
+		const granted = vi.fn()
+		const regranted = vi.fn()
+		const leave = vi.fn()
+		const lane = h.deps.lane
+		lane.acquireSlot = vi.fn(async () => ({ release: granted, preController: undefined }))
+		lane.claimOrCreateJournal = vi.fn(async () => ({ journalId: "j1", controller }))
+		lane.joinOriginLine = vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave }))
+		lane.parkSlot = vi.fn(async (release: () => void, ...rest: unknown[]) => {
+			release()
+			await (rest.at(-1) as () => Promise<void>)()
+			return regranted
+		})
+		h.deps.previewSnapshots.stash("pv-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
+		const aztec = (envelope: object = approval()) =>
+			h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE, envelope as never)
+		const sendTx = (envelope: object = approval()) =>
+			h.executor.executeSendTransaction(sendTransaction(), ORIGIN, undefined, FENCE, HOOKS, envelope as never)
+		/** The fee each proof committed. */
+		const proved = () => h.proveAndSend.mock.calls.map((call) => feeLimitOf((call[0] as unknown as { txRequest: never }).txRequest))
+		/** The records' moves, in order. */
+		const moves = () => (lane.commitJournal as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1])
+		return { ...h, build, reuse, controller, askInWindow, granted, regranted, leave, lane, aztec, sendTx, proved, moves }
+	}
+	type Holding = ReturnType<typeof holding>
+
+	const routes: Array<[string, Route, (h: Holding) => Promise<unknown>]> = [
+		["aztec_sendTx, the account's Fee Juice", FJ, (h) => h.aztec()],
+		["aztec_sendTx, a claim to the account", { feePaymentMethod: FEE_JUICE_WITH_CLAIM }, (h) => h.aztec()],
+		["aztec_sendTx, Private Fee Juice", PRIVATE, (h) => h.aztec()],
+		["aztec_sendTx, an app's payment through the PrivateFPC", appPays(PRIVATE_FPC_ADDRESS), (h) => h.aztec()],
+		["send_transaction, the account's Fee Juice", FJ, (h) => h.sendTx()],
+		["send_transaction, Private Fee Juice", PRIVATE, (h) => h.sendTx()],
+	]
+
+	test.each(routes)("%s: a fall or a rise within the tolerance proves once, unasked", async (_case, route, run) => {
+		for (const fee of [APPROVED - 1n, TOLERATED]) {
+			const h = holding([fee], route)
+			await run(h)
+			expect(h.askInWindow).not.toHaveBeenCalled()
+			expect(h.lane.parkSlot).not.toHaveBeenCalled()
+			expect(h.proved()).toEqual([fee])
+		}
+	})
+
+	test.each(routes)("%s: above it, nothing proves until the person accepts the new figure", async (_case, route, run) => {
+		const h = holding([ROSE, ROSE], route, "none")
+		const sent = run(h)
+		await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+
+		const question = h.askInWindow.mock.calls[0][0]
+		const reask = { fee: ROSE.toString(), cap: APPROVED.toString(), payer: personalPayerOf(route) }
+		expect(question).toEqual({ interactionId: "i-1", index: 0, journalId: "j1", reask, deadline: expect.any(Number) })
+		expect(h.moves()).toContainEqual({ stage: "queued", reask })
+		expect(h.granted).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+
+		expect(h.deps.answers.accept("j1", (ROSE - 1n).toString())).toBe(false)
+		expect(h.deps.answers.accept("j1", ROSE.toString())).toBe(true)
+		await sent
+		expect(h.moves()).toContainEqual({ stage: "pending" })
+		expect(h.lane.reclaimParked).toHaveBeenCalledWith("j1")
+		expect(h.proved()).toEqual([ROSE])
+		expect(h.regranted).toHaveBeenCalledTimes(1)
+	})
+
+	test("a rise past the accepted figure asks again, measured from what was accepted", async () => {
+		const higher = ROSE + (ROSE * FEE_RISE_ASKS.percent) / 100n + 1n
+		const h = holding([ROSE, higher, higher], FJ)
+		h.reuse.stash.mockImplementation(() => {})
+		await h.aztec()
+		expect(h.askInWindow.mock.calls.map(([q]) => [q.reask.fee, q.reask.cap])).toEqual([
+			[ROSE.toString(), APPROVED.toString()],
+			[higher.toString(), ROSE.toString()],
+		])
+		expect(h.proved()).toEqual([higher])
+	})
+
+	test("the accepted figure proves from the build the person saw, without building again", async () => {
+		const h = holding([ROSE], FJ)
+		await h.aztec()
+		expect(h.build).toHaveBeenCalledTimes(1)
+		expect(h.reuse.tryConsume).toHaveBeenCalledTimes(1)
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("a refusal ends the send cancelled, unproven, and drops the held build", async () => {
+		const h = holding([ROSE], FJ, "refuse")
+		await expect(h.aztec()).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+		expect(h.reuse.stash).toHaveBeenCalledTimes(1)
+		expect(h.reuse.entries.size).toBe(0)
+		expect(h.regranted).not.toHaveBeenCalled()
+	})
+
+	test("unanswered for the waiters' hour, the send ends cancelled at the deadline its window was given", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+		try {
+			const h = holding([ROSE], FJ, "none")
+			const askedAt: number[] = []
+			h.askInWindow.mockImplementation(() => void askedAt.push(Date.now()))
+			const sent = h.sendTx().catch((error: unknown) => error)
+			await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+			const { deadline } = h.askInWindow.mock.calls[0][0]
+			expect(deadline).toBe(askedAt[0] + MAX_WAIT_MS)
+
+			await vi.advanceTimersByTimeAsync(deadline - Date.now() - 1)
+			expect(h.moves()).not.toContainEqual({ stage: "cancelled" })
+			await vi.advanceTimersByTimeAsync(1)
+			expect(await sent).toBeInstanceOf(JobCancelledSentinel)
+			expect(h.moves()).toContainEqual({ stage: "cancelled" })
+			expect(h.deps.answers.accept("j1", ROSE.toString())).toBe(false)
+			expect(h.proveAndSend).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test.each([
+		["a sponsor", { feePaymentMethod: EXTERNAL, fpcIdentity: { ...PRIVATE_ROW, type: FpcType.DefaultSponsoredFpc } }],
+		["an app's own fee contract", { feePaymentMethod: EXTERNAL }],
+		["an app's own fee contract the kernel names", appPays(`0x${"0f".repeat(32)}`)],
+	] as Array<[string, Route]>)("%s pays from a balance that is not the person's: any figure proves unasked", async (_case, route) => {
+		const h = holding([ROSE], route)
+		await h.aztec(approval({ feeCeiling: undefined }))
+		expect(h.askInWindow).not.toHaveBeenCalled()
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("a send with no approval window is never held", async () => {
+		const h = holding([ROSE], FJ)
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE)
+		expect(h.askInWindow).not.toHaveBeenCalled()
+		expect(h.proved()).toEqual([ROSE])
+	})
+
+	test("an approval with no figure for a fee the account pays is refused unproven", async () => {
+		const h = holding([APPROVED], FJ)
+		await expect(h.aztec(approval({ feeCeiling: undefined }))).rejects.toThrow(
+			"The approval carries no fee figure for a fee the account pays",
+		)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+		expect((h.lane.markJournal as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[1])).toContainEqual({ stage: "failed" })
+	})
+
+	test("the build after an accept is held to the preview: an authorization it never showed is refused unproven", async () => {
+		const h = holding([ROSE], FJ)
+		h.reuse.stash.mockImplementation(() => {})
+		const rebuilt = { ...makeHarness().built, ...FJ, txRequest: txAt(ROSE) }
+		const discovering = vi.fn(async (...args: unknown[]) => {
+			const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
+			probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ih:new" } })
+			probe.discovered.push({
+				consumer: "0xc",
+				caller: "caller:new",
+				selector: "0xsel",
+				args: [],
+				innerHash: "ih:new",
+				messageHash: "mh:ih:new",
+			})
+			return rebuilt as never
+		})
+		h.build.mockImplementationOnce(h.build.getMockImplementation() as never).mockImplementationOnce(discovering as never)
+		await expect(h.aztec()).rejects.toThrow(AUTHWITS_CHANGED_MESSAGE)
+		expect(h.askInWindow).toHaveBeenCalledTimes(1)
+		expect(h.proveAndSend).not.toHaveBeenCalled()
+	})
+
+	test("the question shows again the authorizations the approval window listed", async () => {
+		const listed = [{ consumer: "0xc", caller: "0xd", selector: "0xsel", args: [], innerHash: "ih:a", messageHash: "mh:ih:a" }]
+		const h = holding([ROSE, ROSE], FJ)
+		h.deps.previewSnapshots.stash("pv-1", {
+			interactionId: "i-1",
+			index: 0,
+			fingerprint: null,
+			discoveredHashes: ["mh:ih:a"],
+			discoveredAuthwits: listed,
+		})
+		await h.aztec()
+		expect(h.askInWindow.mock.calls[0][0].discoveredAuthwits).toEqual(listed)
+
+		const bare = holding([ROSE, ROSE], FJ)
+		await bare.aztec()
+		expect("discoveredAuthwits" in bare.askInWindow.mock.calls[0][0]).toBe(false)
+	})
+
+	test("the send keeps its place in its app's line while asked, and gives it up only to prove", async () => {
+		const h = holding([ROSE], FJ)
+		await h.aztec()
+		const [asked] = h.askInWindow.mock.invocationCallOrder
+		const [left] = h.leave.mock.invocationCallOrder
+		const [proving] = h.proveAndSend.mock.invocationCallOrder
+		expect(asked).toBeLessThan(left)
+		expect(left).toBeLessThan(proving)
+	})
+
+	test("a send of the account that reached the node while the question was open is waited for before the rebuild", async () => {
+		const pending: Array<{ hash: string; chainId: number; account: string; calls: object[]; createdAt: number }> = []
+		const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+		const sequencer = new SendSequencer({ pendingTxs: () => pending as never, sleep: tick, now: () => 0 })
+		const h = holding([ROSE, ROSE], FJ, "none")
+		h.reuse.stash.mockImplementation(() => {})
+		Object.assign(h.deps, { sequencer })
+		const executor = new DappSendExecutor(h.deps)
+		const pendingAtBuild: number[] = []
+		h.build.mockImplementation(async () => {
+			pendingAtBuild.push(pending.length)
+			return { ...makeHarness().built, ...FJ, txRequest: txAt(ROSE) } as never
+		})
+		const sent = executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, HOOKS, FENCE, approval() as never)
+		await vi.waitFor(() => expect(h.askInWindow).toHaveBeenCalledTimes(1))
+		pending.push({ hash: "0xother", chainId: 7, account: "0xacct", calls: [], createdAt: 0 })
+		h.deps.answers.accept("j1", ROSE.toString())
+		for (let i = 0; i < 5; i++) await tick()
+		expect(h.build).toHaveBeenCalledTimes(1)
+		expect(h.lane.parkSlot).toHaveBeenCalledTimes(2)
+
+		pending.length = 0
+		await sent
+		expect(pendingAtBuild).toEqual([0, 0])
+		expect(h.proved()).toEqual([ROSE])
 	})
 })

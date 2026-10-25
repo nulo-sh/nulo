@@ -1,14 +1,11 @@
 import type { Page } from "puppeteer"
+import { acceptanceStatus } from "@nulo/legal"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
-import {
-	type ExtensionContext,
-	clickByTestId,
-	openOnboarding,
-	replaceInputValue,
-	seedLegalAcceptance,
-	waitForHash,
-} from "../fixtures/extension"
+import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
+import type { ExtensionContext } from "../fixtures/extension"
+import { openOnboarding, seedLegalAcceptance } from "../fixtures/wallet-pages"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed } from "../fixtures/legal"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -137,18 +134,22 @@ export async function acceptOnboardingTerms(page: Page, resumesAt: "create" | "i
 }
 
 /**
- * A first run's own path, from no acceptance: the Terms gate, then a password, ending unlocked with
- * onboarding marked complete so the popup opens on Home. The acceptance is the event the worker's
- * token list fetches on; a launch's seeded acceptance is a storage write that no listener hears.
+ * A first run's own path, from no acceptance: the Terms gate, then a password and "Do it later" on
+ * the recovery phrase, ending unlocked with onboarding marked complete so the popup opens on Home.
+ * The acceptance is the event the worker's token list fetches on; a launch's seeded acceptance is a
+ * storage write that no listener hears.
  */
 export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promise<void> {
 	const page = await openOnboarding(ctx, { legal: "missing" })
 	await clickByTestId(page, "onboarding-welcome-create")
 	await acceptOnboardingTerms(page, "create")
+	await clickByTestId(page, "onboarding-method-password")
 	await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
 	await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
 	await clickByTestId(page, "onboarding-submit-create")
-	await waitForHash(page, "#/onboarding/learn", 60_000)
+	await page.waitForSelector('[data-testid="onboarding-phrase-later"]', { visible: true, timeout: 60_000 })
+	await clickByTestId(page, "onboarding-phrase-later")
+	await waitForHash(page, "#/onboarding/done", 10_000)
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
 	await page.close()
 }
@@ -176,12 +177,24 @@ export async function isSheetPresent(page: Page): Promise<boolean> {
 	return page.evaluate((s) => document.querySelector(s) !== null, sel("legal-sheet"))
 }
 
+/** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
+ *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
+export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
+	if (acceptanceStatus(entries[LEGAL_ACCEPTANCE_KEY]) === "current") {
+		if (await isSheetPresent(page)) throw new Error("the update raised the Terms sheet over a current acceptance")
+		return
+	}
+	await waitForSheet(page, "changed")
+	await pointerClick(page, "legal-consent-checkbox")
+	await pointerClick(page, "legal-continue")
+}
+
 /**
  * A REAL pointer click at the element's centre, after proving nothing sits on top of it there. A
  * DOM-dispatched click reaches an element under an overlay; this is the proof that no overlay is.
  * `last` picks the last match of the testid — the control of the popup on top of a stack. The centre
- * is read only once the element holds still: a popup enters sliding 40px over 300ms, and a centre read
- * mid-slide is clicked a round trip later, after the element has moved off it.
+ * is read only once the element holds still: a sheet's card moves 15px as a sheet opens over it or
+ * closes above it, and a centre read mid-move is clicked a round trip later, after it has moved off it.
  */
 export async function pointerClick(page: Page, testid: string, opts: { last?: boolean } = {}): Promise<void> {
 	await page.waitForSelector(sel(testid), { visible: true, timeout: 15_000 })
@@ -212,7 +225,7 @@ export async function pointerClick(page: Page, testid: string, opts: { last?: bo
 
 /** Returns once three reads 50 ms apart give the element the same box and no enter transition above it
  *  still waits to start: Vue drops `*-enter-from` two animation frames after insert, and headless Chrome
- *  has been seen throttling frames long enough to hold a popup still at its start offset (reads are
+ *  has been seen throttling frames long enough to hold a popup still in its start state (reads are
  *  polled from the test for the same reason). After 5 s a still element is pressed where it stands; one
  *  still moving throws. */
 async function waitUntilStill(page: Page, selector: string, last: boolean): Promise<void> {
@@ -230,17 +243,20 @@ async function waitUntilStill(page: Page, selector: string, last: boolean): Prom
 			selector,
 			last,
 		)
-	const deadline = Date.now() + 5_000
-	let previous = await read()
+	let previous: Awaited<ReturnType<typeof read>> | undefined
 	let unchanged = 0
-	while (unchanged < 2 || previous.pending) {
-		if (Date.now() > deadline) {
-			if (unchanged >= 2) return
-			throw new Error(`${selector} was still moving after 5s (last box ${previous.box})`)
-		}
-		await new Promise((resolve) => setTimeout(resolve, 50))
+	const sample = async () => {
 		const now = await read()
-		unchanged = now.box === previous.box && now.pending === previous.pending ? unchanged + 1 : 0
+		unchanged = previous && now.box === previous.box && now.pending === previous.pending ? unchanged + 1 : 0
 		previous = now
+		return { ...now, unchanged }
+	}
+	try {
+		await pollUntil(sample, (s) => s.unchanged >= 2 && !s.pending, { label: `${selector} still`, timeoutMs: 5_000, intervalMs: 50 })
+	} catch (error) {
+		if (!(error instanceof PollTimeoutError)) throw error
+		const seen = error.last as Awaited<ReturnType<typeof sample>>
+		if (seen.unchanged >= 2) return
+		throw new Error(`${selector} was still moving after 5s (last box ${seen.box})`)
 	}
 }

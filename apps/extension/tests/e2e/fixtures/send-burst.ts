@@ -7,6 +7,8 @@ import type { Page } from "puppeteer"
 import { clickByTestId, replaceInputValue } from "./extension"
 import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSendType } from "./helpers"
 import { openSend, readSendView, submitSend, waitForSendGone } from "./send-page"
+import { PollTimeoutError, pollUntil } from "./poll"
+import { readSealedRows } from "./sealed-rows"
 
 export type Side = "public" | "private"
 
@@ -56,45 +58,54 @@ export async function readEstimateState(page: Page): Promise<EstimateState> {
 			if (`${title} ${sub}`.toLowerCase().includes("estimate fee")) return "failed"
 		}
 		if (document.querySelector('[data-testid="fee-estimate"]')) return "ready"
-		const queued = document.querySelector('[data-testid="fee-estimate-queued"], [data-testid="fee-estimate-queued-cap"]')
+		const queued = document.querySelector(
+			'[data-testid="fee-estimate-queued"], [data-testid="fee-estimate-queued-cap"], [data-testid="fee-estimate-queued-sponsored"]',
+		)
 		return queued ? "queued" : "estimating"
 	})
 }
 
 /** Waits until the estimate lands or fails, through any queued spell; the last state on timeout. */
 export async function waitForEstimate(page: Page, timeout = 120_000): Promise<EstimateState> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const state = await readEstimateState(page)
-		if (state === "ready" || state === "failed" || Date.now() > deadline) return state
-		await new Promise((r) => setTimeout(r, 250))
+	try {
+		return await pollUntil(
+			() => readEstimateState(page),
+			(state) => state === "ready" || state === "failed",
+			{ label: "the estimate landed or failed", timeoutMs: timeout, intervalMs: 250 },
+		)
+	} catch (error) {
+		if (error instanceof PollTimeoutError) return error.last as EstimateState
+		throw error
 	}
 }
 
-/** Whether Send is enabled, and whether the queued row offers a fee cap to queue against; `null`
- *  when there is no Send button. */
+/** Whether Send is enabled, and whether the queued row offers to queue: against a fee cap, or with
+ *  Nulo's sponsor paying; `null` when there is no Send button. */
 const readQueueOffer = (page: Page) =>
 	page.evaluate(() => {
 		const send = document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')
-		const capped = Boolean(document.querySelector('[data-testid="fee-estimate-queued-cap-line"]'))
-		return send ? { enabled: !send.disabled, capped } : null
+		const queueable = Boolean(
+			document.querySelector('[data-testid="fee-estimate-queued-cap-line"], [data-testid="fee-estimate-queued-sponsored-line"]'),
+		)
+		return send ? { enabled: !send.disabled, queueable } : null
 	})
 
 /** Fails unless the fee row turns queued and stays queued for the whole window, with Send enabled
- *  exactly while it offers a cap. */
+ *  exactly while it offers to queue. */
 export async function expectEstimateQueued(page: Page, windowMs: number): Promise<void> {
-	const settle = Date.now() + 30_000
-	while ((await readEstimateState(page)) === "estimating") {
-		if (Date.now() > settle) throw new Error("the estimate never answered queued")
-		await new Promise((r) => setTimeout(r, 250))
-	}
+	await pollUntil(
+		() => readEstimateState(page),
+		(state) => state !== "estimating",
+		{ label: "the estimate answering queued", timeoutMs: 30_000, intervalMs: 250 },
+	)
 	const deadline = Date.now() + windowMs
 	while (Date.now() < deadline) {
 		const state = await readEstimateState(page)
 		if (state !== "queued") throw new Error(`the estimate was expected to stay queued, but it is ${state}`)
 		const offer = await readQueueOffer(page)
 		if (!offer) throw new Error("Send is missing while the estimate is queued")
-		if (offer.enabled !== offer.capped) throw new Error(`Send must be enabled exactly while a cap shows: ${JSON.stringify(offer)}`)
+		if (offer.enabled !== offer.queueable)
+			throw new Error(`Send must be enabled exactly while the row offers to queue: ${JSON.stringify(offer)}`)
 		await new Promise((r) => setTimeout(r, 250))
 	}
 }
@@ -123,14 +134,10 @@ const TERMINAL = new Set(["succeeded", "failed", "cancelled"])
 
 /** Popup transfer rows of the journal, oldest first. */
 export async function readTransferRows(page: Page): Promise<TransferRow[]> {
-	const raws = await page.evaluate(async () => {
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		return Object.entries(all).flatMap(([key, raw]) => (key.startsWith("nulo:journal@") ? [raw] : []))
-	})
+	const records = await readSealedRows(page, "journal")
 	const rows: TransferRow[] = []
-	for (const raw of raws) {
+	for (const { row } of records) {
 		try {
-			const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>
 			if (row.kind !== "transfer") continue
 			const progress = row.progress as { stage?: string; txHash?: string; reask?: { fee: string; cap: string } } | undefined
 			const error = row.error as { message?: string } | null | undefined
@@ -158,13 +165,12 @@ export async function waitForTransferStage(
 	stages: readonly string[],
 	timeout = 120_000,
 ): Promise<TransferRow> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const row = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
-		if (row?.stage && stages.includes(row.stage)) return row
-		if (Date.now() > deadline) throw new Error(`transfer ${amountRaw} never reached ${stages.join("|")}: ${JSON.stringify(row)}`)
-		await new Promise((r) => setTimeout(r, 250))
-	}
+	const row = await pollUntil(
+		async () => (await readTransferRows(page)).find((r) => r.amount === amountRaw),
+		(row) => Boolean(row?.stage && stages.includes(row.stage)),
+		{ label: `transfer ${amountRaw} at ${stages.join("|")}`, timeoutMs: timeout, intervalMs: 250 },
+	)
+	return row as TransferRow
 }
 
 /** Fails unless the transfer row of `amountRaw` appears and then stays at `stage` for the whole window. */
@@ -180,40 +186,38 @@ export async function expectStageHeld(page: Page, amountRaw: string, stage: stri
 
 /** Waits until every transfer row is terminal, then returns them all. */
 export async function waitForTransfersTerminal(page: Page, timeout = 300_000): Promise<TransferRow[]> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const rows = await readTransferRows(page)
-		if (rows.every((r) => r.stage && TERMINAL.has(r.stage))) return rows
-		if (Date.now() > deadline)
-			throw new Error(`transfers still in flight: ${JSON.stringify(rows.filter((r) => !TERMINAL.has(r.stage ?? "")))}`)
-		await new Promise((r) => setTimeout(r, 500))
-	}
+	return pollUntil(
+		() => readTransferRows(page),
+		(rows) => rows.every((r) => r.stage && TERMINAL.has(r.stage)),
+		{
+			label: "every transfer terminal",
+			timeoutMs: timeout,
+			intervalMs: 500,
+			show: (rows) => `in flight ${JSON.stringify(rows.filter((r) => !TERMINAL.has(r.stage ?? "")))}`,
+		},
+	)
 }
 
 /** The wallet's tx record status per hash (TxStatus: 0 Pending, 1 Dropped, 2+ in a block); `null` before it is recorded. */
 export async function readTxStatuses(page: Page, hashes: readonly string[]): Promise<Record<string, number | null>> {
-	return page.evaluate(async (hs: string[]) => {
-		const keys = hs.map((h) => `nulo:core:txs@${h}`)
-		const got = (await chrome.storage.local.get(keys)) as Record<string, unknown>
-		const out: Record<string, number | null> = {}
-		for (const h of hs) {
-			const value = got[`nulo:core:txs@${h}`]
-			const row = (typeof value === "string" ? JSON.parse(value) : value) as { status?: number } | undefined
-			out[h] = typeof row?.status === "number" ? row.status : null
-		}
-		return out
-	}, hashes as string[])
+	const rows = await readSealedRows<{ status?: number }>(page, "txs")
+	return Object.fromEntries(
+		hashes.map((hash) => {
+			const status = rows.find((tx) => tx.naturalId === hash)?.row.status
+			return [hash, typeof status === "number" ? status : null]
+		}),
+	)
 }
 
 /** Waits until the wallet's tx record for each hash is in a block. */
 export async function waitForTxsMined(page: Page, hashes: readonly string[], timeout = 180_000): Promise<void> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const statuses = await readTxStatuses(page, hashes)
-		if (hashes.every((h) => (statuses[h] ?? -1) >= 2)) return
-		if (Date.now() > deadline || hashes.some((h) => statuses[h] === 1)) {
-			throw new Error(`txs not mined: ${JSON.stringify(statuses)}`)
-		}
-		await new Promise((r) => setTimeout(r, 500))
-	}
+	await pollUntil(
+		async () => {
+			const statuses = await readTxStatuses(page, hashes)
+			if (hashes.some((h) => statuses[h] === 1)) throw new Error(`txs not mined, one dropped: ${JSON.stringify(statuses)}`)
+			return statuses
+		},
+		(statuses) => hashes.every((h) => (statuses[h] ?? -1) >= 2),
+		{ label: "txs mined", timeoutMs: timeout, intervalMs: 500 },
+	)
 }

@@ -17,6 +17,7 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { PendingVerificationEntry } from "./pending-verification"
 import { wireSessionTeardown } from "./session-revocation"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 const ORIGIN = "https://dapp.xyz"
 const TAB = 7
@@ -34,6 +35,7 @@ async function harness() {
 			getActiveProfile: async () => ({ id: active }),
 			onProfileDeleted: new EventHandler(),
 			deriveDappSessionMacKey: async () => macKey,
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence: async () => ({ profileId: active, epoch: deletionState.capture(active) }),
 		}),
@@ -44,7 +46,7 @@ async function harness() {
 	await collection.start()
 	for (const profileId of ["p2", "p1"]) {
 		active = profileId
-		await sessions.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "1")
+		await sessions.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "1", profileId)
 	}
 
 	const live = new Set(["approved-under-p1", "stamped-to-p2"])

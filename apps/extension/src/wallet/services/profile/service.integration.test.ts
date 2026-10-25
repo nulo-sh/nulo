@@ -28,6 +28,7 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyProfileExistsError,
 	ProfileIdConflictError,
 	RestoreTornError,
 	RecoveryModeError,
@@ -42,6 +43,7 @@ import {
 	asBase64SecretPrf,
 	asHexUserHandle,
 	asImportedKeysDek,
+	asMasterSecretBytes,
 	EncryptionKey,
 	IMPORTED_DEK_AAD,
 	PasswordSecretBox,
@@ -64,14 +66,16 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
-import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
-import { feePicksKey, pinnedTokensKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
+import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, type SessionManager } from "./session-manager"
+import type { ProfileRepository } from "./repository"
+import { pinnedTokensKey, profileImportedKey, profileNotFirstKey, profileUiKeys } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
+import { RowKeyring } from "./row-keyring"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
-import { deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
+import { deriveMasterFromMnemonic, openRow, sealRow } from "@nulo/wallet-crypto"
 
 /** Recovery words for a deterministic 32-byte entropy fill (the v2 restore pairing check
  *  requires entropy whose words actually derive the master). */
@@ -254,6 +258,15 @@ async function makeService(ttlOrInit: number | { sessionTtl?: number; strict?: b
 	return { api, config, logger, service, passkeys }
 }
 
+/** The coordinator's purge, as far as the UI keys go: it removes the profile's. */
+const purgingDelegate = (api: FakeBrowserApi, gate?: Promise<void>) => ({
+	snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+	runFor: async (id: string) => {
+		await gate
+		await api.storage.local.remove(profileUiKeys(id))
+	},
+})
+
 /** Constructs a fresh `ProfileService` bound to a pre-existing
  *  `FakeBrowserApi` — simulates an MV3 SW restart that observes the
  *  prior persisted state. Used by strict-mode tests to verify
@@ -380,34 +393,6 @@ describe("ProfileService integration", () => {
 
 			// Re-query — no stuck lock.
 			await service.getProfiles() // would hang if lock leaked
-		}, 30_000)
-	})
-
-	describe("Change 3 — confirmProfileOperation point-in-time", () => {
-		test("confirm runs fully unlocked from phase 2 onwards", async () => {
-			const { service } = await makeService()
-			const profile = await service.createProfile("P", "pass1234")
-
-			// Kick off confirm; meanwhile change password. confirm should see
-			// the OLD password as valid because its snapshot predates change.
-			// Actually — race ordering is timing-dependent; what we must
-			// assert is that confirm + change together complete without
-			// deadlock and without leaving a stuck lock.
-			const [confirmRes, changeRes] = await Promise.allSettled([
-				service.confirmProfileOperation(profile.id, "pass1234"),
-				service.changeProfilePassword(profile.id, "pass1234", "newpass"),
-			])
-
-			expect(changeRes.status).toBe("fulfilled")
-			// confirm with the OLD password: either succeeded (snapshot before
-			// change) or threw wrapped "Invalid password" (snapshot after change).
-			if (confirmRes.status === "rejected") {
-				expect(confirmRes.reason.message).toMatch(/Invalid profile password/)
-			}
-
-			// No stuck lock: subsequent op returns.
-			const info = await service.getActiveProfile()
-			expect(info?.id).toBe(profile.id)
 		}, 30_000)
 	})
 
@@ -880,6 +865,27 @@ describe("ProfileService integration", () => {
 			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(false)
 		}, 30_000)
 
+		test("a lock whose close returns with a successor's session published does not announce over it", async () => {
+			const { service } = await makeService()
+			const created = await service.createProfile("P", "pass1234")
+			await service.lockActiveProfile()
+			const internals = service as unknown as { repo: ProfileRepository; sessionManager: SessionManager }
+			const profile = await internals.repo.get(created.id)
+			if (!profile) throw new Error("setup: no profile row")
+			const close = internals.sessionManager.close.bind(internals.sessionManager)
+			vi.spyOn(internals.sessionManager, "close").mockImplementationOnce(async (...args) => {
+				const emitted = await close(...args)
+				await internals.sessionManager.open(profile, asMasterSecretBytes(new Uint8Array(32).fill(1)))
+				return emitted
+			})
+			const events: unknown[] = []
+			service.onActiveProfileChanged.add((p) => events.push(p))
+
+			await service.lockActiveProfile().catch(() => undefined)
+
+			expect(events).toEqual([expect.objectContaining({ id: created.id })])
+		}, 30_000)
+
 		test("after a restart that already dropped the record (strict password): the lock is still announced", async () => {
 			const { api, service } = await makeService({ strict: true })
 			await service.createProfile("P", "pass1234")
@@ -1156,32 +1162,15 @@ describe("ProfileService integration", () => {
 			expect(passkeys.outcomes).toEqual(["done", "failed"])
 		}, 30_000)
 
-		test("import names the profile on the window, and reports done, then failed for the same passkey again", async () => {
+		test("import names the profile on the window, and reports done, then exists for the same passkey again", async () => {
 			const { service, passkeys } = await makeService()
 			await service.importPasskey("Imported")
 			expect(passkeys.lastDisplay).toEqual({ step: "import", profileName: "Imported" })
 			expect(passkeys.outcomes).toEqual(["done"])
 
 			await service.lockActiveProfile()
-			await expect(service.importPasskey("Again")).rejects.toThrow()
-			expect(passkeys.outcomes).toEqual(["done", "failed"])
-		}, 30_000)
-
-		test("an operation confirm reports done after its revalidation, and failed when the profile went away meanwhile", async () => {
-			const { service, passkeys } = await makeService()
-			const profile = await service.createPasskeyProfile("PK")
-			passkeys.outcomes.length = 0
-
-			await expect(service.confirmProfileOperation(profile.id)).resolves.toBe(true)
-			expect(passkeys.outcomes).toEqual(["done"])
-
-			const realGetKey = passkeys.getKey.bind(passkeys)
-			vi.spyOn(passkeys, "getKey").mockImplementation(async (id, display) => {
-				await service.deleteProfile(profile.id)
-				return realGetKey(id, display)
-			})
-			await expect(service.confirmProfileOperation(profile.id)).rejects.toThrow(/Invalid profile id/)
-			expect(passkeys.outcomes).toEqual(["done", "failed"])
+			await expect(service.importPasskey("Again")).rejects.toBeInstanceOf(PasskeyProfileExistsError)
+			expect(passkeys.outcomes).toEqual(["done", "exists"])
 		}, 30_000)
 	})
 
@@ -1379,6 +1368,7 @@ describe("ProfileService integration", () => {
 				...profileUiKeys("abc12345").map((key) => `remove:${key}`),
 				`set:${RESTORE_PENDING_ROOT}@abc12345`,
 				"set:nulo:core:profiles@abc12345",
+				`set:${profileImportedKey("abc12345")}`,
 			])
 			expect(await keysOf(api)).toContain(pinnedTokensKey("feed0001"))
 		}, 30_000)
@@ -1414,6 +1404,155 @@ describe("ProfileService integration", () => {
 
 			expect("restoreError" in outcome && outcome.restoreError).toMatch(/storage refused/)
 			expect((await keysOf(api)).filter((key) => key.endsWith("@abc12345"))).toEqual([])
+		}, 30_000)
+	})
+
+	describe("an import records its profile as imported; a create beside another profile, as not first", () => {
+		type Built = Awaited<ReturnType<typeof makeService>>
+		const flag = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
+		const imported = (api: FakeBrowserApi, id: string) => flag(api, profileImportedKey(id))
+		const notFirst = (api: FakeBrowserApi, id: string) => flag(api, profileNotFirstKey(id))
+
+		async function restorePasskey({ service }: Built) {
+			const original = await service.createPasskeyProfile("PK")
+			const credentialId = await service.getPasskeyCredentialId(original.id)
+			await service.lockActiveProfile()
+			await service.deleteProfile(original.id)
+			const out = await service.restore(
+				{ id: "ignored", name: "PK", type: "passkey" },
+				{ type: "passkey", credentialId: asBase64CredentialId(credentialId), dekSealed: await fakeDekSealedFor(credentialId) },
+				undefined,
+				fakeCredentialData(credentialId, original.id),
+			)
+			if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
+			return out
+		}
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a phrase import", async ({ service }) => service.importMnemonic("M", await wordsForFill(0x51), "pass1234")],
+			["a passkey import", ({ service }) => service.importPasskey("IK", fakeCredentialData("cred-imp-1", "uh-imp-1"))],
+			["a passkey import whose prompt ran in the passkey window", ({ service }) => service.importPasskey("IW")],
+			[
+				"a password backup restore",
+				async ({ service }) => service.restore({ id: "r", name: "R", type: "password" }, await restoreSecretFor(0x52), "pass1234"),
+			],
+			["a passkey backup restore", restorePasskey],
+		])(
+			"%s marks its profile",
+			async (_label, run) => {
+				const built = await makeService()
+				const { id } = await run(built)
+				expect(await imported(built.api, id)).toBe(true)
+			},
+			30_000,
+		)
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("P", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-1", "uh-new-1"))],
+		])(
+			"%s of the install's first profile marks neither (control)",
+			async (_label, run) => {
+				const built = await makeService()
+				const { id } = await run(built)
+				expect(await imported(built.api, id)).toBeUndefined()
+				expect(await notFirst(built.api, id)).toBeUndefined()
+			},
+			30_000,
+		)
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("B", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-2", "uh-new-2"))],
+		])(
+			"%s beside another profile marks it not first after its row and before the session switches to it",
+			async (_label, run) => {
+				const built = await makeService()
+				await built.service.createProfile("A", "pass1234")
+				const writes = recordWrites(built.api.storage.local, "nulo:")
+				built.service.onActiveProfileChanged.add(() => writes.log.push("active"))
+				const { id } = await run(built)
+				writes.restore()
+				const row = `set:nulo:core:profiles@${id}`
+				const mark = `set:${profileNotFirstKey(id)}`
+				expect(writes.log.filter((entry) => entry === row || entry === mark || entry === "active")).toEqual([row, mark, "active"])
+				expect(await imported(built.api, id)).toBeUndefined()
+			},
+			30_000,
+		)
+
+		test.each<[string, (built: Built) => Promise<{ id: string }>]>([
+			["a password create", ({ service }) => service.createProfile("B", "pass1234")],
+			["a passkey create", ({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-new-3", "uh-new-3"))],
+		])(
+			"%s beside an imported profile is not first, and the imported one stays imported alone",
+			async (_label, run) => {
+				const built = await makeService()
+				const { api } = built
+				const first = await built.service.importMnemonic("M", await wordsForFill(0x55), "pass1234")
+				const { id } = await run(built)
+				expect(await notFirst(api, id)).toBe(true)
+				expect(await imported(api, id)).toBeUndefined()
+				expect(await imported(api, first.id)).toBe(true)
+				expect(await notFirst(api, first.id)).toBeUndefined()
+			},
+			30_000,
+		)
+
+		test("an import beside another profile is marked imported, not not-first", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("A", "pass1234")
+			const { id } = await service.importMnemonic("M", await wordsForFill(0x54), "pass1234")
+			expect(await imported(api, id)).toBe(true)
+			expect(await notFirst(api, id)).toBeUndefined()
+		}, 30_000)
+
+		test("a profile whose deletion has begun is no other profile", async () => {
+			const { api, service } = await makeService()
+			const a = await service.createProfile("A", "pass1234")
+			service.getDeletionState().beginDeletion(a.id)
+			const b = await service.createProfile("B", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(b.id)
+			expect(await notFirst(api, b.id)).toBeUndefined()
+		}, 30_000)
+
+		test("a later profile stays not first when the first is deleted; with none left, the next is first", async () => {
+			const { api, service } = await makeService()
+			service.setDeletionDelegate(purgingDelegate(api))
+			const a = await service.createProfile("A", "pass1234")
+			const b = await service.createProfile("B", "pass1234")
+			await service.deleteProfile(a.id)
+			expect(await notFirst(api, b.id)).toBe(true)
+			await service.deleteProfile(b.id)
+			expect(await notFirst(api, b.id)).toBeUndefined()
+			const c = await service.createProfile("C", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(c.id)
+			expect(await notFirst(api, c.id)).toBeUndefined()
+		}, 60_000)
+
+		test("a refused not-first write still completes the create", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("A", "pass1234")
+			const set = api.storage.local.set.bind(api.storage.local)
+			api.storage.local.set = async (items) => {
+				if (Object.keys(items).some((key) => key.startsWith("nulo:ui:profileNotFirst@"))) throw new Error("storage refused")
+				await set(items)
+			}
+			const profile = await service.createProfile("B", "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(profile.id)
+			expect(await notFirst(api, profile.id)).toBeUndefined()
+		}, 30_000)
+
+		test("a refused flag write still completes the import", async () => {
+			const { api, service } = await makeService()
+			const set = api.storage.local.set.bind(api.storage.local)
+			api.storage.local.set = async (items) => {
+				if (Object.keys(items).some((key) => key.startsWith("nulo:ui:profileImported@"))) throw new Error("storage refused")
+				await set(items)
+			}
+			const profile = await service.importMnemonic("M", await wordsForFill(0x53), "pass1234")
+			expect((await service.getActiveProfile())?.id).toBe(profile.id)
+			expect(await imported(api, profile.id)).toBeUndefined()
 		}, 30_000)
 	})
 
@@ -1843,15 +1982,10 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	// Composition seam — the runtime now does `new ProfileService(config, logger, browserApi)`
-	// (runtime.ts:136). The browserApi port carries BOTH storage AND alarms, so wiring it for the
-	// storage migration also ACTIVATES SessionManager's pre-existing proactive TTL auto-lock (it was
-	// dormant only because the composition root passed no port). This is an accepted,
-	// user-visible behavior change — the intended completion of the migration, so a proactive-TTL
-	// auto-lock that follows from wiring the port is deliberate. These pins keep the activation
-	// from silently regressing back to dormant (or silently flipping on without a port).
+	// The browserApi port carries alarms as well as storage, so the proactive TTL auto-lock is live
+	// wherever ProfileService is constructed.
 	describe("ProfileService composition seam — proactive TTL activation", () => {
-		test("WITH a browserApi port → SessionManager subscribes to the proactive-TTL alarm", () => {
+		test("SessionManager subscribes to the proactive-TTL alarm", () => {
 			const api = new FakeBrowserApi()
 			api.reset()
 			const onAlarm = vi.spyOn(api.alarms, "onAlarm")
@@ -1859,17 +1993,6 @@ describe("ProfileService integration", () => {
 			const logger = new LoggerStore(config)
 			new ProfileService(config, logger, api)
 			expect(onAlarm).toHaveBeenCalledTimes(1)
-		})
-
-		test("WITHOUT a browserApi port (the runtime before the port was wired) → no alarm subscription (reactive-only, dormant)", () => {
-			const api = new FakeBrowserApi()
-			api.reset()
-			const onAlarm = vi.spyOn(api.alarms, "onAlarm")
-			const config = fakeConfig()
-			const logger = new LoggerStore(config)
-			// Port deliberately NOT passed — mirrors the earlier `new ProfileService(config, logger)`.
-			new ProfileService(config, logger)
-			expect(onAlarm).not.toHaveBeenCalled()
 		})
 	})
 
@@ -2282,113 +2405,6 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		expect(purged).toEqual([])
 		expect((await boot2.getProfiles()).map((x) => x.id)).toContain(named.id)
 		expect(state.isReserved("other")).toBe(true)
-	})
-})
-
-describe("fee picks: one writer per profile", () => {
-	const FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" } as const
-	const appPick = (address: string) => ({ kind: "app", address, pick: FJ }) as const
-	const read = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
-
-	/** The coordinator's purge, as far as the picks go: it removes the profile's UI keys. */
-	const purgingDelegate = (api: FakeBrowserApi, gate?: Promise<void>) => ({
-		snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
-		runFor: async (id: string) => {
-			await gate
-			await api.storage.local.remove(profileUiKeys(id))
-		},
-	})
-
-	test("a pick is the profile's own: another profile holding the same address keeps its own", async () => {
-		const { api, service } = await makeService()
-		const a = await service.createProfile("A", "password123")
-		const b = await service.createProfile("B", "password123")
-
-		expect(await service.saveFeePick(a.id, appPick("0xsame"))).toBe(true)
-		await service.saveFeePick(b.id, { kind: "send", address: "0xsame", side: "public", pick: { type: "private_fpc" } })
-
-		expect(await read(api, feePicksKey(a.id))).toEqual({ "0xsame": FJ })
-		expect(await read(api, feePicksKey(b.id))).toBeUndefined()
-		expect(await read(api, sendFeePicksKey(b.id))).toEqual({ "0xsame": { public: { type: "private_fpc" } } })
-		expect(await read(api, sendFeePicksKey(a.id))).toBeUndefined()
-	})
-
-	test("a write for a deleted profile, or one whose deletion has begun, is refused and writes nothing", async () => {
-		const { api, service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-		let releasePurge = () => {}
-		service.setDeletionDelegate(purgingDelegate(api, new Promise<void>((resolve) => (releasePurge = resolve))))
-
-		const deleting = service.deleteProfile(p.id)
-		await vi.waitFor(() => expect(service.getDeletionState().isReserved(p.id)).toBe(true))
-		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
-		releasePurge()
-		await deleting
-		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
-
-		expect(Object.keys(await api.storage.local.get(null)).filter((key) => key.endsWith(`@${p.id}`))).toEqual([])
-	})
-
-	test("a row still present under a begun deletion (a worker that died mid-delete) is refused too", async () => {
-		const { api, service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-		service.getDeletionState().beginDeletion(p.id)
-
-		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
-		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
-	})
-
-	test("a pick saved before the delete is removed by its purge", async () => {
-		const { api, service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-		service.setDeletionDelegate(purgingDelegate(api))
-		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(true)
-
-		await service.deleteProfile(p.id)
-
-		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
-	})
-
-	test("two windows saving picks for different accounts at once keep both", async () => {
-		const { api, service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-
-		await Promise.all([service.saveFeePick(p.id, appPick("0xa")), service.saveFeePick(p.id, appPick("0xb"))])
-
-		expect(await read(api, feePicksKey(p.id))).toEqual({ "0xa": FJ, "0xb": FJ })
-	})
-
-	test("a writer the lock's watchdog displaced writes nothing once deletion has run", async () => {
-		const { api, service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-		service.setDeletionDelegate(purgingDelegate(api))
-		const get = api.storage.local.get.bind(api.storage.local)
-		let releaseRead = () => {}
-		const stalled = new Promise<void>((resolve) => (releaseRead = resolve))
-		api.storage.local.get = async (keys) => {
-			if ([keys].flat().includes(feePicksKey(p.id))) await stalled
-			return get(keys)
-		}
-
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-		try {
-			const writing = service.saveFeePick(p.id, appPick("0xa"))
-			await vi.advanceTimersByTimeAsync(5 * 60_000)
-			vi.useRealTimers()
-			await service.deleteProfile(p.id)
-			releaseRead()
-
-			expect(await writing).toBe(false)
-		} finally {
-			vi.useRealTimers()
-		}
-		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
-	})
-
-	test("a malformed update is refused at the boundary", async () => {
-		const { service } = await makeService()
-		const p = await service.createProfile("A", "password123")
-		await expect(service.saveFeePick(p.id, { kind: "app", address: "0xa", pick: { type: "embedded" } } as never)).rejects.toThrow()
 	})
 })
 
@@ -3180,14 +3196,97 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 	// (CLOSE READ-BACK PIN) An explicit lock whose persisted-session delete
 	// fails must NOT report success — lockActiveProfile reads back and surfaces it,
 	// else the surviving bearer would silently re-unlock on the next SW start.
+	// A record that refused both deletes restarts the wallet; nothing else does.
 	describe("(CLOSE READ-BACK PIN) lockActiveProfile surfaces a failed persisted-session clear", () => {
-		test("a rejecting session.remove during lock makes lockActiveProfile throw", async () => {
+		// The read-back fails in every row, so a restart keyed on it rather than on the deletes fails here.
+		test.each([
+			{ failedDeletes: 0, attempts: 1, restarts: 0 },
+			{ failedDeletes: 1, attempts: 2, restarts: 0 },
+			{ failedDeletes: 2, attempts: 2, restarts: 1 },
+		])(
+			"a lock with $failedDeletes failed delete(s) restarts the wallet $restarts time(s), and throws",
+			async ({ failedDeletes, attempts, restarts }) => {
+				const { api, service } = await makeService()
+				await service.createProfile("P", "pass1234")
+				const reload = vi.spyOn(api.runtime, "reload")
+				const remove = vi.spyOn(api.storage.session, "remove")
+				for (let i = 0; i < failedDeletes; i++) remove.mockRejectedValueOnce(new Error("session remove failed"))
+				vi.spyOn(api.storage.session, "get").mockRejectedValue(new Error("session get failed"))
+
+				await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+				expect(remove).toHaveBeenCalledTimes(attempts)
+				expect(reload).toHaveBeenCalledTimes(restarts)
+			},
+			30_000,
+		)
+
+		test("a close the person did not ask for restarts nothing, its deletes refused", async () => {
+			const { api, service } = await makeService()
+			const profile = await service.createProfile("P", "pass1234")
+			const reload = vi.spyOn(api.runtime, "reload")
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await service.lockProfileIfActive(profile.id)
+			expect(await service.getActiveProfile()).toBeUndefined()
+			expect(reload).not.toHaveBeenCalled()
+		}, 30_000)
+
+		test("a lock that saves restarts nothing", async () => {
 			const { api, service } = await makeService()
 			await service.createProfile("P", "pass1234")
-			expect((await service.getActiveProfile())?.id).toBeDefined()
+			const reload = vi.spyOn(api.runtime, "reload")
+			const prepare = vi.fn()
+			service.setRestartPreparation(prepare)
+
+			await service.lockActiveProfile()
+			expect(await service.getActiveProfile()).toBeUndefined()
+			expect(reload).not.toHaveBeenCalled()
+			expect(prepare).not.toHaveBeenCalled()
+		}, 30_000)
+
+		test("a lock that cannot be saved runs the restart's preparation, then restarts, in one turn", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			const events: string[] = []
+			vi.spyOn(api.runtime, "reload").mockImplementation(() => void events.push("reload"))
+			service.setRestartPreparation(() => {
+				events.push("prepare")
+				queueMicrotask(() => events.push("a microtask the preparation queued"))
+			})
 
 			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
 			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(events).toEqual(["prepare", "reload", "a microtask the preparation queued"])
+		}, 30_000)
+
+		test("a preparation that throws still restarts", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			const reload = vi.spyOn(api.runtime, "reload")
+			service.setRestartPreparation(() => {
+				throw new Error("preparation failed")
+			})
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(service.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(reload).toHaveBeenCalledTimes(1)
+		}, 30_000)
+
+		test("a restarted worker whose lock cannot be saved announces the lock, then restarts", async () => {
+			const { api, service } = await makeService()
+			await service.createPasskeyProfile("PK")
+			const { service: rebooted } = await makeServiceFromExistingApi(api)
+			expect(await rebooted.getActiveProfile()).toBeUndefined()
+			const events: unknown[] = []
+			const reload = vi.spyOn(api.runtime, "reload").mockImplementation(() => {
+				events.push("reload")
+			})
+			rebooted.onActiveProfileChanged.add((p) => events.push(p))
+
+			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("session remove failed"))
+			await expect(rebooted.lockActiveProfile()).rejects.toThrow(/did not persist/)
+			expect(events).toEqual([undefined, "reload"])
+			expect(reload).toHaveBeenCalledTimes(1)
 		}, 30_000)
 	})
 
@@ -3656,7 +3755,9 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			await service.createPasskeyProfile("PK", fakeCredentialData("cred-dup", "uh-dup"))
 			await service.lockActiveProfile()
 			// importPasskey with the same credential id — even allowDuplicate can't bypass it.
-			await expect(service.importPasskey("PK2", fakeCredentialData("cred-dup", "uh-dup2"), true)).rejects.toThrow(/already exists/)
+			await expect(service.importPasskey("PK2", fakeCredentialData("cred-dup", "uh-dup2"), true)).rejects.toBeInstanceOf(
+				PasskeyProfileExistsError,
+			)
 		})
 	})
 
@@ -3873,18 +3974,34 @@ describe("dApp-session rows under same-phrase SIBLINGS — the real ProfileServi
 		const { api, profiles, sessions, p1, p2 } = await makeSiblings()
 		await profiles.lockActiveProfile()
 		await profiles.unlockProfile(p1.id, "pass1234")
-		const row = await sessions.addDappSession({ name: "dApp", url: "https://dapp.example" }, [], [], 0 as never, "1")
+		const row = await sessions.addDappSession({ name: "dApp", url: "https://dapp.example" }, [], [], 0 as never, "1", p1.id)
 		const [key] = await rowKeys(api)
 		const authentic = (await api.storage.local.get(key))[key] as string
 		expect(JSON.parse(authentic).profileId).toBe(p1.id)
 
 		// The forgery: a sibling holding the SAME master builds a p2-targeted row and signs it with
-		// ITS key (master shared, DEK not) — p1's real derivation stands in for the attacker's. A
-		// master-only derivation would make this tag verify under p2; the DEK-keyed one must not.
-		const authenticRow = JSON.parse(authentic) as Record<string, unknown> & { mac: string }
+		// ITS key (master shared, DEK not) — p1's real derivation stands in for the attacker's. The
+		// row seal is master-only, so the sibling opens p1's row and seals the forgery for p2 (the
+		// keyring's keys stand in for its derivation): only the DEK-keyed MAC is out of its reach.
+		const keysOf = (id: string) => {
+			const keys = profiles.rowKeys(id)
+			if (!keys) throw new Error(`no row keys for ${id}`)
+			return keys
+		}
+		const root = "nulo:core:dappSessions"
+		const sealedText = (JSON.parse(authentic) as { sealed: string }).sealed
+		const authenticRow = JSON.parse(await openRow(keysOf(p1.id), sealedText, { root, storageKey: key, profileId: p1.id })) as Record<
+			string,
+			unknown
+		> & { mac: string }
 		const { mac: _authenticMac, ...forgedBody } = { ...authenticRow, profileId: p2.id }
 		const forgedMac = await signDappSession(await profiles.deriveDappSessionMacKey(p1.id), forgedBody as never)
-		await api.storage.local.set({ [key]: JSON.stringify({ ...forgedBody, mac: forgedMac }) })
+		const forged = await sealRow(keysOf(p2.id), JSON.stringify({ ...forgedBody, mac: forgedMac }), {
+			root,
+			storageKey: key,
+			profileId: p2.id,
+		})
+		await api.storage.local.set({ [key]: JSON.stringify({ profileId: p2.id, sealed: forged }) })
 		await profiles.lockActiveProfile()
 		await profiles.unlockProfile(p2.id, "pass1234")
 		expect(await sessions.getDappSessions()).toEqual([])
@@ -4514,4 +4631,204 @@ describe("byte codecs: export encoders and the lenient decodes of stored and res
 		},
 		30_000,
 	)
+})
+
+describe("row keys — held for the worker's lifetime, never for a dead incarnation", () => {
+	const BINDING = { root: "nulo:core:contacts", storageKey: "nulo:core:contacts@c-1", profileId: "abc12345" }
+
+	test("unlock fills them once; lock, switch and a password change keep the same keys", async () => {
+		const { service } = await makeService()
+		const announced: string[] = []
+		service.onRowKeysReady.add((id) => announced.push(id))
+		const a = await service.createProfile("A", "pass1234")
+		const keys = service.rowKeys(a.id)
+		expect(keys).toBeDefined()
+
+		const b = await service.createProfile("B", "pass1234")
+		await service.lockActiveProfile()
+		expect(service.rowKeys(a.id)).toBe(keys)
+		expect(service.rowKeys(b.id)).toBeDefined()
+		await service.unlockProfile(a.id, "pass1234")
+		await service.changeProfilePassword(a.id, "pass1234", "newpass1")
+		expect(service.rowKeys(a.id)).toBe(keys)
+		expect(announced).toEqual([a.id, b.id])
+	}, 30_000)
+
+	test("the integrity check sees them; a refused open keeps none it derived; recovery mode keeps them", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("P", "pass1234")
+		const { service: restarted } = await makeServiceFromExistingApi(api, { strict: true })
+		expect(restarted.rowKeys(p.id)).toBeUndefined()
+
+		const seen: boolean[] = []
+		let refuse = true
+		restarted.setIntegrityDelegate({
+			verifyBeforeSessionOpen: async (id: string) => {
+				seen.push(restarted.rowKeys(id) !== undefined)
+				if (refuse) throw new AccountAddressInconsistencyError()
+			},
+		})
+		await expect(restarted.unlockProfile(p.id, "pass1234")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect(restarted.rowKeys(p.id)).toBeUndefined()
+
+		refuse = false
+		await writeRawRow(api, p.id, { ...(await readRawRow(api, p.id)), dekSealed: "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" })
+		await restarted.unlockProfile(p.id, "pass1234")
+		expect(restarted.isRecoveryMode(p.id)).toBe(true)
+		expect(restarted.rowKeys(p.id)).toBeDefined()
+		expect(seen).toEqual([true, true])
+	}, 30_000)
+
+	test("a restore holds them before its finalize; a later incarnation of the same id never opens the dead one's rows", async () => {
+		const { service } = await makeService()
+		service.setDeletionDelegate({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async (id) => service.dropRowKeys(id),
+		})
+		const first = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+		const keys = service.rowKeys(first.id)
+		if (!keys) throw new Error("a restore commit fills the row keys")
+		const sealed = await sealRow(keys, "row", BINDING)
+		await service.finalizeRestore(first.id, "pass1234")
+		expect(service.rowKeys(first.id)).toBe(keys)
+
+		await service.deleteProfile(first.id)
+		expect(service.rowKeys(first.id)).toBeUndefined()
+		const again = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+		expect(again.id).toBe(first.id)
+		const reborn = service.rowKeys(again.id)
+		if (!reborn) throw new Error("a restore commit fills the row keys")
+		await expect(openRow(reborn, sealed, BINDING)).rejects.toThrow()
+	}, 30_000)
+
+	test("a deletion that lands while an open derives the row keys stops the open and keeps no keys", async () => {
+		const { service } = await makeService()
+		const p = await service.createProfile("P", "pass1234")
+		await service.lockActiveProfile()
+		service.dropRowKeys(p.id)
+		const fill = RowKeyring.prototype.fill
+		let release = () => {}
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let reached = () => {}
+		const deriving = new Promise<void>((resolve) => {
+			reached = resolve
+		})
+		vi.spyOn(RowKeyring.prototype, "fill").mockImplementationOnce(async function (this: RowKeyring, ...args) {
+			reached()
+			await held
+			return fill.apply(this, args)
+		})
+		const announced: string[] = []
+		service.onRowKeysReady.add((id) => announced.push(id))
+
+		const opening = service.unlockProfile(p.id, "pass1234")
+		await deriving
+		// What a whole deletion that a force-released facade lock let through leaves behind: a newer
+		// epoch, and the id released again.
+		service.getDeletionState().beginDeletion(p.id)
+		service.getDeletionState().release(p.id)
+		release()
+		await expect(opening).rejects.toThrow("Invalid profile id")
+		expect(service.rowKeys(p.id)).toBeUndefined()
+		expect(await service.getActiveProfile()).toBeUndefined()
+		expect(announced).toEqual([])
+		vi.restoreAllMocks()
+	}, 30_000)
+
+	test("a worker that restores the session holds its keys, and a handler that subscribes late gets them on replay", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("P", "pass1234")
+		const { service: restarted } = await makeServiceFromExistingApi(api)
+		expect(restarted.rowKeys(p.id)).toBeDefined()
+
+		const late: string[] = []
+		restarted.onRowKeysReady.add((id) => late.push(id))
+		restarted.replayRowKeysReady()
+		expect(late).toEqual([p.id])
+	}, 30_000)
+})
+
+describe("ProfileService — a passkey whose profile is already here", () => {
+	const profileKey = (id: string) => `nulo:core:profiles@${id}`
+	const rawRow = async (api: FakeBrowserApi, id: string) => (await api.storage.local.get(profileKey(id)))[profileKey(id)]
+
+	test("importing it again refuses with the typed error naming that profile, and adds no profile", async () => {
+		const { service } = await makeService()
+		await service.createProfile("Main", "password123")
+		const daily = await service.createPasskeyProfile("Daily", fakeCredentialData("cred-daily", "uh-daily"))
+		await service.lockActiveProfile()
+
+		const err = await service.importPasskey("Again", fakeCredentialData("cred-daily", daily.id)).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(PasskeyProfileExistsError)
+		expect((err as PasskeyProfileExistsError).details).toEqual({ existingProfileName: "Daily" })
+		expect((await service.getProfiles()).map((p) => p.name).sort()).toEqual(["Daily", "Main"])
+	})
+
+	// Only a readable, live row can be chosen from the profile list, so only it is named; every
+	// other occupant of the id keeps the plain refusal and is never overwritten.
+	type Occupant = { id: string; credential: string }
+	test.each<[label: string, occupy: (ctx: Awaited<ReturnType<typeof makeService>>) => Promise<Occupant>]>([
+		[
+			"a reserved id (a failed purge)",
+			async ({ service }) => {
+				const p = await service.createPasskeyProfile("Gone", fakeCredentialData("cred-gone", "uh-gone"))
+				service.setDeletionDelegate({
+					snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+					runFor: async () => {
+						throw new Error("purge interrupted")
+					},
+				})
+				await expect(service.deleteProfile(p.id)).rejects.toThrow(/purge interrupted/)
+				return { id: p.id, credential: "cred-gone" }
+			},
+		],
+		[
+			"an unreadable row",
+			async ({ api, service }) => {
+				const p = await service.createPasskeyProfile("Torn", fakeCredentialData("cred-torn", "uh-torn"))
+				await service.lockActiveProfile()
+				await api.storage.local.set({ [profileKey(p.id)]: "{" })
+				return { id: p.id, credential: "cred-torn" }
+			},
+		],
+		[
+			"a readable row holding another credential",
+			async ({ service }) => {
+				const p = await service.createPasskeyProfile("Other", fakeCredentialData("cred-other", "uh-other"))
+				await service.lockActiveProfile()
+				return { id: p.id, credential: "cred-new" }
+			},
+		],
+	])("%s under the passkey's id refuses untyped and keeps the stored row", async (_label, occupy) => {
+		const ctx = await makeService()
+		const { id, credential } = await occupy(ctx)
+		const before = await rawRow(ctx.api, id)
+
+		const err = await ctx.service.importPasskey("Again", fakeCredentialData(credential, id)).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(Error)
+		expect(err).not.toBeInstanceOf(PasskeyProfileExistsError)
+		expect((err as Error).message).toBe("Passkey profile already exists")
+		expect(await rawRow(ctx.api, id)).toEqual(before)
+
+		// Success control: a passkey nothing holds still imports and writes its row. The fake derives
+		// one master for every credential, so the import confirms the warned same-wallet duplicate.
+		const fresh = await ctx.service.importPasskey("Fresh", fakeCredentialData("cred-fresh", "uh-fresh"), true)
+		expect(await rawRow(ctx.api, fresh.id)).toBeDefined()
+	})
+
+	test("a passkey full-backup restore over it keeps the full-backup box's text", async () => {
+		const { service } = await makeService()
+		const daily = await service.createPasskeyProfile("Daily", fakeCredentialData("cred-daily", "uh-daily"))
+		await service.lockActiveProfile()
+
+		const out = await service.restore(
+			{ id: "ignored", name: "Daily", type: "passkey" },
+			{ type: "passkey", credentialId: asBase64CredentialId("cred-daily"), dekSealed: await fakeDekSealedFor("cred-daily") },
+			undefined,
+			fakeCredentialData("cred-daily", daily.id),
+		)
+		expect("restoreError" in out && out.restoreError).toBe("Passkey profile already exists")
+	})
 })

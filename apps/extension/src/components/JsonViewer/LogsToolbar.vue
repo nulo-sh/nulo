@@ -10,6 +10,8 @@
  * its "active" tint from `allOptionsSelected[kind]` (false = filtered,
  * which renders the chip in the accent color).
  */
+import { Dropdown } from "@/components/ui/Dropdown"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { capitalize } from "@/utils"
 import { getDisplayName } from "./logs-format"
 
@@ -43,17 +45,20 @@ const filteredKeys = (kind, filters, search) => {
 			:width="kind === 'source' ? '200' : '136'"
 		>
 			<Flex
+				tag="button"
+				type="button"
 				@click="emit('openPopover', kind)"
 				align="center"
 				gap="4"
-				:class="[$style.filter_button, !allOptionsSelected[kind] && $style.filter_button_active]"
+				:class="$style.filter_button"
+				:data-testid="`logs-filter-${kind}`"
 			>
-				<Icon :name="allOptionsSelected[kind] ? 'filter-outline' : 'filter'" size="14" />
-				<Text variant="tag">{{ capitalize(kind) }}</Text>
+				<Icon :name="allOptionsSelected[kind] ? 'filter' : 'filter-solid'" size="14" />
+				<Text variant="label-section">{{ capitalize(kind) }}</Text>
 			</Flex>
 
 			<template #content>
-				<Flex direction="column" gap="4" :class="$style.filter_content_wrapper">
+				<Flex direction="column" gap="4" :class="$style.filter_content_wrapper" :data-testid="`logs-filter-${kind}-panel`">
 					<Flex direction="column" gap="8" wide :class="$style.filter_content_title">
 						<Text variant="label-section" color="tertiary">{{ `Filter by log ${kind}` }}</Text>
 
@@ -68,22 +73,29 @@ const filteredKeys = (kind, filters, search) => {
 						/>
 					</Flex>
 
+					<!-- Its rows take focus and scroll into view, so the scroll box is no Tab stop (Firefox's would be). -->
 					<Flex
 						align="start"
 						direction="column"
 						gap="4"
 						:class="kind === 'source' && $style.filter_items_wrapper"
+						:tabindex="kind === 'source' ? -1 : undefined"
 					>
 						<Flex
 							v-if="!searchTerm"
+							tag="button"
+							type="button"
 							@click="emit('selectAll', kind)"
+							@keydown.enter="refuseRepeatEnter"
+							:aria-pressed="allOptionsSelected[kind]"
 							align="center"
 							justify="start"
 							gap="8"
 							wide
-							:class="$style.filter_content_item"
+							:class="[$style.filter_content_item, $style.filter_toggle]"
+							:data-testid="`logs-filter-${kind}-all`"
 						>
-							<Icon :name="allOptionsSelected[kind] ? 'check-circle' : 'circle'" size="12" />
+							<Icon :name="allOptionsSelected[kind] ? 'square-check' : 'square'" size="12" />
 							<Text variant="body">Select All</Text>
 						</Flex>
 
@@ -91,13 +103,18 @@ const filteredKeys = (kind, filters, search) => {
 							<Flex
 								v-for="k in filteredKeys(kind, filters, searchTerm)"
 								:key="k"
+								tag="button"
+								type="button"
 								@click="emit('toggleFilter', kind, k)"
+								@keydown.enter="refuseRepeatEnter"
+								:aria-pressed="filters[kind][k]"
 								align="center"
 								gap="8"
 								wide
-								:class="[$style.filter_content_item, !filters[kind][k] && $style.inactive]"
+								:class="[$style.filter_content_item, $style.filter_toggle, !filters[kind][k] && $style.inactive]"
+								:data-testid="`logs-filter-${kind}-item-${k}`"
 							>
-								<Icon :name="filters[kind][k] ? 'check-circle' : 'circle'" size="12" />
+								<Icon :name="filters[kind][k] ? 'square-check' : 'square'" size="12" />
 								<Text variant="body">{{ getDisplayName(kind, k) }}</Text>
 							</Flex>
 						</template>
@@ -110,21 +127,29 @@ const filteredKeys = (kind, filters, search) => {
 		</Popover>
 
 		<Dropdown>
-			<Flex align="center" gap="4" :class="$style.filter_button">
-				<Icon name="dots" size="14" />
+			<Flex
+				tag="button"
+				type="button"
+				align="center"
+				gap="4"
+				aria-label="Log actions"
+				:class="$style.filter_button"
+				data-testid="logs-more-trigger"
+			>
+				<Icon name="more" size="14" />
 			</Flex>
 
 			<template #popup>
-				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item">
+				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item" data-testid="logs-export-csv">
 					<Flex align="center" gap="8">
-						<Icon name="download-outline" size="12" />
+						<Icon name="download" size="12" />
 						<Text variant="body">Export logs to CSV</Text>
 					</Flex>
 				</DropdownItem>
-				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item">
-					<Flex align="center" gap="6">
-						<Icon name="close" size="14" style="padding-right: 4px" />
-						Clear logs
+				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item" data-testid="logs-clear">
+					<Flex align="center" gap="8">
+						<Icon name="close" size="12" />
+						<Text variant="body">Clear logs</Text>
 					</Flex>
 				</DropdownItem>
 			</template>
@@ -140,35 +165,40 @@ const filteredKeys = (kind, filters, search) => {
 	z-index: 1;
 }
 
+/* Below the popup's width the toolbar takes its own row above the log rather than covering its lines. */
+@media (width < 359px) {
+	.actions {
+		position: static;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		padding: 10px 18px 0;
+		transform: none;
+	}
+}
+
 .filter_button {
+	user-select: none;
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
 	border: 1px solid var(--nulo-border);
-	border-radius: 6px;
 
 	color: var(--txt-secondary);
-	fill: var(--txt-secondary);
+	font: inherit;
 
 	cursor: pointer;
 
 	transition: all 0.1s ease;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 
 	&:hover {
 		border-color: var(--txt-tertiary);
 
 		* {
 			color: var(--txt-primary);
-			fill: var(--txt-primary);
-		}
-	}
-}
-
-.filter_button_active {
-	fill: var(--blue);
-
-	&:hover {
-		* {
-			fill: var(--blue);
 		}
 	}
 }
@@ -196,12 +226,11 @@ const filteredKeys = (kind, filters, search) => {
 }
 
 .filter_content_item {
+	user-select: none;
 	padding: 6px 8px;
 	background-color: var(--dropdown-bg);
-	border-radius: 4px;
 
 	color: var(--txt-secondary);
-	fill: var(--txt-secondary);
 
 	cursor: pointer;
 
@@ -211,14 +240,23 @@ const filteredKeys = (kind, filters, search) => {
 		background: var(--nulo-surface-high);
 		* {
 			color: var(--txt-primary);
-			fill: var(--txt-primary);
 		}
+	}
+}
+
+/* Inset because the Source list's scroll box clips outside its rows. */
+.filter_toggle {
+	font: inherit;
+	text-align: inherit;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: -2px;
 	}
 }
 
 .inactive {
 	color: var(--txt-tertiary);
-	fill: var(--txt-tertiary);
 }
 
 .empty_content {

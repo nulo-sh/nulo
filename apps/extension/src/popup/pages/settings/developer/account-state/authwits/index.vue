@@ -44,11 +44,9 @@ const {
 	error,
 	refresh: refreshAuthwits,
 } = useEntityCrud({
-	fetch: async () => {
-		const list = await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)
-		return list?.map(decorateAuthwit) ?? []
-	},
+	fetch: async () => (await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)) ?? [],
 	added: authwitsService.onAuthwitAdded,
+	updated: authwitsService.onAuthwitUpdated,
 	deleted: authwitsService.onAuthwitDeleted,
 	identity: (aw) => aw.id,
 	// The list is (profile, chain, account)-scoped: the same address on another chain or profile
@@ -57,8 +55,9 @@ const {
 		aw.profileId === appStore.profile?.id && aw.chainId === appStore.network?.chainId && aw.account === appStore.account?.address,
 })
 
+// Decorated here, not in `fetch`: an event splices the service's raw row into the list.
 const filteredAuthwits = computed(() => {
-	const sorted = sortAuthwits(authwits.value)
+	const sorted = sortAuthwits(authwits.value.map(decorateAuthwit))
 	const term = searchTerm.value.trim()
 	if (!term) return sorted
 	return sorted.filter((aw) => authwitMatchesSearch(aw, term))
@@ -138,7 +137,7 @@ onBeforeUnmount(() => {
 			<template #trailing>
 				<Dropdown>
 					<button type="button" data-testid="authwits-actions-btn" :class="$style.icon_btn" aria-label="Authwit actions">
-						<MaterialIcon name="settings" :size="18" color="secondary" />
+						<Icon name="settings" :size="18" color="secondary" />
 					</button>
 
 					<template #popup>
@@ -150,7 +149,7 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 						<DropdownItem data-testid="authwits-revoke-all" @click="revokeAuthwits()" :disabled="!authwits.length">
 							<Flex align="center" gap="8">
-								<Icon name="close-circle" size="14" color="secondary" />
+								<Icon name="close" size="14" color="secondary" />
 								Revoke all authwits
 							</Flex>
 						</DropdownItem>

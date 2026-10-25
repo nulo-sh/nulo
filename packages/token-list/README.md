@@ -13,10 +13,11 @@ and no `node_modules`.
 | File | Purpose |
 |---|---|
 | `src/envelope.ts` | Envelope encode, sign and verify (Ed25519, domain prefix `nulo-token-list/1\n`), canonical base64url, seed import. |
-| `src/parse.ts` | Payload and source validation in `wallet` and `strict` modes; `selectEntries` (bundled class, first 16 per chain, known price id). |
-| `src/index.ts` | `readTokenList(text, keys)`: verify, then parse, then select. The wallet's one entry point. |
+| `src/parse.ts` | Payload and source validation in `wallet` and `strict` modes, the `flagged` set included; `selectEntries` (bundled class, first 16 per chain, known price id). |
+| `src/index.ts` | `readTokenList(text, keys, floor)`: verify, then parse, then refuse a sequence below the floor, then select. The wallet's one entry point. |
+| `src/floor.json` | The compiled sequence floor, `SEQUENCE_FLOOR`: the last list that delisted or flagged a token. Raised by that list's publish PR. |
 | `src/keys.ts` | The pinned public keys, `nulo-ci-1` and `nulo-recovery-1`. |
-| `src/class-ids.ts` | Token classes the wallet bundles an artifact for. |
+| `src/class-ids.ts` | Token classes the wallet bundles an artifact for, each with the public storage slots of its `symbol` and `decimals`. |
 | `src/price-ids.ts` | The single price table: CoinGecko id, USD sanity band, proxy ticker. |
 | `src/sign.ts`, `src/sign-cli.ts` | Signs `infra/token-list/list.source.json`; sequence = signing time in seconds, above the published one. |
 | `src/keygen-cli.ts` | `install`: run once as a keyed run, sets the CI secret over stdin and prints the public keys. |
@@ -30,8 +31,10 @@ and no `node_modules`.
   out-of-range number or a control, bidi or separator character in `name`/`symbol` refuses the list.
 - **The signer signs only what a wallet accepts**: strict parsing, a key matching the pinned one,
   a sequence above the published envelope's, and a self-verification of the bytes it writes.
+- **A flagged pair is never listed.** Both modes refuse a list that names a pair in `tokens` and in
+  `flagged`, and the approver's digest (`listSha256`) covers both arrays.
 - **Pins live in the extension.** `apps/extension/src/wallet/services/token-list/token-list-pins.test.ts`
-  ties `BUNDLED_TOKEN_CLASS_IDS` to `getBundledTokenClassId()`, `BN254_FR_MODULUS` to `Fr.MODULUS`
+  ties `BUNDLED_TOKEN_CLASS_IDS` to `getBundledTokenClassId()`, `TOKEN_METADATA_SLOTS` to the bundled artifact's `storageLayout`, `BN254_FR_MODULUS` to `Fr.MODULUS`
   and `PRICE_IDS` to the price map.
 - **No private key in the tree.** Tests generate a key per run (`src/test-keys.ts`). The real seeds
   exist only in 1Password and, for the CI key, the `token-list` environment secret.

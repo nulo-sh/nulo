@@ -105,7 +105,7 @@ test.skipIf(!hasConfig)(
 )
 
 test.skipIf(!hasConfig)(
-	"holdings: a pasted contract address adds its token; one with no contract reads the generic line",
+	"holdings: a pasted contract address adds its token; one with no contract says there is no token there",
 	{ timeout: 420_000 },
 	async ({ tokenReadyExtension }) => {
 		const { deployExtraTokensForAccount } = await import("../fixtures/aztec")
@@ -124,7 +124,7 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 30_000,
 		})
-		// A success toast closes itself after six seconds; it would sit over the next popup's field.
+		// A success toast closes itself after two seconds; it would sit over the next popup's field.
 		await waitForToastGone(page, "Token added", 10_000)
 
 		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
@@ -132,7 +132,9 @@ test.skipIf(!hasConfig)(
 		await waitForNewTokenAddress(page, NO_CONTRACT)
 		await clickNewTokenSubmit(page)
 		await page.waitForFunction(
-			() => document.querySelector('[data-testid="new-token-error"]')?.textContent?.trim() === "Something went wrong. Try again.",
+			() =>
+				document.querySelector('[data-testid="new-token-error"]')?.textContent?.trim() ===
+				"There is no token at this address on this network.",
 			{ timeout: 60_000 },
 		)
 		await shotSend(page, "new-token-error", "new-token-error")

@@ -11,6 +11,7 @@ import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import { Input } from "@nulo/design"
 import AddressInput from "@/components/composite/general/AddressInput.vue"
+import RecipientCard from "@/components/composite/send/RecipientCard.vue"
 import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
@@ -31,6 +32,7 @@ const STUBS = {
 		template: `<div data-testid="stub-card" :data-name="name" :data-address="address"><button data-testid="card-change-btn" @click="$emit('change')" /></div>`,
 		props: ["name", "address"],
 		emits: ["change"],
+		methods: { focusChange() {} },
 	},
 }
 
@@ -172,6 +174,41 @@ describe("modules/send/RecipientField", () => {
 			input.element.dispatchEvent(enter())
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([alice.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+		})
+
+		/** Picks the first suggestion with the real card mounted, and lets the card render. */
+		const pickWithCard = async (how: "Enter" | "click") => {
+			const { RecipientCard: _stub, ...stubs } = STUBS
+			const w = mount(RecipientField, {
+				props: { candidates: [alice, account1], searchTerm: "a" },
+				global: { stubs, components: { RecipientCard } },
+				attachTo: document.body,
+			})
+			mounted.push(w)
+			w.get("input").element.focus()
+			await nextTick()
+			if (how === "Enter") w.get("input").element.dispatchEvent(enter())
+			else await w.get('[role="option"]').trigger("click")
+			await nextTick()
+			await nextTick()
+			expect(w.find('[data-testid="recipient-card"]').exists()).toBe(true)
+		}
+
+		test.each([
+			["an Enter pick moves the focus to the card's Change recipient", "Enter", "recipient-card-change"],
+			["a click pick leaves the focus where the removed field had it", "click", undefined],
+		] as const)("%s", async (_, how, focused) => {
+			await pickWithCard(how)
+			expect(document.activeElement?.getAttribute("data-testid") ?? undefined).toBe(focused)
+		})
+
+		test("the pick's auto-repeat on Change is refused, so a held Enter picks once; a new press is not", async () => {
+			await pickWithCard("Enter")
+			const repeat = enter({ repeat: true })
+			const press = enter()
+			document.activeElement?.dispatchEvent(repeat)
+			document.activeElement?.dispatchEvent(press)
+			expect([repeat.defaultPrevented, press.defaultPrevented]).toEqual([true, false])
 		})
 
 		test("a repeat, composing or already handled Enter in the input picks nothing", async () => {
@@ -329,6 +366,89 @@ describe("modules/send/RecipientField", () => {
 			expect(highlighted(w).index).toBe(-1)
 			expect(w.find('[role="listbox"]').exists()).toBe(true)
 		})
+
+		describe("a long list draws the first 50 matches, and says how many more match", () => {
+			const SHOWN = 50
+			const contacts = Array.from({ length: SHOWN + 1_001 }, (_, i) => ({
+				id: `c${i}`,
+				name: `Contact ${String(i).padStart(5, "0")}`,
+				address: `0x${(i + 1).toString(16).padStart(64, "0")}`,
+			}))
+			const MORE = "Keep typing to narrow 1,001 more matches."
+			const capped = (searchTerm = "contact", candidates: unknown[] = contacts) => open({ candidates, searchTerm })
+			const line = (w: ReturnType<typeof mount>) => w.find('[data-testid="send-destination-more"]')
+			const status = (w: ReturnType<typeof mount>) => w.get('[data-testid="send-destination-more-live"]').text()
+			const early = { id: "early", name: "Contact early", address: `0x${"e".repeat(64)}` }
+
+			test("the listbox holds 50 options and nothing else; the line under it and the status name the rest", async () => {
+				const w = await capped("")
+				const live = w.get('[data-testid="send-destination-more-live"]')
+				expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+				expect(live.text()).toBe("")
+
+				await w.setProps({ searchTerm: "contact" })
+				const list = w.get('[role="listbox"]').element
+				expect([...list.children].map((c) => c.getAttribute("role"))).toEqual(Array(SHOWN).fill("option"))
+				expect(w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-address"))).toEqual(
+					contacts.slice(0, SHOWN).map((c) => c.address),
+				)
+				expect(line(w).text()).toBe(MORE)
+				expect(line(w).attributes("aria-hidden")).toBe("true")
+				expect(list.contains(line(w).element)).toBe(false)
+				expect(w.get('[data-testid="send-destination-popover"]').element.contains(line(w).element)).toBe(true)
+				expect(live.text()).toBe(MORE)
+			})
+
+			test("one match past the cap is one more match; at 50 or fewer, or once closed, no line and an empty status", async () => {
+				const one = await capped("contact", contacts.slice(0, SHOWN + 1))
+				expect([line(one).text(), status(one)]).toEqual(Array(2).fill("Keep typing to narrow 1 more match."))
+
+				const full = await capped("contact", contacts.slice(0, SHOWN))
+				expect(options(full)).toHaveLength(SHOWN)
+				expect([line(full).exists(), status(full)]).toEqual([false, ""])
+
+				const narrowed = await capped()
+				await narrowed.setProps({ searchTerm: "contact 0000" })
+				expect(options(narrowed)).toHaveLength(10)
+				expect([line(narrowed).exists(), status(narrowed)]).toEqual([false, ""])
+
+				const closed = await capped()
+				expect(status(closed)).toBe(MORE)
+				await press(closed, "Escape")
+				expect([line(closed).exists(), status(closed)]).toEqual([false, ""])
+			})
+
+			test("Up from no highlight goes to the last drawn row and scrolls it into view; Down wraps; Enter picks it", async () => {
+				const w = await capped()
+				await press(w, "ArrowUp")
+				expect(highlighted(w)).toEqual({ index: SHOWN - 1, selected: [SHOWN - 1] })
+				expect(scrolled.at(-1)).toBe(options(w)[SHOWN - 1].element)
+				await press(w, "ArrowDown")
+				expect(highlighted(w).index).toBe(0)
+				await press(w, "ArrowUp")
+				expect(await press(w, "Enter")).toBe(true)
+				expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([contacts[SHOWN - 1]])
+			})
+
+			test("a highlight new candidates push past the cap is gone, and Enter picks nothing until an arrow or a keystroke", async () => {
+				const w = await capped()
+				await press(w, "ArrowUp")
+				await w.setProps({ candidates: [early, ...contacts] })
+				expect(highlighted(w)).toEqual({ index: -1, selected: [] })
+				expect(await press(w, "Enter")).toBe(true)
+				expect(w.emitted("update:selectedContact")).toBeUndefined()
+				await press(w, "ArrowDown")
+				await press(w, "Enter")
+				expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([early])
+
+				const typed = await capped()
+				await press(typed, "ArrowUp")
+				await typed.setProps({ candidates: [early, ...contacts] })
+				await typed.setProps({ searchTerm: "contact ear" })
+				await press(typed, "Enter")
+				expect(typed.emitted("update:selectedContact")?.at(-1)).toEqual([early])
+			})
+		})
 	})
 
 	describe("a mouse press that takes the focus from the field: the card waits for the press to end", () => {
@@ -424,6 +544,19 @@ describe("modules/send/RecipientField", () => {
 			await afterRelease()
 			expect(lastContact(w)).toEqual(namesake)
 			expect(w.get('[data-testid="stub-card"]').attributes("data-address")).toBe(namesake.address)
+		})
+
+		test("a list that changes under a held press never rebinds the pressed row to another destination", async () => {
+			const own = { name: "Account 1", address: `0x${"b".repeat(64)}` }
+			const w = await focused({ candidates: [own], searchTerm: "acc" })
+			const pressed = w.get('[role="option"]').element as HTMLElement
+			press("pointerdown")
+			await w.get("input").trigger("blur")
+			await w.setProps({ candidates: [{ id: "9", name: "Acc contact", address: `0x${"9".repeat(64)}` }, own] })
+			press("pointerup")
+			pressed.click()
+			await afterRelease()
+			expect(lastContact(w)).toEqual(own)
 		})
 
 		test("a press inside the focused field holds nothing, and its suggestions stay", async () => {

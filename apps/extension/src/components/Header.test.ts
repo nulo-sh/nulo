@@ -1,13 +1,16 @@
 /**
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
- * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
- * the network chip's `data-status` follows the store's status.
+ * active address (not the truncated display text) to the clipboard, except on a pointer click that
+ * ends a selection inside it; both switcher affordances open the accounts popup; the lock chip runs
+ * the shared lock (its behavior: `useLockWallet.test.ts`); the network chip's `data-status` follows
+ * the store's status; the chip shows the network name only while Show network name is on; a
+ * failure log marks the settings badge; and a hand-off window's card shows no header.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
+import { LogLevel } from "@/wallet/logger"
 
 const H = vi.hoisted(() => ({
 	openPopup: vi.fn(),
@@ -18,34 +21,42 @@ const H = vi.hoisted(() => ({
 	getSessionHandle: vi.fn(),
 	profileListeners: new Set<() => void>(),
 	disconnectListeners: new Set<() => void>(),
+	logListeners: new Set<(log: { level: number; id: string }) => void>(),
+	config: {} as Record<string, unknown>,
+	configListeners: new Set<(prop: { key: string; value: unknown }) => void>(),
 	app: {} as Record<string, unknown>,
 	cache: {} as { confirm: Record<string, unknown> } & Record<string, unknown>,
+	cardWindow: false,
 }))
 
 const FULL_ADDRESS = "0x018d47f656a0d242e28e5d15b5c965f39529bd860f2eaae947527b5094d800f6"
 
 vi.mock("@/wallet/services/log-viewer/client", () => ({
 	LogViewerServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), onLog: H.noopEvent }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			onLog: {
+				add: (fn: (log: { level: number; id: string }) => void) => H.logListeners.add(fn),
+				remove: (fn: (log: { level: number; id: string }) => void) => H.logListeners.delete(fn),
+			},
+		}
 	}),
 }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onUpdate: H.noopEvent, getValue: vi.fn().mockResolvedValue(false) }
-	}),
-}))
-vi.mock("@/wallet/services/task/client", () => ({
-	TaskServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			getTasks: vi.fn().mockResolvedValue([]),
-			onTaskCreated: H.noopEvent,
-			onTaskUpdated: H.noopEvent,
-			onTaskDeleted: H.noopEvent,
+			onConnected: H.noopEvent,
+			onUpdate: {
+				add: (fn: (prop: { key: string; value: unknown }) => void) => H.configListeners.add(fn),
+				remove: (fn: (prop: { key: string; value: unknown }) => void) => H.configListeners.delete(fn),
+			},
+			getValue: vi.fn(async (key: string) => H.config[key]),
 		}
 	}),
 }))
-vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false, showNode: false }) }))
+vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ indicateFailures: false, showNode: true }) }))
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
@@ -70,18 +81,28 @@ vi.mock("vue-router", async (importOriginal) => {
 	return { ...mod, useRoute: () => ({ name: "popup-general", meta: {} }), useRouter: () => ({ push: vi.fn() }) }
 })
 
+vi.mock("@/utils/own-window", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/own-window")>()),
+	isCardWindow: () => H.cardWindow,
+}))
+
 import Header from "./Header.vue"
 
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-material" :data-name="name" />', props: ["name", "size", "color"] },
 	AccountAvatar: { template: '<span data-testid="stub-avatar" />', props: ["name", "address", "size"] },
 	Skeleton: { template: '<span data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 }
 
-function mountHeader() {
-	return mount(Header, { global: { stubs: STUBS } })
+function mountHeader(attachTo?: Element) {
+	return mount(Header, { attachTo, global: { stubs: STUBS } })
+}
+
+/** A pointer click carries `detail` 1, the click a key makes on a button 0; `trigger` cannot set it. */
+async function clickAddress(w: ReturnType<typeof mountHeader>, detail: number) {
+	w.get('[data-testid="account-address-copy"]').element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }))
+	await flushPromises()
 }
 
 beforeEach(() => {
@@ -91,6 +112,9 @@ beforeEach(() => {
 	H.openToast.mockClear()
 	H.profileListeners.clear()
 	H.disconnectListeners.clear()
+	H.logListeners.clear()
+	H.configListeners.clear()
+	H.config = { indicateFailures: false, showNode: true }
 	H.getSessionHandle.mockReset().mockResolvedValue("session-1")
 	H.lockActiveProfile.mockClear()
 	H.app = reactive({
@@ -106,7 +130,16 @@ beforeEach(() => {
 		lockHeldByImport: false,
 		contactImports: new Set(),
 	})
-	H.cache = { failureLog: null, activeTasksCount: null, confirm: {} }
+	H.cache = { failureLog: null, confirm: {} }
+	H.cardWindow = false
+})
+
+describe("Header — hand-off window", () => {
+	test("a card window shows no header; any other page keeps it", () => {
+		expect(mountHeader().find("header").exists()).toBe(true)
+		H.cardWindow = true
+		expect(mountHeader().find("header").exists()).toBe(false)
+	})
 })
 
 describe("Header — avatar/name/address split", () => {
@@ -117,12 +150,35 @@ describe("Header — avatar/name/address split", () => {
 		const w = mountHeader()
 		// Sanity: the DISPLAY is truncated — the copy must not be.
 		expect(w.find('[data-testid="account-address-copy"]').text()).toContain("0x018d...00f6")
-		await w.find('[data-testid="account-address-copy"]').trigger("click")
-		await flushPromises()
+		await clickAddress(w, 1)
 
 		expect(writeText).toHaveBeenCalledWith(FULL_ADDRESS)
 		expect(H.openToast).toHaveBeenCalledWith({ kind: "success", label: "Address is copied" })
 		expect(H.openPopup).not.toHaveBeenCalled() // copying never opens the switcher
+	})
+
+	test("a pointer click that ends a selection in the address copies nothing; Enter's click over it still copies", async () => {
+		const writeText = vi.fn(async () => {})
+		Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true })
+		// `selectedWithin` reads only a node in the document.
+		const w = mountHeader(document.body.appendChild(document.createElement("div")))
+		try {
+			const range = document.createRange()
+			range.selectNodeContents(w.get('[data-testid="account-address-text"]').element)
+			window.getSelection()?.addRange(range)
+			expect(window.getSelection()?.toString()).toContain("0x018d...00f6")
+
+			await clickAddress(w, 1)
+			expect(writeText).not.toHaveBeenCalled()
+			expect(H.openToast).not.toHaveBeenCalled()
+
+			await clickAddress(w, 0)
+			expect(writeText.mock.calls).toEqual([[FULL_ADDRESS]])
+		} finally {
+			window.getSelection()?.removeAllRanges()
+			w.unmount()
+			document.body.replaceChildren()
+		}
 	})
 
 	test("avatar AND name both open the accounts popup (the two switcher affordances)", async () => {
@@ -137,7 +193,7 @@ describe("Header — avatar/name/address split", () => {
 describe("Header — lock", () => {
 	test("is a chip: the padlock and the word Lock, named for what it does", () => {
 		const lock = mountHeader().get('[data-testid="header-lock"]')
-		expect(lock.get('[data-testid="stub-material"]').attributes("data-name")).toBe("lock")
+		expect(lock.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("lock")
 		expect(lock.text()).toBe("Lock")
 		expect(lock.attributes("aria-label")).toBe("Lock wallet")
 		expect(lock.attributes("type")).toBe("button")
@@ -178,6 +234,46 @@ describe("Header — network status", () => {
 	})
 })
 
+describe("Header — Show network name", () => {
+	const chip = (w: ReturnType<typeof mountHeader>) => ({
+		name: w.find('[data-testid="network-name"]').exists() ? w.get('[data-testid="network-name"]').text() : null,
+		dot: w.find('[data-testid="network-status-dot"]').exists(),
+		label: w.get('[data-testid="network-button"]').attributes("aria-label"),
+	})
+
+	test("off hides the name and keeps the status dot and the chip's accessible name", async () => {
+		H.config.showNode = false
+		const w = mountHeader()
+		await flushPromises()
+		expect(chip(w)).toEqual({ name: null, dot: true, label: "Manage networks (currently Alpha V5)" })
+	})
+
+	test("on shows the name beside the dot", async () => {
+		const w = mountHeader()
+		await flushPromises()
+		expect(chip(w)).toEqual({ name: "Alpha V5", dot: true, label: "Manage networks (currently Alpha V5)" })
+	})
+
+	test("a change made while the mount's read is in flight outlives that read's older value", async () => {
+		const read = Promise.withResolvers<boolean>()
+		H.config.showNode = read.promise
+		const w = mountHeader()
+		await flushPromises()
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		read.resolve(true)
+		await flushPromises()
+		expect(chip(w).name).toBeNull()
+	})
+
+	test("a change made in Display reaches the open header", async () => {
+		const w = mountHeader()
+		await flushPromises()
+		for (const fn of H.configListeners) fn({ key: "showNode", value: false })
+		await nextTick()
+		expect(chip(w).name).toBeNull()
+	})
+})
+
 describe("Header — the account group follows the active scope", () => {
 	const group = (w: ReturnType<typeof mountHeader>) => ({
 		shown: w.find('[data-testid="account-address-copy"]').exists(),
@@ -208,5 +304,27 @@ describe("Header — the account group follows the active scope", () => {
 		H.app.account = undefined
 		await nextTick()
 		expect(w.find('[data-testid="header-account-loading"]').exists()).toBe(true)
+	})
+})
+
+describe("Header — failure indication", () => {
+	test("an error log marks the failure badge red, a warning yellow, and the mark clears after a minute", () => {
+		vi.useFakeTimers()
+		try {
+			mountHeader()
+			const log = (level: LogLevel, id: string) => {
+				for (const fn of H.logListeners) fn({ level, id })
+			}
+			log(LogLevel.Info, "log-0")
+			expect(H.cache.failureLog).toBeNull()
+			log(LogLevel.Error, "log-1")
+			expect(H.cache.failureLog).toEqual({ id: "log-1", color: "var(--red)" })
+			log(LogLevel.Warn, "log-2")
+			expect(H.cache.failureLog).toEqual({ id: "log-2", color: "var(--yellow)" })
+			vi.advanceTimersByTime(60_000)
+			expect(H.cache.failureLog).toBeNull()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

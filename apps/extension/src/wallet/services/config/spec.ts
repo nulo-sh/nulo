@@ -16,7 +16,6 @@ export const RESTORABLE_CONFIG_KEYS: ReadonlySet<ConfigKey> = new Set<ConfigKey>
 	"theme",
 	"sidePanel",
 	"showNode",
-	"showPopupFullscreen",
 	"disableAnimations",
 	"defaultExplorer",
 	"incomingTransfersVisible",

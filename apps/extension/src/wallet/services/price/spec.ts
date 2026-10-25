@@ -2,6 +2,8 @@ import type { PricedTokens } from "./price-map"
 
 export const PRICE_SERVICE_NAME = "price"
 
+export const TOKEN_PRICES_STORAGE_KEY = "nulo:core:token-prices"
+
 /** A validated USD quote for one CoinGecko id. */
 export type PriceQuote = {
 	coingeckoId: string
@@ -28,6 +30,9 @@ export const QUOTE_TTL_MS = 15 * 60_000
  *  would otherwise stay "fresh" forever AND win every monotonic merge. */
 export const MAX_CLOCK_SKEW_MS = 2 * 60_000
 
+/** A provider fetch is aborted after this long, so no fetch outlives it by more than its cache write. */
+export const PRICE_FETCH_TIMEOUT_MS = 10_000
+
 /**
  * The single staleness rule (spec-level so UI, service, and executors can
  * never drift apart). A quote is usable iff its effective timestamp is
@@ -40,8 +45,14 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 }
 
 /** Usable quotes with the mapping that says which token each id prices. They travel together, so a
- *  reader never prices a token with a mapping from another moment than its quotes. */
-export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens }
+ *  reader never prices a token with a mapping from another moment than its quotes. `flaggedTokens`
+ *  rides along as the popup's one channel to the signed list: the `flaggedKeysOf` key of each pair
+ *  it flags as a scam, whatever the fiat setting. */
+export type PriceSnapshot = {
+	quotes: PriceState
+	pricedTokens: PricedTokens
+	flaggedTokens: readonly string[]
+}
 
 export type Methods = {
 	/** Usable quotes only (validated + fresh + fiat display enabled). */
@@ -51,7 +62,7 @@ export type Methods = {
 }
 
 export type Events = {
-	/** Emitted after every successful refresh and every new token list, and with no quotes when
-	 *  fiat display is disabled. */
+	/** Emitted after every fetch no fiat-display flip superseded, failed or not, after every new token
+	 *  list, and with no quotes when fiat display is disabled. */
 	onQuotesUpdated: PriceSnapshot
 }

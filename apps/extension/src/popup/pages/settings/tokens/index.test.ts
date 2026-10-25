@@ -2,16 +2,20 @@ import { Tooltip } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { useAppStore } from "@/stores/app.store"
 import TokensIndex from "./index.vue"
+
+const H = vi.hoisted(() => ({ tokens: [] as Array<Record<string, unknown>> }))
 
 vi.mock("@/wallet/services/token/client", async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return {
 		TokenServiceClient: function TokenServiceClient() {
 			return {
-				getTokens: vi.fn(async () => [{ id: "t", symbol: "TST", name: "Test token" }]),
+				getTokens: vi.fn(async () => H.tokens),
 				onTokenAdded: new EventHandler(),
+				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				deleteToken: vi.fn(),
 				disconnect: vi.fn(),
@@ -28,19 +32,11 @@ const bubble = () => document.querySelector('[data-testid="tooltip-bubble"]')
 // The app store reads and watches `chrome.storage.local` when it is created.
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn((_k: unknown, cb?: (r: Record<string, unknown>) => void) => {
-					cb?.({})
-					return Promise.resolve({})
-				}),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 	})
+	installChromeStorage({}, { persist: false })
 	document.body.innerHTML = '<div id="tooltip"></div>'
+	H.tokens = [{ id: "t", symbol: "TST", name: "Test token" }]
 })
 afterEach(() => {
 	document.body.innerHTML = ""
@@ -85,4 +81,18 @@ test("the delete icon's tooltip leaves with the icon, and stops taking Escape", 
 	const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
 	document.body.dispatchEvent(esc)
 	expect(esc.defaultPrevented).toBe(false)
+})
+
+test("a row whose symbol or name is blank reads the empty-value dash; a normal row keeps its own", async () => {
+	H.tokens = [
+		{ id: "t", symbol: "TST", name: "Test token" },
+		{ id: "b", symbol: "   ", name: "" },
+	]
+	const { wrapper } = mountPage()
+	await flushPromises()
+	const rows = wrapper.findAll('[data-testid="token-row"]').map((r) => [r.attributes("title"), r.attributes("description")])
+	expect(rows).toEqual([
+		["—", "—"],
+		["TST", "Test token"],
+	])
 })

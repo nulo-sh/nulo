@@ -9,6 +9,7 @@ import { describe, expect, test } from "vitest"
 import { trimAddress } from "@/utils/string"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import OperationCard from "./OperationCard.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 // Wire-shaped: 0x + 64 hex, each value below the field modulus.
 const OWNER = `0x${"0a".repeat(32)}`
@@ -144,6 +145,26 @@ describe("OperationCard — aztec_createAuthWit", () => {
 		}
 	})
 
+	test("on a token the wallet does not hold, the Function row names a transfer by the function's own name, read or not", () => {
+		const call = { to: TOKEN, name: "transfer_in_public", selector: "0x8c9e5472", args: [OWNER, DELEGATE, field(5n), field(1n)] }
+		const decoded = {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_in_public",
+			params: [
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "to", value: { kind: "address", value: DELEGATE } },
+				{ name: "amount", value: { kind: "integer", value: "5" } },
+				{ name: "authwit_nonce", value: { kind: "field", value: field(1n) } },
+			],
+		}
+		const pending = mountCard(createAuthWit({ caller: DELEGATE, call }))
+		expect(pending.find('[data-testid="execute-authwit-function"]').text()).toBe("Transfer In Public")
+		const unread = mountCard(createAuthWit({ caller: DELEGATE, call }), { decodedCalls: [decoded] })
+		expect(unread.find('[data-testid="execute-authwit-structured-args"]').exists()).toBe(false)
+		expect(unread.find('[data-testid="execute-authwit-function"]').text()).toBe("Transfer In Public")
+	})
+
 	test("an unrecognized intent waits for the decode, then renders named parameters; a 2-arg transfer never claims a sender", () => {
 		const call = { to: TOKEN, name: "transfer", args: [DELEGATE, field(5n)] }
 		const pending = mountCard(createAuthWit({ caller: DELEGATE, call }))
@@ -161,6 +182,19 @@ describe("OperationCard — aztec_createAuthWit", () => {
 		})
 		expect(decoded.findAll('[data-testid="execute-authwit-decoded-param"]')).toHaveLength(1)
 		expect(decoded.text()).not.toContain("this account")
+	})
+
+	test("an intent the wallet cannot read says why, with the window's one closing advice", () => {
+		const call = { to: TOKEN, name: "claim", selector: "0x1a2b3c4d", args: [OWNER, field(5n)] }
+		const w = mountCard(createAuthWit({ caller: DELEGATE, call }), {
+			decodedCalls: [{ kind: "undecoded", reason: "unknown-contract" }],
+		})
+		expect(shownText(w.get('[data-testid="execute-authwit-unverified-reason"]').element)).toBe(
+			"Nulo doesn't have this contract's interface.",
+		)
+		expect(w.findAll('[data-testid="execute-authwit-unverified-advice"]').map((a) => a.text())).toEqual([
+			"Check what the app says this does before approving.",
+		])
 	})
 
 	test("a standard transfer intent names its from, not the delegate or the signing account", () => {

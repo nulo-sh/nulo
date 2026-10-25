@@ -69,8 +69,14 @@ export const PAID_BY = {
 /** Spoken in place of a hand-added contract's fee, which is drawn as "—". */
 export const UNVOUCHED_FEE_SENTENCE = "Nulo can't tell what this fee contract charges you."
 
+/** Under the strip for a token whose class Nulo has not validated: the strip's words assume its code. */
+export const TOKEN_CAVEAT = "Nulo can't check this token's contract. What a send publishes depends on its code."
+
 /** The fee row while an earlier send holds the transfer's chain state. */
 export const QUEUED_FEE_COPY = "Queued behind your previous send"
+
+/** The fee row and the review's fee line for a queued send Nulo's sponsor pays: there is no cap to name. */
+export const QUEUED_SPONSORED_COPY = "Goes out after your earlier send."
 
 type SubmittedFee = { paymentMethod?: { kind?: string; fpcId?: string } } | undefined
 
@@ -110,15 +116,14 @@ export function factWord(cell: FactCell, facts: PublishFacts): string {
 	return FACT_WORDS[cell][facts[cell]]
 }
 
-/** The glyph Home and the token rows use for each side: the padlock only for hidden, and none
- *  while Nulo cannot tell, so a mark never claims more privacy than the send has. */
-export function publishGlyph(visibility: Visibility): "lock" | "globe" | null {
+/** Each side's balance mark: a mark never claims more privacy than the send has. */
+export function publishGlyph(visibility: Visibility): "private" | "public" | null {
 	switch (visibility) {
 		case "hidden":
-			return "lock"
+			return "private"
 		case "public":
 		case "exposed":
-			return "globe"
+			return "public"
 		default:
 			return null
 	}

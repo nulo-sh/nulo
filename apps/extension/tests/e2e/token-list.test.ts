@@ -7,9 +7,12 @@
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
-import { isFirefox, newPage, openScratchPage } from "./fixtures/browser"
-import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
+import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
+import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
+import { navigateByHash, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
+import { shotSend } from "./fixtures/send-page"
 import {
+	E2E_LIST_FLAGGED,
 	type ListHost,
 	e2eSigner,
 	heldListEntries,
@@ -19,9 +22,13 @@ import {
 	signTestList,
 	waitForStoredList,
 } from "./fixtures/token-list"
+import { readScopeIdentity, seedTokenRow } from "./helpers/activity-seeds"
+import { refuseTestnet } from "./helpers/contacts"
 import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
 
 const SEED_ROW = '[data-testid="token-seed-row"]'
+const sel = (testid: string) => `[data-testid="${testid}"]`
+const VISIBLE = { visible: true, timeout: 15_000 } as const
 
 /** A cookie the host set through a top-level visit: a request that carried credentials would send it. */
 async function storeHostCookie(ctx: ExtensionContext, host: ListHost): Promise<void> {
@@ -33,12 +40,58 @@ async function storeHostCookie(ctx: ExtensionContext, host: ListHost): Promise<v
 	}
 }
 
+/**
+ * Seeds a token row for the pair the held list flags, with a balance, then restarts the worker: the
+ * balance service reads its token map only as it starts. The caller holds the Testnet RPC refused,
+ * or a refresh writes the real zero over the seed.
+ */
+async function openHomeHoldingFlagged(ctx: ExtensionContext): Promise<Page> {
+	const seeder = await openPopup(ctx)
+	await waitForHash(seeder, "#/popup/general", 30_000)
+	const identity = await readScopeIdentity(seeder)
+	const [pair] = E2E_LIST_FLAGGED
+	if (identity.chainId !== pair.chainId)
+		throw new Error(`the profile is on chain ${identity.chainId}, the flagged pair on ${pair.chainId}`)
+	// Transfer functions, so the token page and Send read as for any sendable token.
+	const transfers = Object.fromEntries(
+		["transferPublicFn", "transferPrivateFn", "transferPublicToPrivateFn", "transferPrivateToPublicFn"].map((key) => [
+			key,
+			{ name: key, impl: 0 },
+		]),
+	)
+	const scope = { ...identity, token: { contract: pair.address, name: "Scam Token", symbol: "SCAM", decimals: 6, ...transfers } }
+	await seedTokenRow(seeder, scope, 1)
+	await seeder.evaluate(
+		(key: string, row: string) => chrome.storage.local.set({ [key]: row }),
+		"nulo:core:token-balances@1",
+		JSON.stringify({
+			id: 1,
+			token: 1,
+			account: scope.account,
+			profileId: scope.profileId,
+			chainId: scope.chainId,
+			contract: pair.address,
+			publicBalance: "50000000000",
+			privateBalance: "0",
+			updatedAt: Date.now(),
+		}),
+	)
+	// Firefox keeps its event page alive while an extension page is open.
+	for (const open of await ctx.browser.pages()) {
+		if (open.url().startsWith(extensionUrl(ctx.extensionId, "/"))) await open.close()
+	}
+	await stopBackground(ctx)
+	const page = await openPopup(ctx)
+	await unlockAfterBackgroundDeath(page)
+	return page
+}
+
 async function seedRowSymbols(page: Page): Promise<string[]> {
 	return (await page.$$eval(SEED_ROW, (rows) => rows.map((row) => row.getAttribute("data-symbol") ?? "?"))).sort()
 }
 
 describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
-	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie or a referrer", {
+	test("accepting the Terms fetches the list, whose defaults show as placeholders; a forged list and an older one change nothing; no request carries a cookie, a referrer or a cache validator", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ freshExtensionPerTest: ctx }) => {
@@ -60,6 +113,8 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 
 			const popup = await openPopup(ctx)
 			await waitForHash(popup, "#/popup/general", 30_000)
+			// The list names Testnet tokens only, and a new profile starts on Mainnet.
+			await switchToNetwork(popup, "Testnet")
 			await popup.waitForSelector(SEED_ROW, { visible: true, timeout: 30_000 })
 			const listed = new Set(heldListEntries().map((e) => e.symbol))
 			const shown = await seedRowSymbols(popup)
@@ -81,10 +136,50 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			for (const request of host.requests()) {
 				expect(request.cookie, "a list request carried a cookie").toBeUndefined()
 				expect(request.referer, "a list request carried a referrer").toBeUndefined()
+				expect(request.ifNoneMatch, "a list request carried a cache validator").toBeUndefined()
 			}
 			console.log(`[token-list] ${isFirefox ? "Firefox" : "Chrome"} sends Origin: ${host.requests()[0]?.origin ?? "(none)"}`)
 		} finally {
 			await host.stop()
 		}
+	})
+
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner", {
+		timeout: 180_000,
+		retry: 0,
+	}, async ({ listedExtensionPerTest: ctx }) => {
+		const refusal = await refuseTestnet(ctx)
+		try {
+			const page = await openHomeHoldingFlagged(ctx)
+			await page.waitForSelector(`${sel("tokens-card")} ${sel("token-flagged")}`, VISIBLE)
+			const rows = await page.$$eval(
+				sel("tokens-card"),
+				(cards, symbol: string, flagged: string) =>
+					cards.map((card) => [card.querySelector(symbol)?.getAttribute("data-symbol"), card.querySelector(flagged) !== null]),
+				sel("token-symbol"),
+				sel("token-flagged"),
+			)
+			expect(rows).toEqual([["SCAM", true]])
+			await shotSend(page, "flagged-home", "token-flagged")
+
+			await openHoldings(page)
+			await page.waitForSelector(`${sel("holdings-page")} ${sel("token-flagged")}`, VISIBLE)
+			await shotSend(page, "flagged-holdings", "token-flagged")
+
+			await navigateByHash(page, "#/popup/tokens/1", 10_000)
+			await page.waitForSelector(sel("token-flagged-banner"), VISIBLE)
+			await shotSend(page, "flagged-token-page", "token-flagged-banner")
+
+			await navigateByHash(page, "#/popup/send?tokenId=1", 10_000)
+			await page.waitForSelector(sel("token-flagged-banner"), VISIBLE)
+			await shotSend(page, "flagged-send", "token-flagged-banner")
+
+			await clickByTestId(page, "send-token-trigger")
+			await page.waitForSelector(`${sel("select-token-row")}[data-symbol="SCAM"] ${sel("select-token-flagged")}`, VISIBLE)
+			await shotSend(page, "flagged-send-picker", "select-token-flagged")
+		} finally {
+			await refusal.stop()
+		}
+		expect(ctx.pageErrors).toEqual([])
 	})
 })

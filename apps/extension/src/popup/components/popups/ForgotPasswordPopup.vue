@@ -34,13 +34,18 @@ const handleReset = () => {
 					<Text variant="body" color="body" height="140" align="center" style="padding: 0 12px">
 						Password recovery is not possible. Delete this profile, then re-import it with its recovery phrase.
 					</Text>
+					<!-- Shown for every profile: while locked the wallet reads nothing about its accounts. -->
+					<Flex align="start" gap="6" :class="$style.warning" data-testid="forgot-imported-warning">
+						<Icon name="warning" size="14" color="txt-warning" aria-hidden="true" />
+						<Text variant="body" color="primary" height="140">Accounts you imported are lost with this profile. The recovery phrase can't bring them back.</Text>
+					</Flex>
 				</Flex>
 
 				<ItemsContainer title="Recovery">
 					<SettingItem
 						@click="handleReset"
 						title="Delete profile"
-						icon="trash"
+						icon="remove"
 						iconBgColor="red"
 						chevron
 						data-testid="forgot-reset-btn"
@@ -62,6 +67,10 @@ const handleReset = () => {
 </template>
 
 <style module>
+.warning {
+	padding: 0 12px;
+}
+
 .wrapper {
 	composes: body from "./popup-shared.module.css";
 }

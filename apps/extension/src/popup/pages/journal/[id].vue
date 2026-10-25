@@ -18,6 +18,7 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -29,15 +30,16 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
 import { DETAIL_TIME_FORMAT } from "../detail-page"
-import { categoricalLabel, journalTerminalDisplay, sanitizeJournalSubtitle } from "@/utils/journal-state"
+import { categoricalLabel, journalCallTitle, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
 import { bindJournalDetailUpdates, readJournalDetail } from "./journal-detail-scope"
-import { humanizeMethodName, formatTransferType } from "@/utils/tx-enrichment"
+import { formatTransferType } from "@/utils/tx-enrichment"
+import { dashIfBlank } from "@/utils/string"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
 import { copyWithToast } from "@/utils/clipboard"
-import { getAccountExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getAccountExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -75,8 +77,8 @@ const token = computed(() => {
 
 const title = computed(() => {
 	if (!op.value) return "Transaction"
-	if (isTransfer.value) return token.value?.symbol || "Transfer"
-	return op.value.title ? humanizeMethodName(op.value.title) : "Transaction"
+	if (isTransfer.value) return dashIfBlank(token.value?.symbol || "Transfer")
+	return journalCallTitle(op.value, tokens.value)
 })
 
 const amountDisplay = computed(() => {
@@ -102,7 +104,7 @@ const transferFiat = computed(() => {
 const methodLabel = computed(() => {
 	if (!op.value?.title) return null
 	if (isTransfer.value) return null
-	return humanizeMethodName(op.value.title)
+	return journalCallTitle(op.value, tokens.value)
 })
 
 // Recipient surface for transfer kinds (only populated post-broadcast on
@@ -113,13 +115,7 @@ const recipientLabel = computed(() => {
 	return trimAddress(r, 6, 4, "…")
 })
 
-// Sanitize the dApp-controlled subtitle before rendering. A malicious dApp
-// could set its origin to an http(s)-URL-looking string; the helper brackets
-// URL-shaped values so the UI signals "not a link" at a glance.
-const originChip = computed(() => {
-	if (op.value?.kind !== "dapp_execute") return null
-	return sanitizeJournalSubtitle(op.value.subtitle)
-})
+const originChip = computed(() => (op.value ? journalCardOriginLabel(op.value) : null))
 
 const txHash = computed(() => op.value?.progress?.txHash ?? null)
 
@@ -134,7 +130,7 @@ const recipientUrl = computed(() => {
 	if (!r || !onActiveNetwork.value) return null
 	return getAccountExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, r)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 
 const handleCopy = (target) => {
 	void copyWithToast(target, openToast, "Successfully copied")
@@ -244,22 +240,12 @@ onBeforeUnmount(() => {
 		<SubPageHeader :title="title" :backTo="'/popup/activity'" />
 
 		<Flex v-if="op && display" wide direction="column" gap="20" :class="$style.content">
-			<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
-				<span v-if="terminalAtLabel" :class="$style.tx_time">{{ terminalAtLabel }}</span>
-				<span v-if="terminalAtLabel && explorerUrl" :class="$style.meta_sep">·</span>
-				<a
-					v-if="explorerUrl"
-					:href="explorerUrl"
-					target="_blank"
-					rel="noopener noreferrer"
-					@click.stop
-					:class="$style.hero_link"
-					data-testid="journal-detail-explorer-link"
-				>
-					<span>View on {{ explorerName }}</span>
-					<Icon name="external-link" size="10" color="tertiary" />
-				</a>
-			</Flex>
+			<DetailHeroMeta
+				:time="terminalAtLabel"
+				:explorerUrl="explorerUrl"
+				:explorerName="explorerName"
+				linkTestid="journal-detail-explorer-link"
+			/>
 
 			<!-- Transfer amount block (transfer kind only) -->
 			<Flex v-if="isTransfer && amountDisplay" align="center" direction="column" gap="6">
@@ -280,7 +266,7 @@ onBeforeUnmount(() => {
 			<!-- Details box — mirrors tx/[id].vue's details_box. App/Method/To/etc.
 				 surfaced as rows (not standalone chips) so the layout matches the
 				 confirmed-tx detail page. -->
-			<Flex wide direction="column" gap="10" :class="$style.details_box">
+			<Flex wide direction="column" gap="10" :class="$style.details_box" data-testid="journal-detail-box">
 				<Flex v-if="category" wide direction="column" gap="4">
 					<span :class="$style.detail_key">What happened</span>
 					<span :class="$style.detail_context" data-testid="journal-detail-context">{{ category.context }}</span>
@@ -295,14 +281,14 @@ onBeforeUnmount(() => {
 					@copy="handleCopy"
 				/>
 
-				<Flex v-if="originChip" wide justify="between" align="center">
-					<span :class="$style.detail_key">App</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-origin">{{ originChip }}</span>
+				<Flex v-if="originChip" wide justify="between" align="start" gap="16">
+					<span :class="$style.app_key" data-testid="journal-detail-app-label">App</span>
+					<span :class="$style.app_value" data-testid="journal-detail-origin">{{ originChip }}</span>
 				</Flex>
 
-				<Flex v-if="methodLabel" wide justify="between" align="center">
-					<span :class="$style.detail_key">Method</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-method">{{ methodLabel }}</span>
+				<Flex v-if="methodLabel" wide justify="between" align="start" gap="16">
+					<span :class="$style.app_key" data-testid="journal-detail-method-label">Method</span>
+					<span :class="$style.method_value" data-testid="journal-detail-method">{{ methodLabel }}</span>
 				</Flex>
 
 				<Flex v-if="recipientLabel" wide justify="between" align="center">
@@ -373,22 +359,6 @@ onBeforeUnmount(() => {
 	composes: content from "../detail-page.module.css";
 }
 
-.hero_meta {
-	composes: hero_meta from "../detail-page.module.css";
-}
-
-.tx_time {
-	composes: tx_time from "../detail-page.module.css";
-}
-
-.meta_sep {
-	composes: meta_sep from "../detail-page.module.css";
-}
-
-.hero_link {
-	composes: hero_link from "../detail-page.module.css";
-}
-
 .amount_value {
 	composes: amount_value from "../detail-page.module.css";
 }
@@ -415,6 +385,23 @@ onBeforeUnmount(() => {
 
 .detail_value_mono {
 	composes: detail_value_mono from "../detail-page.module.css";
+}
+
+.app_key {
+	composes: app_key from "../detail-page.module.css";
+}
+
+.app_value {
+	composes: app_value from "../detail-page.module.css";
+}
+
+/* A function name wraps at its spaces and breaks inside a word only when the word outruns the line. */
+.method_value {
+	composes: detail_value_mono from "../detail-page.module.css";
+	min-width: 0;
+	text-align: right;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
 }
 
 /* TxHashRow's link, so both linked values in Details read alike. */

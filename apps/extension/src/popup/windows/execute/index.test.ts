@@ -1,80 +1,45 @@
 /**
- * Frozen-oracle characterization tests for the execute approval window's SHELL
- * lifecycle — the connect/wait/redirect/init/beforeunload skeleton, the unmount
- * disconnect ORDER (4 services + listener last), the lazy execution-transport
- * asymmetry, and the wrong-profile overlay whose rejection is delivered via the
- * beforeunload route. These pin CURRENT behavior verbatim so the planned shell
- * extraction can be graded against them; they must pass unchanged before AND
- * after it. Spec: implementations-plan/archive/harden-quality-arc/window-characterization.md.
- *
- * Pins covered here (spec ids): A1 connect set+order (+ executionService NEVER
- * eager-connected) · A2 session gate · A3 auth redirect · A4 beforeunload-after-
- * init (incl. init-throw) · A5 unmount disconnect order · A6 closeWindow(true)
- * vs closeWindow() · A7 no-double-reject · B8 reject two-layer order · B9-mirror
- * (execute DOES bail on !requestId — the guard capabilities lacks) · C12
- * onActiveProfileChanged guard · D13 wrong-profile init check · D14 wrong-profile
- * rejection delivered on dismiss→unload · D16 connect/disconnect asymmetry.
- *
- * Out of scope (window-specific business pins D15: approve gating stack, fee
- * selection, token-metadata loading) — deferred; the network e2e dApp-execute
- * flow covers them end-to-end today.
+ * The execute approval window on the shared approval shell, whose own contracts
+ * `composables/useDappApprovalWindow.test.ts` pins. This file pins what the window adds to it: its
+ * four services, the execution transport opened only on first use (A1, A5/D16), an init the shell
+ * gates and waits for, the profile fetch then the payload load (A2, A4, a throwing init
+ * included), its reject routed through the shell's close (B8), its reject's bail-out with no
+ * request id (B9-mirror), the profile guard it subscribes (C12), and a request from another
+ * profile, refused on dismiss and unload (D13, D14). Then the window's own business: cancellation,
+ * init sequencing, self-pay, the approval envelope, a flagged token add, app-paid operations, send
+ * drafts and grants.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
-import { reactive, ref, type Ref } from "vue"
+import { nextTick, ref, type Ref } from "vue"
+import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
+import {
+	approval,
+	beforeunloadAdds,
+	beforeunloadRemoves,
+	callLog,
+	completeInit,
+	getActiveProfileMock,
+	installWindowSpies,
+	onActiveProfileChangedAddMock,
+	rejectViaInteractionServiceMock,
+	resetWindowHarness,
+	windowsRemoveMock,
+} from "../../../../tests/helpers/approval-window-harness"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 
-// ── Mock state (closure refs so tests can flip values mid-test) ──────
-
-let requestIdMock = ref<string | undefined>(undefined)
-let dappMock = ref<{ name: string; url: string } | null>(null)
-let payloadMock: Ref<unknown> = ref(null)
-let isCancelledMock = ref(false)
-let payloadToLoad: unknown = null
-let loadPromiseResolve: (() => void) | undefined
-let _loadPromiseReject: ((err: Error) => void) | undefined
-let getActiveProfilePromiseResolve: ((p: unknown) => void) | undefined
-let getActiveProfilePromiseReject: ((err: Error) => void) | undefined
-
-/** Ordered lifecycle log — the load-bearing pins assert exact sequences on this. */
-const callLog: string[] = []
-
-const loadInteractionPayloadMock = vi.fn(() => {
-	return new Promise<void>((resolve, reject) => {
-		loadPromiseResolve = () => {
-			// Mirror the real composable: load() commits requestId first, then payload + dapp.
-			requestIdMock.value = "req-123"
-			dappMock.value = { name: "Test DApp", url: "https://example.com" }
-			payloadMock.value = payloadToLoad
-			resolve()
-		}
-		_loadPromiseReject = reject
-	})
-})
-
-const rejectViaInteractionServiceMock = vi.fn((reason: string) => {
-	callLog.push(`composableReject:${reason}`)
-})
 const approveInteractionMock = vi.fn(async () => undefined)
-
-const getActiveProfileMock = vi.fn(() => {
-	return new Promise<unknown>((resolve, reject) => {
-		getActiveProfilePromiseResolve = resolve
-		getActiveProfilePromiseReject = reject
-	})
-})
-
-const profileServiceConnectMock = vi.fn(() => callLog.push("profile.connect"))
-const profileServiceDisconnectMock = vi.fn(() => callLog.push("profile.disconnect"))
-const interactionServiceConnectMock = vi.fn(() => callLog.push("interaction.connect"))
-const interactionServiceDisconnectMock = vi.fn(() => callLog.push("interaction.disconnect"))
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
 const executionServiceDisconnectMock = vi.fn(() => callLog.push("execution.disconnect"))
 const tokenServiceConnectMock = vi.fn(() => callLog.push("token.connect"))
+const getTokensMock = vi.fn(async (_profileId: string, _chainId: number): Promise<unknown[]> => [])
+// Resolves undefined by default, which the window records as a failed preview.
+const previewTokenMetadataMock = vi.fn(async (..._args: unknown[]): Promise<unknown> => undefined)
+const tokenUpdatedMock = { add: vi.fn(), remove: vi.fn() }
 const tokenServiceDisconnectMock = vi.fn(() => callLog.push("token.disconnect"))
-const onActiveProfileChangedAddMock = vi.fn()
-const windowsRemoveMock = vi.fn(() => callLog.push("windows.remove"))
 
 // Transient clients constructed INSIDE init() — the wrong-profile throw happens
 // BEFORE their construction, which D13 pins via these constructor spies.
@@ -89,47 +54,20 @@ const { accountServiceCtorMock, networkServiceCtorMock } = vi.hoisted(() => ({
 	}),
 }))
 
-const routerPushMock = vi.fn()
-const routerMock = {
-	currentRoute: { value: { fullPath: "/windows/execute?requestId=req-route", query: { requestId: "req-route" } } },
-	push: routerPushMock,
-}
-
-const appStoreDefaults = () =>
-	reactive({
-		isSessionChecked: true,
-		isLogined: true,
-		account: { name: "TestAccount" },
-		network: { name: "TestNet" },
-		pageAwaitingAuth: "",
-	})
-let appStoreMock = appStoreDefaults()
-
-// ── Mocks (vi.mock is hoisted; factories run lazily at component import) ────
-
-vi.mock("@/composables/useDappInteractionPayload", () => ({
-	useDappInteractionPayload: vi.fn(() => ({
-		requestId: requestIdMock,
-		payload: payloadMock,
-		dapp: dappMock,
-		isCancelled: isCancelledMock,
-		load: loadInteractionPayloadMock,
-		reject: rejectViaInteractionServiceMock,
-	})),
-}))
-
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({
-		hostname: ref("example.com"),
-		isSuspicious: ref(false),
-	})),
-}))
-
 /** One entry per composable instance the window creates, in creation order:
  *  [0] fee estimates, [1] authorization previews. */
 const feeMapInstances: Array<{
-	opts: { estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>; onError?: (key: number, err: unknown) => void }
-	api: { results: Ref<Record<number, unknown>>; estimate: ReturnType<typeof vi.fn>; handoffAll: ReturnType<typeof vi.fn> }
+	opts: {
+		estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>
+		onError?: (key: number, err: unknown) => void
+		cancelRemote?: (token: string) => unknown
+	}
+	api: {
+		results: Ref<Record<number, unknown>>
+		estimate: ReturnType<typeof vi.fn>
+		handoffAll: ReturnType<typeof vi.fn>
+		dispose: ReturnType<typeof vi.fn>
+	}
 }> = []
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn((opts: unknown) => {
@@ -148,34 +86,13 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 	}),
 }))
 const estimateOperationFeeMock = vi.fn(async () => undefined)
+const cancelEstimateMock = vi.fn(async (_token: string): Promise<void> => undefined)
+const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
 const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
 vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: toastMocks.openToast }),
-}))
-
-// Vitest 4 requires `function` expressions (not arrow functions) for mocks
-// instantiated with `new`. Matches discover/index.test.ts pattern.
-vi.mock("@/wallet/services/profile/client", () => ({
-	ProfileServiceClient: vi.fn(function () {
-		return {
-			getActiveProfile: getActiveProfileMock,
-			connect: profileServiceConnectMock,
-			disconnect: profileServiceDisconnectMock,
-			onActiveProfileChanged: { add: onActiveProfileChangedAddMock },
-		}
-	}),
-}))
-
-vi.mock("@/wallet/services/dapp-interaction/client", () => ({
-	DappInteractionServiceClient: vi.fn(function () {
-		return {
-			connect: interactionServiceConnectMock,
-			disconnect: interactionServiceDisconnectMock,
-			approveInteraction: approveInteractionMock,
-		}
-	}),
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -186,7 +103,8 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			estimateOperationFee: estimateOperationFeeMock,
 			previewOperationAuthwits: previewOperationAuthwitsMock,
 			decodeCallsForDisplay: vi.fn(async () => []),
-			cancelEstimate: vi.fn(async () => undefined),
+			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
+			cancelEstimate: cancelEstimateMock,
 		}
 	}),
 }))
@@ -196,11 +114,14 @@ vi.mock("@/wallet/services/token/client", () => ({
 		return {
 			connect: tokenServiceConnectMock,
 			disconnect: tokenServiceDisconnectMock,
-			previewTokenMetadata: vi.fn(async () => undefined),
-			getTokens: vi.fn(async () => []),
+			previewTokenMetadata: previewTokenMetadataMock,
+			getTokens: getTokensMock,
+			onTokenUpdated: tokenUpdatedMock,
 		}
 	}),
 }))
+
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
 
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: accountServiceCtorMock,
@@ -214,73 +135,39 @@ vi.mock("@/wallet/services/transaction/client", () => ({
 	OriginType: { UI: "ui", DAPP: "dapp" },
 }))
 
-vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => appStoreMock,
+vi.mock(
+	"@/composables/useDappInteractionPayload",
+	async () => (await import("../../../../tests/helpers/approval-window-harness")).payloadModule,
+)
+vi.mock(
+	"@/wallet/services/profile/client",
+	async () => (await import("../../../../tests/helpers/approval-window-harness")).profileClientModule,
+)
+vi.mock("@/wallet/services/dapp-interaction/client", async () =>
+	(await import("../../../../tests/helpers/approval-window-harness")).interactionClientModule(() => ({
+		approveInteraction: approveInteractionMock,
+	})),
+)
+vi.mock("@/stores/app.store", async () => (await import("../../../../tests/helpers/approval-window-harness")).appStoreModule)
+vi.mock("vue-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("vue-router")>()),
+	...(await import("../../../../tests/helpers/approval-window-harness")).routerModule,
 }))
 
-vi.mock("vue-router", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("vue-router")>()
-	return { ...actual, useRouter: () => routerMock }
-})
-
-// ── window listener spies (call-through so real registration still happens,
-//    letting tests deliver a synthetic `beforeunload` to the live listener) ──
-
-type WinListener = (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void
-let nativeAdd: WinListener
-let nativeRemove: WinListener
-let addSpy: ReturnType<typeof vi.fn<WinListener>>
-let removeSpy: ReturnType<typeof vi.fn<WinListener>>
-
-const beforeunloadAdds = () => addSpy.mock.calls.filter((c) => c[0] === "beforeunload").length
-const beforeunloadRemoves = () => removeSpy.mock.calls.filter((c) => c[0] === "beforeunload").length
-
 beforeEach(() => {
-	nativeAdd = window.addEventListener.bind(window)
-	nativeRemove = window.removeEventListener.bind(window)
-	addSpy = vi.fn<WinListener>((type, listener, options) => {
-		if (type === "beforeunload") callLog.push("addEventListener:beforeunload")
-		nativeAdd(type, listener, options)
-	})
-	removeSpy = vi.fn<WinListener>((type, listener, options) => {
-		if (type === "beforeunload") callLog.push("removeEventListener:beforeunload")
-		nativeRemove(type, listener, options)
-	})
-	window.addEventListener = addSpy as unknown as typeof window.addEventListener
-	window.removeEventListener = removeSpy as unknown as typeof window.removeEventListener
-
-	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
-	;(globalThis as any).chrome = {
-		windows: {
-			getCurrent: (_o: unknown, cb: (w: { id?: number }) => void) => cb({ id: 42 }),
-			remove: windowsRemoveMock,
-		},
-		runtime: { getURL: (p: string) => `chrome-extension://test/${p}` },
-	}
+	priceFake.reset(undefined)
+	installWindowSpies()
+	Object.assign(chrome, { runtime: { getURL: (p: string) => `chrome-extension://test/${p}` } })
 })
 
 let w: ReturnType<typeof factory> | undefined
 
 afterEach(() => {
-	// Unmount FIRST so the component's removeEventListener goes through the spy
-	// and the real listener actually detaches (no cross-test beforeunload leaks).
+	// Unmount first, so the window's listener removal goes through the spy.
 	w?.unmount()
 	w = undefined
-	window.addEventListener = nativeAdd as unknown as typeof window.addEventListener
-	window.removeEventListener = nativeRemove as unknown as typeof window.removeEventListener
-	callLog.length = 0
-	payloadToLoad = null
-	requestIdMock = ref<string | undefined>(undefined)
-	dappMock = ref<{ name: string; url: string } | null>(null)
-	payloadMock = ref(null)
-	isCancelledMock = ref(false)
-	appStoreMock = appStoreDefaults()
-	loadPromiseResolve = undefined
-	_loadPromiseReject = undefined
-	getActiveProfilePromiseResolve = undefined
-	getActiveProfilePromiseReject = undefined
+	resetWindowHarness()
 	feeMapInstances.length = 0
-	vi.clearAllMocks()
 })
 
 // ── Stubs (children flattened; overlay stub re-emits dismiss on click) ──
@@ -304,11 +191,11 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { template: "<div />" },
+	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged"], template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
-		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"],
+		props: ["dapp", "actionLabel"],
 	},
 	DappCancelledOverlay: {
 		props: ["message"],
@@ -319,11 +206,12 @@ const STUBS = {
 
 // Lazy import after vi.mock hoist
 import Execute from "./index.vue"
+import OperationCard from "./OperationCard.vue"
 
 const factory = () => mount(Execute, { global: { stubs: STUBS } })
 
 type ExecVm = {
-	reject: () => Promise<void>
+	reject: (end: "reject" | "close" | "lock" | "switch") => Promise<void>
 	approve: () => Promise<void>
 	closeWindow: (interactionCompleted?: boolean) => void
 	isWrongProfile: boolean
@@ -339,15 +227,6 @@ const makeExecutableOp = () => ({
 	network: { chainId: 1, name: "TestNet" },
 	account: { address: "0x1", chainId: 1, name: "TestAccount" },
 })
-
-/** Drive init to completion: resolve the profile fetch, then the payload load. */
-const completeInit = async (profile: { id: string } = { id: "p1" }) => {
-	await flushPromises()
-	getActiveProfilePromiseResolve?.(profile)
-	await flushPromises()
-	loadPromiseResolve?.()
-	await flushPromises()
-}
 
 /** Payload whose session belongs to a DIFFERENT profile than the active one. */
 const wrongProfilePayload = () => ({
@@ -366,34 +245,24 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 	})
 
 	test("A2: session gate — init and beforeunload wait for isSessionChecked", async () => {
-		appStoreMock.isSessionChecked = false
+		approval.appStore.isSessionChecked = false
 		w = factory()
 		await flushPromises()
 		expect(getActiveProfileMock).not.toHaveBeenCalled()
 		expect(beforeunloadAdds()).toBe(0)
-		appStoreMock.isSessionChecked = true
+		approval.appStore.isSessionChecked = true
 		await flushPromises()
 		expect(getActiveProfileMock).toHaveBeenCalledTimes(1)
-	})
-
-	test("A3: auth redirect short-circuits — pageAwaitingAuth set, no init, no beforeunload", async () => {
-		appStoreMock.isLogined = false
-		w = factory()
-		await flushPromises()
-		expect(appStoreMock.pageAwaitingAuth).toBe(routerMock.currentRoute.value.fullPath)
-		expect(routerPushMock).toHaveBeenCalledWith({ path: "/popup/auth" })
-		expect(getActiveProfileMock).not.toHaveBeenCalled()
-		expect(beforeunloadAdds()).toBe(0)
 	})
 
 	test("A4: beforeunload is added AFTER init resolves — exactly once", async () => {
 		w = factory()
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(0)
-		getActiveProfilePromiseResolve?.({ id: "p1" })
+		approval.resolveProfile?.({ id: "p1" })
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(0)
-		loadPromiseResolve?.()
+		approval.resolveLoad?.()
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(1)
 	})
@@ -401,7 +270,7 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 	test("A4: beforeunload is STILL added when init throws internally", async () => {
 		w = factory()
 		await flushPromises()
-		getActiveProfilePromiseReject?.(new Error("profile-fetch-failed"))
+		approval.rejectProfile?.(new Error("profile-fetch-failed"))
 		await flushPromises()
 		expect(beforeunloadAdds()).toBe(1)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(true)
@@ -425,33 +294,12 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(executionServiceConnectMock).not.toHaveBeenCalled()
 	})
 
-	test("A6: closeWindow(true) removes the beforeunload listener; closeWindow() keeps it; both close", async () => {
-		w = factory()
-		await completeInit()
-		const vm = w.vm as unknown as ExecVm
-		vm.closeWindow()
-		expect(beforeunloadRemoves()).toBe(0)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		vm.closeWindow(true)
-		expect(beforeunloadRemoves()).toBe(1)
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(2)
-	})
-
-	test("A7: no double-reject — a decided reject detaches the listener before the window unloads", async () => {
-		w = factory()
-		await completeInit()
-		await (w.vm as unknown as ExecVm).reject()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
-		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
-	})
-
-	test("B8: window-local reject() = composable reject THEN closeWindow(true) — order pinned", async () => {
+	test("B8: window-local reject() detaches the unload listener, sends its end, THEN closes — order pinned", async () => {
 		w = factory()
 		await completeInit()
 		callLog.length = 0
-		await (w.vm as unknown as ExecVm).reject()
-		expect(callLog).toEqual(["composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await (w.vm as unknown as ExecVm).reject("reject")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:reject", "windows.remove"])
 	})
 
 	test("B9-mirror: reject() with NO requestId is fully inert (the guard capabilities lacks)", async () => {
@@ -460,8 +308,8 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		// reject() drops (implementations-plan/archive/harden-quality-arc/window-characterization.md § 6.5). Pinned from both sides.
 		w = factory()
 		await flushPromises()
-		expect(requestIdMock.value).toBeUndefined()
-		await (w.vm as unknown as ExecVm).reject()
+		expect(approval.requestId.value).toBeUndefined()
+		await (w.vm as unknown as ExecVm).reject("reject")
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		expect(beforeunloadRemoves()).toBe(0)
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
@@ -478,14 +326,15 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 		handler({ id: "p-other" })
 		await flushPromises()
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(1)
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "switch")
 		handler(undefined)
 		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenLastCalledWith("User rejected", "lock")
 		expect(rejectViaInteractionServiceMock).toHaveBeenCalledTimes(2)
 	})
 
 	test("D13: wrong-profile init check — overlay wins, initComplete stays false, beforeunload still added", async () => {
-		payloadToLoad = wrongProfilePayload()
+		approval.payloadToLoad = wrongProfilePayload()
 		w = factory()
 		await completeInit({ id: "p1" })
 		const vm = w.vm as unknown as ExecVm
@@ -507,7 +356,7 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		// Same profile (construction proceeds), then an unknown op kind throws inside
 		// the ops loop — after `new AccountServiceClient()` / `new NetworkServiceClient()`.
 		// Pre-fix the disconnect ran only on the success path, leaking both ports.
-		payloadToLoad = {
+		approval.payloadToLoad = {
 			session: { profileId: "p1", dappMetadata: { name: "D", url: "https://x" } },
 			params: { operations: [{ kind: "definitely_not_a_valid_kind", chain: "eip155:1" }] },
 		}
@@ -522,22 +371,31 @@ describe("execute window — shell lifecycle frozen oracle", () => {
 		expect(net.disconnect).toHaveBeenCalledTimes(1)
 	})
 
-	test("D14: wrong-profile rejection is delivered on dismiss → unload, not inline", async () => {
-		payloadToLoad = wrongProfilePayload()
+	test("D14: the wrong-profile notice's OK ends the request as the switch, and closes once the wallet has it", async () => {
+		approval.payloadToLoad = wrongProfilePayload()
 		w = factory()
 		await completeInit({ id: "p1" })
 		// No rejection has happened yet — the overlay is just showing.
 		expect(rejectViaInteractionServiceMock).not.toHaveBeenCalled()
 		callLog.length = 0
-		// OK on the overlay → closeWindow() with NO arg → listener stays attached.
 		await w.find('[data-testid="dapp-cancelled-overlay"]').trigger("click")
-		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
-		expect(beforeunloadRemoves()).toBe(0)
-		// The real window would now unload; the still-attached handler delivers
-		// the rejection (requestId was set by load() before the profile check).
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "switch")
+		expect(callLog).toEqual(["removeEventListener:beforeunload", "composableReject:User rejected:switch", "windows.remove"])
+	})
+
+	test("D14-lock: closing another profile's request, with no profile active, ends it as the lock", async () => {
+		approval.payloadToLoad = wrongProfilePayload()
+		w = factory()
+		await flushPromises()
+		approval.resolveProfile?.(undefined)
+		await flushPromises()
+		approval.resolveLoad?.()
+		await flushPromises()
+		// The window's X: the still-attached unload handler names the lock, not the person's close.
 		window.dispatchEvent(new Event("beforeunload"))
-		expect(rejectViaInteractionServiceMock).toHaveBeenCalledWith("User rejected")
-		expect(callLog).toEqual(["windows.remove", "composableReject:User rejected", "removeEventListener:beforeunload", "windows.remove"])
+		await flushPromises()
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "lock")
 	})
 })
 
@@ -550,7 +408,7 @@ describe("execute window — dApp cancellation state", () => {
 		await completeInit()
 		expect(w!.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(false)
 
-		isCancelledMock.value = true
+		approval.isCancelled.value = true
 		await flushPromises()
 		expect(w!.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(true)
 		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
@@ -562,11 +420,12 @@ describe("execute window — dApp cancellation state", () => {
 		const vm = w.vm as unknown as ExecVm
 		vm.operations = [makeExecutableOp()]
 		vm.initComplete = true
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
 		expect(confirm().attributes("disabled")).toBeUndefined()
 
-		isCancelledMock.value = true
+		approval.isCancelled.value = true
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeDefined()
 	})
@@ -581,20 +440,21 @@ describe("execute window — dApp cancellation state", () => {
 		const vm = w.vm as unknown as ExecVm
 		vm.operations = [makeExecutableOp()]
 		vm.initComplete = true
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await flushPromises()
 
 		await vm.approve()
 		await flushPromises()
 		expect(w!.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(true)
 		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
+		for (const { api } of feeMapInstances) expect(api.dispose).not.toHaveBeenCalled()
 	})
 })
 
-// ── Seam pins — pre-extraction, byte-identical
-//    across the refactor commits: init resolves operations SEQUENTIALLY (op N+1's
-//    lookups start only after op N resolved), commits operations/accounts and
-//    flips `initComplete` only AFTER the loop, then prefetches register_token
-//    metadata with the loading flag cleared in a `finally` even on failure. ──
+// ── Init resolves operations SEQUENTIALLY (op N+1's lookups start only after op N
+//    resolved), commits operations/accounts and flips `initComplete` only AFTER the
+//    loop, then prefetches register_token metadata with the loading flag cleared in
+//    a `finally` even on failure. ──
 
 describe("execute window — init sequencing pins", () => {
 	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
@@ -628,7 +488,7 @@ describe("execute window — init sequencing pins", () => {
 		networkServiceCtorMock.mockImplementationOnce(function () {
 			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
 		} as never)
-		payloadToLoad = twoOpsPayload()
+		approval.payloadToLoad = twoOpsPayload()
 		w = factory()
 		await completeInit()
 		// The first op is parked on its account lookup; the second has not started.
@@ -653,7 +513,7 @@ describe("execute window — init sequencing pins", () => {
 		networkServiceCtorMock.mockImplementationOnce(function () {
 			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
 		} as never)
-		payloadToLoad = twoOpsPayload()
+		approval.payloadToLoad = twoOpsPayload()
 		const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
 		try {
 			w = factory()
@@ -698,7 +558,7 @@ describe("execute window — a dApp-requested self-pay", () => {
 
 	test("drafted with no fee settings; approve executes nothing until the card supplies Fee Juice", async () => {
 		resolvable()
-		payloadToLoad = payloadWith({ calls: [{ name: "transfer", to: "0xtok", selector: "0x1", args: [] }], feePayer: OWNER })
+		approval.payloadToLoad = payloadWith({ calls: [{ name: "transfer", to: "0xtok", selector: "0x1", args: [] }], feePayer: OWNER })
 		w = factory()
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
@@ -707,13 +567,14 @@ describe("execute window — a dApp-requested self-pay", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
 	test("a payer that carries its payment is still pre-filled embedded", async () => {
 		resolvable()
-		payloadToLoad = payloadWith({ calls: [], feePayer: "0xfpc" })
+		approval.payloadToLoad = payloadWith({ calls: [], feePayer: "0xfpc" })
 		w = factory()
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm
@@ -756,36 +617,161 @@ describe("execute window — approval envelope", () => {
 		},
 	})
 
-	test("approve sends deltas only: feeSettings for send-likes, the SW's estimate/preview ids, nothing else", async () => {
+	const CLASS_ID = `0x${"c1".repeat(32)}`
+	const preview = { name: "Test USDC", symbol: "USDC", decimals: 6, interface: { classId: CLASS_ID, contract: "0xtok" } }
+
+	test("approve sends deltas only: feeSettings for send-likes, the SW's ids, the token details shown, nothing else", async () => {
 		resolvable()
-		payloadToLoad = payload()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
 		w = factory()
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
-		feeMapInstances[0]!.api.results.value = { 0: { estimateId: "est-0", previewId: "est-0" } }
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800", estimateId: "est-0", previewId: "est-0" } }
 		feeMapInstances[1]!.api.results.value = { 1: { previewId: "pv-1", discoveredAuthwits: [] } }
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 		const [id, deltas] = (approveInteractionMock.mock.calls[0] as unknown[]) ?? []
 		expect(id).toBe("req-123")
 		expect(deltas).toEqual([
-			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "est-0", previewId: "est-0" },
-			{ feeSettings: { paymentMethod: { kind: "embedded" } }, estimateId: undefined, previewId: "pv-1" },
-			{ feeSettings: undefined, estimateId: undefined, previewId: undefined },
+			{ feeSettings: { paymentMethod: { kind: "fj" } }, estimateId: "est-0", previewId: "est-0", feeCeiling: "800" },
+			{ feeSettings: { paymentMethod: { kind: "embedded" } }, estimateId: undefined, previewId: "pv-1", feeCeiling: undefined },
+			{
+				feeSettings: undefined,
+				estimateId: undefined,
+				previewId: undefined,
+				feeCeiling: undefined,
+				tokenMetadata: { name: "Test USDC", symbol: "USDC", decimals: 6, classId: CLASS_ID },
+			},
 		])
 		expect((approveInteractionMock.mock.calls[0] as unknown[]).length).toBe(2)
 		expect(feeMapInstances[0]!.api.handoffAll).toHaveBeenCalledTimes(1)
 		expect(feeMapInstances[1]!.api.handoffAll).toHaveBeenCalledTimes(1)
 	})
 
+	test.each([
+		[0, 1],
+		[1, 0],
+	])(
+		"an accepted approval ends both maps' unfinished estimates and closes only once both have answered (map %i first)",
+		async (first, second) => {
+			resolvable()
+			previewTokenMetadataMock.mockResolvedValueOnce(preview)
+			approval.payloadToLoad = payload()
+			w = factory()
+			await completeInit()
+			const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+			vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+			feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+			const releases: Array<() => void> = []
+			for (const { api } of feeMapInstances) {
+				api.dispose.mockImplementationOnce(() => {
+					callLog.push("dispose")
+					return new Promise<void>((resolve) => releases.push(resolve))
+				})
+			}
+			let accept: () => void = () => {}
+			approveInteractionMock.mockImplementationOnce(() => new Promise<undefined>((resolve) => (accept = () => resolve(undefined))))
+			const approving = vm.approve()
+			await flushPromises()
+			expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+			expect(callLog).not.toContain("dispose")
+			accept()
+			await flushPromises()
+			expect(callLog.filter((e) => e === "dispose")).toHaveLength(2)
+			releases[first]!()
+			await flushPromises()
+			expect(windowsRemoveMock).not.toHaveBeenCalled()
+			releases[second]!()
+			await approving
+			expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+		},
+	)
+
+	test.each([0, 1])("map %i's remote cancel settles only once the worker has answered it", async (i) => {
+		w = factory()
+		await completeInit()
+		let answer: () => void = () => {}
+		cancelEstimateMock.mockImplementationOnce(() => new Promise<void>((resolve) => (answer = resolve)))
+		let settled = false
+		void Promise.resolve(feeMapInstances[i]!.opts.cancelRemote?.("tok-1")).then(() => {
+			settled = true
+		})
+		await flushPromises()
+		expect(cancelEstimateMock).toHaveBeenCalledExactlyOnceWith("tok-1")
+		expect(settled).toBe(false)
+		answer()
+		await flushPromises()
+		expect(settled).toBe(true)
+		cancelEstimateMock.mockRejectedValueOnce(new Error("port closed"))
+		await expect(Promise.resolve(feeMapInstances[i]!.opts.cancelRemote?.("tok-2"))).resolves.toBeUndefined()
+	})
+
+	test("an accepted approval whose cancels never answer still closes the window at the end bound", async () => {
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		for (const { api } of feeMapInstances) api.dispose.mockImplementationOnce(() => new Promise<void>(() => {}))
+		const unloadRemovesBefore = beforeunloadRemoves()
+		vi.useFakeTimers()
+		try {
+			const approving = vm.approve()
+			await vi.advanceTimersByTimeAsync(END_ACK_TIMEOUT_MS - 1)
+			expect(windowsRemoveMock).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			await approving
+			expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+			expect(beforeunloadRemoves()).toBeGreaterThan(unloadRemovesBefore)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a token whose details could not be read keeps Confirm disabled and approve sends nothing", async () => {
+		const tokenOnly = () => ({
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xtok" }] },
+		})
+		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
+		try {
+			resolvable()
+			approval.payloadToLoad = tokenOnly()
+			w = factory()
+			await completeInit()
+			expect(confirm().attributes("disabled")).toBeDefined()
+			await (w.vm as unknown as ExecVm).approve()
+			expect(approveInteractionMock).not.toHaveBeenCalled()
+		} finally {
+			warned.mockRestore()
+		}
+
+		w.unmount()
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = tokenOnly()
+		w = factory()
+		await completeInit()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await (w.vm as unknown as ExecVm).approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
 	test("a fee choice the card withdraws disables Confirm, and the pick that replaces it is what approval sends", async () => {
 		resolvable()
-		payloadToLoad = payload()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
 		w = factory()
 		await completeInit()
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
 		const confirm = () => w!.find('[data-testid="execute-confirm-btn"]')
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
 		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -807,7 +793,7 @@ describe("execute window — approval envelope", () => {
 
 	test("the preview is scheduled at init for default_entrypoint operations only, and both slots estimate by reference", async () => {
 		resolvable()
-		payloadToLoad = payload()
+		approval.payloadToLoad = payload()
 		w = factory()
 		await completeInit()
 		const [fees, previews] = feeMapInstances
@@ -818,6 +804,109 @@ describe("execute window — approval envelope", () => {
 		expect(estimateOperationFeeMock).toHaveBeenCalledExactlyOnceWith("req-123", 0, { paymentMethod: { kind: "fj" } }, "tok-a", "flow-a")
 		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b")
 		expect(previewOperationAuthwitsMock).toHaveBeenCalledExactlyOnceWith("req-123", 1, "tok-b", "flow-b")
+	})
+})
+
+// ── A token add the signed list flags: Confirm and approve() wait for the list's first answer, and
+//    for the person's tick on a flagged token, however the list comes to flag it. ──
+describe("execute window — a token the signed list flags", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = "0xabc"
+	// Wire-shaped: 0x + 64 hex, as a registerToken call carries it.
+	const TOKEN = `0x${"0e".repeat(32)}`
+	const FLAG = [`1:${TOKEN}`]
+	const preview = { name: "USD Coin", symbol: "USDC", decimals: 6, interface: { classId: `0x${"c1".repeat(32)}`, contract: TOKEN } }
+	const mountAdd = async () => {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Account 1" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [{ kind: "register_token", account: `aztec:1:${OWNER}`, address: TOKEN }] },
+		}
+		w = factory()
+		await completeInit()
+	}
+	const confirmOff = () => w!.find('[data-testid="execute-confirm-btn"]').attributes("disabled") !== undefined
+	const card = () => w!.findComponent(OperationCard)
+	const tick = async (on: boolean) => {
+		card().vm.$emit("acknowledgeTokenFlag", 0, on)
+		await nextTick()
+	}
+	const approve = async () => {
+		await (w!.vm as unknown as ExecVm).approve()
+		return approveInteractionMock.mock.calls.length
+	}
+
+	test("flagged: Confirm off and approve sends nothing until the tick; ticked, both go", async () => {
+		priceFake.flagged = FLAG
+		await mountAdd()
+		expect([card().props("tokenFlagged"), card().props("tokenFlagAcknowledged")]).toEqual([true, false])
+		expect(priceFake.refreshes(), "the flag read asks for no price fetch").toBe(0)
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		await tick(true)
+		expect(card().props("tokenFlagAcknowledged")).toBe(true)
+		expect(confirmOff()).toBe(false)
+		await tick(false)
+		expect(confirmOff()).toBe(true)
+		await tick(true)
+		expect(await approve()).toBe(1)
+	})
+
+	test("a token the list does not flag confirms with no tick", async () => {
+		await mountAdd()
+		expect(card().props("tokenFlagged")).toBe(false)
+		expect(confirmOff()).toBe(false)
+		expect(await approve()).toBe(1)
+	})
+
+	test("before the list's first answer Confirm is off and approve sends nothing; the answer enables it", async () => {
+		priceFake.hold()
+		await mountAdd()
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		priceFake.release()
+		await flushPromises()
+		expect(confirmOff()).toBe(false)
+	})
+
+	test("a list that flags the token while the window is open holds Confirm and approve until the tick", async () => {
+		await mountAdd()
+		expect(confirmOff()).toBe(false)
+		priceFake.flagged = FLAG
+		priceFake.broadcast()
+		await nextTick()
+		expect(card().props("tokenFlagged")).toBe(true)
+		expect(confirmOff()).toBe(true)
+		expect(await approve()).toBe(0)
+		await tick(true)
+		expect(await approve()).toBe(1)
+	})
+
+	test("a new window starts unticked, and closing one drops its price client after disconnecting it", async () => {
+		priceFake.flagged = FLAG
+		await mountAdd()
+		await tick(true)
+		const [client] = priceFake.clients
+		w!.unmount()
+		w = undefined
+		expect(client!.disconnect).toHaveBeenCalledTimes(1)
+		expect(client!.onQuotesUpdated.remove).toHaveBeenCalledTimes(1)
+		expect(client!.disconnect.mock.invocationCallOrder[0]).toBeLessThan(client!.onQuotesUpdated.remove.mock.invocationCallOrder[0]!)
+
+		resetWindowHarness()
+		await mountAdd()
+		expect(card().props("tokenFlagAcknowledged")).toBe(false)
+		expect(confirmOff()).toBe(true)
 	})
 })
 
@@ -843,7 +932,7 @@ describe("execute window — an operation the app pays for", () => {
 	const appPaid = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [], feePayer: APP_FPC }, opts: { from: OWNER } }
 	async function opened(op: object = appPaid) {
 		resolvable()
-		payloadToLoad = {
+		approval.payloadToLoad = {
 			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
 			params: { operations: [op] },
 		}
@@ -937,7 +1026,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
 		api.estimating.value = { 0: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -958,7 +1047,7 @@ describe("execute window — an operation the app pays for", () => {
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 
-		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
 		api.estimating.value = { 0: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -981,6 +1070,81 @@ describe("execute window — an operation the app pays for", () => {
 		const { vm, fees, confirm } = await opened()
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
 		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	// The app's own payment claiming Fee Juice to the account, as the wire carries the claim call.
+	const CLAIM = {
+		name: "claim_and_end_setup",
+		to: FEE_JUICE_CONTRACT,
+		selector: CLAIM_AND_END_SETUP_SELECTOR,
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, "100000000000000000000", `0x${"2a".repeat(32)}`, `0x${"01".repeat(32)}`],
+	}
+	const claimToAccount = { ...appPaid, exec: { calls: [CLAIM], feePayer: OWNER } }
+
+	test("an app's claim to the account: Confirm waits for the figure, a failed one toasts, and the figure is what approval carries", async () => {
+		const { vm, fees, confirm } = await opened(claimToAccount)
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		toastMocks.openToast.mockClear()
+		fees.opts.onError?.(0, new Error("node down"))
+		api.results.value = { 0: null }
+		await flushPromises()
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000" } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ feeCeiling?: string }>
+		expect(deltas[0]?.feeCeiling).toBe("16000000000000000")
+	})
+
+	test("a fee the wallet picks: Confirm waits for its figure, and a failed estimate keeps it off until a new one lands", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fj" },
+		})
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "21000000000000000" } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a sponsor picked in the window pays, not the person: Confirm does not wait, and a failed estimate leaves it on", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		const card = w!.findComponent(STUBS.OperationCard)
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fpc", fpcId: "s1" },
+		})
+		card.vm.$emit("updatePayer", 0, { type: "private_fpc" })
+		api.results.value = { 0: null }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		card.vm.$emit("updatePayer", 0, { type: "fpc" })
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		await vm.approve()
@@ -1031,7 +1195,7 @@ describe("execute window — send drafts from wire-shaped requests", () => {
 
 	test("each request drafts with its network, account and fee settings; the signers are deduplicated", async () => {
 		resolvable()
-		payloadToLoad = {
+		approval.payloadToLoad = {
 			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
 			params: { operations: REQUESTS },
 		}
@@ -1051,5 +1215,246 @@ describe("execute window — send drafts from wire-shaped requests", () => {
 			drafted(REQUESTS[4], undefined),
 		])
 		expect(vm.accounts).toEqual([acct(OWNER), acct(OTHER)])
+	})
+})
+
+// ── A public grant: Confirm waits for its decode, and a grant the wallet cannot read refuses the
+//    request through the footer's error row. ──
+describe("execute window — a public grant", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = "0x0a1b2c0000000000000000000000000000000000000000000000000000009c2d"
+	const SPENDER = "0x1b5c090000000000000000000000000000000000000000000000000000083d4e"
+	const TOKEN = "0x2f4e8100000000000000000000000000000000000000000000000000000077a0"
+	const GRANT = {
+		kind: "call",
+		caller: SPENDER,
+		contract: TOKEN,
+		method: "transfer_public_to_public",
+		args: [OWNER, SPENDER, "1", "7"],
+	}
+	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
+	const DECODED = {
+		kind: "decoded",
+		call: { to: TOKEN, name: "transfer_public_to_public", selector: "0xc47adea0", args: [OWNER, SPENDER, field(1n), field(7n)] },
+		decoded: {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_public_to_public",
+			params: [
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "to", value: { kind: "address", value: SPENDER } },
+				{ name: "amount", value: { kind: "integer", value: "1" } },
+				{ name: "_nonce", value: { kind: "field", value: field(7n) } },
+			],
+		},
+	}
+	async function opened() {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: {
+				operations: [
+					{ kind: "send_transaction", account: `aztec:1:${OWNER}`, actions: [{ kind: "add_public_authwit", content: GRANT }] },
+				],
+			},
+		}
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & {
+			handleFeeUpdate: (index: number, value: unknown) => void
+			grantRefusal?: { title: string; tooltip: string }
+		}
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fj" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		await flushPromises()
+		return { vm, confirm: () => w!.find('[data-testid="execute-confirm-btn"]'), error: () => w!.find('[data-testid="error-text"]') }
+	}
+
+	test("a grant that decodes enables Confirm, and approval goes through", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
+		const { vm, confirm, error } = await opened()
+		expect(decodeGrantsForDisplayMock).toHaveBeenCalledExactlyOnceWith("req-123", 0)
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		expect(error().exists()).toBe(false)
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an update to the profile's tokens reads the list again; the window stops listening when it closes", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([DECODED])
+		await opened()
+		expect(getTokensMock).toHaveBeenCalledExactlyOnceWith("p1", 1)
+		const [[listener]] = tokenUpdatedMock.add.mock.calls as [[(token: { profileId: string }) => void]]
+		listener({ profileId: "p2" })
+		listener({ profileId: "p1" })
+		await flushPromises()
+		expect(getTokensMock).toHaveBeenCalledTimes(2)
+		w!.unmount()
+		w = undefined
+		expect(tokenUpdatedMock.remove).toHaveBeenCalledExactlyOnceWith(listener)
+	})
+
+	test("while the grant decodes, Confirm waits and approve sends nothing", async () => {
+		let release!: (value: unknown[]) => void
+		decodeGrantsForDisplayMock.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		const { vm, confirm } = await opened()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+		release([DECODED])
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	// The tooltip cannot hold a dotted term, so each reason says it whole; the window cannot be
+	// approved, so it never carries the closing advice.
+	const REFUSAL = {
+		"unknown-contract": "Nulo doesn't have this contract's interface, so it can't read the arguments.",
+		"unknown-function": "This function isn't in the interface Nulo has for the contract, so it can't read the arguments.",
+		arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
+		unavailable: "Nulo couldn't read the arguments right now.",
+	} as const
+
+	test.each([
+		["unknown-contract", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-contract" }])],
+		["unknown-function", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "unknown-function" }])],
+		["arguments", () => decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "arguments" }])],
+		["unavailable", () => decodeGrantsForDisplayMock.mockRejectedValueOnce(new Error("decoder unreachable"))],
+	] as const)("a grant that reads as %s shows the error row, holds Confirm, and approve refuses", async (reason, arrange) => {
+		arrange()
+		const { vm, confirm, error } = await opened()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(vm.grantRefusal?.tooltip).toBe(REFUSAL[reason])
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("a batch that comes back short refuses the grant it left out", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
+		const { vm, confirm, error } = await opened()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(vm.grantRefusal?.tooltip).toBe(REFUSAL.unavailable)
+		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
+	test("a fee change clears the window's error but not the grant's refusal", async () => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([{ kind: "undecoded", reason: "arguments" }])
+		const { vm, confirm, error } = await opened()
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		await flushPromises()
+		expect(error().text()).toBe("Can't read the arguments")
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+})
+
+describe("execute window — a request the wallet refused", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [] }, opts: { from: OWNER } }
+	// As the worker's refusal crosses the RPC hop.
+	const REGISTRY = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: a transaction's authorization request targets the authorization registry",
+	})
+	const BINDING = walletErrorFromPayload({
+		code: "SCOPE_VIOLATION",
+		message: "Scope violation: call name does not match selector's function",
+	})
+	const REASON = {
+		registry:
+			"This transaction asks your account to change its public authorizations from inside another contract. Apps are never allowed to, so it can't be sent. Reject tells the app.",
+		call: "A call in this transaction does not run the function it names. Nulo never sends such a call, so it can't be sent. Reject tells the app.",
+	}
+
+	async function opened(op: object = send) {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: [op] },
+		}
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		vm.handleFeeUpdate(0, { paymentMethod: { kind: "sponsored_fpc" } })
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		await flushPromises()
+		toastMocks.openToast.mockClear()
+		const refused = () => w!.findComponent(STUBS.OperationCard).props("refused")
+		expect(refused()).toBe(false)
+		return {
+			vm,
+			refused,
+			notice: () => w!.find('[data-testid="execute-op-refusal"]'),
+			confirm: () => w!.find('[data-testid="execute-confirm-btn"]'),
+		}
+	}
+
+	async function expectRefused(kind: "registry" | "call", { vm, refused, notice, confirm }: Awaited<ReturnType<typeof opened>>) {
+		await flushPromises()
+		expect(notice().attributes()).toMatchObject({ "data-kind": kind, role: "alert" })
+		expect(refused()).toBe(true)
+		expect(w!.find('[data-testid="execute-op-refusal-title"]').text()).toBe("Nulo won't send this")
+		expect(w!.find('[data-testid="execute-op-refusal-reason"]').text()).toBe(REASON[kind])
+		expect(toastMocks.openToast).not.toHaveBeenCalled()
+		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(confirm().exists()).toBe(false)
+		approveInteractionMock.mockClear()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+		await w!.find('[data-testid="execute-reject-btn"]').trigger("click")
+		expect(rejectViaInteractionServiceMock).toHaveBeenCalledExactlyOnceWith("User rejected", "reject")
+	}
+
+	test.each([
+		["registry", REGISTRY],
+		["call", BINDING],
+	] as const)("an estimate refused by the %s check: the notice in the fee's place, no toast, only Reject", async (kind, error) => {
+		const window = await opened()
+		feeMapInstances[0]!.opts.onError?.(0, error)
+		await expectRefused(kind, window)
+	})
+
+	test("a preview refused: the same notice", async () => {
+		const window = await opened({ ...send, executionMode: "default_entrypoint" })
+		feeMapInstances[1]!.opts.onError?.(0, REGISTRY)
+		await expectRefused("registry", window)
+	})
+
+	test("an approval the worker refuses: the same notice, never an error row", async () => {
+		const window = await opened()
+		approveInteractionMock.mockRejectedValueOnce(BINDING as never)
+		await window.vm.approve()
+		await expectRefused("call", window)
+	})
+
+	test("any other estimate failure keeps today's toast and Confirm", async () => {
+		const { refused, notice, confirm } = await opened()
+		feeMapInstances[0]!.opts.onError?.(0, new Error("node down"))
+		await flushPromises()
+		expect(toastMocks.openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		expect(notice().exists()).toBe(false)
+		expect(refused()).toBe(false)
+		expect(confirm().attributes("disabled")).toBeUndefined()
 	})
 })

@@ -224,8 +224,14 @@ footer {
 	color: var(--txt-body);
 }
 
-.bar nav a:not(.btn):hover {
+.bar nav a:not(.btn):hover,
+.bar nav a[aria-current="page"] {
 	color: var(--txt-primary);
+}
+
+.bar nav a[aria-current="page"] {
+	text-decoration: underline;
+	text-underline-offset: 6px;
 }
 
 .bar .btn {
@@ -396,6 +402,13 @@ section.s {
 	padding: 72px 0;
 }
 
+.h1 {
+	font-size: 54px;
+	line-height: 1;
+	font-weight: 700;
+	margin-bottom: 16px;
+}
+
 .h2 {
 	font-size: 38px;
 	line-height: 1.05;
@@ -404,6 +417,7 @@ section.s {
 	margin-bottom: 12px;
 }
 
+.h1,
 .h2,
 .lead,
 .cap {
@@ -531,6 +545,7 @@ section.s {
 	margin-top: 36px;
 }
 
+.three h2,
 .three h3 {
 	font-size: 24px;
 	line-height: 1.15;
@@ -540,6 +555,297 @@ section.s {
 .three p {
 	color: var(--txt-body);
 	font-size: 15.5px;
+}
+
+.topic-n {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	color: var(--nulo-secondary);
+	margin-right: 5px;
+}
+
+/* A card whose clip runs edge to edge above its text; the plate's corner ticks stay drawn over the clip. */
+.clip-card {
+	padding: 0;
+	/* Otherwise the player bar's minimum width (Firefox's range input) sets the column's and widens a phone's page. */
+	min-width: 0;
+}
+
+.clip-card::before,
+.clip-card::after {
+	z-index: 1;
+}
+
+.clip-card__body {
+	padding: 6px 28px 26px;
+}
+
+.clip {
+	border-bottom: 1px solid var(--line2);
+}
+
+.clip__stage {
+	position: relative;
+	aspect-ratio: 16 / 9;
+	cursor: pointer;
+}
+
+.clip__svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+/* The big play square marks a clip not yet started or finished; mid-clip it would hide the picture. */
+.clip__poster {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	display: none;
+	place-items: center;
+	width: 56px;
+	height: 56px;
+	transform: translate(-50%, -50%);
+	background: var(--txt-primary);
+	color: var(--app-bg);
+	pointer-events: none;
+}
+
+.clip[data-state="idle"] .clip__poster,
+.clip[data-state="ended"] .clip__poster {
+	display: grid;
+}
+
+.clip__play .clip__icon--pause,
+.clip[data-state="playing"] .clip__play .clip__icon--play {
+	display: none;
+}
+
+.clip[data-state="playing"] .clip__play .clip__icon--pause {
+	display: block;
+}
+
+.clip__icon {
+	display: block;
+	width: 24px;
+	height: 24px;
+}
+
+.clip__captions {
+	min-height: calc(2 * 1.45em + 10px);
+	padding: 10px 16px 0;
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--txt-primary);
+}
+
+.clip__bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 4px 16px 12px;
+}
+
+.clip__play {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border: 1px solid var(--line);
+}
+
+.clip__play .clip__icon {
+	width: 18px;
+	height: 18px;
+}
+
+.clip__seek {
+	flex: 1;
+	min-width: 0;
+	accent-color: var(--txt-primary);
+}
+
+.clip__time {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	color: var(--nulo-secondary);
+	white-space: nowrap;
+}
+
+.transcript {
+	margin-top: 14px;
+}
+
+.transcript summary {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--nulo-secondary);
+	cursor: pointer;
+}
+
+.transcript p {
+	margin-top: 10px;
+	font-size: 14px;
+}
+
+/* The clip stage: a 640×360 drawing whose type comes from the page's own faces and tokens. */
+.c-grain {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	fill: var(--nulo-outline);
+}
+
+.c-corners {
+	fill: none;
+	stroke: var(--txt-primary);
+	stroke-width: 2;
+	vector-effect: non-scaling-stroke;
+}
+
+.c-cover {
+	fill: var(--app-bg);
+}
+
+.c-plate {
+	fill: var(--app-bg);
+	stroke: var(--line);
+	vector-effect: non-scaling-stroke;
+}
+
+.c-tick,
+.c-box,
+.c-outline,
+.c-fence,
+.c-rule {
+	fill: none;
+	stroke: var(--txt-primary);
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
+
+.c-outline {
+	fill: var(--app-bg);
+}
+
+.c-rule {
+	stroke: var(--line2);
+	stroke-width: 1;
+}
+
+.c-fence {
+	stroke-dasharray: 6 5;
+}
+
+.c-wire,
+.c-strike {
+	fill: none;
+	stroke: var(--nulo-secondary);
+	stroke-width: 2;
+}
+
+.c-strike {
+	stroke: var(--txt-primary);
+	stroke-width: 3;
+}
+
+.c-eb,
+.c-mono,
+.c-num {
+	font-family: var(--font-mono);
+}
+
+.c-eb {
+	font-size: 20px;
+	letter-spacing: 0.12em;
+	fill: var(--nulo-secondary);
+}
+
+.c-mono {
+	font-size: 20px;
+	fill: var(--txt-body);
+}
+
+.c-num {
+	font-size: 26px;
+	font-weight: 500;
+}
+
+.c-head {
+	font-family: var(--font-headline);
+	font-size: 34px;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+	fill: var(--txt-primary);
+}
+
+.c-dim-fill {
+	fill: var(--nulo-secondary);
+}
+
+.c-ink-fill {
+	fill: var(--txt-primary);
+}
+
+.c-ink {
+	color: var(--txt-primary);
+}
+
+.c-dim {
+	color: var(--nulo-secondary);
+}
+
+.c-glyph-s {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.c-glyph-f {
+	fill: currentColor;
+}
+
+.c-track {
+	fill: var(--nulo-surface-high);
+}
+
+.c-fill,
+.c-cell,
+.c-block--new {
+	fill: var(--txt-primary);
+}
+
+.c-block {
+	fill: var(--nulo-surface-high);
+	stroke: var(--line);
+	vector-effect: non-scaling-stroke;
+}
+
+.c-block--new {
+	stroke: var(--txt-primary);
+}
+
+.c-chip {
+	fill: var(--app-bg);
+	stroke: var(--txt-primary);
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
+
+.c-button {
+	fill: var(--txt-primary);
+}
+
+.c-button-text {
+	fill: var(--app-bg);
+	font-weight: 700;
 }
 
 .log {
@@ -681,7 +987,8 @@ footer .wrap a:hover {
 		display: none;
 	}
 
-	.hero h1 {
+	.hero h1,
+	.h1 {
 		font-size: 40px;
 	}
 

@@ -28,13 +28,22 @@ import { ContactService } from "./services/contact/service"
 import { DappInteractionService } from "./services/dapp-interaction/service"
 import { DappSessionService } from "./services/dapp-session/service"
 import { ExecutionService } from "./services/execution/service"
-import { E2E_PROVERLESS, E2E_TOKEN_LIST, E2E_TOKEN_LIST_BUILD_STAMP, E2E_TOKEN_SEEDS, E2E_TOKEN_SEEDS_BUILD_STAMP } from "@/e2e/config"
+import {
+	E2E_PROVERLESS,
+	E2E_TOKEN_LIST,
+	E2E_TOKEN_LIST_BUILD_STAMP,
+	E2E_TOKEN_SEEDS,
+	E2E_TOKEN_SEEDS_BUILD_STAMP,
+	E2E_WALLET_CLOCKS,
+	E2E_WALLET_CLOCKS_BUILD_STAMP,
+} from "@/e2e/config"
 import { ChromeStorageProofGate } from "@/e2e/chrome-storage-proof-gate"
 import { ChromeStorageRestoreGate } from "@/e2e/chrome-storage-restore-gate"
 import { ChromeStorageIncomingPollGate } from "@/e2e/chrome-storage-incoming-poll-gate"
 import { ChromeStorageProjectionGate } from "@/e2e/chrome-storage-projection-gate"
 import { ChromeStorageTokenSeeds } from "@/e2e/chrome-storage-token-seeds"
 import { ChromeStorageTokenListSource } from "@/e2e/chrome-storage-token-list"
+import { answerSealedReads } from "@/e2e/sealed-read"
 import { FpcService } from "./services/fpc/service"
 import { LogViewerService } from "./services/log-viewer/service"
 import { LoggerService } from "./services/logger/service"
@@ -65,7 +74,14 @@ import { TaskService } from "./services/task/service"
 import { TokenService } from "./services/token/service"
 import { TokenBalanceService } from "./services/token-balance/service"
 import { TransactionService } from "./services/transaction/service"
+import { UiPreferenceService } from "./services/ui-preference/service"
 import { IncomingTransferService } from "./services/incoming-transfer/service"
+import {
+	closeRestartEndedTabs,
+	POPUP_PAGE,
+	type TrackedWindowPort,
+	trackOpenWindows,
+} from "./services/window-manager/restart-ended-windows"
 import { WindowManager } from "./services/window-manager/window-manager"
 import { initWalletSdkHandler } from "./services/wallet-sdk/background"
 import { type MigrationResult, Migrator, SCHEMA_ATTEMPTS_KEY } from "@nulo/wallet-core/migration"
@@ -204,10 +220,10 @@ export function stopRuntime(state: RuntimeState, clock: WalletRuntimeDeps["clock
 }
 
 /** The boot sequence — the single-flight memo's body. Phase order is the
- *  contract: uninstall URL → migration gate → engine → outcome persistence →
- *  config + Barretenberg → registration → `services.start()` (with the journal
- *  boot cutoff captured IMMEDIATELY before it) → post-start work → wallet-sdk
- *  handler → first liveness write → heartbeat (deliberately last). */
+ *  contract: uninstall URL → restart-ended windows → migration gate → engine →
+ *  outcome persistence → config + Barretenberg → registration → `services.start()`
+ *  (with the journal boot cutoff captured IMMEDIATELY before it) → post-start
+ *  work → wallet-sdk handler → first liveness write → heartbeat (deliberately last). */
 async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection, state: RuntimeState): Promise<void> {
 	const { browserApi, clock, config, logger } = deps
 	// Uninstall URL comes first — zero-cost and covers the user experience
@@ -217,6 +233,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	} catch (error) {
 		logger.log("wallet", LogLevel.Warn, "Failed to set uninstall URL", error)
 	}
+	await closeRestartEndedTabs(browserApi.runtime, browserApi.windows, logger)
 
 	let gateDecision: MigrationGateDecision
 	try {
@@ -256,7 +273,7 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	// Registration zone: `ServiceCollection.add` throws on duplicates and the
 	// tabs/pxe-provider registrations are not re-entrant — no retry past here.
 	state.retrySafe = false
-	const { deletionCoordinator } = registerServices(services, deps)
+	const { deletionCoordinator, windows } = registerServices(services, deps)
 
 	// Capture the journal boot cutoff BEFORE services start. Service RPC
 	// handlers (including journal-creating ones) go live during `services.start()`,
@@ -272,11 +289,20 @@ async function bootRuntime(deps: WalletRuntimeDeps, services: ServiceCollection,
 	state.reaper = armed.reaper
 	state.sendCheck = armed.sendCheck
 	state.journalGc = armed.journalGc
+	if (import.meta.env.VITE_NULO_E2E_SEALED_READ === "1") {
+		const profileService = services.get(ProfileService.name) as ProfileService
+		answerSealedReads({
+			area: browserApi.storage.local,
+			keys: (profileId) => profileService.rowKeys(profileId),
+			addMessageListener: (listener) => chrome.runtime.onMessage.addListener(listener),
+			extensionOrigin: browserApi.runtime.getURL(""),
+		})
+	}
 
 	// Wallet-sdk protocol handler (discovery, key exchange, encrypted channel).
 	// Still reaches for chrome.runtime.onMessage internally; will be
 	// port-migrated alongside its own refactor.
-	initWalletSdkHandler(services, logger, { windows: browserApi.windows, clock })
+	initWalletSdkHandler(services, logger, { windows, clock })
 
 	writeInitialLiveness(browserApi, clock, logger)
 	// Heartbeat — keeps the MV3 service worker alive long enough for cross-SW
@@ -481,7 +507,10 @@ function loadConfigAndBarretenberg(
  *  ordering is determined by `ServiceCollection.start()`'s topological phases.
  *  Fully synchronous: the PXE provider CALLBACKS registered here run later,
  *  off the boot chain. */
-function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps): { deletionCoordinator: ProfileDeletionCoordinator } {
+function registerServices(
+	services: ServiceCollection,
+	deps: WalletRuntimeDeps,
+): { deletionCoordinator: ProfileDeletionCoordinator; windows: TrackedWindowPort } {
 	const { armPopupReturn, browserApi, clock, config, logger } = deps
 	const accountService = new AccountService(logger, browserApi)
 	services.add(accountService)
@@ -493,8 +522,11 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new AuthRegistryService(logger, browserApi))
 	services.add(new ConfigService(config, logger))
 	services.add(new LegalAcceptanceService(logger, browserApi))
-	const windowManager = new WindowManager(browserApi.windows, clock, logger)
+	// One port that knows every wallet window, so the lock's restart can close them all.
+	const windows = trackOpenWindows(browserApi.windows, browserApi.runtime, browserApi.runtime.getURL(POPUP_PAGE))
+	const windowManager = new WindowManager(windows, clock, logger)
 	services.add(new ContactService(logger, browserApi, restoreGate))
+	services.add(new UiPreferenceService(logger, browserApi))
 	services.add(new DappInteractionService(logger, windowManager))
 	services.add(new DappSessionService(logger, browserApi))
 	// E2E_PROVERLESS injects a chrome.storage-backed proof gate into the SW
@@ -524,11 +556,6 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	}
 	const tokenListSource = E2E_TOKEN_LIST ? new ChromeStorageTokenListSource() : undefined
 	services.add(new TokenListService(logger, browserApi, tokenListSource ? { getSource: () => tokenListSource.get() } : {}))
-	// Passing `browserApi` threads the storage port into ProfileService AND, because the port
-	// carries alarms, ACTIVATES SessionManager's proactive TTL auto-lock (dormant pre-arc when the
-	// composition root passed no port — see session-manager.ts "proactive TTL lights up once the
-	// composition root wires browserApi"). Accepted behavior change; seam-pinned in
-	// service.integration.test.ts "Q10 composition seam".
 	const profileService = new ProfileService(config, logger, browserApi)
 	services.add(profileService)
 	wirePxeProviders(profileService)
@@ -548,14 +575,19 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new TokenService(logger, browserApi, undefined, seederOverrides))
 	// E2E_PROVERLESS injects the projection gate; tree-shaken from prod like the proof gate.
 	services.add(new TokenBalanceService(logger, browserApi, undefined, E2E_PROVERLESS ? new ChromeStorageProjectionGate() : undefined))
-	services.add(new TransactionService(logger, browserApi))
+	// The stamp is the release grep's handle on the e2e wallet clocks passed below.
+	if (E2E_WALLET_CLOCKS_BUILD_STAMP) {
+		;(globalThis as { __NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__?: string }).__NULO_E2E_WALLET_CLOCKS_BUILD_STAMP__ =
+			E2E_WALLET_CLOCKS_BUILD_STAMP
+	}
+	services.add(new TransactionService(logger, browserApi, E2E_WALLET_CLOCKS?.finalityReadMs))
 	// E2E_PROVERLESS injects the incoming-poll gate (same tree-shaken-in-prod
-	// pattern + negative-grep as the proof gate above). Default poll interval kept.
+	// pattern + negative-grep as the proof gate above).
 	services.add(
 		new IncomingTransferService(
 			logger,
 			browserApi,
-			undefined, // pollIntervalMs (default)
+			E2E_WALLET_CLOCKS?.incomingPollMs,
 			undefined, // publicReader (production uses the built-in PXE reader)
 			E2E_PROVERLESS ? new ChromeStorageIncomingPollGate() : undefined,
 		),
@@ -569,7 +601,7 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	services.add(new AccountIntegrityCoordinator(logger, browserApi))
 	// The proverless-only restore gate carries the reset's hold points, under the same key.
 	services.add(new NetworkResetService(logger, browserApi, restoreGate))
-	return { deletionCoordinator }
+	return { deletionCoordinator, windows }
 }
 
 /** The three SW-side hooks every `PxeServiceClient` consults, bound to the live ProfileService:
@@ -642,9 +674,9 @@ export async function providePxeStoreKey(
  *  (fire-and-forget, idempotent — the cutoff is the same pre-start instant as
  *  the journal's, so an import RPC racing startup is never touched), the
  *  durable-job reaper (construct → `start()`, adjacent), the send check (same), the
- *  terminal-record GC (same), then the boot-time storage-usage probe (races the sweeps, so its
- *  count is the pre-cleanup snapshot — telemetry, not authoritative), then the
- *  default-token seed resume. Returns
+ *  replay of the row keys already held to both, the terminal-record GC (same), then the
+ *  boot-time storage-usage probe (races the sweeps, so its count is the pre-cleanup
+ *  snapshot — telemetry, not authoritative), then the default-token seed resume. Returns
  *  the three instances `stop()` reads. Exported as a test seam for the order pin. */
 export function armPostStartWork(
 	services: ServiceCollection,
@@ -656,20 +688,25 @@ export function armPostStartWork(
 	void deletionCoordinator
 		.resumePending(journalBootCutoff)
 		.catch((error) => logger.log("wallet", LogLevel.Error, "resumePendingDeletions failed", error))
+	const profileService = services.get(ProfileService.name) as ProfileService
 
 	const journalService = services.get(OperationJournalService.name) as OperationJournalService
 	const reaper = new JournalReaper(journalService, browserApi.alarms, logger, undefined, journalBootCutoff)
 	reaper.start().catch((error) => logger.log("wallet", LogLevel.Error, "JournalReaper start failed", error))
+	profileService.onRowKeysReady.add((profileId) => void reaper.reapUnlocked(profileId))
 
 	const sendCheck = new SendCheck({
 		journal: journalService,
 		network: services.get(NetworkService.name) as NetworkService,
-		profile: services.get(ProfileService.name) as ProfileService,
+		profile: profileService,
 		balances: services.get(TokenBalanceService.name) as TokenBalanceService,
 		logger,
 		clock,
 	})
 	sendCheck.start().catch((error) => logger.log("wallet", LogLevel.Error, "SendCheck start failed", error))
+	// An unlock that completed during `services.start()` announced its keys before the reaper and
+	// the send check attached; each handler is idempotent, so a replay is safe.
+	profileService.replayRowKeysReady()
 
 	const journalGc = new JournalGC(journalService, browserApi.alarms, logger)
 	journalGc.start().catch((error) => logger.log("wallet", LogLevel.Error, "JournalGC start failed", error))

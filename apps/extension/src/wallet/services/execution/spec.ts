@@ -2,6 +2,7 @@
 import type { TransferType, LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import type {
 	DecodedCall,
+	DecodedGrant,
 	DisplayCallInput,
 	FeeSettings,
 	GasBalances,
@@ -31,22 +32,29 @@ export type Methods = {
 	 * @param network Network id.
 	 * @param account Sender account address.
 	 * @param token Token id.
+	 * @param tokenContract The contract of the token the person approved; the send is refused when
+	 *   the row `tokenId` names holds another.
 	 * @param transferType Transfer type.
 	 * @param recipient Recipient address.
 	 * @param amount Amount.
 	 * @param feeCap With it, the send is queued against this fee in base units: a build above it is
 	 *   never proved, and the send asks again through its record (`acceptQueuedFee`).
+	 * @param shownFee The estimate the page showed, in base units, for a send not queued: a build more
+	 *   than `FEE_RISE_ASKS` above it is never proved, and the send asks again the same way. A send
+	 *   carries at most one of `feeCap` and `shownFee`, and one the account pays carries one.
 	 */
 	executeTransfer(
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
 		feeCap?: string,
+		shownFee?: string,
 	): string
 	/**
 	 * Executes batch of operations.
@@ -81,6 +89,7 @@ export type Methods = {
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: TransferType,
 		recipientAddress: string,
 		amount: bigint,
@@ -119,6 +128,19 @@ export type Methods = {
 	 * decode says why instead of guessing.
 	 */
 	decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): DecodedCall[]
+
+	/**
+	 * Decodes the public grants of the stored operation at `(interactionId, index)` for the approval
+	 * card, in action order: each from the fields its message hash commits to, encoded as signing
+	 * encodes them, under the checks and bound of {@link decodeCallsForDisplay}. By reference, as
+	 * {@link estimateOperationFee}, so the card reads the request approval executes. A grant that
+	 * does not encode, decode, or decode back to its fields says why.
+	 */
+	decodeGrantsForDisplay(interactionId: string, index: number): DecodedGrant[]
+
+	/** {@link decodeGrantsForDisplay} for a held send: the stored request the fee question
+	 *  `interactionId` shows. */
+	decodeQuestionGrantsForDisplay(interactionId: string): DecodedGrant[]
 
 	/**
 	 * Cancel an in-flight fee estimate by its caller-minted token.

@@ -100,6 +100,24 @@ describe("LegalAcceptanceSheet", () => {
 		expect(review.getComponent({ name: "LegalConsent" }).props("points")).toEqual(RISK_POINTS)
 	})
 
+	test("a record at the first Terms version lists only the later versions' changes", async () => {
+		legal.getRecord.mockResolvedValue({
+			termsVersion: LEGAL_MANIFEST.terms[0]?.version,
+			privacyVersionShown: "1.0",
+			acceptedAt: 1,
+			surface: "onboarding",
+			history: [],
+		})
+		const later = LEGAL_MANIFEST.terms
+			.slice(1)
+			.filter((v) => v.material)
+			.flatMap((v) => v.changes)
+		expect(later.length).toBeGreaterThan(0)
+		const wrapper = await mountSheet()
+		expect(sheet(wrapper).attributes("data-variant")).toBe("changed")
+		expect(wrapper.get('[data-testid="stub-consent"]').attributes("data-changes")).toBe(later.join("|"))
+	})
+
 	test("Continue records a popup acceptance and the sheet leaves; Not now remembers the version and goes to the declined screen", async () => {
 		const accepting = await mountSheet()
 		await accepting.get('[data-testid="stub-consent"]').trigger("click")
@@ -108,11 +126,17 @@ describe("LegalAcceptanceSheet", () => {
 		expect(sheet(accepting).exists()).toBe(false)
 
 		const declining = await mountSheet()
+		let emittedBeforeLeaving: unknown[][] | undefined
+		push.mockImplementationOnce(async () => {
+			emittedBeforeLeaving = [...(declining.emitted("visibility") ?? [])]
+		})
 		await declining.get('[data-testid="legal-sheet-not-now"]').trigger("click")
 		await flushPromises()
 		expect(session.get("nulo:legal:dismissed")).toBe(TERMS)
 		expect(push).toHaveBeenCalledWith("/popup/legal/declined")
 		expect(sheet(declining).exists()).toBe(false)
+		// Still over Home until the route moves, so nothing waiting on it there sees it gone.
+		expect(emittedBeforeLeaving?.at(-1)).toEqual([true])
 	})
 
 	test.each([
@@ -151,12 +175,14 @@ describe("LegalAcceptanceSheet", () => {
 		expect((toastRoot.firstElementChild as HTMLElement).style.bottom).toBe("52px")
 	})
 
-	test("tells the shell when it shows and when it goes", async () => {
+	test("tells the shell when it shows and when it goes, and that it has no verdict before its read and after it unmounts", async () => {
 		const w = await mountSheet()
-		expect(w.emitted("visibility")).toEqual([[true]])
+		expect(w.emitted("visibility")).toEqual([[undefined], [true]])
 		await w.get('[data-testid="stub-consent"]').trigger("click")
 		await flushPromises()
-		expect(w.emitted("visibility")).toEqual([[true], [false]])
+		expect(w.emitted("visibility")).toEqual([[undefined], [true], [false]])
+		w.unmount()
+		expect(w.emitted("visibility")?.at(-1)).toEqual([undefined])
 	})
 
 	test("a refused accept opens the error snack and the sheet stays", async () => {

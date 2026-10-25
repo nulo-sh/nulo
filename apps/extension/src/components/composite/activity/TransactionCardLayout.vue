@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
+import type { GlyphName } from "@nulo/design"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import { vSnackFooter } from "@/composables/snackInset"
@@ -16,15 +17,14 @@ import { vSnackFooter } from "@/composables/snackInset"
  */
 const props = defineProps({
 	title: { type: String, required: true },
-	icon: { type: String, required: true },
-	iconRotate: { type: [String, Number], default: 0 },
-	amount: { type: String, default: null },
-	amountSymbol: { type: String, default: null },
+	icon: { type: String as PropType<GlyphName>, required: true },
+	amount: { type: String as PropType<string | null>, default: null },
+	amountSymbol: { type: String as PropType<string | null>, default: null },
 	/** `≈ $x.xx` line under the amount — omitted (null) when unpriced. */
-	amountFiat: { type: String, default: null },
+	amountFiat: { type: String as PropType<string | null>, default: null },
 	testId: { type: String, default: undefined },
-	txAmountDisplay: { type: String, default: undefined },
-	txTransferTypeLabel: { type: String, default: undefined },
+	txAmountDisplay: { type: String as PropType<string | null>, default: undefined },
+	txTransferTypeLabel: { type: String as PropType<string | null>, default: undefined },
 	txStatus: { type: String, default: undefined },
 	txHash: { type: String, default: undefined },
 	stage: { type: String as PropType<JobStage | null>, default: null },
@@ -38,6 +38,11 @@ const props = defineProps({
 	opens: { type: Boolean, default: false },
 	/** The row is a receipt arriving now: it slides in and glows. */
 	arriving: { type: Boolean, default: false },
+	/** The title names the function a dApp called: it stays on one line, cut at its end. */
+	oneLineTitle: { type: Boolean, default: false },
+	/** `#title-trailing` opens with the shared separator: where the row has no room for it beside the
+	 *  title, it drops under the title without its separator. */
+	wrapTrailing: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["activate"])
@@ -96,16 +101,21 @@ function hasActionsContent() {
 
 		<Flex align="center" gap="16" :class="$style.left_content">
 			<Flex align="center" justify="center" :class="$style.activity_icon" data-testid="activity-icon">
-				<Icon :name="icon" :rotate="iconRotate" size="18" color="secondary" />
+				<Icon :name="icon" size="18" color="secondary" />
 				<div v-if="$slots.badge" :class="$style.badge">
 					<slot name="badge" />
 				</div>
 			</Flex>
 
-			<Flex direction="column" gap="4" :class="$style.text">
-				<Flex align="center" gap="6">
-					<span :id="titleId" :class="$style.title" data-testid="activity-title">{{ title }}</span>
-					<slot name="title-trailing" />
+			<Flex direction="column" gap="4" :class="$style.text" data-testid="activity-text">
+				<Flex
+					align="center"
+					:gap="wrapTrailing ? undefined : '6'"
+					:class="[$style.title_row, wrapTrailing && $style.title_row_wrap]"
+					data-testid="activity-title-row"
+				>
+					<span :id="titleId" :class="[$style.title, oneLineTitle && $style.title_one_line]" data-testid="activity-title">{{ title }}</span>
+					<span v-if="$slots['title-trailing']" :class="wrapTrailing ? $style.trailing : $style.trailing_inline"><slot name="title-trailing" /></span>
 				</Flex>
 				<Flex v-if="$slots.secondary" align="center" gap="6" :class="$style.secondary_row">
 					<slot name="secondary" />
@@ -142,6 +152,7 @@ function hasActionsContent() {
 }
 
 .interactive {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.15s var(--bezier);
 
@@ -225,13 +236,98 @@ function hasActionsContent() {
 	color: var(--txt-primary);
 }
 
+/* A name the dApp chose can be any length; only this cut keeps it from widening the page. */
+.title_one_line {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Equal and opposite margins cancel on one line, so a row that fits lays out as without them; wrapped,
+ * the group starts 8.78 px (the separator's 2.78 px glyph at 14 px Space Grotesk 700, plus its 6 px gap)
+ * left of the clip, the chip under the title. A fixed box would move every fitting chip a sub-pixel. */
+.title_row_wrap {
+	--sep-room: 8.78px;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	overflow-x: clip;
+}
+
+.title_row_wrap > .title {
+	margin-right: var(--sep-room);
+}
+
+.trailing {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: calc(-1 * var(--sep-room));
+}
+
+/* Generates no box, so the separator and chips lay out as the title row's own items. */
+.trailing_inline {
+	display: contents;
+}
+
+/* Below the popup's width every title row wraps as `wrapTrailing` does, and the amount and actions
+ * drop under the text, at the right, when they do not fit beside it, since neither a chip nor a
+ * figure may be cut. A function's name breaks anywhere and is cut only past a third line. Two classes
+ * outrank the global `justify-between`. */
+@media (width < 359px) {
+	.wrapper.wrapper {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.wrapper_has_actions,
+	.wrapper_two_actions {
+		padding-right: 8px;
+	}
+
+	.left_content {
+		margin-right: auto;
+	}
+
+	.actions {
+		position: static;
+		align-self: flex-start;
+	}
+
+	.title_one_line {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
+	.title_row:has(> .trailing_inline) {
+		--sep-room: 8.78px;
+		flex-wrap: wrap;
+		row-gap: 4px;
+		overflow-x: clip;
+	}
+
+	.title_row:has(> .trailing_inline) > .title {
+		margin-right: var(--sep-room);
+	}
+
+	.trailing_inline {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-left: calc(-1 * var(--sep-room));
+	}
+}
+
 .secondary_row {
 	min-height: 14px;
 }
 
 .amount_fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 }
 
@@ -246,7 +342,7 @@ function hasActionsContent() {
 
 .amount_symbol {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .n-row-in {

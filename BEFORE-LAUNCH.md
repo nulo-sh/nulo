@@ -4,9 +4,9 @@ The Terms and the Privacy Policy ship with `«FILL: …»` placeholders: facts t
 of this repository. While any survives, `nulo.sh/terms` and `/privacy` carry a **DRAFT banner and
 `noindex`**, so nothing here blocks a merge. It blocks **v1.0.0**.
 
-Find every one: `git grep -n "«FILL" -- legal/`. What each one needs is described in
-[`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is the schedule.
-Accepted code work that blocks launch is not listed here: it is the
+Find every one: `git grep -n "«FILL" -- legal/terms.md legal/privacy.md`. What each one needs
+is described in [`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is
+the schedule. Accepted code work that blocks launch is not listed here: it is the
 [`v1.0.0` milestone](https://github.com/nulo-sh/nulo/milestone/1).
 
 ## 1. Any time before v1.0.0 — look these up, do not guess
@@ -37,11 +37,16 @@ URL and Presto links. Each filled fact reads in place in `legal/privacy.md` and 
 The store launch left two owner steps in the dashboards
 ([record](./implementations-plan/archive/nulo-v6/plan.md#store-upload)):
 
-- [ ] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
-      the approval lapses (30 days). The item stays Unlisted until a `/harden security` pass and
-      the owner decides on Public.
-- [ ] AMO: the listing still carries the "This add-on is experimental" flag (owner decision);
-      Mozilla may review the live version later, the modified-library rule being the open risk.
+- [x] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
+      the approval lapses (30 days). On 2026-10-19 the listing serves "Nulo V6" 0.31.0, updated
+      18 October 2026; the store page shows only a published revision, not its visibility.
+- AMO: the listing still carries the "This add-on is experimental" flag (`is_experimental` is
+  `true` in AMO's API on 2026-10-19); removing it is a § 3 step. Mozilla may review the live
+  version later, the modified-library rule being the open risk.
+
+The owner decided both listings' launch state (2026-10-19, decision page 62, #864): Chrome goes
+Public at 1.0.0, "once the security work in flight has landed", and AMO drops the experimental flag
+at 1.0.0 (§ 3).
 
 Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
 ([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared
@@ -74,24 +79,39 @@ loading remote scripts".
 
 ## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
 
-The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
-§ 2). It appears in three places, two in `legal/terms.md` (tests hold the version line to the
-manifest, not the history row's date), so change them together:
+Before the promote:
 
-- [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
-- [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
+- [ ] The owner sends from the 1.0.0 candidate on the new Testnet, which no e2e suite reaches
+      (they run against a local sandbox). Owner's call, 2026-10-19, decision page 68
+
+The Terms' **effective date** is the date the 1.0.0 listing goes live (privacy 1.0's is already
+set, § 2). Terms 1.0 never takes effect: it was a draft, replaced by 1.1, which carries the date.
+It appears in three places, two in `legal/terms.md` (tests hold the version line to the manifest,
+not the history row's date), so change them together:
+
+- [x] `legal/terms.md` — the version line at the top, and the 1.1 row of the history table
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.1 (26 October 2026; 1.0 stays
+      `null`)
+- [x] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
       1.1.1 per § 4
 
 Then:
 
-- [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
+- [x] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
       names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
-- [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
-      public page only once it has published it)
-- [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
-- [ ] After the deploy, `nulo.sh/terms/v1.0/` shows **no DRAFT banner** and no `noindex` meta
-- [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
+- [x] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
+      public page only once it has published it). Both did on 2026-10-19 and on 2026-10-24 (AMO's
+      page answers a script with a challenge; its API reads the add-on public)
+- [x] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
+- [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
+      and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
+      shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
+- [ ] Chrome (owner): set the listing to Public before the 1.0.0 store dispatch; an approved staged
+      submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
+      troubleshooting)
+- [ ] AMO (owner): remove the "This add-on is experimental" flag
+- [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten to the
+      owner's picks (2026-10-19, decision page 68)
 
 ## 4. Every later `release: promote dev → main`
 
@@ -107,8 +127,9 @@ archived, versioned and effective 6 October 2026:
 
 - [x] `legal/privacy.md` — the version line and the 1.1.1 history row
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.1.1
-- [ ] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
-  carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text)
+- [x] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
+  carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text). On 2026-10-19
+  both carry 1.2.1, which keeps 1.1.1's address for reporting security vulnerabilities
 
 **Due at the release that carries the Privacy page:** privacy § 5.3 says the explorer "can be
 disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
@@ -117,16 +138,65 @@ version before that release reaches users (procedure above):
 - [x] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
       row, effective the day it is published (1.2.1, 15 October 2026)
 - [x] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
-- [ ] After the deploy, AMO's Privacy policy field carries the new text
-      (`apps/extension/store/listing.md` § Privacy policy text)
+- [x] After the deploy, AMO's Privacy policy field carries the new text
+      (`apps/extension/store/listing.md` § Privacy policy text). On 2026-10-19 it begins "Version
+      1.2.1 — effective 15 October 2026", and its § 5.3 reads "Settings → Privacy"
 
-**Due at the release that first uploads an Aztec 6.0.0-rc.3 build to a store** (owner's call,
-2026-10-14; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
+**Due at the release that publishes privacy 1.2.2:** §§ 5.2 and 5.11 say what the price and
+token-list requests carry. The version is archived and in place; its effective date is the day the
+promote publishes it, so until then it reads `«FILL: effective date»`:
 
-- [ ] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
-      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier
-- [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
-      against a local sandbox)
+- [x] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (25 October 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.2/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.2 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+
+**Due at the release that publishes privacy 1.2.3:** § 3 says which data is stored encrypted. The
+version is archived and in place, and its effective date, like 1.2.2's, is the day the promote
+publishes it. A promote that publishes both dates both, and the archived
+`legal/archive/privacy-1.2.2.md` with them, since it was archived before its date was known:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (25 October 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.3 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+- [ ] The Chrome Web Store's `storage` justification is re-pasted from `apps/extension/store/listing.md`
+      § Permissions, which now says the data is encrypted
+
+**Due at the release that publishes privacy 1.2.4:** § 3 drops pinned tokens, fee-payer choices
+and the last-selected account from its exceptions. Its effective date, like 1.2.3's, is the day the
+promote publishes it. A promote that publishes both dates both, and the archived
+`legal/archive/privacy-1.2.3.md` with them:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (25 October 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+
+**Due at the release that publishes privacy 1.2.5:** § 5.1 names the Testnet endpoint as the one on
+the Developer's provider account. Its effective date, like 1.2.4's, is the day the promote publishes
+it. A promote that publishes both dates both, and the archived `legal/archive/privacy-1.2.4.md` with
+them:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.5 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.5 (25 October 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.5/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.5 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+
+**Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
+2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
+
+- [x] The wallet's in-place reset of a stale network (planned as `stale-network-reset`) is on `dev`:
+      until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
+      #486 and #487 merged on 2026-10-15, and #497 promoted them before 0.31.0 went to the stores
+      that day
+
+The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
+call, 2026-10-19, decision page 68).
 
 ## Not legal text, same deadline
 

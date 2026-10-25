@@ -11,8 +11,9 @@
  * a person on a real network sends into. Every case starts from an empty mempool, so it never pairs
  * with a tx an earlier case left behind, and asserts the journal, the estimate and the balance rows
  * against a ledger of the file's own settled sends. The service worker does the waiting; the Send
- * page shows the fee row queued with Send disabled, and a confirmed send that waits shows its card
- * at the journal's `queued` stage.
+ * page shows the fee row queued with Send disabled unless the row offers to queue (a fee cap, or
+ * Nulo's sponsor paying), and a confirmed send that waits shows its card at the journal's `queued`
+ * stage.
  *
  * @requires-proverless — formal marker scanned by scripts/e2e/agent.sh; the proof and projection
  * gates exist only in a proverless-armed build.
@@ -37,6 +38,8 @@ import {
 	registerProfile,
 	waitForHash,
 } from "../fixtures/extension"
+import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
+import { PollTimeoutError, pollUntil } from "../fixtures/poll"
 import {
 	createAndActivateProfile,
 	getAccountAddress,
@@ -75,6 +78,7 @@ import {
 import { readScopeIdentity, seedTransaction } from "../helpers/activity-seeds"
 import { deleteProfile, exportBackup, waitForHeldProjection } from "../helpers/handshake-import"
 import { importFullBackup, POPUP_IMPORT_SHELL } from "../helpers/import-drivers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const hasConfig = aztecConfig !== undefined
 const OTHER_PASSWORD = "OtherProfilePw123!"
@@ -174,8 +178,8 @@ const HELD_MS = 15_000
 
 /**
  * The ordering contract for sends that share chain state: while A is held unmined, B's fee row reads
- * queued and Send stays disabled (never the failure toast, never a fee). Lifting the hold mines A;
- * B's estimate then lands, B confirms, and both succeed.
+ * queued (never the failure toast, never a fee), with Send enabled only where the row offers to
+ * queue. Lifting the hold mines A; B's estimate then lands, B confirms, and both succeed.
  */
 async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend, afterA?: (burst: Burst) => Promise<void>): Promise<void> {
 	const aHash = await fireIntoHeldWindow(burst, a)
@@ -230,13 +234,25 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-test.skipIf(!hasConfig)("two private sends of the same token: the second waits", { timeout: 600_000, retry: 0 }, async ({ burst }) => {
-	await expectQueued(
-		burst,
-		{ token: "TST", from: "private", to: "private", amount: "18", destination: to(), fee: "sponsored" },
-		{ token: "TST", from: "private", to: "private", amount: "19", destination: to(), fee: "sponsored" },
-	)
-})
+test.skipIf(!hasConfig)(
+	"two private sends of the same token on Nulo's sponsor: the second is queued while the first is held, then both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "18", destination: to(), fee: "sponsored" }
+		const b: BurstSend = { token: "TST", from: "private", to: "private", amount: "19", destination: to(), fee: "sponsored" }
+		const aHash = await fireIntoHeldWindow(burst, a)
+		const { page } = burst
+		await startSend(page, b)
+		await expectEstimateQueued(page, 3_000)
+		expect(await page.$eval('[data-testid="send-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
+		await shotSend(page, "send-queued-sponsored", "fee-settings-card")
+		await confirmSend(page)
+		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
+		expect((await readTxStatuses(page, [aHash]))[aHash], "A is still unmined while B waits").toBe(0)
+		await releaseMining()
+		await expectBothSucceed(burst, a, b)
+	},
+)
 
 test.skipIf(!hasConfig)(
 	"two public sends paid with private fee juice: the second waits",
@@ -311,18 +327,33 @@ async function readAwaitingCards(page: Page): Promise<AwaitingCard[]> {
 async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingCard> {
 	const appearBy = Date.now() + 30_000
 	let settleBy: number | undefined
-	for (;;) {
+	let sampledAt = 0
+	let seen = "[]"
+	const late = () => new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+	const sample = async () => {
 		const cards = await readAwaitingCards(page)
-		const sampledAt = Date.now()
-		const seen = JSON.stringify(cards)
+		sampledAt = Date.now()
+		seen = JSON.stringify(cards)
 		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
-		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+		// The bound is the test's, so a sample taken past it fails even when it shows the card.
+		if (sampledAt > (settleBy ?? appearBy)) throw late()
 		const [card] = cards
-		if (card?.stage === stage && card.cancel) return card
-		if (card?.stage) throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
-		if (card) settleBy ??= sampledAt + 10_000
-		await new Promise((r) => setTimeout(r, 250))
+		if (card?.stage && !(card.stage === stage && card.cancel))
+			throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
+		return card
 	}
+	const ready = (card: AwaitingCard | undefined) => card?.stage === stage && card.cancel
+	const label = `an awaiting card at ${stage}`
+	const lateOnTimeout = (error: unknown): never => {
+		throw error instanceof PollTimeoutError ? late() : error
+	}
+	const first = await pollUntil(sample, (card) => card !== undefined, { label, timeoutMs: 30_000, intervalMs: 250 }).catch(lateOnTimeout)
+	if (ready(first)) return first as AwaitingCard
+	// The stage-less card gets 10 s from its first sighting to reach `stage`.
+	settleBy = sampledAt + 10_000
+	return (await pollUntil(sample, ready, { label, timeoutMs: settleBy - Date.now(), intervalMs: 250 }).catch(
+		lateOnTimeout,
+	)) as AwaitingCard
 }
 
 /**
@@ -471,11 +502,7 @@ function dappTxHash(result: PgResult): string {
 /** The dApp send recorded after `known` keeps reading `stage` for `windowMs`: its build has not started. */
 async function expectDappRecordHeld(page: Page, known: ReadonlySet<string>, stage: string, windowMs: number): Promise<void> {
 	const fresh = async () => (await readDappExecuteRecords(page)).filter((r) => !known.has(r.id))
-	const recorded = Date.now() + 30_000
-	while ((await fresh()).length === 0) {
-		if (Date.now() > recorded) throw new Error("the dApp send was never recorded")
-		await new Promise((r) => setTimeout(r, 250))
-	}
+	await pollUntil(fresh, (rows) => rows.length > 0, { label: "the dApp send recorded", timeoutMs: 30_000, intervalMs: 250 })
 	const deadline = Date.now() + windowMs
 	while (Date.now() < deadline) {
 		const stages = (await fresh()).map((r) => r.stage)
@@ -613,19 +640,21 @@ const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
 /** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
  *  progress; fails on a terminal failure, or on proof progress before any accept. */
 async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
-	const deadline = Date.now() + 180_000
-	for (;;) {
-		const row = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
-		if (row?.stage === "queued" && row.reask && (cap === undefined || row.reask.cap === cap)) return row as Asking
-		if (row?.stage && !BEFORE_PROOF.has(row.stage)) {
-			if (cap === undefined || !["proving", "submitting", "succeeded"].includes(row.stage)) {
-				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(row)}`)
+	const asking = (row: TransferRow | undefined) =>
+		row?.stage === "queued" && row.reask !== undefined && (cap === undefined || row.reask.cap === cap)
+	const sent = (row: TransferRow | undefined) => row?.stage !== undefined && !BEFORE_PROOF.has(row.stage)
+	const row = await pollUntil(
+		async () => {
+			const read = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
+			if (!asking(read) && sent(read) && (cap === undefined || !["proving", "submitting", "succeeded"].includes(read?.stage ?? ""))) {
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}`)
 			}
-			return "sent"
-		}
-		if (Date.now() > deadline) throw new Error(`transfer ${amountRaw} never asked again: ${JSON.stringify(row)}`)
-		await new Promise((r) => setTimeout(r, 250))
-	}
+			return read
+		},
+		(read) => asking(read) || sent(read),
+		{ label: `transfer ${amountRaw} asked again`, timeoutMs: 180_000, intervalMs: 250 },
+	)
+	return asking(row) ? (row as Asking) : "sent"
 }
 
 async function readReaskSheet(page: Page): Promise<{ line: string; button: string }> {
@@ -638,11 +667,7 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 }
 
 async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
-	return page.evaluate(async (h: string) => {
-		const value = (await chrome.storage.local.get(`nulo:core:txs@${h}`))[`nulo:core:txs@${h}`]
-		const row = (typeof value === "string" ? JSON.parse(value) : value) as { estimatedFee?: string } | undefined
-		return row?.estimatedFee
-	}, hash)
+	return (await readSealedRows<{ estimatedFee?: string }>(page, "txs")).find((tx) => tx.naturalId === hash)?.row.estimatedFee
 }
 
 /** Seeds a finalized private send of TST an hour old, paid from public Fee Juice at Urgent, whose
@@ -666,13 +691,15 @@ test.skipIf(!hasConfig)(
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
-		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e build
-		// widens above Urgent's. B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's
-		// fee, its cap is about A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
+		const prices = await refusePrices(burst.ctx)
+		// B's basis is the older Urgent send, never A at Fast: seeded at 4/5 of A's fee, its cap is about
+		// A's fee, below B at Urgent, whose multiplier is 5/3 of Fast's in every build.
 		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		const basis = await seedUrgentSend(burst, await fireIntoHeldWindow(burst, a))
 		const { page } = burst
+		// Before Home remounts for the first re-ask, which is when its price client reads.
+		await seedFeeJuiceQuote(burst.ctx, prices)
 
 		await startSend(page, b)
 		await expectEstimateQueued(page, 3_000)
@@ -702,17 +729,24 @@ test.skipIf(!hasConfig)(
 			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
-			if (asks === 1) await reopen(burst)
+			if (asks === 1) {
+				await reopen(burst)
+				// The sheet keeps the quote the feed holds when it opens; the feed's read starts as Home mounts.
+				await burst.page.waitForSelector('[data-testid="activity-feed-root"][data-fee-quote="ready"]', { timeout: 30_000 })
+			}
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
 			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
-			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
-			expect(sheet.button).toMatch(/^Send for [\d.]+ FJ$/)
+			const [now, cap] = [pinnedFeeText(asking.reask.fee), pinnedFeeText(asking.reask.cap)]
+			expect(sheet.line).toBe(`Fee is now ${now}, above the ${cap} you accepted.`)
+			expect(sheet.button).toBe("Send")
 			if (asks === 1) await shotSend(burst.page, "4-reask-sheet", "send-review-fee")
 			await pointerClick(burst.page, "send-review-submit")
 			accepted = asking.reask.fee
 		}
+		expect(await prices.refused.failures(), "price interception failures").toEqual([])
+		await prices.refused.stop()
 
 		expect(caps[0], "the first re-ask holds B to the like send's cap").toBe(queuedFeeCap(basis))
 		await expectBothSucceed(burst, a, b)

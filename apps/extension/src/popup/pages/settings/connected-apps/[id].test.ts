@@ -1,7 +1,8 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Icon, MaterialIcon, Toggle, Tooltip } from "@nulo/design"
+import { Icon, Toggle, Tooltip } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import ConnectedApp from "./[id].vue"
 
@@ -34,16 +35,10 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 // The stores read `chrome.storage.local` through the migration-aware facade on setup.
 beforeEach(() => {
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn(async () => ({})),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -75,7 +70,7 @@ async function mountPage(initial: ReturnType<typeof session>) {
 	const w = mount(ConnectedApp, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { Icon, MaterialIcon, Toggle, Tooltip },
+			components: { Icon, Toggle, Tooltip },
 			mocks: { confirmationPolicies: [] },
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },
@@ -177,5 +172,20 @@ describe("Settings › Connected app › its row deleted elsewhere", () => {
 		expect(mocks.routerGo).not.toHaveBeenCalled()
 		for (const fn of mocks.deleted) fn({ id: "s1" })
 		expect(mocks.routerGo).toHaveBeenCalledWith(-1)
+	})
+})
+
+describe("Settings › Connected app › a row no connection reached", () => {
+	const NOT_CONNECTED = '[data-testid="connected-app-not-connected"]'
+
+	test("says it was allowed and is not connected; the hash a connection writes takes the line away", async () => {
+		const w = await mountPage(session([]))
+		expect(w.find(NOT_CONNECTED).text().replace(/\s+/g, " ")).toBe(
+			"You allowed this app, but it has not finished connecting. Nothing is shared with it. Its next connection starts with the emoji check.",
+		)
+
+		mocks.updated[0]({ ...session([]), verificationHash: "ab".repeat(32) })
+		await flushPromises()
+		expect(w.find(NOT_CONNECTED).exists()).toBe(false)
 	})
 })

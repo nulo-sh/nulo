@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { reactive } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -6,7 +7,7 @@ const accountInstance = {
 }
 
 vi.mock("@/utils/core", () => ({
-	managers: { account: undefined as unknown },
+	managers: { account: undefined as unknown, uiPreference: { setSelectedAccount: vi.fn(async () => true) } },
 	initTransactionService: vi.fn(),
 }))
 
@@ -19,10 +20,6 @@ vi.mock("@/composables/useProfileBootstrap", () => ({
 	supersedeProfileActivations: vi.fn(),
 }))
 
-vi.mock("@/utils/storage", () => ({
-	storageLocalSet: vi.fn(async () => true),
-}))
-
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
 		return accountInstance
@@ -32,7 +29,6 @@ vi.mock("@/wallet/services/account/client", () => ({
 import { isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
 import { initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { storageLocalSet } from "@/utils/storage"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
 
@@ -64,14 +60,6 @@ function makeAppStore(overrides: Partial<Record<string, unknown>> = {}) {
 function bootstrapped(store: ReturnType<typeof makeAppStore>, id: string) {
 	store.profile = { id }
 	store.isLogined = true
-}
-
-function deferred<T>() {
-	let resolve!: (value: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
 }
 
 /** Starts the helper and records how it settled without awaiting it. */
@@ -137,7 +125,7 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(setLastActiveProfileId).toHaveBeenCalledWith("created")
 		expect(accountInstance.getAccounts).toHaveBeenCalledWith("created", "1", true)
 		expect(store.accounts).toEqual([{ address: "0xACC", index: 0, visible: true }])
-		expect(storageLocalSet).toHaveBeenCalledWith({ "nulo:ui:activeAccount": "0xACC" })
+		expect(managers.uiPreference.setSelectedAccount).toHaveBeenCalledWith("created", "0xACC")
 		expect(initTransactionService).toHaveBeenCalled()
 		expect(router.push).toHaveBeenCalledWith("/popup/general")
 		expect(openToast).not.toHaveBeenCalled()
@@ -145,7 +133,9 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		// before navigating (the durable state a reopened popup reads).
 		const setIdOrder = vi.mocked(setLastActiveProfileId).mock.invocationCallOrder[0]!
 		expect(setIdOrder).toBeLessThan(accountInstance.getAccounts.mock.invocationCallOrder[0]!)
-		expect(vi.mocked(storageLocalSet).mock.invocationCallOrder[0]!).toBeLessThan(router.push.mock.invocationCallOrder[0]!)
+		expect(vi.mocked(managers.uiPreference.setSelectedAccount).mock.invocationCallOrder[0]!).toBeLessThan(
+			router.push.mock.invocationCallOrder[0]!,
+		)
 	})
 
 	test("a bootstrap failure: the unlock screen with the created profile selected, and the toast once", async () => {
@@ -279,7 +269,7 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 
 		expect(state.outcome).toBe("resolved")
 		expect(store.accounts).toEqual([])
-		expect(storageLocalSet).not.toHaveBeenCalled()
+		expect(managers.uiPreference.setSelectedAccount).not.toHaveBeenCalled()
 		expect(router.push).toHaveBeenCalledTimes(1)
 		expect(router.push).toHaveBeenCalledWith("/popup/general")
 		expect(openToast).toHaveBeenCalledWith(HAND_OFF_TOAST)

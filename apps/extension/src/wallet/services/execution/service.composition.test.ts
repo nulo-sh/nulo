@@ -20,6 +20,7 @@
  * never in the production bundle (the build's negative bundle-grep looks for this
  * marker in `dist/`; it must be absent).
  */
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { describe, expect, test, vi } from "vitest"
 import { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -42,15 +43,23 @@ import { ContactService } from "@/wallet/services/contact/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { PriceService } from "@/wallet/services/price/service"
 import { FpcService } from "@/wallet/services/fpc/service"
-import { TransactionService, TransferType } from "@/wallet/services/transaction/service"
+import { DROPPED_RESURRECTION_WINDOW_MS, TransactionService, TransferType } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError, TooManyPendingError } from "@nulo/extension-messaging/errors"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import {
+	InvalidWalletArgumentsError,
+	TermsAcceptanceRequiredError,
+	TooManyPendingError,
+	UnsupportedMethodError,
+} from "@nulo/extension-messaging/errors"
+import { OperationJournalService, type OperationRecord } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import type { ProofGate } from "@/e2e/proof-gate"
 import type { ExecutionLane } from "./execution-lane"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
@@ -62,6 +71,7 @@ import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
+import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import type { SendSequencer } from "./send-sequencer"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
@@ -91,6 +101,7 @@ function makeControllableGate() {
 
 const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
+const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 const NETWORK = {
 	id: "net1",
 	// The node's pair below: (5 ^ 4) >>> 0 === 1.
@@ -146,6 +157,7 @@ async function makeHarness() {
 	})
 	journal.onOperationUpdated.add((rec) => stages.push(rec.progress.stage))
 	/** Parks the first journal write that stores a record matching `match`, until released. */
+	const journalKeys = (await rowKeysForEveryProfile()).rowKeys
 	const parkJournalWrite = (match: (record: { progress: { stage: string } }) => boolean) => {
 		let release: () => void = () => {}
 		const gate = new Promise<void>((resolve) => {
@@ -155,9 +167,11 @@ async function makeHarness() {
 		const area = api.storage.local
 		const write = area.set.bind(area)
 		vi.spyOn(area, "set").mockImplementation(async (entries) => {
-			const hit = Object.entries(entries).some(
-				([key, value]) => key.startsWith("nulo:journal@") && typeof value === "string" && match(JSON.parse(value)),
-			)
+			let hit = false
+			for (const [key, value] of Object.entries(entries)) {
+				const text = key.startsWith("nulo:journal@") ? await storedText(key, value, journalKeys) : undefined
+				hit ||= text !== undefined && match(JSON.parse(text))
+			}
 			if (hit && !parked) {
 				parked = true
 				await gate
@@ -200,6 +214,7 @@ async function makeHarness() {
 			// The journal's create fence checks membership here — the fake must
 			// list the profile the flow files under or every create is refused.
 			getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
+			...(await rowKeysForEveryProfile()),
 			getDeletionState: () => deletionState,
 			captureExecutionFence,
 			assertFence: async (fence: ExecutionFence) => {
@@ -227,12 +242,12 @@ async function makeHarness() {
 		svc(TransactionService.name, {
 			getPendingForAccount: () => [],
 			// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
-			getTransactions: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
+			transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
 			addTransaction: vi.fn(),
 			onTransactionUpdated: { add: () => {} },
 		}),
 	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: "0xtoken" }) }))
+	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
 	collection.add(
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
@@ -243,11 +258,12 @@ async function makeHarness() {
 	)
 	collection.add(svc(ContactService.name, {}))
 	collection.add(svc(AuthRegistryService.name, { assertWithinCap: async () => {} }))
+	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
 	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: legalAssertCurrent }))
 	collection.add(journal)
 	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
 	// calls task.cancel() on a user-cancel before returning the cancelled result.
-	const fakeTask = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
+	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
 	fakeTask.startSubtask.mockReturnValue(fakeTask)
 	collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 	collection.add(svc(PriceService.name, { getUsableQuote: async () => undefined }))
@@ -262,6 +278,7 @@ async function makeHarness() {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Public,
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
@@ -299,7 +316,7 @@ async function makeHarness() {
 		} as never,
 		nonce: { toString: () => "0" },
 		feePaymentMethod: "EXTERNAL" as never,
-		token: { contract: "0xtok", name: "Tok", symbol: "TOK", decimals: 18 },
+		token: { contract: TOKEN_CONTRACT, name: "Tok", symbol: "TOK", decimals: 18 },
 		fnName: "transfer_public_to_public",
 		args: [],
 		builtAt: Date.now(),
@@ -326,6 +343,7 @@ async function makeHarness() {
 		getAccountContract,
 		proveTx,
 		parkJournalWrite,
+		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
 		lane: (service as unknown as { lane: ExecutionLane }).lane,
 		expiryDeferral: () => expiryDeferral,
@@ -351,6 +369,7 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 				req.networkId,
 				req.accountAddress,
 				req.tokenId,
+				req.tokenContract,
 				req.transferType,
 				req.recipientAddress,
 				req.amount,
@@ -507,6 +526,7 @@ const transfer = (h: Harness, estimateId: string | undefined = h.estimateId) =>
 			h.req.networkId,
 			h.req.accountAddress,
 			h.req.tokenId,
+			h.req.tokenContract,
 			h.req.transferType,
 			h.req.recipientAddress,
 			h.req.amount,
@@ -537,6 +557,8 @@ async function expectEndedUnder(h: Harness, journalId: string, profileId: string
 	expect(record?.progress.stage).toBe("failed")
 	expect(record?.error?.kind).toBe("session_ended")
 	expect(record?.profileId).toBe(profileId)
+	// Written after the session ended, under the keys the worker keeps across it.
+	expect(parseEnvelope(JSON.parse(String(await h.storedJournalRow(journalId))))?.profileId).toBe(profileId)
 }
 
 describe("ExecutionService composition — work runs only while the session that authorized it lives", () => {
@@ -1061,6 +1083,7 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1111,6 +1134,7 @@ describe("ExecutionService composition — a refused operation logs at the level
 		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
 		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
 		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
+		["an unsupported-method refusal", () => UnsupportedMethodError.forMethod("profileTx"), "refused: unsupported method"],
 		["an unclassified failure", () => new Error("boom"), undefined],
 	])("%s", async (_label, makeError, debugReason) => {
 		const h = await makeHarness()
@@ -1171,39 +1195,122 @@ describe("ExecutionService composition — a refused dApp call is titled by what
 	}, 15_000)
 })
 
-describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
-		const h = await makeHarness()
-		const hash = `0x${"1e".repeat(32)}`
-		h.toTx.mockResolvedValueOnce(provenTx(hash))
-		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
-		const blockHash = `0x${"0b".repeat(32)}`
-		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => ({
-			txHash: hash,
-			status: "proven",
-			executionResult: "success",
-			transactionFee: 1234n,
-			blockHash: BlockHash.fromString(blockHash),
-			blockNumber: 42,
+describe("ExecutionService composition — a dApp send names its call before simulating it", () => {
+	const CLASS_ID = AztecAddress.fromNumberUnsafe(0xc1a55).toString()
+	const builtCall = { contract: TOKEN_CONTRACT, method: "transfer_public_to_public", args: [], classId: CLASS_ID }
+	const simulationFailure = new Error("Assertion failed: balance too low")
+	/** An authwit the app attached itself: it keeps the send off the folded route, so discovery builds first. */
+	const attachedAuthwit = { kind: "add_private_authwit", content: { kind: "message_hash", messageHash: CLASS_ID } }
+
+	/** The real `fj` route over a build that resolves `builtCall`, every simulation of it rejecting. */
+	function failSimulationAfterBuild(h: Harness, actions: unknown[] = []) {
+		const internals = h.service as unknown as {
+			planner: OperationPlanner
+			txBuilder: { buildStandard: (...args: unknown[]) => Promise<unknown> }
+			coordinator: { simulateTxTask: (...args: unknown[]) => Promise<unknown> }
+			dappSendExecutor: { estimateOperationFee: (op: unknown, feeSettings: unknown) => Promise<unknown> }
+		}
+		vi.spyOn(internals.planner, "processAztecJsPayload").mockResolvedValue({ actions, feeOptions: undefined } as never)
+		vi.spyOn(internals.txBuilder, "buildStandard").mockImplementation(async () => ({
+			txRequest: { origin: ACCOUNT },
+			account: { address: ACCOUNT },
+			pxe: { simulateTx: async () => Promise.reject(simulationFailure) },
+			node: {},
+			network: NETWORK,
+			txCalls: [builtCall],
 		}))
-		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }
+		vi.spyOn(internals.coordinator, "simulateTxTask").mockRejectedValue(simulationFailure)
+		return internals
+	}
+
+	test.each([
+		["the strategy's", []],
+		["discovery's", [attachedAuthwit]],
+	])(
+		"%s simulation rejects: the record fails with the built call, class included",
+		async (_route, actions) => {
+			const h = await makeHarness()
+			const internals = failSimulationAfterBuild(h, actions)
+			const fence = await h.captureExecutionFence()
+			const queued = await h.journal.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: "p1",
+				sessionId: "sess-1",
+				title: "transfer_public_to_public",
+				initialStage: { stage: "queued" },
+			})
+			const send = { ...(dappSend() as object), feeSettings: { paymentMethod: { kind: "fj" } }, opts: { from: ACCOUNT } } as never
+
+			const [result] = await h.service.executeOperations(
+				[send],
+				DAPP_ORIGIN,
+				undefined,
+				{ queuedJournalId: queued.id },
+				undefined,
+				fence,
+			)
+
+			const record = await h.journal.getOperation(queued.id)
+			expect({ status: result.status, stage: record?.progress.stage, title: record?.title, call: record?.call }).toEqual({
+				status: "failed",
+				stage: "failed",
+				title: "transfer_public_to_public",
+				call: { contract: TOKEN_CONTRACT, argCount: 0, classId: CLASS_ID },
+			})
+			expect(internals.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
+		},
+		15_000,
+	)
+
+	test("the window's estimate over the same build writes no record", async () => {
+		const h = await makeHarness()
+		const internals = failSimulationAfterBuild(h)
+		const record = vi.spyOn(h.lane, "recordBuiltCall")
+		const send = { ...(dappSend() as object), feeSettings: { paymentMethod: { kind: "fj" } }, opts: { from: ACCOUNT } } as never
+
+		const outcome = await internals.dappSendExecutor
+			.estimateOperationFee(send, { paymentMethod: { kind: "fj" } })
+			.catch((e: unknown) => e)
+
+		expect(outcome).toBe(simulationFailure)
+		expect(internals.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
+		expect(record).not.toHaveBeenCalled()
+	}, 15_000)
+})
+
+describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
+	/** A running send check over the harness's journal, reading the chain from `node`. */
+	async function startCheck(h: Harness, node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> }) {
+		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
 		const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
 		const clock = new MockClock(Date.now())
 		const check = new SendCheck({
 			journal: h.journal,
 			network,
-			profile: { captureExecutionFence: h.captureExecutionFence, isFenceLive: h.isFenceLive },
+			profile: {
+				captureExecutionFence: h.captureExecutionFence,
+				isFenceLive: h.isFenceLive,
+				onRowKeysReady: new EventHandler<string>(),
+			},
 			balances,
 			logger: new LoggerStore(new ConfigStore()),
 			clock,
 		})
 		await check.start()
+		return { check, network, balances, clock }
+	}
 
+	/** A transfer whose `sendTx` throws `error`, run to its failed row. */
+	async function sendFailing(h: Harness, hash: string, error: Error) {
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
+		h.sendTx.mockRejectedValueOnce(error)
 		const p = h.service
 			.executeTransfer(
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1213,9 +1320,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			.catch((e) => e)
 		await waitFor(() => h.ctrl.entered)
 		h.ctrl.release()
-		expect(await p).toStrictEqual(recorded(h, expect.any(TypeError)))
-
-		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(await p).toStrictEqual(recorded(h, expect.any(error.constructor)))
 		const failed = await h.journal.getOperation(h.getJournalId())
 		expect(failed?.progress).toEqual({
 			stage: "failed",
@@ -1224,6 +1329,31 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			submittedEndpointUrl: "http://fake",
 			expiry: RECORDED_EXPIRY,
 		})
+		return failed
+	}
+
+	/** As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself. */
+	const nodeRefusal = (message: string) => new Error(message, { cause: { code: -32702, message } })
+	const dropped = (hash: string) => ({ txHash: hash, status: "dropped" })
+	const minedAt = (hash: string, blockHash: string) => ({
+		txHash: hash,
+		status: "proven",
+		executionResult: "success",
+		transactionFee: 1234n,
+		blockHash: BlockHash.fromString(blockHash),
+		blockNumber: 42,
+	})
+	const cardOf = (op: OperationRecord | undefined) => op && buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })
+
+	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"1e".repeat(32)}`
+		const blockHash = `0x${"0b".repeat(32)}`
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => minedAt(hash, blockHash))
+		const { check, network, balances, clock } = await startCheck(h, { getTxReceipt })
+
+		const failed = await sendFailing(h, hash, new TypeError("fetch failed"))
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
 
 		clock.advance(SEND_CHECK_TICK_MS)
 		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
@@ -1232,46 +1362,93 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(getTxReceipt.mock.calls[0]?.[0].toString()).toBe(hash)
 		const answered = await h.journal.getOperation(h.getJournalId())
 		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
-		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined })
-		expect(card).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
+		expect(cardOf(answered)).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
 		expect(balances.refreshAccountBalances).toHaveBeenCalledWith(h.req.accountAddress)
 		expect(h.sendTx).toHaveBeenCalledTimes(1)
 		check.stop()
 	})
 
-	test("a sendTx the node refused reads 'Not confirmed yet' too: a retried POST can come back refused after an accepted attempt", async () => {
+	test("an existing-nullifier refusal the network holds none of reads refused, then sent once it shows up mined", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"2e".repeat(32)}`
+		const blockHash = `0x${"0c".repeat(32)}`
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
+		const { check, balances, clock } = await startCheck(h, { getTxReceipt })
+		let latest: OperationRecord | undefined
+		h.journal.onOperationUpdated.add((op) => {
+			latest = op
+		})
+
+		const failed = await sendFailing(h, hash, nodeRefusal("Invalid tx: Existing nullifier"))
+		expect(failed && sendOutcome(failed)).toBe("checking")
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "refused")
+		const refused = await h.journal.getOperation(h.getJournalId())
+		expect(cardOf(refused)).toMatchObject({ state: "failed", subtitle: "Refused by the network", color: "red" })
+		expect(balances.refreshAccountBalances).not.toHaveBeenCalled()
+
+		getTxReceipt.mockResolvedValue(minedAt(hash, blockHash))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
+		const landed = await h.journal.getOperation(h.getJournalId())
+		expect(landed?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
+		expect(cardOf(landed)).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		check.stop()
+	})
+
+	test("a refusal no read corrects in its window reads 'Won't go through' once the final chain passes its expiry without it", async () => {
+		const h = await makeHarness()
+		const hash = `0x${"2d".repeat(32)}`
+		const finalized = {
+			header: BlockHeader.empty({
+				globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(9), timestamp: BigInt(RECORDED_EXPIRY.timestamp + 1) }),
+			}),
+			blockHash: BlockHash.fromString(`0x${"1f".repeat(32)}`),
+		}
+		const node = {
+			getTxReceipt: vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash)),
+			getBlockData: vi.fn(async (_tag: string) => finalized),
+			findLeavesIndexes: vi.fn(async (..._args: unknown[]) => [undefined]),
+		}
+		const { check, clock } = await startCheck(h, node)
+		let latest: OperationRecord | undefined
+		h.journal.onOperationUpdated.add((op) => {
+			latest = op
+		})
+
+		const failed = await sendFailing(h, hash, nodeRefusal("Invalid tx: Existing nullifier"))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "refused")
+		expect(node.getBlockData).not.toHaveBeenCalled()
+
+		clock.setNow(clock.now() + DROPPED_RESURRECTION_WINDOW_MS)
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => latest?.progress.stage === "failed" && latest.progress.check === "expired")
+		const expired = await h.journal.getOperation(h.getJournalId())
+		expect(expired?.progress).toEqual({ ...failed?.progress, check: "expired" })
+		expect(cardOf(expired)).toMatchObject({ state: "failed", subtitle: "Won't go through", color: "red" })
+		expect(node.getTxReceipt).toHaveBeenCalledTimes(1)
+		check.stop()
+	})
+
+	test("a fee refusal reads 'Not confirmed yet' after a Dropped read: a lagging node can refuse a send another took", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"2f".repeat(32)}`
-		h.toTx.mockResolvedValueOnce(provenTx(hash))
-		// As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself.
-		const refusal = "Invalid tx: Insufficient fee payer balance"
-		h.sendTx.mockRejectedValueOnce(new Error(refusal, { cause: { code: -32702, message: refusal } }))
+		const getTxReceipt = vi.fn(async (_hash: { toString(): string }): Promise<unknown> => dropped(hash))
+		const { check, clock } = await startCheck(h, { getTxReceipt })
 
-		const p = h.service
-			.executeTransfer(
-				h.req.networkId,
-				h.req.accountAddress,
-				h.req.tokenId,
-				h.req.transferType,
-				h.req.recipientAddress,
-				h.req.amount,
-				h.req.feeSettings,
-				h.estimateId,
-			)
-			.catch((e) => e)
-		await waitFor(() => h.ctrl.entered)
-		h.ctrl.release()
-		expect(await p).toStrictEqual(recorded(h, expect.any(Error)))
+		await sendFailing(h, hash, nodeRefusal("Invalid tx: Insufficient fee payer balance"))
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => getTxReceipt.mock.calls.length > 0)
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => getTxReceipt.mock.calls.length > 1)
 
-		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({
-			stage: "failed",
-			from: "submitting",
-			txHash: hash,
-			submittedEndpointUrl: "http://fake",
-			expiry: RECORDED_EXPIRY,
-		})
-		expect(failed && sendOutcome(failed)).toBe("checking")
+		const read = await h.journal.getOperation(h.getJournalId())
+		expect(read?.progress).not.toHaveProperty("check")
+		expect(read && sendOutcome(read)).toBe("checking")
+		check.stop()
 	})
 })
 
@@ -1286,6 +1463,7 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 				h.req.networkId,
 				h.req.accountAddress,
 				h.req.tokenId,
+				h.req.tokenContract,
 				h.req.transferType,
 				h.req.recipientAddress,
 				h.req.amount,
@@ -1379,5 +1557,136 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
 		expect(await stageOf(h, id)).toBe("cancelled")
 		expect(h.proveTx).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService composition — a Send held to the estimate it showed asks again above it", () => {
+	// Fee Juice, paid by the account. The stashed build's fee is 100 × 2 + L2 × 3 = 11 × 10^12, eleven
+	// readout units: exactly 10% above SHOWN_AT_LINE, and past the line for one base unit less.
+	const FJ: FeeSettings = { paymentMethod: { kind: "fj" } }
+	const L2 = 3_666_666_666_600
+	const BUILT = "11000000000000"
+	const SHOWN_AT_LINE = "10000000000000"
+	const SHOWN_BELOW_LINE = "9999999999999"
+
+	async function fjHarness() {
+		const h = await makeHarness()
+		const gasSettings = { ...(h.entry.txRequest as never as { txContext: { gasSettings: object } }).txContext.gasSettings }
+		const entry: TransferEstimateReuseEntry = {
+			...h.entry,
+			feeSettingsHash: fingerprintFeeSettings(FJ),
+			fpcIdentity: undefined,
+			feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+			txRequest: { txContext: { gasSettings: { ...gasSettings, gasLimits: { daGas: 100, l2Gas: L2 } } } } as never,
+		}
+		;(h.service as unknown as { estimateReuse: TransferEstimateReuse }).estimateReuse.stash("estimate-fj", entry)
+		const send = (feeCap: string | undefined, shownFee: string | undefined) =>
+			h.service
+				.executeTransfer(
+					h.req.networkId,
+					h.req.accountAddress,
+					h.req.tokenId,
+					h.req.tokenContract,
+					h.req.transferType,
+					h.req.recipientAddress,
+					h.req.amount,
+					FJ,
+					"estimate-fj",
+					feeCap,
+					shownFee,
+				)
+				.catch((e) => e)
+		return { ...h, entry, send }
+	}
+
+	test("a build more than 10% above the figure is asked about and never proved or sent", async () => {
+		const h = await fjHarness()
+		const run = h.send(undefined, SHOWN_BELOW_LINE)
+		await waitFor(() => h.stages.includes("queued"))
+		const id = h.getJournalId()
+		expect((await h.journal.getOperation(id))?.progress).toEqual({
+			stage: "queued",
+			reask: { fee: BUILT, cap: SHOWN_BELOW_LINE, payer: { type: "fj", isProtocol: false } },
+		})
+		await h.service.cancelJob(id)
+		h.ctrl.release()
+		expect(await run).toBeInstanceOf(JobCancelledError)
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
+	})
+
+	test("the control: a build exactly 10% above the figure is proved and sent once, never asked about", async () => {
+		const h = await fjHarness()
+		const run = h.send(undefined, SHOWN_AT_LINE)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		expect(await run).toBe("0xhash")
+		expect((h.proveTx.mock.calls[0] as unknown[])[0]).toBe(h.entry.txRequest)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.stages).not.toContain("queued")
+	})
+
+	test("a send the account pays with neither figure ends failed before any proof", async () => {
+		const h = await fjHarness()
+		expect(await h.send(undefined, undefined)).toStrictEqual(recorded(h, expect.any(Error)))
+		const failed = await h.journal.getOperation(h.getJournalId())
+		expect(failed?.progress.stage).toBe("failed")
+		expect(failed?.error?.message).toContain("no fee figure")
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(h.sendTx).not.toHaveBeenCalled()
+	})
+})
+
+describe("ExecutionService composition — a held dApp send's question answered in its window", () => {
+	const REASK = { fee: "21000000000000000", cap: "16000000000000000", payer: { type: "fj" as const, isProtocol: false } }
+
+	/** A dApp send's real record asking `reask`, its registered cancel, and the send's waiter. */
+	async function heldSend(window: () => Promise<boolean>) {
+		const h = await makeHarness()
+		const fence = await h.captureExecutionFence()
+		const id = (await h.lane.beginJournal(NETWORK.id, ACCOUNT.toString(), DAPP_ORIGIN, [], fence)) as string
+		await h.lane.commitJournal(id, { stage: "simulating" })
+		await h.lane.commitJournal(id, { stage: "queued", reask: REASK })
+		const controller = new AbortController()
+		h.lane.registerInFlight(id, fence.session, controller)
+		const internals = h.service as unknown as {
+			queuedFeeAnswers: QueuedFeeAnswers
+			askInWindow(question: unknown): Promise<void>
+			interactionOperations(): unknown
+		}
+		const answer = internals.queuedFeeAnswers.wait(id, REASK.fee, controller.signal, 60_000)
+		const askFeeAgain = vi.fn(window)
+		vi.spyOn(internals, "interactionOperations").mockReturnValue({ askFeeAgain })
+		const ask = (reask = REASK) =>
+			internals.askInWindow({ interactionId: "i-1", index: 0, journalId: id, reask, deadline: Date.now() + 60_000 })
+		return { ...h, id, controller, answer, askFeeAgain, ask }
+	}
+
+	test("an accept resumes the send at exactly the figure asked, the record still asking", async () => {
+		const h = await heldSend(async () => true)
+		await h.ask()
+		expect(await h.answer).toBe("accepted")
+		expect(await stageOf(h, h.id)).toBe("queued")
+		expect(h.controller.signal.aborted).toBe(false)
+	})
+
+	test.each([
+		["a refusal", async () => false],
+		["a window that closed or never opened", async () => Promise.reject(new Error("window closed"))],
+	])("%s cancels the send", async (_case, window) => {
+		const h = await heldSend(window)
+		await h.ask()
+		expect(await h.answer).toBe("aborted")
+		expect(await stageOf(h, h.id)).toBe("cancelled")
+		expect(h.controller.signal.aborted).toBe(true)
+	})
+
+	test("a refusal of a figure the send no longer asks cancels nothing", async () => {
+		const h = await heldSend(async () => false)
+		await h.ask({ ...REASK, fee: "25000000000000000" })
+		expect(await stageOf(h, h.id)).toBe("queued")
+		expect(h.controller.signal.aborted).toBe(false)
+		h.controller.abort()
+		expect(await h.answer).toBe("aborted")
 	})
 })

@@ -6,7 +6,7 @@
  * Trust-state machine (per `(profileId, networkId, contract)`):
  *   unknown → first note → pending (record hidden, this popup opens)
  *   user Allow → trusted (queued hidden records flip visible atomically)
- *   user Reject → blocked (queued records stay hidden permanently)
+ *   user Reject → blocked (both scans stop, queued records are deleted)
  *
  * Adding a token trusts its contract at once, so this opens only for a listed token with no trust
  * row, after a trust write that failed at add or a backup restore. It states no amount, which the
@@ -32,9 +32,9 @@ import { useCacheStore } from "@/stores/cache.store.ts"
 
 /** Utils */
 import { copyToClipboard } from "@/utils/clipboard"
-import { trimAddress } from "@/utils/string"
+import { isBlank, trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
-import { getContractExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
 
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
@@ -47,6 +47,8 @@ const props = defineProps({
 
 // The contract sets the symbol; sanitizing drops invisible and bidi characters, not look-alikes.
 const tokenSymbol = computed(() => sanitizeWireString(cacheStore.incomingTrust.tokenSymbol ?? "Token", 32))
+const symbolBlank = computed(() => isBlank(tokenSymbol.value))
+const subject = computed(() => (symbolBlank.value ? "this token" : tokenSymbol.value))
 const contractFull = computed(() => cacheStore.incomingTrust.contract ?? "")
 const contractSlice = computed(() => (contractFull.value ? trimAddress(contractFull.value, 6, 4) : ""))
 // A prompt only ever shows for the active network; the check keeps a stale one off another chain's explorer.
@@ -54,7 +56,7 @@ const contractUrl = computed(() => {
 	if (!appStore.network || cacheStore.incomingTrust.networkId !== appStore.network.id) return null
 	return getContractExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, contractFull.value)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 
 // Verification surface: keyboard-reachable expand toggle + copy. Without
 // these as real <button> elements, a keyboard-only user couldn't get to
@@ -114,8 +116,8 @@ async function decide(action, successLabel) {
 	}
 	if (payloadKey() === key) emit("onClose")
 }
-const handleAllow = () => decide(cacheStore.incomingTrust.allow, `Now showing receives for ${tokenSymbol.value}`)
-const handleReject = () => decide(cacheStore.incomingTrust.reject, `Hiding receives from ${tokenSymbol.value}`)
+const handleAllow = () => decide(cacheStore.incomingTrust.allow, `Now showing receives for ${subject.value}`)
+const handleReject = () => decide(cacheStore.incomingTrust.reject, `Hiding receives from ${subject.value}`)
 
 // Initial focus on the expand toggle so a keyboard-only user lands on
 // the verification surface first — they should be reading the contract
@@ -147,9 +149,9 @@ watch(
 				<Flex direction="column" align="center" gap="12" :class="$style.header">
 					<Icon name="download" size="20" color="primary" />
 					<span :class="$style.pre_title">First receive</span>
-					<h2 :class="$style.title">Allow {{ tokenSymbol }}?</h2>
+					<h2 :class="$style.title">Allow {{ subject }}?</h2>
 					<Text variant="body" color="body" height="150" align="center">
-						You received <strong>{{ tokenSymbol }}</strong> from a contract you haven't seen before.
+						You received <strong v-if="!symbolBlank">{{ tokenSymbol }}</strong><template v-else>a token</template> from a contract you haven't seen before.
 					</Text>
 				</Flex>
 
@@ -169,10 +171,8 @@ watch(
 							name="chevron"
 							size="10"
 							color="tertiary"
-							:style="{
-								transform: `rotate(${expanded ? '180' : '0'}deg)`,
-								transition: 'transform 0.2s ease',
-							}"
+							:rotate="expanded ? 270 : 90"
+							:class="$style.chevron"
 						/>
 					</button>
 					<div
@@ -200,7 +200,7 @@ watch(
 						data-testid="incoming-trust-contract-link"
 					>
 						<span>View contract on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
+						<Icon name="open" size="10" color="tertiary" />
 					</a>
 				</Flex>
 
@@ -254,11 +254,11 @@ watch(
 	background: var(--nulo-surface-low);
 }
 .contract_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--txt-tertiary);
 }
 .contract_value {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 	word-break: break-all;
 }
@@ -285,7 +285,7 @@ watch(
 	border-top: 1px solid var(--nulo-border);
 }
 .contract_full {
-	composes: type--data from global;
+	composes: type--meta from global;
 	flex: 1;
 	color: var(--txt-primary);
 	word-break: break-all;
@@ -312,5 +312,9 @@ watch(
 }
 :global([theme="light"]) .pre_title {
 	color: var(--txt-secondary);
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

@@ -10,9 +10,12 @@ import type {
 } from "@nulo/wallet-crypto"
 import type { Restored } from "@/wallet/base"
 import type { ExecutionFence } from "./profile-deletion-state"
-import type { FeePickUpdate } from "@/utils/fee-picks"
 
 export const PROFILE_SERVICE_NAME = "profile"
+
+/** Storage root for profile records. Frozen: renaming detaches every
+ *  wallet on disk from its profile metadata. */
+export const PROFILE_STORAGE_ROOT = "nulo:core:profiles"
 
 export type ProfileType = "password" | "passkey"
 
@@ -296,12 +299,6 @@ export type Methods = {
 	changeProfileName(id: string, newName: string): ProfileInfo
 
 	/**
-	 * Saves one fee-method pick, or drops every pick naming a deleted FPC, in the profile's own keys.
-	 * Resolves `false`, writing nothing, once the profile is gone or its deletion has begun.
-	 */
-	saveFeePick(profileId: string, update: FeePickUpdate): boolean
-
-	/**
 	 * Changes profile password and returns the updated profile.
 	 * @param id Profile id.
 	 * @param oldPassword Old password, to decrypt storage.
@@ -310,20 +307,14 @@ export type Methods = {
 	changeProfilePassword(id: string, oldPassword: string, newPassword: string): ProfileInfo
 
 	/**
-	 * Confirm profile operation.
-	 * @param id Profile id.
-	 * @param password Profile password.
-	 */
-	confirmProfileOperation(id: string, password?: string): boolean
-
-	/**
 	 * Deletes a profile and returns the deleted profile.
 	 * @param id Profile id.
 	 */
 	deleteProfile(id: string): ProfileInfo
 
 	/**
-	 * Imports a passkey-backed profile using an existing credential and signs in.
+	 * Imports a passkey-backed profile using an existing credential and signs in. Throws
+	 * `PasskeyProfileExistsError` (naming it) when a live profile here already holds the credential.
 	 *
 	 * @param name Display name.
 	 * @param credentialData OPTIONAL — PATH A. See `createPasskeyProfile` for

@@ -12,9 +12,8 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
-import { copyWithToast } from "@/utils/clipboard"
-import { knownDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
-import { aggregateFiat } from "@/utils/token-aggregate"
+import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
+import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { storageLocalGet, storageLocalSet } from "@/utils/storage"
 import { createBalanceCount } from "./balance-count"
 import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
@@ -23,8 +22,6 @@ import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 /** Composables */
 import { usePrices } from "@/composables/usePrices"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-import { useToast } from "@/composables/toast.js"
-const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -52,6 +49,7 @@ const props = defineProps({
 		default: null,
 	},
 })
+const emit = defineEmits(["holdings"])
 
 const PRIVATE_BALANCE_LABEL = "Private balance: only you can see it"
 const PUBLIC_BALANCE_LABEL = "Public balance: anyone can see it"
@@ -59,7 +57,6 @@ const PUBLIC_BALANCE_LABEL = "Public balance: anyone can see it"
 const tokenBalances = ref([])
 
 const tokenToDisplay = computed(() => props.tokenBalance?.token)
-const showFullBalance = ref(false)
 /** The token hero reads a stored row: a malformed side or unknown decimals renders a dash, never throws. */
 const heroSides = computed(() => {
 	const tb = props.tokenBalance
@@ -69,12 +66,6 @@ const heroSides = computed(() => {
 	const privateRaw = parseRawBalance({ privateBalance: tb.privateBalance })
 	if (publicRaw === undefined || privateRaw === undefined) return undefined
 	return { publicRaw, privateRaw, decimals }
-})
-const totalTokenBalance = computed(() => {
-	if (!props.tokenBalance) return { value: 0 }
-	const sides = heroSides.value
-	if (!sides) return { value: "—" }
-	return balanceFormatted(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20, { compact: true })
 })
 
 const privateBalanceFormatted = computed(() => {
@@ -111,11 +102,11 @@ const displayedTokenFiat = computed(() => {
 	return prices.tokenFiatLabel(tokenToDisplay.value, sides.publicRaw + sides.privateRaw)
 })
 
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
 
-/** Always a dollar figure — holdings that lack a price count as $0.00 and
- *  the "priced assets only" caption owns the honesty, never an em-dash. */
+/** Holdings that lack a price count as $0.00 under the "priced assets only" caption, unless every
+ *  priceable one lacks it (`noPrices`). */
 const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 const isAggregatePartial = computed(() => aggregate.value.partial)
 
@@ -140,7 +131,7 @@ const heroCandidates = computed(() => {
 	if (!tokenToDisplay.value) return fiatHeroCandidates(countMicro.value ?? aggregate.value.micro)
 	const sides = heroSides.value
 	if (!sides) return ["—"]
-	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20)
+	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, 20)
 })
 const heroFit = ref(FULL_SIZE)
 const heroText = computed(() => heroCandidates.value[Math.min(heroFit.value.index, heroCandidates.value.length - 1)])
@@ -159,20 +150,6 @@ function fitHeroToLine() {
 	const fresh = fitHero(Math.min(candidates.length, forms.length), widthAt, heroRoom(heroSection.value))
 	const next = heroHeldFor === null ? fresh : holdHeroFit(heroFit.value, fresh)
 	if (next.index !== heroFit.value.index || next.scale !== heroFit.value.scale) heroFit.value = next
-}
-
-const handleCopy = (value, label) => {
-	void copyWithToast(value, openToast, `${label} is copied`)
-}
-const handleTokenBalanceClick = async () => {
-	let balance = totalTokenBalance.value?.value
-	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
-		showFullBalance.value = !showFullBalance.value
-		await nextTick()
-		balance = totalTokenBalance.value?.value
-	}
-
-	handleCopy(balance, "Balance")
 }
 
 /** `loaded` = a snapshot for the active scope has SUCCEEDED; it then survives a later rejected refetch.
@@ -202,24 +179,20 @@ function restartCap() {
 		capElapsed.value = true
 	}, HERO_PENDING_CAP_MS)
 }
-/** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
- *  the first price answer; an empty or unpriced wallet has none to wait for. Before the mapping
- *  arrives, any holding may be priced. */
-const awaitingQuotes = computed(
-	() =>
-		showFiatValues.value &&
-		!prices.settled.value &&
-		tokenBalances.value.some(
-			(tb) =>
-				typeof tb.token?.contract === "string" &&
-				(parseRawBalance(tb) ?? 0n) > 0n &&
-				(!prices.mapped.value || prices.isPriced(tb.token.chainId, tb.token.contract)),
-		),
-)
+const awaitingQuotes = computed(() => showFiatValues.value && awaitingFirstPriceAnswer(tokenBalances.value, prices))
+/** Holds too once the cap passes with no price answer: no quote is a missing price. */
+const noPrices = computed(() => showFiatValues.value && pricesUnavailable(tokenBalances.value, fiatOf, prices))
 const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
 /** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded
  *  empty list is a real $0.00; a list that never loaded is unknown. */
 const isTotalKnown = computed(() => balancesState.value === "loaded")
+/** Home's reminders: any positive row holds funds, priced or not; none is known only once the
+ *  total settles or the cap passes. The token page answers nothing. */
+const holdings = computed(() => {
+	if (tokenToDisplay.value) return undefined
+	if (tokenBalances.value.some((tb) => (parseRawBalance(tb) ?? 0n) > 0n)) return "some"
+	return isTotalUnsettled.value && !capElapsed.value ? "unknown" : "none"
+})
 
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
@@ -251,7 +224,10 @@ watch(
 )
 // Only a figure the hero displays is recorded: loading, unknown and fiat off count nothing.
 watch(
-	() => (!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value ? aggregate.value.micro : null),
+	() =>
+		!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value && !noPrices.value
+			? aggregate.value.micro
+			: null,
 	(micro) => (micro === null ? balanceCount.reset() : balanceCount.observe(micro)),
 	{ immediate: true },
 )
@@ -263,6 +239,7 @@ watch(
 		balanceCount.arrive(chipCalm.value)
 	},
 )
+watch(holdings, (value) => value && emit("holdings", value), { immediate: true })
 // After the render, so the ruler holds the new forms, and before the paint.
 watch([heroCandidates, () => tokenToDisplay.value?.symbol], fitHeroToLine, { flush: "post" })
 onMounted(async () => {
@@ -293,7 +270,6 @@ onBeforeUnmount(() => {
 			<div :class="$style.hero_wrap">
 				<div
 					v-if="tokenToDisplay || showFiatValues"
-					@click="handleTokenBalanceClick"
 					data-testid="balance-amount"
 					:aria-busy="(!tokenToDisplay && heroPending) || undefined"
 					:class="$style.balance_amount"
@@ -303,6 +279,7 @@ onBeforeUnmount(() => {
 						<span :class="$style.balance_symbol">{{ tokenToDisplay?.symbol }}</span>
 					</span>
 					<Skeleton v-else-if="heroPending" :width="150" :height="40" data-testid="balance-hero-loading" :class="$style.hero_skeleton" />
+					<span v-else-if="isTotalKnown && noPrices" aria-hidden="true">—</span>
 					<span v-else-if="isTotalKnown" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">{{ heroText }}</span>
 					<!-- The balance list could not be read at all: unknown, which is not zero. -->
 					<span v-else data-testid="balance-hero-unknown">—</span>
@@ -336,18 +313,25 @@ onBeforeUnmount(() => {
 				{{ displayedTokenFiat }}
 			</div>
 			<div
-				v-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
+				v-if="!tokenToDisplay && !heroPending && isTotalKnown && noPrices"
+				data-testid="balance-prices-unavailable"
+				:class="$style.fiat_partial"
+			>
+				Prices unavailable
+			</div>
+			<div
+				v-else-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
 				data-testid="balance-fiat-partial"
 				:class="$style.fiat_partial"
 			>
 				priced assets only
 			</div>
 
-			<!-- Glyphs only: the padlock and globe are the token rows' vocabulary, so no word doubles them. -->
+			<!-- Glyphs only: the two marks are the token rows' vocabulary, so no word doubles them. -->
 			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_private"><Icon name="lock" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_private"><Icon name="private" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
 						<span data-testid="private-balance-value">{{ privateBalanceFormatted }}</span>
 					</span>
 					<template #content>
@@ -357,7 +341,7 @@ onBeforeUnmount(() => {
 				<span :class="$style.breakdown_divider">|</span>
 				<Tooltip textAlign="left" delay="300">
 					<span :class="$style.breakdown_item">
-						<span :class="$style.breakdown_public"><Icon name="globe" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
+						<span :class="$style.breakdown_public"><Icon name="public" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
 						<span data-testid="public-balance-value">{{ publicBalanceFormatted }}</span>
 					</span>
 					<template #content>
@@ -396,7 +380,6 @@ onBeforeUnmount(() => {
 	composes: type--amount-hero from global;
 	font-size: 48px;
 	color: var(--txt-primary);
-	cursor: pointer;
 
 	white-space: nowrap;
 	overflow: hidden;
@@ -430,7 +413,9 @@ onBeforeUnmount(() => {
 }
 
 .arrival_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
+	/* Faded out, the chip still holds its text, which a drag across the hero would copy. */
+	user-select: none;
 	position: absolute;
 	left: 50%;
 	top: -18px;
@@ -504,7 +489,7 @@ onBeforeUnmount(() => {
 
 .fiat_partial {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	margin-top: 4px;
 }
 
@@ -520,7 +505,7 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Same private/public vocabulary as TokenCard's split: bone lock = private, grey globe = public. */
+/* Keep in step with TokenCard's split: one private/public vocabulary on every balance. */
 .breakdown_private {
 	display: inline-flex;
 	color: var(--nulo-accent);
@@ -532,7 +517,7 @@ onBeforeUnmount(() => {
 }
 
 .breakdown_divider {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 /* Text on the bubble must reach WCAG AA's 4.5:1 in both themes. */

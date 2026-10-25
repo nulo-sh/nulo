@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /** Components */
 import EmojiGrid from "@/components/composite/general/EmojiGrid.vue"
-import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Vendor */
 import { onMounted, onUnmounted, watch } from "vue"
@@ -10,7 +9,7 @@ import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { HOSTNAME_WARNING, useDappHostname } from "@/composables/useDappHostname"
+import { HOSTNAME_WARNING, useDappOrigin } from "@/composables/useDappOrigin"
 import { untilSessionChecked } from "@/composables/useDappApprovalWindow"
 
 /** Services */
@@ -49,7 +48,6 @@ const session = ref<DappSession>()
 const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
-const alwaysTrust = ref(false)
 /** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
 const checkHash = ref<string>()
 /** One answer per window: either control locks both, released only when that answer fails. */
@@ -71,7 +69,7 @@ const header = computed(() =>
 		: undefined,
 )
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
+const { isSuspicious: hostnameHasNonAscii } = useDappOrigin(dapp)
 
 const dappSessionService = new DappSessionServiceClient()
 
@@ -79,9 +77,6 @@ const handleConfirm = async () => {
 	if (isBusy.value) return
 	isBusy.value = true
 	try {
-		if (alwaysTrust.value && session.value) {
-			await dappSessionService.setTrustedVerification(session.value.id, true)
-		}
 		// The app's calls wait for this report. Only the URL's hash names this window's key exchange: the
 		// row's may belong to another session of the same app.
 		if (checkHash.value) await dappSessionService.confirmVerification(checkHash.value)
@@ -210,14 +205,12 @@ onUnmounted(() => {
 	<Flex v-if="session" direction="column" :class="$style.wrapper">
 		<!-- Identity strip: anti-phishing trust anchor. Status is always ready on verify. -->
 		<IdentityStrip v-if="header" :accountLabel="header.account" :networkLabel="header.network" :warn="header.warn" />
-		<ConnectStepBar v-if="!isReconnect" :step="2" />
 
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
+				actionTestId="verify-action"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
 				<SectionLabel :label="CHECK_LABEL" />
@@ -230,14 +223,6 @@ onUnmounted(() => {
 		</Flex>
 
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
-			<Flex align="center" justify="between" gap="12" wide>
-				<Flex direction="column" gap="4">
-					<Text variant="row-title" color="primary" :class="$style.skip_title_size">Skip this check next time</Text>
-					<Text variant="caption" color="tertiary">Only for this app on this network.</Text>
-				</Flex>
-				<div data-testid="verify-always-trust-toggle"><Toggle :modelValue="alwaysTrust" @update:modelValue="(v: boolean) => (alwaysTrust = v)" /></div>
-			</Flex>
-
 			<Flex align="center" justify="between" gap="12" wide>
 				<Button
 					data-testid="verify-mismatch-btn"
@@ -262,7 +247,7 @@ onUnmounted(() => {
 					They match
 				</Button>
 			</Flex>
-			<Text v-if="refusalError" variant="body" color="red" role="alert" data-testid="verify-mismatch-error">
+			<Text v-if="refusalError" variant="body" color="txt-danger" role="alert" data-testid="verify-mismatch-error">
 				{{
 					refusalError === "unremoved"
 						? "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps."
@@ -296,10 +281,6 @@ onUnmounted(() => {
 
 .footer {
 	composes: footer from "../window-shell.module.css";
-}
-
-.skip_title_size {
-	font-size: 13px;
 }
 
 .visually_hidden {

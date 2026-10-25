@@ -1,16 +1,15 @@
 # Nulo Wallet
 
-> ## ⚠️ DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET
+> ## Nulo 1.0
 >
-> **Nulo is a demo for evaluation and feedback. It is not a production wallet.**
+> **A self-custody wallet for the Aztec network, for Chrome and Firefox. You use it at your own risk.**
 >
-> - **No security audit.** The code has not been reviewed by an external security firm.
-> - **The Aztec testnet is the default network.** Its assets are for testing; a mainnet network you add may carry real value. Use only what you can afford to lose entirely. Treat any key material you import as compromised.
-> - **Storage format is unstable.** Profiles, sessions, and on-disk schemas may change between builds. Expect data wipes and full reseeds.
-> - **Interfaces will change without notice.** dApp surface, popup UX, and message shapes are still in flux.
-> - **No uptime, support, or recovery guarantees.** This is a preview of work in progress, published so people can try it, file bugs, and follow along.
->
-> If you are looking for a production Aztec wallet, this is not it — come back later, or follow [`implementations-plan/index.md`](./implementations-plan/index.md) to track readiness.
+> - **No independent security audit.** The code has been reviewed internally and with automated tools, not by an external security firm.
+> - **Aztec Mainnet is the default network.** Its assets may carry real value. The Aztec Testnet is built in for testing. A network you add yourself may carry real value too.
+> - **Keep your way back.** From 1.0, a change to how the wallet stores data ships with a migration, but a Testnet reset still clears that network's history. Your recovery phrase, your passkey or a full backup is the only way to restore a lost profile.
+> - **Used a preview build?** If you used 0.31.x or any earlier preview build, start fresh in 1.0: create a new profile with a new recovery phrase or a new passkey, then move any funds to it.
+> - **Install only from the official listings**, linked from [nulo.sh](https://nulo.sh).
+> - **No warranty.** Read the [Terms of Use](https://nulo.sh/terms) and the [Privacy Policy](https://nulo.sh/privacy).
 
 A self-custody wallet for the [Aztec network](https://aztec.network), packaged as a Chrome and Firefox extension. Nulo runs the Aztec [Private Execution Environment](https://docs.aztec.network/aztec/protocol/circuits/pxe) locally so transactions are simulated and signed on the user's machine; no node operator sees the contents.
 

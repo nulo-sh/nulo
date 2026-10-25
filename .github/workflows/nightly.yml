@@ -179,76 +179,21 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
 
-  # The network suite mirrors pr-extension-network-e2e.yml's job shape exactly (5
-  # proverless shards + three dedicated heavy jobs + the real-proving canary),
-  # minus its paths-filter/decide plumbing — a nightly always runs everything.
-  # scripts/ci-cd/behavior-gating.test.ts pins each job's files to that file's.
+  # The network suite as the PR lanes run it (_extension-network-e2e-lane.yml), minus their
+  # paths-filter/decide plumbing: a nightly always runs everything.
 
   network-e2e:
-    name: Run / shard ${{ matrix.shard.id }}
+    name: Run
     needs: resolve
     if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - { id: "1/5", label: "1-of-5" }
-          - { id: "2/5", label: "2-of-5" }
-          - { id: "3/5", label: "3-of-5" }
-          - { id: "4/5", label: "4-of-5" }
-          - { id: "5/5", label: "5-of-5" }
-    uses: ./.github/workflows/_extension-network-e2e.yml
+    uses: ./.github/workflows/_extension-network-e2e-lane.yml
     with:
       ref: ${{ needs.resolve.outputs.sha }}
-      shard: ${{ matrix.shard.id }}
-      shard_label: ${{ matrix.shard.label }}
-      # No `retry` input → config default (2 retries, 3 attempts). See header, flake policy.
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-heavy:
-    name: Run / heavy / fee-methods + selfpay-phase
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy"
-      test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
-      proverless: true
-
-  network-e2e-heavy-concurrent:
-    name: Run / heavy / concurrent-confirm
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy-concurrent"
-      test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
-      proverless: true
-
-  network-e2e-heavy-long:
-    name: Run / heavy / snack-placement + failed-send-check
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy-long"
-      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-canary:
-    name: Run / canary / real-proving
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "canary"
-      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
+      # The seeded send chaos run gates the publish. Unseeded it takes the run's id, which "Re-run
+      # failed jobs" keeps, so a re-run replays the actions a red night drew (a seed fixes the
+      # actions, not their timing); the logged seed replays it through chaos_seed.
+      chaos_seed: ${{ github.event.inputs.chaos_seed || github.run_id }}
 
   # The canary files on the in-browser WASM prover, the path of every user without Presto; every other
   # prover-ON job proves natively unless NULO_E2E_DISABLE_PRESTO is set. ADVISORY: no job needs it, so
@@ -264,22 +209,6 @@ jobs:
       shard_label: "canary-wasm"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: true
-
-  # The seeded send chaos run (send-chaos.test.ts) gates the publish. Unseeded it takes the run's
-  # id, which "Re-run failed jobs" keeps, so a re-run replays the actions a red night drew (a seed
-  # fixes the actions, not their timing); the logged seed replays it through chaos_seed.
-  network-e2e-chaos:
-    name: Run / chaos / sends
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "chaos"
-      test_files: "tests/e2e/network/send-chaos.test.ts"
-      proverless: true
-      chaos: true
-      chaos_seed: ${{ github.event.inputs.chaos_seed || github.run_id }}
 
   # Advisory duplication trend (jscpd) — a report instrument, never a gate.
   # Deliberately absent from publish-nightly's needs; continue-on-error keeps a
@@ -334,6 +263,24 @@ jobs:
       - name: Probe tokens.nulo.sh
         run: bun run --cwd infra/token-list test:live
 
+  # Each remote default network's seed pins its node's chain identity, which a reset or an upgrade
+  # moves; read every one from outside every night, quiet days included, so a stale pin is recorded
+  # before a person's send is refused. ADVISORY, like rp-host-live: the fix is a pin in the tree.
+  seed-identity-live:
+    needs: resolve
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Read each remote seed's node identity
+        run: bun run --cwd apps/extension check:seeds
+
   # Builds gate on lint+unit only (not network) — same wall-time overlap as
   # release.yml; the publish job waits for everything.
 
@@ -378,94 +325,21 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
       artifact_name: extension-chrome
+      artifact_id: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
 
-  # The same suites on `browser: firefox`, gating the publish like their Chrome twins: a nightly
-  # ships a Firefox zip. The file lists mirror the Chrome jobs above exactly, the two execution
-  # canaries included (pinned by scripts/ci-cd/behavior-gating.test.ts).
+  # The same lane on `browser: firefox`, gating the publish like its Chrome twin: a nightly ships a
+  # Firefox zip.
 
   network-e2e-firefox:
-    name: Firefox / Run / shard ${{ matrix.shard.id }}
+    name: Firefox / Run
     needs: resolve
     if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        shard:
-          - { id: "1/5", label: "1-of-5" }
-          - { id: "2/5", label: "2-of-5" }
-          - { id: "3/5", label: "3-of-5" }
-          - { id: "4/5", label: "4-of-5" }
-          - { id: "5/5", label: "5-of-5" }
-    uses: ./.github/workflows/_extension-network-e2e.yml
+    uses: ./.github/workflows/_extension-network-e2e-lane.yml
     with:
       browser: firefox
       ref: ${{ needs.resolve.outputs.sha }}
-      shard: ${{ matrix.shard.id }}
-      shard_label: ${{ matrix.shard.label }}
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-chaos-firefox:
-    name: Firefox / Run / chaos / sends
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      browser: firefox
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "chaos"
-      test_files: "tests/e2e/network/send-chaos.test.ts"
-      proverless: true
-      chaos: true
-      chaos_seed: ${{ github.event.inputs.chaos_seed || github.run_id }}
-
-  network-e2e-heavy-firefox:
-    name: Firefox / Run / heavy / fee-methods + selfpay-phase
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      browser: firefox
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy"
-      test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
-      proverless: true
-
-  network-e2e-heavy-concurrent-firefox:
-    name: Firefox / Run / heavy / concurrent-confirm
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      browser: firefox
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy-concurrent"
-      test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
-      proverless: true
-
-  network-e2e-heavy-long-firefox:
-    name: Firefox / Run / heavy / snack-placement + failed-send-check
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      browser: firefox
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "heavy-long"
-      test_files: "tests/e2e/network/snack-placement.test.ts tests/e2e/network/failed-send-check.test.ts"
-      proverless: true
-
-  network-e2e-canary-firefox:
-    name: Firefox / Run / canary / real-proving
-    needs: resolve
-    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
-    uses: ./.github/workflows/_extension-network-e2e.yml
-    with:
-      browser: firefox
-      ref: ${{ needs.resolve.outputs.sha }}
-      shard_label: "canary"
-      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
+      chaos_seed: ${{ github.event.inputs.chaos_seed || github.run_id }}
 
   smoke-firefox-against-artifact:
     needs: [resolve, build-firefox]
@@ -478,6 +352,7 @@ jobs:
     with:
       ref: ${{ needs.resolve.outputs.sha }}
       artifact_name: extension-firefox
+      artifact_id: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
       browser: firefox
 
   # git-cliff runs here, in a job that holds no write token and signs nothing: its action downloads
@@ -487,6 +362,8 @@ jobs:
     if: always() && !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
     env:
       TAG: ${{ needs.resolve.outputs.tag }}
       SHA: ${{ needs.resolve.outputs.sha }}
@@ -527,7 +404,8 @@ jobs:
           echo '--- body preview ---'
           cat /tmp/body.md
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
         with:
           name: nightly-notes
           path: /tmp/body.md
@@ -541,17 +419,7 @@ jobs:
         lint-and-typecheck,
         unit-tests,
         network-e2e,
-        network-e2e-heavy,
-        network-e2e-heavy-concurrent,
-        network-e2e-heavy-long,
-        network-e2e-canary,
-        network-e2e-chaos,
         network-e2e-firefox,
-        network-e2e-heavy-firefox,
-        network-e2e-heavy-concurrent-firefox,
-        network-e2e-heavy-long-firefox,
-        network-e2e-canary-firefox,
-        network-e2e-chaos-firefox,
         build-chrome,
         build-firefox,
         smoke-against-artifact,
@@ -569,17 +437,7 @@ jobs:
       needs.lint-and-typecheck.result == 'success' &&
       needs.unit-tests.result == 'success' &&
       needs.network-e2e.result == 'success' &&
-      needs.network-e2e-heavy.result == 'success' &&
-      needs.network-e2e-heavy-concurrent.result == 'success' &&
-      needs.network-e2e-heavy-long.result == 'success' &&
-      needs.network-e2e-canary.result == 'success' &&
-      needs.network-e2e-chaos.result == 'success' &&
       needs.network-e2e-firefox.result == 'success' &&
-      needs.network-e2e-heavy-firefox.result == 'success' &&
-      needs.network-e2e-heavy-concurrent-firefox.result == 'success' &&
-      needs.network-e2e-heavy-long-firefox.result == 'success' &&
-      needs.network-e2e-canary-firefox.result == 'success' &&
-      needs.network-e2e-chaos-firefox.result == 'success' &&
       needs.build-chrome.result == 'success' &&
       needs.build-firefox.result == 'success' &&
       needs.smoke-against-artifact.result == 'success' &&
@@ -609,20 +467,35 @@ jobs:
           cache: "false"
           install: "false"
 
+      - name: Check the Chrome build's artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download Chrome build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: extension-chrome
+          artifact-ids: ${{ needs.build-chrome.outputs.chrome_artifact_id }}
           path: dist/release/chrome
+      - name: Check the Firefox build's artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download Firefox build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: extension-firefox
+          artifact-ids: ${{ needs.build-firefox.outputs.firefox_artifact_id }}
           path: dist/release/firefox
+      - name: Check the release notes' artifact id
+        env:
+          ARTIFACT_ID: ${{ needs.nightly-notes.outputs.artifact_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "::error::artifact id '$ARTIFACT_ID' is not a positive integer, and an empty one downloads every artifact of the run"; exit 1; }
       - name: Download release notes
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: nightly-notes
+          artifact-ids: ${{ needs.nightly-notes.outputs.artifact_id }}
           path: dist/notes
 
       # Every entry is stamped with the built commit's own time and written in a fixed order, so a
@@ -707,17 +580,7 @@ jobs:
         lint-and-typecheck,
         unit-tests,
         network-e2e,
-        network-e2e-heavy,
-        network-e2e-heavy-concurrent,
-        network-e2e-heavy-long,
-        network-e2e-canary,
-        network-e2e-chaos,
         network-e2e-firefox,
-        network-e2e-heavy-firefox,
-        network-e2e-heavy-concurrent-firefox,
-        network-e2e-heavy-long-firefox,
-        network-e2e-canary-firefox,
-        network-e2e-chaos-firefox,
         build-chrome,
         build-firefox,
         smoke-against-artifact,
@@ -736,17 +599,7 @@ jobs:
             "${{ needs.lint-and-typecheck.result }}" \
             "${{ needs.unit-tests.result }}" \
             "${{ needs.network-e2e.result }}" \
-            "${{ needs.network-e2e-heavy.result }}" \
-            "${{ needs.network-e2e-heavy-concurrent.result }}" \
-            "${{ needs.network-e2e-heavy-long.result }}" \
-            "${{ needs.network-e2e-canary.result }}" \
-            "${{ needs.network-e2e-chaos.result }}" \
             "${{ needs.network-e2e-firefox.result }}" \
-            "${{ needs.network-e2e-heavy-firefox.result }}" \
-            "${{ needs.network-e2e-heavy-concurrent-firefox.result }}" \
-            "${{ needs.network-e2e-heavy-long-firefox.result }}" \
-            "${{ needs.network-e2e-canary-firefox.result }}" \
-            "${{ needs.network-e2e-chaos-firefox.result }}" \
             "${{ needs.build-chrome.result }}" \
             "${{ needs.build-firefox.result }}" \
             "${{ needs.smoke-against-artifact.result }}" \

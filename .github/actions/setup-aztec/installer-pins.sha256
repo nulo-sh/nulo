@@ -3,10 +3,10 @@
 #   noir/<noir version>/<asset>, from the noir-lang/noir release that versions file names
 #   foundry/<foundry version>/<asset>, from the foundry-rs/foundry release that versions file names
 # An Aztec bump re-pins them in one commit (the aztec-update skill has the procedure).
-# foundry 1.4.1: the hash equals the release asset's GitHub digest, and the four binaries it holds
+# foundry 1.8.5: the hash equals the release asset's GitHub digest, and the five binaries it holds
 # match Foundry's build-provenance attestation (gh attestation verify <binary> --repo foundry-rs/foundry:
-# release.yml at refs/tags/v1.4.1, commit cf7746048646f2ecff48246dd61e265e49ab16f0), checked 2026-10-08.
-f7f2349e500dc3c25c445f1b661aa63ec3e9724ba0cc818d98c38078b23055d6  6.0.0-rc.3/install
-bd07b479c05d41cc4a18745bad2d057fed7da1c0217997597896ef47a4dad5f9  6.0.0-rc.3/versions
+# release.yml at refs/tags/v1.8.5, commit 51a52c59cffd940f76eddd0b4bb1791aa4b5ac7f), checked 2026-10-23.
+f7a00e039647cb4101a0011da10070ae0a559f7a032adfdc65513a380ab603b1  6.0.0/install
+21993dc771fd85439ca76f2ef9808125737d9a213069af0ba68225c149e78e2f  6.0.0/versions
 5792dd962afce1eed834570f95d9f72cc4a09d45cd846d3b80b7a57392732973  noir/1.0.0-rc.3/noir-x86_64-unknown-linux-gnu.tar.gz
-f1b044ee954402807c4dd5a5e7d29b210d24fd3633b7f199d184f034ff94d934  foundry/1.4.1/foundry_v1.4.1_linux_amd64.tar.gz
+6c66ffcc55fa4249197721baa3098bc208014ea1d8aa04b2ed50ac6bccffb226  foundry/1.8.5/foundry_v1.8.5_linux_amd64.tar.gz

@@ -1,10 +1,11 @@
 /**
- * Direct unit pins for `ProfileDeletionCoordinator.purge` — the awaited 13-step
+ * Direct unit pins for `ProfileDeletionCoordinator.purge` — the awaited
  * cascade. The e2e proves end-state; this proves the CONTRACT the ordering
  * comment relies on: every leaf purge is awaited, the address-derived purges
  * (tx/auth/balance) run BEFORE the account/token/network tail (so the tail's
- * re-emitted delete events find rows already gone), the profile's UI keys go
- * after the networks, `pxe.clearProfileState` runs LAST, a leaf throw
+ * re-emitted delete events find rows already gone), the row keys drop after every
+ * typed purge and before the keyless sweep, the profile's UI keys go after the
+ * networks, `pxe.clearProfileState` runs LAST, a leaf throw
  * PROPAGATES (caller keeps the tombstone), and `runFor` is single-flight.
  * Drives the real coordinator over `svc()` leaf stubs.
  */
@@ -26,19 +27,25 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
+import { UiPreferenceService } from "@/wallet/services/ui-preference/service"
 import { svc } from "../composition-harness"
 import { ProfileDeletionCoordinator } from "./coordinator"
 
 const SNAP = { addresses: ["0xa"], tokenIds: [1], networkIds: ["n1"], pxeGeneration: "gen-1" }
 
-/** Local storage holding `seeded` keys; `remove` records its turn in `order`. */
+/** Local storage holding `seeded` keys; the keyless sweep's whole-area read and `remove` record
+ *  their turns in `order`. */
 function uiKeyStore(order: string[], seeded: string[] = []) {
 	const keys = new Set(seeded)
+	const get = async () => {
+		order.push("sealedSweep")
+		return Object.fromEntries([...keys].map((key) => [key, "{}"]))
+	}
 	const remove = async (removed: string | string[]) => {
 		order.push("uiKeys")
 		for (const key of [removed].flat()) keys.delete(key)
 	}
-	return { keys, storage: { remove } as unknown as StorageArea }
+	return { keys, storage: { get, remove } as unknown as StorageArea }
 }
 
 const build = async (order: string[], storage: StorageArea = uiKeyStore(order).storage) => {
@@ -46,7 +53,13 @@ const build = async (order: string[], storage: StorageArea = uiKeyStore(order).s
 		order.push(name)
 	}
 	const services = new ServiceCollection()
-	services.add(svc(ProfileService.name, { setDeletionDelegate: () => {}, resumePendingDeletions: rec("profiles") }))
+	services.add(
+		svc(ProfileService.name, {
+			setDeletionDelegate: () => {},
+			resumePendingDeletions: rec("profiles"),
+			dropRowKeys: () => order.push("dropKeys"),
+		}),
+	)
 	services.add(svc(TransactionService.name, { purgeForAccounts: rec("txs") }))
 	services.add(svc(AuthRegistryService.name, { purgeForProfile: rec("auth") }))
 	services.add(svc(TokenBalanceService.name, { purgeForTokens: rec("balances") }))
@@ -58,6 +71,7 @@ const build = async (order: string[], storage: StorageArea = uiKeyStore(order).s
 	services.add(svc(AccountService.name, { purgeForProfile: rec("accounts") }))
 	services.add(svc(TokenService.name, { purgeForProfile: rec("tokens") }))
 	services.add(svc(NetworkService.name, { purgeForProfile: rec("networks") }))
+	services.add(svc(UiPreferenceService.name, { purgeForProfile: rec("preferences") }))
 	const coord = new ProfileDeletionCoordinator(new LoggerStore(new ConfigStore()), storage)
 	services.add(coord)
 	await services.start()
@@ -71,7 +85,7 @@ const build = async (order: string[], storage: StorageArea = uiKeyStore(order).s
 }
 
 describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
-	test("awaits all 13 purges in order; address-derived BEFORE the account/token/network tail; pxe LAST", async () => {
+	test("awaits every purge in order; address-derived BEFORE the account/token/network tail; pxe LAST", async () => {
 		const order: string[] = []
 		const coord = await build(order)
 
@@ -89,6 +103,9 @@ describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
 			"accounts",
 			"tokens",
 			"networks",
+			"preferences",
+			"dropKeys",
+			"sealedSweep",
 			"uiKeys",
 			"pxe",
 		])
@@ -122,12 +139,13 @@ describe("ProfileDeletionCoordinator.purge — awaited order contract", () => {
 		await coord.runFor("p1", SNAP)
 
 		expect([...store.keys]).toEqual(builders.map((key) => key("p10")))
-		expect(order.slice(-3)).toEqual(["networks", "uiKeys", "pxe"])
+		expect(order.slice(-6)).toEqual(["networks", "preferences", "dropKeys", "sealedSweep", "uiKeys", "pxe"])
 	})
 
 	test("a failed UI-key removal propagates and the PXE clear does not run", async () => {
 		const order: string[] = []
 		const failing = {
+			get: async () => ({}),
 			remove: async () => {
 				throw new Error("quota")
 			},

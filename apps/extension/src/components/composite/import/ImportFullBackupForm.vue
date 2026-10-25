@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { newPasswordHint } from "@/utils/password"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
@@ -17,6 +18,8 @@ const props = defineProps({
 	/** Names of the networks a Retry replays; the warning names them. */
 	unrestoredNetworks: { type: Array, default: () => [] },
 	hasOtherErrors: { type: Boolean, default: false },
+	/** Imported accounts the restore kept for networks the new profile lacks; the warning names them. */
+	heldAccounts: { type: Array, default: () => [] },
 	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
 	warningText: { type: String, default: undefined },
 	/** The failed-Retry line the page adds above its buttons, which raises their edge again. */
@@ -42,7 +45,9 @@ const warningRef = useTemplateRef("warningRef")
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
-const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
+const shownWarning = computed(
+	() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors, props.heldAccounts),
+)
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
 // which leaves the warning below its edge; the failed-Retry line shortens it once more.
@@ -85,11 +90,11 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text variant="body" color="red" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="txt-danger" :class="$style.error_title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>
-				<Text variant="body" height="120" color="red" :class="$style.error_description">{{ error.tooltip }}</Text>
+				<Text variant="body" height="120" color="txt-danger" :class="$style.error_description">{{ error.tooltip }}</Text>
 			</Flex>
 		</Flex>
 
@@ -110,7 +115,7 @@ watch(
 		</Flex>
 	</div>
 
-	<div v-if="selectedBackup?.type === 'encrypted' && !selectedBackup?.profileType" :class="$style.section">
+	<div v-if="showsDecryptCta({ selectedBackup })" :class="$style.section">
 		<span :class="$style.section_label">Decryption Password</span>
 		<Input
 			v-model="decryptionPassword"
@@ -151,7 +156,7 @@ watch(
 				</template>
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
-						<MaterialIcon name="lock" :size="12" color="tertiary" />
+						<Icon name="lock" :size="12" color="tertiary" />
 						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>
@@ -189,8 +194,8 @@ watch(
 }
 
 .error_tag {
-	composes: type--tag from global;
-	color: var(--red);
+	composes: type--label-section from global;
+	color: var(--txt-danger);
 	border: 1px solid var(--red);
 	padding: 2px 6px;
 	flex-shrink: 0;

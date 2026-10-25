@@ -5,16 +5,12 @@
  * impersonate a familiar name via Unicode tricks.
  */
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
-import { HOSTNAME_WARNING } from "@/composables/useDappHostname"
+import { HOSTNAME_WARNING, useDappOrigin } from "@/composables/useDappOrigin"
 
 const props = defineProps({
-	/** From useDappInteractionPayload.dapp; reads `loadingLogo`,
+	/** From useDappInteractionPayload.dapp; reads `url`, `loadingLogo`,
 	 *  `logoBlobUrl`, and `name` keys. */
 	dapp: { type: Object, default: null },
-	/** Pre-normalized hostname (parent computes from `dapp.url`). */
-	hostname: { type: String, default: "" },
-	/** Anti-phishing flag — shows the homograph warning line under the hostname. */
-	hostnameSuspicious: { type: Boolean, default: false },
 	/** Per-window verb (e.g. "wants to connect to your wallet"). */
 	actionLabel: { type: String, required: true },
 	/** Forwarded to the hostname `<span>` so e2e selectors stay scoped
@@ -24,22 +20,24 @@ const props = defineProps({
 	actionTestId: { type: String, default: undefined },
 })
 
+const { origin, isSuspicious } = useDappOrigin(toRef(props, "dapp"))
+
 const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(props.dapp.name, 64) : ""))
 </script>
 
 <template>
-	<Flex :align="hostnameSuspicious ? 'start' : 'center'" gap="12" :class="$style.dapp_block">
+	<Flex :align="isSuspicious ? 'start' : 'center'" gap="12" :class="$style.dapp_block">
 		<div :class="$style.dapp_logo_wrapper">
-			<Icon v-if="dapp?.loadingLogo" :loading="true" name="dapp" size="24" color="tertiary" />
+			<Icon v-if="dapp?.loadingLogo" :loading="true" name="app" size="24" color="tertiary" />
 			<img v-else-if="dapp?.logoBlobUrl" :src="dapp?.logoBlobUrl" :class="$style.dapp_logo" alt="" />
-			<Icon v-else name="dapp" size="24" color="tertiary" />
+			<Icon v-else name="app" size="24" color="tertiary" />
 		</div>
 
 		<Flex direction="column" gap="4" wide :class="$style.dapp_info">
 			<Flex align="center" gap="6">
-				<span :data-testid="hostnameTestId" :class="$style.dapp_hostname">{{ hostname }}</span>
+				<span :data-testid="hostnameTestId" :class="$style.dapp_hostname">{{ origin }}</span>
 			</Flex>
-			<Flex v-if="hostnameSuspicious" align="start" gap="6" data-testid="dapp-hostname-warning">
+			<Flex v-if="isSuspicious" align="start" gap="6" data-testid="dapp-hostname-warning">
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.warning_icon" />
 				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
@@ -84,9 +82,8 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 	composes: type--data-lead from global;
 	color: var(--txt-primary);
 
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .warning_icon {

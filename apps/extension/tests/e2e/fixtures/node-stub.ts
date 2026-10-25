@@ -1,5 +1,5 @@
 /**
- * The guarded smoke launch's stand-in for an outside node: a loopback endpoint that answers every
+ * A guarded launch's stand-in for an outside node: a loopback endpoint that answers every
  * call with HTTP 400 and a JSON-RPC error. The node client stops at once on a 4xx with a readable
  * JSON body; a refused connection, or a 400 without one, it retries for seconds per call.
  */
@@ -9,7 +9,13 @@ import { holdRpcInterception } from "./browser"
 import { listenClaimed } from "./egress-guard"
 import type { HeldNode } from "./egress-guard"
 
-const REFUSAL = JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "no node answers a guarded smoke run" } })
+const REFUSAL = JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32601, message: "no node answers a guarded e2e run" } })
+
+/** The stand-in's answer: the node client ends the call on it at once, and a browser, having a reply,
+ *  re-sends nothing. */
+export function refuseNodeCall(res: ServerResponse): void {
+	res.writeHead(400, { "Content-Type": "application/json" }).end(REFUSAL)
+}
 
 export interface NodeStub {
 	url: string
@@ -23,7 +29,7 @@ export async function startNodeStub(): Promise<NodeStub> {
 	const handle = (req: IncomingMessage, res: ServerResponse) => {
 		requests++
 		req.resume()
-		req.on("end", () => res.writeHead(400, { "Content-Type": "application/json" }).end(REFUSAL))
+		req.on("end", () => refuseNodeCall(res))
 	}
 	const { server, port, release } = await listenClaimed<Server>(() => createServer(handle), "egress-node-stub")
 	let stopping: Promise<void> | undefined
@@ -46,6 +52,8 @@ export async function holdNodeStub(browser: Browser, extensionId: string, nodeUr
 	try {
 		const held = await holdRpcInterception(browser, extensionId, nodeUrl, { kind: "redirect", to: stub.url })
 		return {
+			host: new URL(nodeUrl).hostname,
+			holding: held.holding,
 			requests: stub.requests,
 			failures: held.failures,
 			stop: async () => {
@@ -60,6 +68,18 @@ export async function holdNodeStub(browser: Browser, extensionId: string, nodeUr
 		}
 	} catch (err) {
 		await stub.stop()
+		throw err
+	}
+}
+
+/** Holds a stub for each of `nodeUrls`; a failed hold stops the ones held before it, then throws. */
+export async function holdNodeStubs(browser: Browser, extensionId: string, nodeUrls: readonly string[]): Promise<HeldNode[]> {
+	const held: HeldNode[] = []
+	try {
+		for (const url of nodeUrls) held.push(await holdNodeStub(browser, extensionId, url))
+		return held
+	} catch (err) {
+		await Promise.all(held.map((node) => node.stop()))
 		throw err
 	}
 }

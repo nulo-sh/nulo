@@ -38,7 +38,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { EventHandler, ReadWriteGuard, array_equals, errorMessageFromUnknown, fromBase64 } from "@nulo/wallet-core/utils"
 import type { ChainRuntime, NetworkInfo, ProvePhaseEvent } from "./chain-runtime"
 import { ChainRuntimeRegistry, ProductionPxeFactory, PXE_STORE_KEY_MISSING, type PxeFactory } from "./chain-runtime"
-import { PXE_DATA_DIR_ROOT, chainDataDir, chainDataDirPrefix, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
+import { PXE_DATA_DIR_ROOT, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { listChainStoreDirs, removeChainStoreDir, removeProfileStoreDirs } from "./opfs-store"
 import { ArtifactRegistry } from "./artifact-registry"
 import { PxeLifecycleCoordinator } from "./lifecycle-coordinator"
@@ -63,26 +63,6 @@ import {
 } from "./public-events"
 
 export * from "./spec"
-
-/** What a legacy (rc.2-era, pre-OPFS) IndexedDB delete does when an open connection blocks it. */
-type BlockedDeletePolicy =
-	/** Best-effort sweep: a blocked delete is skipped (resolves), so the sweep never hangs. */
-	| { onBlocked: "skip"; warnArgs: (name: string) => unknown[] }
-	/** Verified erasure: wait for the blocker to close; reject if the deadline expires — never a
-	 *  false "deleted", and never a null rejection reason. */
-	| { onBlocked: "wait"; timeoutMs: number; warnArgs: (name: string) => unknown[] }
-
-const LEGACY_SWEEP: BlockedDeletePolicy = {
-	onBlocked: "skip",
-	warnArgs: (name) => ["deleteDatabase blocked (DB still in use):", name],
-}
-const VERIFIED_ERASE: BlockedDeletePolicy = {
-	onBlocked: "wait",
-	timeoutMs: 5_000,
-	warnArgs: (name) => ["deleteDatabase blocked (waiting for close):", name],
-}
-
-const isLegacyPxeDb = (x: IDBDatabaseInfo) => x.name?.startsWith(PXE_DATA_DIR_ROOT)
 
 /** One profile id's incarnations in this document: see `PxeService.profileLifecycles`. */
 interface ProfileLifecycle {
@@ -253,63 +233,47 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	}
 
 	/**
-	 * Orphan cleanup, both storage generations (deferred from init — see the deadlock note there):
-	 *  - OPFS (the live 5.0.0 backend): the store registry IS the OPFS tree — enumerate
-	 *    `pxe/<profileId>/<chainId>` dirs and remove any whose profile no longer exists. Needs no
-	 *    live runtime (that is the point of the registry).
-	 *  - IndexedDB (LEGACY, rc.2-era): one-way cleanup of pre-OPFS databases — not a fallback
-	 *    backend and not a migration; the old data is unreadable by 5.0.0 anyway (upstream wiped
-	 *    on schema bump) so only the bytes are being reclaimed. Sweeps them ALL.
+	 * Orphan cleanup (deferred from init — see the deadlock note there): the store registry IS the
+	 * OPFS tree, so enumerate `pxe/<profileId>/<chainId>` dirs and remove any whose profile no
+	 * longer exists. Needs no live runtime (that is the point of the registry).
 	 */
 	private async sweepOrphanStores(): Promise<void> {
 		const opfsDirs = await listChainStoreDirs()
-		const pxes = (await indexedDB.databases()).filter(isLegacyPxeDb)
-		if (opfsDirs.length) {
-			const profiles = await this.profiles.getProfiles()
-			// Remove orphans whole-profile-at-a-time: the profile is POSITIVELY absent
-			// from the profiles store (a chain can only open under an existing profile
-			// row), so recursively dropping its dir cannot race a sibling-chain open —
-			// unlike the removed per-chain empty-dir sweep (a TOCTOU).
-			const orphanProfiles = [...new Set(opfsDirs.map((c) => c.profileId))].filter((id) => !profiles.some((x) => x.id === id))
-			// The barrier loop stays INLINE: the next orphan's `enterWrite()` must
-			// be reserved on the same continuation the previous `leaveWrite()` ran
-			// on — a helper-return hop here would let a concurrent reader win the
-			// barrier and change removal/warning timing.
-			for (const profileId of orphanProfiles) {
-				// Serialize against store-opens: dirs are (re)created by
-				// `registry.ensure` under this profile's `barrier.read`, so holding
-				// WRITE here means a same-id re-import provisioning DURING the sweep
-				// either lands its lifecycle entry before the re-check below
-				// (removal skipped) or has its store creation queued until the
-				// removal finishes (fresh dir after). Without the barrier, the
-				// recursive remove could delete a successor store mid-create. The
-				// barrier entry is retained (unlike clearProfileState's success
-				// path) — deleting it here could split-brain a queued reader onto a
-				// stale guard instance.
-				const barrier = this.getProfileBarrier(profileId)
-				await barrier.enterWrite()
-				try {
-					// Re-check liveness AFTER acquiring the barrier, not just at the
-					// snapshot: a provision that landed while we waited (dir exists ⟹ key
-					// provisioned ⟹ lifecycle entry present) must not be swept as orphan.
-					if (this.profileLifecycles.has(profileId)) continue
-					this.logWarn(`sweep: removing orphan OPFS PXE profile dir ${PXE_DATA_DIR_ROOT}/${profileId}`)
-					await removeProfileStoreDirs(profileId)
-				} finally {
-					barrier.leaveWrite()
-				}
+		if (!opfsDirs.length) return
+		const profiles = await this.profiles.getProfiles()
+		// Remove orphans whole-profile-at-a-time: the profile is POSITIVELY absent
+		// from the profiles store (a chain can only open under an existing profile
+		// row), so recursively dropping its dir cannot race a sibling-chain open,
+		// which a per-chain empty-dir sweep would (a TOCTOU).
+		const orphanProfiles = [...new Set(opfsDirs.map((c) => c.profileId))].filter((id) => !profiles.some((x) => x.id === id))
+		// The barrier loop stays INLINE: the next orphan's `enterWrite()` must
+		// be reserved on the same continuation the previous `leaveWrite()` ran
+		// on — a helper-return hop here would let a concurrent reader win the
+		// barrier and change removal/warning timing.
+		for (const profileId of orphanProfiles) {
+			// Serialize against store-opens: dirs are (re)created by
+			// `registry.ensure` under this profile's `barrier.read`, so holding
+			// WRITE here means a same-id re-import provisioning DURING the sweep
+			// either lands its lifecycle entry before the re-check below
+			// (removal skipped) or has its store creation queued until the
+			// removal finishes (fresh dir after). Without the barrier, the
+			// recursive remove could delete a successor store mid-create. The
+			// barrier entry is retained (unlike clearProfileState's success
+			// path) — deleting it here could split-brain a queued reader onto a
+			// stale guard instance.
+			const barrier = this.getProfileBarrier(profileId)
+			await barrier.enterWrite()
+			try {
+				// Re-check liveness AFTER acquiring the barrier, not just at the
+				// snapshot: a provision that landed while we waited (dir exists ⟹ key
+				// provisioned ⟹ lifecycle entry present) must not be swept as orphan.
+				if (this.profileLifecycles.has(profileId)) continue
+				this.logWarn(`sweep: removing orphan OPFS PXE profile dir ${PXE_DATA_DIR_ROOT}${profileId}`)
+				await removeProfileStoreDirs(profileId)
+			} finally {
+				barrier.leaveWrite()
 			}
 		}
-		if (!pxes.length) return
-		// Tail-returned (never awaited-then-resumed): a hop before the first
-		// deleteDatabase would widen the window in which a concurrent DB open
-		// changes the blocked/warn outcome.
-		return this.sweepLegacyIndexedDbs(pxes)
-	}
-
-	/** One-way cleanup of the LEGACY (rc.2-era, pre-OPFS) IndexedDB stores. */
-	private async sweepLegacyIndexedDbs(pxes: IDBDatabaseInfo[]): Promise<void> {
-		for (let i = pxes.length - 1; i >= 0; i--) await this.deleteDb(pxes[i].name!, LEGACY_SWEEP)
 	}
 
 	public async getContractInstance(
@@ -384,6 +348,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			// PUBLIC keys, all derived here from `secretKey`.
 			const parsed = await Fr.schema.parseAsync(secretKey)
 			const keys = await deriveKeys(parsed)
+			const partial = await Fr.schema.parseAsync(partialAddress)
 			return pxe.registerAccount(
 				{
 					masterNullifierHidingSecretKey: keys.masterNullifierHidingSecretKey,
@@ -393,7 +358,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					masterMessageSigningPublicKey: keys.masterMessageSigningPublicKey,
 					masterFallbackPublicKey: keys.masterFallbackPublicKey,
 				},
-				await Fr.schema.parseAsync(partialAddress),
+				partial,
 			)
 		})
 	}
@@ -442,6 +407,13 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		return this.withPxeWrite("registerContract", network, async (pxe) => {
 			const instance = await ContractInstanceWithAddressSchema.parseAsync(contract.instance)
 			const artifact = await ContractArtifactSchema.optional().parseAsync(contract.artifact)
+			// The PXE stores only the preimage, whose class is the original: a different current class
+			// would pair the address with code it does not commit to.
+			if (!instance.currentContractClassId.equals(instance.originalContractClassId)) {
+				throw new Error(
+					`registerContract class mismatch: current class ${instance.currentContractClassId.toString()} is not the original ${instance.originalContractClassId.toString()}`,
+				)
+			}
 			// Derive before any write: the upstream `registerContract` call itself persists the
 			// instance, so a preimage/address mismatch must be rejected while the store is untouched.
 			const derived = await computeContractAddressFromInstance(instance)
@@ -451,7 +423,11 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 				)
 			}
 			if (artifact) {
-				await pxe.registerContractClass(artifact)
+				// A provided artifact serves only a class the wallet has no copy of: its own copy, compiled-in
+				// then stored, is the one written. Resolved on the raw PXE, since the public read would wait
+				// on this write.
+				const own = await this.artifacts.resolve(instance.originalContractClassId, (id) => pxe.getContractArtifact(id))
+				await pxe.registerContractClass(own ?? artifact)
 			}
 			await pxe.registerContract(instance)
 		})
@@ -711,8 +687,8 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	}
 
 	/**
-	 * Dispose the runtime for `(profileId, chainId)` and delete its
-	 * IndexedDB. Called by the SW-side `NetworkService.purgeChain`
+	 * Dispose the runtime for `(profileId, chainId)` and remove its OPFS
+	 * store. Called by the SW-side `NetworkService.purgeChain`
 	 * coordinator when a chain is removed.
 	 *
 	 * Runs under the same per-chain write-lock as proveTx/simulateTx so it
@@ -722,37 +698,42 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	public async clearChainState(profileId: string, chainId: number): Promise<void> {
 		const barrier = this.getProfileBarrier(profileId)
 		const chainGuard = this.getChainGuard(profileId, chainId)
-		await barrier.read(async () => {
-			await chainGuard.write(async () => {
-				// Dispose closes the owned store (releasing the SAH-pool lock), then the OPFS
-				// directory removal reclaims the encrypted bytes — it needs NO live runtime, so
-				// a chain whose PXE never booted this session purges identically. The key stays
-				// with the profile (other chains share it); crypto-erase for the profile as a
-				// whole happens in clearProfileState. The IndexedDB delete is the LEGACY
-				// (rc.2-era) cleanup layer.
-				// Bump the purge epoch at BOTH ends of the destructive section.
-				// The opening bump fences ops that captured before the purge began;
-				// the closing bump (right before the guard releases) fences an op that
-				// entered DURING the destruction window — it would have read
-				// the already-incremented value and otherwise passed the equality
-				// check in withPxeWrite/withPxeRead, resurrecting a chain whose row is
-				// gone. Only a genuinely-post-purge op captures the stable final value.
-				this.bumpChainPurgeEpoch(profileId, chainId)
-				await this.registry.dispose(profileId, chainId)
-				await removeChainStoreDir({ profileId, chainId })
-				await this.deleteDb(chainDataDir({ profileId, chainId }), VERIFIED_ERASE)
-				this.bumpChainPurgeEpoch(profileId, chainId)
+		// Raised before the drain: an op holding the guard against an unreachable node would
+		// otherwise hold this clear for its whole backoff.
+		const releaseRetries = this.registry.stopRetries(profileId, chainId)
+		try {
+			await barrier.read(async () => {
+				await chainGuard.write(async () => {
+					// Dispose closes the owned store (releasing the SAH-pool lock), then the OPFS
+					// directory removal reclaims the encrypted bytes — it needs NO live runtime, so
+					// a chain whose PXE never booted this session purges identically. The key stays
+					// with the profile (other chains share it); crypto-erase for the profile as a
+					// whole happens in clearProfileState.
+					// Bump the purge epoch at BOTH ends of the destructive section.
+					// The opening bump fences ops that captured before the purge began;
+					// the closing bump (right before the guard releases) fences an op that
+					// entered DURING the destruction window — it would have read
+					// the already-incremented value and otherwise passed the equality
+					// check in withPxeWrite/withPxeRead, resurrecting a chain whose row is
+					// gone. Only a genuinely-post-purge op captures the stable final value.
+					this.bumpChainPurgeEpoch(profileId, chainId)
+					await this.registry.dispose(profileId, chainId)
+					await removeChainStoreDir({ profileId, chainId })
+					this.bumpChainPurgeEpoch(profileId, chainId)
+				})
 			})
-		})
+		} finally {
+			releaseRetries()
+		}
 	}
 
 	/**
-	 * Profile-wide PXE erase. Deletes every PXE database for the profile by PREFIX —
-	 * a per-chain `clearChainState` misses a DB on a chainId whose network row is
-	 * gone. `keyval-store` (idb-keyval's default DB, where bb.js caches the public
-	 * CRS) is device-wide, never the profile's, and is never touched. AWAITED +
-	 * rejects on failure so the deletion coordinator can treat a rejection as a
-	 * critical, retryable erasure failure.
+	 * Profile-wide PXE erase. Removes the profile's whole OPFS tree — a per-chain
+	 * `clearChainState` misses a store on a chainId whose network row is gone.
+	 * IndexedDB is never touched, so `keyval-store` (idb-keyval's default DB, where
+	 * bb.js caches the public CRS, device-wide) survives. AWAITED + rejects on
+	 * failure so the deletion coordinator can treat a rejection as a critical,
+	 * retryable erasure failure.
 	 */
 	public async clearProfileState(profileId: string, generation: string): Promise<void> {
 		if (!generation) throw new Error("clearProfileState: missing pxe generation")
@@ -774,11 +755,13 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		// clear must find the erase to join.
 		const record = existing ?? this.newLifecycle(profileId)
 		record.current = { kind: "deleting", gen: generation }
+		const releaseRetries = this.registry.stopRetries(profileId)
 		const done = this.eraseProfile(profileId, generation, record)
 		record.clearing = { gen: generation, done }
 		try {
 			await done
 		} finally {
+			releaseRetries()
 			// A failed erase leaves `deleting(gen)` for the coordinator's retry, which must start a
 			// fresh erase rather than join this rejected one.
 			if (record.clearing?.done === done) record.clearing = undefined
@@ -802,15 +785,10 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			const guardPrefix = chainRegistryKeyPrefix(profileId)
 			for (const k of Array.from(this.chainGuards.keys())) if (k.startsWith(guardPrefix)) this.chainGuards.delete(k)
 			// Crypto-erase first (drop the in-memory key — the encrypted stores become
-			// unreadable even if a removal below is interrupted), then reclaim the OPFS bytes
-			// (registry-driven — covers chains whose network row or runtime is already gone),
-			// then the LEGACY rc.2-era IndexedDB sweep.
+			// unreadable even if the removal below is interrupted), then reclaim the OPFS bytes
+			// (registry-driven — covers chains whose network row or runtime is already gone).
 			this.storeKeys.delete(profileId)
 			await removeProfileStoreDirs(profileId)
-			const dbPrefix = chainDataDirPrefix(profileId)
-			for (const db of await indexedDB.databases()) {
-				if (db.name?.startsWith(dbPrefix)) await this.deleteDb(db.name, VERIFIED_ERASE)
-			}
 			// SUCCESS ONLY: drop the barrier so a re-added profile gets a fresh one. On FAILURE the
 			// entry is RETAINED (this line is skipped by the throw) so the profile stays a known
 			// being-deleted entity and a same-gen retry reuses the SAME barrier — deleting it on a
@@ -879,30 +857,6 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		const lifecycle = record ?? this.newLifecycle(profileId)
 		lifecycle.current = { kind: "live", gen: generation }
 		this.storeKeys.set(profileId, key)
-	}
-
-	/**
-	 * Delete the IndexedDB database `name`, resolving once deleted; `policy` decides what a
-	 * `blocked` event does. Deliberately not `async`: callers' awaits must see this exact promise,
-	 * since an extra hop shifts every step after the delete.
-	 */
-	private deleteDb(name: string, policy: BlockedDeletePolicy): Promise<void> {
-		return new Promise<void>((resolve, reject) => {
-			const req = indexedDB.deleteDatabase(name)
-			let timer: ReturnType<typeof setTimeout> | undefined
-			const finish = (fn: () => void) => {
-				if (timer) clearTimeout(timer)
-				fn()
-			}
-			req.onsuccess = () => finish(() => resolve())
-			req.onerror = () =>
-				finish(() => reject(policy.onBlocked === "skip" ? req.error : (req.error ?? new Error(`deleteDatabase failed: ${name}`))))
-			req.onblocked = () => {
-				this.logWarn(...policy.warnArgs(name))
-				if (policy.onBlocked === "skip") return resolve()
-				timer = setTimeout(() => reject(new Error(`deleteDatabase blocked past timeout: ${name}`)), policy.timeoutMs)
-			}
-		})
 	}
 
 	/** Attempts before giving up on the read path's peek → write-rebind → re-peek

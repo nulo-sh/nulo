@@ -9,8 +9,8 @@ import { describe, expect, test } from "vitest"
 import { defineMigration } from "@nulo/wallet-core/migration"
 import { ACCOUNT_STORAGE_ROOT } from "@/wallet/services/account/spec"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
-import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import { denormalizeBackupData, normalizeBackupData } from "./backup-migration-registry"
 import { migrateBackupData } from "./backup-migrator"
 import { defineRowMapMigration } from "./row-map-migration"
@@ -183,20 +183,6 @@ describe("preflight reject oracle (via migrateBackupData's migrations seam)", ()
 		})
 	})
 
-	test("registry-uncovered root → incompatible naming the target", async () => {
-		const res = await run(
-			defineRowMapMigration({
-				version: 2,
-				description: "unmapped root",
-				rowMaps: { "nulo:mystery": { addDefault: { x: 1 } } },
-			}),
-		)
-		expect(res).toEqual({
-			kind: "incompatible",
-			reason: 'migration 2 touches "nulo:mystery", which no backup slice maps to',
-		})
-	})
-
 	test("read of an absent non-optional slice → failed naming root + version", async () => {
 		const res = await run(
 			defineRowMapMigration({
@@ -211,8 +197,8 @@ describe("preflight reject oracle (via migrateBackupData's migrations seam)", ()
 		})
 	})
 
-	// The reject-oracle ORDER is contract too: brand → blocked → uncovered →
-	// absent-read, per migration, refs in reads-then-writes insertion order.
+	// The reject-oracle ORDER is contract too: brand → blocked → absent-read,
+	// per migration, refs in reads-then-writes insertion order.
 	test("precedence: an imperative migration touching a blocked root reports NOT-BACKUP-SAFE first", async () => {
 		const res = await run(
 			defineMigration({
@@ -228,14 +214,14 @@ describe("preflight reject oracle (via migrateBackupData's migrations seam)", ()
 		)
 	})
 
-	test("precedence: blocked beats uncovered when both appear (first offending ref wins)", async () => {
+	test("a block-listed root refuses beside a root no slice maps to", async () => {
 		const res = await run(
 			defineRowMapMigration({
 				version: 2,
-				description: "blocked+uncovered",
+				description: "uncovered+blocked",
 				rowMaps: {
-					[PROFILE_STORAGE_ROOT]: { addDefault: { x: 1 } },
 					"nulo:mystery": { addDefault: { x: 1 } },
+					[PROFILE_STORAGE_ROOT]: { addDefault: { x: 1 } },
 				},
 			}),
 		)
@@ -244,7 +230,7 @@ describe("preflight reject oracle (via migrateBackupData's migrations seam)", ()
 		)
 	})
 
-	test("precedence: uncovered beats absent-required-read (refs loop runs before the reads loop)", async () => {
+	test("a root no slice maps to never masks an absent required read", async () => {
 		const res = await run(
 			defineRowMapMigration({
 				version: 2,
@@ -255,7 +241,10 @@ describe("preflight reject oracle (via migrateBackupData's migrations seam)", ()
 				},
 			}),
 		)
-		expect(res.reason).toBe('migration 2 touches "nulo:mystery", which no backup slice maps to')
+		expect(res).toEqual({
+			kind: "failed",
+			reason: `backup is missing a required slice for "${ACCOUNT_STORAGE_ROOT}" that migration 2 reads`,
+		})
 	})
 })
 

@@ -10,6 +10,7 @@
 <script setup>
 /** Components */
 import AmountCard from "@/components/composite/send/AmountCard.vue"
+import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import PublishStrip from "@/components/composite/send/PublishStrip.vue"
 import RecipientField from "@/popup/components/modules/send/RecipientField.vue"
@@ -33,12 +34,13 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feeLine, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
+import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
-import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
-import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
+import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
+import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
 import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
@@ -50,6 +52,7 @@ import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
+import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 const { openToast } = useToast()
 
 /** Store */
@@ -104,15 +107,17 @@ const openFeeJuiceBridge = () => {
 const awaitingNewToken = ref(false)
 
 const tokenService = new TokenServiceClient()
-tokenService.onTokenAdded.add(onTokenAdded)
+tokenService.onTokenAdded.add(onTokensChanged)
+tokenService.onTokenUpdated.add(onTokensChanged)
 tokenService.onTokenDeleted.add(onTokenDeleted)
-let tokenAddedDuringLoad = false
-/** Fires for any profile's or chain's add, so it re-reads the current identity's tokens rather
- *  than appending one; an add during an identity fetch makes that fetch read them again, and one
- *  after a refused fetch retries it, since its balances and contacts are missing too. */
-function onTokenAdded() {
+let tokensChangedDuringLoad = false
+/** Fires for any profile's or chain's add or update, so it re-reads the current identity's tokens
+ *  rather than patching one: an amount integerizes with the decimals the list holds. A change during
+ *  an identity fetch makes that fetch read them again, and one after a refused fetch retries it,
+ *  since its balances and contacts are missing too. */
+function onTokensChanged() {
 	if (tokensLoading.value) {
-		tokenAddedDuringLoad = true
+		tokensChangedDuringLoad = true
 		return
 	}
 	if (tokensFailed.value) return retryTokens()
@@ -153,17 +158,19 @@ const tokensFailed = ref(false)
 const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
-const tokenBalanceService = new TokenBalanceServiceClient()
-tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
-function onBalanceAdded(balance) {
-	applyBalanceAdd(tokenBalances.value, appStore.account.address, balance)
-}
-function onBalanceUpdated(balance) {
-	applyBalanceUpdate(tokenBalances.value, balance)
-}
-
 const tokenBalances = ref([])
+/** `loaded` once the hook has landed a read since the identity fetch began. */
+const balancesState = ref("loading")
+const tokenBalanceService = new TokenBalanceServiceClient()
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows: tokenBalances,
+	state: balancesState,
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -243,6 +250,14 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** The line under the amount names only a balance the wallet read: a row never synced holds a zero
+ *  placeholder, which the token card draws as loading. */
+const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
+
+/** The estimate watch's source for validity, a boolean: `amountValidation` is a new object on every
+ *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
+const amountSendable = computed(() => amountValidation.value.valid)
+
 /** C3 live pricing. The card freezes a session quote when fiat mode starts;
  *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
 const priceService = new PriceServiceClient()
@@ -288,7 +303,7 @@ const handleRequote = (e) => {
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
- *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
+ *  estimate lands, fails or stops, so nothing the person pays goes out on a fee they have not seen. */
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
@@ -298,17 +313,22 @@ const clearQueued = () => {
 }
 /** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
 const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
+/** Queued with Nulo's sponsor paying: the person pays nothing, so there is no cap to hold it to. A
+ *  sponsor added by hand can charge the account, so it never queues. */
+const queuedSponsored = computed(() => feeQueued.value && feePayerOf(payer.value) === "sponsor")
+const queueMode = computed(() => Boolean(queueCap.value) || queuedSponsored.value)
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value && !queueCap.value) return false
+	if (feeQueued.value && !queueMode.value) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
 	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
-	// queued send's figure is the cap the card shows, and nothing goes out above it.
-	if (!queueCap.value && !feeEstimate.value) return false
+	// queued send's figure is the cap the card shows, and nothing goes out above it; Nulo's sponsor
+	// charges the person nothing.
+	if (!queueMode.value && !feeEstimate.value) return false
 	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
@@ -319,6 +339,7 @@ const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
 const facts = computed(() =>
 	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
 )
+const showsTokenCaveat = computed(() => !isBlockedTransfer.value && !isValidatedTokenClass(activeToken.value?.classId))
 
 /** The review sheet lives on the popup stack under this key, so it stacks and closes like any other popup. */
 const REVIEW_KEY = "send_review"
@@ -336,7 +357,7 @@ const openReview = () => {
 const closeReview = () => popupStore.close(REVIEW_KEY)
 
 const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
-const feeText = computed(() => feeLine(feeDisplay.value))
+const reviewFeeText = computed(() => (feeDisplay.value ? feeText(feeDisplay.value) : undefined))
 
 const transferType = computed(() => {
 	if (selectedSendType.value === "private" && selectedReceiverType.value === "private") return TransferType.Private
@@ -388,12 +409,22 @@ const {
 } = useFeeEstimation({
 	debounceMs: 800,
 	estimate: (params, estimateToken, signal) => {
-		const { networkId, accountAddress, tokenId, transferType: tt, destination, amount, settings } = params
+		const { networkId, accountAddress, tokenId, tokenContract, transferType: tt, destination, amount, settings } = params
 		lastEstimateParams = params
 		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
 		return estimateWhenClear(
 			() =>
-				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
+				executionService.estimateTransferFee(
+					networkId,
+					accountAddress,
+					tokenId,
+					tokenContract,
+					tt,
+					destination,
+					amount,
+					settings,
+					estimateToken,
+				),
 			signal,
 			{
 				onQueued: (answer) => {
@@ -473,6 +504,8 @@ function snapshotTransfer() {
 	// cancel) for the full TTL.
 	const feeCap = queueCap.value?.cap
 	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
+	// A send the person pays is held to the figure the page showed: the queued cap, or the estimate.
+	const shownFee = feeCap || feePayerOf(payer.value) !== "self" ? undefined : feeEstimate.value?.maxFee
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -484,6 +517,7 @@ function snapshotTransfer() {
 		feeSettings: feeSettings.value,
 		precomputedEstimateId,
 		feeCap,
+		shownFee,
 		contract: activeToken.value.contract,
 		symbol: activeToken.value.symbol,
 		decimals: activeToken.value.decimals,
@@ -533,6 +567,14 @@ watch(
 	},
 )
 
+// A re-read of the same token can take away the transfer kind the page has selected; a kind it
+// still supports stays selected.
+watch([() => activeToken.value?.hasPrivateTransfers, () => activeToken.value?.hasPublicTransfers], ([canPrivate, canPublic]) => {
+	if (!activeToken.value) return
+	if (!canPrivate) selectedSendType.value = selectedReceiverType.value = "public"
+	if (!canPublic) selectedSendType.value = selectedReceiverType.value = "private"
+})
+
 watch(
 	() => tokens.value,
 	() => {
@@ -544,49 +586,55 @@ watch(
 	{ deep: true },
 )
 
+function requestEstimate() {
+	// An estimate simulates against the node: no work for a send the wall would refuse.
+	if (!legal.isCurrent.value) {
+		cancelFeeEstimate()
+		return
+	}
+	// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
+	// or Private → Private is silently dropped here before estimation.
+	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
+		cancelFeeEstimate()
+		return
+	}
+	if (!amountValidation.value.valid) {
+		cancelFeeEstimate()
+		return
+	}
+
+	// New input asks a new question: it is queued only once the wallet says so again.
+	clearQueued()
+	scheduleFeeEstimate({
+		networkId: appStore.network.id,
+		accountAddress: appStore.account.address,
+		tokenId: activeToken.value.id,
+		tokenContract: activeToken.value.contract,
+		transferType: transferType.value,
+		destination: searchTerm.value,
+		amount: amountValidation.value.integerized,
+		settings: feeSettings.value,
+	})
+}
+
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
-// current input's: each change re-asks (clearing the result) or cancels.
+// current input's: each change re-asks (clearing the result) or cancels. A balance that starts or
+// stops covering the amount counts as a change.
 watch(
 	[
 		amountTerm,
+		amountSendable,
 		searchTerm,
 		selectedSendType,
 		selectedReceiverType,
 		() => feeSettings.value,
 		() => legal.isCurrent.value,
 		() => activeToken.value?.id,
+		() => activeToken.value?.contract,
 		() => appStore.network?.id,
 		() => appStore.account?.address,
 	],
-	() => {
-		// An estimate simulates against the node: no work for a send the wall would refuse.
-		if (!legal.isCurrent.value) {
-			cancelFeeEstimate()
-			return
-		}
-		// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
-		// or Private → Private is silently dropped here before estimation.
-		if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
-			cancelFeeEstimate()
-			return
-		}
-		if (!amountValidation.value.valid) {
-			cancelFeeEstimate()
-			return
-		}
-
-		// New input asks a new question: it is queued only once the wallet says so again.
-		clearQueued()
-		scheduleFeeEstimate({
-			networkId: appStore.network.id,
-			accountAddress: appStore.account.address,
-			tokenId: activeToken.value.id,
-			transferType: transferType.value,
-			destination: searchTerm.value,
-			amount: amountValidation.value.integerized,
-			settings: feeSettings.value,
-		})
-	},
+	requestEstimate,
 	{ deep: true },
 )
 
@@ -613,6 +661,9 @@ let identityFetchSeq = 0
 async function refetchIdentityScopedState() {
 	const mySeq = ++identityFetchSeq
 	const isCurrent = () => mySeq === identityFetchSeq
+	// A reconnect's re-read or retry begun for the previous identity must not land after this.
+	balances.invalidate()
+	balancesState.value = "loading"
 	tokenReadSeq++
 	tokensFailed.value = false
 	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {
@@ -630,7 +681,7 @@ async function refetchIdentityScopedState() {
 	tokens.value = []
 	tokenBalances.value = []
 	tokensLoading.value = true
-	tokenAddedDuringLoad = false
+	tokensChangedDuringLoad = false
 	try {
 		const [first, tb, c] = await Promise.all([
 			tokenService.getTokens(profileId, chainId),
@@ -638,13 +689,14 @@ async function refetchIdentityScopedState() {
 			contactService.getContacts(),
 		])
 		let t = first
-		while (tokenAddedDuringLoad && isCurrent()) {
-			tokenAddedDuringLoad = false
+		while (tokensChangedDuringLoad && isCurrent()) {
+			tokensChangedDuringLoad = false
 			t = await tokenService.getTokens(profileId, chainId)
 		}
 		if (!isCurrent()) return
 		tokens.value = t
-		tokenBalances.value = tb
+		// A reconnect's read that began after this fetch and has landed is the newer one.
+		if (balancesState.value !== "loaded") tokenBalances.value = tb
 		contacts.value = c
 		// The tokens watch makes the first token added to an empty list the active one. A refused
 		// load must not arm it, or the Retry's list would lose the active or requested token.
@@ -704,6 +756,7 @@ onBeforeUnmount(() => {
 	closeReview()
 
 	contactService.disconnect()
+	balances.dispose()
 	tokenBalanceService.disconnect()
 	tokenService.disconnect()
 	prices.dispose()
@@ -758,6 +811,7 @@ onBeforeUnmount(() => {
 				<!-- Section: Select Asset -->
 				<div :class="$style.section">
 					<span :class="$style.section_label">Select Asset</span>
+					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
 					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
 				</div>
 
@@ -775,6 +829,7 @@ onBeforeUnmount(() => {
 						:balanceRawByType="balanceRaw ?? null"
 						:liveQuote
 						:proxyTicker
+						:exceedsBalance
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
@@ -797,8 +852,8 @@ onBeforeUnmount(() => {
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
+						:amountTyped="Boolean(amountTerm)"
 						:originPrivacy="selectedSendType"
-						:destinationPrivacy="selectedReceiverType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
 						v-model="feeSettings"
@@ -813,6 +868,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
 				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
+				<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"
@@ -832,7 +888,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueCap ? "Queue send" : "Confirm Transaction" }}
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueMode ? "Queue send" : "Confirm Transaction" }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -846,13 +902,14 @@ onBeforeUnmount(() => {
 			:symbol="activeToken?.symbol"
 			:recipientName="selectedContact?.name"
 			:recipientAddress="searchTerm"
-			:feeText="feeText"
+			:feeText="reviewFeeText"
 			:payerKind="payerKind"
 			:payerType="payer?.type"
 			:canSend="isAllowedToSend"
 			:sending="isSending"
 			:ready="reviewReady"
 			:queuedCapText="queueCap ? queuedCapText : undefined"
+			:queuedSponsored="queuedSponsored"
 			@close="closeReview"
 			@send="submit('review')"
 		/>
@@ -914,7 +971,7 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	line-height: inherit;
 	background: none;
 	color: var(--nulo-accent);

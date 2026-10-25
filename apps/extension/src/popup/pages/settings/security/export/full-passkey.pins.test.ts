@@ -6,10 +6,11 @@
  * Scaffolding mirrors full.test.ts (client modules mocked at the import level).
  */
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { EncryptionKey, PasskeyCredential, verifyBackupMac } from "@nulo/wallet-crypto"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -156,7 +157,7 @@ vi.mock("vue-router", () => ({
 
 const surface = vi.hoisted(() => ({ needsOwnWindow: vi.fn(() => false), ownRoute: vi.fn((): string | undefined => undefined) }))
 const moveToOwnWindow = vi.hoisted(() => vi.fn(async () => true))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: () => surface.needsOwnWindow() }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.needsOwnWindow() }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow,
@@ -164,6 +165,8 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 const runCeremony = vi.fn<() => Promise<unknown>>()
+/** What the export ceremony's passkey answers: a credential with its PRF output. */
+const CEREMONY_ANSWER = { id: Buffer.from("cred-1").toString("base64"), prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64") }
 const rejectCeremony = vi.fn()
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({
@@ -175,11 +178,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 }))
 
 beforeEach(() => {
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 	vi.clearAllMocks()
 	captureRunFence.mockReset()
 	captureRunFence.mockResolvedValue(FENCE)
@@ -278,12 +277,12 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	})
 
 	it("a passkey export carries the service's sealed DEK (fresh or stored) into the file and names the loss only when it was replaced", async () => {
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "fresh-sealed", dekReplaced: true })
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await flushPromises()
-		expect(exportPasskeyBackupKeys).toHaveBeenCalledWith(FENCE, { id: "cred-1" })
+		expect(exportPasskeyBackupKeys).toHaveBeenCalledWith(FENCE, CEREMONY_ANSWER)
 		// The local Banner stub drops attrs, so assert on the copy the loss banner renders once
 		// the assembly settles (real assembleFullBackup runs over the stubbed slice clients).
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Imported keys are not in this backup"))
@@ -293,7 +292,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(openToast).not.toHaveBeenCalled()
 
 		// A healthy slot: no loss banner.
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, dekSealed: "stored-sealed" })
 		const healthy = mountPage("passkey")
 		await healthy.find("[data-testid='agree-continue-btn']").trigger("click")
@@ -355,7 +354,7 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 	}
 
 	async function passkeyExport(material: Record<string, unknown>) {
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		exportPasskeyBackupKeys.mockResolvedValueOnce({ ...PASSKEY_KEYS, ...material })
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
@@ -369,11 +368,11 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 	] as const)("a %s export names one, three or no unopened imported accounts", async (_kind, run) => {
 		const one = await run({ unopenedImportedKeys: 1 })
 		expect(one.text()).toContain(UNOPENED)
-		expect(one.text()).toContain("1 imported account could not be opened, so they will not be restored.")
+		expect(one.text()).toContain("1 imported account could not be opened, so it will not be restored.")
 		expect(one.text()).toContain("Import their keys again after the restore.")
 
 		const three = await run({ unopenedImportedKeys: 3 })
-		expect(three.text()).toContain("3 imported accounts could not be opened")
+		expect(three.text()).toContain("3 imported accounts could not be opened, so they will not be restored.")
 
 		expect((await run({ unopenedImportedKeys: 0 })).text()).not.toContain(UNOPENED)
 	})
@@ -385,6 +384,18 @@ describe("export/full.vue — imported accounts that will not restore", () => {
 		const wrapper = await run({ dekReplaced: true, unopenedImportedKeys: 2 })
 		expect(wrapper.text()).toContain(LOST)
 		expect(wrapper.text()).not.toContain(UNOPENED)
+	})
+
+	it.each([
+		["password", passwordExport],
+		["passkey", passkeyExport],
+	] as const)("a %s export counts an imported account on chain 1337, not one on the local network", async (_kind, run) => {
+		const row = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, encryptedSigningKey: "sealed" })
+		const account = (chainId: number) => ({ profileId: "p1", chainId, address: `0x${chainId}`, type: 1, name: "Imp" })
+		const wrapper = await run({ importedKeyRows: [row(1337), row(0)], accounts: [account(1337), account(0)] })
+		expect(wrapper.get("[data-testid='backup-imported-network-banner']").text()).toContain(
+			"1 imported account is on a network you added.",
+		)
 	})
 
 	it("a passkey file carries the account and key rows the count was made over", async () => {
@@ -406,7 +417,7 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 	const downloadButton = (wrapper: Wrapper) => wrapper.get("[data-testid='download-backup-btn']")
 
 	async function reachBackupReady(): Promise<Wrapper> {
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
@@ -455,7 +466,11 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		const { data, filename } = downloadFile.mock.calls[0][0]
 		expect(filename).toMatch(/^NuloBackup_/)
-		expect((JSON.parse(data) as Record<string, unknown>)["master-key"]).toBe("cred-1")
+		const file = JSON.parse(data) as Record<string, unknown>
+		expect(file["master-key"]).toBe("cred-1")
+		// The file carries the check the ceremony's passkey made over its checksum.
+		const credential = await PasskeyCredential.create(CEREMONY_ANSWER)
+		expect(await verifyBackupMac(credential, file.checksum as string, file["backup-mac"] as string)).toBe(true)
 	})
 
 	it("a confirmation answered after the page left writes nothing", async () => {
@@ -485,7 +500,7 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
 		await flushPromises()
 		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 		callback()
@@ -517,7 +532,7 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
 		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 	})
@@ -561,7 +576,7 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 
 describe("export/full.vue — the encrypt pair", () => {
 	it("asks a password manager for a new password on both fields", async () => {
-		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		runCeremony.mockResolvedValueOnce(CEREMONY_ANSWER)
 		const wrapper = mountPage("passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))

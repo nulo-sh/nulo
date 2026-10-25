@@ -10,6 +10,8 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import StatusCard from "@/components/composite/StatusCard.vue"
+import HandoffCard from "@/components/composite/HandoffCard.vue"
 import ContactRow from "@/popup/components/modules/settings/contacts/ContactRow.vue"
 
 /** Services */
@@ -19,13 +21,16 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 /** Utils */
 import { stringCompare } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, returnToPanel } from "@/utils/own-window"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useEntityCrud } from "@/composables/useEntityCrud"
 import { useContactImportExport } from "@/popup/components/modules/settings/contacts/useContactImportExport"
 
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -49,6 +54,7 @@ const { entities: contacts } = useEntityCrud({
 	mode: "resync",
 })
 
+const cardWindow = isCardWindow()
 const sortedContacts = computed(() =>
 	[...contacts.value].sort((a, b) => {
 		const abbrPos = stringCompare(a.abbr, b.abbr)
@@ -108,7 +114,19 @@ accountStateService.onSenderAdded.add(onSenderAdded)
 accountStateService.onSenderDeleted.add(onSenderDeleted)
 watch(() => appStore.network?.id, syncSenders)
 
-const { exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
+const { exporting, exportContacts, importContacts } = useContactImportExport({ contacts, accountStateService })
+
+/** From Firefox's toolbar panel the import moves to Contacts' own window, where the card's press picks. */
+const handleImportContacts = async () => {
+	if (await leavePanelFor(OWN_WINDOW_ROUTES.contacts)) return
+	await importContacts()
+}
+
+/** A refused file keeps the card for another pick; any other end hands its snack back to the panel. */
+const handleChooseInCard = async () => {
+	const outcome = await importContacts()
+	if (outcome) await returnToPanel(OWN_WINDOW_ROUTES.contacts, outcome)
+}
 
 const handleCopyContactAddress = (contact) => {
 	void copyWithToast(contact.address, openToast, "Address is copied")
@@ -120,14 +138,15 @@ function handleEditContact(contact) {
 function handleDeleteContact(contact) {
 	// Deleting a contact never touches sender registration — sender rows are
 	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.confirm_text = "Yes, delete contact"
-	cacheStore.confirm.description = `Delete contact "${contact.name}"?`
-	cacheStore.confirm.callback = async () => {
-		await contactService.deleteContact(contact.id)
-		openToast({ kind: "success", label: "Contact deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		confirm_color: "red",
+		confirm_text: "Yes, delete contact",
+		description: `Delete contact "${contact.name}"?`,
+		callback: async () => {
+			await contactService.deleteContact(contact.id)
+			openToast({ kind: "success", label: "Contact deleted" })
+		},
+	})
 }
 
 onMounted(async () => {
@@ -141,29 +160,43 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12">
+	<HandoffCard
+		v-if="cardWindow"
+		title="Pick the contacts file"
+		:busy="appStore.contactImports.size > 0"
+		@choose="handleChooseInCard"
+		@cancel="closeOwnWindow"
+	/>
+	<SettingsPageShell v-else title="Contacts" :backTo="'/popup/settings'" gap="12" data-testid="contacts-page">
 		<template #trailing>
 			<Dropdown>
 				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">
-					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+					<Icon name="more" :rotate="90" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
+					<DropdownItem @click="handleImportContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
-							<Icon name="upload-outline" size="14" color="secondary" />
+							<Icon name="upload" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
-					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length || exporting" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
-							<Icon name="download-outline" size="14" color="secondary" />
+							<Icon name="download" size="14" color="secondary" />
 							Export contacts
 						</Flex>
 					</DropdownItem>
 				</template>
 			</Dropdown>
 		</template>
+
+		<StatusCard
+			v-if="exporting"
+			title="Exporting your contacts"
+			description="Gathering your contacts into a file."
+			data-testid="contacts-export-status-card"
+		/>
 
 		<SectionLabel label="Contacts" :count="sortedContacts.length" />
 

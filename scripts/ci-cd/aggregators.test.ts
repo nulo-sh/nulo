@@ -1,9 +1,10 @@
 /**
  * Behavioral pin for the aggregators outside the e2e lanes: `quality-status` (pr-quick.yml),
- * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; for the
- * sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin; for nightly.yml's
- * `status` and its `publish-nightly` guard; and, for every PR e2e lane, that a draft whose diff
- * touches the lane's surface gets its suites run, not skipped.
+ * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; for
+ * nightly.yml's `status` and its `publish-nightly` guard; and for the four PR e2e lanes, whose
+ * `changes` job decides through `e2e-decide.sh` and whose `status` runs `e2e-aggregate.sh` on
+ * `toJSON(needs)`, run here wiring and script together, a draft whose diff touches the lane's
+ * surface included.
  *
  * Each must fail closed (nightly's `status` aside, held to its own rule below): pass only when every
  * need ended exactly as its own `if:` asks, so a gate that never ran (skipped for the wrong reason,
@@ -67,9 +68,9 @@ function expressionOf(file: string, key: string, value: string): string {
 
 /**
  * Run the script as the runner does: each inline `${{ }}` replaced by its value first, then `bash -e`
- * with an environment of only `PATH`, `extra` and the bound `env:`.
+ * from the repository root with an environment of only `PATH`, `extra` and the bound `env:`.
  */
-function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number {
+function runScript(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}) {
 	const worldValue = (expression: string): string => {
 		if (!(expression in world)) throw new Error(`${agg.file}: no world value for ${expression}`)
 		return world[expression]
@@ -77,8 +78,11 @@ function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, e
 	const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", ...extra }
 	for (const [key, value] of Object.entries(agg.env)) env[key] = worldValue(expressionOf(agg.file, key, value))
 	const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => worldValue(expression))
-	return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { env, stdout: "ignore", stderr: "ignore" }).exitCode
+	return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { cwd: ROOT, env, stdout: "pipe", stderr: "ignore" })
 }
+
+const exitCode = (agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number =>
+	runScript(agg, world, extra).exitCode
 
 /** Every need `success`, except the ones a world's conditions skip. */
 const results = (needs: string[], skipped: string[]): World =>
@@ -112,25 +116,38 @@ const release = (context: World, skipped: string[]): World => ({
 	"needs.auto-unstick.outputs.unstuck": "",
 	"needs.resolve.outputs.is_prerelease": "false",
 	"needs.resolve.outputs.on_main": "true",
+	"needs.select-assets.outputs.source": "build",
 	...context,
 	...results(RELEASE.needs, skipped),
 })
+/** A push never selects: select-assets skips and writes no source. */
+const push = (context: World, skipped: string[]): World =>
+	release({ "github.event_name": "push", "needs.select-assets.outputs.source": "", ...context }, [...skipped, "select-assets"])
 const asked = (value: string): World => ({
 	"github.event.inputs.run_network_e2e": value,
 	"github.event.inputs.publish_chrome": value,
 	"github.event.inputs.publish_firefox": value,
 })
-const PUSH_WITHOUT_RELEASE = release(
+const PUSH_WITHOUT_RELEASE = push(
 	{
-		"github.event_name": "push",
 		"needs.auto-unstick.outputs.unstuck": "false",
 		"needs.resolve.outputs.is_prerelease": "",
 		"needs.resolve.outputs.on_main": "",
 	},
 	RELEASE.needs.filter((job) => job !== "release-please" && job !== "auto-unstick"),
 )
-const PUSH_RESCUED = release({ "github.event_name": "push", "needs.auto-unstick.outputs.unstuck": "true" }, NOT_ASKED)
+const PUSH_RESCUED = push({ "needs.auto-unstick.outputs.unstuck": "true" }, NOT_ASKED)
 const STORE_SUBMISSION = release(asked("true"), ["release-please", "auto-unstick"])
+/** A store dispatch on a published release: its own checked bytes are smoked and shipped, so nothing builds. */
+const PUBLISHED_SUBMISSION = release({ ...asked("true"), "needs.select-assets.outputs.source": "published" }, [
+	"release-please",
+	"auto-unstick",
+	"build-chrome",
+	"build-firefox",
+])
+
+const SOAK = aggregator("extension-network-e2e-soak.yml")
+const soak = (retry: string): World => ({ "inputs.repeats": "3", "inputs.retry": retry, ...results(SOAK.needs, []) })
 
 const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record<string, World> }[] = [
 	{
@@ -152,6 +169,12 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		},
 	},
 	{
+		file: SOAK.file,
+		agg: SOAK,
+		advisory: [],
+		worlds: { "a soak at retry 0": soak("0"), "a soak at the config-default retry": soak("") },
+	},
+	{
 		file: ACTIONLINT.file,
 		agg: ACTIONLINT,
 		advisory: [],
@@ -167,13 +190,14 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		advisory: ["release-pr-lockfile", "sync-main-to-dev"],
 		worlds: {
 			"a push that only refreshes the Release PR": PUSH_WITHOUT_RELEASE,
-			"a push release-please tagged": release(
-				{ "github.event_name": "push", "needs.release-please.outputs.release_created": "true" },
-				["auto-unstick", ...NOT_ASKED],
-			),
+			"a push release-please tagged": push({ "needs.release-please.outputs.release_created": "true" }, [
+				"auto-unstick",
+				...NOT_ASKED,
+			]),
 			"a push the auto-unstick rescued": PUSH_RESCUED,
 			"a republish": release(asked("false"), ["release-please", "auto-unstick", ...NOT_ASKED]),
 			"a store submission with the network suite": STORE_SUBMISSION,
+			"a store submission of a published release's own bytes": PUBLISHED_SUBMISSION,
 			"a Chrome store submission alone": release(
 				{
 					"github.event.inputs.run_network_e2e": "false",
@@ -228,6 +252,25 @@ describe.each(CASES)("$file aggregator", ({ agg, advisory, worlds }) => {
 	})
 })
 
+describe("extension-network-e2e-soak.yml status line", () => {
+	const said = (world: World): string => runScript(SOAK, world).stdout.toString()
+
+	test("states the iteration count, and zero test retries only at retry 0", () => {
+		expect(said(soak("0"))).toContain("all 3 iteration(s) green, every named test ran, with zero test retries")
+		for (const retry of ["", "2"]) expect(said(soak(retry)), `retry '${retry}'`).not.toContain("zero test retries")
+	})
+
+	test("names a cancel as a cancel, never a refusal or a flake", () => {
+		const prep = said({ ...soak("0"), "needs.prep.result": "cancelled" })
+		expect(prep).toContain("prep=cancelled")
+		expect(prep).not.toContain("flake")
+		const iteration = said({ ...soak("0"), "needs.soak.result": "cancelled" })
+		expect(iteration).toContain("soak=cancelled")
+		expect(iteration).not.toContain("flake")
+		expect(said({ ...soak("0"), "needs.soak.result": "failure" })).toContain("a flake to fix or breakage")
+	})
+})
+
 function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
 	for (const job of agg.needs) {
 		const key = `needs.${job}.result`
@@ -237,45 +280,12 @@ function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
 	}
 }
 
-// Each smoke lane runs its suite as one matrix job of three shards, which GitHub hands the aggregator
-// as the single `needs.smoke.result`, so a failed or cancelled shard arrives as `failure` or
-// `cancelled`. These scripts read their results inline.
-const SMOKE = aggregator("pr-extension-smoke-e2e.yml")
-const SMOKE_FIREFOX = aggregator("pr-extension-smoke-e2e-firefox.yml")
-const READ_ATTEMPT = "needs.changes.outputs.read-attempt"
-const smoke = (run: string, skipped: string[]): World => ({
-	"needs.decide.outputs.run": run,
-	[READ_ATTEMPT]: "1",
-	"github.run_attempt": "1",
-	...results(SMOKE.needs, skipped),
-})
-const SMOKE_WORLDS: Record<string, World> = {
-	"a run of every shard": smoke("true", []),
-	"a gate that skipped the suite": smoke("false", ["smoke"]),
-}
-
-describe.each([SMOKE, SMOKE_FIREFOX])("$file aggregator", (agg) => {
-	test("always runs, nothing can hide a red script, and it waits on every job", () => {
-		expect(agg.if).toBe("always()")
-		expect(agg.suppressors).toEqual([undefined, undefined, undefined])
-		expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
-	})
-
-	test.each(Object.entries(SMOKE_WORLDS))("passes %s", (_, world) => {
-		expect(exitCode(agg, world)).toBe(0)
-	})
-
-	test.each(Object.entries(SMOKE_WORLDS))("fails %s once any one need ends otherwise", (_, world) => {
-		expectEveryOtherResultFails(agg, world)
-	})
-})
-
 // nightly.yml's `status` passes a skipped stage by design: a quiet day skips every gate, and a stage
 // behind a red one skips while that one reds the run. So it is held to what it states, against every
 // need, and to the exact set it waits on: a job added to the workflow gates the nightly, or is named
 // advisory here.
 const NIGHTLY = aggregator("nightly.yml")
-const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live", "network-e2e-canary-wasm", "token-list-host-live"]
+const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live", "network-e2e-canary-wasm", "token-list-host-live", "seed-identity-live"]
 const NIGHTLY_WORLDS: Record<string, World> = {
 	"a green night": results(NIGHTLY.needs, []),
 	"a quiet day": results(
@@ -351,8 +361,13 @@ test.each([
 	["needs.auto-unstick.outputs.unstuck", RELEASE, PUSH_RESCUED, RESCUE_CHAIN],
 	["needs.resolve.outputs.is_prerelease", RELEASE, STORE_SUBMISSION, STORES],
 	["needs.resolve.outputs.on_main", RELEASE, STORE_SUBMISSION, STORES],
-	["needs.decide.outputs.run", SMOKE, smoke("true", []), ["smoke"]],
-	["needs.decide.outputs.run", SMOKE_FIREFOX, smoke("true", []), ["smoke"]],
+	// No build, smoke or attach-assets takes an unknown source; the store jobs wait on attach-assets.
+	[
+		"needs.select-assets.outputs.source",
+		RELEASE,
+		STORE_SUBMISSION,
+		["build-chrome", "build-firefox", "smoke-against-artifact", "smoke-firefox-against-artifact", "attach-assets", ...STORES],
+	],
 ] as const)("%s: a malformed control output fails the check", (output, agg, world, skips) => {
 	expect(exitCode(agg, world)).toBe(0)
 	const skipped = Object.fromEntries(skips.map((job) => [`needs.${job}.result`, "skipped"]))
@@ -366,60 +381,217 @@ test("release_created may be empty, but nothing else that is not true or false",
 
 /** The opt-in network suite must be exactly what the dispatch asked for; every other gate exactly `success`. */
 const NETWORK_CLAUSE = "needs.network-e2e.result == (github.event.inputs.run_network_e2e == 'true' && 'success' || 'skipped')"
-
-test("release's attach-assets publishes only past gates that all ended as asked, and never from a cancelled run", () => {
-	const job = workflow("release.yml").jobs["attach-assets"]
-	const needs: string[] = [job.needs].flat()
-	expect([...needs].sort()).toEqual(
-		[
-			"resolve",
-			"lint-and-typecheck",
-			"unit-tests",
-			"network-e2e",
-			"build-chrome",
-			"build-firefox",
-			"smoke-against-artifact",
-			"smoke-firefox-against-artifact",
-			"release-notes",
-		].sort(),
-	)
-	const clauses = String(job.if)
-		.replace(NETWORK_CLAUSE, "NETWORK")
+/** select-assets ran exactly on a dispatch. */
+const SELECTED = "needs.select-assets.result == (github.event_name == 'workflow_dispatch' && 'success' || 'skipped')"
+/** A dispatch's source is one select-assets can write; a failed, cancelled or empty select matches neither. */
+const SOURCE_KNOWN =
+	"(github.event_name == 'push' || needs.select-assets.outputs.source == 'build' || needs.select-assets.outputs.source == 'published')"
+const BUILDS = "(github.event_name == 'push' || needs.select-assets.outputs.source == 'build')"
+/** A build ran exactly when the bytes are this run's own. */
+const built = (browser: string): string =>
+	`needs.build-${browser}.result == (needs.select-assets.outputs.source == 'published' && 'skipped' || 'success')`
+const BROWSERS = ["chrome", "firefox"]
+const TOKENS: [string, string][] = [
+	[NETWORK_CLAUSE, "NETWORK"],
+	[SELECTED, "SELECTED"],
+	[SOURCE_KNOWN, "SOURCE_KNOWN"],
+	[BUILDS, "BUILDS"],
+	...BROWSERS.map((browser): [string, string] => [built(browser), `BUILT ${browser}`]),
+]
+/** A job's `if:` as its sorted `&&` clauses, each compound clause above read as one token. */
+const clausesOf = (condition: unknown): string[] =>
+	TOKENS.reduce((text, [clause, token]) => text.replaceAll(clause, token), String(condition).split(/\s+/).join(" ").trim())
 		.split("&&")
 		.map((clause) => clause.trim())
-	const expected = [
-		"always()",
-		"!cancelled()",
-		...needs.map((need) => (need === "network-e2e" ? "NETWORK" : `needs.${need}.result == 'success'`)),
-	]
-	expect(clauses.sort()).toEqual(expected.sort())
+		.sort()
+const succeeded = (...jobs: string[]): string[] => jobs.map((job) => `needs.${job}.result == 'success'`)
+
+// Each consumer of select-assets takes SELECTED and SOURCE_KNOWN, so a dispatch whose select failed,
+// was cancelled or wrote no source runs no smoke and no attach-assets, not only a red status.
+describe("release's source-bound stages", () => {
+	const { jobs } = workflow("release.yml")
+
+	test("attach-assets publishes only past gates that all ended as asked, and never from a cancelled run", () => {
+		const job = jobs["attach-assets"]
+		expect([job.needs].flat().sort()).toEqual(
+			[
+				"resolve",
+				"lint-and-typecheck",
+				"unit-tests",
+				"network-e2e",
+				"select-assets",
+				"build-chrome",
+				"build-firefox",
+				"smoke-against-artifact",
+				"smoke-firefox-against-artifact",
+				"release-notes",
+			].sort(),
+		)
+		expect(clausesOf(job.if)).toEqual(
+			[
+				"always()",
+				"!cancelled()",
+				"NETWORK",
+				"SELECTED",
+				"SOURCE_KNOWN",
+				"BUILT chrome",
+				"BUILT firefox",
+				...succeeded(
+					"resolve",
+					"lint-and-typecheck",
+					"unit-tests",
+					"smoke-against-artifact",
+					"smoke-firefox-against-artifact",
+					"release-notes",
+				),
+			].sort(),
+		)
+	})
+
+	test.each(BROWSERS)("build-%s runs past the gates, on a push or a dispatch that selected the build", (browser) => {
+		const job = jobs[`build-${browser}`]
+		expect([job.needs].flat().sort()).toEqual(["resolve", "lint-and-typecheck", "unit-tests", "select-assets"].sort())
+		expect(clausesOf(job.if)).toEqual(
+			["always()", "SELECTED", "BUILDS", ...succeeded("resolve", "lint-and-typecheck", "unit-tests")].sort(),
+		)
+	})
+
+	test.each([
+		["smoke-against-artifact", "chrome"],
+		["smoke-firefox-against-artifact", "firefox"],
+	])("%s runs on the source select-assets chose, its build exactly when that is the build", (name, browser) => {
+		const job = jobs[name]
+		expect([job.needs].flat().sort()).toEqual(["resolve", `build-${browser}`, "select-assets"].sort())
+		expect(clausesOf(job.if)).toEqual(["always()", "SELECTED", "SOURCE_KNOWN", `BUILT ${browser}`, ...succeeded("resolve")].sort())
+	})
 })
 
-// The opt-in suite is one matrix job whose legs are the PR lane's jobs (behavior-gating.test.ts pins
-// them), so the one clause above reads every leg; a second job calling the suite is one it never reads.
+// The opt-in suite is one call of the PR lanes' lane (behavior-gating.test.ts pins its jobs), so the
+// one clause above reads every lane job; a second job calling the suite is one it never reads.
 test("release runs the network suite in the one job attach-assets and status read", () => {
 	const { jobs } = workflow("release.yml")
-	const callers = Object.keys(jobs).filter((name) => /\/_extension-network-e2e\.yml(@.*)?$/.test(String(jobs[name].uses)))
+	const callers = Object.keys(jobs).filter((name) => /\/_extension-network-e2e(-lane)?\.yml(@.*)?$/.test(String(jobs[name].uses)))
 	expect(callers).toEqual(["network-e2e"])
-	expect(jobs["network-e2e"].strategy?.["fail-fast"]).toBe(false)
+	expect(jobs["network-e2e"].uses).toBe("./.github/workflows/_extension-network-e2e-lane.yml")
 })
 
-// A required aggregator passes when its gate skipped the suites. A gate that skipped a draft would
-// pass it, and once marked ready the PR would merge on that pass while its suites still ran. So each
-// lane's whole `Decide` step runs here bound to a draft whose diff touches its surface: it must ask
-// for the suites, and the aggregator must then fail on them skipped. A draft-flag read spelled any
-// other way than the one this world binds has no value here, and throws.
+// The four PR e2e lanes. Each `status` checks out `e2e-aggregate.sh` at this run's commit and runs it
+// on `toJSON(needs)`; each smoke lane's three shards reach it as the one `smoke` result, so a failed or
+// cancelled shard arrives as `failure` or `cancelled`. Every table below runs the lane's own wiring
+// and the shared script together.
 const E2E_LANES = [
 	{ file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface" },
 	{ file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface" },
 	{ file: "pr-extension-network-e2e.yml", surface: "extension-network" },
 	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network" },
 ]
-const LABEL_HIT = "needs.changes.outputs.label-hit"
 
-/** Runs a lane's `Decide` step: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
+const STATUS_CHECKOUT = {
+	uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+	with: {
+		ref: "${{ github.sha }}",
+		"persist-credentials": false,
+		"sparse-checkout": "/scripts/ci-cd/e2e-aggregate.sh",
+		"sparse-checkout-cone-mode": false,
+	},
+}
+
+type LaneAggregator = Aggregator & { workflowName: string }
+
+function laneAggregator(file: string): LaneAggregator {
+	const wf = workflow(file)
+	const job = wf.jobs.status
+	const [checkout, step, ...rest] = job.steps
+	expect(rest, `${file}: the aggregator is the checkout and one step`).toEqual([])
+	expect(checkout, `${file}: the status checkout`).toEqual(STATUS_CHECKOUT)
+	return {
+		file,
+		if: job.if,
+		suppressors: [job["continue-on-error"], step["continue-on-error"], step.if],
+		needs: [job.needs].flat(),
+		jobs: Object.keys(wf.jobs).filter((name) => name !== "status"),
+		run: step.run,
+		env: step.env ?? {},
+		workflowName: wf.name,
+	}
+}
+
+type Needs = Record<string, { result?: unknown; outputs?: Record<string, string> }>
+
+/** What `toJSON(needs)` holds when the gate said `run`: `changes` succeeded, every suite as asked. */
+function laneNeeds(agg: LaneAggregator, run: string, suites: "success" | "skipped", readAttempt = "1"): Needs {
+	const need = (job: string): Needs[string] =>
+		job === "changes" ? { result: "success", outputs: { run, "read-attempt": readAttempt } } : { result: suites, outputs: {} }
+	return Object.fromEntries(agg.needs.map((job) => [job, need(job)]))
+}
+
+/** Runs the aggregator as the runner does, `needs` given whole or as the raw text standing for it. */
+function laneExit(agg: LaneAggregator, needs: Needs | string, attempt = "1"): number {
+	const json = typeof needs === "string" ? needs : JSON.stringify(needs, null, 2)
+	return exitCode(agg, { "toJSON(needs)": json }, { GITHUB_RUN_ATTEMPT: attempt, GITHUB_WORKFLOW: agg.workflowName })
+}
+
+const LANE_WORLDS = [
+	["a run of every suite", "true", "success"],
+	["a gate that skipped the suites", "false", "skipped"],
+] as const
+
+describe.each(E2E_LANES.map(({ file }) => laneAggregator(file)))("$file aggregator", (agg) => {
+	test("always runs, nothing can hide a red script, and it waits on every job", () => {
+		expect(agg.if).toBe("always()")
+		expect(agg.suppressors).toEqual([undefined, undefined, undefined])
+		expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
+	})
+
+	test.each(LANE_WORLDS)("passes %s", (_, run, suites) => {
+		expect(laneExit(agg, laneNeeds(agg, run, suites))).toBe(0)
+	})
+
+	test.each(LANE_WORLDS)("fails %s once any one need ends otherwise", (_, run, suites) => {
+		const world = laneNeeds(agg, run, suites)
+		for (const job of agg.needs) {
+			for (const result of RESULTS.filter((r) => r !== world[job].result)) {
+				expect(laneExit(agg, { ...world, [job]: { ...world[job], result } }), `${job} '${result}'`).not.toBe(0)
+			}
+		}
+	})
+
+	// What a run produces with that output malformed: no suite's `if:` compares equal, so all skip.
+	test("a malformed or missing run output fails the check", () => {
+		for (const run of ["", "yes", "True"]) expect(laneExit(agg, laneNeeds(agg, run, "skipped")), `'${run}'`).not.toBe(0)
+		const world = laneNeeds(agg, "true", "success")
+		expect(laneExit(agg, { ...world, changes: { result: "success", outputs: { "read-attempt": "1" } } })).not.toBe(0)
+	})
+
+	test("fails on needs it cannot read: a result null or missing, malformed JSON, no suite", () => {
+		const world = laneNeeds(agg, "true", "success")
+		for (const job of agg.needs) {
+			const { result: _, ...missing } = world[job]
+			expect(laneExit(agg, { ...world, [job]: { ...world[job], result: null } }), `${job} null`).not.toBe(0)
+			expect(laneExit(agg, { ...world, [job]: missing }), `${job} missing`).not.toBe(0)
+		}
+		const json = JSON.stringify(world)
+		for (const text of ["", json.slice(0, -1), `[${json}]`]) expect(laneExit(agg, text), text).not.toBe(0)
+		expect(laneExit(agg, { changes: world.changes }), "no suite").not.toBe(0)
+	})
+
+	// A re-run of `status` alone carries the earlier attempt's gate, so a skip decided on labels read
+	// before a label was added could pass; a re-run of failed suites keeps its ran gate.
+	test("accepts skipped suites only on labels read in this attempt", () => {
+		expect(laneExit(agg, laneNeeds(agg, "false", "skipped", "2"), "2")).toBe(0)
+		expect(laneExit(agg, laneNeeds(agg, "false", "skipped", "1"), "2")).not.toBe(0)
+		expect(laneExit(agg, laneNeeds(agg, "false", "skipped", ""), "1")).not.toBe(0)
+		expect(laneExit(agg, laneNeeds(agg, "true", "success", "1"), "2")).toBe(0)
+	})
+})
+
+const LABEL_HIT = "steps.live.outputs.label-hit"
+const BASE = "steps.live.outputs.base"
+const surfaceOf = (surface: string): string => `steps.override.outputs.full || steps.filter.outputs.${surface}`
+
+/** Runs a lane's gate step in `changes`: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
 function decide(file: string, world: World): { code: number; output: string } {
-	const step = workflow(file).jobs.decide.steps[0]
+	const step = workflow(file).jobs.changes.steps.find((s: { id?: string }) => s.id === "gate")
 	const dir = mkdtempSync(join(tmpdir(), "decide-"))
 	try {
 		const output = join(dir, "output")
@@ -438,8 +610,8 @@ function decided(file: string, world: World): string {
 
 const prWorld = (surface: string, over: World = {}): World => ({
 	"github.event_name": "pull_request",
-	"needs.changes.outputs.base": "dev",
-	[`needs.changes.outputs.${surface}`]: "false",
+	[BASE]: "dev",
+	[surfaceOf(surface)]: "false",
 	[LABEL_HIT]: "false",
 	...over,
 })
@@ -449,40 +621,22 @@ const prWorld = (surface: string, over: World = {}): World => ({
 test.each(E2E_LANES)("$file decides from the live label and base, and refuses a malformed one", ({ file, surface }) => {
 	expect(decided(file, prWorld(surface, { [LABEL_HIT]: "true" }))).toBe("run=true")
 	expect(decided(file, prWorld(surface))).toBe("run=false")
+	expect(decided(file, prWorld(surface, { [surfaceOf(surface)]: "true" })), "the paths filter runs it").toBe("run=true")
 	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
-	expect(decided(file, prWorld(surface, { "needs.changes.outputs.base": "main" })), "the live base forces main's run").toBe("run=true")
-	expect(decide(file, prWorld(surface, { "needs.changes.outputs.base": "" })).code, "an empty base").not.toBe(0)
+	expect(decided(file, prWorld(surface, { [BASE]: "main" })), "the live base forces main's run").toBe("run=true")
+	expect(decide(file, prWorld(surface, { [BASE]: "" })).code, "an empty base").not.toBe(0)
 })
 
+// A required aggregator passes when its gate skipped the suites. A gate that skipped a draft would
+// pass it, and once marked ready the PR would merge on that pass while its suites still ran. So each
+// lane's gate step runs here bound to a draft whose diff touches its surface: it must ask for the
+// suites, and the aggregator must then fail on them skipped. A draft-flag read in the YAML spelled any
+// other way than the one this world binds has no value here, and throws; behavior-gating.test.ts
+// refuses one in the two scripts.
 test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface }) => {
-	const draft: World = {
-		...prWorld(surface, { [`needs.changes.outputs.${surface}`]: "true" }),
-		"github.event.pull_request.draft": "true",
-	}
+	const draft: World = { ...prWorld(surface, { [surfaceOf(surface)]: "true" }), "github.event.pull_request.draft": "true" }
 	expect(decided(file, draft)).toBe("run=true")
-	const agg = aggregator(file)
-	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
-	const ran = { "needs.decide.outputs.run": "true", [READ_ATTEMPT]: "1", "github.run_attempt": "1", ...results(agg.needs, []) }
-	expect(exitCode(agg, ran)).toBe(0)
-	expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
-})
-
-// The parity pins compare only the suite jobs, and the loop pin holds when a job leaves `needs` and the
-// loop together, so a suite dropped from a network lane's `status` would stop gating unnoticed.
-test.each(E2E_LANES.filter(({ file }) => file.includes("network")))("$file's aggregator waits on every job", ({ file }) => {
-	const agg = aggregator(file)
-	expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
-})
-
-// A re-run of `status` or `decide` alone carries the earlier attempt's gate inputs, so a skip decided
-// on labels read before a label was added could pass; a re-run of failed suites keeps its ran gate.
-test.each(E2E_LANES)("$file accepts skipped suites only on labels read in this attempt", ({ file }) => {
-	const agg = aggregator(file)
-	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
-	const skip = { "needs.decide.outputs.run": "false", ...results(agg.needs, suites) }
-	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "2", "github.run_attempt": "2" })).toBe(0)
-	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "1", "github.run_attempt": "2" })).not.toBe(0)
-	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "", "github.run_attempt": "1" })).not.toBe(0)
-	const rerunSuites = { "needs.decide.outputs.run": "true", ...results(agg.needs, []), [READ_ATTEMPT]: "1", "github.run_attempt": "2" }
-	expect(exitCode(agg, rerunSuites)).toBe(0)
+	const agg = laneAggregator(file)
+	expect(laneExit(agg, laneNeeds(agg, "true", "success"))).toBe(0)
+	expect(laneExit(agg, laneNeeds(agg, "true", "skipped"))).not.toBe(0)
 })

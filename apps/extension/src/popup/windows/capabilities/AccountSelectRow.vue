@@ -61,12 +61,12 @@ const startRename = async () => {
 		<Flex align="center" gap="12" wide>
 			<Icon
 				v-if="selected"
-				name="check-circle"
+				name="square-check"
 				size="16"
 				color="primary"
 				:class="$style.row_check"
 			/>
-			<Icon v-else name="circle" size="16" color="secondary" :class="$style.row_check" />
+			<Icon v-else name="square" size="16" color="secondary" :class="$style.row_check" />
 
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
 				<Flex align="center" justify="between" gap="8" wide>
@@ -74,7 +74,7 @@ const startRename = async () => {
 					<span v-if="locked" :class="$style.chain_label">SHARED</span>
 					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
 				</Flex>
-				<Flex align="center" justify="between" gap="8" wide>
+				<Flex align="center" justify="between" gap="8" wide :class="$style.address_line">
 					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
 					<DottedTerm
 						v-if="canRename && !renaming"
@@ -112,6 +112,7 @@ const startRename = async () => {
 
 <style module>
 .row {
+	user-select: none;
 	position: relative;
 
 	display: flex;
@@ -185,13 +186,26 @@ const startRename = async () => {
 }
 
 .row_address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	line-height: 16px;
 
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* Below the popup's width the rename link goes under the shortened address, at the right, when the two
+ * do not fit side by side, so the address is never cut. Two classes outrank the global `gap--8`. */
+@media (width < 359px) {
+	.row_text > .address_line {
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+
+	.address_line > .row_address + * {
+		margin-left: auto;
+	}
 }
 
 .chain_label {
@@ -210,7 +224,7 @@ const startRename = async () => {
 }
 
 .alias_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -235,7 +249,7 @@ const startRename = async () => {
 	}
 
 	&::placeholder {
-		color: var(--nulo-outline);
+		color: var(--nulo-secondary);
 	}
 }
 </style>

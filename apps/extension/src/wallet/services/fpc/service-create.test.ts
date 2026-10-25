@@ -1,11 +1,15 @@
 /**
  * FPC creation fences: `addFpc` and the `getFpcs` protocol-discovery writes
- * capture the deletion fence at their authorizing entry and assert it flush
- * against the row write — a deletion completing during the PXE fetches must
- * never land an orphan row.
+ * capture the deletion fence and a network liveness mark at their entry and
+ * assert both flush against the row write — a deletion, network delete or
+ * reset completing during the PXE work must never land a row.
+ *
+ * A purge or sweep is awaited while a registration is parked, so one that
+ * waited on the registration times the case out instead of racing a timer.
  */
 import { describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { deferred } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -14,6 +18,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 
 vi.mock("@/wallet/services/execution/contract-resolver", () => ({
 	ensureRegistered: async () => {},
@@ -33,13 +38,8 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 import { FpcService, FpcType } from "./service"
 import { FPC_STORAGE_ROOT } from "./spec"
 
-function _deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((res) => {
-		resolve = res
-	})
-	return { promise, resolve }
-}
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 const SPONSOR_ARTIFACT = { functions: [{ name: "sponsor_unconditionally", parameters: [], returnTypes: [] }] }
 const NETWORK = {
@@ -52,13 +52,31 @@ const NETWORK = {
 	endpoints: [{ id: "e1", rpcUrl: "https://n.example/" }],
 }
 
+/** The liveness contract `NetworkService` offers: a mark, and reservations counted since it. */
+function makeReservations() {
+	const state = { count: 0, open: false }
+	return {
+		reserve: () => {
+			state.count++
+			state.open = true
+		},
+		release: () => {
+			state.open = false
+		},
+		isNetworkLive: async (_id: string, since?: number) => !state.open && (since === undefined || since === state.count),
+		captureLiveness: async () => (state.open ? undefined : state.count),
+	}
+}
+
 async function makeHarness() {
 	const api = new FakeBrowserApi()
 	api.reset()
 	const deletionState = new ProfileDeletionState()
+	const reservations = makeReservations()
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
+			...ROW_KEY_FAKE,
 			getDeletionState: () => deletionState,
 			getActiveProfile: async () => ({ id: "p1" }),
 			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1") }),
@@ -69,7 +87,8 @@ async function makeHarness() {
 			registerChainPurgeSubscriber: () => {},
 			getNetwork: async () => NETWORK,
 			getNetworks: async () => [NETWORK],
-			isNetworkLive: async () => true,
+			isNetworkLive: reservations.isNetworkLive,
+			captureLiveness: reservations.captureLiveness,
 		}),
 	)
 	const service = new FpcService(new LoggerStore(new ConfigStore()), api)
@@ -80,8 +99,18 @@ async function makeHarness() {
 		sponsored: "0xsponsored",
 		private: "0xprivate",
 	})
-	return { api, deletionState, service }
+	return { api, deletionState, reservations, service }
 }
+
+type Harness = Awaited<ReturnType<typeof makeHarness>>
+
+function setPxe(h: Harness, pxe: Record<string, unknown>) {
+	;(h.service as unknown as { pxeService: unknown }).pxeService = { getPXE: () => pxe }
+}
+
+type Registration = { instance: { address: { toString(): string } } }
+
+const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 async function fpcRowCount(api: FakeBrowserApi): Promise<number> {
 	const raw = await api.storage.local.get(null)
@@ -91,7 +120,7 @@ async function fpcRowCount(api: FakeBrowserApi): Promise<number> {
 describe("FPC creation fences", () => {
 	test("addFpc: a deletion completing DURING the artifact fetch rejects the write (entry-capture pin)", async () => {
 		const h = await makeHarness()
-		const gate = _deferred<unknown>()
+		const gate = deferred<unknown>()
 		;(h.service as unknown as { pxeService: unknown }).pxeService = {
 			getPXE: () => ({
 				getContractInstance: async () => ({ currentContractClassId: "c1" }),
@@ -112,25 +141,136 @@ describe("FPC creation fences", () => {
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
-	test("getFpcs discovery: a deletion completing DURING the registration park writes NO protocol rows", async () => {
+	test("getFpcs discovery: stores one row per protocol FPC and returns both as protocol rows", async () => {
+		const h = await makeHarness()
+		const registered: string[] = []
+		setPxe(h, { registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()) })
+
+		const fpcs = await h.service.getFpcs(1)
+		expect(registered).toEqual(["0xsponsored", "0xprivate"])
+		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual(
+			expect.arrayContaining([
+				[FpcType.DefaultSponsoredFpc, "0xsponsored", true],
+				[FpcType.PrivateFpc, "0xprivate", true],
+			]),
+		)
+		expect(await fpcRowCount(h.api)).toBe(2)
+	})
+
+	test("getFpcs discovery: a profile purge settles while the registration is parked, and the discovery then writes NO row", async () => {
 		// Discovery is best-effort per item (throws are caught + logged), so the
 		// observable contract is: zero rows land for the deleted profile.
 		const h = await makeHarness()
-		const gate = _deferred<void>()
-		;(h.service as unknown as { pxeService: unknown }).pxeService = {
-			getPXE: () => ({
-				registerContract: () => gate.promise,
-			}),
-		}
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		setPxe(h, {
+			registerContract: () => {
+				reached.resolve()
+				return gate.promise
+			},
+		})
+		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
 
 		const run = h.service.getFpcs(1)
-		await new Promise((r) => setTimeout(r, 0))
-		h.deletionState.beginDeletion("p1")
-		h.deletionState.release("p1")
-		gate.resolve()
+		try {
+			await reached.promise
+			h.deletionState.beginDeletion("p1")
+			await h.service.purgeForProfile("p1")
+			h.deletionState.release("p1")
+		} finally {
+			gate.resolve()
+		}
 
 		await run
+		writes.restore()
+		expect(writes.log).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: two concurrent discoveries store one row per protocol FPC", async () => {
+		const h = await makeHarness()
+		const gate = deferred<void>()
+		setPxe(h, { registerContract: () => gate.promise })
+
+		const runs = Promise.all([h.service.getFpcs(1), h.service.getFpcs(1)])
+		await macrotask()
+		gate.resolve()
+
+		for (const fpcs of await runs) {
+			expect(fpcs.map((f) => f.type).sort()).toEqual([FpcType.DefaultSponsoredFpc, FpcType.PrivateFpc])
+		}
+		expect(await fpcRowCount(h.api)).toBe(2)
+	})
+
+	test("getFpcs discovery: a network reset that completes during a registration leaves NO row", async () => {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => {
+				if (instance.address.toString() !== "0xprivate") return
+				reached.resolve()
+				await gate.promise
+			},
+		})
+
+		const run = h.service.getFpcs(1)
+		try {
+			await reached.promise
+			expect(await fpcRowCount(h.api)).toBe(1)
+			h.reservations.reserve()
+			await h.service.clearChainState("p1", 1)
+			h.reservations.release()
+		} finally {
+			gate.resolve()
+		}
+
+		const fpcs = await run
+		expect(fpcs).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: a network reset during one registration stops the next one", async () => {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		const registered: string[] = []
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => {
+				registered.push(instance.address.toString())
+				reached.resolve()
+				await gate.promise
+			},
+		})
+
+		const run = h.service.getFpcs(1)
+		try {
+			await reached.promise
+			h.reservations.reserve()
+			await h.service.clearChainState("p1", 1)
+			h.reservations.release()
+		} finally {
+			gate.resolve()
+		}
+
+		expect(await run).toEqual([])
+		expect(registered).toEqual(["0xsponsored"])
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: admitted while its network is reserved, it registers nothing and stores NO row", async () => {
+		const h = await makeHarness()
+		const registered: string[] = []
+		setPxe(h, { registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()) })
+
+		h.reservations.reserve()
+		expect(await h.service.getFpcs(1)).toEqual([])
+		expect(registered).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(0)
+
+		h.reservations.release()
+		expect(await h.service.getFpcs(1)).toHaveLength(2)
+		expect(registered).toEqual(["0xsponsored", "0xprivate"])
 	})
 
 	test("getFpcs discovery: a deletion landing DURING a protocol row write compensates it; the logged refusal is exact", async () => {
@@ -153,6 +293,30 @@ describe("FPC creation fences", () => {
 		expect(fired).toBe(true)
 		const errors = logError.mock.calls.map(([, e]) => (e as Error).message)
 		expect(errors[0]).toBe("profile p1 deleted")
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("addFpc: admitted while its network is reserved, it rejects before any PXE call and stores NO row", async () => {
+		const h = await makeHarness()
+		let pxeCalls = 0
+		setPxe(h, {
+			getContractInstance: async () => {
+				pxeCalls++
+				return { currentContractClassId: "c1" }
+			},
+			// The reservation closing during the fetch is what a mark taken under it would miss.
+			getContractArtifact: async () => {
+				pxeCalls++
+				h.reservations.release()
+				return SPONSOR_ARTIFACT
+			},
+		})
+
+		h.reservations.reserve()
+		await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, `0x${"11".repeat(32)}`, "New")).rejects.toThrow(
+			/^network deleted$/,
+		)
+		expect(pxeCalls).toBe(0)
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 

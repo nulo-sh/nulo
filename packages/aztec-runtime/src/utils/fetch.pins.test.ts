@@ -5,18 +5,38 @@
  */
 import { NoRetryError } from "@aztec-labs/foundation/retry"
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { makeFetchWithTimeout, makeSingleAttemptFetch } from "./fetch"
+import { MAX_NODE_RESPONSE_BYTES, makeFetchWithTimeout, makeSingleAttemptFetch } from "./fetch"
 
 const realFetch = globalThis.fetch
 
 function jsonResponse(body: unknown, init: { ok: boolean; status?: number; statusText?: string }) {
-	return {
-		ok: init.ok,
+	return new Response(JSON.stringify(body), {
 		status: init.status ?? (init.ok ? 200 : 500),
 		statusText: init.statusText ?? "",
-		headers: { get: (h: string) => (h === "x-pin" ? "yes" : null) },
-		json: async () => body,
-	} as unknown as Response
+		headers: { "x-pin": "yes" },
+	})
+}
+
+/** A body of `size` bytes streamed in 1 MiB chunks with no `content-length`, so only the counted read can bound it. */
+function streamedJsonString(size: number, status: number): Response {
+	const chunk = new Uint8Array(1024 * 1024).fill(0x61)
+	let left = size - 2
+	const body = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(new TextEncoder().encode('"'))
+		},
+		pull(controller) {
+			if (left === 0) {
+				controller.enqueue(new TextEncoder().encode('"'))
+				controller.close()
+				return
+			}
+			const n = Math.min(left, chunk.byteLength)
+			controller.enqueue(n === chunk.byteLength ? chunk : chunk.subarray(0, n))
+			left -= n
+		},
+	})
+	return new Response(body, { status })
 }
 
 afterEach(() => {
@@ -68,34 +88,12 @@ describe("fetchOnce (via makeSingleAttemptFetch) reject oracle", () => {
 	})
 
 	test("unparseable body on a NON-ok response surfaces the statusText", async () => {
-		globalThis.fetch = vi.fn(
-			async () =>
-				({
-					ok: false,
-					status: 500,
-					statusText: "Bad Gateway-ish",
-					headers: { get: () => null },
-					json: async () => {
-						throw new Error("nope")
-					},
-				}) as unknown as Response,
-		) as typeof fetch
+		globalThis.fetch = vi.fn(async () => new Response("nope", { status: 500, statusText: "Bad Gateway-ish" })) as typeof fetch
 		await expect(makeSingleAttemptFetch(1000)("http://h", {})).rejects.toThrowError("Bad Gateway-ish")
 	})
 
 	test("unparseable body on an OK response is its own failure", async () => {
-		globalThis.fetch = vi.fn(
-			async () =>
-				({
-					ok: true,
-					status: 200,
-					statusText: "OK",
-					headers: { get: () => null },
-					json: async () => {
-						throw new Error("nope")
-					},
-				}) as unknown as Response,
-		) as typeof fetch
+		globalThis.fetch = vi.fn(async () => new Response("nope", { status: 200 })) as typeof fetch
 		await expect(makeSingleAttemptFetch(1000)("http://h", {})).rejects.toThrowError("Failed to parse body as JSON")
 	})
 
@@ -111,9 +109,9 @@ describe("fetchOnce (via makeSingleAttemptFetch) reject oracle", () => {
 		expect(init.signal).toBeInstanceOf(AbortSignal)
 	})
 
-	test("the abort timer stays armed through a PENDING resp.json(): a stalled body still times out", async () => {
+	test("the abort timer stays armed through a PENDING body read: a stalled body still times out", async () => {
 		// fetch resolves fast, but the body read hangs; the AbortController fires
-		// mid-json and the (aborted) read rejects INTO the json-parse catch —
+		// mid-read and the (aborted) read rejects INTO the json-parse catch —
 		// surfacing as the parse-failure message on an ok response (current
 		// behavior, pinned so the extraction can't move clearTimeout ahead of
 		// the body read).
@@ -122,16 +120,12 @@ describe("fetchOnce (via makeSingleAttemptFetch) reject oracle", () => {
 			let signal: AbortSignal | undefined
 			globalThis.fetch = vi.fn(async (_h: unknown, init: RequestInit) => {
 				signal = init.signal as AbortSignal
-				return {
-					ok: true,
-					status: 200,
-					statusText: "OK",
-					headers: { get: () => null },
-					json: () =>
-						new Promise((_, reject) => {
-							signal?.addEventListener("abort", () => reject(new Error("body read aborted")))
-						}),
-				} as unknown as Response
+				const body = new ReadableStream<Uint8Array>({
+					start(controller) {
+						signal?.addEventListener("abort", () => controller.error(new Error("body read aborted")))
+					},
+				})
+				return new Response(body, { status: 200 })
 			}) as unknown as typeof fetch
 			const pending = makeSingleAttemptFetch(50)("http://h", {})
 			const settled = expect(pending).rejects.toThrowError("Failed to parse body as JSON")
@@ -141,6 +135,23 @@ describe("fetchOnce (via makeSingleAttemptFetch) reject oracle", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("the node reply byte budget", () => {
+	test.each([200, 503])("a reply over the budget with status %i is a NoRetryError and is fetched once", async (status) => {
+		const spy = vi.fn(async () => streamedJsonString(MAX_NODE_RESPONSE_BYTES + 1, status))
+		globalThis.fetch = spy as unknown as typeof fetch
+		const err = await makeFetchWithTimeout(60_000)("http://h", {}).catch((e) => e)
+		expect(err).toBeInstanceOf(NoRetryError)
+		expect(err.message).toBe(`Response body is over its ${MAX_NODE_RESPONSE_BYTES}-byte budget`)
+		expect(spy).toHaveBeenCalledOnce()
+	})
+
+	test("a reply at the budget parses (control)", async () => {
+		globalThis.fetch = vi.fn(async () => streamedJsonString(MAX_NODE_RESPONSE_BYTES, 200)) as unknown as typeof fetch
+		const out = await makeSingleAttemptFetch(60_000)("http://h", {})
+		expect((out.response as unknown as string).length).toBe(MAX_NODE_RESPONSE_BYTES - 2)
 	})
 })
 
@@ -172,5 +183,68 @@ describe("retry-wrapper interaction (makeFetchWithTimeout)", () => {
 		}) as typeof fetch
 		await expect(makeFetchWithTimeout(1000)("http://h", {})).rejects.toThrowError("Error 404 from server http://h: bad")
 		expect(calls).toBe(1)
+	})
+})
+
+describe("retryWhile (makeFetchWithTimeout)", () => {
+	function refusingFetch(): { calls: () => number } {
+		let calls = 0
+		globalThis.fetch = vi.fn(async () => {
+			calls++
+			throw new TypeError(`refused #${calls}`)
+		}) as typeof fetch
+		return { calls: () => calls }
+	}
+
+	/** The outcome once `ms` of fake time has passed, or `undefined` if still pending then. */
+	async function settleWithin(pending: Promise<unknown>, ms: number): Promise<Error | undefined> {
+		let error: Error | undefined
+		pending.catch((e: Error) => {
+			error = e
+		})
+		await vi.advanceTimersByTimeAsync(ms)
+		return error
+	}
+
+	// Retries stopped means no backoff sleep either: the call rejects with no time passing.
+	test.each([
+		{ allowed: false, calls: 1, ms: 0 },
+		{ allowed: true, calls: 4, ms: 6_000 },
+	])(
+		"a network failure with retryWhile $allowed makes $calls attempt(s) and rejects with the last one's error",
+		async ({ allowed, calls, ms }) => {
+			const node = refusingFetch()
+			vi.useFakeTimers()
+			try {
+				const error = await settleWithin(makeFetchWithTimeout(1000, { retryWhile: () => allowed })("http://h", {}), ms)
+				expect(error?.message).toBe(`Error fetching from host http://h: TypeError: refused #${calls}`)
+				expect(node.calls()).toBe(calls)
+			} finally {
+				vi.useRealTimers()
+			}
+		},
+	)
+
+	test("a stop raised during the backoff sleep dispatches nothing when the sleep ends", async () => {
+		const node = refusingFetch()
+		let allowed = true
+		vi.useFakeTimers()
+		try {
+			const outcome = makeFetchWithTimeout(1000, { retryWhile: () => allowed })("http://h", {}).catch((e: Error) => e)
+			await vi.advanceTimersByTimeAsync(500)
+			expect(node.calls()).toBe(1)
+			allowed = false
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(((await outcome) as Error).message).toBe("Error fetching from host http://h: TypeError: refused #1")
+			expect(node.calls()).toBe(1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a first attempt runs and resolves even with retries stopped", async () => {
+		globalThis.fetch = vi.fn(async () => jsonResponse({ result: 9 }, { ok: true })) as typeof fetch
+		const out = await makeFetchWithTimeout(1000, { retryWhile: () => false })("http://h", {})
+		expect(out.response).toEqual({ result: 9 })
 	})
 })

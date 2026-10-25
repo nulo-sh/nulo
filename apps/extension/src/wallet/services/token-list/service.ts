@@ -1,10 +1,11 @@
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { AlarmDispatcher, EventHandler } from "@nulo/wallet-core/utils"
+import { AlarmDispatcher, EventHandler, ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
 import type { IService, ServiceCollection } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
-import { ValueStorage } from "@/wallet/storage"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
 import {
 	type RefreshOutcome,
 	TOKEN_LIST_REFRESH_ALARM_NAME,
@@ -16,7 +17,6 @@ import {
 
 export * from "./spec"
 
-const STORAGE_KEY = "nulo:core:token-list"
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
 const JITTER_MS = 2 * HOUR_MS
@@ -28,7 +28,22 @@ const FAILED: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused"
 /** A served list the wallet refused is worth a line in a bug report; a dead network is not. */
 const SUSPECT: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize"])
 
-type StoredState = { envelope?: string; lastSuccessAt?: number; nextAttemptAt?: number; failures: number }
+export type TokenListStoredState = { envelope?: string; lastSuccessAt?: number; nextAttemptAt?: number; failures: number }
+type StoredState = TokenListStoredState
+
+/** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
+ *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
+export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
+	if (!raw || typeof raw !== "object") return { failures: 0 }
+	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
+	const latest = now + DAY_MS + JITTER_MS
+	return {
+		envelope: typeof envelope === "string" ? envelope : undefined,
+		lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
+		nextAttemptAt: Number.isFinite(due) && (due as number) <= latest ? (due as number) : undefined,
+		failures: Number.isSafeInteger(failures) && (failures as number) >= 0 ? (failures as number) : 0,
+	}
+}
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 
@@ -86,7 +101,7 @@ export class TokenListService implements IService {
 		browserApi: BrowserApi,
 		options: TokenListServiceOptions = {},
 	) {
-		this.storage = new ValueStorage<StoredState>(STORAGE_KEY, browserApi.storage.local)
+		this.storage = valueStorage<StoredState>("tokenList", browserApi.storage.local)
 		this.dispatcher = new AlarmDispatcher(TOKEN_LIST_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.getSource = options.getSource ?? (async () => ({ url: TOKEN_LIST_URL, keys: PINNED_KEYS }))
 		this.fetchFn = options.fetchFn ?? ((url, init) => fetch(url, init))
@@ -197,18 +212,19 @@ export class TokenListService implements IService {
 				credentials: "omit",
 				referrerPolicy: "no-referrer",
 				redirect: "error",
-				cache: "no-cache",
+				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
+				cache: "no-store",
 				signal: controller.signal,
 			})
 			if (!response.ok) throw new DownloadError("http-status")
-			return await readCapped(response, MAX_ENVELOPE_BYTES)
+			return await readBodyCapped(response, MAX_ENVELOPE_BYTES).catch((error: unknown) => {
+				throw error instanceof ResponseTooLargeError ? new DownloadError("oversize") : error
+			})
 		} finally {
 			clearTimeout(timeout)
 		}
 	}
 
-	/** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
-	 *  past the longest one this service writes reads as due, so a planted value cannot stop refreshes. */
 	private async readState(): Promise<StoredState> {
 		let raw: unknown
 		try {
@@ -216,15 +232,7 @@ export class TokenListService implements IService {
 		} catch {
 			return { failures: 0 }
 		}
-		if (!raw || typeof raw !== "object") return { failures: 0 }
-		const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
-		const latest = this.now() + DAY_MS + JITTER_MS
-		return {
-			envelope: typeof envelope === "string" ? envelope : undefined,
-			lastSuccessAt: Number.isFinite(lastSuccessAt) ? (lastSuccessAt as number) : undefined,
-			nextAttemptAt: Number.isFinite(due) && (due as number) <= latest ? (due as number) : undefined,
-			failures: Number.isSafeInteger(failures) && (failures as number) >= 0 ? (failures as number) : 0,
-		}
+		return decodeTokenListState(raw, this.now())
 	}
 
 	private log(level: LogLevel, message: string, data: Record<string, unknown>): void {
@@ -232,34 +240,10 @@ export class TokenListService implements IService {
 	}
 }
 
-function toSnapshot({ sequence, keyId, entries }: VerifiedTokenList): TokenListSnapshot {
-	return { sequence, keyId, entries }
+function toSnapshot({ sequence, keyId, entries, flagged }: VerifiedTokenList): TokenListSnapshot {
+	return { sequence, keyId, entries, flagged }
 }
 
 function refusalOutcome(error: unknown): RefreshOutcome {
 	return error instanceof EnvelopeError && error.reason === "verify-unsupported" ? "verify-unsupported" : "refused"
-}
-
-/** Reads at most `max` bytes, so a hostile host cannot make the worker buffer an unbounded body. */
-async function readCapped(response: Response, max: number): Promise<string> {
-	if (Number(response.headers.get("content-length")) > max) throw new DownloadError("oversize")
-	const reader = response.body?.getReader()
-	if (!reader) return ""
-	const chunks: Uint8Array[] = []
-	let size = 0
-	for (let read = await reader.read(); !read.done; read = await reader.read()) {
-		size += read.value.byteLength
-		if (size > max) {
-			await reader.cancel()
-			throw new DownloadError("oversize")
-		}
-		chunks.push(read.value)
-	}
-	const bytes = new Uint8Array(size)
-	let offset = 0
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset)
-		offset += chunk.byteLength
-	}
-	return new TextDecoder().decode(bytes)
 }

@@ -148,6 +148,14 @@ function makeOpts(rows: unknown[] = [TESTNET, LOCAL, OTHER]) {
 	}
 }
 
+const RESTORED = { kind: "success", label: "Testnet and Local Network restored" }
+
+/** The page left Home once, carrying `outcome`: only a full restore hands one on. */
+function expectLeft(leave: ReturnType<typeof vi.fn>, outcome?: unknown) {
+	expect(leave).toHaveBeenCalledOnce()
+	expect(leave.mock.calls[0]?.[0]).toEqual(outcome)
+}
+
 /** A mounted page over a reminder armed for `armed`, with `backup` picked. */
 async function open(armed: string[] = ["N1", "N2"], backup?: Record<string, unknown>) {
 	const original = await buildBackup()
@@ -155,7 +163,7 @@ async function open(armed: string[] = ["N1", "N2"], backup?: Record<string, unkn
 	const env = makeOpts()
 	const page = useRestoreAgain(env.opts)
 	await page.start()
-	page.selectedBackup.value = { name: "b.json", backup: backup ?? original, type: "plain", profileType: "password" }
+	page.selectedBackup.value = { name: "b.json", backup: backup ?? original, kind: "plain", profileType: "password" }
 	return { ...env, page, run, original }
 }
 
@@ -227,13 +235,33 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
+	test("a passkey body with no check, even the one the reminder names, shows the import's words", async () => {
+		const body = await buildBackup({ data: { profile: { id: "src", name: "Daily", type: "passkey" } } })
+		await armRestoreOutcome("p1", body.checksum, ["N1", "N2"])
+		const { opts } = makeOpts()
+		const page = useRestoreAgain(opts)
+		await page.start()
+		page.selectedBackup.value = { name: "b.json", backup: body, kind: "plain", profileType: "passkey" }
+		const before = structuredClone(store.get(KEY))
+
+		await page.restoreBackup()
+
+		expect(opts.fillError).toHaveBeenCalledWith(
+			"full_backup",
+			"Backup cannot be restored",
+			"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+		)
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
 	test("a tampered body shows the integrity message", async () => {
 		const { page, opts, original } = await open()
 		const before = structuredClone(store.get(KEY))
 		page.selectedBackup.value = {
 			name: "b.json",
 			backup: { ...original, data: { ...original.data, "account-state": [item(1)] } },
-			type: "plain",
+			kind: "plain",
 			profileType: "password",
 		}
 
@@ -244,13 +272,33 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
+	test("a body nested past the engine's stack shows the integrity message", async () => {
+		let deep: unknown[] = []
+		for (let i = 0; i < 1_000_000; i++) deep = [deep]
+		const { page, opts, original } = await open()
+		const before = structuredClone(store.get(KEY))
+		page.selectedBackup.value = {
+			name: "b.json",
+			backup: { ...original, data: { ...original.data, deep } },
+			kind: "plain",
+			profileType: "password",
+		}
+
+		await page.restoreBackup()
+
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
+		expect(page.restoreStatus.value).toBe("failed")
+		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
 	test("a wrong decryption password shows the import's error and never restores", async () => {
 		const { page, opts, original } = await open()
 		const before = structuredClone(store.get(KEY))
 		page.selectedBackup.value = {
 			name: "b.txt",
 			backup: await sealFullBackupText(JSON.stringify(original), "right password"),
-			type: "encrypted",
+			kind: "sealed",
 			profileType: null,
 		}
 		page.decryptionPassword.value = "wrong password"
@@ -289,8 +337,8 @@ describe("useRestoreAgain: outcomes", () => {
 		await page.restoreBackup()
 
 		expect(store.has(KEY)).toBe(false)
-		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Testnet and Local Network restored" })
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith(RESTORED)
+		expectLeft(opts.leave, { snack: RESTORED, profileId: "p1" })
 	})
 
 	test("a network that ran out of time stays named, with the import's warning and Retry", async () => {
@@ -327,7 +375,7 @@ describe("useRestoreAgain: outcomes", () => {
 		const { opts } = makeOpts()
 		const page = useRestoreAgain(opts)
 		await page.start()
-		page.selectedBackup.value = { name: "b.json", backup, type: "plain", profileType: "password" }
+		page.selectedBackup.value = { name: "b.json", backup, kind: "plain", profileType: "password" }
 
 		await page.restoreBackup()
 
@@ -350,8 +398,8 @@ describe("useRestoreAgain: outcomes", () => {
 
 		await page.retryRestore()
 		expect(store.has(KEY)).toBe(false)
-		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Testnet and Local Network restored" })
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith(RESTORED)
+		expectLeft(opts.leave, { snack: RESTORED, profileId: "p1" })
 	})
 
 	test("Continue returns Home and leaves the reminder as the run left it", async () => {
@@ -362,7 +410,7 @@ describe("useRestoreAgain: outcomes", () => {
 
 		page.continueHome()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(store.get(KEY)).toEqual(left)
 	})
 })
@@ -374,7 +422,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.has(KEY)).toBe(false)
 	})
@@ -386,7 +434,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(other)
 	})
@@ -398,7 +446,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.restoreBackup()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(armed)
 		expect(opts.fillError).not.toHaveBeenCalled()
@@ -414,7 +462,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.retryRestore()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
 		expect(store.get(KEY)).toEqual(left)
 		expect(page.isRetrying.value).toBe(false)
@@ -434,7 +482,7 @@ describe("useRestoreAgain: races", () => {
 
 		await page.retryRestore()
 
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 		expect(opts.openToast).not.toHaveBeenCalled()
 		// The Retry's admission renewed the lease, which runs out; the networks stay named.
 		expect(store.get(KEY)).toMatchObject({ run, networkIds: ["N2"] })
@@ -457,13 +505,13 @@ describe("useRestoreAgain: races", () => {
 		session.live = false
 		active.value = "p2"
 		await nextTick()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 
 		release()
 		await restoring
 		expect(store.get(KEY)).toEqual(admitted)
 		expect(opts.openToast).not.toHaveBeenCalled()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 	})
 
 	test.each([
@@ -476,7 +524,7 @@ describe("useRestoreAgain: races", () => {
 		const page = useRestoreAgain(opts)
 		await page.start()
 		await nextTick()
-		expect(opts.leave).toHaveBeenCalledOnce()
+		expectLeft(opts.leave)
 	})
 
 	test("a list still loading neither names nor leaves; the loaded list names the networks", async () => {

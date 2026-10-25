@@ -22,11 +22,11 @@ defineProps<{
 	<Flex direction="column" gap="8" :class="[$style.panel, granted && $style.granted]">
 		<!-- accounts -->
 		<template v-if="capability.type === 'accounts'">
-			<Text variant="label" color="secondary">Permissions:</Text>
+			<Text variant="label-section" color="secondary">Permissions:</Text>
 			<Flex direction="column" gap="4" :class="$style.detail_list">
-				<Flex v-if="capability.canGet !== false" align="center" gap="6">
+				<Flex v-if="capability.canGet === true" align="center" gap="6">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
-					<Text variant="body" color="secondary">Read your account addresses</Text>
+					<Text variant="body" color="secondary">List all your accounts</Text>
 				</Flex>
 				<Flex v-if="capability.canCreateAuthWit" align="center" gap="6">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
@@ -44,7 +44,7 @@ defineProps<{
 		<!-- contracts -->
 		<template v-else-if="capability.type === 'contracts'">
 			<Flex direction="column" gap="4">
-				<Text variant="label" color="secondary">Scope:</Text>
+				<Text variant="label-section" color="secondary">Scope:</Text>
 				<Flex v-if="capability.contracts === '*'" align="center" gap="6" :class="$style.detail_list">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
 					<Text variant="body" color="secondary">Any contract</Text>
@@ -67,7 +67,7 @@ defineProps<{
 				</Flex>
 			</Flex>
 			<Flex direction="column" gap="4">
-				<Text variant="label" color="secondary">Permissions:</Text>
+				<Text variant="label-section" color="secondary">Permissions:</Text>
 				<Flex direction="column" gap="4" :class="$style.detail_list">
 					<Flex v-if="capability.canRegister" align="center" gap="6">
 						<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
@@ -84,7 +84,7 @@ defineProps<{
 		<!-- contractClasses -->
 		<template v-else-if="capability.type === 'contractClasses'">
 			<Flex direction="column" gap="4">
-				<Text variant="label" color="secondary">Scope:</Text>
+				<Text variant="label-section" color="secondary">Scope:</Text>
 				<Flex v-if="capability.classes === '*'" align="center" gap="6" :class="$style.detail_list">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
 					<Text variant="body" color="secondary">Any contract class</Text>
@@ -107,7 +107,7 @@ defineProps<{
 				</Flex>
 			</Flex>
 			<Flex v-if="capability.canGetMetadata" direction="column" gap="4">
-				<Text variant="label" color="secondary">Permissions:</Text>
+				<Text variant="label-section" color="secondary">Permissions:</Text>
 				<Flex align="center" gap="6" :class="$style.detail_list">
 					<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
 					<Text variant="body" color="secondary">Read class metadata</Text>
@@ -118,11 +118,11 @@ defineProps<{
 		<!-- simulation -->
 		<template v-else-if="capability.type === 'simulation'">
 			<Flex v-if="capability.transactions" direction="column" gap="4">
-				<Text variant="label" color="secondary">Simulate transactions (and view-calls) in scope:</Text>
+				<Text variant="label-section" color="secondary">Simulate transactions (and view-calls) in scope:</Text>
 				<ScopePatternList :scope="capability.transactions.scope" />
 			</Flex>
 			<Flex v-if="capability.utilities" direction="column" gap="4">
-				<Text variant="label" color="secondary">Simulate utilities in scope:</Text>
+				<Text variant="label-section" color="secondary">Simulate utilities in scope:</Text>
 				<ScopePatternList :scope="capability.utilities.scope" />
 			</Flex>
 			<Text v-if="!capability.transactions && !capability.utilities" variant="body" color="tertiary">
@@ -133,7 +133,7 @@ defineProps<{
 		<!-- transaction -->
 		<template v-else-if="capability.type === 'transaction'">
 			<Flex direction="column" gap="4">
-				<Text variant="label" color="secondary">Allowed transactions:</Text>
+				<Text variant="label-section" color="secondary">Allowed transactions:</Text>
 				<ScopePatternList :scope="capability.scope" />
 			</Flex>
 			<!-- Load-bearing invariant: dapp-interaction/service.ts:354-362 forces -->
@@ -160,7 +160,7 @@ defineProps<{
 				</Flex>
 			</Flex>
 			<Flex v-if="capability.privateEvents" direction="column" gap="4">
-				<Text variant="label" color="secondary">Read private events from:</Text>
+				<Text variant="label-section" color="secondary">Read private events from:</Text>
 				<Flex
 					v-if="capability.privateEvents.contracts === '*'"
 					align="center"
@@ -196,7 +196,7 @@ defineProps<{
 					This wallet doesn't recognize this permission. Reject if you don't know what it does.
 				</Text>
 				<Flex align="center" gap="6">
-					<Text variant="label" color="tertiary">type:</Text>
+					<Text variant="label-section" color="tertiary">type:</Text>
 					<Text color="secondary" :class="$style.mono">
 						{{ sanitizeWireString(String((capability as { type: string }).type), 32) }}
 					</Text>

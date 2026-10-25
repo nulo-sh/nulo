@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { rpcTransportVerdict } from "@nulo/wallet-core/utils"
+import { hasHiddenUrlCharacter, rpcTransportVerdict } from "@nulo/wallet-core/utils"
 import { z } from "zod"
 
 export const NETWORK_SERVICE_NAME = "network"
@@ -7,6 +7,11 @@ export const NETWORK_SERVICE_NAME = "network"
 /** EntityStorage root for network rows (keyed by `network.id`). Frozen:
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const NETWORK_STORAGE_ROOT = "nulo:core:networks"
+
+/** Per-profile key root of the active network id, stored as a bare string (`${root}@${profileId}`). */
+export const ACTIVE_NETWORK_STORAGE_ROOT = "nulo:core:active-network"
+
+export const decodeActiveNetworkId = (raw: unknown): string | undefined => (typeof raw === "string" ? raw : undefined)
 
 export enum NodeStatus {
 	Active,
@@ -16,7 +21,8 @@ export enum NodeStatus {
 
 // "devnet" is LEGACY-tolerated only (no seed/UI since the devnet default was dropped): stored
 // rows and backups may still carry it, so the schema keeps accepting it.
-export type ChainKind = "mainnet" | "testnet" | "devnet" | "local" | "custom"
+const CHAIN_KINDS = ["mainnet", "testnet", "devnet", "local", "custom"] as const
+export type ChainKind = (typeof CHAIN_KINDS)[number]
 
 export type NetworkEndpoint = {
 	/** Stable id (random hex). */
@@ -55,25 +61,28 @@ const NetworkEndpointRowSchema: z.ZodType<NetworkEndpoint> = z.object({
 	label: z.string().optional(),
 })
 
-/** STORAGE codec row schema — structural only, deliberately LAXER than the wire
- *  `NetworkSchema` below (no `RpcUrlSchema` refine, no `.min(1)`): a legacy row
- *  written before a value-constraint was tightened must still LOAD (the strict
- *  rules keep applying at the add/update/restore boundaries). The `kind` enum
- *  list MUST stay in sync with `ChainKind` above: a new kind written before it
- *  is added here would make those rows unreadable (kept, but hidden) on read. */
-export const NetworkRowSchema: z.ZodType<Network> = z.object({
+export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(CHAIN_KINDS)
+
+const networkShape = {
 	id: z.string(),
 	profileId: z.string(),
 	chainId: z.number(),
 	// Key-derivation chain input: canonical u32, REQUIRED even in the lax row codec — a row
 	// without it cannot participate in account derivation, and a silent default would collapse
-	// the chain separation the field exists to provide (pre-production baseline, no migration).
+	// the chain separation the field exists to provide (required since the first release, so no
+	// stored row lacks it).
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
 	name: z.string(),
 	primaryEndpointId: z.string(),
 	endpoints: z.array(NetworkEndpointRowSchema),
-	kind: z.enum(["mainnet", "testnet", "devnet", "local", "custom"]).optional(),
-})
+	kind: ChainKindSchema.optional(),
+} as const satisfies Record<keyof Network, z.ZodType>
+
+/** STORAGE codec row schema — structural only, deliberately LAXER than the wire
+ *  `NetworkSchema` below (no `.min(1)`): a legacy row written before a
+ *  value-constraint was tightened must still LOAD (the strict rules keep applying
+ *  at the add/update/restore boundaries). */
+export const NetworkRowSchema: z.ZodType<Network> = z.object(networkShape)
 
 /**
  * Synthesized at lookup-time from `(Network, primaryEndpoint.rpcUrl)`. Kept
@@ -114,6 +123,9 @@ export function findPrimaryEndpoint(network: Network): NetworkEndpoint | undefin
 	return network.endpoints.find((e) => e.id === network.primaryEndpointId)
 }
 
+/** One identity read of the person's own node: a single request, aborted at this budget. */
+export const IDENTITY_PROBE_MS = 5_000
+
 // ── Service-thrown error message prefixes ────────────────────────────
 // Errors cross the SW↔popup wire as plain Error.message strings (custom
 // classes don't survive serialization). Callers match on prefixes.
@@ -130,53 +142,48 @@ export const ERR_UNATTENDED_LIVE_CHECK = "UNATTENDED_LIVE_CHECK"
 export const ERR_CHAIN_QUARANTINED = "CHAIN_QUARANTINED"
 /** A reset of this network is running: deleting it would race the reset's purge. */
 export const ERR_RESET_RUNNING = "RESET_RUNNING"
+/** The RPC URL field's own lines, matched by the popups in the validation error's message. */
+export const ERR_RPC_URL_HIDDEN_CHARACTERS = "RPC URL can't contain spaces or hidden characters."
+export const ERR_RPC_URL_IPV6_LOOPBACK = "Use http://localhost instead of http://[::1]."
+const ERR_RPC_URL_TRANSPORT = "RPC URL must use https:// or http://localhost / http://127.0.0.1 and contain no userinfo"
 
 // ── Zod schemas for the RPC boundary ─────────────────────────────────
 
-export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet", "devnet", "local", "custom"])
-
 /**
- * An RPC URL the wallet may treat as its chain authority: the transport rule
- * (`rpcTransportVerdict`), userinfo refused. zod trims the string before the
- * refine sees it.
+ * An RPC URL the wallet may treat as its chain authority: no hidden character
+ * inside it, then the transport rule (`rpcTransportVerdict`), userinfo refused.
+ * zod's `.url()` returns the trimmed string, so a caller stores the parsed value,
+ * never its own argument. It also drops tab, CR and LF from that value, so the
+ * hidden-character check reads the raw string before it.
  *
- * Runs on the popup client's params and results (`network/client.ts`), on the
- * service's params, and on the backup-restore network filter
- * (`account-state/service.ts`); not in the lax storage row codec. The
- * node-factory adapter applies the transport rule on its own to every URL it
- * dials.
+ * Runs on every input URL: the params of the popup client (`network/client.ts`)
+ * and of the service. A stored URL is never re-judged by it (see `NetworkSchema`);
+ * the node-factory adapter applies the transport rule to every URL it dials.
  */
 export const RpcUrlSchema = z
 	.string()
+	.refine((url) => !hasHiddenUrlCharacter(url), { message: ERR_RPC_URL_HIDDEN_CHARACTERS, abort: true })
 	.url()
-	.refine(
-		(url) => {
-			let parsed: URL
-			try {
-				parsed = new URL(url)
-			} catch {
-				return false
-			}
-			return rpcTransportVerdict(parsed).allowed
-		},
-		{ message: "RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo" },
-	)
+	.superRefine((url, ctx) => {
+		let parsed: URL
+		try {
+			parsed = new URL(url)
+		} catch {
+			ctx.addIssue({ code: "custom", message: ERR_RPC_URL_TRANSPORT })
+			return
+		}
+		const verdict = rpcTransportVerdict(parsed)
+		if (verdict.allowed) return
+		const ipv6Loopback = verdict.refusal === "http-host" && verdict.host === "[::1]"
+		ctx.addIssue({ code: "custom", message: ipv6Loopback ? ERR_RPC_URL_IPV6_LOOPBACK : ERR_RPC_URL_TRANSPORT })
+	})
 
-export const NetworkEndpointSchema: z.ZodType<NetworkEndpoint> = z.object({
-	id: z.string(),
-	rpcUrl: RpcUrlSchema,
-	label: z.string().optional(),
-})
-
+/** A network as storage holds it, every field checked except each endpoint's URL, which is read as
+ *  the row codec reads it: a URL saved before a rule tightened (an `http://[::1]` node) must still
+ *  list and restore, so the person can switch or delete it. */
 export const NetworkSchema: z.ZodType<Network> = z.object({
-	id: z.string(),
-	profileId: z.string(),
-	chainId: z.number(),
-	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
-	name: z.string(),
-	primaryEndpointId: z.string(),
-	endpoints: z.array(NetworkEndpointSchema).min(1),
-	kind: ChainKindSchema.optional(),
+	...networkShape,
+	endpoints: z.array(NetworkEndpointRowSchema).min(1),
 })
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
@@ -226,21 +233,29 @@ export const NetworkMethodSchemas = {
 		params: z.tuple([]),
 		result: NetworkSchema.nullable(),
 	},
+	getNetworkArrival: {
+		params: z.tuple([]),
+		result: NetworkSchema.nullable(),
+	},
+	answerNetworkArrival: {
+		params: z.tuple([z.string().min(1)]),
+		result: z.void(),
+	},
 	setActiveForProfile: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
 		result: z.string(),
 	},
 	addEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	updateEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1), z.string().optional(), RpcUrlSchema]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	deleteEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
-		result: NetworkEndpointSchema,
+		result: NetworkEndpointRowSchema,
 	},
 	setPrimaryEndpoint: {
 		params: z.tuple([z.string().min(1), z.string().min(1)]),
@@ -303,6 +318,14 @@ export type Methods = {
 	 * `DEFAULT_SEEDS` (a hardcoded `kind` check in the composable would break the e2e flag).
 	 */
 	getPrimaryNetwork(): Network | null
+	/**
+	 * A default network a later build added to this profile after it had networks, until the person
+	 * answers its arrival; null when there is none. Answered by {@link answerNetworkArrival} or by
+	 * making that network active.
+	 */
+	getNetworkArrival(): Network | null
+	/** Answers the arrival of `networkId` without switching to it; a network not announced is a no-op. */
+	answerNetworkArrival(networkId: string): void
 	/**
 	 * Writes the active-network pointer for a SPECIFIC profile without requiring it to be the active
 	 * session — used by full-backup import to restore the user's active-network selection BEFORE

@@ -1,0 +1,77 @@
+{
+	"tag": "v0.31.0",
+	"browser": "chrome",
+	"entries": {
+		"nulo:config": "{\"theme\":\"system\",\"sidePanel\":false,\"showNode\":true,\"showPopupFullscreen\":true,\"disableAnimations\":false,\"sessionTtl\":1800000,\"strictSecurityMode\":true,\"defaultExplorer\":\"aztecscan\",\"showFiatValues\":true,\"privacyMode\":false,\"incomingTransfersVisible\":true,\"incomingDustUsdThreshold\":0,\"prestoReached\":false,\"developerMode\":true,\"debugMode\":false,\"indicateFailures\":true}",
+		"nulo:core:account-integrity-verified@5def17c9": "{\"walletVersion\":\"0.31.0\",\"accountSetDigest\":\"[]\"}",
+		"nulo:core:accounts@[\"account\",\"5def17c9\",2267676295,\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\"]": "{\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"address\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"index\":0,\"type\":0,\"l1ChainId\":31337,\"name\":\"Account 1\",\"visible\":true}",
+		"nulo:core:accounts@[\"account\",\"5def17c9\",3415328944,\"0x03eb4a87a0bc7de94c96f7f9c9044ac92ab085b4241e29a5429979862101acc6\"]": "{\"profileId\":\"5def17c9\",\"chainId\":3415328944,\"address\":\"0x03eb4a87a0bc7de94c96f7f9c9044ac92ab085b4241e29a5429979862101acc6\",\"index\":1,\"type\":0,\"l1ChainId\":11155111,\"name\":\"Second\",\"visible\":true}",
+		"nulo:core:accounts@[\"account\",\"5def17c9\",3415328944,\"0x09b8aeb68ba5d5b118d15b317b152b3f632808b8947790c4151975bca9b4e5b6\"]": "{\"profileId\":\"5def17c9\",\"chainId\":3415328944,\"address\":\"0x09b8aeb68ba5d5b118d15b317b152b3f632808b8947790c4151975bca9b4e5b6\",\"index\":0,\"type\":0,\"l1ChainId\":11155111,\"name\":\"Account 1\",\"visible\":true}",
+		"nulo:core:accounts@[\"account\",\"5def17c9\",3415328944,\"0x0afb31abda8118e42ecccbadfe68e5514f97289c755d1ecb960fdc2e3e3be8fc\"]": "{\"profileId\":\"5def17c9\",\"chainId\":3415328944,\"address\":\"0x0afb31abda8118e42ecccbadfe68e5514f97289c755d1ecb960fdc2e3e3be8fc\",\"index\":0,\"type\":1,\"l1ChainId\":11155111,\"name\":\"Imported\",\"visible\":true}",
+		"nulo:core:active-network@5def17c9": "f10857e3",
+		"nulo:core:contacts@1992ebaa": "{\"id\":\"1992ebaa\",\"profileId\":\"5def17c9\",\"name\":\"Bob\",\"address\":\"0x16a9b34d9ba1e2e9214880538f0a5cfb0cc0716f5a68568d86ab2044c2a1b46c\",\"abbr\":\"BO\"}",
+		"nulo:core:contacts@27892059": "{\"id\":\"27892059\",\"profileId\":\"5def17c9\",\"name\":\"Alice\",\"address\":\"0x0a14e44c5e978db1faf5a18010a73d7a752462472831aededb6d676d250a102c\",\"abbr\":\"AL\"}",
+		"nulo:core:dappSessions@8448218e2820d7b2135f02e8bec83f65d6e78ac2199d8af503a2adde594ae568": "{\"id\":\"8448218e2820d7b2135f02e8bec83f65d6e78ac2199d8af503a2adde594ae568\",\"profileId\":\"5def17c9\",\"chainId\":\"2267676295\",\"dappMetadata\":{\"name\":\"nulo-playground\",\"url\":\"http://localhost:20132\"},\"permissions\":[{\"methods\":[]}],\"accounts\":[\"aztec:2267676295:0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\"],\"confirmationLevel\":5,\"expiry\":1793315041206,\"verificationHash\":\"1f44340cf62c1a084a8b0c875d82ee0c351dad9cf18e578108e1ed8637e9dc45\",\"capabilityGrants\":[{\"capability\":{\"type\":\"accounts\",\"canGet\":true,\"canCreateAuthWit\":true},\"grantedAt\":1792710241994},{\"capability\":{\"type\":\"transaction\",\"scope\":\"*\"},\"grantedAt\":1792710241994},{\"capability\":{\"type\":\"simulation\",\"transactions\":{\"scope\":\"*\"},\"utilities\":{\"scope\":\"*\"}},\"grantedAt\":1792710241994}],\"accountAliases\":{\"aztec:2267676295:0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\":\"Account 1\"},\"capabilityRejections\":[],\"mac\":\"RSVRsGlFoXx/kJy9Cjnw81N/MKA8t/7WFg++/pksrZI=\"}",
+		"nulo:core:fpcs@8293fc01": "{\"id\":\"8293fc01\",\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"type\":2,\"address\":\"0x2e189d0c28cb86234a17951a94131e19620cda595fa8f9c5c10c24268ceb6db4\",\"name\":\"Private Fee Juice\"}",
+		"nulo:core:fpcs@ecc90d41": "{\"id\":\"ecc90d41\",\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"type\":1,\"address\":\"0x2adfb70e860909f0db8268b3fec80bce52a94559963444f5c0341816b8412130\",\"name\":\"Sponsored\"}",
+		"nulo:core:imported-account-keys@[\"account\",\"5def17c9\",3415328944,\"0x0afb31abda8118e42ecccbadfe68e5514f97289c755d1ecb960fdc2e3e3be8fc\"]": "{\"profileId\":\"5def17c9\",\"chainId\":3415328944,\"address\":\"0x0afb31abda8118e42ecccbadfe68e5514f97289c755d1ecb960fdc2e3e3be8fc\",\"encryptedSigningKey\":\"ARjCAsK6VuyFjT3CGnyFPWBH3nblD2gPMyKzYqHJlEmhwv9BMrGS2SyE9wrez3pvMrrqY7eaXzv78rPyzw==\"}",
+		"nulo:core:incoming-arrivals@5def17c9|f10857e3|0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d": "{\"sinceBlock\":5,\"played\":[[\"note:5def17c9|f10857e3|0x2fe1e09d15e5935430d5a6e03bd742a6b7d0ab1240dcb7ee276b7ed50add463b\",9],[\"pub:5def17c9|f10857e3|0x25427e3eaa2782959ad033b43fff253b269775471ebe560c0cef31a130ecb8b0|0\",8]]}",
+		"nulo:core:incoming-balance-outbox@5def17c9|f10857e3|0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d|1": "{\"dirtyAt\":1792710238317,\"pendingTaskId\":\"81efcd6a\"}",
+		"nulo:core:incoming-public-cursors@5def17c9|f10857e3|0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d": "{\"cursor\":{\"blockNumber\":8,\"txIndexWithinBlock\":0,\"logIndexWithinTx\":0},\"lastSyncedBlockHash\":\"0x252f3b0efc1e17dbac46ab8daea1aad727c9296b1acede319aaf9c6c630cdf53\",\"lastScanFinalized\":8,\"startBlock\":0}",
+		"nulo:core:incoming-transfers@note:5def17c9|f10857e3|0x2fe1e09d15e5935430d5a6e03bd742a6b7d0ab1240dcb7ee276b7ed50add463b": "{\"kind\":\"note\",\"id\":\"note:5def17c9|f10857e3|0x2fe1e09d15e5935430d5a6e03bd742a6b7d0ab1240dcb7ee276b7ed50add463b\",\"siloedNullifier\":\"0x2fe1e09d15e5935430d5a6e03bd742a6b7d0ab1240dcb7ee276b7ed50add463b\",\"profileId\":\"5def17c9\",\"networkId\":\"f10857e3\",\"accountAddress\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"tokenId\":1,\"owner\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"amountRaw\":\"25000000000000000000\",\"noteHash\":\"0x0d96ba337b1019284556bdcbe5c534aa05f34c7ccf0da251e93d5d1257560b10\",\"txHash\":\"0x251a06c2eae3715aab501295f29d9befc5a36b81a6bf28dd00faf7799f9060a9\",\"l2BlockNumber\":9,\"txIndexInBlock\":0,\"indexInTx\":0,\"hidden\":false,\"discoveredAt\":1792710238317,\"blockTimestamp\":1792711047}",
+		"nulo:core:incoming-transfers@pub:5def17c9|f10857e3|0x25427e3eaa2782959ad033b43fff253b269775471ebe560c0cef31a130ecb8b0|0": "{\"kind\":\"public-event\",\"id\":\"pub:5def17c9|f10857e3|0x25427e3eaa2782959ad033b43fff253b269775471ebe560c0cef31a130ecb8b0|0\",\"from\":\"0x1332ddba39e2ebdff7b7153838f3d0f29b41f0c8757f110bd7d4bfd0ce155b7b\",\"blockHash\":\"0x252f3b0efc1e17dbac46ab8daea1aad727c9296b1acede319aaf9c6c630cdf53\",\"profileId\":\"5def17c9\",\"networkId\":\"f10857e3\",\"accountAddress\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"tokenId\":1,\"amountRaw\":\"10000000000000000000\",\"txHash\":\"0x25427e3eaa2782959ad033b43fff253b269775471ebe560c0cef31a130ecb8b0\",\"l2BlockNumber\":8,\"txIndexInBlock\":0,\"indexInTx\":0,\"hidden\":false,\"discoveredAt\":1792710208723,\"blockTimestamp\":1792710975}",
+		"nulo:core:incoming-trust@5def17c9|f10857e3|0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d": "{\"profileId\":\"5def17c9\",\"networkId\":\"f10857e3\",\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"state\":\"trusted\",\"updatedAt\":1792710178251,\"arrivalFloor\":5}",
+		"nulo:core:networks@41766e7d": "{\"id\":\"41766e7d\",\"profileId\":\"5def17c9\",\"chainId\":3415328944,\"l1ChainId\":11155111,\"name\":\"Testnet\",\"primaryEndpointId\":\"41766e7d-ep0\",\"endpoints\":[{\"id\":\"41766e7d-ep0\",\"rpcUrl\":\"https://lb.drpc.live/aztec-testnet/Ak_eT5HA2kbyqamqGTF702frWR_Kv18R8bthLtu1AWF8\",\"label\":\"dRPC\"}],\"kind\":\"testnet\"}",
+		"nulo:core:networks@63cf9b33": "{\"id\":\"63cf9b33\",\"profileId\":\"5def17c9\",\"chainId\":0,\"l1ChainId\":31337,\"name\":\"Local Network\",\"primaryEndpointId\":\"63cf9b33-ep0\",\"endpoints\":[{\"id\":\"63cf9b33-ep0\",\"rpcUrl\":\"http://localhost:8080\"}],\"kind\":\"local\"}",
+		"nulo:core:networks@f10857e3": "{\"id\":\"f10857e3\",\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"l1ChainId\":31337,\"name\":\"Sandbox\",\"primaryEndpointId\":\"f10857e3-ep0\",\"endpoints\":[{\"id\":\"f10857e3-ep0\",\"rpcUrl\":\"http://localhost:30784\"}],\"kind\":\"custom\"}",
+		"nulo:core:profiles@5def17c9": "{\"id\":\"5def17c9\",\"name\":\"Main\",\"type\":\"password\",\"pxeGeneration\":\"35bb4b520435d437f24fd737d4870d92\",\"dekSealed\":\"AG9TlA4h10Qtdwzc3B6TrVcX9Yht5N2hPtG8Dj9VvFxF3R8sYpuIqZ9j8JDqDlXmyNf8yzrm1PR37XH94g==\",\"walletFingerprint\":\"4136d7f21a61b0a3b56874ffd3334f0eb7bac2378053da0f6bcf043e21f9cf83\",\"guard\":\"AN7IvyqdwY6HsR6TYOA/MCabwgvF0QOOmq+W7Q6LCrnKhyo4Vg==\",\"secret\":\"ADTBh7vrINR2Ws6sJsCuAmm22rhtWvpIWToycFDvr8pRV6GOF6E6fmmR/Wp2RNyhHVHgOwCZxLesZRhueg==\",\"entropy\":\"ACeD2n7/EaY5KAsLY7osvrOXiwuIcI2GvLH6w6ppbflcEhWLnK2GvGBWa+W3RLZTCYWlflfRTzQ+L/MlKQ==\",\"envelopeMac\":\"uyvfPXF/qpEthflw4lP8z2nU6pPnSNIwYkd2NoPuARg=\"}",
+		"nulo:core:token-balances@1": "{\"id\":1,\"token\":1,\"account\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"publicBalance\":\"9000000000000000000\",\"privateBalance\":\"25000000000000000000\",\"updatedAt\":1792710266084}",
+		"nulo:core:tokens@1": "{\"id\":1,\"profileId\":\"5def17c9\",\"chainId\":2267676295,\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"classId\":\"0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a\",\"name\":\"TestToken\",\"symbol\":\"TST\",\"decimals\":18,\"getNameFn\":{\"name\":\"name\",\"impl\":0},\"getSymbolFn\":{\"name\":\"symbol\",\"impl\":0},\"getDecimalsFn\":{\"name\":\"decimals\",\"impl\":0},\"balanceOfPublicFn\":{\"name\":\"balance_of_public\",\"impl\":0},\"balanceOfPrivateFn\":{\"name\":\"balance_of_private\",\"impl\":0},\"transferPublicFn\":{\"name\":\"transfer_public_to_public\",\"impl\":0},\"transferPrivateFn\":{\"name\":\"transfer_private_to_private\",\"impl\":1},\"transferPublicToPrivateFn\":{\"name\":\"transfer_public_to_private\",\"impl\":1},\"transferPrivateToPublicFn\":{\"name\":\"transfer_private_to_public\",\"impl\":0}}",
+		"nulo:core:txs@0x01ed4d9714abf3ac520d89fe3aa662b564a5b4fb3d886df9ebf0f41b108638aa": "{\"origin\":{\"type\":1,\"name\":\"nulo-playground\"},\"chainId\":2267676295,\"profileId\":\"5def17c9\",\"networkId\":\"f10857e3\",\"account\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"calls\":[{\"contract\":\"0x2adfb70e860909f0db8268b3fec80bce52a94559963444f5c0341816b8412130\",\"method\":\"sponsor_unconditionally\",\"args\":[],\"classId\":\"0x0d6670f2e8fdfcddc0436f10a43f9b06e5e5ee8797c0b0540e39d35881632437\"},{\"contract\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\",\"method\":\"transfer_public_to_public\",\"args\":[\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"0x1332ddba39e2ebdff7b7153838f3d0f29b41f0c8757f110bd7d4bfd0ce155b7b\",\"0x0000000000000000000000000000000000000000000000000de0b6b3a7640000\",\"0x0000000000000000000000000000000000000000000000000000000000000000\"],\"classId\":\"0x163b2b247391083157f9fc30405e81810e6c08c58501fa2dd10de27d42be1d8a\"}],\"nonce\":\"0x1de8e8fa9aa0d62ad266ee952935207b1c4008dfe726d04b85a14085fa331a4e\",\"feePaymentMethod\":0,\"hash\":\"0x01ed4d9714abf3ac520d89fe3aa662b564a5b4fb3d886df9ebf0f41b108638aa\",\"createdAt\":1792710261992,\"updatedAt\":1792710264682,\"status\":4,\"estimatedFee\":\"4509541217424690\",\"gasDetails\":{\"l2GasLimit\":755917,\"daGasLimit\":1088,\"teardownL2GasLimit\":0,\"teardownDaGasLimit\":0,\"feePerL2Gas\":\"5965656570\",\"feePerDaGas\":\"0\"},\"submittedEndpointUrl\":\"http://localhost:30784\",\"executionResult\":0,\"block\":{\"hash\":\"0x25a319f0590d170b0ec19cafeda377926d7d8ac8f972e8293c7448ae3d386059\",\"number\":10},\"fee\":\"1985793959000000\",\"awaitingFinality\":true}",
+		"nulo:journal@6093cdb46fdd58b2": "{\"id\":\"6093cdb46fdd58b2\",\"kind\":\"token_import\",\"origin\":\"popup\",\"profileId\":\"5def17c9\",\"progress\":{\"stage\":\"succeeded\"},\"error\":null,\"terminalAt\":1792710178225,\"attempts\":0,\"createdAt\":1792710177288,\"updatedAt\":1792710178225,\"accountAddress\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"networkId\":\"f10857e3\",\"title\":\"TST\",\"subtitle\":\"Adding token…\",\"contractAddress\":\"0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d\"}",
+		"nulo:journal@e89deb2081ea248c": "{\"id\":\"e89deb2081ea248c\",\"kind\":\"dapp_execute\",\"origin\":\"dapp\",\"profileId\":\"5def17c9\",\"sessionId\":\"5577f114-ea54-47be-bce2-4a2093435af9\",\"progress\":{\"stage\":\"succeeded\",\"txHash\":\"0x01ed4d9714abf3ac520d89fe3aa662b564a5b4fb3d886df9ebf0f41b108638aa\"},\"error\":null,\"terminalAt\":1792710261995,\"attempts\":0,\"createdAt\":1792710245295,\"updatedAt\":1792710261995,\"accountAddress\":\"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d\",\"networkId\":\"f10857e3\",\"title\":\"transfer_public_to_public\",\"subtitle\":\"nulo-playground\"}",
+		"nulo:legal:accepted": {
+			"acceptedAt": 1767225600000,
+			"history": [
+				{
+					"acceptedAt": 1767225600000,
+					"privacyVersionShown": "1.2.4",
+					"surface": "onboarding",
+					"termsVersion": "1.0"
+				}
+			],
+			"privacyVersionShown": "1.2.4",
+			"surface": "onboarding",
+			"termsVersion": "1.0"
+		},
+		"nulo:onboarding:completed": true,
+		"nulo:schema:version": 1,
+		"nulo:ui:activeAccount": "0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d",
+		"nulo:ui:feePaymentMethods@5def17c9": {
+			"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d": {
+				"fpc": {
+					"id": "ecc90d41",
+					"isProtocol": true
+				},
+				"subtitle": "sponsored",
+				"title": "Sponsored",
+				"type": "fpc"
+			}
+		},
+		"nulo:ui:lastActiveProfile": "5def17c9",
+		"nulo:ui:pinnedTokens@5def17c9": {
+			"2267676295": ["0x2425c8910c85608374ba4bd41ff76a596f56903dc07d98105858981293ba6b0d"]
+		},
+		"nulo:ui:sendFeePaymentMethods@5def17c9": {
+			"0x0b0f9853c94d84a65d0463ff5e41f576de4e100e7318fe412ba6ee5198c5969d": {
+				"private": {
+					"fpc": {
+						"id": "ecc90d41",
+						"name": "Sponsored"
+					},
+					"type": "fpc"
+				}
+			}
+		}
+	}
+}

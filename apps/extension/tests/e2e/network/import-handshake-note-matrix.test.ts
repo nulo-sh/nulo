@@ -1,8 +1,8 @@
 /**
- * The rest of the handshake-note import matrix: the Settings delete and a passkey profile. Both
- * reach the same `clearProfileState` and the same import as the pooled row, so they run locally
- * only: CI skips them, and the passkey row also needs the export ceremony that CI's virtual
- * authenticator does not resolve (`passkey-backup.test.ts`).
+ * The rest of the handshake-note import matrix. The passkey row is the one PR-lane restore of a
+ * passkey backup the wallet made, through the real ceremony and into the PXE; smoke restores a
+ * synthetic one. The Settings row reaches the same purge and import as the pooled row
+ * (`import-handshake-note.test.ts`), differing only in where the delete starts, so CI skips it.
  *
  * @requires-proverless — formal marker scanned by scripts/e2e/agent.sh; the projection gate exists
  * only in a proverless-armed build.
@@ -13,13 +13,13 @@ import { test } from "../fixtures/extension"
 import { type ImportRow, importRowName, runHandshakeImport } from "../helpers/handshake-import"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-const ROWS: readonly ImportRow[] = [
-	{ credential: "password", deleteFrom: "settings" },
-	{ credential: "passkey", deleteFrom: "lock-view" },
+const ROWS: readonly { row: ImportRow; inCi: boolean }[] = [
+	{ row: { credential: "password", deleteFrom: "settings" }, inCi: false },
+	{ row: { credential: "passkey", deleteFrom: "lock-view" }, inCi: true },
 ]
 
-for (const row of ROWS) {
-	test.skipIf(!aztecConfig || process.env.CI === "true")(
+for (const { row, inCi } of ROWS) {
+	test.skipIf(!aztecConfig || (!inCi && process.env.CI === "true"))(
 		importRowName(row),
 		{ timeout: 900_000, retry: 0 },
 		async ({ freshExtensionPerTest: ctx }) => {

@@ -17,13 +17,13 @@ import type { AztecNode } from "@aztec-labs/aztec.js/node"
 import type { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { Fr } from "@aztec-labs/aztec.js/fields"
 import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
-import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
 import { extractEvent } from "@aztec-labs/ethereum/utils"
 import { FeeJuicePortalAbi } from "@aztec-foundation/l1-artifacts/FeeJuicePortalAbi"
 import { computeSecretHash } from "@aztec-labs/stdlib/hash"
 import { poseidon2HashBytes, poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/sync"
 import { createLogger } from "@aztec-labs/foundation/log"
-import { type Chain, getContract } from "@aztec/viem"
+import { getContract } from "viem"
+import { createFixtureL1Client } from "./l1-signer"
 
 /**
  * Domain separator for FPC bridge secret derivation — must match the Noir
@@ -33,7 +33,6 @@ import { type Chain, getContract } from "@aztec/viem"
 const DOM_SEP__FPC_BRIDGE_SECRET = Number(poseidon2HashBytes(Buffer.from("az_dom_sep__fpc_bridge_secret")).toBigInt() & 0xffff_ffffn)
 
 const DEFAULT_L1_RPC_URL = "http://127.0.0.1:8545"
-const DEFAULT_L1_MNEMONIC = "test test test test test test test test test test test junk"
 
 export type BridgeForMintResult = {
 	secret: Fr
@@ -50,7 +49,6 @@ export async function bridgeForMint(
 	produceL2Block: () => Promise<unknown>,
 	opts?: {
 		l1RpcUrls?: string[]
-		l1Mnemonic?: string
 		messagePollTries?: number
 		messagePollIntervalMs?: number
 	},
@@ -62,10 +60,7 @@ export async function bridgeForMint(
 
 	const l1RpcUrls = opts?.l1RpcUrls ?? [process.env.ANVIL_URL ?? DEFAULT_L1_RPC_URL]
 	const nodeInfo = await aztecNode.getNodeInfo()
-	const l1Client = createExtendedL1Client(l1RpcUrls, opts?.l1Mnemonic ?? DEFAULT_L1_MNEMONIC, {
-		id: nodeInfo.l1ChainId,
-		name: "anvil",
-	} as Chain)
+	const l1Client = createFixtureL1Client(l1RpcUrls, nodeInfo.l1ChainId)
 
 	const { feeJuicePortalAddress, feeJuiceAddress, feeAssetHandlerAddress } = nodeInfo.l1ContractAddresses
 	const handlerAddress = feeAssetHandlerAddress && !feeAssetHandlerAddress.isZero() ? feeAssetHandlerAddress : undefined

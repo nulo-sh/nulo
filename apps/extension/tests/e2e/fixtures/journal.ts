@@ -8,8 +8,8 @@
  * `succeeded`, and a freshly-opened popup paints the card asynchronously after
  * the journal already reflects the state. Asserting on the card therefore races
  * the render (and the proverless fast-completion); asserting on the journal does
- * not. Read these from any extension-context page (popup/SW) — `chrome.storage`
- * is shared across extension contexts.
+ * not. The records are sealed at rest, so every read goes through the build's
+ * sealed-read seam (`./sealed-rows.ts`), sent from an extension page.
  *
  * Stage groups mirror `@nulo/wallet-core/jobs` `JobStage`
  * (`queued|pending|simulating|proving|submitting|succeeded|failed|cancelled`):
@@ -25,6 +25,13 @@ import { execSync } from "node:child_process"
 import type { EvaluateFunc, Page } from "puppeteer"
 import { EXTENSION_SCHEME } from "./browser"
 import { type TickState, TICK_STATE_CAUSE, tickStateBefore } from "./balance-queue-trail"
+import { PollTimeoutError, pollUntil } from "./poll"
+import { readSealedRows, SEALED_READ_MESSAGE } from "./sealed-rows"
+
+/** Every journal record the background can open. */
+async function journalRecords(page: Page): Promise<Record<string, unknown>[]> {
+	return (await readSealedRows(page, "journal")).map(({ row }) => row)
+}
 
 /** Non-terminal, claimed stages — "an op is in flight right now". */
 export const ACTIVE_STAGES = ["pending", "simulating", "proving", "submitting"] as const
@@ -40,49 +47,20 @@ export type InFlightCounts = { active: number; queued: number; total: number }
  * were copy-pasted across concurrency tests.
  */
 export async function readDappExecuteRecords(page: Page): Promise<DappExecuteView[]> {
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 16 — one tolerant in-browser journal scan projecting the exact lean record view
-	return page.evaluate(async () => {
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		const out: { id: string; stage: string; sessionId?: string }[] = []
-		for (const [k, raw] of Object.entries(all)) {
-			if (!k.startsWith("nulo:journal@")) continue
-			try {
-				const r = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
-					id?: string
-					kind?: string
-					progress?: { stage?: string }
-					sessionId?: string
-				}
-				if (r?.kind === "dapp_execute") out.push({ id: r.id ?? "", stage: r.progress?.stage ?? "?", sessionId: r.sessionId })
-			} catch {
-				// Skip unparseable / non-record entries.
-			}
-		}
-		return out
-	})
+	type Row = { id?: string; kind?: string; progress?: { stage?: string }; sessionId?: string }
+	return ((await journalRecords(page)) as Row[])
+		.filter((r) => r.kind === "dapp_execute")
+		.map((r) => ({ id: r.id ?? "", stage: r.progress?.stage ?? "?", sessionId: r.sessionId }))
 }
 
 export type DappExecuteOutcome = { id: string; stage: string; failure?: string }
 
 /** Every `dapp_execute` row's stage and, once it failed, its failure kind (`error.kind`). */
 export async function readDappExecuteOutcomes(page: Page): Promise<DappExecuteOutcome[]> {
-	const outcomes = await page.evaluate(async () => {
-		type Row = { id?: string; kind?: string; progress?: { stage?: string }; error?: { kind?: string } }
-		const parse = (raw: unknown): Row | undefined => {
-			try {
-				return (typeof raw === "string" ? JSON.parse(raw) : raw) as Row
-			} catch {
-				return undefined
-			}
-		}
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		return Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:journal@"))
-			.map(([, raw]) => parse(raw))
-			.filter((row): row is Row => row?.kind === "dapp_execute")
-			.map((row) => ({ id: row.id ?? "", stage: row.progress?.stage ?? "?", failure: row.error?.kind }))
-	})
-	return outcomes
+	type Row = { id?: string; kind?: string; progress?: { stage?: string }; error?: { kind?: string } | null }
+	return ((await journalRecords(page)) as Row[])
+		.filter((row) => row.kind === "dapp_execute")
+		.map((row) => ({ id: row.id ?? "", stage: row.progress?.stage ?? "?", failure: row.error?.kind }))
 }
 
 /** Polls the `dapp_execute` rows until `holds` accepts them; a timeout names the last read. */
@@ -92,13 +70,11 @@ export async function waitForDappExecuteOutcomes(
 	holds: (rows: DappExecuteOutcome[]) => boolean,
 	timeout = 30_000,
 ): Promise<DappExecuteOutcome[]> {
-	const deadline = Date.now() + timeout
-	for (;;) {
-		const rows = await readDappExecuteOutcomes(page)
-		if (holds(rows)) return rows
-		if (Date.now() > deadline) throw new Error(`waitForDappExecuteOutcomes: ${what} within ${timeout}ms; rows: ${JSON.stringify(rows)}`)
-		await new Promise((resolve) => setTimeout(resolve, 200))
-	}
+	return pollUntil(() => readDappExecuteOutcomes(page), holds, {
+		label: `waitForDappExecuteOutcomes: ${what}`,
+		timeoutMs: timeout,
+		intervalMs: 200,
+	})
 }
 
 /** A send's record: its owner and how far it got. `enteredProveAt` is stamped just before a held
@@ -107,22 +83,13 @@ export type SendRecordView = { id: string; kind: "transfer" | "dapp_execute"; pr
 
 /** Snapshot every send record, popup (`transfer`) and dApp (`dapp_execute`), of every profile. */
 export async function readSendRecords(page: Page): Promise<SendRecordView[]> {
-	const rows = await page.evaluate(async () => {
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		return Object.entries(all).flatMap(([key, raw]) => (key.startsWith("nulo:journal@") ? [raw] : []))
-	})
-	return rows.flatMap(toSendRecordView)
+	return (await journalRecords(page)).flatMap(toSendRecordView)
 }
 
-function toSendRecordView(raw: unknown): SendRecordView[] {
+function toSendRecordView(stored: Record<string, unknown>): SendRecordView[] {
 	type Stored = { id?: string; kind?: string; profileId?: string; progress?: { stage?: string; enteredProveAt?: number } }
-	let record: Stored | null
-	try {
-		record = (typeof raw === "string" ? JSON.parse(raw) : raw) as Stored | null
-	} catch {
-		return []
-	}
-	if (record?.kind !== "transfer" && record?.kind !== "dapp_execute") return []
+	const record = stored as Stored
+	if (record.kind !== "transfer" && record.kind !== "dapp_execute") return []
 	const { id = "", kind, profileId = "", progress } = record
 	return [{ id, kind, profileId, stage: progress?.stage ?? "?", enteredProveAt: progress?.enteredProveAt }]
 }
@@ -133,15 +100,12 @@ export async function waitForSendRecord(
 	match: (record: SendRecordView) => boolean,
 	timeoutMs = 60_000,
 ): Promise<SendRecordView> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const records = await readSendRecords(page)
-		const found = records.find(match)
-		if (found) return found
-		if (Date.now() > deadline)
-			throw new Error(`waitForSendRecord: no matching record within ${timeoutMs}ms (records: ${JSON.stringify(records)})`)
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
+	const records = await pollUntil(
+		() => readSendRecords(page),
+		(records) => records.some(match),
+		{ label: "waitForSendRecord: a matching send record", timeoutMs, intervalMs: 250 },
+	)
+	return records.find(match) as SendRecordView
 }
 
 /**
@@ -209,8 +173,8 @@ async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
  * F1 measurement capture (measure, NO fix). Test-side, so it can never ship in
  * a build. At the authwits settings step it dumps the decisive bucket evidence
  * under `[authwit-measure]`:
- *   - stored `nulo:core:auth-registry` rows (their `account` keys + hashes),
- *   - stored `nulo:core:accounts` rows (the address the page queries with),
+ *   - the `nulo:core:auth-registry` rows the wallet reads (their `account` keys + hashes),
+ *   - the `nulo:core:accounts` rows the wallet reads (the address the page queries with),
  *   - the authwits page render state + the revoke-all disabled state.
  * Classifies bucket A (rows exist but their `account` ≠ the queried address —
  * format mismatch) vs B/C (no rows after a grant) vs D (rows match the address
@@ -219,18 +183,22 @@ async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
  */
 export async function dumpAuthwitMeasurement(page: Page, label: string): Promise<void> {
 	try {
-		const storage = await extCtxEvaluate(page, async () => {
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			const pick = (match: (k: string) => boolean) =>
-				Object.entries(all)
-					.filter(([k]) => match(k))
-					.map(([key, value]) => ({ key, value }))
-			return {
-				authwits: pick((k) => k.startsWith("nulo:core:auth-registry") && !k.startsWith("nulo:core:auth-registry-enabled")),
-				authwitsEnabled: pick((k) => k.startsWith("nulo:core:auth-registry-enabled")),
-				accounts: pick((k) => k.startsWith("nulo:core:accounts")),
-			}
-		})
+		const storage = await extCtxEvaluate(
+			page,
+			async (message: string) => {
+				// The authwit roots and the accounts are sealed: read them as the wallet does, through the seam.
+				const sealed = async (root: string) =>
+					(((await chrome.runtime.sendMessage({ type: message, root })) ?? []) as { storageKey: string; row: unknown }[]).map(
+						({ storageKey, row }) => ({ key: storageKey, value: row }),
+					)
+				return {
+					authwits: await sealed("authRegistry"),
+					authwitsEnabled: await sealed("authRegistryEnabled"),
+					accounts: await sealed("accounts"),
+				}
+			},
+			SEALED_READ_MESSAGE,
+		)
 		const dom = await page
 			.evaluate(() => {
 				const body = document.body.textContent ?? ""
@@ -263,49 +231,41 @@ export async function dumpAuthwitMeasurement(page: Page, label: string): Promise
  * callers (F1/F2) too. Allowlisted to `dapp_execute` (NOT a `get(null)` dump).
  */
 export async function readDappExecuteRecordsFull(page: Page): Promise<unknown[] | string> {
-	// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 18 — one tolerant scan applies the diagnostic allowlist before data crosses into CI artifacts
-	return extCtxEvaluate(page, async () => {
-		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-		const out: unknown[] = []
-		for (const [k, raw] of Object.entries(all)) {
-			if (!k.startsWith("nulo:journal@")) continue
-			try {
-				const r = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
-					kind?: string
-					id?: string
-					sessionId?: string
-					progress?: { stage?: string }
-					error?: { code?: unknown }
-					attempts?: number
-					createdAt?: number
-					updatedAt?: number
-					terminalAt?: number | null
-					title?: string
-				}
-				if (r?.kind === "dapp_execute") {
-					// Project DIAGNOSTIC fields only — never accountAddress / txHash /
-					// profileId / networkId / error body. Keeps the queued-stall
-					// disambiguators (stage + createdAt/updatedAt + attempts/terminalAt)
-					// + a truncated sessionId for correlation; keeps identifiers/PII out
-					// of CI artifacts (the dump is uploaded on failure).
-					out.push({
-						id: r.id,
-						stage: r.progress?.stage,
-						attempts: r.attempts,
-						createdAt: r.createdAt,
-						updatedAt: r.updatedAt,
-						terminalAt: r.terminalAt,
-						title: r.title,
-						errorCode: r.error?.code,
-						sid8: typeof r.sessionId === "string" ? r.sessionId.slice(0, 8) : undefined,
-					})
-				}
-			} catch {
-				// Skip unparseable entries.
+	return extCtxEvaluate(
+		page,
+		async (message: string) => {
+			type Row = {
+				kind?: string
+				id?: string
+				sessionId?: string
+				progress?: { stage?: string }
+				error?: { code?: unknown }
+				attempts?: number
+				createdAt?: number
+				updatedAt?: number
+				terminalAt?: number | null
+				title?: string
 			}
-		}
-		return out
-	})
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as { row: Row | null }[]
+			// Diagnostic fields only, never accountAddress, txHash, profileId, networkId or the error
+			// body: the dump is uploaded as a CI artifact on failure.
+			return rows
+				.map(({ row }) => row)
+				.filter((r): r is Row => r?.kind === "dapp_execute")
+				.map((r) => ({
+					id: r.id,
+					stage: r.progress?.stage,
+					attempts: r.attempts,
+					createdAt: r.createdAt,
+					updatedAt: r.updatedAt,
+					terminalAt: r.terminalAt,
+					title: r.title,
+					errorCode: r.error?.code,
+					sid8: typeof r.sessionId === "string" ? r.sessionId.slice(0, 8) : undefined,
+				}))
+		},
+		SEALED_READ_MESSAGE,
+	)
 }
 
 /**
@@ -351,30 +311,38 @@ export async function readSwLogTrail(page: Page, opts: { limit?: number; match?:
  */
 export async function waitForBalanceQueueIdle(page: Page, timeoutMs = 60_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs
-	let state: TickState = { kind: "absent" }
-	while (Date.now() < deadline) {
-		const marker = `e2e-balance-queue-barrier-${Math.random().toString(36).slice(2, 12)}`
-		await page.evaluate((m: string) => console.debug(m), marker)
-		state = await tickStateAtMarker(page, marker, deadline)
-		if (state.kind === "idle") {
-			console.log(`[balance-queue-barrier] idle: ${state.linesSinceEnd} lines between the last tick's end and the marker`)
-			return
-		}
-	}
-	throw new Error(`the balance queue never read idle within ${timeoutMs} ms: ${TICK_STATE_CAUSE[state.kind]}`)
+	const idle = (await pollUntil(
+		async () => {
+			const marker = `e2e-balance-queue-barrier-${Math.random().toString(36).slice(2, 12)}`
+			await page.evaluate((m: string) => console.debug(m), marker)
+			return tickStateAtMarker(page, marker, deadline)
+		},
+		(state) => state.kind === "idle",
+		{ label: "the balance queue reading idle", timeoutMs, intervalMs: 0, show: (state) => TICK_STATE_CAUSE[state.kind] },
+	)) as Extract<TickState, { kind: "idle" }>
+	console.log(`[balance-queue-barrier] idle: ${idle.linesSinceEnd} lines between the last tick's end and the marker`)
 }
 
-/** Polls the stored trail until `marker` is in it, then reads the balance queue's state before it. */
+/** Polls the stored trail until `marker` is in it, then reads the balance queue's state before it;
+ *  at the shared deadline, the state read last. */
 async function tickStateAtMarker(page: Page, marker: string, deadline: number): Promise<TickState> {
-	for (;;) {
+	const readState = async () => {
 		const lines = await page.evaluate(async () => {
 			const res = (await chrome.storage.session.get("nulo:logs")) as Record<string, unknown>
 			const logs = (res["nulo:logs"] as { data?: unknown[] }[] | undefined) ?? []
 			return logs.map((log) => (typeof log.data?.[0] === "string" ? (log.data[0] as string) : ""))
 		})
-		const state = tickStateBefore(lines, marker)
-		if (state.kind !== "absent" || Date.now() >= deadline) return state
-		await new Promise((r) => setTimeout(r, 250))
+		return tickStateBefore(lines, marker)
+	}
+	try {
+		return await pollUntil(readState, (state) => state.kind !== "absent", {
+			label: "the marker in the stored trail",
+			timeoutMs: deadline - Date.now(),
+			intervalMs: 250,
+		})
+	} catch (error) {
+		if (error instanceof PollTimeoutError) return error.last as TickState
+		throw error
 	}
 }
 
@@ -533,32 +501,20 @@ export async function waitForInFlight(
 ): Promise<void> {
 	const { minActive = 0, minQueued = 0, minInFlight = 0, sessionId, timeout = 30_000 } = opts
 	const wait = page.waitForFunction(
-		// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 26 — parse, session filter, stage classification and three threshold checks form one polling predicate
-		async (sid: string | null, minA: number, minQ: number, minIF: number) => {
+		async (message: string, sid: string | null, minA: number, minQ: number, minIF: number) => {
+			type Row = { kind?: string; progress?: { stage?: string }; sessionId?: string }
 			const active = new Set(["pending", "simulating", "proving", "submitting"])
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			let a = 0
-			let q = 0
-			for (const [k, raw] of Object.entries(all)) {
-				if (!k.startsWith("nulo:journal@")) continue
-				try {
-					const r = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
-						kind?: string
-						progress?: { stage?: string }
-						sessionId?: string
-					}
-					if (r?.kind !== "dapp_execute") continue
-					if (sid && r.sessionId !== sid) continue
-					const s = r.progress?.stage
-					if (s && active.has(s)) a++
-					else if (s === "queued") q++
-				} catch {
-					// Skip unparseable entries.
-				}
-			}
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as { row: Row | null }[]
+			const stages = rows
+				.map(({ row }) => row)
+				.filter((r): r is Row => r?.kind === "dapp_execute" && (!sid || r.sessionId === sid))
+				.map((r) => r.progress?.stage ?? "")
+			const a = stages.filter((s) => active.has(s)).length
+			const q = stages.filter((s) => s === "queued").length
 			return a >= minA && q >= minQ && a + q >= minIF
 		},
 		{ timeout, polling: 200 },
+		SEALED_READ_MESSAGE,
 		sessionId ?? null,
 		minActive,
 		minQueued,
@@ -577,21 +533,15 @@ export async function waitForInFlight(
 export async function waitForDappExecuteStagesPresent(page: Page, stages: string[], opts: { timeout?: number } = {}): Promise<void> {
 	const { timeout = 30_000 } = opts
 	const wait = page.waitForFunction(
-		async (required: string[]) => {
-			const present = new Set<string>()
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			for (const [k, raw] of Object.entries(all)) {
-				if (!k.startsWith("nulo:journal@")) continue
-				try {
-					const r = (typeof raw === "string" ? JSON.parse(raw) : raw) as { kind?: string; progress?: { stage?: string } }
-					if (r?.kind === "dapp_execute" && r.progress?.stage) present.add(r.progress.stage)
-				} catch {
-					// Skip unparseable entries.
-				}
-			}
+		async (message: string, required: string[]) => {
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as {
+				row: { kind?: string; progress?: { stage?: string } } | null
+			}[]
+			const present = new Set(rows.filter(({ row }) => row?.kind === "dapp_execute").map(({ row }) => row?.progress?.stage))
 			return required.every((s) => present.has(s))
 		},
 		{ timeout, polling: 200 },
+		SEALED_READ_MESSAGE,
 		stages,
 	)
 	await awaitOrDump(page, `waitForDappExecuteStagesPresent(${stages.join(",")})`, wait)
@@ -610,21 +560,15 @@ export async function waitForDappExecuteStagesPresent(page: Page, stages: string
 export async function waitForDappExecuteWorked(page: Page, options: { timeout?: number } = {}): Promise<void> {
 	const { timeout = 30_000 } = options
 	const wait = page.waitForFunction(
-		async () => {
+		async (message: string) => {
 			const workedOrDone = new Set(["simulating", "proving", "submitting", "succeeded"])
-			const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			for (const [k, raw] of Object.entries(all)) {
-				if (!k.startsWith("nulo:journal@")) continue
-				try {
-					const r = (typeof raw === "string" ? JSON.parse(raw) : raw) as { kind?: string; progress?: { stage?: string } }
-					if (r?.kind === "dapp_execute" && r.progress?.stage && workedOrDone.has(r.progress.stage)) return true
-				} catch {
-					// Skip unparseable entries.
-				}
-			}
-			return false
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "journal" })) ?? []) as {
+				row: { kind?: string; progress?: { stage?: string } } | null
+			}[]
+			return rows.some(({ row }) => row?.kind === "dapp_execute" && workedOrDone.has(row.progress?.stage ?? ""))
 		},
 		{ timeout, polling: 250 },
+		SEALED_READ_MESSAGE,
 	)
 	await awaitOrDump(page, "waitForDappExecuteWorked", wait)
 }

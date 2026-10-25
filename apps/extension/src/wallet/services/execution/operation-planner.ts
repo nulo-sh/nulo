@@ -46,7 +46,7 @@ const TRANSFER_FN_BY_TYPE = {
 	[TransferType.PublicToPrivate]: { field: "transferPublicToPrivateFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPublicToPrivate },
 } as const satisfies Record<TransferType, { field: string; descriptor: unknown }>
 import type { Fn } from "@/wallet/utils/fn"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryMethod, wireTitle } from "@/utils/primary-method"
 import type {
 	Action,
 	AddCapsuleAction,
@@ -59,7 +59,7 @@ import type {
 	Operation,
 	SendTransactionOperation,
 } from "./spec"
-import { type FeePayerRoute, classifyFeePayer } from "@nulo/wallet-bridge"
+import { type FeePayerRoute, classifyFeePayer, sameFieldAddress } from "@nulo/wallet-bridge"
 
 /** The transfer-request value object used below the RPC seam. The wire
  *  (`spec.ts`) stays positional — RPC entry points construct this at the
@@ -68,11 +68,17 @@ export interface TransferRequest {
 	networkId: string
 	accountAddress: string
 	tokenId: number
+	/** The contract of the token the person approved, as `fieldAddressKey` spells it. The send is
+	 *  ordered and built against it, never against whatever row `tokenId` holds later. */
+	tokenContract: string
 	transferType: TransferType
 	recipientAddress: string
 	amount: bigint
 	feeSettings: FeeSettings
 }
+
+/** The refusal of a transfer whose token row names another contract than the one approved. */
+export const TOKEN_MOVED_MESSAGE = "The token changed after this send was approved"
 
 /** Result of {@link OperationPlanner.processAztecJsPayload}: the normalized
  *  actions plus the inferred fee shape. Named (not a positional tuple) so the
@@ -127,6 +133,7 @@ export class OperationPlanner {
 			throw new Error("Unauthorized")
 		}
 		const token = await this.tokenService.getTokenRaw(tokenId)
+		if (!sameFieldAddress(token.contract, req.tokenContract)) throw new Error(TOKEN_MOVED_MESSAGE)
 
 		// A plain index would coerce "0" / ["0"] and reach inherited names; the enum is numeric and own.
 		const transfer =
@@ -245,7 +252,7 @@ export class OperationPlanner {
 		}
 		if ("exec" in operation && (operation as AztecSendTxOperation).exec?.calls?.length) {
 			const carriers = (operation as AztecSendTxOperation).exec.calls.map((c) => ({
-				name: c.name?.toString() ?? c.selector?.toString(),
+				name: wireTitle(c.name?.toString()) ?? c.selector?.toString(),
 			}))
 			return pickPrimaryMethod(carriers)
 		}

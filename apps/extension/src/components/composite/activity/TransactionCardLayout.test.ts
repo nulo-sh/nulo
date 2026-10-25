@@ -45,9 +45,24 @@ describe("composite/TransactionCardLayout", () => {
 		expect(w.find("[data-testid='secondary-content']").exists()).toBe(true)
 	})
 
-	test("title-trailing slot renders inline next to the title", () => {
-		const w = mountLayout({}, { "title-trailing": "<span data-testid='trailing'>↗</span>" })
-		expect(w.find("[data-testid='trailing']").exists()).toBe(true)
+	test("`oneLineTitle` gives the title its one-line cut; by default the title keeps today's rule", () => {
+		const cut = /_title_one_line_/
+		expect(mountLayout({ oneLineTitle: true }).get("[data-testid='activity-title']").attributes("class")).toMatch(cut)
+		expect(mountLayout().get("[data-testid='activity-title']").attributes("class")).not.toMatch(cut)
+	})
+
+	test("title-trailing slot renders in the group beside the title; `wrapTrailing` lets the group drop under it at any width", () => {
+		const slots = { "title-trailing": "<span data-testid='trailing'>↗</span>" }
+		const row = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='activity-title']").element.parentElement as HTMLElement
+		const group = (w: ReturnType<typeof mountLayout>) => w.get("[data-testid='trailing']").element.parentElement as HTMLElement
+		const inline = mountLayout({}, slots)
+		expect(group(inline).className).toMatch(/_trailing_inline_/)
+		expect(group(inline).parentElement).toBe(row(inline))
+		expect(row(inline).className).not.toMatch(/_title_row_wrap_/)
+		const wrapping = mountLayout({ wrapTrailing: true }, slots)
+		expect(group(wrapping).className).toMatch(/_trailing_(?!inline)/)
+		expect(row(wrapping).className).toMatch(/_title_row_wrap_/)
+		expect(row(mountLayout()).querySelector("[class*='_trailing_']")).toBeNull()
 	})
 
 	test("amount + amountSymbol render in the right column when both provided", () => {

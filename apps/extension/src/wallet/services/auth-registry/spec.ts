@@ -57,7 +57,7 @@ export const AuthwitSchema: z.ZodType<Authwit> = z.object({
 	chainId: z.number(),
 	account: z.string(),
 	hash: z.string(),
-	content: z.custom<AuthwitContent>((v) => typeof v === "object" && v !== null),
+	content: z.custom<AuthwitContent>((v) => typeof v === "object" && v !== null).describe("any non-null object, kept as stored"),
 	pending: z.boolean().optional(),
 	txHash: z.string().optional(),
 })
@@ -164,6 +164,8 @@ export type Methods = {
 export type Events = {
 	/** Emitted when a new authwit is added (carries the full scoped row). */
 	onAuthwitAdded: Authwit
+	/** Emitted when a pending authwit's grant is proven (carries the row, `pending: false`). */
+	onAuthwitUpdated: Authwit
 	/** Emitted when an existing authwit is deleted (carries the full scoped row). */
 	onAuthwitDeleted: Authwit
 	/** Emitted when an auth registry is enabled — the `(profileId, chainId, account)` scope, so a

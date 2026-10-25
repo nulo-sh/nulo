@@ -1,10 +1,12 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import { nextTick } from "vue"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../tests/helpers/settings-rows"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
@@ -43,23 +45,20 @@ beforeEach(() => {
 	fakes.config.onUpdate = new EventHandler<ConfigProp>()
 	fakes.config.onConnected = new EventHandler<void>()
 	fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 1_800_000 : true))
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 async function mountLock(type: "password" | "passkey" = "password") {
 	const wrapper = mount(LockPage, {
 		global: {
 			plugins: [
+				settingsRouter(),
 				createTestingPinia({
 					createSpy: vi.fn,
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },
 				}),
 			],
-			components: { Flex, ItemsContainer, MaterialIcon, SettingItem, Text },
+			components: { Flex, ItemsContainer, SettingItem, Text, Icon },
 			stubs: {
 				SettingsPageShell: { props: ["title"], template: '<div :data-title="title"><slot /></div>' },
 				LoadingState: { template: '<div data-testid="loading" />' },
@@ -75,6 +74,10 @@ async function mountLock(type: "password" | "passkey" = "password") {
 }
 
 describe("settings/lock", () => {
+	test.each(["password", "passkey"] as const)("renders the search registry's rows for a %s profile", async (type) => {
+		expectOwnedRows(await mountLock(type), "/popup/settings/lock", settingsContext({ passkey: type === "passkey" }))
+	})
+
 	test("is titled Lock, and Lock now renders while the config reads hang", async () => {
 		fakes.config.getValue.mockReturnValue(new Promise(() => {}))
 		const w = await mountLock()
@@ -157,10 +160,11 @@ describe("settings/lock", () => {
 		const strict = (w: VueWrapper) => w.findComponent('[data-testid="strict-security-toggle"]').attributes("modelvalue")
 		const minutes = (w: VueWrapper) => w.findComponent('[data-testid="auto-lock-input"]').attributes("modelvalue")
 
-		test("a read the drop rejected is made again on the reconnect, never on the first open", async () => {
+		// A port dropped before its deferred Ready announcement never makes it, so the next open announced
+		// is the reopened port's; a read that timed out waiting for Ready meets that port's own first open.
+		test("a read the drop rejected is made again on the next open, the port's first included", async () => {
 			fakes.config.getValue.mockRejectedValueOnce(new Error("Client disconnected"))
 			const w = await mountLock()
-			connect()
 			await flushPromises()
 			expect(fakes.config.getValue).toHaveBeenCalledTimes(1)
 			expect(w.find('[data-testid="loading"]').exists()).toBe(true)

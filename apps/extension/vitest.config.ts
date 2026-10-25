@@ -1,8 +1,8 @@
 import vue from "@vitejs/plugin-vue"
 import useAutoImport from "unplugin-auto-import/vite"
 import { defineConfig } from "vitest/config"
-import { sharedTest } from "../../vitest.base"
-import { artifactAliases, sharedDefine, srcDir } from "./vite.shared"
+import { sharedTest } from "../../vitest.base.mts"
+import { artifactAliases, sharedDefine, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	// Vue plugin + auto-import: required so vitest can compile *.vue
@@ -28,6 +28,9 @@ export default defineConfig({
 		globals: true,
 		environment: "jsdom",
 		setupFiles: "./tests/vitest.setup.ts",
+		// Vitest returns an empty string for CSS unless told otherwise; the viewers' shadow-root
+		// sheet is CSS a test must read as the browser does.
+		css: { include: [/\/components\/JsonViewer\/editor-shadow\.css/] },
 		// Also pick up the co-located tests of the extracted @nulo/* workspace
 		// packages: they run standalone under their own configs AND here under the
 		// extension's jsdom setup, so the aggregate re-runs them (see ARCHITECTURE §14).
@@ -74,6 +77,10 @@ export default defineConfig({
 			// the account vectors above). Runs in aztec-runtime's own node-env suite via `test:all`.
 			"../../packages/aztec-runtime/src/pxe/public-events.test.ts",
 			"../../packages/aztec-runtime/src/pxe/public-events-warn.pins.test.ts",
+			// Same bb.js WASM limitation (the selector's poseidon2). Runs in wallet-bridge's own suite.
+			"../../packages/wallet-bridge/src/auth-registry.pins.test.ts",
+			// Same bb.js WASM limitation (the claim selector's poseidon2). Runs in wallet-bridge's own suite.
+			"../../packages/wallet-bridge/src/fee-payer.pins.test.ts",
 		],
 		// Inline workspace @nulo/* packages so vite processes their TS
 		// source entry points instead of externalizing them (default

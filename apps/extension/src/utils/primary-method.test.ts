@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { FEE_METHODS, pickPrimaryMethod } from "./primary-method"
+import { FEE_METHODS, pickPrimaryMethod, pickPrimaryWireCall, wireTitle } from "./primary-method"
 
 describe("FEE_METHODS — wallet-injected fee/entrypoint set", () => {
 	test("contains the documented seven entries", () => {
@@ -130,5 +130,48 @@ describe("pickPrimaryMethod — order invariant", () => {
 	})
 	test("fee call sandwiched between user calls → first user call wins", () => {
 		expect(pickPrimaryMethod([{ method: "transfer" }, { method: "sponsor_unconditionally" }, { method: "shield" }])).toBe("transfer")
+	})
+})
+
+describe("pickPrimaryWireCall — a dApp call list's primary call and title", () => {
+	const pickPrimaryWireMethod = (calls: unknown) => pickPrimaryWireCall(calls)?.name
+
+	test("the call returned is the one picked, never an earlier fee call of the same name", () => {
+		const fee = { name: "claim", to: "0xfee" }
+		const app = { name: "claim", to: "0xapp" }
+		expect(pickPrimaryWireCall([fee, { name: "mint_and_pay_fee" }, app])).toEqual({ name: "claim", call: app })
+	})
+
+	test("a call is titled by its name, never by a method key beside it", () => {
+		expect(pickPrimaryWireMethod([{ name: "transfer", method: "approve_all" }])).toBe("transfer")
+		expect(pickPrimaryWireMethod([{ method: "approve_all" }])).toBeUndefined()
+	})
+
+	test("the title is the name as sanitizeWireString returns it at 64 code points", () => {
+		expect(pickPrimaryWireMethod([{ name: `trans\u200bfer\u0007${"f".repeat(70)}` }])).toBe(`transfer${"f".repeat(56)}…`)
+		expect(pickPrimaryWireMethod([{ name: "\u200b\u0007" }])).toBeUndefined()
+	})
+
+	test("names are cleaned before the pick, so a queued title skips the fee call a settled record does", () => {
+		const wire = [{ name: "\u200bpay_fee" }, { name: "transfer" }]
+		const settled = wire.map((call) => ({ method: wireTitle(call.name) }))
+		expect(pickPrimaryWireMethod(wire)).toBe("transfer")
+		expect(pickPrimaryMethod(settled)).toBe("transfer")
+	})
+
+	test("the fee-skip rules pick as before (control)", () => {
+		expect(pickPrimaryWireMethod([{ name: "claim_and_end_setup" }, { name: "claim_public" }])).toBe("claim_public")
+		expect(pickPrimaryWireMethod([{ name: "claim" }, { name: "mint_and_pay_fee" }, { name: "swap" }])).toBe("swap")
+		expect(pickPrimaryWireMethod([{ name: "transfer_in_public" }])).toBe("transfer_in_public")
+	})
+
+	test("anything but a list of named calls has no title", () => {
+		expect(pickPrimaryWireMethod(undefined)).toBeUndefined()
+		expect(pickPrimaryWireMethod("transfer")).toBeUndefined()
+		expect(pickPrimaryWireMethod([null, 5, { name: 7 }])).toBeUndefined()
+	})
+
+	test("wireTitle leaves a plain name of 64 characters as it is (control)", () => {
+		expect(wireTitle("x".repeat(64))).toBe("x".repeat(64))
 	})
 })

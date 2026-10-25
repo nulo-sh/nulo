@@ -107,6 +107,22 @@ describe("usePrestoCheck", () => {
 		expect(state.value.kind).toBe("available")
 	})
 
+	test("a flag read released after dispose() sends no probe; one released before it does", async () => {
+		const probes: number[] = []
+		for (const disposeFirst of [true, false]) {
+			let release!: (reached: boolean) => void
+			const config = fakeConfig()
+			config.getValue.mockImplementationOnce(() => new Promise<boolean>((resolve) => (release = resolve)))
+			const { start, dispose, client } = run(config)
+			const pending = start()
+			if (disposeFirst) dispose()
+			release(true)
+			await pending
+			probes.push(client.checkStatus.mock.calls.length)
+		}
+		expect(probes).toEqual([0, 1])
+	})
+
 	test("a result arriving after dispose() is dropped and nothing is remembered", async () => {
 		const config = fakeConfig()
 		const { state, check, dispose } = run(config)

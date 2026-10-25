@@ -14,7 +14,7 @@
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -25,8 +25,26 @@
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
+}
+
+/* Sits level with the value's first line, whose line box is taller. */
+.app_key {
+	composes: detail_key;
+	flex-shrink: 0;
+	padding-top: 2px;
+}
+
+/* A dApp's name can be one unbreakable word: it breaks anywhere, so the row grows instead of the page. */
+.app_value {
+	composes: detail_value_mono;
+	min-width: 0;
+	text-align: right;
+	word-break: break-all;
+	/* Firefox's break-all won't split a letter from the digits after it; anywhere fills every line. */
+	line-break: anywhere;
+	line-height: 1.4;
 }
 
 .empty_headline {
@@ -37,7 +55,7 @@
 
 .empty_sub {
 	composes: type--body from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	text-align: center;
 }
 
@@ -64,11 +82,12 @@
 
 .meta_sep {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .hero_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
+	user-select: none;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -80,18 +99,19 @@
 	transition: color 0.2s var(--bezier);
 
 	& svg {
-		transition: fill 0.2s var(--bezier);
+		transition: color 0.2s var(--bezier);
 	}
 
 	&:hover {
 		color: var(--nulo-accent);
 		& svg {
-			fill: var(--nulo-accent);
+			color: var(--nulo-accent);
 		}
 	}
 }
 
-/* No base colour: the hover outranks whichever colour a page or a sibling class sets. */
+/* No base colour: the hover outranks whichever colour a page or a sibling class sets. The
+ * underline is the dark theme's only hover cue, where the accent nearly matches the value. */
 .detail_link {
 	text-decoration: none;
 	cursor: pointer;
@@ -99,6 +119,7 @@
 
 	&:hover {
 		color: var(--nulo-accent);
+		text-decoration: underline;
 	}
 }
 
@@ -110,12 +131,12 @@
 }
 
 .caption {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .type_chip {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	align-self: center;
 
 	padding: 5px 12px;
@@ -123,6 +144,25 @@
 	background: transparent;
 
 	color: var(--nulo-secondary);
+}
+
+/* Below the popup's width the From and To cards stack, so each shortened address stays whole; a
+ * detail's value keeps a gap from its key when it wraps, and an app's name breaks between its words,
+ * inside one only when a word is wider than the line. */
+@media (width < 359px) {
+	.address_pair {
+		flex-direction: column;
+	}
+
+	.details_box > * {
+		column-gap: 16px;
+	}
+
+	.app_value {
+		word-break: normal;
+		line-break: auto;
+		overflow-wrap: anywhere;
+	}
 }
 
 .address_card {
@@ -150,5 +190,5 @@
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }

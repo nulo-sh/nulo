@@ -1,7 +1,7 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { openPlayground, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { waitForPopup, approveConnect, approveVerify } from "../fixtures/popups"
+import { openPlayground } from "../fixtures/playground"
+import { waitForPopup, approveConnect, approveVerify, recordCreatedWindows } from "../fixtures/popups"
 import { switchToLocalNetwork } from "../fixtures/helpers"
 import { openPopup, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
@@ -9,71 +9,47 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
+const CONNECTED = '[data-testid="pg-status"][data-status="connected"]'
+
 /**
- * Test #04 — session reconnect parameterized.
- *
- *   alwaysTrust=false — second connect skips discover (auto-approved by
- *                       background.ts:280 when DappSession exists) but
- *                       SHOWS verify (because trustedVerification=false).
- *   alwaysTrust=true  — skips both discover AND verify.
- *
- * Note: handleDiscovery auto-approves whenever a DappSession
- * exists, so a second connect from the same origin does NOT re-fire the
- * discover popup. Only verify gets surfaced if !trustedVerification.
+ * A remembered app's reconnect: `handleDiscovery` approves it with no connect window, and its
+ * emoji check still opens, on its own, as the one window the reconnect creates.
  */
-for (const alwaysTrust of [false, true]) {
-	test.skipIf(!hasConfig)(
-		`session-reconnect — alwaysTrust=${alwaysTrust} reconnect ${alwaysTrust ? "skips" : "shows"} verify`,
-		{
-			timeout: 120_000,
-		},
-		async ({ registeredExtensionPerTest }) => {
-			// Switch to Local Network so the playground's chainInfo (Fr.ZERO = 0)
-			// matches the wallet's active network.
-			const setupPage = await openPopup(registeredExtensionPerTest)
-			await waitForHash(setupPage, "#/popup/general", 15_000)
-			await switchToLocalNetwork(setupPage)
-			await setupPage.close()
+test.skipIf(!hasConfig)(
+	"session-reconnect — a remembered app's reconnect opens its emoji check and nothing else",
+	{ timeout: 120_000 },
+	async ({ registeredExtensionPerTest: ctx }) => {
+		// Switch to Local Network so the playground's chainInfo (Fr.ZERO = 0)
+		// matches the wallet's active network. The page stays open to record windows.
+		const control = await openPopup(ctx)
+		await waitForHash(control, "#/popup/general", 15_000)
+		await switchToLocalNetwork(control)
 
-			// First connect — full handshake with the alwaysTrust toggle as configured
-			const dappPage = await openPlayground(registeredExtensionPerTest)
-			const discoverP1 = waitForPopup(registeredExtensionPerTest, "discover", { timeout: 30_000 })
-			await clickByTestId(dappPage, "pg-btn-connect")
-			const verifyPage1 = await approveConnect(registeredExtensionPerTest, await discoverP1)
-			await approveVerify(verifyPage1, { alwaysTrust })
-			await dappPage.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 20_000 })
+		const dappPage = await openPlayground(ctx)
+		const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
+		await clickByTestId(dappPage, "pg-btn-connect")
+		await approveVerify(await approveConnect(ctx, await discoverP))
+		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })
 
-			// Disconnect from dApp side
-			await clickByTestId(dappPage, "pg-btn-disconnect")
-			await dappPage.waitForSelector('[data-testid="pg-status"][data-status="disconnected"]', { timeout: 10_000 })
+		await clickByTestId(dappPage, "pg-btn-disconnect")
+		await dappPage.waitForSelector('[data-testid="pg-status"][data-status="disconnected"]', { timeout: 10_000 })
+		await dappPage.reload({ waitUntil: "domcontentloaded" })
+		await dappPage.waitForSelector('[data-testid="pg-status"]', { timeout: 10_000 })
 
-			// Reload + reconnect — discovery is auto-approved (DappSession persists);
-			// no /windows/discover popup should appear.
-			await dappPage.reload({ waitUntil: "domcontentloaded" })
-			await dappPage.waitForSelector('[data-testid="pg-status"]', { timeout: 10_000 })
+		const created = await recordCreatedWindows(control)
+		const checkP = waitForPopup(ctx, "verify", { timeout: 30_000 })
+		await clickByTestId(dappPage, "pg-btn-connect")
+		const check = await checkP
+		await check.waitForSelector('[data-testid="verify-emoji-grid"]', { visible: true, timeout: 30_000 })
+		const shown = await check.evaluate(async () => ({
+			window: (await chrome.windows.getCurrent()).id,
+			isReconnect: new URLSearchParams(location.hash.split("?")[1]).get("isReconnect"),
+		}))
+		expect(shown).toEqual({ window: expect.any(Number), isReconnect: "true" })
 
-			if (alwaysTrust) {
-				// No discover popup, no verify popup — should reach connected directly.
-				await clickByTestId(dappPage, "pg-btn-connect")
-				await dappPage.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 30_000 })
-				// A trusted reconnect shows no check, so nothing holds the app's first call.
-				const seq = await snapshotResultSeq(dappPage)
-				await clickByTestId(dappPage, "pg-btn-getChainInfo")
-				expect((await waitForPgResult(dappPage, "getChainInfo", seq, 30_000)).status).toBe("ok")
-
-				// Sanity: assert no verify popup ever opened during the reconnect.
-				const verifyOpened = registeredExtensionPerTest.browser.targets().some((t) => t.url().includes("#/windows/verify"))
-				expect(verifyOpened).toBe(false)
-			} else {
-				// Discover auto-approves but verify pops because trustedVerification=false.
-				const verifyP2 = waitForPopup(registeredExtensionPerTest, "verify", { timeout: 30_000 })
-				await clickByTestId(dappPage, "pg-btn-connect")
-				const verifyPage2 = await verifyP2
-				await approveVerify(verifyPage2)
-				await dappPage.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 20_000 })
-			}
-
-			await dappPage.close()
-		},
-	)
-}
+		await approveVerify(check)
+		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })
+		expect(await created()).toEqual([{ id: shown.window, type: "popup" }])
+		await dappPage.close()
+	},
+)

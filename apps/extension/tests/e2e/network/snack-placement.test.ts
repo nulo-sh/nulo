@@ -4,7 +4,8 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	type AztecTestConfig,
 	createSponsoredFeeOptions,
@@ -14,9 +15,11 @@ import {
 	spendPublicAuthwit,
 	waitForTxMined,
 } from "../fixtures/aztec"
+import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import {
 	captureBalanceBaseline,
+	clearGetStarted,
 	enterSendForm,
 	fillSendForm,
 	importToken,
@@ -28,6 +31,7 @@ import {
 	waitForToast,
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
+import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { shotSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
@@ -169,16 +173,14 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 type Box = { top: number; bottom: number; left: number; right: number }
 type ControlPlacement = { at: string; hit: string; covered: boolean; snack: Box; control: Box; viewport: number }
 
-/** Scrolls `testid` to `at` (the end of the container that scrolls it, or centred) and waits for the
- *  snack to measure again. */
-async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "centre"): Promise<void> {
+/** Scrolls `testid` to `at` (the top of the container that scrolls it, the highest it shows, or
+ *  centred) and waits for the snack to measure again. */
+async function scrollControl(page: Page, testid: string, at: "rest" | "top" | "centre"): Promise<void> {
 	await page.evaluate(
 		async (id: string, where: string) => {
 			const el = document.querySelector(`[data-testid="${id}"]`)
 			if (!el) throw new Error(`${id} not found`)
-			let scroller = el.parentElement
-			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-			if (where === "end") (scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			if (where === "top") el.scrollIntoView({ block: "start" })
 			if (where === "centre") el.scrollIntoView({ block: "center" })
 			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 		},
@@ -187,12 +189,12 @@ async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "c
 	)
 }
 
-/** `testid` where the page rests, with the container that scrolls it at its end, then centred, each
+/** `testid` where the page rests, at the top of the container that scrolls it, then centred, each
  *  read once the snack has measured again: what a click at its centre hits, whether any part of it is
  *  under the snack, and where both are. */
 async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<ControlPlacement[]> {
 	const placements: ControlPlacement[] = []
-	for (const at of ["rest", "end", "centre"] as const) {
+	for (const at of ["rest", "top", "centre"] as const) {
 		await scrollControl(page, testid, at)
 		const placement = await page.evaluate(
 			(s: string, id: string, where: string) => {
@@ -221,31 +223,27 @@ async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
-/** Two of the worker's once-a-minute finality reads, each a single attempt that can fail, and margin. */
+/** Two finality reads at the production minute, each a single attempt that can fail, and margin, so
+ *  the bound holds on a build without the e2e clocks. */
 const FINAL_READ_MS = 180_000
 
-async function storedValue<T>(page: Page, key: string): Promise<T | undefined> {
-	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
-	if (raw === undefined) return undefined
-	return (typeof raw === "string" ? JSON.parse(raw) : raw) as T
+async function storedTx(page: Page, hash: string): Promise<Tx | undefined> {
+	return (await readSealedRows<Tx>(page, "txs")).find((tx) => tx.naturalId === hash)?.row
 }
 
 async function waitFor(what: string, done: () => Promise<boolean>, timeoutMs = 120_000): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	while (!(await done())) {
-		if (Date.now() > deadline) throw new Error(`${what} within ${timeoutMs} ms`)
-		await new Promise((r) => setTimeout(r, 500))
-	}
+	await pollUntil(done, (met) => met, { label: what, timeoutMs, intervalMs: 500 })
 }
 
 /** The wallet acted on the public receipt `txHash`: its record exists and no balance refresh it
  *  asked for is still owed. */
 async function receiptSettled(page: Page, txHash: string): Promise<boolean> {
-	return page.evaluate(async (hash: string) => {
-		const keys = Object.keys(await chrome.storage.local.get(null))
-		const recorded = keys.some((k) => k.startsWith("nulo:core:incoming-transfers@pub:") && k.includes(hash))
-		return recorded && !keys.some((k) => k.startsWith("nulo:core:incoming-balance-outbox@"))
-	}, txHash)
+	const records = await readSealedRows<{ kind?: string; txHash?: string }>(page, "incomingTransfers")
+	const recorded = records.some(({ row }) => row.kind === "public-event" && row.txHash === txHash)
+	const owed = await page.evaluate(async () =>
+		Object.keys(await chrome.storage.local.get(null)).some((k) => k.startsWith("nulo:core:incoming-balance-outbox@")),
+	)
+	return recorded && !owed
 }
 
 /** Waits, without asking for a refresh, for the balance row's next write to carry `expectedRaw`, then
@@ -282,7 +280,7 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 	const grantHash = String(granted.resultJson).replace(/^"(.*)"$/, "$1")
 	await waitForTxMined(config, grantHash)
 	await waitFor("the wallet never saw its grant mined", async () => {
-		const tx = await storedValue<Tx>(page, `${TRANSACTION_STORAGE_ROOT}@${grantHash}`)
+		const tx = await storedTx(page, grantHash)
 		return tx !== undefined && tx.status !== TxStatus.Pending
 	})
 	return grantHash
@@ -291,15 +289,7 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 type TxNode = Awaited<ReturnType<typeof createTestWallet>>["node"]
 
 async function accountTxRows(page: Page, account: string): Promise<Tx[]> {
-	const raws = await page.evaluate(async (root: string) => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([k]) => k.startsWith(`${root}@`))
-			.map(([, v]) => v)
-	}, TRANSACTION_STORAGE_ROOT)
-	return raws
-		.map((v) => (typeof v === "string" ? JSON.parse(v) : v) as Tx)
-		.filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
+	return (await readSealedRows<Tx>(page, "txs")).map(({ row }) => row).filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
 }
 
 /** The account's rows, which must be exactly the grant: any other row could owe a write of its own. */
@@ -329,15 +319,11 @@ async function settledGrantFinality(page: Page, node: TxNode, account: string, g
 	const started = Date.now()
 	await finalizeThrough(node, block)
 	const chainFinal = Date.now()
-	let grant = await soleGrantRow(page, account, grantHash)
-	const deadline = chainFinal + FINAL_READ_MS
-	while (grant.status !== TxStatus.Finalized || grant.awaitingFinality) {
-		if (Date.now() > deadline) {
-			throw new Error(`the wallet never read its grant final within ${FINAL_READ_MS} ms: ${JSON.stringify(grant)}`)
-		}
-		await new Promise((r) => setTimeout(r, 500))
-		grant = await soleGrantRow(page, account, grantHash)
-	}
+	const grant = await pollUntil(
+		() => soleGrantRow(page, account, grantHash),
+		(row) => row.status === TxStatus.Finalized && !row.awaitingFinality,
+		{ label: "the wallet reading its grant final", timeoutMs: FINAL_READ_MS, intervalMs: 500 },
+	)
 	console.log(
 		`[snack-placement] grant block ${block}: chain final in ${chainFinal - started} ms, wallet final ${Date.now() - chainFinal} ms later`,
 	)
@@ -570,6 +556,11 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
+		// Where Home rests, the Get started card would hold the awaiting row below the fold.
+		const setup = await openPopup(ctx)
+		await waitForHash(setup, "#/popup/general", 30_000)
+		await clearGetStarted(setup, TEST_PASSWORD)
+		await setup.close()
 		const page = await balanceDrainedBehindTheWallet(ctx, estimateOnSend)
 		await confirmDrainedSend(page)
 		await waitForHash(page, "#/popup/general", 10_000)
@@ -586,7 +577,7 @@ test.skipIf(!hasConfig)(
 		await settledCard(page)
 
 		const placed = await placementsAtRestAndScrolled(page, "tx-awaiting-cancel")
-		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(placed)}`)
+		console.log(`[snack-placement] Home, Cancel at rest, at the top of the middle and centred: ${JSON.stringify(placed)}`)
 		for (const p of placed) {
 			expect([p.at, p.covered, p.hit], "Cancel is clear of the snack and takes the click").toEqual([
 				p.at,
@@ -595,8 +586,14 @@ test.skipIf(!hasConfig)(
 			])
 			expect(p.snack.top >= 0 && p.snack.bottom <= p.viewport, `${p.at}: the snack is wholly on screen`).toBe(true)
 		}
-		// Clear of the Cancel, the snack rests 12px above the 64px nav rather than above where the row was.
-		expect(placed.slice(1).map((p) => p.viewport - p.snack.bottom)).toEqual([76, 76])
+		// The snack rests 12px above the 64px nav, and climbs to 12px above the Cancel only where resting
+		// would cover it; at the top of the middle the row is clear, so it is back at rest.
+		for (const p of placed) {
+			const rest = { bottom: p.viewport - 76, top: p.viewport - 76 - (p.snack.bottom - p.snack.top) }
+			const meets = p.control.top < rest.bottom && p.control.bottom > rest.top
+			expect(p.snack.bottom, `${p.at}: the snack's bottom`).toBeCloseTo(meets ? p.control.top - 12 : rest.bottom, 0)
+		}
+		expect(placed.filter((p) => p.at === "top").map((p) => p.viewport - p.snack.bottom)).toEqual([76])
 		await page.evaluate(async () => {
 			window.scrollTo(0, 0)
 			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))

@@ -5,8 +5,9 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { keyedSegment } from "@nulo/wallet-crypto"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler, type KeyedLock } from "@nulo/wallet-core/utils"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ServiceCollection } from "@/wallet/base"
@@ -17,8 +18,14 @@ import { ERR_UNATTENDED_LIVE_CHECK, NETWORK_SERVICE_NAME } from "@/wallet/servic
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
+import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
-import { accountRowId } from "./spec"
+import { accountRowId, accountRowIdOf } from "./spec"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
+const SEALED_0xI = accountRowId("p1", 1, await keyedSegment(ROW_KEY_FAKE.rowKeys("p1")!, "0xI"))
 
 const mkAccount = (address: string, over: Record<string, unknown> = {}) =>
 	({ profileId: "p1", chainId: 1, address, index: 0, type: 0, l1ChainId: 1, name: "A", visible: true, ...over }) as never
@@ -42,15 +49,31 @@ const readFailsOnSecondCall = (call: number): boolean => {
 	return true
 }
 
-describe("AccountService.createAccount — deletion fence", () => {
-	function _deferred<T>() {
-		let resolve!: (v: T) => void
-		const promise = new Promise<T>((res) => {
-			resolve = res
-		})
-		return { promise, resolve }
-	}
+/** Parks the first `get(rowKey)` after it returns, so the parked run holds a row it has already
+ *  read; parked before the read, its resumed read would see fresh state. */
+function parkRowRead(api: FakeBrowserApi, rowKey: string): { release: () => void; parked: Promise<void> } {
+	const realGet = api.storage.local.get.bind(api.storage.local)
+	let release!: () => void
+	let reached!: () => void
+	const parked = new Promise<void>((r) => {
+		reached = r
+	})
+	let armed = true
+	api.storage.local.get = (async (key: unknown) => {
+		const value = await realGet(key as never)
+		if (armed && key === rowKey) {
+			armed = false
+			reached()
+			await new Promise<void>((r) => {
+				release = r
+			})
+		}
+		return value
+	}) as typeof api.storage.local.get
+	return { release: () => release(), parked }
+}
 
+describe("AccountService.createAccount — deletion fence", () => {
 	async function makeHarness(over: { secret?: Promise<unknown>; probe?: Promise<number>; chainLive?: (call: number) => boolean } = {}) {
 		const api = new FakeBrowserApi()
 		api.reset()
@@ -60,6 +83,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 		let liveCalls = 0
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileSecret: () => over.secret ?? Promise.resolve(master),
@@ -90,7 +114,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 		// deletion begins AND fully releases while the secret promise is parked,
 		// so a post-await capture would observe the settled post-bump epoch and
 		// pass the pre-write assert — landing the orphan row.
-		const gate = _deferred<unknown>()
+		const gate = deferred<unknown>()
 		const h = await makeHarness({ secret: gate.promise })
 		const run = h.service.createAccount("p1", 1, 0, "A")
 		await new Promise((r) => setTimeout(r, 0)) // the run captures its fence, then parks on the secret
@@ -102,7 +126,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 	})
 
 	test("a deletion beginning during the network probe rejects the write", async () => {
-		const gate = _deferred<number>()
+		const gate = deferred<number>()
 		const h = await makeHarness({ probe: gate.promise })
 		const run = h.service.createAccount("p1", 1, 0, "A")
 		await new Promise((r) => setTimeout(r, 0)) // let the run park on the probe
@@ -152,6 +176,7 @@ describe("AccountService restore writers — deletion fence", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				consumeDekRewrapContext: async () => ({ sourceDek: {} as never, destinationDek: {} as never }),
@@ -237,6 +262,57 @@ describe("AccountService restore writers — deletion fence", () => {
 	})
 })
 
+describe("AccountService.restore — a chain the profile has no network for", () => {
+	test("holds an imported row unchecked; refuses a derived row there and every row of a network that fails its validation", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const services = new ServiceCollection()
+		services.add(
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
+		)
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				getNetworksRaw: async (profileId: string) => [1, 2].map((chainId) => ({ profileId, chainId })),
+				getL1ChainIdStored: async (_profileId: string, chainId: number) => {
+					if (chainId === 1) return 1
+					if (chainId === 2) throw new Error("Seeded network L1 identity mismatch: stored 9, expected 11155111")
+					throw new Error(`No network for chain ${chainId} in this profile`)
+				},
+			}),
+		)
+		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
+		services.add(service)
+		await services.start()
+		const imported = (address: string, chainId: number) => mkAccount(address, { chainId, type: 1, l1ChainId: 5 })
+
+		const results = await service.restore([
+			imported("0xheld", 1337),
+			mkAccount("0xderived", { chainId: 1337 }),
+			imported("0xtampered", 2),
+			imported("0xwrongl1", 1),
+			mkAccount("0xok"),
+		])
+
+		expect(results.map((r) => r.restoreError)).toEqual([
+			undefined,
+			"No network for chain 1337 in this profile",
+			"Seeded network L1 identity mismatch: stored 9, expected 11155111",
+			"account/network chain identity mismatch: 5 vs 1",
+			undefined,
+		])
+		const stored = Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:accounts@"))
+		expect(stored).toHaveLength(2)
+		expect((await service.getAccountsRaw("p1")).map(accountRowIdOf).sort()).toEqual(
+			[accountRowId("p1", 1337, "0xheld"), accountRowId("p1", 1, "0xok")].sort(),
+		)
+	})
+})
+
 describe("AccountService.restore — validation + provenance", () => {
 	let accountService: AccountService
 	let api: FakeBrowserApi
@@ -246,7 +322,11 @@ describe("AccountService.restore — validation + provenance", () => {
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
@@ -305,8 +385,9 @@ describe("AccountService.restore — validation + provenance", () => {
 	test("a well-formed unique account restores cleanly", async () => {
 		const [res] = await accountService.restore([mkAccount("0x111")])
 		expect(res.restoreError).toBeUndefined()
-		const raw = await api.storage.local.get(null)
-		expect(Object.keys(raw).some((k) => k.includes("0x111"))).toBe(true)
+		expect(await accountService.getAccount("p1", 1, "0x111")).toMatchObject({ address: "0x111" })
+		// Sealed: the address is in no stored key or value.
+		expect(JSON.stringify(await api.storage.local.get(null))).not.toContain("0x111")
 	})
 
 	test("two concurrent restores of the SAME account — the lock lets exactly ONE win", async () => {
@@ -448,19 +529,22 @@ describe("AccountService.restore — validation + provenance", () => {
 })
 
 describe("AccountService.sweepOrphanImportedKeys", () => {
-	// The sweep runs awaited inside init(), so each case seeds raw storage FIRST
-	// and then boots a fresh service — survival/deletion after start() is the
-	// assertion. The live-set must come from the PHYSICAL key space: a codec-
-	// hidden (or even non-string-valued) account row still counts as occupied,
-	// so a data-integrity failure can never cascade into deleting the sealed
-	// imported signing key behind it.
+	// The sweep runs when a profile's row keys arrive, after its conversion, so each case seeds
+	// storage, boots a service and announces p1's keys. An account counts in either form, readable
+	// or not: a codec-hidden or non-string account row still keeps the signing key behind it.
 	const ACCOUNT_KEY = (address: string) => `nulo:core:accounts@${accountRowId("p1", 1, address)}`
 	const IMPORTED_KEY = (address: string) => `nulo:core:imported-account-keys@${accountRowId("p1", 1, address)}`
+	const keyRow = (address: string) => JSON.stringify({ profileId: "p1", chainId: 1, address, encryptedSigningKey: "sealed" })
 
 	const boot = async (api: FakeBrowserApi) => {
+		const keys = await rowKeysForEveryProfile()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...keys,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
@@ -473,16 +557,19 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		const logger = new LoggerStore(new ConfigStore())
 		services.add(new AccountService(logger, api))
 		await services.start()
-		return logger
+		keys.onRowKeysReady.invoke("p1")
+		const keyRows = new ImportedKeysRepository(api.storage.local, keys.rowKeys)
+		return { logger, hasKeyRow: async (address: string) => (await keyRows.get("p1", 1, address)) !== undefined }
 	}
+	const keyRowsLeft = async (api: FakeBrowserApi) =>
+		Object.keys(await api.storage.local.get(null)).filter((k) => k.startsWith("nulo:core:imported-account-keys@")).length
 
-	test("a TRUE orphan key row (no account key at all) is reaped — proves the sweep ran", async () => {
+	test("a TRUE orphan key row (no account in either form) is reaped, sealed or not — proves the sweep ran", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "AAAA" }) })
+		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: keyRow("0xorphan") })
 		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xorphan")]).toBeUndefined()
+		await vi.waitFor(async () => expect(await keyRowsLeft(api)).toBe(0))
 	})
 
 	test("a codec-hidden (malformed string) account row keeps its imported-key row alive", async () => {
@@ -490,40 +577,42 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		api.reset()
 		await api.storage.local.set({
 			[ACCOUNT_KEY("0xhidden")]: "{ not json at all",
-			[IMPORTED_KEY("0xhidden")]: JSON.stringify({ sealed: "AAAA" }),
-			[IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "BBBB" }), // control: sweep still reaps
+			[IMPORTED_KEY("0xhidden")]: keyRow("0xhidden"),
+			[IMPORTED_KEY("0xorphan")]: keyRow("0xorphan"), // control: sweep still reaps
 		})
-		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xhidden")]).toBeDefined() // survived
-		expect(raw[IMPORTED_KEY("0xorphan")]).toBeUndefined() // control reaped
+		const { hasKeyRow } = await boot(api)
+		await vi.waitFor(async () => expect(await hasKeyRow("0xorphan")).toBe(false))
+		expect(await hasKeyRow("0xhidden")).toBe(true)
 	})
 
-	test("a sweep that throws is logged as the error's projection, and service start still completes", async () => {
+	test("a sweep that throws is logged as the error's projection", async () => {
 		const api = new FakeBrowserApi()
 		api.reset()
-		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "AAAA" }) })
+		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: keyRow("0xorphan") })
 		api.storage.local.remove = async () => {
 			throw new Error("storage unavailable")
 		}
-		const logger = await boot(api)
-		expect(loggedAfter(logger, "imported-key orphan sweep failed")).toEqual([
-			{ error: { name: "Error", message: "storage unavailable" } },
-		])
+		const { logger } = await boot(api)
+		await vi.waitFor(() =>
+			expect(loggedAfter(logger, "converting or sweeping the profile's accounts failed; the next worker retries")).toEqual([
+				{ error: { name: "Error", message: "storage unavailable" } },
+			]),
+		)
 	})
 
-	test("a non-string-VALUED account row keeps its imported-key row alive (the getKeys discriminator)", async () => {
-		// rawStringEntries skips non-string values — only the physical key space
-		// (getKeys) sees this row. A live-set built any narrower deletes the key.
+	test("a non-string-VALUED account row keeps its imported-key row alive (the physical-key discriminator)", async () => {
+		// rawStringEntries skips non-string values: only the physical key sees this row. A live-set
+		// built any narrower deletes the key.
 		const api = new FakeBrowserApi()
 		api.reset()
 		await api.storage.local.set({
 			[ACCOUNT_KEY("0xobj")]: { not: "a string" },
-			[IMPORTED_KEY("0xobj")]: JSON.stringify({ sealed: "AAAA" }),
+			[IMPORTED_KEY("0xobj")]: keyRow("0xobj"),
+			[IMPORTED_KEY("0xorphan")]: keyRow("0xorphan"),
 		})
-		await boot(api)
-		const raw = await api.storage.local.get(null)
-		expect(raw[IMPORTED_KEY("0xobj")]).toBeDefined()
+		const { hasKeyRow } = await boot(api)
+		await vi.waitFor(async () => expect(await hasKeyRow("0xorphan")).toBe(false))
+		expect(await hasKeyRow("0xobj")).toBe(true)
 	})
 })
 
@@ -535,6 +624,7 @@ describe("AccountService — same-row field editors serialize", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 			}),
@@ -551,43 +641,28 @@ describe("AccountService — same-row field editors serialize", () => {
 		await services.start()
 
 		const rowId = accountRowId("p1", 1, "0xaa")
-		await api.storage.local.set({ [`nulo:core:accounts@${rowId}`]: JSON.stringify(mkAccount("0xaa")) })
+		const rowKey = `nulo:core:accounts@${rowId}`
+		await api.storage.local.set({ [rowKey]: JSON.stringify(mkAccount("0xaa")) })
 
-		// Park the FIRST row read AFTER it returns — the parked name change then
-		// holds its already-read (soon stale) row snapshot while the visibility
-		// change tries to run to completion. Parking before the read would let
-		// the resumed read see fresh state and prove nothing.
-		const realGet = api.storage.local.get.bind(api.storage.local)
-		let parked: (() => void) | null = null
-		let armed = true
-		api.storage.local.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && typeof key === "string" && key.includes(rowId)) {
-				armed = false
-				await new Promise<void>((resolve) => {
-					parked = resolve
-				})
-			}
-			return value
-		}) as typeof api.storage.local.get
-
+		const gate = parkRowRead(api, rowKey)
 		const nameRun = service.changeAccountName("p1", 1, "0xaa", "B")
-		await new Promise((resolve) => setTimeout(resolve, 0))
+		await gate.parked
 		const visRun = service.changeAccountVisibility("p1", 1, "0xaa", false)
-		await new Promise((resolve) => setTimeout(resolve, 0))
-		;(parked as (() => void) | null)?.()
+		// An editor takes the row's lock before its first await, so the visibility change is queued here.
+		expect((service as unknown as { tupleLocks: { waiting(key: string): number } }).tupleLocks.waiting(rowId)).toBe(1)
+		gate.release()
 		await Promise.all([nameRun, visRun])
 
-		const raw = await realGet(null)
-		const row = JSON.parse((raw as Record<string, string>)[`nulo:core:accounts@${rowId}`])
-		expect(row.name).toBe("B")
-		expect(row.visible).toBe(false)
+		const row = await service.getAccount("p1", 1, "0xaa")
+		expect(row?.name).toBe("B")
+		expect(row?.visible).toBe(false)
 	})
 })
 
 describe("AccountService.importAccount — deletion fence", () => {
-	const accountKey = `nulo:core:accounts@${accountRowId("p1", 1, "0xI")}`
-	const keyRowKey = `nulo:core:imported-account-keys@${accountRowId("p1", 1, "0xI")}`
+	// Where the service seals the pair: both roots hash the address alike.
+	const accountKey = `nulo:core:accounts@${SEALED_0xI}`
+	const keyRowKey = `nulo:core:imported-account-keys@${SEALED_0xI}`
 	const staleText = /^profile p1 is being deleted — write rejected \(epoch 0 → 1\)$/
 
 	async function makeHarness(
@@ -606,6 +681,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileDek: async () => {
@@ -808,15 +884,20 @@ describe("AccountService.importAccount — deletion fence", () => {
 })
 
 describe("AccountService purges wait for a rename holding the same row", () => {
-	const rowKey = `nulo:core:accounts@${accountRowId("p1", 1, "0xaa")}`
-	const keyRowKey = `nulo:core:imported-account-keys@${accountRowId("p1", 1, "0xaa")}`
+	const rowId = accountRowId("p1", 1, "0xaa")
+	const rowKey = `nulo:core:accounts@${rowId}`
+	const keyRowKey = `nulo:core:imported-account-keys@${rowId}`
 
 	async function makeHarness() {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
+				onProfileDeleted: new EventHandler(),
+				getDeletionState: () => new ProfileDeletionState(),
+			}),
 		)
 		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
@@ -829,27 +910,33 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		return { api, service }
 	}
 
-	/** Parks the first keyed read of the row after it returns, as a rename's read. */
-	function parkRowRead(api: FakeBrowserApi): { release: () => void; parked: Promise<void> } {
-		const realGet = api.storage.local.get.bind(api.storage.local)
-		let release!: () => void
-		let reached!: () => void
-		const parked = new Promise<void>((r) => {
-			reached = r
-		})
-		let armed = true
-		api.storage.local.get = (async (key: unknown) => {
-			const value = await realGet(key as never)
-			if (armed && key === rowKey) {
-				armed = false
-				reached()
-				await new Promise<void>((r) => {
-					release = r
-				})
-			}
-			return value
-		}) as typeof api.storage.local.get
-		return { release: () => release(), parked }
+	/** Every key left under either root, sealed rows included. */
+	async function rowsLeft(api: FakeBrowserApi): Promise<string[]> {
+		const keys = Object.keys(await api.storage.local.get(null))
+		return keys.filter((k) => k.startsWith("nulo:core:accounts@") || k.startsWith("nulo:core:imported-account-keys@"))
+	}
+
+	/** Parks a rename at its read of the row, starts `purge`, and fails unless the purge is queued
+	 *  behind it on the row's lock, reached only after awaits of its own, before releasing the rename. */
+	async function purgeBehindRename<T>(api: FakeBrowserApi, service: AccountService, purge: () => Promise<T>) {
+		const gate = parkRowRead(api, rowKey)
+		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
+		await gate.parked
+		const locks = (service as unknown as { tupleLocks: KeyedLock }).tupleLocks
+		const withLock = locks.withLock.bind(locks)
+		const requested = deferred()
+		// `withLock` queues its caller before it returns, so the signal marks a request already waiting.
+		locks.withLock = ((key: string, fn: () => unknown) => {
+			const queued = withLock(key, fn)
+			if (key === rowId) requested.resolve()
+			return queued
+		}) as KeyedLock["withLock"]
+		const purging = purge()
+		// A purge that settles without asking for the row's lock fails the queue check at once.
+		await Promise.race([requested.promise, purging])
+		expect(locks.waiting(rowId)).toBe(1)
+		gate.release()
+		return Promise.all([rename, purging])
 	}
 
 	test.each([
@@ -857,29 +944,41 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		["purgeForProfile", (s: AccountService) => s.purgeForProfile("p1")],
 	])("%s: the renamed row is not written back after the delete", async (_name, purge) => {
 		const { api, service } = await makeHarness()
-		const gate = parkRowRead(api)
-		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
-		await gate.parked
-		const purging = purge(service)
-		await new Promise((r) => setTimeout(r, 0))
-		gate.release()
-		await Promise.all([rename, purging])
-		const keys = Object.keys(await api.storage.local.get(null))
-		expect(keys.filter((k) => k === rowKey || k === keyRowKey)).toEqual([])
+		const [renamed] = await purgeBehindRename(api, service, () => purge(service))
+		expect(renamed?.name).toBe("renamed")
+		expect(await rowsLeft(api)).toEqual([])
 	})
 
 	test("reconcileImportedAccounts: a keyless row is not written back by a rename parked on it", async () => {
 		const { api, service } = await makeHarness()
 		await api.storage.local.remove(keyRowKey)
-		const gate = parkRowRead(api)
-		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
-		await gate.parked
-		const reconciling = service.reconcileImportedAccounts("p1")
-		await new Promise((r) => setTimeout(r, 0))
-		gate.release()
-		const [, dropped] = await Promise.all([rename, reconciling])
+		const [renamed, dropped] = await purgeBehindRename(api, service, () => service.reconcileImportedAccounts("p1"))
+		expect(renamed?.name).toBe("renamed")
 		expect(dropped).toEqual([{ chainId: 1, address: "0xaa" }])
-		expect(Object.keys(await api.storage.local.get(null)).filter((k) => k === rowKey)).toEqual([])
+		expect(await rowsLeft(api)).toEqual([])
+	})
+
+	test("reconcileImportedAccounts: a rename started after the keyless check is not written back", async () => {
+		const { api, service } = await makeHarness()
+		await api.storage.local.remove(keyRowKey)
+		// Held in a purge subscriber, the reconcile is past its keyless check, so only the delete's
+		// own lock can order it behind the rename.
+		const inSubscriber = deferred()
+		const resume = deferred()
+		service.registerAccountPurgeSubscriber(async () => {
+			inSubscriber.resolve()
+			await resume.promise
+		})
+		const reconciling = service.reconcileImportedAccounts("p1")
+		const staged = await Promise.race([inSubscriber.promise.then(() => "subscriber"), reconciling.then(() => "settled")])
+		expect(staged).toBe("subscriber")
+		const [renamed, dropped] = await purgeBehindRename(api, service, () => {
+			resume.resolve()
+			return reconciling
+		})
+		expect(renamed?.name).toBe("renamed")
+		expect(dropped).toEqual([{ chainId: 1, address: "0xaa" }])
+		expect(await rowsLeft(api)).toEqual([])
 	})
 })
 
@@ -891,6 +990,7 @@ describe("AccountService.provisionDefaultAccount — unattended rule", () => {
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileSecret: () => Promise.resolve(new Fr(42n)),
@@ -978,6 +1078,7 @@ describe("AccountService keyed reads bind the row body to the requested address"
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
+				...ROW_KEY_FAKE,
 				onProfileDeleted: new EventHandler(),
 				getDeletionState: () => deletion,
 				getProfileDek: async () => undefined,
@@ -1028,24 +1129,17 @@ describe("AccountService keyed reads bind the row body to the requested address"
 		expect(await service.getAccount("p1", 1, "0xA")).toBeUndefined()
 	})
 
-	test("an omitted profile id with no row throws the engine's own TypeError, naming the local `account`", async () => {
-		// In-process calls skip the RPC params check, so `undefined === undefined` passes the first
-		// check and the second read throws; the text is whatever this engine says for that expression.
-		const reference = (() => {
-			// Read through `Reflect.get` so no transpiler folds the local into `(void 0)`.
-			const account = Reflect.get({}, "absent") as { chainId: number }
-			try {
-				return String(account.chainId)
-			} catch (err) {
-				return (err as Error).message
-			}
-		})()
-		const { service } = await makeHarness()
+	test("an omitted profile id is refused before any read: the keyed root names no owner", async () => {
+		// In-process calls skip the RPC params check; the sealed root cannot hash an id that names no
+		// profile, so it refuses rather than reading or guessing one.
+		const { api, service } = await makeHarness()
+		const { log } = recordWrites(api.storage.local, "nulo:core:")
 		const missing = undefined as unknown as string
-		await expect(service.getAccount(missing, 1, "0xA")).rejects.toThrow(reference)
-		await expect(service.getAccountContract(missing, 1, "0xA")).rejects.toThrow(reference)
-		await expect(service.exportAccount(missing, 1, "0xA", "pw", false)).rejects.toThrow(reference)
-		await expect(service.changeAccountName(missing, 1, "0xA", "x")).rejects.toThrow(reference)
-		await expect(service.getAccount(missing, 1, "0xA")).rejects.toBeInstanceOf(TypeError)
+		const refusal = /^nulo:core:accounts is keyed per profile: name the owner$/
+		await expect(service.getAccount(missing, 1, "0xA")).rejects.toThrow(refusal)
+		await expect(service.getAccountContract(missing, 1, "0xA")).rejects.toThrow(refusal)
+		await expect(service.exportAccount(missing, 1, "0xA", "pw", false)).rejects.toThrow(refusal)
+		await expect(service.changeAccountName(missing, 1, "0xA", "x")).rejects.toThrow(refusal)
+		expect(log).toEqual([])
 	})
 })

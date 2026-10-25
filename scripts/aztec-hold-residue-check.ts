@@ -3,7 +3,7 @@
  * entry in those scopes is on its line unless a held package reaches it through the lock's
  * dependency graph — computed over graph edges, not key prefixes, because bun.lock shortens a nested
  * key to the bare position when only one dependent exists — and no package of the retired `@aztec`
- * scope but `@aztec/viem` is locked at all. Runtime resolution must agree: every consumer, and
+ * scope is locked at all. Runtime resolution must agree: every consumer, and
  * everything that must share its generation, reaches one physical copy of each Aztec package.
  * A package's exact-pinned Aztec PEER only re-binds to the workspace line when the consuming
  * workspace DECLARES that package at the pinned version; otherwise it silently nests its own copy,
@@ -20,11 +20,11 @@ import { createRequire } from "node:module"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..")
-const LABS_LINE = "6.0.0-rc.3"
+const LABS_LINE = "6.0.0"
 /** The `@aztec-foundation/*` toolchain numbers its releases apart; this is the one the labs line depends on. */
-const FOUNDATION_LINE = "6.0.0-rc.6"
+const FOUNDATION_LINE = "6.0.0"
 /** Published from its own repository, on the labs numbering. */
-const STANDARDS_LINE = "6.0.0-rc.3"
+const STANDARDS_LINE = "6.0.0"
 const lineOf = (name: string): string =>
 	name === "@aztec-foundation/aztec-standards" ? STANDARDS_LINE : name.startsWith("@aztec-foundation/") ? FOUNDATION_LINE : LABS_LINE
 /** Packages allowed to stay on an older Aztec line, with everything they reach. Empty: one generation. */
@@ -32,7 +32,7 @@ const HELD_ROOTS: string[] = []
 /** Packages whose own Aztec deps and peers must resolve to the workspace line, not a private copy. */
 const SINGLE_GENERATION_ROOTS = ["@alejoamiras/presto", "@alejoamiras/private-fee-juice", "@aztec-foundation/aztec-standards"]
 const AZTEC_LINE = /^@aztec-(labs|foundation)\//
-const RETIRED_SCOPE = /^@aztec\/(?!viem$)/
+const RETIRED_SCOPE = /^@aztec\//
 
 let failures = 0
 const fail = (msg: string) => {

@@ -8,7 +8,8 @@
  *
  * S1a  network reset: A1, a Switch network round trip, one reset from a double click, A4, then
  *      A5 only once the account is loaded; the row is back on the seed's chainId and the accounts
- *      keep their addresses, names and indexes; Local is untouched.
+ *      keep their addresses, names and indexes; Local is untouched; Home's card keeps the Fee Juice
+ *      the profile held and its open phrase row.
  * S1b  address change (A2) with a hidden account and an imported one: the derived accounts come
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
@@ -18,7 +19,9 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
+import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
+import { clickByTestId, type ExtensionContext, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
+import { switchToNetwork } from "./fixtures/networks"
 import {
 	closeStuckPopup,
 	createAccount,
@@ -26,15 +29,16 @@ import {
 	ensureUnlocked,
 	lockWallet,
 	navigateByHash,
+	readSessionRow,
 	waitForToast,
 } from "./fixtures/helpers"
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
 	addNetwork,
-	E2E_MAINNET_CHAIN_ID,
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
 	readNetwork,
+	readNetworkRows,
 	readTakeoverTrace,
 	TAKEOVER,
 	takeoverScreen,
@@ -44,6 +48,7 @@ import {
 	snapshotChain,
 	traceTakeover,
 } from "./helpers/stale-network"
+import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
 
@@ -62,15 +67,32 @@ async function switchFromTakeover(page: Page, name: string): Promise<void> {
 	})
 }
 
+/** Home on Testnet, where a profile meets a Testnet reset: a new profile starts on Mainnet. */
+async function openOnTestnet(ctx: ExtensionContext): Promise<Page> {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToNetwork(page, "Testnet")
+	return page
+}
+
 describe("stale network", () => {
 	test("S1a network reset: A1, Switch network and back, one reset from a double click, A4, then A5 with the account loaded", {
 		timeout: 240_000,
 		retry: 0,
 	}, async ({ registeredExtensionPerTest: ctx }) => {
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
 		await createAccount(page, "Savings")
 		await closeStuckPopup(page)
+		// Smoke has no node to hold Fee Juice, so the flag Home writes on its first positive read is
+		// stored directly. The reset's new chain holds none, and the step must stay done.
+		await navigateByHash(page, "#/popup/general", 15_000)
+		await waitForHomeReminders(page)
+		const profileId = (await readSessionRow(page))?.profile
+		if (!profileId) throw new Error("no unlocked profile")
+		await page.evaluate((key: string) => chrome.storage.local.set({ [key]: true }), getStartedFeeJuiceHeldKey(profileId))
+		await page.waitForSelector('[data-testid="get-started-feeJuice"][data-done="true"]', { timeout: 10_000 })
+		const card = ["get-started-phrase", "get-started-aztec", "get-started-feeJuice done", "get-started-presto"]
+		expect(await getStartedRows(page)).toEqual(card)
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => [a.name, a.index])).toEqual([
 			[FIRST_ACCOUNT_NAME, 0],
@@ -78,12 +100,14 @@ describe("stale network", () => {
 		])
 		const local = await readNetwork(page, "local")
 		const localBefore = await snapshotChain(page, local.chainId, local.id)
+		const networks = await readNetworkRows(page)
 
 		await lockWallet(page)
-		await seedStaleNetwork(page, "network-reset")
+		await seedStaleNetwork(page, "network-reset", { networks })
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("network-reset")
 		expect(await page.$('[data-testid="account-address-copy"]')).toBeNull()
+		expect(await page.$('[data-testid="home-scroller"]')).toBeNull()
 
 		// Networks is reachable and shows no account; Back returns to the takeover.
 		await clickByTestId(page, "stale-network-switch")
@@ -112,6 +136,8 @@ describe("stale network", () => {
 		expect((await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)).toEqual(before.map(identity))
 		expect(await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)).toEqual([])
 		expect(await snapshotChain(page, local.chainId, local.id)).toEqual(localBefore)
+		await waitForHomeReminders(page)
+		expect(await getStartedRows(page)).toEqual(card)
 	})
 
 	test("S1b address change: A2; derived accounts return at their true addresses, the hidden one hidden, the imported one with its key", {
@@ -123,15 +149,13 @@ describe("stale network", () => {
 		const donor = await launchExtension()
 		try {
 			await registerProfile(donor)
-			const donorPage = await openPopup(donor)
-			await waitForHash(donorPage, "#/popup/general", 30_000)
+			const donorPage = await openOnTestnet(donor)
 			foreignBody = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
 		} finally {
 			await donor.close()
 		}
 
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
 		await createAccount(page, "Savings")
 		const importedAddress = await previewImport(page, foreignBody)
 		expect(importedAddress).toBeTruthy()
@@ -139,9 +163,10 @@ describe("stale network", () => {
 		await closeStuckPopup(page)
 		const before = await readAccounts(page, CHAIN_IDS.TESTNET)
 		expect(before.map((a) => a.type).sort()).toEqual([0, 0, 1])
+		const networks = await readNetworkRows(page)
 
 		await lockWallet(page)
-		await seedStaleNetwork(page, "address-change", { hideIndex: 1 })
+		await seedStaleNetwork(page, "address-change", { hideIndex: 1, networks })
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("new-addresses")
 
@@ -164,9 +189,10 @@ describe("stale network", () => {
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
-		const { networkId } = await seedStaleMainnet(page)
-		const mainnetBefore = await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)
+		const { networkId } = await seedStaleMainnet(page, networks)
+		const mainnetBefore = await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)
 		await ensureUnlocked(page)
 
 		expect(await takeoverScreen(page)).toBe("blocked")
@@ -176,25 +202,29 @@ describe("stale network", () => {
 		await switchFromTakeover(page, "Testnet")
 		await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 60_000 })
 		expect(await page.$(TAKEOVER)).toBeNull()
-		expect(await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)).toEqual(mainnetBefore)
+		expect(await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)).toEqual(mainnetBefore)
 	})
 
 	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ registeredExtensionPerTest: ctx }) => {
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
+		const networks = await readNetworkRows(page)
 		await lockWallet(page)
-		await seedStaleNetwork(page, "network-reset")
-		await addNetwork(page, {
-			name: "My Testnet",
-			kind: "custom",
-			chainId: CHAIN_IDS.TESTNET,
-			l1ChainId: TESTNET_L1_CHAIN_ID,
-			movedAccount: false,
-			active: false,
-		})
+		await seedStaleNetwork(page, "network-reset", { networks })
+		await addNetwork(
+			page,
+			{
+				name: "My Testnet",
+				kind: "custom",
+				chainId: CHAIN_IDS.TESTNET,
+				l1ChainId: TESTNET_L1_CHAIN_ID,
+				movedAccount: false,
+				active: false,
+			},
+			networks,
+		)
 		await ensureUnlocked(page)
 		expect(await takeoverScreen(page)).toBe("already-added")
 

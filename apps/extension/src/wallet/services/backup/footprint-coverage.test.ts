@@ -1,11 +1,11 @@
 /**
  * The cross-system anti-drift guardrails for backup-import migrations:
  *
- * 1. FOOTPRINT COVERAGE — every backup-facing migration's read/write refs must
- *    be registry-covered; anything touching a block-listed root, an unmapped
- *    root, or authored imperatively (non-backup-safe) BLOCKS backup import and
- *    must be explicitly acknowledged below — an explicit release decision,
- *    never silent drift.
+ * 1. FOOTPRINT COVERAGE — a migration authored imperatively (non-backup-safe)
+ *    or touching a block-listed root BLOCKS backup import and must be
+ *    acknowledged in IMPORT_BLOCKING_ACK — an explicit release decision, never
+ *    silent drift — and the real import must agree. A ref no slice maps to
+ *    blocks nothing: the import's scratch store never holds a row under it.
  * 2. METAMORPHIC GUARDRAIL (defense-in-depth behind the structural DSL) —
  *    every backup-safe migration's per-row output is byte-identical across
  *    single-row-subset × permutation × duplication runs through the REAL
@@ -14,26 +14,24 @@
  * 3. NON-FORGEABLE BRAND — `backupSafe` membership is factory-private and the
  *    branded migration is deep-frozen; brand-then-mutate is impossible.
  */
-import { describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import { defineMigration, type Migration, Migrator, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MemoryStorageArea } from "@nulo/wallet-core/storage"
 import { backupMigrationFixture } from "@/e2e/backup-migration-fixture"
 import { backupMigrations, migrations, realMigrations } from "@/wallet/storage/migrations"
 import { CONTACT_STORAGE_ROOT, ContactSchema } from "@/wallet/services/contact/spec"
+import { NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
+import { migrateBackupData } from "./backup-migrator"
+import { STORED_SHAPES, type StoredShape } from "@/wallet/storage/stored-shapes"
+import { committedBaseline, decodeGoldens, emptyBackup } from "@/wallet/storage/stored-shapes/baseline"
 import type { z } from "zod"
 import { BACKUP_BLOCKED_ROOTS, BACKUP_SLICE_REGISTRY } from "./backup-migration-registry"
+import { IMPORT_BLOCKING_ACK } from "./import-blocking-ack"
 import { applyRowTransform, defineRowMapMigration, isBackupSafeMigration, rowMapDefOf, type RowMapTransform } from "./row-map-migration"
 
-/** ⚠ EXPLICIT RELEASE DECISIONS ONLY. A version listed here ships knowing it
- *  BLOCKS backup import for every older backup it covers (users must
- *  re-export). Adding an entry requires the release notes to say so. */
-const IMPORT_BLOCKING_ACK: ReadonlySet<number> = new Set([])
-
 const coveredRoots = new Set<string>()
-const coveredValueKeys = new Set<string>()
 for (const desc of Object.values(BACKUP_SLICE_REGISTRY)) {
 	if (desc.kind === "root") coveredRoots.add(desc.root)
-	if (desc.kind === "value-projection") coveredValueKeys.add(desc.key)
 }
 const blocked = new Set(BACKUP_BLOCKED_ROOTS)
 
@@ -41,26 +39,55 @@ const blocked = new Set(BACKUP_BLOCKED_ROOTS)
  *  asserted explicitly since unit builds don't register it). */
 const backupFacing: Migration[] = [...new Set([...backupMigrations, backupMigrationFixture])]
 
+const touchesBlocked = (m: Migration): boolean => [...m.reads, ...m.writes].some((r) => r.kind === "root" && blocked.has(r.root))
+const blocksImport = (m: Migration): boolean => !isBackupSafeMigration(m) || touchesBlocked(m)
+
+/** The real import, with `m` pending, of an older backup that carries every required slice empty. */
+const importOf = (m: Migration) =>
+	migrateBackupData({ data: emptyBackup(), backupSchemaVersion: m.version - 1, migrations: [m], baselineVersion: m.version - 1 })
+
 describe("footprint coverage (anti-drift keystone)", () => {
 	test("the live array is exactly the real migrations in unstamped builds; backup array matches", () => {
 		expect(migrations).toEqual(realMigrations)
 		expect(backupMigrations).toEqual(realMigrations)
 	})
 
-	test("every backup-facing migration is backup-safe with a fully registry-covered footprint, or explicitly acknowledged as import-blocking", () => {
+	test("every backup-facing migration that blocks backup import is explicitly acknowledged, and the import agrees", async () => {
 		for (const m of backupFacing) {
-			const refs = [...m.reads, ...m.writes]
-			const touchesBlocked = refs.some((r) => r.kind === "root" && blocked.has(r.root))
-			const unmapped = refs.filter((r) => (r.kind === "root" ? !coveredRoots.has(r.root) : !coveredValueKeys.has(r.key)))
-			const blocksImport = !isBackupSafeMigration(m) || touchesBlocked || unmapped.length > 0
-			if (blocksImport) {
+			const res = await importOf(m)
+			expect(res.kind, `migration ${m.version}: ${JSON.stringify(res)}`).toBe(blocksImport(m) ? "incompatible" : "migrated")
+			if (blocksImport(m)) {
 				expect(
 					IMPORT_BLOCKING_ACK.has(m.version),
 					`migration ${m.version} ("${m.description}") blocks backup import ` +
-						`(backupSafe=${isBackupSafeMigration(m)}, blockedRoots=${touchesBlocked}, unmapped=${JSON.stringify(unmapped)}) ` +
-						`— either make it a registry-covered defineRowMapMigration or acknowledge the version in IMPORT_BLOCKING_ACK`,
+						`(backupSafe=${isBackupSafeMigration(m)}, blockedRoots=${touchesBlocked(m)}) ` +
+						`— either make it a defineRowMapMigration of no block-listed root or acknowledge the version in IMPORT_BLOCKING_ACK`,
 				).toBe(true)
 			}
+		}
+	})
+
+	test("a backup-safe migration of a root no slice carries needs no acknowledgement; an imperative or block-listed one does", async () => {
+		expect(coveredRoots.has(NETWORK_STORAGE_ROOT)).toBe(false)
+		const networks = { kind: "root", root: NETWORK_STORAGE_ROOT } as const
+		const rowMap = (root: string) =>
+			defineRowMapMigration({ version: 2, description: `row-map of ${root}`, rowMaps: { [root]: { addDefault: { x: 1 } } } })
+		const imperative = defineMigration({
+			version: 2,
+			description: "imperative",
+			reads: [networks],
+			writes: [networks],
+			up: async () => {},
+		})
+		const cases: Array<[Migration, boolean]> = [
+			[rowMap(NETWORK_STORAGE_ROOT), false],
+			[imperative, true],
+			...[...blocked].map((root): [Migration, boolean] => [rowMap(root), true]),
+		]
+		for (const [m, blocks] of cases) {
+			expect(blocksImport(m), m.description).toBe(blocks)
+			const res = await importOf(m)
+			expect(res.kind, `${m.description}: ${JSON.stringify(res)}`).toBe(blocks ? "incompatible" : "migrated")
 		}
 	})
 
@@ -152,14 +179,36 @@ describe("metamorphic guardrail: per-row output invariant under subset × permut
 	// the old→new path here (only the author's before/after fixtures know the
 	// old shape — see template.ts step 7), but a `drop`/`retype` of a required
 	// field breaks a CURRENT-shape row too, which we CAN catch: apply each
-	// migration to a schema-valid current row and assert it stays valid. The
-	// map forces a sample when a future migration targets a new root.
-	const SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = {
-		[CONTACT_STORAGE_ROOT]: {
-			schema: ContactSchema as unknown as z.ZodType<unknown>,
-			valid: { id: "c1", profileId: "p1", name: "Alice", address: "0xabc", abbr: "A" },
-		},
-	}
+	// migration to a schema-valid current row and assert it stays valid. Every
+	// codec root of the stored-shape registry supplies its `full` golden as the
+	// migrations leave it, so a migration of any root has a current-shape sample.
+	let SCHEMA_SAMPLES: Record<string, { schema: z.ZodType<unknown>; valid: Record<string, unknown> }> = {}
+	beforeAll(async () => {
+		const { snapshot, goldens } = committedBaseline()
+		const { stored } = await decodeGoldens(goldens, snapshot.stamps, realMigrations)
+		SCHEMA_SAMPLES = Object.fromEntries(
+			goldens
+				.filter((golden) => golden.id === `${golden.shape}.full`)
+				.flatMap((golden) => {
+					const shape: StoredShape = STORED_SHAPES[golden.shape]
+					if (shape.read !== "codec" || shape.ref.kind !== "root") return []
+					return [
+						[
+							shape.ref.root,
+							{ schema: shape.schema as z.ZodType<unknown>, valid: stored[golden.id] as Record<string, unknown> },
+						],
+					]
+				}),
+		)
+	})
+
+	test("every codec root of the stored-shape registry has a schema sample", () => {
+		const roots = Object.values(STORED_SHAPES as Record<string, StoredShape>).flatMap((shape) =>
+			shape.read === "codec" && shape.ref.kind === "root" ? [shape.ref.root] : [],
+		)
+		expect(Object.keys(SCHEMA_SAMPLES).sort()).toEqual(roots.sort())
+		for (const [root, sample] of Object.entries(SCHEMA_SAMPLES)) expect(sample.schema.safeParse(sample.valid).success, root).toBe(true)
+	})
 
 	test("every backup-safe migration keeps a schema-valid row valid (no dropped/retyped required field)", () => {
 		for (const m of covered) {

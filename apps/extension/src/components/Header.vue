@@ -4,14 +4,16 @@ import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { LogLevel } from "@/wallet/logger"
 import { LogViewerServiceClient } from "@/wallet/services/log-viewer/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
-import { TaskServiceClient } from "@/wallet/services/task/client"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { useLockWallet } from "@/composables/useLockWallet"
 
 /** Utils */
 import { managers } from "@/utils/core"
 import { copyAddressToClipboard } from "./header-copy-address"
+import { endsSelection } from "@/utils/selection"
+import { isCardWindow } from "@/utils/own-window"
 import { accountStateOf } from "./header-account"
 
 /** Store */
@@ -37,39 +39,21 @@ configService.onUpdate.add(onSettingUpdate)
 const defaultConfig = makeDefaultConfig()
 const indicateFailures = ref(defaultConfig.indicateFailures)
 const showNode = ref(defaultConfig.showNode)
+const showNodeRead = useConfigRead(
+	configService,
+	() => configService.getValue("showNode"),
+	(value, updatedSince) => {
+		if (!updatedSince("showNode")) showNode.value = value
+	},
+)
 const networkStatusKey = computed(() => appStore.networkStatus?.toLowerCase())
 const accountState = computed(() => accountStateOf(appStore))
 
 const HEADER_INDICATION_DURATION = 5_000
 let headerIndicateFailureTimer = null
-let headerIndicateTaskTimer = null
 
 const MENU_INDICATION_DURATION = 60_000
 let menuIndicateFailureTimer = null
-let menuIndicateTaskTimer = null
-
-const tasks = ref([])
-const activeTasksCount = ref(0)
-const taskService = new TaskServiceClient()
-taskService.onTaskCreated.add(onTaskCreated)
-taskService.onTaskUpdated.add(onTaskUpdated)
-taskService.onTaskDeleted.add(processTask)
-async function onTaskCreated(task) {
-	if (task.parentId) return
-
-	tasks.value.push(task)
-}
-function processTask(task) {
-	const idx = tasks.value.findIndex((t) => t.id === task.id)
-	if (idx !== -1) {
-		tasks.value.splice(idx, 1)
-	}
-}
-function onTaskUpdated(task) {
-	if (!task.finishedAt || task.parentId) return
-
-	processTask(task)
-}
 
 const currentFailureType = ref("")
 const highlightColor = computed(() => {
@@ -77,8 +61,6 @@ const highlightColor = computed(() => {
 		return "var(--red)"
 	} else if (currentFailureType.value === "warning") {
 		return "var(--yellow)"
-	} else if (activeTasksCount.value) {
-		return "" // "var(--green)"
 	} else {
 		return ""
 	}
@@ -95,8 +77,6 @@ function handleWalletFailure(type, logId) {
 
 	headerIndicateFailureTimer = setTimeout(() => {
 		currentFailureType.value = ""
-		activeTasksCount.value = tasks.value?.length || 0
-		cacheStore.activeTasksCount = activeTasksCount.value
 		headerIndicateFailureTimer = null
 	}, HEADER_INDICATION_DURATION)
 
@@ -150,7 +130,10 @@ const handleOpenPopup = (target) => {
 }
 
 const { openToast } = useToast()
-const handleCopyAddress = () => copyAddressToClipboard(appStore.account?.address, openToast)
+const handleCopyAddress = (e) => {
+	if (endsSelection(e)) return
+	copyAddressToClipboard(appStore.account?.address, openToast)
+}
 
 const handleOpenNetworks = () => {
 	if (!appStore.isLogined) return
@@ -167,44 +150,10 @@ watch(
 		}
 	},
 )
-watch(
-	() => tasks.value?.length,
-	(newValue) => {
-		if (!newValue) {
-			if (headerIndicateTaskTimer) {
-				clearTimeout(headerIndicateTaskTimer)
-				headerIndicateTaskTimer = null
-			}
-
-			headerIndicateTaskTimer = setTimeout(() => {
-				activeTasksCount.value = 0
-				headerIndicateTaskTimer = null
-			}, HEADER_INDICATION_DURATION)
-
-			menuIndicateTaskTimer = setTimeout(() => {
-				cacheStore.activeTasksCount = null
-				menuIndicateTaskTimer = null
-			}, MENU_INDICATION_DURATION)
-
-			return
-		}
-
-		if (menuIndicateTaskTimer) {
-			clearTimeout(menuIndicateTaskTimer)
-			menuIndicateTaskTimer = null
-		}
-
-		activeTasksCount.value = newValue
-		cacheStore.activeTasksCount = newValue
-	},
-)
 
 onMounted(async () => {
+	void showNodeRead.read()
 	indicateFailures.value = await configService.getValue("indicateFailures")
-	showNode.value = await configService.getValue("showNode")
-
-	tasks.value = (await taskService.getTasks()).filter((t) => !t.parentId && !t.finishedAt)
-	activeTasksCount.value = tasks.value?.length
 
 	if (indicateFailures.value) {
 		logViewerService.connect()
@@ -213,14 +162,14 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
 	configService.disconnect()
+	showNodeRead.dispose()
 	logViewerService.disconnect()
-	taskService.disconnect()
 	disposeLockWallet()
 })
 </script>
 
 <template>
-	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader" :class="$style.wrapper">
+	<header v-if="!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && !isCardWindow()" :class="$style.wrapper">
 		<!-- The switcher owns TWO explicit affordances (avatar + name) while the address is a
 		     one-click copy target — no popup detour. `account-selector` stays on the name button so
 		     every existing e2e switching flow passes unchanged (testid-preservation contract). -->
@@ -285,8 +234,8 @@ onBeforeUnmount(() => {
 				:aria-label="`Manage networks (currently ${appStore.network.name})`"
 				:class="$style.network_chip"
 			>
-				<span :class="$style.network_label">{{ appStore.network.name }}</span>
-				<div :class="[$style.status_dot, $style[networkStatusKey]]" />
+				<span v-if="showNode" data-testid="network-name" :class="$style.network_label">{{ appStore.network.name }}</span>
+				<div data-testid="network-status-dot" :class="[$style.status_dot, $style[networkStatusKey]]" />
 			</button>
 
 			<button
@@ -298,7 +247,7 @@ onBeforeUnmount(() => {
 				:disabled="appStore.lockHeldByImport"
 				:class="$style.lock_chip"
 			>
-				<MaterialIcon name="lock" :size="15" color="primary" />
+				<Icon name="lock" :size="15" color="primary" />
 				<span :class="$style.lock_label">Lock</span>
 			</button>
 
@@ -354,7 +303,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -402,6 +351,7 @@ onBeforeUnmount(() => {
 	position: relative;
 	display: inline-flex;
 	align-items: center;
+	user-select: text;
 
 	text-decoration: underline transparent;
 	text-underline-offset: 3px;
@@ -436,7 +386,10 @@ onBeforeUnmount(() => {
 	color: var(--nulo-accent);
 }
 
+/* With the label's role, `1lh` is the label's line while the label sets no line-height of its own, so
+ * the chip keeps its height when the name is hidden; 14px is the padding and border. */
 .network_chip {
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -444,8 +397,10 @@ onBeforeUnmount(() => {
 	max-width: 120px;
 	flex-shrink: 1;
 	min-width: 0;
+	min-height: calc(1lh + 14px);
 
-	padding: 6px 10px;
+	/* At the popup's width, 5px sides hold "TESTNET" whole with 2px to spare; 6px cut it by a fraction of a pixel. */
+	padding: 6px 5px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
@@ -458,7 +413,7 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -466,14 +421,15 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/* Drawn as the network chip beside it: same border, type and hover. */
+/* Drawn as the network chip beside it; the two change together. */
 .lock_chip {
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
 	flex-shrink: 0;
 
-	height: 26px;
+	min-height: calc(1lh + 14px);
 	padding: 0 9px 0 7px;
 
 	background: transparent;
@@ -497,8 +453,25 @@ onBeforeUnmount(() => {
 }
 
 .lock_label {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
+}
+
+/* Below the popup's width the row tightens and the Lock chip keeps only its icon, its name still "Lock
+ * wallet", so the address stays whole and both chips stay inside the row. */
+@media (width < 359px) {
+	.wrapper {
+		gap: 8px;
+		padding: 0 12px 0 16px;
+	}
+
+	.lock_chip {
+		padding: 0 6px;
+	}
+
+	.lock_label {
+		display: none;
+	}
 }
 
 .status_dot {

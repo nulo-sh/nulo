@@ -16,6 +16,10 @@
  * foreign-account TOKEN-BALANCE row (both must be dropped) plus a funded-account
  * authwit (must survive).
  *
+ * The funded token's row is doctored too (class, name, symbol, decimals): the
+ * import reads the token from the live node after the session opens, so the
+ * restored row must hold the chain's metadata before Home renders it.
+ *
  * Finally it drives a delete → re-add round-trip: resetting the
  * profile fires the awaited deletion coordinator, which must purge every
  * account-owned root AND clear its durable tombstone (proving the cascade is
@@ -33,7 +37,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type ExtensionContext, launchExtension, openPopup, registerProfile, test } from "../fixtures/extension"
@@ -48,8 +52,10 @@ import {
 	waitForProfilePurged,
 	waitForTokenCardAmount,
 } from "../fixtures/helpers"
-import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
+import { sealPlainBackup } from "../helpers/backup-seal"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -117,6 +123,17 @@ test.skipIf(!hasConfig)(
 			{ id: 999_001, token: someTokenId, account: FOREIGN_ACCOUNT, publicBalance: "5", updatedAt: 1 },
 		]
 
+		// The funded token's row claims another class, name, symbol and decimals; the import reads the
+		// token from the chain and must keep the chain's, which are the values the export carried.
+		const fundedToken = aztecConfig!.tokenAddress.toLowerCase()
+		const tokenRow = ((exported.data.token ?? []) as Array<Record<string, unknown>>).find(
+			(row) => String(row.contract).toLowerCase() === fundedToken,
+		)
+		if (!tokenRow) throw new Error("the export carries no row for the funded token")
+		const chainMetadata = { classId: tokenRow.classId, name: tokenRow.name, symbol: tokenRow.symbol, decimals: tokenRow.decimals }
+		expect(chainMetadata).toMatchObject({ classId: expect.any(String), symbol: "TST", decimals: 18 })
+		Object.assign(tokenRow, { classId: `0x${"11".repeat(32)}`, name: "Doctored", symbol: "FAKE", decimals: 6 })
+
 		keepChainAccountState(exported.data, chainId, aztecConfig!.tokenAddress)
 
 		// ── 3. Import into a FRESH extension ──────────────────────────────
@@ -128,31 +145,39 @@ test.skipIf(!hasConfig)(
 			const page2 = await gotoPopupImport(ctx2)
 			await importFullBackup(page2, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
 
-			// ── 4. Provenance assertion via RAW chrome.storage ──────────────
-			const txAccounts = await page2.evaluate(async () => {
-				const all = await chrome.storage.local.get()
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:txs@"))
-					.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-			})
+			// ── 4a. The token row holds the chain's metadata once the import ends ──
+			const restoredToken = (await readSealedRows(page2, "tokens")).find(
+				({ row }) => String(row.contract).toLowerCase() === fundedToken,
+			)?.row
+			expect(restoredToken).toMatchObject(chainMetadata)
+
+			// ── 4. Provenance assertion over every stored tx row ────────────
+			const txAccounts = (await readSealedRows<{ account: string }>(page2, "txs")).map(({ row }) => row.account)
+			// Every stored row is one the wallet reads: none is hidden from the assertion below.
+			const storedTxRows = await page2.evaluate(
+				async () => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith("nulo:core:txs@")).length,
+			)
+			expect(storedTxRows).toBe(txAccounts.length)
 			// The funded-account tx (its account WAS imported) survived; the
 			// foreign-account tx was dropped before restore could write it.
 			expect(txAccounts).toContain(funded)
 			expect(txAccounts).not.toContain(FOREIGN_ACCOUNT)
 
-			// Authwit + token-balance provenance via RAW chrome.storage: a foreign
-			// account's auth/balance rows were dropped before restore wrote them.
-			const readAccounts = (prefix: string) =>
-				page2.evaluate(async (p) => {
-					const all = await chrome.storage.local.get()
-					return Object.entries(all)
-						.filter(([k]) => k.startsWith(p))
-						.map(([, v]) => (JSON.parse(v as string) as { account: string }).account)
-				}, prefix)
-			const authAccounts = await readAccounts("nulo:core:auth-registry@")
+			// Authwit + token-balance provenance: a foreign account's auth/balance rows were dropped
+			// before restore wrote them, and every stored row is one the wallet reads.
+			const readAccounts = async (root: "authRegistry" | "tokenBalances", prefix: string) => {
+				const accounts = (await readSealedRows<{ account: string }>(page2, root)).map(({ row }) => row.account)
+				const stored = await page2.evaluate(
+					async (p) => Object.keys(await chrome.storage.local.get()).filter((k) => k.startsWith(p)).length,
+					prefix,
+				)
+				expect(stored).toBe(accounts.length)
+				return accounts
+			}
+			const authAccounts = await readAccounts("authRegistry", "nulo:core:auth-registry@")
 			expect(authAccounts).toContain(funded)
 			expect(authAccounts).not.toContain(FOREIGN_ACCOUNT)
-			const balanceAccounts = await readAccounts("nulo:core:token-balances@")
+			const balanceAccounts = await readAccounts("tokenBalances", "nulo:core:token-balances@")
 			expect(balanceAccounts).not.toContain(FOREIGN_ACCOUNT)
 
 			// ── 5. On-chain functionality ───────────────────────────────────
@@ -224,12 +249,7 @@ test.skipIf(!hasConfig)(
 			try {
 				await ctx2?.close()
 			} finally {
-				try {
-					rmSync(profileDir, { recursive: true, force: true })
-				} finally {
-					// The doctored file embeds the wallet's REAL (local-chain test) master-key.
-					rmSync(dirname(filePath), { recursive: true, force: true })
-				}
+				rmSync(profileDir, { recursive: true, force: true })
 			}
 		}
 	},

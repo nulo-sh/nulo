@@ -32,14 +32,16 @@ import type { Page } from "puppeteer"
 import { beforeAll, expect, inject } from "vitest"
 import { categoricalLabel, sendOutcome } from "@/utils/journal-state"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
-import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import { type AztecTestConfig, createTestWallet, finalizeThrough, readPublicTokenBalance } from "../fixtures/aztec"
 import { stopBackground } from "../fixtures/browser"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { fillSendForm, navigateByHash, refreshBalances, setActiveSendType, unlockAfterBackgroundDeath } from "../fixtures/helpers"
 import { waitForSendRecord } from "../fixtures/journal"
 import { LEGAL_ACCEPTANCE_KEY } from "../fixtures/legal"
+import { pollUntil } from "../fixtures/poll"
 import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { openSend, shotSend, submitSend } from "../fixtures/send-page"
 import { readLegalRecord } from "../helpers/legal-drivers"
 
@@ -67,9 +69,7 @@ beforeAll(() => {
 })
 
 async function readRecord(page: Page, id: string): Promise<OperationRecord | undefined> {
-	const raw = await page.evaluate(async (key) => (await chrome.storage.local.get(key))[key], `nulo:journal@${id}`)
-	if (raw === undefined) return undefined
-	return (typeof raw === "string" ? JSON.parse(raw) : raw) as OperationRecord
+	return (await readSealedRows<OperationRecord>(page, "journal")).find((record) => record.naturalId === id)?.row
 }
 
 async function waitForRecord(
@@ -79,56 +79,50 @@ async function waitForRecord(
 	what: string,
 	timeoutMs: number,
 ): Promise<OperationRecord> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const record = await readRecord(page, id)
-		if (record && done(record)) return record
-		if (Date.now() > deadline) throw new Error(`[${SPEC}] record ${id} ${what} within ${timeoutMs} ms: ${JSON.stringify(record)}`)
-		await sleep(250)
-	}
+	const record = await pollUntil(
+		() => readRecord(page, id),
+		(record) => record !== undefined && done(record),
+		{ label: `[${SPEC}] record ${id} ${what}`, timeoutMs, intervalMs: 250 },
+	)
+	return record as OperationRecord
 }
 
-/** Rewrites the stored row's `terminalAt`, keeping the row's stored form. */
+/** Rewrites record `id` in plaintext at its key, which the wallet reads as it reads a row it has
+ *  not sealed yet. */
+async function rewriteRecord(page: Page, id: string, edit: (record: OperationRecord) => OperationRecord): Promise<void> {
+	const record = await readRecord(page, id)
+	if (!record) throw new Error(`[${SPEC}] record ${id} is not readable`)
+	await page.evaluate(({ key, value }) => chrome.storage.local.set({ [key]: value }), {
+		key: `nulo:journal@${id}`,
+		value: JSON.stringify(edit(record)),
+	})
+}
+
+/** Rewrites the stored row's `terminalAt`. */
 async function ageRecord(page: Page, id: string, terminalAt: number): Promise<void> {
-	await page.evaluate(
-		async ({ key, at }) => {
-			const raw = (await chrome.storage.local.get(key))[key]
-			const row = typeof raw === "string" ? JSON.parse(raw) : raw
-			const aged = { ...row, terminalAt: at }
-			await chrome.storage.local.set({ [key]: typeof raw === "string" ? JSON.stringify(aged) : aged })
-		},
-		{ key: `nulo:journal@${id}`, at: terminalAt },
-	)
+	await rewriteRecord(page, id, (record) => ({ ...record, terminalAt }))
 }
 
-/** Rewrites the stored row's recorded expiry, keeping the row's stored form. */
+/** Rewrites the stored row's recorded expiry. */
 async function setRecordedExpiry(page: Page, id: string, timestamp: number): Promise<void> {
-	await page.evaluate(
-		async ({ key, at }) => {
-			const raw = (await chrome.storage.local.get(key))[key]
-			const row = typeof raw === "string" ? JSON.parse(raw) : raw
-			const moved = { ...row, progress: { ...row.progress, expiry: { ...row.progress.expiry, timestamp: at } } }
-			await chrome.storage.local.set({ [key]: typeof raw === "string" ? JSON.stringify(moved) : moved })
-		},
-		{ key: `nulo:journal@${id}`, at: timestamp },
-	)
+	await rewriteRecord(page, id, (record) => {
+		const progress = record.progress as Extract<OperationRecord["progress"], { stage: "failed" }>
+		if (!progress.expiry) throw new Error(`[${SPEC}] record ${id} recorded no expiry`)
+		return { ...record, progress: { ...progress, expiry: { ...progress.expiry, timestamp } } }
+	})
 }
 
 async function readTx(page: Page, hash: string): Promise<Tx | undefined> {
-	const key = `${TRANSACTION_STORAGE_ROOT}@${hash}`
-	const raw = await page.evaluate(async (k) => (await chrome.storage.local.get(k))[k], key)
-	if (raw === undefined) return undefined
-	return (typeof raw === "string" ? JSON.parse(raw) : raw) as Tx
+	return (await readSealedRows<Tx>(page, "txs")).find((tx) => tx.naturalId === hash)?.row
 }
 
 async function waitForTx(page: Page, hash: string, done: (tx: Tx) => boolean, what: string, timeoutMs: number): Promise<Tx> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const tx = await readTx(page, hash)
-		if (tx && done(tx)) return tx
-		if (Date.now() > deadline) throw new Error(`[${SPEC}] activity row ${what} within ${timeoutMs} ms: ${JSON.stringify(tx)}`)
-		await sleep(1_000)
-	}
+	const tx = await pollUntil(
+		() => readTx(page, hash),
+		(tx) => tx !== undefined && done(tx),
+		{ label: `[${SPEC}] activity row ${what}`, timeoutMs, intervalMs: 1_000 },
+	)
+	return tx as Tx
 }
 
 async function waitForCardStatus(page: Page, hash: string, status: string): Promise<void> {
@@ -146,20 +140,26 @@ async function waitForCardStatus(page: Page, hash: string, status: string): Prom
 /** Every journal row the page sees written, in order: `submitting` lasts one RPC, too short to poll. */
 async function recordJournalWrites(page: Page): Promise<void> {
 	await page.evaluate(() => {
-		const seen: unknown[] = []
+		const seen: { key: string; value: unknown }[] = []
 		Object.assign(window, { __journalWrites: seen })
 		chrome.storage.onChanged.addListener((changes, area) => {
 			if (area !== "local") return
 			for (const [key, change] of Object.entries(changes)) {
-				if (key.startsWith("nulo:journal@") && change.newValue !== undefined) seen.push(change.newValue)
+				if (key.startsWith("nulo:journal@") && change.newValue !== undefined) seen.push({ key, value: change.newValue })
 			}
 		})
 	})
 }
 
+/** The captured writes of record `id`, each opened by the background as the row it sealed. */
 async function journalWrites(page: Page, id: string): Promise<OperationRecord[]> {
-	const raw = await page.evaluate(() => (window as unknown as { __journalWrites: unknown[] }).__journalWrites)
-	return raw.map((r) => (typeof r === "string" ? JSON.parse(r) : r) as OperationRecord).filter((r) => r.id === id)
+	const writes = await page.evaluate(() => (window as unknown as { __journalWrites: { key: string; value: unknown }[] }).__journalWrites)
+	const opened: OperationRecord[] = []
+	for (const { key, value } of writes.filter((write) => write.key === `nulo:journal@${id}`)) {
+		const [record] = await readSealedRows<OperationRecord>(page, "journal", { [key]: value })
+		if (record) opened.push(record.row)
+	}
+	return opened
 }
 
 async function waitForRow(page: Page, testId: string, text: string): Promise<void> {

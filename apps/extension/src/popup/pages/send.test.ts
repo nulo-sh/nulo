@@ -9,6 +9,8 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { ImportedAccountUnusableError, JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED } from "@/wallet/services/token-list/list.fixture"
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
@@ -41,6 +43,7 @@ const mocks = vi.hoisted(() => ({
 	legalStatus: vi.fn(async () => "current"),
 	refreezeQuote: vi.fn(),
 	focusAmount: vi.fn(),
+	flagged: { current: [] as string[] },
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -56,15 +59,23 @@ vi.mock("@/wallet/services/execution/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: liveBus(), onTokenDeleted: liveBus(), getTokens: mocks.getTokens }
+		return {
+			disconnect: vi.fn(),
+			onTokenAdded: liveBus(),
+			onTokenUpdated: liveBus(),
+			onTokenDeleted: liveBus(),
+			getTokens: mocks.getTokens,
+		}
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
 	TokenBalanceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
+			onConnected: new EventHandler(),
 			onTokenBalanceAdded: new EventHandler(),
 			onTokenBalanceUpdated: new EventHandler(),
+			onTokenBalanceDeleted: new EventHandler(),
 			getTokenBalances: mocks.getTokenBalances,
 		}
 	}),
@@ -86,8 +97,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {}, flaggedTokens: mocks.flagged.current })),
 		}
 	}),
 }))
@@ -138,7 +149,6 @@ const STUBS = {
 	Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i />" },
-	MaterialIcon: { template: "<i />" },
 	SubPageHeader: { template: "<header />" },
 	Banner: { template: '<div data-testid="stub-banner"><slot /></div>' },
 	Button: {
@@ -162,13 +172,23 @@ const STUBS = {
 		name: "AmountCard",
 		template:
 			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
+		props: [
+			"modelValue",
+			"fiatMode",
+			"fiatGuard",
+			"token",
+			"tokenBalanceByType",
+			"balanceRawByType",
+			"liveQuote",
+			"proxyTicker",
+			"exceedsBalance",
+		],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
 		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
-		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" :data-destination="destinationPrivacy" />',
+		template: '<div data-testid="stub-fee-card" :data-origin="originPrivacy" />',
 		props: [
 			"profile",
 			"network",
@@ -176,8 +196,8 @@ const STUBS = {
 			"feeEstimate",
 			"isEstimating",
 			"originPrivacy",
-			"destinationPrivacy",
 			"payerNoticeShape",
+			"amountTyped",
 			"modelValue",
 			"needsFeeJuice",
 			"payer",
@@ -215,7 +235,7 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 }
 
 /** What a landed estimate answers when a test names none. */
-const LANDED = { maxFee: "1000", maxFeeFormatted: "0.000000000000001", gasDetails: {} }
+const LANDED = { maxFee: "1000", gasDetails: {} }
 
 /** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
 async function estimateLands() {
@@ -267,6 +287,9 @@ const strip = (w: W) => w.find('[data-testid="send-publish-strip"]')
 const sheetOpen = (w: W) => w.get('[data-testid="send-review-sheet"]').attributes("data-open") === "true"
 const sendNow = (w: W) => w.get('[data-testid="send-review-submit"]')
 const awaitingIds = (store: ReturnType<typeof useAppStore>) => store.awaitingTransactions.map((row) => row.id)
+const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
+const balanceUpdated = () => lastClient<{ onTokenBalanceUpdated: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceUpdated
+const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
 
 /** A transfer the test settles by hand. */
 function pendingTransfer() {
@@ -293,6 +316,7 @@ beforeEach(() => {
 	vi.spyOn(console, "debug").mockImplementation(() => {})
 })
 afterEach(() => {
+	mocks.flagged.current = []
 	vi.clearAllMocks()
 	vi.restoreAllMocks()
 	vi.useRealTimers()
@@ -313,10 +337,12 @@ describe("send page — the submit tail", () => {
 			"n1",
 			ACCOUNT,
 			TOKEN.id,
+			TOKEN.contract,
 			TransferType.Private,
 			DESTINATION,
 			1_500_000n,
 			SPONSOR.settings,
+			undefined,
 			undefined,
 			undefined,
 		)
@@ -324,6 +350,47 @@ describe("send page — the submit tail", () => {
 		expect(appStore.awaitingTransactions[0]).toMatchObject({ account: ACCOUNT, destination: DESTINATION, contract: TOKEN.contract })
 		expect(mocks.routerReplace).toHaveBeenCalledWith("/popup/general")
 		expect(submit(w).text()).toBe("CONFIRMING")
+		w.unmount()
+	})
+
+	test("a token updated after mount is sent with its new decimals", async () => {
+		const { w } = await mountSend()
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, decimals: 4 }])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, decimals: 4, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toBe(15_000n)
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Private)
+		w.unmount()
+	})
+
+	test("a token update that adds private transfers keeps the open page's public choice", async () => {
+		const publicOnly = { ...TOKEN, hasPrivateTransfers: false }
+		mocks.getTokens.mockResolvedValue([publicOnly])
+		const { w, cacheStore } = await mountSend()
+		cacheStore.preselectedBalanceType = "private"
+		mocks.getTokens.mockResolvedValue([TOKEN])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...TOKEN, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
+		w.unmount()
+	})
+
+	test("a token update that takes away private transfers moves the open page to public", async () => {
+		const { w } = await mountSend()
+		const publicOnly = { ...TOKEN, hasPrivateTransfers: false }
+		mocks.getTokens.mockResolvedValue([publicOnly])
+		const client = (TokenServiceClient as unknown as { mock: { results: { value: { onTokenUpdated: EventHandler<unknown> } }[] } }).mock
+		client.results.at(-1)?.value.onTokenUpdated.invoke({ ...publicOnly, profileId: "p1" })
+		await flushPromises()
+		await fillForm(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[4]).toBe(TransferType.Public)
 		w.unmount()
 	})
 
@@ -340,10 +407,12 @@ describe("send page — the submit tail", () => {
 			"n1",
 			ACCOUNT,
 			TOKEN.id,
+			TOKEN.contract,
 			TransferType.Private,
 			DESTINATION,
 			1_234_567_123_456n,
 			SPONSOR.settings,
+			undefined,
 			undefined,
 			undefined,
 		)
@@ -571,6 +640,17 @@ describe("send page — the footer", () => {
 		w.unmount()
 	})
 
+	test("the card hears whether the amount field holds an amount, with no recipient needed", async () => {
+		const { w } = await mountSend()
+		const typed = () => w.findComponent({ name: "FeeSettingsCard" }).props("amountTyped")
+		expect(typed()).toBe(false)
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		expect(typed()).toBe(true)
+		await w.get('[data-testid="stub-amount"]').setValue("")
+		expect(typed()).toBe(false)
+		w.unmount()
+	})
+
 	test("the card is handed the tag's shape exactly while the send is gated", async () => {
 		const { w } = await mountSend()
 		const shape = () => w.findComponent({ name: "FeeSettingsCard" }).props("payerNoticeShape")
@@ -583,6 +663,147 @@ describe("send page — the footer", () => {
 		await feeCard(w, FJ)
 		await w.get('[data-testid="send-from-type"]').trigger("click")
 		expect(shape()).toBeNull()
+		w.unmount()
+	})
+})
+
+describe("send page — an amount over the balance says so", () => {
+	const line = (w: W) => w.find('[data-testid="send-amount-over-balance"]')
+	const amountInput = (w: W) => w.get('[data-testid="send-amount-input"]')
+
+	test("6 typed over private 5 shows the line; the balance rising to cover it takes it away", async () => {
+		const { w } = await mountSend({ realAmountCard: true })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await amountInput(w).setValue("6")
+		await feeCard(w, SPONSOR)
+		await estimateLands()
+		expect(line(w).text()).toBe("More than your balance")
+		expect(amountInput(w).attributes("aria-invalid")).toBe("true")
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "10000000", updatedAt: 2 })
+		await flushPromises()
+		expect(line(w).exists()).toBe(false)
+		expect(amountInput(w).attributes("aria-invalid")).toBe("false")
+		w.unmount()
+	})
+
+	// Tokens are read per profile and chain, balances per account: a switch keeps the typed amount.
+	test("an account whose balance is not read yet keeps the amount, and only a synced balance below it shows the line", async () => {
+		const { w, appStore } = await mountSend({ realAmountCard: true })
+		await amountInput(w).setValue("1.5")
+		expect(line(w).exists()).toBe(false)
+
+		mocks.getTokenBalances.mockResolvedValue([])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect((amountInput(w).element as HTMLInputElement).value).toBe("1.5")
+		expect(line(w).exists()).toBe(false)
+
+		// The row a new account gets before its first sync.
+		const bob = { ...BALANCE, id: "b2", account: "0xbob", privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+		balanceAdded().invoke(bob)
+		await flushPromises()
+		expect(line(w).exists()).toBe(false)
+
+		balanceUpdated().invoke({ ...bob, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(line(w).text()).toBe("More than your balance")
+		w.unmount()
+	})
+})
+
+describe("send page — the estimate follows the amount the balance covers", () => {
+	const fee = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("feeEstimate")
+	const estimating = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("isEstimating")
+	const balanceShown = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
+
+	test("public side: an amount over the balance asks nothing; the balance rising to cover it asks for that amount", async () => {
+		const { w } = await mountSend()
+		await w.get('[data-testid="send-from-type"]').trigger("click")
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await w.get('[data-testid="stub-amount"]').setValue("4")
+		await feeCard(w, SPONSOR)
+		await estimateLands()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		expect(submit(w).attributes("disabled")).toBeDefined()
+
+		balanceUpdated().invoke({ ...BALANCE, publicBalance: "6000000", updatedAt: 2 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(mocks.estimateTransferFee.mock.calls[0]?.[6]).toBe(4_000_000n)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a balance change that leaves the amount covered keeps the landed fee and asks nothing", async () => {
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "8000000", updatedAt: 2 })
+		await flushPromises()
+		expect(balanceShown(w)).toBe("8")
+		expect(fee(w)).toEqual(LANDED)
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("a balance falling below a landed amount clears the fee and stops its estimate; covering it again asks anew", async () => {
+		const { w } = await mountSend()
+		await fillForm(w)
+		const landed = mocks.estimateTransferFee.mock.calls[0]?.[8]
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(balanceShown(w)).toBe("1")
+		expect(mocks.cancelEstimate).toHaveBeenCalledExactlyOnceWith(landed)
+		expect(fee(w)).toBeNull()
+		expect(estimating(w)).toBe(false)
+		expect(submit(w).attributes("disabled")).toBeDefined()
+
+		await w.get('[data-testid="stub-amount"]').setValue("1.50")
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "5000000", updatedAt: 3 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(mocks.estimateTransferFee.mock.calls[1]?.[6]).toBe(1_500_000n)
+		expect(submit(w).attributes("disabled")).toBeUndefined()
+		w.unmount()
+	})
+
+	test("an estimate running when the balance falls below its amount is stopped, and its late answer never lands", async () => {
+		let answer: (value: unknown) => void = () => {}
+		mocks.estimateTransferFee.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		const { w } = await mountSend()
+		await fillForm(w)
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+		const started = mocks.estimateTransferFee.mock.calls[0]?.[8]
+		expect(estimating(w)).toBe(true)
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "1000000", updatedAt: 2 })
+		await flushPromises()
+		expect(mocks.cancelEstimate).toHaveBeenCalledExactlyOnceWith(started)
+		expect(estimating(w)).toBe(false)
+		answer(LANDED)
+		await flushPromises()
+		expect(fee(w)).toBeNull()
+
+		balanceUpdated().invoke({ ...BALANCE, privateBalance: "5000000", updatedAt: 3 })
+		await flushPromises()
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		expect(fee(w)).toEqual(LANDED)
 		w.unmount()
 	})
 })
@@ -614,7 +835,7 @@ describe("send page — consent", () => {
 		const closeSpy = vi.spyOn(popupStore, "close")
 		await sendNow(w).trigger("click")
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
-		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toEqual(FJ.settings)
+		expect(mocks.executeTransfer.mock.calls[0]?.[7]).toEqual(FJ.settings)
 		expect(closeSpy.mock.invocationCallOrder[0]).toBeLessThan(mocks.routerReplace.mock.invocationCallOrder[0] as number)
 		expect(sheetOpen(w)).toBe(false)
 		w.unmount()
@@ -850,9 +1071,10 @@ describe("send page — the token card while the tokens load", () => {
 	const FOREIGN = { ...TOKEN, chainId: 999, contract: `0x${"f".repeat(64)}`, symbol: "FRN" }
 
 	const holdTokenReads = () => holdReads<unknown[]>(mocks.getTokens)
-	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
-	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
+	const balanceDeleted = () =>
+		lastClient<{ onTokenBalanceDeleted: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceDeleted
+	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
 	const card = (w: W) => {
 		const el = w.get('[data-testid="stub-token-card"]')
 		return { loading: el.attributes("data-loading"), symbol: el.attributes("data-symbol") }
@@ -914,6 +1136,149 @@ describe("send page — the token card while the tokens load", () => {
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
 		expect(failed(w)).toBe("true")
+		w.unmount()
+	})
+
+	test("after an account switch an add for the previous account never lands; one for the new account does", async () => {
+		const { w, appStore } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		mocks.getTokenBalances.mockResolvedValue([])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+
+		balanceAdded().invoke({ ...BALANCE, id: "b3", privateBalance: "7000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		balanceAdded().invoke({ ...BALANCE, id: "b2", account: "0xbob", privateBalance: "9000000" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("9")
+		w.unmount()
+	})
+
+	// A restarted worker can give a listed row's id to another token's row, and that row's add can
+	// reach the port before the reconnect's read lands. It is created at zero, and its first update
+	// replaces the listed row by id, so each token shows its own amount at every step.
+	test("a restart that gives a listed row's id to another token shows each token's own amount at every step", async () => {
+		const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW" }
+		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
+		const { w, cacheStore } = await mountSend()
+		const shown = async (tokenId: number) => {
+			cacheStore.activeTokenIdx = tokenId
+			await flushPromises()
+			return amount(w).attributes("data-balance")
+		}
+		const created = { ...BALANCE, token: NEW, privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+		const projected = { ...created, privateBalance: "4000000", updatedAt: 2 }
+		balanceConnected().invoke()
+		const reads = holdReads<unknown[]>(mocks.getTokenBalances)
+		balanceConnected().invoke()
+		await flushPromises()
+
+		balanceAdded().invoke(created)
+		await flushPromises()
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["5", "0"])
+		balanceUpdated().invoke(projected)
+		await flushPromises()
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["0", "4"])
+
+		reads[0]?.resolve([created])
+		await flushPromises()
+		reads[1]?.resolve([projected])
+		await flushPromises()
+		expect(reads).toHaveLength(2)
+		expect([await shown(TOKEN.id), await shown(NEW.id)]).toEqual(["0", "4"])
+		w.unmount()
+	})
+
+	test("a worker restart re-reads the balances: the first connect is the load's own, a later one lands the new amount", async () => {
+		const { w } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "8000000" }])
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(1)
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(amount(w).attributes("data-balance")).toBe("8")
+		w.unmount()
+	})
+
+	test("an account switch drops a re-read still out for the previous account", async () => {
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		let release: (rows: unknown[]) => void = () => {}
+		mocks.getTokenBalances.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		balanceConnected().invoke()
+		await flushPromises()
+		mocks.getTokenBalances.mockResolvedValue([])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		release([{ ...BALANCE, privateBalance: "8000000" }])
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		w.unmount()
+	})
+
+	test("an identity fetch's balance read never lands over a reconnect's read that began after it", async () => {
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		const reads = holdTokenReads()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob", privateBalance: "8000000" }])
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(3)
+		reads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("8")
+		w.unmount()
+	})
+
+	test("an identity fetch's balance read lands when the reconnect's read that began after it is refused", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const { w, appStore } = await mountSend()
+		balanceConnected().invoke()
+		// A re-read landed for the previous identity first.
+		balanceConnected().invoke()
+		await flushPromises()
+		const reads = holdTokenReads()
+		mocks.getTokenBalances.mockResolvedValueOnce([{ ...BALANCE, id: "b2", account: "0xbob" }])
+		appStore.account = { address: "0xbob" } as never
+		await flushPromises()
+		mocks.getTokenBalances.mockRejectedValue(new Error("port closed"))
+		balanceConnected().invoke()
+		await flushPromises()
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(5)
+		reads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		w.unmount()
+	})
+
+	test("a deleted balance row drops its amount; a delete for another row keeps it", async () => {
+		const { w } = await mountSend()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceDeleted().invoke({ ...BALANCE, id: "b9" })
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("5")
+		balanceDeleted().invoke(BALANCE)
+		await flushPromises()
+		expect(amount(w).attributes("data-balance")).toBe("0")
 		w.unmount()
 	})
 
@@ -1371,6 +1736,27 @@ describe("send page — Refresh quote by keyboard", () => {
 		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 1.904761 USDC"))
 		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(false)
 		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
+		w.unmount()
+	})
+})
+
+describe("send page — a token the signed list flags", () => {
+	test("the banner sits above the token card while the active token is flagged, and leaves with it", async () => {
+		// Wire-shaped, in the upper case a restored row may keep.
+		const scam = { ...TOKEN, id: 8, symbol: "SCAM", contract: `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}` }
+		mocks.flagged.current = flaggedKeysOf([{ chainId: TOKEN.chainId, address: TEST_FLAGGED.address }])
+		mocks.getTokens.mockResolvedValue([TOKEN, scam])
+		const { w, cacheStore } = await mountSend()
+		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
+
+		cacheStore.activeTokenIdx = scam.id
+		await flushPromises()
+		const banner = w.get('[data-testid="token-flagged-banner"]')
+		expect(banner.element.nextElementSibling?.getAttribute("data-testid")).toBe("stub-token-card")
+
+		cacheStore.activeTokenIdx = TOKEN.id
+		await flushPromises()
+		expect(w.find('[data-testid="token-flagged-banner"]').exists()).toBe(false)
 		w.unmount()
 	})
 })

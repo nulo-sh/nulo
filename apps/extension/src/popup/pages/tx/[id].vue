@@ -12,6 +12,7 @@
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
+import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
 import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
@@ -27,19 +28,19 @@ import { DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
-import { trimAddress } from "@/utils/string"
+import { endsSelection } from "@/utils/selection"
+import { isBlank, trimAddress } from "@/utils/string"
 import {
 	getTxCategory,
 	getTxTitle,
 	getOriginLabel,
 	getPrimaryCall,
 	formatTransferType,
-	humanizeMethodName,
 	FEE_METHODS,
+	settledCallTitle,
 } from "@/utils/tx-enrichment"
-import { formatFeeJuice, feeToUsd, feeJuicePricingFromUsd } from "@/utils/fee-estimation"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { explorerDisplayName, getAccountExplorerUrl, getBlockExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "@/popup/components/modules/tx/tx-detail-helpers"
 
 /** Composables */
@@ -64,14 +65,15 @@ const configService = new ConfigServiceClient()
 const showDebugPanel = ref(false)
 
 const tx = computed(() => appStore.transactions.find((t) => t.hash === route.params.id))
+const tokens = ref([])
 const call = computed(() => (tx.value?.calls ? getPrimaryCall(tx.value.calls) : undefined))
-const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls) : "tx"))
+const type = computed(() => (tx.value?.calls ? getTxCategory(tx.value.calls, tokens.value) : "tx"))
 
 // The explorer link renders for EVERY status — pending, dropped, reverted
 // (owner call): a possibly-404 explorer page is exactly what the user wants
 // to check when a tx never confirmed. Copy hash remains only when no
 // explorer URL exists (sandbox chain, explorer set to None).
-const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls) : "Transaction"))
+const popupTitle = computed(() => (tx.value?.calls ? getTxTitle(tx.value.calls, tokens.value) : "Transaction"))
 const originLabel = computed(() => getOriginLabel(tx.value?.origin))
 
 const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
@@ -79,9 +81,12 @@ const transferTypeLabel = computed(() => {
 	if (!transfer.value || transfer.value.type === undefined || transfer.value.type === null) return null
 	return formatTransferType(transfer.value.type)
 })
-const tokens = ref([])
 const token = computed(() => tokens.value.find((t) => call.value?.contract === t.contract))
-const transferSymbol = computed(() => displaySymbol(transfer.value?.token?.symbol))
+// Blank is judged before `displaySymbol`'s cap, which ends a long run of spaces in "…".
+const missingTitle = computed(() => {
+	const symbol = transfer.value?.token?.symbol
+	return typeof symbol !== "string" || isBlank(symbol) ? "This token is missing" : `${displaySymbol(symbol)} is missing`
+})
 
 const amount = computed(() => txAmount(tx.value?.calls, tokens.value))
 const formattedAmount = computed(() =>
@@ -101,15 +106,11 @@ const handleCopy = (target) => {
 
 const feePaymentLabel = computed(() => describeFeePaymentMethod(tx.value))
 
-const formattedFee = computed(() => (tx.value?.fee ? formatFeeJuice(BigInt(tx.value.fee)) : null))
 // Live pricing at TODAY'S AZTEC rate — historical fees are valued at the
 // current spot, not the price at execution time (TxFeeRow labels this).
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const feeJuicePricing = computed(() => feeJuicePricingFromUsd(prices.feeJuiceQuote.value?.usd))
-const formattedFeeUsd = computed(() => (tx.value?.fee ? feeToUsd(BigInt(tx.value.fee), feeJuicePricing.value) : null))
-const formattedEstFee = computed(() => (tx.value?.estimatedFee ? formatFeeJuice(BigInt(tx.value.estimatedFee)) : null))
-const formattedEstFeeUsd = computed(() => (tx.value?.estimatedFee ? feeToUsd(BigInt(tx.value.estimatedFee), feeJuicePricing.value) : null))
+const feeJuiceUsd = computed(() => prices.feeJuiceQuote.value?.usd)
 
 /** D2 hero line: fiat value of the transfer at TODAY'S rate, shown for
  *  EVERY status (owner call: a failed transfer's dollar context is still
@@ -127,7 +128,7 @@ const explorerUrl = computed(() => {
 	if (!appStore.network?.chainId || !tx.value?.hash) return null
 	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, tx.value.hash)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+const explorerName = computed(() => explorerDisplayName(appStore.defaultExplorer))
 const blockUrl = computed(() =>
 	tx.value?.block ? getBlockExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, tx.value.block.hash) : null,
 )
@@ -148,6 +149,7 @@ const userCalls = computed(() => {
 	const filtered = tx.value.calls.filter((c) => !FEE_METHODS.has(c.method))
 	return filtered.length ? filtered : tx.value.calls
 })
+const callRowTitle = (c) => settledCallTitle(c, tokens.value)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
@@ -171,30 +173,14 @@ onBeforeUnmount(() => {
 
 		<Flex v-if="tx" wide direction="column" gap="24" :class="$style.content">
 			<Flex direction="column" align="center" gap="10">
-				<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
-					<span v-if="txTime" :class="$style.tx_time">{{ txTime }}</span>
-					<span v-if="txTime && (explorerUrl || tx?.hash)" :class="$style.meta_sep">·</span>
-					<a
-						v-if="explorerUrl"
-						:href="explorerUrl"
-						target="_blank"
-						rel="noopener noreferrer"
-						@click.stop
-						:class="$style.hero_link"
-					>
-						<span>View on {{ explorerName }}</span>
-						<Icon name="external-link" size="10" color="tertiary" />
-					</a>
-					<span
-						v-else-if="tx?.hash"
-						@click="handleCopy(tx.hash)"
-						:class="[$style.hero_link, 'copyable']"
-						data-testid="tx-detail-pending-copy-hash"
-					>
-						<span>Copy hash</span>
-						<Icon name="copy" size="10" color="tertiary" />
-					</span>
-				</Flex>
+				<DetailHeroMeta
+					:time="txTime"
+					:explorerUrl="explorerUrl"
+					:explorerName="explorerName"
+					:hash="tx.hash"
+					copyTestid="tx-detail-pending-copy-hash"
+					@copy="handleCopy"
+				/>
 			</Flex>
 
 			<Flex v-if="type === 'transfer' && formattedAmount" align="center" direction="column" gap="6">
@@ -222,7 +208,7 @@ onBeforeUnmount(() => {
 				:action="{ name: 'Copy token address', callback: () => handleCopy(call.contract) }"
 				wide
 			>
-				<template #title> {{ transferSymbol }} is missing </template>
+				<template #title> {{ missingTitle }} </template>
 				<template #description> This token not found in your token list </template>
 			</Banner>
 
@@ -231,13 +217,13 @@ onBeforeUnmount(() => {
 					{{ transferTypeLabel }}
 				</div>
 
-				<Flex wide gap="8">
+				<Flex wide gap="8" :class="$style.address_pair">
 					<Flex
 						wide
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.from)"
+						@click="endsSelection($event) || handleCopy(transfer.from)"
 					>
 						<AddressDisplay
 							static
@@ -261,7 +247,7 @@ onBeforeUnmount(() => {
 						direction="column"
 						gap="4"
 						:class="$style.address_card"
-						@click="handleCopy(transfer.to)"
+						@click="endsSelection($event) || handleCopy(transfer.to)"
 					>
 						<AddressDisplay
 							static
@@ -285,38 +271,37 @@ onBeforeUnmount(() => {
 			<Flex wide direction="column" gap="10">
 				<SectionLabel label="Details" />
 
-				<Flex wide direction="column" gap="10" :class="$style.details_box">
+				<Flex wide direction="column" gap="10" :class="$style.details_box" data-testid="tx-detail-box">
 					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
-					<Flex v-if="originLabel" wide justify="between" align="center">
-						<span :class="$style.detail_key">App</span>
-						<span :class="$style.detail_value">{{ originLabel }}</span>
+					<Flex v-if="originLabel" wide justify="between" align="start" gap="16">
+						<span :class="$style.app_key" data-testid="tx-detail-app-label">App</span>
+						<span :class="$style.app_value" data-testid="tx-detail-app">{{ originLabel }}</span>
 					</Flex>
 
 					<Flex v-if="feePaymentLabel" wide justify="between" align="center">
 						<span :class="$style.detail_key">Fee method</span>
-						<span :class="$style.detail_value">{{ feePaymentLabel }}</span>
+						<span :class="$style.detail_value" data-testid="tx-detail-fee-method">{{ feePaymentLabel }}</span>
 					</Flex>
 
 					<TxFeeRow
-						v-if="formattedFee"
+						v-if="tx?.fee"
 						v-model="showFeeBreakdown"
 						label="Fee paid"
-						:feeAmount="formattedFee"
-						:feeUsd="formattedFeeUsd"
+						:fee="tx.fee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
-						:estimatedFee="formattedEstFee"
-						:estimatedFeeUsd="formattedEstFeeUsd"
+						:estimatedFee="tx.estimatedFee"
 						:feeSavings="feeSavings"
 					/>
 
 					<TxFeeRow
-						v-else-if="formattedEstFee"
+						v-else-if="tx?.estimatedFee"
 						v-model="showFeeBreakdown"
 						estimated
 						label="Estimated fee"
-						:feeAmount="formattedEstFee"
-						:feeUsd="formattedEstFeeUsd"
+						:fee="tx.estimatedFee"
+						:usdPerFeeJuice="feeJuiceUsd"
 						:gasBreakdown="gasBreakdown"
 					/>
 
@@ -333,7 +318,7 @@ onBeforeUnmount(() => {
 								:class="[$style.detail_value_aux, $style.detail_link]"
 								>{{ trimAddress(tx.block.hash, 6, 4) }}</a
 							>
-							<span v-else data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<span v-else data-testid="tx-block-hash" @click="endsSelection($event) || handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -341,7 +326,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="tx?.nonce" wide justify="between" align="center">
 						<span :class="$style.detail_key">Nonce</span>
-						<span data-testid="tx-nonce" @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
+						<span data-testid="tx-nonce" @click="endsSelection($event) || handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
 							{{ trimAddress(tx.nonce, 6, 4) }}
 						</span>
 					</Flex>
@@ -359,8 +344,8 @@ onBeforeUnmount(() => {
 						gap="4"
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
-						<span :class="$style.call_method">{{ humanizeMethodName(c.method) || "Call" }}</span>
-						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span data-testid="tx-call-method" :class="$style.call_method">{{ callRowTitle(c) }}</span>
+						<span data-testid="tx-call-contract" @click="endsSelection($event) || handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>
@@ -390,22 +375,6 @@ onBeforeUnmount(() => {
 	composes: amount_fiat from "../detail-page.module.css";
 }
 
-.hero_meta {
-	composes: hero_meta from "../detail-page.module.css";
-}
-
-.tx_time {
-	composes: tx_time from "../detail-page.module.css";
-}
-
-.meta_sep {
-	composes: meta_sep from "../detail-page.module.css";
-}
-
-.hero_link {
-	composes: hero_link from "../detail-page.module.css";
-}
-
 .amount_value {
 	composes: amount_value from "../detail-page.module.css";
 }
@@ -420,6 +389,10 @@ onBeforeUnmount(() => {
 
 .transfer_type_chip {
 	composes: type_chip from "../detail-page.module.css";
+}
+
+.address_pair {
+	composes: address_pair from "../detail-page.module.css";
 }
 
 .address_card {
@@ -447,13 +420,21 @@ onBeforeUnmount(() => {
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
+}
+
+.app_key {
+	composes: app_key from "../detail-page.module.css";
+}
+
+.app_value {
+	composes: app_value from "../detail-page.module.css";
 }
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .detail_link {
@@ -486,7 +467,7 @@ onBeforeUnmount(() => {
 }
 
 .call_contract {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 

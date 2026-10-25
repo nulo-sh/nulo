@@ -12,14 +12,30 @@ export interface ScopeFollowDeps {
 	/** The live row, read under the lock: a follow that ran before this one may have moved it. */
 	getActiveNetworkId: () => Promise<string | undefined>
 	setActiveNetwork: (networkId: string) => Promise<unknown>
-	/** The durable pointer write; `unless` runs inside the facade, right before the write. */
+	/** The device's selection write ({@link selectionWriter}); `unless` is asked right before it. */
 	writeActiveAccount: (address: string, unless: () => boolean) => Promise<unknown>
 }
 
 /**
- * Moves the wallet to the scope a confirmed payload runs in — the network row, then the account
- * pointer — without ever touching this realm's store: the window is closing, and the shell's
- * network watcher would otherwise wake and stamp the pointer with an arbitrary account.
+ * The follow's account write: no call once `unless` holds, else one call to the worker, posted at
+ * once, which drops it if the session ended before its commit. A wallet send that begins after the
+ * check is not caught: the next popup opens on the followed account.
+ */
+export function selectionWriter(
+	profileId: () => string | undefined,
+	save: (profileId: string, address: string) => Promise<unknown>,
+): ScopeFollowDeps["writeActiveAccount"] {
+	return async (address, unless) => {
+		const id = profileId()
+		if (unless() || id === undefined) return
+		await save(id, address)
+	}
+}
+
+/**
+ * Moves the wallet to the scope a confirmed payload runs in — the network row, then the device's
+ * account selection — without ever touching this realm's store: the window is closing, and the shell's
+ * network watcher would otherwise wake and stamp the selection with an arbitrary account.
  *
  * The lifecycle generation is the fence. Every await here is a point where the wallet can lock or
  * switch profile; the shell rejects and closes but does not cancel this continuation, and the store

@@ -85,6 +85,13 @@ const MAX_EXPIRY_DEFERRAL_MS = 10 * 60_000
 /** How far one deferral moves the deadline, capped again by the TTL. */
 const EXPIRY_DEFERRAL_STEP_MS = 60_000
 
+/** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
+const CLOSE_DELETE_ATTEMPTS = 2
+
+/** What `close()` did: whether it announced the lock, and whether every delete attempt of the
+ *  persisted record was refused. */
+export type CloseOutcome = { emitted: boolean; recordKept: boolean }
+
 /** The deadline and TTL revision a snapshot-based write was decided on. */
 type CommitExpectation = { lockedAt: number | undefined; configRev: number }
 
@@ -114,18 +121,18 @@ export class SessionManager {
 	 *  race-free with concurrent toggles — `onConfigUpdated` keeps it in
 	 *  sync. */
 	private strictSecurityMode: boolean
-	private readonly alarms?: AlarmsPort
+	private readonly alarms: AlarmsPort
 	// The named create/clear ritual is owned by the shared AlarmDispatcher.
 	// The listener deliberately does NOT go through `dispatcher.listen()`: the
 	// staleness gate needs `alarm.scheduledTime` (the dispatcher's tick contract
 	// doesn't surface the event), and the handler's fire-and-forget `void`
 	// semantics must stay byte-identical.
-	private readonly dispatcher?: AlarmDispatcher
+	private readonly dispatcher: AlarmDispatcher
 	/** Facade-lock serializer injected by ProfileService. Serializes the
 	 *  alarm-driven TTL close against the facade-locked session writers
 	 *  (refresh/open/unlock) so a racing refresh writeback cannot resurrect a
-	 *  session the alarm just closed. Defaults to a pass-through for the
-	 *  lock-agnostic legacy/test paths (which never wire the alarm). */
+	 *  session the alarm just closed. Defaults to a pass-through when no facade
+	 *  lock is injected. */
 	private readonly runExclusive: <T>(fn: () => Promise<T>) => Promise<T>
 	/** Serializes the session ARTIFACT operations (row write/delete, alarm
 	 *  schedule/clear) across every entry point — including the off-lock
@@ -165,41 +172,29 @@ export class SessionManager {
 	 *                    + error logging (never throws out of SessionManager).
 	 * @param onChange    Callback invoked on open + close transitions. The
 	 *                    facade wires this to `emit("onActiveProfileChanged", …)`.
-	 * @param browserApi  Optional `BrowserApi` port. Tests pass `FakeBrowserApi`
-	 *                    so storage + alarms are in-memory. If omitted, falls
-	 *                    back to `chrome.storage.session` for legacy SW startup
-	 *                    AND skips alarm wiring (proactive TTL relies on the
-	 *                    port; without it, the existing reactive `isExpired`
-	 *                    check still gates `getActive`).
+	 * @param browserApi  Session storage and the alarm behind the proactive TTL lock; the
+	 *                    reactive `isExpired` check in `getActive` stays the safety net.
 	 */
 	public constructor(
 		config: IConfig,
 		private readonly logger: ILogger,
 		onChange: SessionChangeListener,
-		browserApi?: BrowserApi,
+		browserApi: BrowserApi,
 		runExclusive?: <T>(fn: () => Promise<T>) => Promise<T>,
 	) {
 		this.onChange = onChange
 		this.sessionTtl = config.get("sessionTtl")
 		this.strictSecurityMode = config.get("strictSecurityMode")
 		config.onUpdate.add(this.onConfigUpdated)
-		this.session = browserApi
-			? new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
-			: new ValueStorage<Session>(SESSION_STORAGE_ROOT, chrome.storage.session)
-		// Subscribe to `chrome.alarms` only when a port is wired. The
-		// legacy (no-`browserApi`) SW path keeps the reactive `isExpired`
-		// behavior — proactive TTL lights up once the composition root
-		// passes a real `BrowserApi`.
-		this.alarms = browserApi?.alarms
-		this.dispatcher = this.alarms ? new AlarmDispatcher(SESSION_TTL_ALARM_NAME, this.alarms) : undefined
-		// Pass-through default keeps the lock-agnostic contract for callers
-		// that don't wire the alarm (legacy SW path / unit tests).
+		this.session = new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
+		this.alarms = browserApi.alarms
+		this.dispatcher = new AlarmDispatcher(SESSION_TTL_ALARM_NAME, this.alarms)
 		this.runExclusive = runExclusive ?? ((fn) => fn())
 		this.artifactLock = new Lock(LOG_SOURCE, logger, null)
 		// SessionManager has no dispose method (SW-lifetime singleton);
 		// we don't store the unsubscribe handle. If a future teardown
 		// path emerges, capture this return value.
-		this.alarms?.onAlarm(this.onAlarmFired)
+		this.alarms.onAlarm(this.onAlarmFired)
 	}
 
 	/** Returns the active session if one exists and has not yet expired.
@@ -385,31 +380,34 @@ export class SessionManager {
 	 *  iff a session was actually open (idempotent when already closed).
 	 *  Safe to call multiple times.
 	 *
-	 *  Returns whether it emitted. A worker that restarted holds no in-memory
-	 *  session while the persisted record may still exist, so an explicit lock
-	 *  that reaches here emits nothing — the caller that owns the user's intent
-	 *  (`lockActiveProfile`) announces the lock itself on `false`.
+	 *  `emitted`: a worker that restarted holds no in-memory session while the
+	 *  persisted record may still exist, so an explicit lock that reaches here
+	 *  emits nothing — the caller that owns the user's intent
+	 *  (`lockActiveProfile`) announces the lock itself on `false`. `recordKept`:
+	 *  every delete attempt of the persisted record failed; a stale close that
+	 *  stood down reports `false`, since the row is a successor's.
 	 *
 	 *  `expected` (the expiry path passes the session it OBSERVED): when the
 	 *  active session is no longer that exact object, a successor already
 	 *  replaced it — this stale close must not touch the successor's
 	 *  in-memory state or artifacts, so it returns untouched. */
-	public async close(expected?: ActiveSession): Promise<boolean> {
+	public async close(expected?: ActiveSession): Promise<CloseOutcome> {
 		let emitted = false
+		let recordKept = false
 		try {
 			// Identity guard — synchronous, so there is no TOCTOU between the
 			// check and the in-memory head below.
 			if (expected && this.activeSession !== expected) {
-				return false
+				return { emitted, recordKept }
 			}
 			const gen = this.sessionGeneration
 			// Memory-first + asymmetric-to-open. Clear the in-memory session
 			// FIRST so a rejecting `session.delete` can't leave the secret live in
 			// memory after an explicit lock. Unlike open(), a swallowed delete
 			// failure here is NOT benign — the persisted bearer would survive and
-			// re-unlock on the next SW start — so `delete()` gets its OWN catch
-			// (clearLockAlarm must still run) and callers that need the durable
-			// guarantee (lockActiveProfile) read back via hasPersistedSession().
+			// re-unlock on the next SW start — so the delete never throws past
+			// clearLockAlarm, and callers that need the durable guarantee
+			// (lockActiveProfile) read back via hasPersistedSession().
 			if (this.activeSession) {
 				zeroize(this.activeSession.dek)
 				this.activeSession = undefined
@@ -426,11 +424,7 @@ export class SessionManager {
 					this.logger.log(LOG_SOURCE, LogLevel.Info, "Stale close stood down — a newer session committed its artifacts")
 					return
 				}
-				try {
-					await this.session.delete()
-				} catch (error) {
-					this.logger.log(LOG_SOURCE, LogLevel.Error, "Failed to delete persisted session on close", error)
-				}
+				recordKept = !(await this.deletePersistedSession())
 				// Cancel any pending lock alarm. Idempotent — `clear()` returns
 				// `false` if no alarm exists. Run after state-clear so a racing
 				// alarm fire that arrives during this call sees
@@ -441,7 +435,25 @@ export class SessionManager {
 		} catch (error) {
 			this.logger.log(LOG_SOURCE, LogLevel.Error, "Failed to close profile session", error)
 		}
-		return emitted
+		return { emitted, recordKept }
+	}
+
+	/** Deletes the persisted session, reattempting a rejected delete once, and reports whether a
+	 *  delete succeeded. Runs inside the artifact section, so no attempt can reach a successor's
+	 *  row. Never throws. No backoff: a `storage.session` removal has no quota or throttling path
+	 *  to wait out. */
+	private async deletePersistedSession(): Promise<boolean> {
+		for (let attempt = 1; attempt <= CLOSE_DELETE_ATTEMPTS; attempt++) {
+			try {
+				await this.session.delete()
+				return true
+			} catch (error) {
+				const last = attempt === CLOSE_DELETE_ATTEMPTS
+				const message = last ? "Failed to delete persisted session on close" : "Persisted session delete failed; reattempting"
+				this.logger.log(LOG_SOURCE, last ? LogLevel.Error : LogLevel.Warn, message, { error })
+			}
+		}
+		return false
 	}
 
 	/** True iff a session record is still persisted in storage. Used by
@@ -935,14 +947,13 @@ export class SessionManager {
 
 	/**
 	 * Schedule the lock alarm at `lockedAt` (epoch ms). No-op when
-	 * alarms aren't wired, when sessionTtl is 0, or when lockedAt is
-	 * undefined / past.
+	 * sessionTtl is 0, or when lockedAt is undefined / past.
 	 *
 	 * Errors are logged + swallowed; never propagate to callers (the
 	 * reactive `isExpired` check is the safety net).
 	 */
 	private async scheduleLockAlarm(lockedAt: number | undefined): Promise<void> {
-		if (!this.dispatcher || this.sessionTtl === 0 || lockedAt === undefined || lockedAt <= Date.now()) {
+		if (this.sessionTtl === 0 || lockedAt === undefined || lockedAt <= Date.now()) {
 			return
 		}
 		try {
@@ -954,10 +965,9 @@ export class SessionManager {
 
 	/**
 	 * Cancel any pending lock alarm. Idempotent — `clear` returns false
-	 * when no alarm exists. No-op when alarms aren't wired.
+	 * when no alarm exists.
 	 */
 	private async clearLockAlarm(): Promise<void> {
-		if (!this.dispatcher) return
 		try {
 			await this.dispatcher.clear()
 		} catch (error) {

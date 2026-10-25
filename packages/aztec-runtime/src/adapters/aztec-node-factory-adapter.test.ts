@@ -18,14 +18,8 @@ const SENTINEL = "sentinel-7f3a"
 const realFetch = globalThis.fetch
 const CONSOLE_METHODS = ["log", "info", "warn", "error", "debug"] as const
 
-function reply(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
-	return {
-		ok: init.ok ?? true,
-		status: init.status ?? 200,
-		statusText: init.ok === false ? "Server Error" : "OK",
-		headers: { get: () => null },
-		json: async () => body,
-	} as unknown as Response
+function reply(body: unknown, status = 200): Response {
+	return new Response(JSON.stringify(body), { status, statusText: status >= 400 ? "Server Error" : "OK" })
 }
 
 /** Answers each batched request by its id, as a node does. */
@@ -79,7 +73,7 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 	})
 
 	test("a 500 rejects after exactly one attempt", async () => {
-		const fetchSpy = vi.fn(async () => reply({ error: { message: "boom" } }, { ok: false, status: 500 }))
+		const fetchSpy = vi.fn(async () => reply({ error: { message: "boom" } }, 500))
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
 		await expect(new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
@@ -167,8 +161,11 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 const OK = { ok: true } as const
 const USERINFO = { ok: false, reason: "userinfo is not permitted in an RPC URL" }
 const INVALID = { ok: false, reason: "not a valid URL" }
-const scheme = (s: string) => ({ ok: false, reason: `scheme "${s}:" not in allowlist (only https: and http://loopback are permitted)` })
-const loopbackOnly = (host: string) => ({ ok: false, reason: `http: only permitted for loopback hosts (got host="${host}")` })
+const scheme = (s: string) => ({
+	ok: false,
+	reason: `scheme "${s}:" not in allowlist (only https: and http: to localhost or 127.0.0.1 are permitted)`,
+})
+const localOnly = (host: string) => ({ ok: false, reason: `http: only permitted for localhost and 127.0.0.1 (got host="${host}")` })
 const ALLOWLIST: [string, unknown][] = [
 	["https://rpc.example.com", OK],
 	["HTTPS://RPC.EXAMPLE.COM/Path?Q=1", OK],
@@ -182,8 +179,8 @@ const ALLOWLIST: [string, unknown][] = [
 	["http://LOCALHOST:8080", OK],
 	["http://127.0.0.1:8080", OK],
 	["http://127.1:8080", OK],
-	["http://[::1]:8080", OK],
-	["http://[0:0:0:0:0:0:0:1]:8080", OK],
+	["http://[::1]:8080", localOnly("[::1]")],
+	["http://[0:0:0:0:0:0:0:1]:8080", localOnly("[::1]")],
 	["https://[2001:db8::1]:8443", OK],
 	["https://exämple.com", OK],
 	[" https://rpc.example.com", OK],
@@ -191,11 +188,11 @@ const ALLOWLIST: [string, unknown][] = [
 	["https://rpc.example.com/?q=x ", OK],
 	["https:rpc.example.com", OK],
 	["http://localhost\\@evil.com", OK],
-	["http://localhost.:8080", loopbackOnly("localhost.")],
-	["http://sub.localhost:8080", loopbackOnly("sub.localhost")],
-	["http://127.0.0.2:8080", loopbackOnly("127.0.0.2")],
-	["http://0.0.0.0:8080", loopbackOnly("0.0.0.0")],
-	["http://[::ffff:127.0.0.1]:8080", loopbackOnly("[::ffff:7f00:1]")],
+	["http://localhost.:8080", localOnly("localhost.")],
+	["http://sub.localhost:8080", localOnly("sub.localhost")],
+	["http://127.0.0.2:8080", localOnly("127.0.0.2")],
+	["http://0.0.0.0:8080", localOnly("0.0.0.0")],
+	["http://[::ffff:127.0.0.1]:8080", localOnly("[::ffff:7f00:1]")],
 	["https://rpc.example.com:65536", INVALID],
 	["https://user:hunter2@rpc.example.com:65536", INVALID],
 	["", INVALID],

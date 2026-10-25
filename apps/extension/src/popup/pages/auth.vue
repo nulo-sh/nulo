@@ -23,7 +23,7 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { initTransactionService, managers, refreshBalances } from "@/utils/core"
@@ -56,8 +56,6 @@ const isTornImport = ref(false)
 const isPasswordType = ref(true)
 const isAwaitingResponse = ref(false)
 let isUnmounted = false
-// The failure toast this screen opened last: a new attempt closes it, never another surface's.
-let failureToastId
 
 const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
 // Opened before the service answered: the heading, its line and the form depend on the profile's
@@ -113,7 +111,7 @@ const advancePastAuth = async () => {
  *  across the awaits. */
 const unlockActiveProfile = async () => {
 	if (isPasskeyProfile.value) {
-		if (passkeyNeedsOwnWindow()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
+		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
 		const credentialId = await managers.profile.getPasskeyCredentialId(appStore.profile.id)
 		const credData = await runCeremony({ mode: "get", credentialId, step: "unlock", profileName: appStore.profile.name })
 		return managers.profile.unlockPasskeyProfile(appStore.profile.id, credData)
@@ -169,8 +167,9 @@ const handleUnlockWallet = async () => {
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
-	// So an attempt that unlocks lands on a clean Home, and a second failure shows its toast afresh.
-	if (toast.value && toast.value.id === failureToastId) closeToast()
+	// Closed before the attempt, so one that unlocks lands on a clean Home and a second failure shows
+	// its toast afresh.
+	if (toast.value?.kind === "error") closeToast()
 
 	try {
 		let activeProfile
@@ -188,10 +187,7 @@ const handleUnlockWallet = async () => {
 			// the analogous import handshake allows 30 s).
 			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
 		} catch (error) {
-			// The ladder runs synchronously, so a toast that appears during it is its own.
-			const shown = toast.value?.id
 			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
-			if (toast.value && toast.value.id !== shown) failureToastId = toast.value.id
 			return
 		} finally {
 			isAwaitingResponse.value = false
@@ -274,7 +270,7 @@ watch(
 		</Flex>
 
 		<Flex direction="column" align="center" gap="32" :class="$style.main">
-			<MaterialIcon name="lock" :size="48" color="primary" :class="$style.lock_icon" />
+			<Icon name="lock" :size="48" color="primary" :class="$style.lock_icon" />
 
 			<AuthProfilePill :name="appStore.profile?.name ?? ''" @click="popupStore.open('select_profile')" />
 
@@ -432,7 +428,7 @@ watch(
 
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: -8px;
 }
 
@@ -442,7 +438,7 @@ watch(
 }
 
 .reset_link {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 
 	background: transparent;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { Skeleton } from "@nulo/design"
-import { QUEUED_FEE_COPY } from "@/components/composite/send/publish-facts"
+import { QUEUED_FEE_COPY, QUEUED_SPONSORED_COPY } from "@/components/composite/send/publish-facts"
 import FeeCostReadout from "./FeeCostReadout.vue"
 
 const STUBS = {
@@ -45,6 +45,30 @@ describe("FeeCostReadout", () => {
 		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
+	test("pending with an amount typed, the bar stands for any estimate or queue still on the props", async () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		const queued = factory({ pending: true, amountTyped: true, isEstimating: true, isQueued: true, queuedCap })
+		expect(queued.text()).toBe("You pay")
+		expect(queued.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		await queued.setProps({ pending: false })
+		expect(queued.find('[data-testid="fee-estimate-queued-cap-line"]').exists()).toBe(true)
+
+		const landed = factory({ pending: true, amountTyped: true, estimate: ESTIMATE })
+		expect(landed.text()).toBe("You pay")
+		await landed.setProps({ pending: false })
+		expect(drawn(landed)).toBe("You pay ~3.577824 FJ ($0.215)")
+	})
+
+	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		const stale = factory({ pending: true, estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })
+		expect(stale.text()).toBe("Fee estimated after simulation")
+		expect(stale.findComponent(Skeleton).exists()).toBe(false)
+		await stale.setProps({ amountTyped: true })
+		expect(stale.text()).toBe("You pay")
+		expect(stale.findComponent(Skeleton).exists()).toBe(true)
+	})
+
 	test("estimate takes precedence over the estimating skeleton", () => {
 		const w = factory({ estimate: { amount: "1.0" }, isEstimating: true })
 		expect(w.text()).toContain("~1.0 FJ")
@@ -54,7 +78,10 @@ describe("FeeCostReadout", () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
 		const w = factory({ isEstimating: true, isQueued: true, queuedCap })
 		expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(false)
-		expect(drawn(w)).toBe("You pay About 3.577824 FJ ($0.215) Goes out after your earlier send, for at most 4.47228 FJ ($0.269).")
+		expect(drawn(w).startsWith("You pay About ~3.577824 FJ ($0.215) Goes out")).toBe(true)
+		expect(w.get('[data-testid="fee-estimate-queued-cap-line"]').text()).toBe(
+			"Goes out after your earlier send, for at most ~4.47228 FJ ($0.269).",
+		)
 		expect(w.find('[data-testid="fee-estimate-usd"]').text()).toBe("($0.215)")
 		const unpriced = factory({
 			isEstimating: true,
@@ -62,9 +89,19 @@ describe("FeeCostReadout", () => {
 			queuedCap: { about: { amount: "1.0", usd: null }, cap: { amount: "1.25", usd: null } },
 		})
 		expect(unpriced.find('[data-testid="fee-estimate-queued-cap-line"]').text()).toBe(
-			"Goes out after your earlier send, for at most 1.25 FJ.",
+			"Goes out after your earlier send, for at most ~1.25 FJ.",
 		)
 		expect(drawn(factory({ isEstimating: true, isQueued: true }))).toBe(`You pay ${QUEUED_FEE_COPY}`)
+	})
+
+	test("queued with Nulo's sponsor paying: You pay nothing and it goes out after the earlier send; a hand-added sponsor keeps the queued line", () => {
+		const w = factory({ isEstimating: true, isQueued: true, payer: "sponsor" })
+		expect(drawn(w)).toBe(`You pay Nothing ${QUEUED_SPONSORED_COPY}`)
+		expect(w.get('[data-testid="fee-estimate-queued-sponsored-line"]').text()).toBe("Goes out after your earlier send.")
+		expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(false)
+		const handAdded = factory({ isEstimating: true, isQueued: true, payer: "unvouched" })
+		expect(handAdded.find('[data-testid="fee-estimate-queued-sponsored"]').exists()).toBe(false)
+		expect(drawn(handAdded)).toBe(`You pay ${QUEUED_FEE_COPY}`)
 	})
 
 	test("a queued estimate shows the queued line in place of the skeleton; the estimate replaces it", () => {

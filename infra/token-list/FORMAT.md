@@ -53,13 +53,19 @@ The payload is a UTF-8 JSON object:
 			"name": "Test USDC",
 			"priceId": "usd-coin"
 		}
+	],
+	"flagged": [
+		{
+			"chainId": 2904119610,
+			"address": "0x2a6c…41d7"
+		}
 	]
 }
 ```
 
 | Field | Rule |
 |---|---|
-| `sequence` | Integer, 1 to 2^53 − 1: the signing time in seconds. Accept a list only if its `sequence` is above the last one you accepted. |
+| `sequence` | Integer, 1 to 2^53 − 1: the signing time in seconds. Accept a list only if its `sequence` is above the last one you accepted. Nulo also refuses one below the floor its release compiles ([`floor.json`](../../packages/token-list/src/floor.json)), the sequence of the last list that delisted or flagged a token. |
 | `issuedAt` | ISO 8601 UTC instant of the signing. |
 | `chainId` | Unsigned 32-bit integer: the Aztec wallet chain id, `(l1ChainId ^ rollupVersion) >>> 0`. |
 | `address`, `classId` | `0x` + 64 lower-case hex digits, below the BN254 scalar field modulus `0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001`. Other spellings are refused, never normalized. |
@@ -67,9 +73,11 @@ The payload is a UTF-8 JSON object:
 | `name` | 1 to 80 characters. |
 | `decimals` | Integer, 0 to 18. |
 | `priceId` | Optional CoinGecko id. Absent means unpriced. |
+| `flagged` | Optional array of `{chainId, address}` pairs, under the rules above: tokens the publisher flags as scams. Absent means none. |
 
 `symbol` and `name` contain no control, format (bidi overrides, zero-width joiners) or line and
-paragraph separator characters. Each (`chainId`, `address`) pair appears once.
+paragraph separator characters. Each (`chainId`, `address`) pair appears once across `tokens` and
+`flagged`: a flagged token is never listed.
 
 ### What a reader does with it
 
@@ -78,6 +86,7 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once.
   an artifact for, and checks the class, symbol and decimals against the chain before it adds a row.
 - Leave an entry unpriced when its `priceId` is not one it knows.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
+- Warn wherever a flagged token shows, whoever added it, and never treat a flagged pair as listed.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo

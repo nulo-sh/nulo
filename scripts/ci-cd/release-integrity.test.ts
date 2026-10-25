@@ -19,6 +19,8 @@ type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: 
 type Defaults = { run?: { "working-directory"?: string } }
 type Job = {
 	uses?: string
+	environment?: unknown
+	secrets?: unknown
 	permissions?: unknown
 	env?: Record<string, unknown>
 	defaults?: Defaults
@@ -35,7 +37,7 @@ const parse = <T>(path: string): T => Bun.YAML.parse(readFileSync(join(ROOT, pat
 
 function loadTree(): Tree {
 	const workflows: Record<string, Workflow> = {}
-	for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((f) => f.endsWith(".yml"))) {
+	for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((f) => /\.ya?ml$/.test(f))) {
 		workflows[file] = parse<Workflow>(`.github/workflows/${file}`)
 	}
 	const actions: Record<string, Action> = {}
@@ -132,6 +134,57 @@ function mintFindings(tree: Tree): string[] {
 		}
 	}
 	return [...findings, ...Object.keys(MINTS).flatMap((where) => (seen.has(where) ? [] : [`${where}: its pinned App token is gone`]))]
+}
+
+/** The release App's id and key are secrets of this environment, which GitHub opens only to runs from
+ *  `main` and `dev`; it matches an environment name case-blind. */
+const RELEASE_APP = "release-app"
+const APP_SECRET = /RELEASE_PLEASE_APP_/i
+const OWN_TOKEN = /\bsecrets\s*(?:\.\s*GITHUB_TOKEN\b|\[\s*'GITHUB_TOKEN'\s*\])/gi
+
+function environmentName(job: Job): string | undefined {
+	const named = typeof job.environment === "object" ? (job.environment as { name?: unknown } | null)?.name : job.environment
+	return typeof named === "string" ? named : undefined
+}
+
+const inReleaseApp = (job: Job): boolean => environmentName(job)?.toLowerCase() === RELEASE_APP
+
+/** The `${{ }}` spans of a job and its workflow's env, without the mint's two inputs: the App secrets' one use. */
+function spansBesideMint(wf: Workflow, job: Job): string[] {
+	const steps = job.steps?.map((s) =>
+		s.uses?.startsWith(MINT) ? { ...s, with: { ...s.with, "app-id": undefined, "private-key": undefined } } : s,
+	)
+	return expressions(JSON.stringify([wf.env, { ...job, steps }]))
+}
+
+function releaseAppJobFindings(tree: Tree, where: string, wf: Workflow, job: Job): string[] {
+	const findings: string[] = []
+	const spans = spansBesideMint(wf, job)
+	if (where in MINTS) {
+		if (environmentName(job) !== RELEASE_APP) findings.push(`${where}: mints the App token outside ${RELEASE_APP}`)
+		// Inside the environment any other read, `toJSON(secrets)` included, can carry the key.
+		if (spans.some((span) => /\bsecrets\b/i.test(span.replace(OWN_TOKEN, ""))))
+			findings.push(`${where}: reads a secret beside its mint`)
+		return findings
+	}
+	if (environmentName(job)?.includes("${{")) findings.push(`${where}: names its environment by an expression`)
+	else if (inReleaseApp(job)) findings.push(`${where}: enters ${RELEASE_APP} but mints no pinned App token`)
+	if (spans.some((span) => APP_SECRET.test(span))) findings.push(`${where}: reads the release App's secrets`)
+	// A workflow from another commit can enter release-app too, and this test cannot read it.
+	if (job.uses && !job.uses.startsWith("./") && job.secrets === "inherit")
+		findings.push(`${where}: inherits secrets into a workflow outside this commit`)
+	const callee = tree.workflows[job.uses?.match(/^\.\/\.github\/workflows\/([^/]+)$/)?.[1] ?? ""]
+	// A secret the caller does not pass resolves empty in the callee, and the run shows no error.
+	if (callee && Object.values(callee.jobs).some(inReleaseApp) && job.secrets !== "inherit")
+		findings.push(`${where}: calls a ${RELEASE_APP} workflow without secrets: inherit`)
+	return findings
+}
+
+/** Every job, callers included: exactly the minting jobs enter `release-app`, and only their mint reads the App's secrets. */
+function releaseAppFindings(tree: Tree): string[] {
+	return Object.entries(tree.workflows).flatMap(([file, wf]) =>
+		Object.entries(wf.jobs ?? {}).flatMap(([name, job]) => releaseAppJobFindings(tree, `${file}#${name}`, wf, job)),
+	)
 }
 
 /** release-please maintains Release PRs only; a run that tagged or released would bypass the publish checks. */
@@ -249,6 +302,7 @@ const NO_INSTALL = [
 	"release.yml#auto-unstick",
 	"release.yml#publish-chrome-store",
 	"release.yml#publish-firefox-amo",
+	"release.yml#select-assets",
 	"release.yml#sync-main-to-dev",
 	"source-rebuild.yml#rebuild-arm64",
 	"source-rebuild.yml#rebuild-x64",
@@ -446,6 +500,102 @@ function storeBytesFindings(tree: Tree): string[] {
 	return findings
 }
 
+const SELECT = "release.yml#select-assets"
+const SELECT_ENV = {
+	VERSION: "${{ needs.resolve.outputs.version }}",
+	TAG: "${{ needs.resolve.outputs.tag }}",
+	SHA: "${{ needs.resolve.outputs.sha }}",
+}
+const SOURCE = "${{ github.event_name == 'push' && 'build' || needs.select-assets.outputs.source }}"
+const BY_SOURCE: Record<string, string> = { build: "env.SOURCE == 'build'", published: "env.SOURCE == 'published'" }
+const SMOKES = { "smoke-against-artifact": "chrome", "smoke-firefox-against-artifact": "firefox" }
+const PUBLISHED_ONLY = "steps.select.outputs.source == 'published'"
+/** A step's shell commands, one per line, comments and blank lines dropped. */
+const commandsOf = (step: Step | undefined): string[] =>
+	(step?.run ?? "")
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line && !line.startsWith("#"))
+
+function selectStepFindings(step: Step): string[] {
+	const findings: string[] = []
+	if (step.uses?.startsWith("actions/checkout@") && (step.with?.ref !== undefined || step.with?.["persist-credentials"] !== false))
+		findings.push(`${SELECT}: a checkout of another revision, or one that keeps its token`)
+	if (step.uses === SETUP_BUN && (step.with?.cache !== "false" || step.with?.install !== "false"))
+		findings.push(`${SELECT}: Bun's setup restores a cache or installs`)
+	return findings
+}
+
+/** select-assets reads the release with the narrowest token, from this workflow's revision, installing nothing. */
+function selectJobFindings(tree: Tree): string[] {
+	const job = tree.workflows["release.yml"].jobs["select-assets"]
+	if (!job) return [`${SELECT}: missing`]
+	const findings = (job.steps ?? []).flatMap(selectStepFindings)
+	if (!Bun.deepEquals(job.permissions, { contents: "read", attestations: "read" })) findings.push(`${SELECT}: permissions`)
+	if (!Bun.deepEquals(job.env, SELECT_ENV)) findings.push(`${SELECT}: VERSION, TAG and SHA are not resolve's`)
+	const others = thirdParty(expanded(tree, job))
+	if (others.join() !== "oven-sh/setup-bun") findings.push(`${SELECT}: runs ${others.join(", ")}`)
+	if (!(job.steps ?? []).some((step) => step.run === `${RUNNER} select`)) findings.push(`${SELECT}: does not run select`)
+	return [...findings, ...handoffFindings(job.steps ?? [])]
+}
+
+const PUBLISHED_ZIPS = ["chrome", "firefox"].map((browser) => `dist/release/nulo-${browser}-\${VERSION}.zip`)
+const PUBLISHED_ASSETS = [
+	"dist/release/nulo-chrome-${{ env.VERSION }}.zip",
+	"dist/release/nulo-firefox-${{ env.VERSION }}.zip",
+	"dist/release/SHASUMS256.txt",
+]
+
+/** Each published tree is its own browser's checked zip, unpacked, and the assets artifact is the three checked files. */
+function handoffFindings(steps: Step[]): string[] {
+	const findings: string[] = []
+	const unpacked = commandsOf(steps.find((s) => s.run?.includes("unzip")))
+	const want = [
+		"mkdir -p dist/published",
+		...["chrome", "firefox"].map((browser, i) => `unzip -q "${PUBLISHED_ZIPS[i]}" -d dist/published/${browser}`),
+	]
+	if (!Bun.deepEquals(unpacked, want)) findings.push(`${SELECT}: a tree is not its own browser's zip`)
+	for (const browser of ["chrome", "firefox"]) {
+		const upload = steps.find((s) => s.with?.name === `published-${browser}`)
+		if (upload?.with?.path !== `dist/published/${browser}` || upload.if !== PUBLISHED_ONLY)
+			findings.push(`${SELECT}: published-${browser} is not the unpacked ${browser} zip`)
+	}
+	const assets = steps.find((s) => s.with?.name === "published-assets")
+	const paths = String(assets?.with?.path ?? "")
+		.trim()
+		.split("\n")
+		.map((p) => p.trim())
+	if (!Bun.deepEquals(paths, PUBLISHED_ASSETS) || assets?.if !== PUBLISHED_ONLY)
+		findings.push(`${SELECT}: published-assets is not the three checked files`)
+	return findings
+}
+
+/** On a dispatch, the bytes attach-assets ships are the ones the smokes ran: the rebuild only on `build`. */
+function sourceFindings(tree: Tree): string[] {
+	const { jobs: all } = tree.workflows["release.yml"]
+	const attach = all["attach-assets"]
+	const findings = selectJobFindings(tree)
+	if (attach.env?.SOURCE !== SOURCE) findings.push("attach-assets: SOURCE may default on a dispatch")
+	const steps = attach.steps ?? []
+	const guard = (find: (s: Step) => boolean) => steps.find(find)?.if
+	if (guard((s) => s.run?.includes("zip-reproducible.ts") === true) !== BY_SOURCE.build)
+		findings.push("attach-assets: the zip step runs on a published source")
+	for (const browser of ["chrome", "firefox"])
+		if (guard((s) => s.with?.["artifact-ids"] === `\${{ needs.build-${browser}.outputs.${browser}_artifact_id }}`) !== BY_SOURCE.build)
+			findings.push(`attach-assets: the ${browser} build is downloaded on a published source`)
+	const published = steps.find((s) => s.with?.["artifact-ids"] === "${{ needs.select-assets.outputs.published_assets_artifact_id }}")
+	if (published?.if !== BY_SOURCE.published || published.with?.path !== "dist/release")
+		findings.push("attach-assets: the published assets are not what a published source ships")
+	for (const [smoke, browser] of Object.entries(SMOKES)) {
+		const want = `\${{ needs.select-assets.outputs.source == 'published' && 'published-${browser}' || 'extension-${browser}' }}`
+		const wantId = `\${{ needs.select-assets.outputs.source == 'published' && needs.select-assets.outputs.published_${browser}_artifact_id || needs.build-${browser}.outputs.${browser}_artifact_id }}`
+		const job = all[smoke] as Job & { with?: Record<string, unknown> }
+		if (job.with?.artifact_name !== want || job.with?.artifact_id !== wantId)
+			findings.push(`${smoke}: smokes other bytes than its source's`)
+	}
+	return findings
+}
+
 /** Every release write goes through the runner: `gh release` would publish or replace without its checks. */
 function releaseWriteFindings(tree: Tree): string[] {
 	return [...jobs(tree)].flatMap(({ where, job }) =>
@@ -534,6 +684,85 @@ describe("App tokens", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(mintFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+	test("only the minting jobs enter release-app, and only their mint reads the App's secrets", () => {
+		expect(releaseAppFindings(TREE)).toEqual([])
+		const entered = Object.entries(TREE.workflows).flatMap(([file, wf]) =>
+			Object.entries(wf.jobs).flatMap(([name, job]) => (inReleaseApp(job) ? [`${file}#${name}`] : [])),
+		)
+		expect(entered.sort()).toEqual(Object.keys(MINTS).sort())
+	})
+	const notes = (t: Tree) => t.workflows["release.yml"].jobs["release-notes"]
+	const caller = (t: Tree, file: string) => t.workflows[file].jobs["release-pr-lockfile"]
+	const reading = (expression: string) => ({ run: "true", env: { KEY: `\${{ ${expression} }}` } }) as Step
+	const cases: [string, (t: Tree) => unknown, string[]][] = [
+		[
+			"a minting job outside it",
+			(t) => unset(t.workflows["release.yml"].jobs["auto-unstick"], "environment"),
+			["release.yml#auto-unstick: mints the App token outside release-app"],
+		],
+		[
+			"another job in it, in any case",
+			(t) => Object.assign(notes(t), { environment: "Release-App" }),
+			["release.yml#release-notes: enters release-app but mints no pinned App token"],
+		],
+		[
+			"an environment named by an expression",
+			(t) => Object.assign(notes(t), { environment: { name: "${{ 'release-app' }}" } }),
+			["release.yml#release-notes: names its environment by an expression"],
+		],
+		[
+			"another job reading the key",
+			(t) => notes(t).steps?.push(reading("secrets.release_please_app_private_key")),
+			["release.yml#release-notes: reads the release App's secrets"],
+		],
+		[
+			"a minting job handing the key to a script",
+			(t) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push(reading("secrets.RELEASE_PLEASE_APP_PRIVATE_KEY")),
+			["release.yml#auto-unstick: reads a secret beside its mint"],
+		],
+		[
+			"a minting job reading the whole context",
+			(t) => t.workflows["_release-pr-lockfile.yml"].jobs["lock-version"].steps?.push(reading("toJSON(secrets)")),
+			["_release-pr-lockfile.yml#lock-version: reads a secret beside its mint"],
+		],
+		[
+			"a caller passing the id by name",
+			(t) => Object.assign(caller(t, "release.yml"), { secrets: { RELEASE_PLEASE_APP_ID: "${{ secrets.RELEASE_PLEASE_APP_ID }}" } }),
+			[
+				"release.yml#release-pr-lockfile: reads the release App's secrets",
+				"release.yml#release-pr-lockfile: calls a release-app workflow without secrets: inherit",
+			],
+		],
+		[
+			"a caller passing nothing",
+			(t) => unset(caller(t, "release-prerelease.yml"), "secrets"),
+			["release-prerelease.yml#release-pr-lockfile: calls a release-app workflow without secrets: inherit"],
+		],
+		[
+			"a caller inheriting into another commit's workflow",
+			(t) => Object.assign(caller(t, "release.yml"), { uses: "nulo-sh/nulo/.github/workflows/_release-pr-lockfile.yml@main" }),
+			["release.yml#release-pr-lockfile: inherits secrets into a workflow outside this commit"],
+		],
+		[
+			"nothing in a minting job's environment without deployments",
+			(t) =>
+				Object.assign(t.workflows["release.yml"].jobs["sync-main-to-dev"], {
+					environment: { name: "release-app", deployment: false },
+				}),
+			[],
+		],
+		[
+			"nothing in a mint reading its key by bracket",
+			(t) =>
+				Object.assign(step(t, "_release-pr-lockfile.yml#lock-version", MINT).with ?? {}, {
+					"private-key": "${{ secrets['RELEASE_PLEASE_APP_PRIVATE_KEY'] }}",
+				}),
+			[],
+		],
+	]
+	test.each(cases)("finds %s", (_, edit, expected) => {
+		expect(releaseAppFindings(mutated(edit)).sort()).toEqual([...expected].sort())
 	})
 })
 
@@ -833,6 +1062,7 @@ describe("jobs that install nothing", () => {
 				"publish-token-list.yml#sign",
 				"release.yml#attach-assets",
 				"release.yml#auto-unstick",
+				"release.yml#select-assets",
 				"release.yml#sync-main-to-dev",
 				"verify-store-copies.yml#compare",
 			].map((where) => `${where}: runs Bun after changing directory`),
@@ -1024,6 +1254,53 @@ describe("attestations", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(storeBytesFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+	test("a store dispatch ships the bytes its smokes ran, read by a job that holds no write", () => {
+		expect(sourceFindings(TREE)).toEqual([])
+	})
+	const releaseJob = (t: Tree, name: string) => t.workflows["release.yml"].jobs[name] as Job & { with?: Record<string, unknown> }
+	test.each([
+		[
+			"a smoke fixed to the rebuild",
+			(t: Tree) => Object.assign(releaseJob(t, "smoke-against-artifact").with ?? {}, { artifact_name: "extension-chrome" }),
+			["smoke-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a smoke's id fixed to the rebuild",
+			(t: Tree) =>
+				Object.assign(releaseJob(t, "smoke-firefox-against-artifact").with ?? {}, {
+					artifact_id: "${{ needs.build-firefox.outputs.firefox_artifact_id }}",
+				}),
+			["smoke-firefox-against-artifact: smokes other bytes than its source's"],
+		],
+		[
+			"a build downloaded on any source",
+			(t: Tree) => {
+				const download = releaseJob(t, "attach-assets").steps?.find(
+					(s) => s.with?.["artifact-ids"] === "${{ needs.build-chrome.outputs.chrome_artifact_id }}",
+				)
+				if (download) download.if = undefined
+			},
+			["attach-assets: the chrome build is downloaded on a published source"],
+		],
+		[
+			"a tree unpacked from the other browser's zip",
+			(t: Tree) => {
+				const unpack = releaseJob(t, "select-assets").steps?.find((s) => s.run?.includes("unzip"))
+				if (unpack) unpack.run = unpack.run?.replace("nulo-firefox-", "nulo-chrome-")
+			},
+			["release.yml#select-assets: a tree is not its own browser's zip"],
+		],
+		[
+			"an unguarded zip step",
+			(t: Tree) => {
+				const zip = releaseJob(t, "attach-assets").steps?.find((s) => s.run?.includes("zip-reproducible.ts"))
+				if (zip) zip.if = undefined
+			},
+			["attach-assets: the zip step runs on a published source"],
+		],
+	] as [string, (t: Tree) => void, string[]][])("finds %s", (_, edit, expected) => {
+		expect(sourceFindings(mutated(edit))).toEqual(expected)
 	})
 	test("finds a release written with gh", () => {
 		const edit = (t: Tree) =>

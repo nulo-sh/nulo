@@ -43,6 +43,7 @@ import {
 	type PxeFactory,
 } from "./chain-runtime"
 import type { NodeFactory } from "../ports/node-factory-port"
+import { openChainStore } from "./opfs-store"
 
 // The injected encrypted store is unit-mocked (real OPFS needs a browser; the production-build
 // spike is the empirical proof). The factory only needs open/close handles here.
@@ -53,7 +54,11 @@ vi.mock("./opfs-store", () => ({
 const createPXEMock = vi.mocked(createPXE)
 
 const fakeNodeFactory: NodeFactory = {
-	createNode: () => ({ getL1ContractAddresses: async () => ({ rollupAddress: undefined }) }) as never,
+	createNode: () =>
+		({
+			getNodeInfo: async () => ({ l1ChainId: 31337, rollupVersion: 0 }),
+			getL1ContractAddresses: async () => ({ rollupAddress: undefined }),
+		}) as never,
 	createSingleAttemptNode: () => ({}) as never,
 	probeChainId: async () => 0,
 	readPublicStorageOnce: async () => {
@@ -103,6 +108,28 @@ describe("ProductionPxeFactory default (production) mode", () => {
 		checkPrestoStatusMock.mockResolvedValue({ available: false, reason: "offline" })
 		const factory = new ProductionPxeFactory(fakeNodeFactory, { provingMode: "default" })
 		await expect(factory.createChainRuntime(fakeNetwork, fakeStoreKey)).resolves.toBeDefined()
+	})
+})
+
+describe("ProductionPxeFactory store identity gate", () => {
+	test("refuses a node serving another chain before its store opens", async () => {
+		vi.mocked(openChainStore).mockClear()
+		createPXEMock.mockClear()
+		const alpha = { getNodeInfo: async () => ({ l1ChainId: 1, rollupVersion: 4248422647 }), getL1ContractAddresses: vi.fn() }
+		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => alpha as never })
+		const v6 = { ...fakeNetwork, chainId: (1 ^ 2070860440) >>> 0 }
+		await expect(factory.createChainRuntime(v6, fakeStoreKey)).rejects.toThrow(/Refusing to open its PXE store/)
+		expect(openChainStore).not.toHaveBeenCalled()
+		expect(alpha.getL1ContractAddresses).not.toHaveBeenCalled()
+		expect(createPXEMock).not.toHaveBeenCalled()
+	})
+
+	test("opens chain 0 without reading the node's identity", async () => {
+		const getNodeInfo = vi.fn()
+		const local = { getNodeInfo, getL1ContractAddresses: async () => ({ rollupAddress: undefined }) }
+		const factory = new ProductionPxeFactory({ ...fakeNodeFactory, createNode: () => local as never })
+		await expect(factory.createChainRuntime({ ...fakeNetwork, chainId: 0 }, fakeStoreKey)).resolves.toBeDefined()
+		expect(getNodeInfo).not.toHaveBeenCalled()
 	})
 })
 
@@ -382,5 +409,69 @@ describe("ChainRuntimeRegistry peek/ensure split", () => {
 		await expect(reg.ensure(netAt(1, "http://b"))).rejects.toThrow("close failed")
 		expect(factoryCalls).toBe(1)
 		expect(reg.peek(P, 1)).toBe(bad)
+	})
+})
+
+describe("ChainRuntimeRegistry.stopRetries", () => {
+	type Stop = [profileId: string, chainId?: number]
+	const RUNTIMES = ["a:1", "a:12", "b:1"] as const
+
+	async function registryWith(...keys: string[]) {
+		const retryWhile = new Map<string, () => boolean>()
+		const reg = new ChainRuntimeRegistry({
+			createChainRuntime: async (n, _storeKey, retries) => {
+				retryWhile.set(`${n.profileId}:${n.chainId}`, retries?.retryWhile ?? (() => true))
+				return new ChainRuntime(n.chainId, {} as never, {} as never, n.rpcUrl)
+			},
+		})
+		const ensure = async (key: string) => {
+			const [profileId, chainId] = key.split(":")
+			await reg.ensure({ profileId, chainId: Number(chainId), rpcUrl: "http://n" })
+		}
+		for (const key of keys) await ensure(key)
+		const retrying = () => Object.fromEntries([...retryWhile].map(([key, allowed]) => [key, allowed()]))
+		return { reg, ensure, retrying }
+	}
+
+	test.each<{ name: string; stops: Stop[]; stopped: string[] }>([
+		{ name: "no stop", stops: [], stopped: [] },
+		{ name: "one chain's stop", stops: [["a", 1]], stopped: ["a:1"] },
+		{ name: "a profile's stop", stops: [["a"]], stopped: ["a:1", "a:12"] },
+		{ name: "another profile's stop", stops: [["b"]], stopped: ["b:1"] },
+	])("$name turns off exactly its runtimes' retries", async ({ stops, stopped }) => {
+		const { reg, retrying } = await registryWith(...RUNTIMES)
+		for (const [profileId, chainId] of stops) reg.stopRetries(profileId, chainId)
+		expect(retrying()).toEqual(Object.fromEntries(RUNTIMES.map((key) => [key, !stopped.includes(key)])))
+	})
+
+	test("a release restores retries; overlapping stops need every release, each counted once", async () => {
+		const { reg, retrying } = await registryWith(...RUNTIMES)
+		const chain = reg.stopRetries("a", 1)
+		const profile = reg.stopRetries("a")
+		const again = reg.stopRetries("a")
+
+		profile()
+		profile()
+		expect(retrying()).toEqual({ "a:1": false, "a:12": false, "b:1": true })
+		again()
+		expect(retrying()).toEqual({ "a:1": false, "a:12": true, "b:1": true })
+		chain()
+		expect(retrying()).toEqual({ "a:1": true, "a:12": true, "b:1": true })
+	})
+
+	test("a runtime built while its profile is stopped starts with retries off", async () => {
+		const { reg, ensure, retrying } = await registryWith()
+		const release = reg.stopRetries("a")
+		await ensure("a:3")
+		expect(retrying()).toEqual({ "a:3": false })
+		release()
+		expect(retrying()).toEqual({ "a:3": true })
+	})
+
+	test("the production factory builds its node with the registry's retry policy", async () => {
+		const createNode = vi.fn(fakeNodeFactory.createNode)
+		const retries = { retryWhile: () => false }
+		await new ProductionPxeFactory({ ...fakeNodeFactory, createNode }).createChainRuntime(fakeNetwork, fakeStoreKey, retries)
+		expect(createNode).toHaveBeenCalledWith(fakeNetwork.rpcUrl, retries)
 	})
 })

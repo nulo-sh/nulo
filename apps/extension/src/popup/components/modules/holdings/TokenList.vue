@@ -110,7 +110,7 @@ const toggleSort = () => {
 
 		<Flex direction="column" :class="$style.list">
 			<Button v-if="addCandidate" wide variant="secondary" data-testid="holdings-add-token" @click="emit('addToken', addCandidate)">
-				<span>Add token <span class="type--data" data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
+				<span>Add token <span class="type--meta" data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
 			</Button>
 			<ListStatusMessage v-else-if="noResults" variant="no-results" testid="holdings-no-results" />
 			<template v-else>
@@ -147,7 +147,7 @@ const toggleSort = () => {
 }
 
 .sort {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	height: 20px;
 	padding: 0 8px;
 	background: var(--nulo-surface-high);
@@ -166,7 +166,7 @@ const toggleSort = () => {
 }
 
 .fold {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -188,6 +188,6 @@ const toggleSort = () => {
 }
 
 .fold_action {
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 </style>

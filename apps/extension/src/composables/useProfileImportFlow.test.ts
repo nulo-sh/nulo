@@ -15,10 +15,10 @@ vi.mock("@/utils/core", () => {
 
 vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/utils")>()), pickFile: vi.fn() }))
 
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { pickFile } from "@/utils"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
@@ -48,7 +48,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0))
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	// The flow reads cacheStore/popupStore for the duplicate-phrase confirm dialog.
 	setActivePinia(createPinia())
 })
@@ -80,7 +80,7 @@ describe("useProfileImportFlow", () => {
 	})
 
 	test("in Firefox's toolbar panel, passkey import runs no in-page ceremony: the background does", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
 		await flow.handleImportPasskey()
@@ -230,15 +230,20 @@ describe("useProfileImportFlow", () => {
 		/** Drive the ConfirmPopup the way the real popup does: invoke the stashed callback. */
 		async function confirmDialog() {
 			const { useCacheStore } = await import("@/stores/cache.store")
+			const { usePopupStore } = await import("@/stores/popup.store")
+			expect(usePopupStore().isOpened("confirm")).toBe(true)
 			const confirm = useCacheStore().confirm as { callback?: () => void; title?: string; description?: string }
 			expect(confirm.title).toBeTruthy()
 			confirm.callback?.()
 			return confirm
 		}
-		/** Dismiss it: the popup store close IS the cancel signal (ConfirmPopup has no cancel hook). */
+		/** Dismiss it: the popup store close IS the cancel signal (ConfirmPopup has no cancel hook), and
+		 *  the popup replaces the request object as it closes. */
 		async function dismissDialog() {
 			const { usePopupStore } = await import("@/stores/popup.store")
+			const { useCacheStore } = await import("@/stores/cache.store")
 			usePopupStore().close("confirm")
+			useCacheStore().confirm = {}
 		}
 
 		test("seed: a duplicate throws → dialog → confirm retries with allowDuplicate", async () => {
@@ -279,6 +284,35 @@ describe("useProfileImportFlow", () => {
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
 			expect(opts.completeImport).not.toHaveBeenCalled()
 			expect(flow.isImporting.value).toBe(false)
+		})
+
+		test("seed: a second warning after a dismissed one carries its own request and retries on confirm", async () => {
+			profileApi.importMnemonic
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Savings" }))
+				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "password" })
+			const { flow, opts } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			flow.seedPhrase.value = SEED_24
+
+			const first = flow.handleImportSeed()
+			await tick()
+			await dismissDialog()
+			await first
+
+			const second = flow.handleImportSeed()
+			await tick()
+			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(2)
+			const confirm = (await confirmDialog()) as { description?: string; confirm_text?: string }
+			expect(String(confirm.description)).toContain("Savings")
+			expect(confirm.confirm_text).toBe("Add anyway")
+			await second
+
+			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(3)
+			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true)
+			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
 		test("passkey: the confirm-retry reuses the SAME credential (no second ceremony)", async () => {

@@ -1,13 +1,17 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { afterAll, describe, expect, test, vi } from "vitest"
+import ts from "typescript"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
+import { testTempDir } from "../../tests/e2e/helpers/test-temp-dir"
 
 // Set before the modules load: `E2E_DATA_ROOT` is read at import time, and these cases create and
 // delete run dirs that must never be a real run's.
-const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-owned-processes-test-"))
+const ROOT = path.join(tmpdir(), `nulo-owned-processes-test-${randomBytes(4).toString("base64url")}`)
 process.env.NULO_E2E_DATA_ROOT = ROOT
+let rootMade = false
 
 const {
 	LAUNCH_ENV,
@@ -27,6 +31,7 @@ const {
 	chromesUnclaimed,
 	createRunDir,
 	deletableRunDir,
+	nodeTmpDir,
 	reapPriorRun,
 	stopService,
 	stopServiceOnExit,
@@ -135,6 +140,11 @@ function spyKill() {
 const fast = { graceMs: 1_500, killGraceMs: 1_000, pollMs: 50 }
 
 describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { timeout: 20_000 }, () => {
+	// Made and removed by this block, so a host that skips it makes nothing.
+	beforeAll(() => {
+		mkdirSync(ROOT, { mode: 0o700 })
+		rootMade = true
+	})
 	afterAll(() => {
 		for (const pid of [...spawned, ...markers.flatMap((m) => ownedProcesses(m))]) {
 			try {
@@ -143,7 +153,7 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 				// Already stopped by the case under test.
 			}
 		}
-		rmSync(ROOT, { recursive: true, force: true })
+		if (rootMade) rmSync(ROOT, { recursive: true, force: true })
 	})
 
 	test("teardown stops a leaderless group's marked member and leaves an unmarked sibling", async () => {
@@ -233,7 +243,7 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 
 	test("a run dir is deleted only directly under the root, with the prefix, stamped with the lock's marker", async () => {
 		const m = marker()
-		const outside = mkdtempSync(path.join(tmpdir(), "nulo-aztec-outside-"))
+		const outside = testTempDir("nulo-aztec-outside-")
 		createRunDir(outside, m)
 		const unprefixed = path.join(ROOT, "other-run")
 		createRunDir(unprefixed, m)
@@ -248,7 +258,6 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 		expect(deletableRunDir(own, m)).toBeDefined()
 		expect(await reapPriorRun(lock({ markers: { aztec: m }, owner: DEAD, aztecDataDir: own }), fast)).toEqual({ cleared: true })
 		expect(existsSync(own)).toBe(false)
-		rmSync(outside, { recursive: true, force: true })
 	})
 
 	test("a lock naming no owner is never signalled: all pids dead clears it and its stamped run dir, one live pid refuses", async () => {
@@ -407,6 +416,24 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 	})
 })
 
+// `killChromesLoading` runs pkill without a shell, on the escaped and argument-anchored
+// `chromePattern`; any other spelling of it drifts from that.
+test("no e2e module but sandbox-ownership.ts spells a pkill", () => {
+	const root = path.resolve(__dirname, "../../tests/e2e")
+	const spelled = new Set<string>()
+	for (const rel of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+		if (!rel.endsWith(".ts")) continue
+		const visit = (node: ts.Node): void => {
+			if ((ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) && node.text.includes("pkill")) spelled.add(rel)
+			ts.forEachChild(node, visit)
+		}
+		visit(ts.createSourceFile(rel, readFileSync(path.join(root, rel), "utf8"), ts.ScriptTarget.Latest, true))
+	}
+	// The one sanctioned spelling is also the scan's success control: a scan that stopped seeing
+	// literals would find nothing at all.
+	expect([...spelled]).toEqual(["sandbox-ownership.ts"])
+})
+
 type ZombieParent = { parent: ChildProcess; child: number | undefined }
 
 function comm(pid: number): string | undefined {
@@ -484,5 +511,18 @@ describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000
 		} finally {
 			release(held)
 		}
+	})
+})
+
+describe("the node's tmp dir", () => {
+	test("is refused once a socket path in it would overflow sun_path, counted in bytes", () => {
+		const limit = (process.platform === "darwin" ? 103 : 107) - 28
+		// `/<filler>/tmp`, the filler two-byte characters with one ASCII byte when odd.
+		const runDir = (bytes: number) => {
+			const filler = bytes - "//tmp".length
+			return `/${"\u00e9".repeat(filler >> 1)}${"a".repeat(filler & 1)}`
+		}
+		expect(Buffer.byteLength(nodeTmpDir(runDir(limit)))).toBe(limit)
+		expect(() => nodeTmpDir(runDir(limit + 1))).toThrow("set NULO_E2E_DATA_ROOT to a shorter directory")
 	})
 })

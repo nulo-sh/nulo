@@ -38,9 +38,10 @@ const mountPanel = (capability: Record<string, unknown>, granted = false) =>
 	})
 
 describe("composite/CapabilityDetailPanel", () => {
-	test("accounts capability with canGet:true renders the v2.1 read-addresses row", () => {
-		const w = mountPanel({ type: "accounts", canGet: true })
-		expect(w.text()).toContain("Read your account addresses")
+	test("the listing line follows the grant: only canGet:true lists your accounts", () => {
+		expect(mountPanel({ type: "accounts", canGet: true }).text()).toContain("List all your accounts")
+		expect(mountPanel({ type: "accounts", canCreateAuthWit: true }).text()).not.toContain("List all your accounts")
+		expect(mountPanel({ type: "accounts", canGet: false }).text()).not.toContain("List all your accounts")
 	})
 
 	test("accounts capability with canCreateAuthWit:true renders the scoped-signatures row", () => {

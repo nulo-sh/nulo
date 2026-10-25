@@ -10,8 +10,10 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Utils */
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
@@ -19,11 +21,12 @@ import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { useSettingUpdate } from "@/composables/useSettingUpdate"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const privacyRead = useConfigRead(configService, () => configService.getProps(), landPrivacyConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
@@ -31,21 +34,9 @@ const isShowFiatValues = ref(defaultConfig.showFiatValues)
 const defaultExplorer = ref(defaultConfig.defaultExplorer)
 const isPrivacyMode = ref(defaultConfig.privacyMode)
 const settings = {
-	showFiatValues: {
-		title: "Show fiat values",
-		description: "Fetch USD prices from CoinGecko while unlocked. Off hides all dollar values",
-		model: isShowFiatValues,
-	},
-	defaultExplorer: {
-		title: "Block Explorer",
-		description: "Transaction link explorer",
-		model: defaultExplorer,
-	},
-	privacyMode: {
-		title: "Privacy mode",
-		description: "Load a receipt's network fee only when you tap Show fee",
-		model: isPrivacyMode,
-	},
+	showFiatValues: { ...settingsRow("privacy-fiat-values"), model: isShowFiatValues },
+	defaultExplorer: { ...settingsRow("privacy-explorer"), model: defaultExplorer },
+	privacyMode: { ...settingsRow("privacy-mode"), model: isPrivacyMode },
 }
 
 const selectedExplorerName = computed(() => {
@@ -54,17 +45,9 @@ const selectedExplorerName = computed(() => {
 	return explorer?.name || "None"
 })
 
-async function updateSetting(key, value) {
-	if (!settings[key]) return
-	if (settings[key].model.value === value) return
-
-	try {
-		await configService.setValue(key, value)
-		applySetting(key, value)
-	} catch (err) {
-		openToast({ kind: "error", label: "Failed to update setting" })
-	}
-}
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onSettingUpdate)
+const privacyRead = useConfigRead(configService, () => configService.getProps(), landPrivacyConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
@@ -79,22 +62,8 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
-}
-
-// Copies the values only: `applySetting` would toast on a reread.
-function landPrivacyConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (settings[s.key] && !updatedSince(s.key)) {
-			settings[s.key].model.value = s.value
-		}
-	})
-
+function landPrivacyConfig(stored, updatedSince) {
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -113,24 +82,30 @@ onBeforeUnmount(() => {
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
-			<Flex justify="between" align="center">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.showFiatValues.description }}</Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.showFiatValues.title"
+				:description="settings.showFiatValues.description"
+				descriptionTestid="fiat-values-description"
+				align="center"
+				:data-testid="settings.showFiatValues.testid"
+				v-settings-row="settings.showFiatValues.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('showFiatValues', $event)"
 					:modelValue="settings.showFiatValues.model.value"
 					data-testid="fiat-values-toggle"
 				/>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex justify="between" align="center">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.defaultExplorer.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.defaultExplorer.description }}</Text>
-				</Flex>
+			<SettingControlRow
+				:title="settings.defaultExplorer.title"
+				:description="settings.defaultExplorer.description"
+				titleTestid="explorer-title"
+				descriptionTestid="explorer-description"
+				align="center"
+				:data-testid="settings.defaultExplorer.testid"
+				v-settings-row="settings.defaultExplorer.id"
+			>
 
 				<Dropdown>
 					<template #trigger>
@@ -138,7 +113,6 @@ onBeforeUnmount(() => {
 							<Text variant="value" color="primary">
 								{{ selectedExplorerName }}
 							</Text>
-							<Icon name="chevron-down" size="12" color="tertiary" />
 						</DropdownTrigger>
 					</template>
 
@@ -151,35 +125,38 @@ onBeforeUnmount(() => {
 						>
 							<Flex align="center" gap="8">
 								<Icon
-									:name="settings.defaultExplorer.model.value === explorer.id ? 'check' : ''"
+									name="check"
 									size="14"
 									color="primary"
+									:class="settings.defaultExplorer.model.value !== explorer.id && $style.unselected"
 								/>
 								{{ explorer.name }}
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('defaultExplorer', null)" data-testid="explorer-none-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="!settings.defaultExplorer.model.value ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="settings.defaultExplorer.model.value && $style.unselected" />
 								None
 							</Flex>
 						</DropdownItem>
 					</template>
 				</Dropdown>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex justify="between" align="center">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.privacyMode.title }}</Text>
-					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.privacyMode.title"
+				:description="settings.privacyMode.description"
+				titleTestid="privacy-mode-title"
+				align="center"
+				:data-testid="settings.privacyMode.testid"
+				v-settings-row="settings.privacyMode.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('privacyMode', $event)"
 					:modelValue="settings.privacyMode.model.value"
 					data-testid="privacy-mode-toggle"
 				/>
-			</Flex>
+			</SettingControlRow>
 		</template>
 	</SettingsPageShell>
 </template>
@@ -191,7 +168,7 @@ onBeforeUnmount(() => {
 	gap: 6px;
 }
 
-.title_size {
-	font-size: 13px;
+.unselected {
+	visibility: hidden;
 }
 </style>

@@ -1,0 +1,169 @@
+/**
+ * Home's "Get started" card: which reminders a profile still shows. The flags record what the
+ * person did or dismissed, never proof of a backup; they live per profile beside the other UI keys
+ * (`profile-ui-keys.ts`), so a deletion or a row commit clears them and no backup carries them.
+ */
+import {
+	getStartedAztecOpenedKey,
+	getStartedBackupSavedKey,
+	getStartedFeeJuiceHeldKey,
+	getStartedHiddenKey,
+	getStartedPhraseSavedKey,
+	getStartedPrestoOpenedKey,
+	profileImportedKey,
+	profileNotFirstKey,
+} from "@/utils/profile-ui-keys"
+import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+
+/** The slice of a gas balance read the reminders need (`stores/balances.store.ts`' `GasSlice`). */
+type GasRead = { display?: { publicFeeJuice: string | null; privateFeeJuice: string | null }; status: string }
+
+export type GetStartedFlag =
+	| "phraseSaved"
+	| "backupSaved"
+	| "aztecOpened"
+	| "feeJuiceHeld"
+	| "prestoOpened"
+	| "hidden"
+	| "imported"
+	| "notFirst"
+
+/** The flags a page may set; `imported` and `notFirst` have one writer, the profile service, beside the row. */
+export type MarkableGetStartedFlag = Exclude<GetStartedFlag, "imported" | "notFirst">
+
+export type GetStartedFlags = Readonly<Record<GetStartedFlag, boolean>>
+
+const KEYS: Readonly<Record<GetStartedFlag, (profileId: string) => string>> = {
+	phraseSaved: getStartedPhraseSavedKey,
+	backupSaved: getStartedBackupSavedKey,
+	aztecOpened: getStartedAztecOpenedKey,
+	feeJuiceHeld: getStartedFeeJuiceHeldKey,
+	prestoOpened: getStartedPrestoOpenedKey,
+	hidden: getStartedHiddenKey,
+	imported: profileImportedKey,
+	notFirst: profileNotFirstKey,
+}
+
+const FLAGS = Object.keys(KEYS) as GetStartedFlag[]
+
+/** The storage keys of `profileId`'s flags, for a reader that listens for their changes. */
+export const getStartedKeys = (profileId: string): string[] => FLAGS.map((flag) => KEYS[flag](profileId))
+
+/** The flags a `storage.onChanged` event names for `profileId`, taken from the event's own new
+ *  values: on Firefox a read issued from the listener can still answer the old value. */
+export function changedGetStarted(profileId: string, changes: Readonly<Record<string, unknown>>): Partial<Record<GetStartedFlag, boolean>> {
+	const changed: Partial<Record<GetStartedFlag, boolean>> = {}
+	for (const flag of FLAGS) {
+		const key = KEYS[flag](profileId)
+		if (Object.hasOwn(changes, key)) changed[flag] = (changes[key] as { newValue?: unknown } | undefined)?.newValue === true
+	}
+	return changed
+}
+
+/** A flag counts only when stored as `true`: anything else in storage reads as not done. */
+export async function readGetStarted(profileId: string): Promise<GetStartedFlags> {
+	const stored = await storageLocalGet(getStartedKeys(profileId))
+	return Object.fromEntries(FLAGS.map((flag) => [flag, stored[KEYS[flag](profileId)] === true])) as Record<GetStartedFlag, boolean>
+}
+
+/** Records a flag. Never rejects: a lost write leaves the reminder up, and the action it rides on
+ *  (a link, a download, leaving the phrase step) must go ahead. */
+export async function markGetStarted(profileId: string, flag: MarkableGetStartedFlag): Promise<void> {
+	try {
+		await storageLocalSet({ [KEYS[flag](profileId)]: true })
+	} catch (error) {
+		console.debug("get-started flag write failed", { error })
+	}
+}
+
+/** The landing's How Aztec works page, with the clips. */
+export const HOW_AZTEC_WORKS_URL = "https://nulo.sh/how-aztec-works"
+
+/** What a balance read says about holding funds: `unknown` until it settles. */
+export type Holdings = "some" | "none" | "unknown"
+
+export type GetStartedItem = "phrase" | "backup" | "aztec" | "feeJuice" | "presto"
+
+export interface GetStartedInput {
+	type: "password" | "passkey" | undefined
+	/** `undefined` until the active profile's flags are read. */
+	flags: GetStartedFlags | undefined
+	/** Tokens or Fee Juice on the selected account. */
+	funds: Holdings
+	feeJuice: Holdings
+	/** `undefined` until the config is read. */
+	prestoReached: boolean | undefined
+}
+
+/** A step of the card; a done step stays, checked, until every step listed is done. */
+export interface GetStartedStep {
+	item: GetStartedItem
+	done: boolean
+}
+
+export interface GetStartedView {
+	/** The urgent "Your funds have no backup" banner above the balance; only after Hide. */
+	banner: boolean
+	/** In the drawn order; empty means no card. */
+	steps: GetStartedStep[]
+	/** Whether the card offers Hide: only steps a person may dismiss count. */
+	canHide: boolean
+}
+
+/** Combines the token and Fee Juice reads: any positive side holds funds. */
+export function combineHoldings(a: Holdings, b: Holdings): Holdings {
+	if (a === "some" || b === "some") return "some"
+	if (a === "unknown" || b === "unknown") return "unknown"
+	return "none"
+}
+
+type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStartedFlags; prestoReached: boolean }
+
+/** Every step but the phrase, done or not; a hidden card, or a profile created while another
+ *  existed, lists none. */
+function firstProfileSteps(i: Ready): GetStartedStep[] {
+	if (i.flags.notFirst || i.flags.hidden) return []
+	const steps: GetStartedStep[] = []
+	if (i.type === "passkey") steps.push({ item: "backup", done: i.flags.backupSaved })
+	steps.push(
+		{ item: "aztec", done: i.flags.aztecOpened },
+		{ item: "feeJuice", done: i.flags.feeJuiceHeld || i.feeJuice === "some" },
+		{ item: "presto", done: i.flags.prestoOpened || i.prestoReached },
+	)
+	return steps
+}
+
+/**
+ * Home's reminders for the active profile, or `null` while anything they depend on is unread:
+ * a loading balance never moves the reminder, and an old profile's flags never show for a new one.
+ */
+export function getStartedView(input: GetStartedInput): GetStartedView | null {
+	const { type, flags, prestoReached, funds } = input
+	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
+	// A wallet the person brought in is an established one: Home asks nothing of it.
+	if (flags.imported) return { banner: false, steps: [], canHide: false }
+	// A password wallet's phrase step cannot be hidden: it stays in the card, and only once Hide has
+	// put the card away does a funded wallet's phrase become the banner, so the two never show together.
+	const banner = type === "password" && !flags.phraseSaved && funds === "some" && flags.hidden
+	const steps: GetStartedStep[] = []
+	if (type === "password" && !banner) steps.push({ item: "phrase", done: flags.phraseSaved })
+	steps.push(...firstProfileSteps({ ...input, type, flags, prestoReached }))
+	if (steps.every((step) => step.done)) return { banner, steps: [], canHide: false }
+	return { banner, steps, canHide: steps.some((step) => step.item !== "phrase") }
+}
+
+/** Fee Juice from the gas slice: a failed first read claims nothing held, so the step stays open. */
+export function gasHoldings(gas: GasRead | undefined): Holdings {
+	const display = gas?.display
+	if (display === undefined) return gas?.status === "degraded" ? "none" : "unknown"
+	return [display.publicFeeJuice, display.privateFeeJuice].some(isPositive) ? "some" : "none"
+}
+
+function isPositive(raw: string | null | undefined): boolean {
+	if (typeof raw !== "string") return false
+	try {
+		return BigInt(raw) > 0n
+	} catch {
+		return false
+	}
+}

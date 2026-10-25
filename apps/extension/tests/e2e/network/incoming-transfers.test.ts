@@ -1,7 +1,16 @@
 import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { INCOMING_SCAN_INTERVAL_MS, getAccountAddress, lockWallet, switchToLocalNetwork, unlockUntilIncomingRow } from "../fixtures/helpers"
+import {
+	INCOMING_SCAN_INTERVAL_MS,
+	getAccountAddress,
+	lockWallet,
+	readActiveNetwork,
+	switchToLocalNetwork,
+	unlockUntilIncomingRow,
+	selectedAccount,
+} from "../fixtures/helpers"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -71,6 +80,19 @@ test.skipIf(!hasConfig)(
 			const elapsed = await unlockUntilIncomingRow(page, "Received privately", "+9")
 			console.log(`[install-run] private receipt shown ${elapsed} ms after the unlock`)
 			expect(elapsed).toBeLessThan(INCOMING_SCAN_INTERVAL_MS)
+
+			// The receipt is stored sealed: no key or value at rest names its note or its transaction.
+			type Receipt = { kind?: string; accountAddress?: string; amountRaw?: string; noteHash?: string; txHash?: string }
+			const receipt = (await readSealedRows<Receipt>(page, "incomingTransfers")).find(
+				({ row }) =>
+					row.kind === "note" &&
+					row.accountAddress?.toLowerCase() === walletAddress.toLowerCase() &&
+					row.amountRaw === (9n * 10n ** 18n).toString(),
+			)
+			if (!receipt) throw new Error("the wallet reads no stored record of the receipt it shows")
+			const named = [receipt.naturalId.split("|").at(-1), receipt.row.noteHash, receipt.row.txHash]
+			const atRest = JSON.stringify(await page.evaluate(() => chrome.storage.local.get(null))).toLowerCase()
+			for (const hex of named) expect(atRest).not.toContain(String(hex).slice(2).toLowerCase())
 		} finally {
 			await cleanup()
 			await page.close()
@@ -117,15 +139,14 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 	const seedPage = await openPopup(registeredExtension)
 	await waitForHash(seedPage, "#/popup/general", 30_000)
 
-	// Read the active triple from chrome.storage so the pre-seed matches.
-	// Profile id is persisted under `nulo:ui:lastActiveProfile` (see
-	// `utils/lastActiveProfile.ts`); account address under
-	// `nulo:ui:activeAccount` (see `stores/app.store.ts`).
-	const triple = await seedPage.evaluate(async () => {
+	// Read the active triple so the pre-seed matches. Profile id is persisted
+	// under `nulo:ui:lastActiveProfile` (see `utils/lastActiveProfile.ts`); the
+	// account is the selection the worker answers (see `stores/app.store.ts`).
+	const stored = await seedPage.evaluate(async () => {
 		const profile = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
-		return { profileId: typeof profile === "string" ? profile : null, account: typeof account === "string" ? account : null }
+		return { profileId: typeof profile === "string" ? profile : null }
 	})
+	const triple = { ...stored, account: (await selectedAccount(seedPage)) ?? null }
 	if (!triple.profileId || !triple.account) {
 		// Fallback — read appStore directly via window for fixtures that
 		// don't use the activeProfile storage shape.
@@ -138,30 +159,20 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 	// `appStore.network.id` and passes to `replayPendingPrompts` (filtered at
 	// service.ts:712). Taking the first `nulo:core:networks@*` key picks the
 	// first-SEEDED network, which need not be the active one, and then the
-	// pending-trust filter finds 0 rows and the prompt never fires. Read the
-	// per-profile active-network pointer instead.
-	const network = await seedPage.evaluate(async (profileId: string) => {
-		const activeKey = `nulo:core:active-network@${profileId}`
-		const activeId = (await chrome.storage.local.get(activeKey))[activeKey]
-		if (typeof activeId !== "string") return null
-		const rowKey = `nulo:core:networks@${activeId}`
-		const raw = (await chrome.storage.local.get(rowKey))[rowKey]
-		if (typeof raw !== "string") return null
-		const chainId = (JSON.parse(raw) as { chainId: number }).chainId
-		return { id: activeId, chainId }
-	}, triple.profileId)
-	if (!network) throw new Error("could not resolve the active network id")
+	// pending-trust filter finds 0 rows and the prompt never fires. Ask the
+	// network service for the active network instead.
+	const network = await readActiveNetwork(seedPage)
 	const networkId = network.id
 
 	const contract = `0x${"cc".repeat(32)}`
-	const siloedNullifier = `0x${"aa".repeat(32)}`
+	const uniqueNoteHash = `0x${"aa".repeat(32)}`
 
 	// Pre-seed pending trust + hidden incoming record matching the
 	// active triple. EntityStorage stores values as JSON.stringify(entity).
 	await seedPage.evaluate(
-		async ([profileId, nid, chainId, addr, contract, siloedNullifier]) => {
+		async ([profileId, nid, chainId, addr, contract, uniqueNoteHash]) => {
 			const trustKey = `nulo:core:incoming-trust@${profileId}|${nid}|${contract}`
-			const recordId = `note:${profileId}|${nid}|${siloedNullifier}`
+			const recordId = `note:${profileId}|${nid}|${uniqueNoteHash}`
 			const recordKey = `nulo:core:incoming-transfers@${recordId}`
 			// `replayPendingPrompts` skips a pending row whose contract has no
 			// matching token registration (service.ts: `tokens.find` by contract +
@@ -188,7 +199,6 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 				[recordKey]: JSON.stringify({
 					kind: "note",
 					id: recordId,
-					siloedNullifier,
 					profileId,
 					networkId: nid,
 					accountAddress: addr,
@@ -206,7 +216,7 @@ test.skipIf(!hasConfig)("C2 — trust prompt re-fires after popup close + reopen
 				}),
 			})
 		},
-		[triple.profileId, networkId, network.chainId, triple.account, contract, siloedNullifier] as const,
+		[triple.profileId, networkId, network.chainId, triple.account, contract, uniqueNoteHash] as const,
 	)
 	await seedPage.close()
 

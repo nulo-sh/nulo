@@ -2,7 +2,7 @@
 import { computed, type Ref, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
-import { useCacheStore } from "@/stores/cache.store"
+import { useConfirm } from "@/composables/useConfirm"
 import { usePopupStore } from "@/stores/popup.store"
 import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
@@ -12,7 +12,7 @@ import { FileTooLargeError, pickFile } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
 import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
@@ -45,8 +45,9 @@ export interface UseProfileImportFlowOptions {
 	completeImport: (profile: unknown) => Promise<void> | void
 	/** Per-shell restore-error surface (popup = data-viewer overlay; onboarding = notification). */
 	showErrorLog: (errors: Record<string, unknown[]>, networks: RestoreErrorNetworks) => void
-	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`). */
-	notifyImportFailed: () => void
+	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`); gets the
+	 *  failure so a profile already here reads as itself. */
+	notifyImportFailed: (err: unknown) => void
 	/** The page's toast: the copy-error affordance, and a passkey prompt that was not confirmed. */
 	openToast: (toast: ToastOptions) => void
 }
@@ -93,16 +94,8 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
-	const cacheStore = useCacheStore()
 	const popupStore = usePopupStore()
-	/** `cacheStore.confirm` is an untyped shared `reactive({})` (every other consumer is an
-	 *  unchecked SFC). Narrow it here to the fields ConfirmPopup actually reads. */
-	const confirmSlot = cacheStore.confirm as {
-		title?: string
-		description?: string
-		confirm_text?: string
-		callback?: () => void
-	}
+	const { requestConfirm } = useConfirm()
 	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
 	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
 	const allowDuplicate = ref(false)
@@ -127,23 +120,22 @@ function useDuplicateConfirm() {
 					stop()
 					resolve(value)
 				}
-				confirmSlot.title = "You already have this wallet"
-				confirmSlot.description = existing
-					? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-					: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?"
-				confirmSlot.confirm_text = "Add anyway"
-				// ConfirmPopup invokes `callback` on confirm and just closes on cancel/dismiss —
-				// there is no cancel hook — so the close transition IS the cancel signal. Watch it
-				// (the watcher starts before `open`, and `settle` is idempotent, so a confirm that
-				// also closes can't resolve twice).
-				confirmSlot.callback = () => settle(true)
+				// A close without the callback is the dialog's only cancel signal; a confirm closes it
+				// too, after `settle(true)`, which `settled` keeps final.
 				const stop = watch(
 					() => popupStore.isOpened("confirm"),
 					(isOpen, wasOpen) => {
 						if (wasOpen && !isOpen) settle(false)
 					},
 				)
-				popupStore.open("confirm")
+				requestConfirm({
+					title: "You already have this wallet",
+					description: existing
+						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+					confirm_text: "Add anyway",
+					callback: () => settle(true),
+				})
 			})
 			if (!confirmed) return undefined
 			allowDuplicate.value = true
@@ -210,16 +202,14 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 			if (name === null) return
 			// Discovery `get` — no allowedCredentials; the user picks from their
 			// available passkeys. In Firefox's toolbar panel the background runs it in its own window.
-			const credData = passkeyNeedsOwnWindow()
-				? undefined
-				: await deps.runCeremony({ mode: "get", step: "import", profileName: name })
+			const credData = closesOnFocusLoss() ? undefined : await deps.runCeremony({ mode: "get", step: "import", profileName: name })
 			// PATH A reuses this credential on the confirm-retry, so no second ceremony runs.
 			const profile = await deps.withDuplicateConfirm(() => managers.profile.importPasskey(name, credData, deps.allowDuplicate.value))
 			if (!profile) return
 			await deps.completeImport(profile)
 		} catch (err) {
 			if (handleCancelOrUnconfirmed(err, deps.openToast)) return
-			deps.notifyImportFailed()
+			deps.notifyImportFailed(err)
 			console.error("Failed to import profile:", err)
 		} finally {
 			deps.isImporting.value = false
@@ -400,6 +390,7 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 		unrestoredNetworkNames,
 		retryFailedAgain,
 		hasOtherRestoreErrors,
+		heldAccounts,
 		isRetryingAccountState,
 		retryAccountState,
 		continueImport,
@@ -443,6 +434,7 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 			unrestoredNetworkNames,
 			retryFailedAgain,
 			hasOtherRestoreErrors,
+			heldAccounts,
 			isRetryingAccountState,
 			retryAccountState,
 			continueImport,

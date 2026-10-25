@@ -4,6 +4,7 @@
  * `isArriving`, and the incoming rows are presented after the render that showed them. Its received
  * rows resolve their token for the current profile and network, however the page was opened.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
@@ -14,12 +15,23 @@ import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/li
 
 const H = vi.hoisted(() => {
 	const event = () => ({ add: () => {}, remove: () => {} })
+	/** Emitting hands back what each handler returned, so a case can await a handler's promise. */
+	const bus = () => {
+		const handlers = new Set<(x?: unknown) => unknown>()
+		return {
+			add: (fn: (x?: unknown) => unknown) => handlers.add(fn),
+			remove: (fn: (x?: unknown) => unknown) => handlers.delete(fn),
+			emit: (x?: unknown) => [...handlers].map((fn) => fn(x)),
+			handlers,
+		}
+	}
 	const handlers = new Set<() => void>()
 	const tokenAddedHandlers = new Set<() => void>()
 	return {
 		tokenAddedHandlers,
 		event,
 		incomingConnected: { add: (fn: () => void) => handlers.add(fn), remove: (fn: () => void) => handlers.delete(fn), handlers },
+		journal: { connected: bus(), added: bus(), updated: bus(), deleted: bus() },
 		getIncomingTransfers: vi.fn(),
 		getOperations: vi.fn(),
 		getTokens: vi.fn(),
@@ -41,17 +53,17 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 	OperationJournalServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onConnected: H.event(),
-			onOperationAdded: H.event(),
-			onOperationUpdated: H.event(),
-			onOperationDeleted: H.event(),
+			onConnected: H.journal.connected,
+			onOperationAdded: H.journal.added,
+			onOperationUpdated: H.journal.updated,
+			onOperationDeleted: H.journal.deleted,
 			getOperations: H.getOperations,
 		}
 	}),
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: H.tokenAdded, getTokens: H.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: H.tokenAdded, onTokenUpdated: H.event(), getTokens: H.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/incoming-transfer/client", () => ({
@@ -89,9 +101,9 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import TransactionsList from "../components/modules/activity/TransactionsList.vue"
 import Activity from "./activity.vue"
 
-const record = (siloedNullifier: string, discoveredAt: number) => ({
+const record = (key: string, discoveredAt: number) => ({
 	kind: "note",
-	id: `note:p1|net-1|${siloedNullifier}`,
+	id: `note:p1|net-1|${key}`,
 	profileId: "p1",
 	accountAddress: "0xacct",
 	networkId: "net-1",
@@ -132,6 +144,7 @@ beforeEach(async () => {
 	H.getOperations.mockReset().mockResolvedValue([])
 	H.getTokens.mockReset().mockResolvedValue([])
 	H.incomingConnected.handlers.clear()
+	for (const ev of Object.values(H.journal)) ev.handlers.clear()
 	H.quotes = {}
 	H.store.current = createAppStoreHarness()
 	vi.stubGlobal(
@@ -147,6 +160,7 @@ beforeEach(async () => {
 })
 afterEach(() => {
 	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
 })
 
 describe("pages/activity — arrivals", () => {
@@ -170,7 +184,7 @@ describe("pages/activity — arrivals", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 				provide: { [ARRIVALS_KEY as symbol]: arrivals },
 			},
 		})
@@ -207,7 +221,7 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -221,6 +235,119 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 		H.store.current.network = { id: "net-2", chainId: 2 }
 		await flushPromises()
 		expect(keys()).toEqual(["journal:there"])
+	})
+})
+
+describe("pages/activity — the cancelled and failed list's events and reads", () => {
+	const op = (id: string, over: Record<string, unknown> = {}) => ({
+		id,
+		kind: "transfer",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		progress: { stage: "cancelled" },
+		error: null,
+		terminalAt: 2000,
+		createdAt: 0,
+		updatedAt: 2000,
+		...over,
+	})
+	const mountActivity = () =>
+		mount(Activity, { shallow: true, global: { plugins: [router], stubs: { Flex: { template: "<div><slot /></div>" } } } })
+	const keys = (w: ReturnType<typeof mountActivity>) => {
+		const list = w.findComponent(TransactionsList)
+		return list.exists() ? list.props("rows").map((row: { key: string }) => row.key) : []
+	}
+
+	test("a new or re-added row leads, an update keeps a listed row in place, and a refused add changes nothing", async () => {
+		// One end time for every row: the list's stable sort then shows the mirror's own order.
+		H.getOperations.mockResolvedValue([op("x")])
+		const w = mountActivity()
+		await flushPromises()
+		H.journal.added.emit(op("running", { terminalAt: null, progress: { stage: "proving" } }))
+		H.journal.added.emit(op("late"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:late", "journal:x"])
+
+		H.journal.added.emit(op("x"))
+		H.journal.updated.emit(op("late", { progress: { stage: "failed" } }))
+		H.journal.updated.emit(op("unseen"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:unseen", "journal:x", "journal:late"])
+		w.unmount()
+	})
+
+	test("an update it refuses keeps the row where it is, and a later terminal one replaces it", async () => {
+		H.getOperations.mockResolvedValue([op("x"), op("y")])
+		const w = mountActivity()
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
+
+		// A non-terminal update delivered after the read that saw the record end.
+		H.journal.updated.emit(op("y", { terminalAt: null, progress: { stage: "proving" } }))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:x", "journal:y"])
+		H.journal.updated.emit(op("y"))
+		H.journal.deleted.emit(op("x"))
+		await flushPromises()
+		expect(keys(w)).toEqual(["journal:y"])
+		w.unmount()
+	})
+
+	test("a reconnect's read supersedes the mount's, and a refused one is read again after 2 s", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const mountRead = deferred<unknown[]>()
+			const reconnectRead = deferred<unknown[]>()
+			H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+			const w = mountActivity()
+			await flushPromises()
+			const [reconnect] = H.journal.connected.emit()
+			mountRead.resolve([op("x")])
+			await flushPromises()
+			expect(keys(w)).toEqual([])
+
+			reconnectRead.reject(new Error("port closed"))
+			await expect(reconnect).rejects.toThrow("port closed")
+			await flushPromises()
+			expect(keys(w)).toEqual([])
+
+			H.getOperations.mockResolvedValueOnce([op("x"), op("y", { terminalAt: 1000 })])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(keys(w)).toEqual(["journal:x", "journal:y"])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	// History has no journal scope watcher: a retry reads whatever profile is live when it fires.
+	test("a retry armed under one profile reads the live one; one that finds no profile reads nothing and stops", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const w = mountActivity()
+			await flushPromises()
+			H.getOperations.mockRejectedValueOnce(new Error("port closed"))
+			const [reconnect] = H.journal.connected.emit()
+			await expect(reconnect).rejects.toThrow("port closed")
+
+			H.store.current.profile = { ...H.store.current.profile, id: "p2" } as never
+			H.getOperations.mockRejectedValueOnce(new Error("port closed"))
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(H.getOperations).toHaveBeenLastCalledWith({ profileId: "p2", isTerminal: true })
+
+			const reads = H.getOperations.mock.calls.length
+			const profile = H.store.current.profile
+			H.store.current.profile = null as never
+			await vi.advanceTimersByTimeAsync(2_000)
+			H.store.current.profile = profile
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(H.getOperations).toHaveBeenCalledTimes(reads)
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -243,7 +370,6 @@ describe("pages/activity — the received row's token", () => {
 				plugins: [router],
 				stubs: {
 					Flex: { template: "<div><slot /></div>" },
-					MaterialIcon: true,
 					TransactionCardLayout: {
 						props: ["title", "amount", "amountFiat"],
 						template: `<div data-testid="row"><span class="title">{{ title }}</span><span class="amount">{{ amount }}</span><span class="fiat">{{ amountFiat }}</span></div>`,
@@ -317,6 +443,7 @@ describe("pages/activity — the received row's token", () => {
 			expect.anything(),
 		)
 		expect(rowOf(w)).toEqual({ title: "TST", amount: "+1,000", fiat: "≈ $1,000.00" })
+		w.unmount()
 	})
 })
 
@@ -328,7 +455,7 @@ describe("pages/activity — the incoming load signal", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -348,7 +475,7 @@ describe("pages/activity — the title", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -361,7 +488,7 @@ describe("pages/activity — the title", () => {
 			shallow: true,
 			global: {
 				plugins: [router],
-				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+				stubs: { Flex: { template: "<div><slot /></div>" } },
 			},
 		})
 		await flushPromises()
@@ -378,6 +505,29 @@ describe("pages/activity — the title", () => {
 		const w = await mountTitled()
 		await deliverHero(false, true)
 		expect(barShown(w)).toBe(false)
+	})
+	test("the first report draws the bar at once, its state committed before the fade comes back; later reports fade", async () => {
+		const w = await mountTitled()
+		const bar = w.get('[data-testid="page-title-bar"]').element.parentElement as HTMLElement
+		expect(bar.className).toContain("page_title_bar_instant")
+		const read = window.getComputedStyle.bind(window)
+		const readWith: string[] = []
+		vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+			if (el === bar) readWith.push(bar.className)
+			return read(el, pseudo)
+		})
+		await deliverHero(false)
+		expect(readWith).toHaveLength(1)
+		expect(readWith[0]).toContain("page_title_bar_visible")
+		expect(readWith[0]).toContain("page_title_bar_instant")
+		expect(barShown(w)).toBe(true)
+		expect(bar.className).not.toContain("page_title_bar_instant")
+
+		await deliverHero(true)
+		await deliverHero(false)
+		expect(barShown(w)).toBe(true)
+		expect(bar.className).not.toContain("page_title_bar_instant")
+		expect(readWith).toHaveLength(1)
 	})
 })
 
@@ -410,7 +560,6 @@ describe("pages/activity — opened from a token page", () => {
 	const eurcIn = { ...record("e", 3000), tokenId: 2 }
 	const stubs = {
 		Flex: { template: "<div><slot /></div>" },
-		MaterialIcon: true,
 		Badge: { template: "<div><slot /></div>" },
 		RowAction: {
 			props: ["label"],
@@ -503,6 +652,13 @@ describe("pages/activity — opened from a token page", () => {
 	test("a repeated ?token= is no filter", async () => {
 		const w = await openHistory("/popup/activity?token=1&token=2")
 		expect(keys(w)).toEqual(ALL)
+		w.unmount()
+	})
+
+	test("the chip of a token whose symbol is blank reads the empty-value dash", async () => {
+		H.getTokens.mockResolvedValue([{ ...USDC, symbol: "   " }, EURC])
+		const w = await openHistory("/popup/activity?token=1")
+		expect(w.get('[data-testid="activity-token-filter-symbol"]').text()).toBe("—")
 		w.unmount()
 	})
 

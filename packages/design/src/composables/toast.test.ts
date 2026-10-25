@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { SUCCESS_TOAST_MS, type ToastOptions, useToast } from "./toast"
+import { ACTION_TOAST_MS, SUCCESS_TOAST_MS, type ToastOptions, useToast } from "./toast"
 
 describe("useToast", () => {
 	beforeEach(() => vi.useFakeTimers())
@@ -9,25 +9,35 @@ describe("useToast", () => {
 		vi.useRealTimers()
 	})
 
-	it("a success is visible at 5.9 s and gone at 6 s", () => {
+	it("a success is visible at 1.9 s and gone at 2 s", () => {
 		const { toast, openToast } = useToast()
 		openToast({ kind: "success", label: "Copied" })
-		expect(SUCCESS_TOAST_MS).toBe(6_000)
-		vi.advanceTimersByTime(5_900)
+		expect(SUCCESS_TOAST_MS).toBe(2_000)
+		vi.advanceTimersByTime(1_900)
 		expect(toast.value).toMatchObject({ kind: "success", label: "Copied" })
 		vi.advanceTimersByTime(100)
 		expect(toast.value).toBeNull()
 	})
 
-	it("a hold at 2 s stops the timer; a release resumes the remaining 4 s", () => {
+	it("a success with an action is visible at 5.9 s and gone at 6 s", () => {
+		const { toast, openToast } = useToast()
+		openToast({ kind: "success", label: "Received", action: { label: "View", onSelect: () => {} } })
+		expect(ACTION_TOAST_MS).toBe(6_000)
+		vi.advanceTimersByTime(5_900)
+		expect(toast.value).toMatchObject({ kind: "success", label: "Received" })
+		vi.advanceTimersByTime(100)
+		expect(toast.value).toBeNull()
+	})
+
+	it("a hold at 0.5 s stops the timer; a release resumes the remaining 1.5 s", () => {
 		const { toast, openToast, holdToast } = useToast()
 		openToast({ kind: "success", label: "Held" })
-		vi.advanceTimersByTime(2_000)
+		vi.advanceTimersByTime(500)
 		holdToast(true)
 		vi.advanceTimersByTime(60_000)
 		expect(toast.value).not.toBeNull()
 		holdToast(false)
-		vi.advanceTimersByTime(3_999)
+		vi.advanceTimersByTime(1_499)
 		expect(toast.value).not.toBeNull()
 		vi.advanceTimersByTime(1)
 		expect(toast.value).toBeNull()
@@ -36,15 +46,15 @@ describe("useToast", () => {
 	it("a repeated hold or release changes nothing", () => {
 		const { toast, openToast, holdToast } = useToast()
 		openToast({ kind: "success", label: "Held" })
-		vi.advanceTimersByTime(1_000)
+		vi.advanceTimersByTime(250)
 		holdToast(true)
 		vi.advanceTimersByTime(1_000)
 		holdToast(true)
 		vi.advanceTimersByTime(1_000)
 		holdToast(false)
-		vi.advanceTimersByTime(2_000)
+		vi.advanceTimersByTime(500)
 		holdToast(false)
-		vi.advanceTimersByTime(2_999)
+		vi.advanceTimersByTime(1_249)
 		expect(toast.value).not.toBeNull()
 		vi.advanceTimersByTime(1)
 		expect(toast.value).toBeNull()
@@ -85,10 +95,10 @@ describe("useToast", () => {
 		const { toast, openToast } = useToast()
 		openToast({ kind: "success", label: "First" })
 		const first = toast.value?.id
-		vi.advanceTimersByTime(5_000)
+		vi.advanceTimersByTime(1_500)
 		openToast({ kind: "success", label: "First" })
 		expect(toast.value?.id).not.toBe(first)
-		vi.advanceTimersByTime(5_999)
+		vi.advanceTimersByTime(1_999)
 		expect(toast.value).toMatchObject({ label: "First" })
 		vi.advanceTimersByTime(1)
 		expect(toast.value).toBeNull()
@@ -99,7 +109,7 @@ describe("useToast", () => {
 		openToast({ kind: "success", label: "First" })
 		holdToast(true)
 		openToast({ kind: "success", label: "Second" })
-		vi.advanceTimersByTime(6_000)
+		vi.advanceTimersByTime(2_000)
 		expect(toast.value).toBeNull()
 	})
 
@@ -113,7 +123,7 @@ describe("useToast", () => {
 		expect(toast.value).toBeNull()
 		openToast({ kind: "success", label: "Y" })
 		holdToast(false)
-		vi.advanceTimersByTime(5_999)
+		vi.advanceTimersByTime(1_999)
 		expect(toast.value).toMatchObject({ label: "Y" })
 		vi.advanceTimersByTime(1)
 		expect(toast.value).toBeNull()
@@ -123,10 +133,10 @@ describe("useToast", () => {
 		const { toast, openToast, updateToast } = useToast()
 		const id = openToast({ kind: "success", label: "One" })
 		expect(toast.value?.id).toBe(id)
-		vi.advanceTimersByTime(5_000)
+		vi.advanceTimersByTime(1_500)
 		updateToast(id, "Two")
 		expect(toast.value).toMatchObject({ id, kind: "success", label: "Two" })
-		vi.advanceTimersByTime(1_000)
+		vi.advanceTimersByTime(500)
 		expect(toast.value).toBeNull()
 	})
 

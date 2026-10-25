@@ -9,7 +9,7 @@
  * between) and asserts ONE popup ran and both requests were rejected.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 
 const log: string[] = []
 type Callbacks = { onPendingDiscovery: (d: unknown) => void }
@@ -46,14 +46,6 @@ vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 import { initWalletSdkHandler } from "./background"
 import { fakeSdkPorts } from "./test-ports"
 
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
-
 function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promise<undefined>) {
 	let lookups = 0
 	const timedLookupRequested = deferred<void>()
@@ -61,7 +53,11 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		network: { servesChain: async () => true, servesLiveChain: async () => true },
 		account: {},
 		execution: {},
-		profile: { onActiveProfileChanged: new EventHandler<unknown>(), getActiveProfile: async () => ({ id: "p1" }) },
+		profile: {
+			onActiveProfileChanged: new EventHandler<unknown>(),
+			getActiveProfile: async () => ({ id: "p1" }),
+			setRestartPreparation: () => {},
+		},
 		"dapp-interaction": {
 			discover: () => {
 				log.push("discover")

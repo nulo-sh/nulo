@@ -28,9 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      smoke-surface: ${{ steps.override.outputs.full || steps.filter.outputs.smoke-surface }}
-      label-hit: ${{ steps.live.outputs.label-hit }}
-      base: ${{ steps.live.outputs.base }}
+      run: ${{ steps.gate.outputs.run }}
       read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -97,6 +95,8 @@ jobs:
               - '.github/workflows/_extension-smoke-e2e.yml'
               - '.github/workflows/_build-extension.yml'
               - '.github/workflows/pr-extension-smoke-e2e.yml'
+              - 'scripts/ci-cd/e2e-decide.sh'
+              - 'scripts/ci-cd/e2e-aggregate.sh'
               - '.github/actions/setup-bun/**'
               - '.github/actions/setup-puppeteer/**'
       - name: Override for manual dispatch
@@ -104,42 +104,14 @@ jobs:
         id: override
         run: echo "full=true" >> "$GITHUB_OUTPUT"
 
-  decide:
-    name: Decide
-    needs: changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    outputs:
-      run: ${{ steps.gate.outputs.run }}
-    steps:
-      - id: gate
+      - name: Decide
+        id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ needs.changes.outputs.base }}
-          SMOKE: ${{ needs.changes.outputs.smoke-surface }}
-          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
-        run: |
-          case "$LABEL_HIT" in
-            true | false) ;;
-            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
-          esac
-          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
-            echo "::error::changes.outputs.base is empty"
-            exit 1
-          fi
-          # The paths filter already answers "does this diff touch the surface?" — gating it on
-          # the base branch as well only creates a hole, because a stacked PR's `github.base_ref`
-          # is the branch below it. Only the bottom arc of a stack targets `dev`; every arc above
-          # it could reach this suite by LABEL alone, and a gate miss reports success-on-skip.
-          # `main` and `workflow_dispatch` still force-run, so dropping the base test only widens.
-          if [ "$EVENT" = "workflow_dispatch" ] \
-             || [ "$BASE" = "main" ] \
-             || [ "$LABEL_HIT" = "true" ] \
-             || [ "$SMOKE" = "true" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          BASE: ${{ steps.live.outputs.base }}
+          LABEL_HIT: ${{ steps.live.outputs.label-hit }}
+          SURFACE: ${{ steps.override.outputs.full || steps.filter.outputs.smoke-surface }}
+        run: bash scripts/ci-cd/e2e-decide.sh
 
   # PR smoke builds IN-JOB (no artifact): the in-job build arms the migration fixture (artifact
   # runs skip those e2es by the arming contract - they were silently skipped on PRs before).
@@ -148,15 +120,16 @@ jobs:
   # artifact (prod-shaped by design - its chain-adjacent legs are the known queued follow-up).
   smoke:
     name: Run / shard ${{ matrix.shard.id }}
-    needs: [decide]
-    if: needs.decide.outputs.run == 'true'
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     strategy:
       # Every shard reports, so one red shard never hides another's result.
       fail-fast: false
       matrix:
         # Three shards keep the slowest one under half the 30-minute limit on Firefox, whose whole
-        # run reaches ~26m on a slow runner. Vitest assigns files by the SHA-1 of their path, so
-        # the split is fixed, and uneven. `label` is `id` without the `/` upload-artifact rejects.
+        # run reaches ~26m on a slow runner. Files go to shards by their recorded time
+        # (apps/extension/tests/e2e/shard-sequencer.ts). `label` is `id` without the `/`
+        # upload-artifact rejects.
         shard:
           - { id: "1/3", label: "1-of-3" }
           - { id: "2/3", label: "2-of-3" }
@@ -170,33 +143,19 @@ jobs:
   status:
     name: extension-smoke-e2e-status
     if: always()
-    needs: [changes, decide, smoke]
+    needs: [changes, smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # The commit this run's workflow file came from, so the script is the one this file was written
+      # against. A failed fetch reds the check: it is never green without the evaluation.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: /scripts/ci-cd/e2e-aggregate.sh
+          sparse-checkout-cone-mode: false
       - name: Aggregate results
-        run: |
-          # An exact state machine, not a denylist of bad results — see the network gate for why.
-          RUN="${{ needs.decide.outputs.run }}"
-          for r in "${{ needs.changes.result }}" "${{ needs.decide.result }}"; do
-            if [ "$r" != "success" ]; then
-              echo "::error::A gate-control job did not succeed: $r"
-              exit 1
-            fi
-          done
-          case "$RUN" in
-            true) want="success" ;;
-            false) want="skipped" ;;
-            *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
-          esac
-          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
-          # read in this attempt.
-          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
-            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
-            exit 1
-          fi
-          if [ "${{ needs.smoke.result }}" != "$want" ]; then
-            echo "::error::gate said run=$RUN, so the smoke suite must be '$want' — got '${{ needs.smoke.result }}'"
-            exit 1
-          fi
-          echo "Extension smoke e2e gate passed (or was skipped — no relevant changes / not labeled)."
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: bash scripts/ci-cd/e2e-aggregate.sh

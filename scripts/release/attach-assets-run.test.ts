@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -10,6 +10,8 @@ const OTHER = "b".repeat(40)
 const NAMES = assetNames("1.2.3")
 const BUILT: Record<string, string> = Object.fromEntries(NAMES.map((name, i) => [name, String(i + 1).repeat(64)]))
 const ENV = { TAG: "v1.2.3", VERSION: "1.2.3", GITHUB_SHA: SHA, SHA, NOTES: "notes.md" }
+const PUSH = { ...ENV, GITHUB_EVENT_NAME: "push" }
+const DISPATCH = { ...ENV, GITHUB_EVENT_NAME: "workflow_dispatch" }
 const SHASUMS = `${BUILT[NAMES[0]]}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  ${NAMES[1]}\n`
 
 interface World {
@@ -41,6 +43,7 @@ function fake(world: World) {
 	const logs: string[] = []
 	let nextId = 100
 	let stale = false
+	const downloads = new Set<string>()
 	const find = (id: number) => {
 		const release = world.releases.find((r) => r.id === id)
 		if (!release) throw new Error(`no release ${id}`)
@@ -48,7 +51,7 @@ function fake(world: World) {
 	}
 	const fileHash = (path: string): string => {
 		const name = path.slice(path.lastIndexOf("/") + 1)
-		if (path.includes("/published/"))
+		if (downloads.has(path) || path.includes("/published/"))
 			return world.downloaded?.[name] ?? world.releases[0].assets.find((a) => a.name === name)?.digest?.slice(7) ?? ""
 		return world.rebuilt?.[name] ?? BUILT[name]
 	}
@@ -95,8 +98,9 @@ function fake(world: World) {
 		},
 		attested: async () => world.attested ?? true,
 		verifyAttestation: async () => world.verifies ?? true,
-		async downloadAsset(id) {
+		async downloadAsset(id, path) {
 			calls.push(`download ${id}`)
+			downloads.add(path)
 		},
 		sha256: async (path) => fileHash(path),
 		readText: async (path) => (path.endsWith("SHASUMS256.txt") ? (world.shasums ?? SHASUMS) : (world.notes ?? "notes")),
@@ -109,10 +113,11 @@ function fake(world: World) {
 	return { io, calls, outputs, logs }
 }
 
-const run = (world: World, ...argv: string[]) => {
+const runIn = (env: Record<string, string>, world: World, ...argv: string[]) => {
 	const f = fake(world)
-	return { ...f, exit: main(argv, ENV, f.io) }
+	return { ...f, exit: main(argv, env, f.io) }
 }
+const run = (world: World, ...argv: string[]) => runIn(ENV, world, ...argv)
 const complete = (over: Partial<ReleaseRecord> = {}) => ({
 	tag: "v1.2.3",
 	id: 7,
@@ -133,6 +138,62 @@ describe("plan", () => {
 		const { exit, outputs } = run({ releases: [complete(), complete({ id: 8 })], tags: new Map() }, "plan")
 		expect(await exit).toBe(1)
 		expect(outputs).toEqual({})
+	})
+
+	test("refuses to publish the downloaded assets of a release that is no longer published", async () => {
+		const { exit, outputs, logs } = runIn(
+			{ ...DISPATCH, SOURCE: "published" },
+			{ releases: [], tags: new Map([["v1.2.3", SHA]]) },
+			"plan",
+		)
+		expect(await exit).toBe(1)
+		expect(outputs).toEqual({})
+		expect(logs.join("\n")).toContain("no longer published")
+	})
+})
+
+describe("select", () => {
+	const published = (over: Partial<World> = {}): World => ({ releases: [complete()], tags: new Map([["v1.2.3", SHA]]), ...over })
+
+	test.each([
+		["no release", []],
+		["a draft", [complete({ draft: true, immutable: false })]],
+	])("writes build with no download for %s", async (_, releases) => {
+		const { exit, outputs, calls } = runIn(DISPATCH, { releases, tags: new Map([["v1.2.3", SHA]]) }, "select")
+		expect(await exit).toBe(0)
+		expect(outputs).toEqual({ source: "build" })
+		expect(calls).toEqual([])
+	})
+
+	test("writes published after downloading and checking the three assets, and edits nothing", async () => {
+		const world = published({ edits: [] })
+		const { exit, outputs, calls } = runIn(DISPATCH, world, "select")
+		expect(await exit).toBe(0)
+		expect(outputs).toEqual({ source: "published" })
+		expect(calls).toEqual(["download 1", "download 2", "download 3"])
+		expect(world.edits).toEqual([])
+	})
+
+	test.each([
+		["an ambiguous release", { releases: [complete(), complete({ id: 8 })] }, "2 releases name v1.2.3"],
+		[
+			"a published release missing an asset",
+			{ releases: [complete({ assets: complete().assets.slice(0, 2) })] },
+			"without SHASUMS256.txt",
+		],
+		["an unattested digest", { attested: false }, "not attested by this workflow"],
+		["a download off its digest", { downloaded: { [NAMES[1]]: "e".repeat(64) } }, "does not match"],
+		["an attestation that does not verify", { verifies: false }, "does not verify"],
+		[
+			"a SHASUMS256.txt that does not match",
+			{ shasums: `${"e".repeat(64)}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  ${NAMES[1]}\n` },
+			"SHASUMS256.txt does not match",
+		],
+	])("refuses %s", async (_, over, reason) => {
+		const { exit, outputs, logs } = runIn(DISPATCH, published(over), "select")
+		expect(await exit).toBe(1)
+		expect(outputs).toEqual({})
+		expect(logs.join("\n")).toContain(reason)
 	})
 })
 
@@ -223,8 +284,9 @@ describe("apply", () => {
 	})
 })
 
-describe("verify-published", () => {
+describe("verify-published on a push", () => {
 	const published = (over: Partial<World> = {}): World => ({ releases: [complete()], tags: new Map([["v1.2.3", SHA]]), ...over })
+	const run = (world: World, ...argv: string[]) => runIn(PUSH, world, ...argv)
 
 	test("ships the published bytes once their digests, attestations and SHASUMS check out", async () => {
 		const world = published({ edits: [] })
@@ -264,11 +326,41 @@ describe("verify-published", () => {
 	})
 })
 
+describe("verify-published on a dispatch", () => {
+	const published = (over: Partial<World> = {}): World => ({ releases: [complete()], tags: new Map([["v1.2.3", SHA]]), ...over })
+
+	test("writes the notes once every asset it holds is the release's, attested, with no download and no dir", async () => {
+		const world = published({ edits: [] })
+		const { exit, outputs, calls } = runIn(DISPATCH, world, "verify-published")
+		expect(await exit).toBe(0)
+		expect(outputs).toEqual({})
+		expect(calls).toEqual(["notes"])
+		expect(world.edits).toEqual([{ tag: "v1.2.3", body: "notes" }])
+	})
+
+	test.each([
+		["a held asset that differs from the release's", { rebuilt: { [NAMES[0]]: "d".repeat(64) } }, "does not match"],
+		["an attestation that does not verify", { verifies: false }, "does not verify"],
+	])("refuses %s, with no edit and no download", async (_, over, reason) => {
+		const { exit, calls, logs } = runIn(DISPATCH, published(over), "verify-published")
+		expect(await exit).toBe(1)
+		expect(calls).toEqual([])
+		expect(logs.join("\n")).toContain(reason)
+	})
+})
+
 describe("inputs", () => {
 	test("refuses a tag and version that disagree, and a commit that is not an id", () => {
 		expect(typeof inputFromEnv({ ...ENV })).toBe("object")
 		expect(inputFromEnv({ ...ENV, VERSION: "1.2.4" })).toBeTypeOf("string")
 		expect(inputFromEnv({ ...ENV, SHA: "main" })).toBeTypeOf("string")
+	})
+
+	test("reads an unset SOURCE as build, and refuses an empty or unknown one", () => {
+		expect(inputFromEnv({ ...ENV })).toMatchObject({ source: "build" })
+		expect(inputFromEnv({ ...ENV, SOURCE: "published" })).toMatchObject({ source: "published" })
+		expect(inputFromEnv({ ...ENV, SOURCE: "" })).toBeTypeOf("string")
+		expect(inputFromEnv({ ...ENV, SOURCE: "rebuild" })).toBeTypeOf("string")
 	})
 
 	test("reads a release with every field, and refuses one without", () => {
@@ -311,7 +403,11 @@ describe("inputs", () => {
 describe.skipIf(!process.env.NULO_RELEASE_PROBE)("the REST boundary against a published release", () => {
 	const PROBE = "v0.30.2"
 	const io = realIO(process.env.GITHUB_REPOSITORY ?? "nulo-sh/nulo", process.env.GH_TOKEN ?? "")
-	const dir = mkdtempSync(join(tmpdir(), "nulo-release-probe-"))
+	let dir = ""
+	// A skipped describe runs its body but no hook: the dir is made in one.
+	beforeAll(() => {
+		dir = mkdtempSync(join(tmpdir(), "nulo-release-probe-"))
+	})
 	afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 	test("reads the release and its tag, and downloads an asset whose bytes match GitHub's digest", async () => {

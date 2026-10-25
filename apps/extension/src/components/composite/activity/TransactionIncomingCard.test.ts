@@ -41,7 +41,7 @@ const mountCard = (props: Record<string, unknown> = {}) =>
 
 describe("composite/TransactionIncomingCard", () => {
 	test("the status icon fills with the success text token", () => {
-		expect(mountCard().find('[data-testid="activity-status-icon"][data-name="check-circle"]').attributes("data-color")).toBe(
+		expect(mountCard().find('[data-testid="activity-status-icon"][data-name="square-check"]').attributes("data-color")).toBe(
 			"txt-success",
 		)
 	})
@@ -54,6 +54,15 @@ describe("composite/TransactionIncomingCard", () => {
 	test("renders the token symbol column", () => {
 		const w = mountCard()
 		expect(w.find(".symbol").text()).toBe("cUSD")
+	})
+
+	test("a blank symbol titles the row with the empty-value dash; the amount keeps the symbol as given", () => {
+		const read = (tokenSymbol: string) => {
+			const layout = mountCard({ tokenSymbol }).findComponent(STUBS.TransactionCardLayout)
+			return [layout.props("title"), layout.props("amountSymbol")]
+		}
+		expect(read("   ")).toEqual(["—", "   "])
+		expect(read("cUSD")).toEqual(["cUSD", "cUSD"])
 	})
 
 	test("fractional raw amounts keep their precision", () => {
@@ -147,6 +156,14 @@ describe("composite/TransactionIncomingCard — the row, on the real layout and 
 		expect(w.find('[data-testid="tx-incoming-card"]').exists()).toBe(true)
 		expect(w.text()).not.toContain("+")
 		expect(w.find('[data-testid="activity-fiat"]').exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("the separator and the kind chip ride the group that drops under the title where the row has no room", async () => {
+		const { w } = await mountRow({ receivedLabel: "Received privately" })
+		const group = w.get('[data-testid="tx-incoming-kind-chip"]').element.parentElement as HTMLElement
+		expect(group.className).toMatch(/_trailing_/)
+		expect(group.textContent).toBe("·Received privately")
 		w.unmount()
 	})
 

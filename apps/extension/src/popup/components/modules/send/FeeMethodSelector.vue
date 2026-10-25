@@ -1,7 +1,6 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { Dropdown } from "@/components/ui/Dropdown"
-import { publishGlyph } from "@/components/composite/send/publish-facts"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { menuOrder } from "./fee-helpers"
 
@@ -11,12 +10,11 @@ const props = defineProps({
 	/** "private-private" | "private-public" while this send's fee names the account, else null. The
 	 *  page decides; this only draws the tag. */
 	payerNoticeShape: { type: String, default: null },
+	/** The card is still reading what can pay. */
+	pending: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["update:modelValue", "open", "close"])
-
-/** The tag only ever says the fee names the account publicly. */
-const TAG_GLYPH = publishGlyph("exposed")
 
 const menu = computed(() => menuOrder(props.methods))
 
@@ -37,7 +35,7 @@ const onRowClick = (method, event) => {
 				data-testid="send-fee-privacy-notice"
 				:data-notice-shape="payerNoticeShape"
 			>
-				<Icon :name="TAG_GLYPH" size="10" aria-hidden="true" />
+				<Icon name="public" size="10" aria-hidden="true" />
 				NAMES YOUR ADDRESS
 			</span>
 		</Flex>
@@ -52,10 +50,15 @@ const onRowClick = (method, event) => {
 					:class="$style.trigger"
 					data-testid="send-fee-method-trigger"
 					:data-fee-method="modelValue?.subtitle"
+					:aria-busy="!modelValue && pending ? 'true' : undefined"
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
+					<span v-else-if="pending" :class="$style.fee_value" data-testid="send-fee-method-checking">
+						<Skeleton :class="$style.bar" />
+						<span :class="$style.visually_hidden">Checking</span>
+					</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
-					<MaterialIcon name="expand_more" :size="16" color="secondary" aria-hidden="true" />
+					<Icon name="chevron" :rotate="90" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
 			</template>
 
@@ -125,6 +128,12 @@ const onRowClick = (method, event) => {
 	color: var(--nulo-secondary);
 }
 
+/* Centred on the line, the bar stays inside the text's line box, so the trigger keeps its height when
+   the title replaces it. */
+.bar {
+	vertical-align: middle;
+}
+
 /* A disabled method already reads in tertiary ink, so DropdownItem's own fade would dim it twice.
    The doubled class outranks `.wrapper.disabled` whichever sheet loads last. */
 .method.method[aria-disabled="true"] {
@@ -143,7 +152,7 @@ const onRowClick = (method, event) => {
 }
 
 .tag {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;

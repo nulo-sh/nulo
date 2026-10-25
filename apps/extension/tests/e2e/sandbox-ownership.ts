@@ -27,14 +27,37 @@ const RUN_DIR_STAMP = ".nulo-launch"
  *  run's from a live one's. Not created here: {@link createRunDir} does that as the node starts. */
 export const plannedRunDir = (): string => path.join(E2E_DATA_ROOT, `${RUN_DIR_PREFIX}${process.pid}-${Date.now()}`)
 
-/** Creates the run dir stamped with the node's marker; the node writes under `<dir>/data`, so the
- *  stamp sits outside anything the node writes or wipes. */
-export function createRunDir(dir: string, marker: string): string {
+/** `sun_path` holds 108 bytes on Linux and 104 on macOS, its NUL included. */
+const SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107
+/** The longest socket name the node binds under its `TMPDIR` with its separator:
+ *  `/cdb-ts-<pid>-<thread>-<n>.sock` at a 7-digit pid and 3-digit counters. */
+const NODE_SOCKET_NAME_BYTES = 28
+
+/**
+ * The node's `TMPDIR` inside the run dir, absolute because forge changes its working directory. In
+ * local-network mode the node ignores `--data-directory` and opens every store, socket and log
+ * there instead. Throws when a socket path there would not fit `sun_path`: the node only logs the
+ * failed bind, and its AVM then waits on the socket for good.
+ */
+export function nodeTmpDir(runDir: string): string {
+	const tmp = path.resolve(runDir, "tmp")
+	if (Buffer.byteLength(tmp) + NODE_SOCKET_NAME_BYTES > SOCKET_PATH_MAX)
+		throw new Error(
+			`[e2e-setup] the node's socket paths under ${tmp} would exceed ${SOCKET_PATH_MAX} bytes; set NULO_E2E_DATA_ROOT to a shorter directory`,
+		)
+	return tmp
+}
+
+/** Creates the run dir stamped with the node's marker, and the node's `data` and `tmp` under it, so
+ *  the stamp sits outside anything the node writes or wipes. */
+export function createRunDir(dir: string, marker: string): { data: string; tmp: string } {
 	mkdirSync(dir, { recursive: true })
 	writeFileSync(path.join(dir, RUN_DIR_STAMP), marker, "utf8")
 	const data = path.join(dir, "data")
+	const tmp = nodeTmpDir(dir)
 	mkdirSync(data, { recursive: true })
-	return data
+	mkdirSync(tmp, { recursive: true })
+	return { data, tmp }
 }
 
 /** The canonical path to delete, or `undefined` when the lock has no right to it: a lock names a

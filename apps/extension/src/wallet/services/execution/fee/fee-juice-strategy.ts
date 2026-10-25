@@ -16,7 +16,7 @@ import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import type { Action } from "../spec"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
-	appPriorityOf,
+	buildFor,
 	finalizeGasLimits,
 	isInitWrapped,
 	probedFirstSimOpts,
@@ -33,13 +33,7 @@ export class FeeJuiceStrategy implements FeeStrategy {
 	public async buildAndEstimate(ctx: FeeStrategyContext): Promise<FeeEstimate> {
 		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
 		try {
-			let built = await this.deps.txBuilder.buildStandard(
-				ctx.op,
-				ctx.fence,
-				AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
-				task,
-				appPriorityOf(ctx.op.fee),
-			)
+			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 			suggestGasLimits(built.txRequest, ctx.op.fee)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			let discovered: Action[] = []
@@ -51,27 +45,17 @@ export class FeeJuiceStrategy implements FeeStrategy {
 				if (discovered.length || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
-					built = await this.deps.txBuilder.buildStandard(
-						ctx.op,
-						ctx.fence,
-						AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
-						task,
-						appPriorityOf(ctx.op.fee),
-					)
+					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
 				}
 			}
-			await finalizeGasLimits(
-				built.node,
-				built.txRequest,
-				simulatedTx,
-				ctx.gasPadding,
-				undefined,
-				ctx.op.fee,
-				ctx.feeMultiplier,
-				built.txsLimits,
-			)
+			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
+				gasPadding: ctx.gasPadding,
+				customLimits: ctx.op.fee,
+				feeMultiplier: ctx.feeMultiplier,
+				txsLimits: built.txsLimits,
+			})
 			task.complete()
 			return { ...built, feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE }
 		} catch (error) {

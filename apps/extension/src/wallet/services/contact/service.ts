@@ -14,12 +14,13 @@ import { restoreRows } from "@/wallet/services/restore-rows"
 import { nextRandomId, preferOrReallocId } from "@/wallet/services/id-allocators"
 import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
-import { EntityStorage } from "@/wallet/storage"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { getInitials } from "@/utils"
 import { isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
+import { type Contact, CONTACT_SERVICE_NAME, ContactSchema, type Events, type Methods } from "./spec"
 
 export * from "./spec"
 
@@ -45,30 +46,34 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	public readonly onContactUpdated = new EventHandler<Contact>()
 	public readonly onContactDeleted = new EventHandler<Contact>()
 
-	private readonly storage: EntityStorage<Contact>
+	private readonly storage: SealedEntityStorage<Contact>
 	private readonly lock = new Lock()
 
 	private profileService: ProfileService = null!
 
-	/**
-	 * @param browserApi — optional; if omitted, falls back to `chrome.storage`
-	 *        directly (legacy behavior). Passed explicitly by the composition
-	 *        root and by tests via FakeBrowserApi.
-	 */
 	public constructor(
 		logger: ILogger,
-		browserApi?: BrowserApi,
+		browserApi: BrowserApi,
 		private readonly restoreGate: RestoreGate = NOOP_RESTORE_GATE,
 	) {
 		super(CONTACT_SERVICE_NAME, logger)
-		this.storage = browserApi
-			? new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, browserApi.storage.local, (raw) => ContactSchema.parse(raw))
-			: new EntityStorage<Contact>(CONTACT_STORAGE_ROOT, chrome.storage.local, (raw) => ContactSchema.parse(raw))
+		this.storage = sealedEntityStorage("contacts", browserApi.storage.local, (profileId) => this.profileService.rowKeys(profileId))
 	}
 
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext contacts under the lock every contact writer holds, so no write
+	 *  lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext contacts failed; the next worker retries", { error })
+		}
 	}
 
 	public async getContacts(fence?: RunFence | null): Promise<Contact[]> {
@@ -121,9 +126,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 				abbr: this._getAbbreviation(stored),
 			}
 
+			// Sealed before the checks, committed with no await after them.
+			const write = await this.storage.prepare(contact.id, contact)
 			deletion.assertCurrent(fence.profileId, fence.epoch)
 			this.assertStillLive(runFence)
-			await this.storage.set(contact.id, contact)
+			await write.commit()
 			// The set awaits — compensate the just-written row if the deletion
 			// landed during it, before the row becomes observable via the emit.
 			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
@@ -153,8 +160,9 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 				address: address || contact.address,
 			}
 
+			const write = await this.storage.prepare(contactId, newContact)
 			this.assertStillLive(fence)
-			await this.storage.set(contactId, newContact)
+			await write.commit()
 
 			this.emit("onContactUpdated", newContact)
 
@@ -194,7 +202,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 	 * Sender registrations are NOT touched here: `NetworkService.onProfileDeleted`
 	 * (network/service.ts:617) already iterates the deleted profile's networks
 	 * and calls `purgeChain → pxeServiceClient.clearChainState(profileId, chainId)`
-	 * which deletes `indexedDB pxe/${profileId}/${chainId}` — wiping the entire
+	 * which removes the OPFS store `pxe/${profileId}/${chainId}` — wiping the entire
 	 * PXE database for that profile + chain, senders included. So senders for
 	 * deleted profiles are cleaned up as a side-effect of the chain purge,
 	 * not by this listener.
@@ -278,8 +286,9 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)
+				const write = await this.storage.prepare(id, written)
 				assertRestoreEpoch(deletion, epochs, written.profileId)
-				await this.storage.set(id, written)
+				await write.commit()
 				return written
 			})
 		})

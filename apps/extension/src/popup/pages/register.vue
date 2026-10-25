@@ -30,7 +30,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 	<Flex direction="column" :class="$style.wrapper">
 		<!-- Brand signature: lock icon + NULO wordmark -->
 		<Flex align="center" justify="center" gap="8" :class="$style.brand">
-			<MaterialIcon name="lock" :size="18" color="primary" />
+			<Icon name="lock" :size="18" color="primary" />
 			<span :class="$style.wordmark">NULO</span>
 		</Flex>
 
@@ -125,7 +125,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 .terms {
 	composes: type--caption from global;
 	line-height: 1.5;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 	text-align: center;
 	margin: 0;
 
@@ -133,6 +133,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .link {
+	user-select: none;
 	color: var(--nulo-secondary);
 	cursor: pointer;
 	border-bottom: 1px solid var(--nulo-border);

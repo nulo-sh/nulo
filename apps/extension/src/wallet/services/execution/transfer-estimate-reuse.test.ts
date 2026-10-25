@@ -12,21 +12,19 @@ import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { FeeSettings } from "./spec"
-import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
-import {
-	TransferEstimateReuse,
-	type TransferEstimateReuseDeps,
-	type TransferEstimateReuseEntry,
-	fingerprintFeeSettings,
-} from "./transfer-estimate-reuse"
+import { ESTIMATE_REUSE_TTL_MS, type EstimateReuseDeps } from "./estimate-reuse-shared"
+import { TransferEstimateReuse, type TransferEstimateReuseEntry, fingerprintFeeSettings } from "./transfer-estimate-reuse"
 
 const FEE_SETTINGS: FeeSettings = { paymentMethod: { kind: "fj" } }
 const FENCE = { profileId: "profile-1", epoch: 0, session: 1 }
+
+const TOKEN_CONTRACT = `0x${"1a".repeat(32)}`
 
 const INPUTS = {
 	networkId: "net-1",
 	accountAddress: "0xacc",
 	tokenId: 1,
+	tokenContract: TOKEN_CONTRACT,
 	transferType: TransferType.Public,
 	recipientAddress: "0xrecipient",
 	amount: 100n,
@@ -69,7 +67,7 @@ function makeEntry(overrides: Partial<TransferEstimateReuseEntry> = {}): Transfe
 		txRequest: {} as TransferEstimateReuseEntry["txRequest"],
 		nonce: { toString: () => "1" },
 		feePaymentMethod: 0 as TransferEstimateReuseEntry["feePaymentMethod"],
-		token: { contract: "0xtoken", name: "Token", symbol: "TOK", decimals: 18 },
+		token: { contract: TOKEN_CONTRACT, name: "Token", symbol: "TOK", decimals: 18 },
 		fnName: "transfer_in_public",
 		args: [],
 		builtAt: Date.now(),
@@ -92,7 +90,7 @@ function makeReuse(
 	const entry = makeEntry(overrides.entry)
 	const logDebug = vi.fn()
 	const getFpcInfo = vi.fn(overrides.fpcRow ?? (async () => ({ ...SPONSOR_ROW })))
-	const deps: TransferEstimateReuseDeps = {
+	const deps: EstimateReuseDeps = {
 		sequenceEpoch: () => overrides.epoch ?? 0,
 		getNetwork: async () =>
 			(overrides.network ?? {
@@ -153,6 +151,12 @@ describe("tryConsume: every observable exit", () => {
 	test("input drift (recipient) → undefined", async () => {
 		const { reuse } = makeReuse({ entry: { recipientAddress: "0xother" } })
 		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBeUndefined()
+	})
+
+	test("token contract drift (an entry built for another contract under the same id) → undefined", async () => {
+		const { reuse, logDebug } = makeReuse({ entry: { token: { ...makeEntry().token, contract: `0x${"1b".repeat(32)}` } } })
+		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBeUndefined()
+		expect(logDebug).toHaveBeenCalledWith(expect.stringContaining("input drift"))
 	})
 
 	test("fee-settings drift (different payment method hash) → undefined", async () => {

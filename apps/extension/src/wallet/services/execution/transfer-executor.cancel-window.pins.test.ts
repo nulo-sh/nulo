@@ -17,12 +17,14 @@ import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor
 
 const FEE_SETTINGS = { paymentMethod: { kind: "fj" } } as never
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const TOKEN_CONTRACT = `0x${"1a".repeat(32)}`
 
 function makeReq(): TransferRequest {
 	return {
 		networkId: "net-1",
 		accountAddress: "0xme",
 		tokenId: 1,
+		tokenContract: TOKEN_CONTRACT,
 		transferType: TransferType.Private,
 		recipientAddress: "0xyou",
 		amount: 5n,
@@ -31,13 +33,13 @@ function makeReq(): TransferRequest {
 }
 
 function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDeps {
-	const task = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
+	const task = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	return {
 		tasks: { startNewTask: vi.fn(() => task) } as never,
 		planner: {
 			buildTransferOperation: vi.fn(async (req: TransferRequest) => ({
 				op: { networkId: req.networkId, accountAddress: req.accountAddress, actions: [], feeSettings: req.feeSettings },
-				token: { contract: "0xtoken", name: "T", symbol: "T", decimals: 18 },
+				token: { contract: TOKEN_CONTRACT, name: "T", symbol: "T", decimals: 18 },
 				fn: { name: "transfer_private" },
 				args: [],
 			})),
@@ -49,9 +51,8 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 		getFpcImpl: vi.fn(
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),
-		getTokenContract: vi.fn(async () => "0xtoken"),
 		// One mined tx: the account is initialized.
-		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
+		transactionsOf: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
 		lane: {
 			registerInFlight: vi.fn(() => ({ live: true })),
 			deleteController: vi.fn(),

@@ -6,7 +6,8 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { PriceState } from "@/wallet/services/price/spec"
 import TokenCard from "./TokenCard.vue"
 import { boundAttr, declarationsOf, elementByTestid, parseSource, walkElements } from "../../../../../scripts/type-roles/source-scan"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // TokenCard imports useAppStore but never reads from it. The store body calls
 // syncedRef which touches chrome.storage.local — not stubbed in vitest.setup.ts.
@@ -15,16 +16,19 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({}),
 }))
 
-// Controllable price feed: tests set `mockQuotes` before mounting.
+// Controllable price feed: tests set `mockQuotes` and `mockFlagged` before mounting.
 let mockQuotes: PriceState = {}
+let mockFlagged: string[] = []
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: mockFlagged })),
+			refreshIfStale: vi
+				.fn()
+				.mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: mockFlagged })),
 		}
 	}),
 }))
@@ -282,9 +286,25 @@ describe("TokenCard — hostile rows", () => {
 		expect(w.find("[data-malformed]").exists()).toBe(false)
 		expect(w.text()).toContain("7")
 	})
+
+	test("a blank symbol and an empty or blank name read as the empty-value dash; data-symbol keeps the stored symbol", async () => {
+		mockQuotes = {}
+		const blank = factory({ updatedAt: 1, publicBalance: "5" }, { symbol: "   ", name: "" })
+		const spaces = factory({ updatedAt: 1, publicBalance: "5" }, { name: "   " })
+		const plain = factory({ updatedAt: 1, publicBalance: "5" })
+		await flushPromises()
+		const symbol = blank.get('[data-testid="token-symbol"]')
+		expect([symbol.text(), symbol.attributes("data-symbol")]).toEqual(["—", "   "])
+		expect(blank.get('[data-testid="token-name"]').text()).toBe("—")
+		expect(spaces.get('[data-testid="token-name"]').text()).toBe("—")
+		expect([plain.get('[data-testid="token-symbol"]').text(), plain.get('[data-testid="token-name"]').text()]).toEqual([
+			"TST",
+			"Test Token",
+		])
+	})
 })
 
-describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () => {
+describe("TokenCard — R5 layout (subtitle left, private/public split right)", () => {
 	test("priced: fiat fills the subtitle slot; no PRIVATE/PUBLIC label anywhere", async () => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 0.999857, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		const w = factory(
@@ -319,12 +339,30 @@ describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () =
 		expect(w.text()).not.toContain("1,234.")
 	})
 
-	test("the split line renders a bone lock (private) and a grey globe (public) with both amounts", async () => {
+	test("a row the signed list flags reads 'Flagged as a scam' in place of its name; an unflagged row keeps its name", async () => {
+		mockQuotes = {}
+		mockFlagged = flaggedKeysOf([TEST_FLAGGED])
+		try {
+			// Wire-shaped, in the upper case a restored row may keep.
+			const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
+			const flagged = factory({ updatedAt: 1, publicBalance: "5" }, { chainId: TEST_FLAGGED.chainId, contract })
+			const plain = factory({ updatedAt: 1, publicBalance: "5" }, { chainId: TEST_FLAGGED.chainId, contract: TEST_USDC })
+			await flushPromises()
+			expect(flagged.find('[data-testid="token-flagged"]').text()).toBe("Flagged as a scam")
+			expect(flagged.find('[data-testid="token-name"]').exists()).toBe(false)
+			expect(plain.find('[data-testid="token-flagged"]').exists()).toBe(false)
+			expect(plain.find('[data-testid="token-name"]').text()).toBe("Test Token")
+		} finally {
+			mockFlagged = []
+		}
+	})
+
+	test("the split line renders the private mark and the public mark with both amounts", async () => {
 		mockQuotes = {}
 		const w = factory({ updatedAt: 1, privateBalance: (7n * 10n ** 18n).toString(), publicBalance: (3n * 10n ** 18n).toString() })
 		await flushPromises()
 		const icons = w.findAll('[data-testid="stub-icon"]')
-		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["lock", "globe"])
+		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["private", "public"])
 		expect(w.text()).toContain("7")
 		expect(w.text()).toContain("3")
 	})
@@ -333,10 +371,18 @@ describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () =
 describe("TokenCard — the subtitle's overflow", () => {
 	const parsed = parseSource("apps/extension/src/popup/components/modules/general/TokenCard.vue")
 
+	test("the flagged line is a caption in the danger text colour, which passes AA in both themes", () => {
+		expect(declarationsOf(parsed, ".flagged")).toEqual({ composes: "type--caption from global", color: "var(--txt-danger)" })
+	})
+
 	test("a priced figure wraps rather than hide digits; a contract-supplied name stays clipped to one line", () => {
 		const fiat = elementByTestid(parsed, "token-fiat")?.node
 		expect(fiat && boundAttr(fiat, "class")).toBe("[$style.fiat, $style.fiat_figure]")
-		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
+		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({
+			"max-width": "190px",
+			"white-space": "normal",
+			"overflow-wrap": "anywhere",
+		})
 		expect(declarationsOf(parsed, ".fiat")).toMatchObject({ "max-width": "160px", overflow: "hidden", "white-space": "nowrap" })
 		const subtitles: string[] = []
 		if (parsed.template)

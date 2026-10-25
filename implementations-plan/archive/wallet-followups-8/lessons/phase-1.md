@@ -1,0 +1,11 @@
+# Phase 1: popup fixes (#339, #465, #466), arc 1
+
+- 2026-10-15: merged `origin/dev` (#506, #509) into the plan branch; no dependency or arc-file change. Arc 1 branch `worktree-wallet-followups-8-popup` cut from `origin/dev` at `2dcdad48` in the lane worktree (D-arc1-1).
+- 2026-10-15: three commits, one per issue. T5, T6 and T7 fail on the base copies of the three `.vue` files (`d59459ab`, unchanged at `2dcdad48`), exactly the three new assertions, and pass on head; the PXE store control stays green on both.
+- 2026-10-15: T6 needs the real `Input` (`@nulo/design`), since the page test's stub never renders the attribute on a native input; `mountImport({ realInput: true })` registers it and drops the stub.
+- 2026-10-15: `bun run lint` first failed on a format-only line in `holdings.test.ts` (the new literal pushed it past the width); `biome format --write` fixed it. The 27 warnings it prints are on dev already.
+- 2026-10-15: review round 1. Codex (gpt-6.1-sol, high, session 01a141dd, `~/.codex` login): approve, two comment findings, both accepted. Opus 5.5: approve, one test gap accepted (a typed non-contract refusal as control; a mutation to `err?.code` fails exactly that row). Fixes in `0a039883`. Round 2 (resumed): approve, no new finding.
+- 2026-10-15: smoke `account-import-export` + `holdings-add-token` at retry 0, armed build: Chrome pass (5 tests, 71 s), Firefox pass (5 tests, 67 s). The Chrome run launched at load1 155, above the host's 150 limit: a 143.7 reading a minute earlier triggered it. Later runs read the load at launch and gate on it.
+- 2026-10-16: network `holdings.test.ts` through `agent.sh` at retry 0: Chrome pass (file 73.4 s, the changed scenario 21.7 s), Firefox pass (83.9 s, 22.9 s). The CI baseline for the file the same day (shard 4/5) was 60.5 s Chrome and 65.3 s Firefox; no step was added, so the gap is the host.
+- 2026-10-16: `new-token-error` shots (light, dark) show the owner's line; committed, linked by permalink in the PR body, dropped in the next commit, as earlier popup PRs did.
+- 2026-10-16: final gates on `0a039883`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` pass. PR #531 opened against `dev`; every lane's path filter tripped, so no label.

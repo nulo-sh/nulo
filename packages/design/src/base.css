@@ -35,36 +35,6 @@
 	src: url("./fonts/JetBrainsMono-latin.woff2") format("woff2");
 }
 
-@font-face {
-	font-family: "Material Symbols Outlined";
-	font-style: normal;
-	font-weight: 100 700;
-	font-display: block;
-	src: url("./fonts/MaterialSymbolsOutlined.woff2") format("woff2");
-}
-
-.material-symbols-outlined {
-	/* biome-ignore lint/a11y/useGenericFontNames: icon font — a generic fallback would render ligature text, not icons (verbatim from the prior _base.scss) */
-	font-family: "Material Symbols Outlined";
-	font-weight: normal;
-	font-style: normal;
-	font-size: 24px;
-	line-height: 1;
-	letter-spacing: normal;
-	text-transform: none;
-	display: inline-block;
-	white-space: nowrap;
-	word-wrap: normal;
-	direction: ltr;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	font-variation-settings:
-		"FILL" 0,
-		"wght" 300,
-		"GRAD" 0,
-		"opsz" 24;
-}
-
 :root[data-has-nav="true"] {
 	--nav-clearance: 96px;
 }
@@ -105,7 +75,7 @@
 	--border: rgba(74, 70, 63, 0.5);
 	--border-hovered: rgba(74, 70, 63, 0.8);
 
-	/* The light theme inherits both hairlines and every scrim unchanged. */
+	/* The light theme inherits both hairlines and the sheet and loader scrims unchanged. */
 	--hairline-soft: rgba(74, 70, 63, 0.2);
 	--hairline-strong: rgba(74, 70, 63, 0.3);
 
@@ -152,6 +122,9 @@
 	--tooltip-bg: #f3f3f3;
 	--dropdown-bg: #fff;
 
+	/* The Terms sheet keeps the dark scrim: it is a blocking wall, and this wash nearly erases its edge. */
+	--scrim-popup: color-mix(in srgb, var(--app-bg) 70%, transparent);
+
 	/* Direction A — warm chromatic. These 8 brand tokens were MISSING from the light block (they fell
 	 * through to the dark :root values, which is what broke the light theme). The accent stays a
 	 * saturated colour (NOT near-black ink) so it still reads as a link / active-tab / toggle-ON across
@@ -171,6 +144,8 @@
 	--border-hovered: rgba(124, 116, 104, 0.55);
 
 	color-scheme: light;
+	/* Barrier copy uses the theme's text tokens, so its scrim follows the light palette. */
+	--scrim-barrier: rgba(245, 245, 247, 0.92);
 
 	--txt-primary: rgba(0, 0, 0, 88%);
 	--txt-secondary: rgba(0, 0, 0, 60%);
@@ -209,9 +184,9 @@
 	--json-bool: #1e754f;
 
 	--log-background: #f5f5f7;
-	--log-warn-color: #c38700;
+	--log-warn-color: var(--txt-warning);
 	--log-warn-background: #fff8e1;
-	--log-error-color: #e53935;
+	--log-error-color: var(--txt-danger);
 	--log-error-background: #ffebee;
 	--log-inactive-filter: 1.03;
 
@@ -227,7 +202,7 @@
 	--log-background: #1e1e1e;
 	--log-warn-color: #a99d5e;
 	--log-warn-background: #3a2a0f;
-	--log-error-color: #c34f38;
+	--log-error-color: var(--txt-danger);
 	--log-error-background: #3a1f1e;
 	--log-inactive-filter: 0.8;
 }
@@ -280,20 +255,29 @@ body {
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Text is selectable; a control is not, so a drag or a double-click across one never takes its
+   label. A control without one of these semantics sets it on its class. */
+button,
+[role="button"],
+[role="tab"],
+[role="switch"],
+[role="checkbox"],
+[role="option"] {
 	user-select: none;
 }
 
-.slide-enter-active {
+.sheet-enter-active {
 	transition: all 0.3s var(--bezier);
 }
 
-.slide-leave-active {
+.sheet-leave-active {
 	transition: all 0.15s var(--bezier);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-	transform: translateY(40px);
+.sheet-enter-from,
+.sheet-leave-to {
 	opacity: 0;
 }
 

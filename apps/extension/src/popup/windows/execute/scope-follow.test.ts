@@ -41,6 +41,9 @@ const windowsRemoveMock = vi.fn()
 const setActiveNetworkMock = vi.fn(async () => undefined)
 const getActiveNetworkMock = vi.fn(async () => appStoreMock.network)
 const storageSetMock = vi.fn(async (_items: Record<string, unknown>) => undefined)
+const { setSelectedAccountMock } = vi.hoisted(() => ({
+	setSelectedAccountMock: vi.fn(async (_profileId: string, _address: string) => true),
+}))
 /** A fake Web Lock: runs the callback at once (jsdom has none). */
 const locksRequestMock = vi.fn((_name: string, callback: () => Promise<unknown>) => callback())
 
@@ -58,9 +61,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		reject: rejectViaInteractionServiceMock,
 	})),
 }))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: vi.fn(() => ({ hostname: ref("example.com"), isSuspicious: ref(false) })),
-}))
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn(() => ({
 		results: ref({}),
@@ -77,6 +77,7 @@ vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: vi.fn() }),
 }))
 vi.mock("@/utils/core", () => ({
+	managers: { uiPreference: { setSelectedAccount: setSelectedAccountMock } },
 	requireNetwork: () => ({ setActiveNetwork: setActiveNetworkMock, getActiveNetwork: getActiveNetworkMock }),
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
@@ -113,6 +114,7 @@ vi.mock("@/wallet/services/token/client", () => ({
 			disconnect: vi.fn(),
 			previewTokenMetadata: vi.fn(async () => undefined),
 			getTokens: vi.fn(async () => []),
+			onTokenUpdated: { add: vi.fn(), remove: vi.fn() },
 		}
 	}),
 }))
@@ -167,7 +169,7 @@ const STUBS = {
 	SectionLabel: { template: "<div />" },
 	OperationCard: { template: "<div />" },
 	SignerIdentityStrip: { template: "<div />", props: ["signerAccounts", "signerNetworks", "status"] },
-	DappIdentityBlock: { template: "<div />", props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"] },
+	DappIdentityBlock: { template: "<div />", props: ["dapp", "actionLabel"] },
 	DappCancelledOverlay: { template: "<div />", props: ["message"] },
 }
 
@@ -208,9 +210,13 @@ const open = async (operations: unknown[]) => {
 const banner = () => w!.find('[data-testid="execute-scope-banner"]')
 const bannerText = () => ({ title: w!.find('[data-testid="banner-title"]').text(), body: w!.find('[data-testid="banner-desc"]').text() })
 const action = () => w!.find('[data-testid="execute-scope-action-btn"]')
-type ExecVm = { approve: () => Promise<void>; reject: () => Promise<void>; processingError?: { title: string } }
+type ExecVm = { approve: () => Promise<void>; reject: (end: "reject") => Promise<void>; processingError?: { title: string } }
 const vm = () => w!.vm as unknown as ExecVm
-const accountWrites = () => storageSetMock.mock.calls.map(([items]) => items["nulo:ui:activeAccount"])
+const accountWrites = () =>
+	setSelectedAccountMock.mock.calls.map(([profileId, address]) => {
+		expect(profileId).toBe("p1")
+		return address
+	})
 
 beforeEach(() => {
 	opsNetwork = TESTNET
@@ -346,7 +352,7 @@ describe("execute window — the follow after Confirm", () => {
 		w!.unmount()
 
 		await open([sendFrom(MAIN.address)])
-		await vm().reject()
+		await vm().reject("reject")
 		expect(accountWrites()).toEqual([])
 		w!.unmount()
 

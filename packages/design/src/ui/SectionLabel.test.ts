@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
 import SectionLabel from "./SectionLabel.vue"
@@ -27,5 +29,10 @@ describe("ui/SectionLabel", () => {
 	test("string count is rendered as-is (e.g. '12+')", () => {
 		const w = mount(SectionLabel, { props: { label: "Profiles", count: "12+" } })
 		expect(w.text()).toContain("12+")
+	})
+
+	test("count is meta text in --nulo-secondary; --nulo-outline is for decoration", () => {
+		const source = readFileSync(resolve(__dirname, "SectionLabel.vue"), "utf8")
+		expect(source).toMatch(/^\.count \{[^{}]*\bcolor: var\(--nulo-secondary\);[^{}]*\}/m)
 	})
 })

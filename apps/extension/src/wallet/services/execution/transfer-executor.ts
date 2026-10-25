@@ -13,17 +13,9 @@
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
-import {
-	IllegalTransitionError,
-	type JobError,
-	type JobProgress,
-	JobCancelledSentinel,
-	normalizeError,
-	type QueuedFeePayer,
-} from "@nulo/wallet-core/jobs"
+import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import { JournaledRejection, OperationNotRecordedError, SessionEndedError, WalletError } from "@nulo/extension-messaging/errors"
 import type { IAccountContract } from "@nulo/aztec-runtime/account"
-import { formatFeeJuice } from "@/utils/fee-estimation"
 import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { NewOperationInput, OperationRecord } from "@/wallet/services/operation-journal/spec"
@@ -40,6 +32,7 @@ import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
 import { builtCapOf, type ChainIdentity } from "./estimate-reuse-shared"
+import { askFeeAgain, figureAsks, personalPayerOf, type SendFeeFigure } from "./fee-reask"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { type QueuedFeeAnswers, queuedFeePayer, speedOf } from "./queued-fee-cap"
@@ -100,8 +93,8 @@ export interface TransferExecutorLane {
 }
 
 /** Where a transfer stands in its account's line, and what it holds there; `feeSpender` is the fee
- *  contract its `fpc:` key names. */
-export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string }
+ *  contract its `fpc:` key names, and `sponsored` whether Nulo's own sponsor pays. */
+export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string; sponsored: boolean }
 
 /** Mutated in place on re-entry, so the submit callback and the cleanup see the current ticket. */
 type TransferLine = { sequence: TransferSequence; ticket: SequenceTicket }
@@ -114,6 +107,8 @@ type TransferRun = {
 	readonly journalId: string
 	readonly controller: AbortController
 	readonly line: TransferLine
+	/** Nulo's own sponsor paid when the send entered; a re-entry's sequence does not change it. */
+	readonly sponsored: boolean
 	readonly task: WrappedTask
 	markJournal(progress: JobProgress): Promise<boolean>
 	checkCancelled(): void
@@ -121,8 +116,8 @@ type TransferRun = {
 	stashId?: string
 }
 
-/** A build above its cap, as the question needs it: the build itself is only in the stash. */
-type OverCap = { stashId: string | undefined; fee: string; cap: string; payer: QueuedFeePayer }
+/** A build above its figure, as the question needs it: the build itself is only in the stash. */
+type OverCap = { stashId: string | undefined; fee: string; figure: SendFeeFigure; payer: QueuedFeePayer }
 
 export interface TransferExecutorDeps {
 	tasks: TaskService
@@ -132,10 +127,9 @@ export interface TransferExecutorDeps {
 	lane: TransferExecutorLane
 	sequencer: SendSequencer
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
-	getTokenContract(tokenId: number): Promise<string>
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
-	getTransactions(account: string): Promise<Tx[]>
+	transactionsOf(account: string, profileId: string): Promise<Tx[]>
 	getActiveProfile(): Promise<ProfileInfo | undefined>
 	captureExecutionFence(): Promise<ExecutionFence>
 	assertFence(fence: ExecutionFence): Promise<void>
@@ -168,40 +162,44 @@ export interface TransferExecutorDeps {
 
 const QUEUED_SPENT: TransferFeeQueued = { queued: true, tokenSpent: true }
 
+/** Nulo's own sponsor on this chain: the one FPC that never spends the payer's notes. */
+function isProtocolSponsor(fpc: Fpc | undefined, chainId: number): boolean {
+	const info = fpc?.infoData
+	return info?.type === FpcType.DefaultSponsoredFpc && info.isProtocol === true && info.chainId === chainId
+}
+
 /** An FPC that may spend the payer's notes: any but the protocol sponsor on this chain. */
 function feeSpenderOf(fpc: Fpc | undefined, chainId: number): string | undefined {
 	const info = fpc?.infoData
 	if (!info) return undefined
-	const protocolSponsor = info.type === FpcType.DefaultSponsoredFpc && info.isProtocol === true && info.chainId === chainId
-	return protocolSponsor ? undefined : info.address
+	return isProtocolSponsor(fpc, chainId) ? undefined : info.address
 }
 /** The failure once a send has waited its whole `MAX_WAIT_MS` for earlier sends and the slot. */
 const WAIT_LIMIT_MESSAGE = "An earlier send of this account is still in flight"
+/** The failure of a send that entered with Nulo's sponsor whose row is no longer it at its turn. */
+const SPONSOR_MOVED_MESSAGE = "Nulo's sponsor row changed while this send waited"
+/** A Send-page send the person pays carries the figure the page showed. */
+const MISSING_FEE_FIGURE = "The send carries no fee figure for a fee the account pays"
 
 /** Embedded fee payments take a divergent execution path, and Fee Juice with a claim mutates its
  *  actions during the build, so neither leaves a build to reuse. */
 const reusable = (feeSettings: FeeSettings): boolean => feeSettings.paymentMethod.kind === "fj" || feeSettings.paymentMethod.kind === "fpc"
 
-/** `cancelJob` writes `cancelled` before it aborts, so a move of the send's own record that fails
- *  while aborted, or on a cancelled record, lost to the cancel. */
-const lostToCancel = (err: unknown, controller: AbortController): boolean =>
-	controller.signal.aborted || (err instanceof IllegalTransitionError && err.from === "cancelled")
-
 export class TransferExecutor {
 	public constructor(private readonly deps: TransferExecutorDeps) {}
 
-	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`). */
-	public async sequence(req: TransferRequest): Promise<TransferSequence> {
-		const [token, network] = await Promise.all([this.deps.getTokenContract(req.tokenId), this.deps.getNetwork(req.networkId)])
-		const chainId = network.chainId
+	/** The account's line this transfer joins, and the keys it holds there (`transfer-sequence-keys.ts`),
+	 *  read from the history of the profile it is sent from. */
+	public async sequence(req: TransferRequest, profileId: string): Promise<TransferSequence> {
+		const { chainId } = await this.deps.getNetwork(req.networkId)
 		const [fpc, history] = await Promise.all([
 			this.payingFpc(req.feeSettings),
-			this.deps.getTransactions(req.accountAddress).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
+			this.deps.transactionsOf(req.accountAddress, profileId).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
 		])
 		const feeSpender = feeSpenderOf(fpc, chainId)
 		const keys = transferSequenceKeys({
 			me: req.accountAddress,
-			token,
+			token: req.tokenContract,
 			type: req.transferType,
 			recipient: req.recipientAddress,
 			feeSpender,
@@ -209,7 +207,7 @@ export class TransferExecutor {
 			initializing: !history.some(minedSuccessfully),
 			used: usedSequences(history, req.accountAddress),
 		})
-		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender }
+		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender, sponsored: isProtocolSponsor(fpc, chainId) }
 	}
 
 	/** The validated fee contract a transfer pays through; `undefined` when it pays without an FPC. */
@@ -217,13 +215,13 @@ export class TransferExecutor {
 		return feeSettings.paymentMethod.kind === "fpc" ? this.deps.getFpcImpl(feeSettings.paymentMethod.fpcId) : undefined
 	}
 
-	/** With `cap`, a build whose fee is above it is never proved: the send keeps its place and asks
-	 *  the person again (`buildWithinCap`). */
+	/** A build that `figure` asks about is never proved: the send keeps its place and asks the person
+	 *  again (`buildWithinCap`). A build the person pays with no `figure` is refused. */
 	public async execute(
 		req: TransferRequest,
 		precomputedEstimateId: string | undefined,
 		fence: ExecutionFence,
-		cap?: string,
+		figure?: SendFeeFigure,
 	): Promise<string> {
 		const { networkId, accountAddress, tokenId, transferType, recipientAddress, amount } = req
 		const origin: LocalTxOrigin = { type: OriginType.UI }
@@ -257,7 +255,7 @@ export class TransferExecutor {
 		try {
 			// The ticket's place in line is taken before the row exists, so the row's first stage says
 			// whether it waits. Fail closed here, inside the try: a transfer with no durable record never runs.
-			const sequence = await this.sequence(req)
+			const sequence = await this.sequence(req, fence.profileId)
 			const held: TransferLine = { sequence, ticket: this.deps.sequencer.enter(sequence.scope, sequence.keys) }
 			line = held
 			const queued =
@@ -269,8 +267,8 @@ export class TransferExecutor {
 			controller = created.controller
 			if (!created.live) throw new SessionEndedError()
 			const journal = { journalId: created.journalId, controller: controller as AbortController }
-			run = { ...journal, req, fence, line: held, task: transferTask, markJournal, checkCancelled }
-			const built = await this.buildWithinCap(run, queued, precomputedEstimateId, cap)
+			run = { ...journal, req, fence, line: held, sponsored: sequence.sponsored, task: transferTask, markJournal, checkCancelled }
+			const built = await this.buildWithinCap(run, queued, precomputedEstimateId, figure)
 			const { txRequest, node, pxe, account, initializesAccount } = built
 			const { txHash } = await this.deps.coordinator.proveAndSend({
 				pxe,
@@ -292,7 +290,7 @@ export class TransferExecutor {
 			})
 			// Released at submit, as a dApp send's: the ticket, not the slot, holds until inclusion.
 			run.release?.()
-			transferTask.complete()
+			transferTask.completeIfTracked()
 			return txHash.toString()
 		} catch (error) {
 			// Journal already in `cancelled` (cancelJob did it); convert the
@@ -313,42 +311,45 @@ export class TransferExecutor {
 	}
 
 	/**
-	 * Takes the turn and builds until a build comes out within `cap`. One above it is not proved: it
-	 * gives the slot back, keeps the ticket so no later send that shares its keys overtakes it, and
-	 * asks the person. An accepted fee is the next pass's cap, and its build is reused while nothing
-	 * it was built on has moved.
+	 * Takes the turn and builds until a build comes out within `figure`. One above it is not proved:
+	 * it gives the slot back, keeps the ticket so no later send that shares its keys overtakes it,
+	 * and asks the person. An accepted fee is the next pass's figure under the same rule, and its
+	 * build is reused while nothing it was built on has moved.
 	 */
 	private async buildWithinCap(
 		run: TransferRun,
 		createdQueued: boolean,
 		estimateId: string | undefined,
-		cap: string | undefined,
+		figure: SendFeeFigure | undefined,
 	): Promise<TransferBuildInputs> {
 		let queued = createdQueued
 		let heldId = estimateId
-		let limit = cap
+		let limit = figure
 		for (;;) {
 			const pass = await this.buildPass(run, queued, heldId, limit)
 			if ("built" in pass) return pass.built
 			await this.askAgain(run, pass.over)
 			heldId = pass.over.stashId
-			limit = pass.over.fee
+			limit = { ...pass.over.figure, fee: pass.over.fee }
 			// The accept claimed the row back to `pending`.
 			queued = false
 		}
 	}
 
-	/** One turn and one build. Above `cap` the slot is already given back and the build stashed, and
-	 *  only what the question needs leaves this frame. */
+	/** One turn and one build. Above `figure` the slot is already given back and the build stashed,
+	 *  and only what the question needs leaves this frame. */
 	private async buildPass(
 		run: TransferRun,
 		queued: boolean,
 		estimateId: string | undefined,
-		cap: string | undefined,
+		figure: SendFeeFigure | undefined,
 	): Promise<{ built: TransferBuildInputs } | { over: OverCap }> {
 		const { req, fence, line } = run
 		const turn = await this.takeTurn(req, run.journalId, run.controller, line, fence, queued)
 		run.release = turn.release
+		// A send that entered with Nulo's sponsor goes out with no figure, so a row edited while it waited
+		// must not pay for it: that contract could spend an authorization the account granted it.
+		if (run.sponsored && !isProtocolSponsor(turn.fpc, line.sequence.scope.chainId)) throw new Error(SPONSOR_MOVED_MESSAGE)
 		// The cached estimate first; any drift from its snapshot (`tryConsume`'s ladder) rebuilds.
 		const reused = estimateId ? await this.deps.estimateReuse.tryConsume(estimateId, req, fence, turn.fpc) : undefined
 
@@ -362,47 +363,34 @@ export class TransferExecutor {
 		const built = reused
 			? await this.fromReusedEstimate(reused, req, estimateId, fence)
 			: await this.buildFresh(req, fence, run.task, turn.fpc, sequenceEpoch)
-		if (cap === undefined) return { built }
+		if (figure === undefined) {
+			// Classified by the route the build took, as the dApp path classifies its approvals.
+			const { provenance } = built
+			const fpcIdentity = "entry" in provenance ? provenance.entry.fpcIdentity : provenance.fpcIdentity
+			if (personalPayerOf({ feePaymentMethod: built.feePaymentMethod, fpcIdentity })) throw new Error(MISSING_FEE_FIGURE)
+			return { built }
+		}
 		const fee = getEstimatedFee(built.txRequest)
-		if (BigInt(fee) <= BigInt(cap)) return { built }
+		if (!figureAsks(fee, figure)) return { built }
 		run.release()
 		run.release = undefined
 		run.stashId = this.stashBuild(req, fence.profileId, built)
-		return { over: { stashId: run.stashId, fee, cap, payer: queuedFeePayer(turn.fpc) } }
+		return { over: { stashId: run.stashId, fee, figure, payer: queuedFeePayer(turn.fpc) } }
 	}
 
-	/**
-	 * Asks the person about a fee above the cap and returns once they accept exactly it, the row
-	 * claimed back to `pending`. The waiter exists before the question is published, so an accept
-	 * never arrives first. A ×, a session end, or the send's own deadline ends it as cancelled.
-	 */
-	private async askAgain(run: TransferRun, over: OverCap): Promise<void> {
+	/** Asks the person about a fee above the figure; the send's own line deadline bounds the question. */
+	private askAgain(run: TransferRun, over: OverCap): Promise<void> {
 		const { journalId, controller } = run
-		const answer = this.deps.answers.wait(journalId, over.fee, controller.signal, run.line.ticket.remainingMs())
-		try {
-			await this.moveOwn(journalId, controller, { stage: "queued", reask: { fee: over.fee, cap: over.cap, payer: over.payer } })
-		} catch (err) {
-			this.deps.answers.drop(journalId)
-			throw err
-		}
-		this.deps.logDebug("queued send: fee above its cap, asking again")
-		this.deps.lane.beginQueuedWait(journalId)
-		const result = await answer.finally(() => this.deps.lane.endQueuedWait(journalId))
-		if (result === "aborted") throw new JobCancelledSentinel(journalId)
-		if (result === "expired") {
-			this.deps.logDebug("queued send: unanswered at its deadline, cancelled")
-			await this.moveOwn(journalId, controller, { stage: "cancelled" })
-			throw new JobCancelledSentinel(journalId)
-		}
-		await this.moveOwn(journalId, controller, { stage: "pending" })
-	}
-
-	private async moveOwn(journalId: string, controller: AbortController, progress: JobProgress): Promise<void> {
-		try {
-			await this.deps.transitionJournal(journalId, progress)
-		} catch (err) {
-			throw lostToCancel(err, controller) ? new JobCancelledSentinel(journalId) : err
-		}
+		return askFeeAgain(
+			{
+				answers: this.deps.answers,
+				transitionJournal: (id, progress) => this.deps.transitionJournal(id, progress),
+				beginQueuedWait: (id) => this.deps.lane.beginQueuedWait(id),
+				endQueuedWait: (id) => this.deps.lane.endQueuedWait(id),
+				logDebug: (msg) => this.deps.logDebug(msg),
+			},
+			{ journalId, controller, reask: { fee: over.fee, cap: over.figure.fee, payer: over.payer }, ms: run.line.ticket.remainingMs() },
+		)
 	}
 
 	/** Stashes a build for the accept to reuse. A consumed entry goes back as it was, so its
@@ -496,6 +484,7 @@ export class TransferExecutor {
 			networkId: network.id,
 			feeSpender,
 			priorityLevel: speedOf(req.feeSettings),
+			feeChoice: "wallet",
 		})
 	}
 
@@ -540,7 +529,7 @@ export class TransferExecutor {
 				const fpc = await this.payingFpc(req.feeSettings)
 				if (feeSpenderOf(fpc, line.sequence.scope.chainId) !== line.sequence.feeSpender) {
 					release()
-					await this.reenter(req, line)
+					await this.reenter(req, line, fence.profileId)
 					continue
 				}
 				if (queued) await this.claim(journalId, controller, requeued)
@@ -553,8 +542,8 @@ export class TransferExecutor {
 	}
 
 	/** Takes a new place in line under the keys the request gives now, within the first ticket's deadline. */
-	private async reenter(req: TransferRequest, line: TransferLine): Promise<void> {
-		const next = await this.sequence(req)
+	private async reenter(req: TransferRequest, line: TransferLine, profileId: string): Promise<void> {
+		const next = await this.sequence(req, profileId)
 		const { deadline } = line.ticket
 		line.ticket.release()
 		line.sequence = next
@@ -831,7 +820,6 @@ export class TransferExecutor {
 
 		return {
 			maxFee: maxFeeRaw.toString(),
-			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			...(sponsorFunding ? { sponsorFunding } : {}),

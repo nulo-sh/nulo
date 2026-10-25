@@ -1,6 +1,6 @@
 /**
- * Per-origin admission for dApp handshakes that the wallet will approve without a user gesture
- * (a remembered session) or that will open a verify window.
+ * Per-origin admission for the dApp handshakes the wallet approves, each of which opens a verify
+ * window: a remembered session's, approved without a user gesture, and a new connection's.
  *
  * Two budgets, both keyed on the page origin: a token bucket bounds how fast a remembered origin
  * is re-approved (a reload loop is slowed, not blocked), and a window budget bounds how many verify
@@ -12,9 +12,7 @@
  * A window slot is reserved at admission and released only when the window it produced is gone:
  * releasing on session termination alone would let an origin connect, keep the window, close the
  * tab and reconnect past the cap, and releasing while a creation is in flight would let a
- * replacement open before the original window appears. A connect window that waits for its
- * channel is attached to the slot (standby) and shows the check itself, under the same rule; if its
- * reservation expires first, the window stays open on its expired page until it is closed.
+ * replacement open before the original window appears.
  */
 
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
@@ -35,37 +33,28 @@ export interface AdmissionRequest {
 	readonly origin: string
 	/** Epoch ms after which the dApp no longer listens for the approval. */
 	readonly deadline: number
-	/** Whether establishment will open a verify window for this handshake. */
-	readonly needsWindow: boolean
 	/** Whether this handshake counts against the origin's reconnect rate (a user-approved
 	 *  connect popup does not; a remembered-session auto-approval does). */
 	readonly consumesToken: boolean
 }
 
 export type AdmissionOutcome = "now" | "queued" | "rejected"
-export type AdmissionRun = (reservation: WindowReservation | undefined) => void
+export type AdmissionRun = (reservation: WindowReservation) => void
 
 export type AdmissionClock = Pick<ClockPort, "now" | "setTimeout" | "clearTimeout">
 
 /** What the gate asks of the worker that hosts it. */
 export interface AdmissionHooks {
-	/** Close a standby window whose attempt was given up. Best effort: its removal frees the slot. */
-	closeWindow(windowId: number): void
-	/** Load `url` in a standby window. Rejects when the window or its tab is gone. */
-	navigateWindow(windowId: number, url: string): Promise<void>
-	/** The reservation for `id` expired with its window kept open: `id` can no longer establish. */
-	expired(id: string): void
-	/** The slot reserved for `id` was given back. */
+	/** The slot reserved for `id` was given back, by its window's removal, its expiry or its attempt. */
 	released(id: string): void
 }
 
-type ReservationState = "unstarted" | "standby" | "in-flight" | "opened" | "closing" | "released"
+type ReservationState = "unstarted" | "in-flight" | "opened" | "released"
 
 /** One reserved verify-window slot, held from admission until its window is removed. */
 export class WindowReservation {
 	private state: ReservationState = "unstarted"
 	private cancelled = false
-	private expiredUrl: string | undefined
 	public windowId: number | undefined
 
 	public constructor(
@@ -76,55 +65,21 @@ export class WindowReservation {
 		private readonly release: (r: WindowReservation) => void,
 		/** Consumes a removal that arrived before this reservation knew its window id. */
 		private readonly consumeRemoval: (windowId: number) => boolean,
-		private readonly hooks: Omit<AdmissionHooks, "released">,
 	) {}
 
 	public get status(): ReservationState {
 		return this.state
 	}
 
-	/** Closing or released: the attempt can no longer show its check. */
 	public get abandoned(): boolean {
-		return this.state === "closing" || this.state === "released"
+		return this.state === "released"
 	}
 
-	/** Nothing has claimed the slot yet, so its expiry reclaims it. */
-	public get unclaimed(): boolean {
-		return this.state === "unstarted" || this.state === "standby"
-	}
-
-	/** Give the slot back while no window creation has been issued. `false` once one has. A standby
-	 *  window is closed instead, and its removal frees the slot. */
+	/** Give the slot back while no window creation has been issued. `false` once one has. */
 	public releaseIfUnstarted(): boolean {
-		if (this.state === "standby") {
-			this.closeStandby()
-			return true
-		}
 		if (this.state !== "unstarted") return false
 		this.finish()
 		return true
-	}
-
-	/** Bind the connect window that waits for this session's channel: from here the slot follows it.
-	 *  `expiredUrl` is the page it shows if the reservation expires; without one it is closed then.
-	 *  `false` when the slot is not unstarted, or when the window is already gone, which frees it. */
-	public attach(windowId: number, expiredUrl?: string): boolean {
-		if (this.state !== "unstarted") return false
-		this.windowId = windowId
-		this.expiredUrl = expiredUrl
-		if (this.consumeRemoval(windowId)) {
-			this.finish()
-			return false
-		}
-		this.state = "standby"
-		return true
-	}
-
-	/** Claim the standby window for the check: its id once, then `undefined`. Adopt it after. */
-	public claimStandby(): number | undefined {
-		if (this.state !== "standby") return undefined
-		this.state = "in-flight"
-		return this.windowId
 	}
 
 	/** Claim the slot for one window creation. `false` if the slot is not claimable (already
@@ -157,12 +112,10 @@ export class WindowReservation {
 		if (this.state === "in-flight") this.finish()
 	}
 
-	/** The session behind this slot is gone: an unstarted slot is freed, a standby window closed,
-	 *  an in-flight creation marked so its window is closed on arrival, and an open window keeps
-	 *  the slot until it closes. */
+	/** The session behind this slot is gone: an unstarted slot is freed, an in-flight creation
+	 *  marked so its window is closed on arrival, and an open window keeps the slot until it closes. */
 	public cancel(): void {
 		if (this.state === "unstarted") this.finish()
-		else if (this.state === "standby") this.closeStandby()
 		else if (this.state === "in-flight") this.cancelled = true
 	}
 
@@ -174,35 +127,10 @@ export class WindowReservation {
 		return true
 	}
 
-	/** Only an unclaimed reservation is reclaimed on a timer; a claimed or closing one settles on
-	 *  its own creation or removal, so the drain never re-selects it (which would spin the timer). */
+	/** Only an unstarted reservation is reclaimed on a timer; a claimed one settles on its own
+	 *  creation or removal, so the drain never re-selects it (which would spin the timer). */
 	public expiredUnclaimed(now: number): boolean {
-		return this.unclaimed && now > this.expiresAt
-	}
-
-	/** Reclaim an unclaimed reservation past its expiry. An unstarted slot is freed. A standby window
-	 *  keeps the slot and shows its expired page, so the person learns why the attempt ended; its
-	 *  removal frees the slot, and a window that cannot load the page is closed instead. */
-	public expire(): void {
-		if (this.state === "unstarted") {
-			this.finish()
-			return
-		}
-		if (this.state !== "standby" || this.expiredUrl === undefined) {
-			this.releaseIfUnstarted()
-			return
-		}
-		const windowId = this.windowId as number
-		// Closing before the hook and the navigation: a late establishment then claims no window.
-		this.state = "closing"
-		this.hooks.expired(this.id)
-		this.hooks.navigateWindow(windowId, this.expiredUrl).catch(() => this.hooks.closeWindow(windowId))
-	}
-
-	private closeStandby(): void {
-		// The state changes first: a port that reports the removal synchronously finds it closing.
-		this.state = "closing"
-		if (this.windowId !== undefined) this.hooks.closeWindow(this.windowId)
+		return this.state === "unstarted" && now > this.expiresAt
 	}
 
 	private finish(): void {
@@ -227,11 +155,11 @@ interface OriginState {
 export class VerifyAdmissionGate {
 	private readonly origins = new Map<string, OriginState>()
 	private readonly reservations = new Map<string, WindowReservation>()
-	/** Window-needing request ids currently queued or holding a reservation — a dApp-controlled id
+	/** Request ids currently queued or holding a reservation — a dApp-controlled id
 	 *  that is already live must not acquire a second slot (it would overwrite the first, which then
 	 *  can never decrement the counters). */
 	private readonly liveWindowIds = new Set<string>()
-	/** Window ids removed before a reservation knew them, awaiting `adopt` or `attach` (bounded). */
+	/** Window ids removed before a reservation knew them, awaiting `adopt` (bounded). */
 	private readonly recentRemovals = new Set<number>()
 	private globalWindows = 0
 	private timer: TimerHandle | undefined
@@ -242,12 +170,12 @@ export class VerifyAdmissionGate {
 	) {}
 
 	/**
-	 * Admit `req` now (`run` is invoked synchronously with the window reservation, if one was
-	 * requested), queue it (`run` or `expire` is invoked later from the drain), or reject it
-	 * outright when the origin's queue is full.
+	 * Admit `req` now (`run` is invoked synchronously with its window reservation), queue it (`run`
+	 * or `expire` is invoked later from the drain), or reject it outright when the origin's queue is
+	 * full.
 	 */
 	public admit(req: AdmissionRequest, run: AdmissionRun, expire: () => void): AdmissionOutcome {
-		if (req.needsWindow && this.liveWindowIds.has(req.id)) return "rejected"
+		if (this.liveWindowIds.has(req.id)) return "rejected"
 		const origin = this.originState(req.origin)
 		this.refill(origin)
 		if (this.fits(origin, req)) {
@@ -256,7 +184,7 @@ export class VerifyAdmissionGate {
 		}
 		if (origin.queue.length >= ADMISSION_QUEUE_PER_ORIGIN) return "rejected"
 		origin.queue.push({ req, run, expire })
-		if (req.needsWindow) this.liveWindowIds.add(req.id)
+		this.liveWindowIds.add(req.id)
 		this.arm()
 		return "queued"
 	}
@@ -272,12 +200,11 @@ export class VerifyAdmissionGate {
 
 	public windowRemoved(windowId: number): void {
 		for (const r of this.reservations.values()) if (r.windowRemoved(windowId)) return
-		// No reservation owns this id yet: an in-flight creation may adopt it next, or a connect window
-		// whose Allow still queues for a slot may attach it, tens of seconds later. Buffered so either
-		// frees its slot at once instead of holding it for a window already gone. Overflowing the bound
-		// in that wait is unlikely, not impossible, and fail-closed: the affected slot stays held until
-		// the worker restarts, never exceeding the cap, because `WindowPort` cannot confirm a window's
-		// absence and a wrong release would.
+		// No reservation owns this id yet: an in-flight creation may adopt it next. Buffered so it frees
+		// its slot at once instead of holding it for a window already gone. Overflowing the bound is
+		// unlikely, not impossible, and fail-closed: the affected slot stays held until the worker
+		// restarts, never exceeding the cap, because `WindowPort` cannot confirm a window's absence and
+		// a wrong release would.
 		this.recentRemovals.add(windowId)
 		if (this.recentRemovals.size > 64) this.recentRemovals.delete(this.recentRemovals.values().next().value as number)
 	}
@@ -317,13 +244,11 @@ export class VerifyAdmissionGate {
 
 	private fits(origin: OriginState, req: AdmissionRequest): boolean {
 		if (req.consumesToken && origin.tokens < 1) return false
-		if (req.needsWindow && (origin.windows >= VERIFY_WINDOWS_PER_ORIGIN || this.globalWindows >= VERIFY_WINDOWS_GLOBAL)) return false
-		return true
+		return origin.windows < VERIFY_WINDOWS_PER_ORIGIN && this.globalWindows < VERIFY_WINDOWS_GLOBAL
 	}
 
-	private consume(origin: OriginState, req: AdmissionRequest): WindowReservation | undefined {
+	private consume(origin: OriginState, req: AdmissionRequest): WindowReservation {
 		if (req.consumesToken) origin.tokens -= 1
-		if (!req.needsWindow) return undefined
 		origin.windows += 1
 		this.globalWindows += 1
 		this.liveWindowIds.add(req.id)
@@ -333,7 +258,6 @@ export class VerifyAdmissionGate {
 			req.deadline + RESERVATION_GRACE_MS,
 			(r) => this.released(r),
 			(windowId) => this.recentRemovals.delete(windowId),
-			this.hooks,
 		)
 		this.reservations.set(req.id, reservation)
 		this.arm()
@@ -353,7 +277,7 @@ export class VerifyAdmissionGate {
 
 	private serve(): void {
 		const now = this.clock.now()
-		for (const r of [...this.reservations.values()]) if (r.expiredUnclaimed(now)) r.expire()
+		for (const r of [...this.reservations.values()]) if (r.expiredUnclaimed(now)) r.releaseIfUnstarted()
 		for (const [name, origin] of this.origins) {
 			this.refill(origin)
 			this.drain(origin, now)
@@ -367,7 +291,7 @@ export class VerifyAdmissionGate {
 			const head = origin.queue[0]
 			if (now > head.req.deadline) {
 				origin.queue.shift()
-				if (head.req.needsWindow) this.liveWindowIds.delete(head.req.id)
+				this.liveWindowIds.delete(head.req.id)
 				head.expire()
 				continue
 			}
@@ -387,7 +311,7 @@ export class VerifyAdmissionGate {
 			if (origin.tokens < RECONNECT_TOKENS) consider(origin.refilledAt + RECONNECT_REFILL_MS)
 			consider(origin.queue[0].req.deadline + 1)
 		}
-		for (const r of this.reservations.values()) if (r.unclaimed) consider(r.expiresAt + 1)
+		for (const r of this.reservations.values()) if (r.status === "unstarted") consider(r.expiresAt + 1)
 		return next
 	}
 
@@ -409,10 +333,7 @@ export class VerifyAdmissionGate {
 }
 
 /** Promise form for the async approval sites: resolves with the reservation once admitted. */
-export function admitAsync(
-	gate: VerifyAdmissionGate,
-	req: AdmissionRequest,
-): Promise<WindowReservation | undefined | "rejected" | "expired"> {
+export function admitAsync(gate: VerifyAdmissionGate, req: AdmissionRequest): Promise<WindowReservation | "rejected" | "expired"> {
 	return new Promise((resolve) => {
 		const outcome = gate.admit(
 			req,

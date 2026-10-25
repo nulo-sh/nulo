@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
-import { aggregateFiat } from "./token-aggregate"
+import { ref } from "vue"
+import { aggregateFiat, awaitingFirstPriceAnswer, isPriceableHolding, type PriceMapping, pricesUnavailable } from "./token-aggregate"
 
 type Row = { publicBalance?: string; privateBalance?: string; token: { symbol: string; decimals: number } }
 const row = (symbol: string, pub = "0", priv = "0"): Row => ({ publicBalance: pub, privateBalance: priv, token: { symbol, decimals: 6 } })
@@ -62,5 +63,78 @@ describe("aggregateFiat — row reads", () => {
 		}
 		aggregateFiat([counted], () => 1n)
 		expect(reads).toEqual({ pub: 1, priv: 1 })
+	})
+})
+
+describe("isPriceableHolding, pricesUnavailable and awaitingFirstPriceAnswer", () => {
+	type Held = { publicBalance: string; privateBalance: string; token: { chainId: number; contract: string; decimals: number } }
+	const held = (contract: string, pub = "5"): Held => ({
+		publicBalance: pub,
+		privateBalance: "0",
+		token: { chainId: 1, contract, decimals: 6 },
+	})
+	const mapping = (mapped: boolean): PriceMapping => ({
+		mapped: ref(mapped),
+		isPriced: (_chain, contract) => contract === "0xp" || contract === "0xq",
+	})
+	const quoted = (micro: Record<string, bigint | undefined>) => (tb: Held) => micro[tb.token.contract]
+
+	test.each([
+		{
+			name: "a priced holding with no quote",
+			rows: [held("0xp")],
+			mapped: true,
+			quotes: {},
+			priceable: [true],
+			unavailable: true,
+			awaiting: true,
+		},
+		{
+			name: "one quote among priced holdings",
+			rows: [held("0xp"), held("0xq")],
+			mapped: true,
+			quotes: { "0xp": 5n },
+			priceable: [true, true],
+			unavailable: false,
+			awaiting: true,
+		},
+		{ name: "nothing held", rows: [], mapped: true, quotes: {}, priceable: [], unavailable: false, awaiting: false },
+		{
+			name: "unpriced holdings only",
+			rows: [held("0xu")],
+			mapped: true,
+			quotes: {},
+			priceable: [false],
+			unavailable: false,
+			awaiting: false,
+		},
+		{
+			name: "before the mapping, any holding",
+			rows: [held("0xu")],
+			mapped: false,
+			quotes: {},
+			priceable: [true],
+			unavailable: true,
+			awaiting: true,
+		},
+		{
+			name: "a zero balance",
+			rows: [held("0xp", "0")],
+			mapped: true,
+			quotes: {},
+			priceable: [false],
+			unavailable: false,
+			awaiting: false,
+		},
+	])("$name", ({ rows, mapped, quotes, priceable, unavailable, awaiting }) => {
+		const prices = mapping(mapped)
+		expect(rows.map((tb) => isPriceableHolding(tb, prices))).toEqual(priceable)
+		expect(pricesUnavailable(rows, quoted(quotes), prices)).toBe(unavailable)
+		expect(awaitingFirstPriceAnswer(rows, { ...prices, settled: ref(false) })).toBe(awaiting)
+	})
+
+	test("once the first price answer or its rejection is in, no holding waits for one", () => {
+		expect(awaitingFirstPriceAnswer([held("0xp")], { ...mapping(true), settled: ref(true) })).toBe(false)
+		expect(awaitingFirstPriceAnswer([held("0xu")], { ...mapping(false), settled: ref(true) })).toBe(false)
 	})
 })

@@ -6,13 +6,16 @@ run-name: "publish-token-list ← ${{ github.event_name }} at ${{ github.sha }}"
 # - `prepare` holds no secret: it runs the tree invariants and writes the review summary (token diff,
 #   the tokens digest `sign` will hold to, and every signing-relevant change since the last publish).
 #   The `token-list` environment approves a run, not its code: read the summary before approving.
+#   Its advisory live check reads each entry from a keyless public node; no failure of it blocks
+#   `sign`, which it delays by at most its 5 min timeout.
 # - `sign` runs in the `token-list` environment (owner reviewer, branch `dev`), reads its secret in
 #   one step, installs nothing and runs the signer with `bun --no-install`; the signer's import
 #   closure is pinned to `node:` and its own package. It refuses any token set but the summary's,
 #   a sequence not above the served one, and a key that is not the pinned `nulo-ci-1`.
-# - `publish-pr` mints the release App token (contents and pull-requests write), commits the envelope
-#   on `token-list-publish-<sequence>` through createCommitOnBranch (GitHub-signed, so the PR's CI
-#   runs and re-verifies it), opens the PR into dev and closes older publish PRs.
+# - `publish-pr` runs in the `release-app` environment, which holds the release App's key, mints its
+#   token (contents and pull-requests write), commits the envelope on `token-list-publish-<sequence>`
+#   through createCommitOnBranch (GitHub-signed, so the PR's CI runs and re-verifies it), opens the
+#   PR into dev and closes older publish PRs.
 #
 # `gh workflow run publish-token-list.yml --ref dev`
 
@@ -51,6 +54,11 @@ jobs:
       - name: Review summary
         id: summary
         run: bun infra/token-list/scripts/summary.ts >> "$GITHUB_STEP_SUMMARY"
+      # Committed and pinned in behavior-gating.test.ts: the node URL must carry no key.
+      - name: Live check (advisory)
+        continue-on-error: true
+        timeout-minutes: 5
+        run: bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"
 
   sign:
     name: sign (owner approval)
@@ -81,7 +89,7 @@ jobs:
         run: |
           mkdir -p dist
           bun --no-install packages/token-list/src/sign-cli.ts --source infra/token-list/list.source.json --published infra/token-list/public/v1/list.json --out dist/list.json --expect-tokens-sha256 "$EXPECT_TOKENS" | tee -a "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: token-list-envelope
           path: dist/list.json
@@ -93,6 +101,7 @@ jobs:
     needs: sign
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: release-app
     permissions:
       contents: read
     steps:
@@ -104,13 +113,13 @@ jobs:
         with:
           cache: "false"
           install: "false"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: token-list-envelope
           path: dist
       - name: Mint the publish token
         id: app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}

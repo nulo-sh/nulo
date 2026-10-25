@@ -11,6 +11,7 @@
 <script setup>
 /** Components */
 import BalanceView from "../../components/modules/general/BalanceView.vue"
+import FlaggedTokenBanner from "../../components/modules/general/FlaggedTokenBanner.vue"
 import RecentActivityView from "../../components/modules/general/RecentActivityView.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { Dropdown } from "@/components/ui/Dropdown"
@@ -21,14 +22,20 @@ import { DateTime } from "luxon"
 /** Services */
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
+import { useConfirm } from "@/composables/useConfirm"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
+import { usePrices } from "@/composables/usePrices"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { copyWithToast } from "@/utils/clipboard"
+import { dashIfBlank, isBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Store */
@@ -45,6 +52,7 @@ const router = useRouter()
 const token = ref()
 const tokenBalance = ref()
 const isRefreshingBalance = ref(false)
+const scrolled = ref(false)
 
 const tokenService = new TokenServiceClient()
 tokenService.onTokenDeleted.add(onTokenDeleted)
@@ -60,6 +68,11 @@ function onBalanceUpdated(tb) {
 	if (tb.id !== tokenBalance.value?.id) return
 	tokenBalance.value = tb
 }
+
+/** The signed list's flags reach the page with the price snapshot. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+const isFlagged = computed(() => prices.isFlagged(token.value))
 
 /** Read the currently-cached balance for this (token, account). Fast path
  *  for first paint — the actual refresh is fired separately via `scheduleRefresh()`. */
@@ -101,6 +114,10 @@ watch(
 	},
 )
 
+function onScroll(event) {
+	scrolled.value = event.currentTarget.scrollTop > 0
+}
+
 /** Trailing actions */
 const handleRefreshBalance = () => scheduleRefresh()
 
@@ -113,6 +130,7 @@ const scope = () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId)
 // still counts toward the cap and is never pruned.
 const pins = usePinnedTokens({
 	tokenService,
+	preferences: managers.uiPreference,
 	getScope: scope,
 	knownContracts: async () => {
 		const s = scope()
@@ -135,15 +153,14 @@ const showHomeFull = async () => {
 	const still = scope()
 	if (unmounted || token.value !== subject || still?.profileId !== s.profileId || still.chainId !== s.chainId) return
 	if (popupStore.isOpened("confirm")) return
-	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), sanitizeWireString(t.symbol, 32)]))
+	const symbolOf = new Map(tokens.map((t) => [t.contract.toLowerCase(), dashIfBlank(sanitizeWireString(t.symbol, 32))]))
 	const pinned = [...pins.pinnedContracts.value].map((c) => symbolOf.get(c)).filter((x) => x !== undefined)
-	cacheStore.confirm = {
+	requestConfirm({
 		single: true,
 		title: "Home is full",
-		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
+		description: `Home shows up to 3 pinned tokens. Unpin one of these to pin ${isBlank(subject.symbol) ? "this token" : sanitizeWireString(subject.symbol, 32)}: ${pinned.join(", ")}`,
 		confirm_text: "Got it",
-	}
-	popupStore.open("confirm")
+	})
 }
 
 const handleTogglePin = async () => {
@@ -159,13 +176,14 @@ const handleTogglePin = async () => {
 }
 
 const handleDeleteToken = () => {
-	cacheStore.confirm.description = "Removing a token only affects the display in the UI and it does not affect the token balance"
-	cacheStore.confirm.callback = async () => {
-		await tokenService.deleteToken(token.value.id)
-		router.push("/popup/general")
-		openToast({ kind: "success", label: "Token successfully deleted" })
-	}
-	popupStore.open("confirm")
+	requestConfirm({
+		description: "Removing a token only affects the display in the UI and it does not affect the token balance",
+		callback: async () => {
+			await tokenService.deleteToken(token.value.id)
+			router.push("/popup/general")
+			openToast({ kind: "success", label: "Token successfully deleted" })
+		},
+	})
 }
 
 onMounted(async () => {
@@ -194,6 +212,8 @@ onBeforeUnmount(() => {
 	unmounted = true
 	tokenService.disconnect()
 	tokenBalanceService.disconnect()
+	prices.dispose()
+	priceService.disconnect()
 	pins.dispose()
 	cacheStore.activeTokenIdx = null
 })
@@ -201,99 +221,127 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
-		<SubPageHeader
-			:title="token?.symbol || ''"
-			:backTo="'/popup/general'"
-			leadingIcon="account_balance_wallet"
-		>
-			<template #trailing>
-				<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
-					<button
-						@click="handleRefreshBalance"
-						type="button"
-						:disabled="isRefreshingBalance"
-						:class="$style.icon_btn"
-						aria-label="Refresh balance"
-					>
-						<MaterialIcon name="refresh" :size="18" color="secondary" />
-					</button>
-
-					<template #content>
-						<Text color="secondary">Latest balance refresh - </Text>
-						<Text>{{ DateTime.fromSeconds(tokenBalance?.updatedAt / 1_000).toRelative({ locale: "en" }) }}</Text>
-					</template>
-				</Tooltip>
-
-				<Dropdown>
-					<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
-						<MaterialIcon name="more_vert" :size="18" color="secondary" />
-					</button>
-
-					<template #popup>
-						<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
-							<Flex align="center" gap="8">
-								<MaterialIcon name="push_pin" :size="14" color="primary" />
-								{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
-							</Flex>
-						</DropdownItem>
-						<DropdownItem @click="handleCopy(token?.contract, 'Token address')">
-							<Flex align="center" gap="8">
-								<Icon name="copy" size="14" color="primary" />
-								Copy address
-							</Flex>
-						</DropdownItem>
-						<DropdownItem @click="popupStore.open('token_metadata')">
-							<Flex align="center" gap="8">
-								<Icon name="code-circle" size="14" color="primary" />
-								Show metadata
-							</Flex>
-						</DropdownItem>
-						<DropdownItem
-							@click="router.push('/popup/settings/contacts')"
-							data-testid="token-manage-contacts"
+		<div :class="$style.hero" data-testid="token-hero">
+			<SubPageHeader
+				:title="token ? dashIfBlank(token.symbol) : ''"
+				:backTo="'/popup/general'"
+				leadingIcon="holdings"
+			>
+				<template #trailing>
+					<Tooltip position="end" :disabled="isRefreshingBalance || !tokenBalance?.updatedAt">
+						<button
+							@click="handleRefreshBalance"
+							type="button"
+							:disabled="isRefreshingBalance"
+							:class="$style.icon_btn"
+							aria-label="Refresh balance"
 						>
-							<Flex align="center" gap="8">
-								<Icon name="user" size="14" color="primary" />
-								Manage contacts
-							</Flex>
-						</DropdownItem>
-						<DropdownDivider />
-						<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
-							<Flex align="center" gap="8">
-								<Icon name="trash" size="14" color="primary" />
-								<Text>Remove token</Text>
-							</Flex>
-						</DropdownItem>
-					</template>
-				</Dropdown>
-			</template>
-		</SubPageHeader>
+							<Icon name="refresh" :size="18" color="secondary" />
+						</button>
 
-		<BalanceView :tokenBalance />
+						<template #content>
+							<Text color="secondary">Latest balance refresh - </Text>
+							<Text>{{ DateTime.fromSeconds(tokenBalance?.updatedAt / 1_000).toRelative({ locale: "en" }) }}</Text>
+						</template>
+					</Tooltip>
 
-		<Flex direction="column" justify="between" :class="$style.content">
-			<Flex direction="column" gap="32">
-				<Banner v-if="!token?.hasPublicTransfers && !token?.hasPrivateTransfers" variant="warning">
-					Private and public transfers disabled
-				</Banner>
+					<Dropdown>
+						<button type="button" :class="$style.icon_btn" aria-label="Token actions" data-testid="token-menu-trigger">
+							<Icon name="more" :rotate="90" :size="18" color="secondary" />
+						</button>
 
+						<template #popup>
+							<DropdownItem @click="handleTogglePin" data-testid="token-menu-pin" :data-pinned="isPinned ? 'true' : 'false'">
+								<Flex align="center" gap="8">
+									<Icon name="pin" :size="14" color="primary" />
+									{{ isPinned ? "Unpin from Home" : "Pin to Home" }}
+								</Flex>
+							</DropdownItem>
+							<DropdownItem @click="handleCopy(token?.contract, 'Token address')">
+								<Flex align="center" gap="8">
+									<Icon name="copy" size="14" color="primary" />
+									Copy address
+								</Flex>
+							</DropdownItem>
+							<DropdownItem @click="popupStore.open('token_metadata')" data-testid="token-menu-metadata">
+								<Flex align="center" gap="8">
+									<Icon name="code" size="14" color="primary" />
+									Show metadata
+								</Flex>
+							</DropdownItem>
+							<DropdownItem
+								@click="router.push('/popup/settings/contacts')"
+								data-testid="token-manage-contacts"
+							>
+								<Flex align="center" gap="8">
+									<Icon name="user" size="14" color="primary" />
+									Manage contacts
+								</Flex>
+							</DropdownItem>
+							<DropdownDivider />
+							<DropdownItem @click="handleDeleteToken" :class="$style.hover_red">
+								<Flex align="center" gap="8">
+									<Icon name="remove" size="14" color="primary" />
+									<Text>Remove token</Text>
+								</Flex>
+							</DropdownItem>
+						</template>
+					</Dropdown>
+				</template>
+			</SubPageHeader>
+
+			<div v-if="isFlagged" :class="$style.flagged">
+				<FlaggedTokenBanner />
+			</div>
+
+			<BalanceView :tokenBalance />
+
+			<div v-if="!token?.hasPublicTransfers && !token?.hasPrivateTransfers" :class="$style.warning">
+				<Banner variant="warning">Private and public transfers disabled</Banner>
+			</div>
+			<div aria-hidden="true" :class="[$style.scroll_shadow, scrolled && $style.scroll_shadow_visible]" data-testid="token-scroll-shadow" />
+		</div>
+
+		<div :class="$style.scroller" data-testid="token-scroller" @scroll.passive="onScroll">
+			<Flex direction="column" :class="$style.content">
 				<RecentActivityView :token />
 			</Flex>
-		</Flex>
-
+		</div>
 	</Flex>
 </template>
 
 <style module>
 .wrapper {
-	flex: 1;
-	overflow: auto;
-	background: var(--app-bg);
-	scrollbar-gutter: stable;
+	composes: wrapper from "../pinned-hero.module.css";
+}
+
+.hero {
+	composes: hero from "../pinned-hero.module.css";
+}
+
+.scroll_shadow {
+	composes: scroll_shadow from "../pinned-hero.module.css";
+}
+
+.scroll_shadow_visible {
+	composes: scroll_shadow_visible from "../pinned-hero.module.css";
+}
+
+.scroller {
+	composes: scroller from "../pinned-hero.module.css";
+}
+
+/* Inset as BalanceView and the page's other banners are. */
+.flagged {
+	padding: 0 24px 16px;
+}
+
+/* With the content's 24px top padding, 32px between the warning and the activity. */
+.warning {
+	padding: 24px 24px 8px;
 }
 
 .content {
-	flex: 1;
 	padding: 24px 24px var(--nav-clearance) 24px;
 }
 
@@ -313,8 +361,8 @@ onBeforeUnmount(() => {
 	}
 
 	&:hover {
-		svg { fill: var(--red); }
-		span { color: var(--red); }
+		svg { color: var(--red); }
+		span { color: var(--txt-danger); }
 	}
 }
 </style>

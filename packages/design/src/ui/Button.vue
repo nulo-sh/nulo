@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, type PropType, useCssModule } from "vue"
 import Icon from "../core/Icon.vue"
+import type { GlyphName } from "../core/glyphs"
 import Spinner from "./Spinner.vue"
 import type { TextColorName } from "../color-names"
 
@@ -65,7 +66,7 @@ const props = defineProps({
 		required: false,
 	},
 	leftIcon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 		required: false,
 	},
 	leftIconColor: {
@@ -73,7 +74,7 @@ const props = defineProps({
 		required: false,
 	},
 	rightIcon: {
-		type: String,
+		type: String as PropType<GlyphName>,
 		required: false,
 	},
 	rightIconColor: {
@@ -278,7 +279,6 @@ const rel = computed(() => {
 .wrapper.primary {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
-	fill: var(--txt-inverse);
 }
 .wrapper.primary:hover:not(.disabled):not(.loading) {
 	background: color-mix(in srgb, var(--nulo-accent), var(--txt-primary) 18%);
@@ -287,7 +287,6 @@ const rel = computed(() => {
 .wrapper.destructive {
 	background: var(--btn-destructive);
 	color: var(--txt-white);
-	fill: var(--txt-white);
 }
 /* Toward black in both themes: a mix toward the text colour lightens it in the dark one, below AA. */
 .wrapper.destructive:hover:not(.disabled):not(.loading),
@@ -301,7 +300,6 @@ const rel = computed(() => {
 .wrapper.primary_outline {
 	background: transparent;
 	color: var(--txt-primary);
-	fill: var(--txt-primary);
 	border: 2px solid var(--nulo-outline);
 }
 .wrapper.primary_outline:hover:not(.disabled):not(.loading) {
@@ -368,12 +366,49 @@ const rel = computed(() => {
 	padding: 14px 0;
 }
 
+/* Below the popup's width a label wraps to a second line rather than being cut, and its button
+ * grows to hold it. Each selector matches the rule it overrides, so it wins by order. */
+@media (width < 359px) {
+	.wrapper {
+		white-space: normal;
+		text-align: center;
+	}
+
+	.wrapper.large {
+		height: auto;
+		min-height: 48px;
+	}
+
+	.wrapper.small {
+		height: auto;
+		min-height: 32px;
+	}
+
+	.wrapper.mini {
+		height: auto;
+		min-height: 26px;
+	}
+
+	.wrapper.micro {
+		height: auto;
+		min-height: 20px;
+	}
+
+	.wrapper.cta,
+	.wrapper.cta_outline,
+	.wrapper.cta_destructive,
+	.wrapper.cta.compact,
+	.wrapper.cta_outline.compact,
+	.wrapper.cta_destructive.compact {
+		padding-inline: 8px;
+	}
+}
+
 /** CTA — full-width brutalist call-to-action for primary page-level
  *  submits (Continue, Decrypt Backup, Import, Confirm). */
 .wrapper.cta {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
-	fill: var(--txt-inverse);
 	border: none;
 }
 .wrapper.cta:hover:not(.disabled):not(.loading) {
@@ -390,7 +425,6 @@ const rel = computed(() => {
 .wrapper.cta_outline {
 	background: transparent;
 	color: var(--nulo-secondary);
-	fill: var(--nulo-secondary);
 	border: 1px solid var(--nulo-outline);
 }
 .wrapper.cta_outline:hover:not(.disabled):not(.loading) {
@@ -404,7 +438,6 @@ const rel = computed(() => {
 .wrapper.cta_destructive {
 	background: var(--btn-destructive);
 	color: var(--txt-white);
-	fill: var(--txt-white);
 	border: none;
 }
 

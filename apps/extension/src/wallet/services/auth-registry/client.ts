@@ -15,6 +15,7 @@ export interface AuthRegistryServiceClient extends MethodsSpec<Methods> {}
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: the merged interface's methods ARE installed — at runtime by definePassthroughsExhaustive below, whose signature proves the name list covers every Methods key, so no advertised method is missing.
 export class AuthRegistryServiceClient extends ServiceClient<Methods, Events> implements ServiceSpec<Methods, Events> {
 	public readonly onAuthwitAdded = new EventHandler<Authwit>()
+	public readonly onAuthwitUpdated = new EventHandler<Authwit>()
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()

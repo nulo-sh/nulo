@@ -10,15 +10,22 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
-import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import {
+	AuthRegistryRefusalError,
+	DuplicateInitializationError,
+	ScopeViolationError,
+	SessionEndedError,
+	TooManyPendingError,
+} from "@nulo/extension-messaging/errors"
 import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
+import type { JournalRetitle } from "@/wallet/services/operation-journal/spec"
 import { assertSelectorBinding, AUTHWIT_CALL_BINDING, CALL_BINDING } from "./contract-resolver"
 import { failureKind, markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 
 function fakeLane() {
 	return {
 		markJournal: vi.fn(
-			async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null, _failedTitle?: string) => {},
+			async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null, _retitle?: JournalRetitle) => {},
 		),
 	}
 }
@@ -91,6 +98,15 @@ describe("markFailedUnlessCancelled", () => {
 		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "scope_refused"), undefined)
 	})
 
+	test("a registry refusal on a dApp send records registry_refused", async () => {
+		const lane = fakeLane()
+		const error = new AuthRegistryRefusalError(
+			"Scope violation: a transaction's authorization request targets the authorization registry",
+		)
+		await markFailedUnlessCancelled(error, "j1", lane)
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "registry_refused"), undefined)
+	})
+
 	test("a call-binding refusal retitles the record in its failing write; an inner call or a plain failure never does", async () => {
 		const transfer = { name: "transfer_public_to_public" } as FunctionAbi
 		const cases: Array<[label: string, error: unknown, title: string | undefined]> = [
@@ -103,7 +119,7 @@ describe("markFailedUnlessCancelled", () => {
 		for (const [label, error, title] of cases) {
 			const lane = fakeLane()
 			await markFailedUnlessCancelled(error, "j1", lane)
-			expect({ label, title: lane.markJournal.mock.calls[0]?.[3] }).toEqual({ label, title })
+			expect({ label, title: lane.markJournal.mock.calls[0]?.[3]?.title }).toEqual({ label, title })
 		}
 	})
 
@@ -111,6 +127,11 @@ describe("markFailedUnlessCancelled", () => {
 		expect(failureKind(new ScopeViolationError("Scope violation: call name does not match selector's function"), "transfer")).toBe(
 			"transfer",
 		)
+	})
+
+	test("the waiting-sends cap keeps its own kind on a first-party Send, as on a dApp's", () => {
+		expect(failureKind(new TooManyPendingError(), "transfer")).toBe("too_many_pending")
+		expect(failureKind(new Error("boom"), "transfer")).toBe("transfer")
 	})
 
 	test("any other error keeps the dapp_execute kind", async () => {

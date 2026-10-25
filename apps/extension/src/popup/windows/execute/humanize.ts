@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { dashIfBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 /**
  * Operation-kind humanizer for the execute popup window.
@@ -42,3 +43,6 @@ export function humanizeOperationKind(kind: string): string {
 
 /** A wire string with control characters stripped and, past `max` code points, truncated with an ellipsis; "" when absent. */
 export const safeWire = (s: string | undefined, max: number): string => (s ? sanitizeWireString(s, max) : "")
+
+/** `safeWire`'s output, or the empty-value "—" when nothing but whitespace survives the strip, judged before the length cap. */
+export const safeWireOrDash = (s: string | undefined, max: number): string => safeWire(dashIfBlank(s), max)

@@ -5,6 +5,7 @@
  *
  * Mounted shallow so `TokenCard` / `TokenSeedRow` are stubs whose props are read directly.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
@@ -50,6 +51,10 @@ const H = vi.hoisted(() => {
 	}
 })
 
+vi.mock("@/utils/core", async (importOriginal) => {
+	const { chromeUiPreferences } = await import("../../../../../tests/helpers/ui-preference-fake")
+	return { ...(await importOriginal<typeof import("@/utils/core")>()), managers: { uiPreference: chromeUiPreferences() } }
+})
 vi.mock("@/wallet/services/task/client", () => ({
 	TaskServiceClient: vi.fn(function () {
 		return {
@@ -117,14 +122,6 @@ import TokensView from "./TokensView.vue"
 beforeEach(() => {
 	installChromeStorage()
 })
-
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
 
 const CONTRACT = "0xtokenA"
 const balanceRow = (contract = CONTRACT) => ({
@@ -745,15 +742,6 @@ describe("TokensView — the balance snapshot's fences", () => {
 	const OTHER = "0xother"
 	const emptyState = (w: ReturnType<typeof mount>) => w.find('[data-testid="tokens-empty-import-link"]').exists()
 	const calls = () => H.getTokenBalances.mock.calls.length
-	function held<T>() {
-		let resolve!: (v: T) => void
-		let reject!: (e: unknown) => void
-		const promise = new Promise<T>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
 	/** A refetch on demand: the first connect is the mount's own, so later ones refetch. */
 	let connects = 0
 	const reconnect = () => {
@@ -784,12 +772,12 @@ describe("TokensView — the balance snapshot's fences", () => {
 	}
 
 	test("account A's snapshot answered during B's task wait never renders under B", async () => {
-		const aFetch = held<unknown[]>()
+		const aFetch = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(aFetch.promise)
 		const w = await mountView()
 		expect(H.getTokenBalances).toHaveBeenLastCalledWith(undefined, "0xacct")
 
-		const bTasks = held<unknown[]>()
+		const bTasks = deferred<unknown[]>()
 		H.getTasks.mockReturnValueOnce(bTasks.promise)
 		H.store.current.account = { address: "0xB" }
 		await flushPromises()
@@ -806,10 +794,10 @@ describe("TokensView — the balance snapshot's fences", () => {
 	})
 
 	test("A's snapshot rejected during B's task wait arms no retry", async () => {
-		const aFetch = held<unknown[]>()
+		const aFetch = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(aFetch.promise)
 		await mountView()
-		H.getTasks.mockReturnValueOnce(held<unknown[]>().promise)
+		H.getTasks.mockReturnValueOnce(deferred<unknown[]>().promise)
 		H.store.current.account = { address: "0xB" }
 		await flushPromises()
 		aFetch.reject(new Error("port closed"))
@@ -821,7 +809,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 	test("a retry armed in A fires during B's task wait and asks for B", async () => {
 		H.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
 		await mountView()
-		H.getTasks.mockReturnValueOnce(held<unknown[]>().promise)
+		H.getTasks.mockReturnValueOnce(deferred<unknown[]>().promise)
 		H.store.current.account = { address: "0xB" }
 		await flushPromises()
 		expect(calls()).toBe(1)
@@ -831,10 +819,10 @@ describe("TokensView — the balance snapshot's fences", () => {
 	})
 
 	test("an older run in the same scope answering last never overwrites the newer one", async () => {
-		const run1 = held<unknown[]>()
+		const run1 = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(run1.promise)
 		const w = await mountView()
-		const run2 = held<unknown[]>()
+		const run2 = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(run2.promise)
 		reconnect()
 		run2.resolve([namedRow(2, "NEW")])
@@ -874,7 +862,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 
 	test("only an in-scope update marks a run in flight stale, displayed or not", async () => {
 		await mountView()
-		const quiet = held<unknown[]>()
+		const quiet = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(quiet.promise)
 		reconnect()
 		H.balanceUpdated.emit(namedRow(50, "FOREIGN_CHAIN", { chainId: 2 }))
@@ -883,7 +871,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 		await flushPromises()
 		expect(calls()).toBe(2)
 
-		const shown = held<unknown[]>()
+		const shown = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(shown.promise)
 		reconnect()
 		H.balanceUpdated.emit(balanceRow())
@@ -891,7 +879,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 		await flushPromises()
 		expect(calls()).toBe(4)
 
-		const unseen = held<unknown[]>()
+		const unseen = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(unseen.promise)
 		reconnect()
 		H.balanceUpdated.emit(namedRow(99, "UNSEEN"))
@@ -909,7 +897,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 
 	test("an account replaced by an equal-address object (a rename) clears the rows and refetches", async () => {
 		const w = await mountView()
-		const pending = held<unknown[]>()
+		const pending = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(pending.promise)
 		H.store.current.account = { address: "0xacct", name: "renamed" }
 		await flushPromises()
@@ -921,7 +909,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 
 	test("an in-place chain id change is not a scope change; the run lands on the chain it started on", async () => {
 		const w = await mountView()
-		const pending = held<unknown[]>()
+		const pending = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(pending.promise)
 		reconnect()
 		;(H.store.current.network as { chainId: number }).chainId = 2
@@ -961,7 +949,7 @@ describe("TokensView — the balance snapshot's fences", () => {
 
 	test("an add for a row already shown still marks the run in flight stale", async () => {
 		await mountView()
-		const pending = held<unknown[]>()
+		const pending = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(pending.promise)
 		reconnect()
 		H.balanceAdded.emit(balanceRow())
@@ -1000,5 +988,94 @@ describe("TokensView — the balance snapshot's fences", () => {
 		;(H.store.current.network as { chainId: number }).chainId = 10
 		expect(ownRuns).toBe(2)
 		stop(own)
+	})
+})
+
+describe("TokensView — the token-import rows' events and reads", () => {
+	let wrapper: ReturnType<typeof mount> | undefined
+	beforeEach(() => {
+		resetHarness()
+		// Views mounted by earlier cases are never unmounted and still hold handlers on these events.
+		for (const ev of [H.journalAdded, H.journalUpdated, H.journalDeleted, H.journalConnected]) ev.clear()
+	})
+	afterEach(() => {
+		wrapper?.unmount()
+		wrapper = undefined
+	})
+
+	const imp = (id: string, over: Record<string, unknown> = {}) => ({
+		id,
+		kind: "token_import",
+		profileId: "p1",
+		accountAddress: H.store.current.account?.address,
+		contractAddress: `0x${id}`,
+		terminalAt: null,
+		progress: { stage: "pending" },
+		...over,
+	})
+	const importRows = () =>
+		(wrapper as ReturnType<typeof mount>)
+			.findAllComponents({ name: "TokenImportRow" })
+			.map((c) => c.props("op") as { id: string; progress: { stage: string } })
+
+	test("an update keeps a listed import where it is, an unseen one goes last, and a delete removes it", async () => {
+		H.getOperations.mockResolvedValue([imp("a"), imp("b")])
+		wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.journalUpdated.emit(imp("b", { progress: { stage: "simulating" } }))
+		H.journalUpdated.emit(imp("c"))
+		await nextTick()
+		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([
+			["a", "pending"],
+			["b", "simulating"],
+			["c", "pending"],
+		])
+
+		H.journalDeleted.emit(imp("a"))
+		H.journalUpdated.emit(imp("b", { kind: "transfer" }))
+		await nextTick()
+		expect(importRows().map((op) => op.id)).toEqual(["b", "c"])
+	})
+
+	test("an add for a listed import replaces it where it is, and its end reaches the one row", async () => {
+		// A read can answer with a record whose add the worker has not delivered yet.
+		H.getOperations.mockResolvedValue([imp("a"), imp("b")])
+		wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.journalAdded.emit(imp("a", { progress: { stage: "simulating" } }))
+		await nextTick()
+		expect(importRows().map((op) => [op.id, op.progress.stage])).toEqual([
+			["a", "simulating"],
+			["b", "pending"],
+		])
+
+		H.journalUpdated.emit(imp("a", { terminalAt: 2, progress: { stage: "succeeded" } }))
+		await nextTick()
+		expect(importRows().map((op) => op.id)).toEqual(["b"])
+	})
+
+	test("a reconnect's read supersedes the mount's, and a refused one is read again after 2 s", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const mountRead = deferred<unknown[]>()
+			const reconnectRead = deferred<unknown[]>()
+			H.getOperations.mockReturnValueOnce(mountRead.promise).mockReturnValueOnce(reconnectRead.promise)
+			wrapper = mount(TokensView, { shallow: true })
+			await flushPromises()
+			H.journalConnected.emit()
+			mountRead.resolve([imp("a")])
+			await flushPromises()
+			expect(importRows()).toEqual([])
+
+			reconnectRead.reject(new Error("port closed"))
+			await flushPromises()
+			expect(importRows()).toEqual([])
+
+			H.getOperations.mockResolvedValueOnce([imp("a"), imp("b")])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(importRows().map((op) => op.id)).toEqual(["a", "b"])
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

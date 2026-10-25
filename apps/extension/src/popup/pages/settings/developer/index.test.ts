@@ -3,14 +3,17 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
+import { expectOwnedRows, settingsContext, settingsRouter } from "../../../../../tests/helpers/settings-rows"
 import AdvancedSettings from "./index.vue"
+import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 
-const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
+const fakes = vi.hoisted(() => ({ config: undefined as unknown, openToast: vi.fn() }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: function ConfigServiceClient() {
 		return fakes.config
 	},
 }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: fakes.openToast }) }))
 
 let config: {
 	getProps: ReturnType<typeof vi.fn>
@@ -32,6 +35,7 @@ const windows = { create: vi.fn(), get: vi.fn(), update: vi.fn() }
 
 // The app store's `useSyncedRef` reads `chrome.storage.local` and listens for changes as it is created.
 beforeEach(() => {
+	fakes.openToast.mockReset()
 	config = {
 		getProps: vi.fn(async () => [{ key: "developerMode", value: true }] as ConfigProp[]),
 		setValue: vi.fn(async () => undefined),
@@ -42,14 +46,7 @@ beforeEach(() => {
 	fakes.config = config
 	for (const fn of Object.values(windows)) fn.mockReset()
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn(async () => ({})),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: {
 			connect: vi.fn(),
 			getURL: (path: string) => `chrome-extension://nulo/${path}`,
@@ -57,13 +54,14 @@ beforeEach(() => {
 		},
 		windows,
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => vi.unstubAllGlobals())
 
 async function mountAdvanced() {
 	const wrapper = mount(AdvancedSettings, {
 		global: {
-			plugins: [createTestingPinia({ createSpy: vi.fn })],
+			plugins: [settingsRouter(), createTestingPinia({ createSpy: vi.fn })],
 			stubs: {
 				SettingsPageShell: { template: "<div><slot /></div>" },
 				Flex: { template: "<div><slot /></div>" },
@@ -71,8 +69,7 @@ async function mountAdvanced() {
 				LoadingState: true,
 				Toggle: true,
 				RowTarget: true,
-				MaterialIcon: true,
-				RouterLink: true,
+				RouterLink: { template: "<a><slot /></a>" },
 			},
 		},
 	})
@@ -124,4 +121,52 @@ test("a reread that finds Developer Mode changed shows it and writes nothing", a
 	await flushPromises()
 	expect(w.get('[data-testid="settings-toggle-developerMode"]').attributes("modelvalue")).toBe("false")
 	expect(config.setValue).not.toHaveBeenCalled()
+})
+
+test("a worker update turning Developer Mode off shows it and writes both dependents", async () => {
+	config.getProps.mockResolvedValue([
+		{ key: "developerMode", value: true },
+		{ key: "indicateFailures", value: true },
+		{ key: "debugMode", value: true },
+	] as ConfigProp[])
+	const w = await mountAdvanced()
+	config.onUpdate.invoke({ key: "developerMode", value: false } as ConfigProp)
+	await flushPromises()
+	expect(w.get('[data-testid="settings-toggle-developerMode"]').attributes("modelvalue")).toBe("false")
+	expect(config.setValue.mock.calls).toEqual([
+		["indicateFailures", false],
+		["debugMode", false],
+	])
+})
+
+test("a failed write leaves Developer Mode as stored and writes no dependent; asking again turns all three off", async () => {
+	// The worker persists before it announces, so a failed write announces nothing.
+	config.getProps.mockResolvedValue([
+		{ key: "developerMode", value: true },
+		{ key: "indicateFailures", value: true },
+		{ key: "debugMode", value: true },
+	] as ConfigProp[])
+	config.setValue.mockRejectedValueOnce(new Error("persist failed"))
+	const w = await mountAdvanced()
+	// Developer Mode is the first toggle.
+	const emit = () => w.getComponent({ name: "Toggle" }).vm.$emit("update:modelValue", false)
+	const toggle = () => w.get('[data-testid="settings-toggle-developerMode"]')
+	emit()
+	await flushPromises()
+	expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to update setting" })
+	expect(config.setValue).toHaveBeenCalledExactlyOnceWith("developerMode", false)
+	expect(toggle().attributes("modelvalue")).toBe("true")
+	emit()
+	await flushPromises()
+	expect(config.setValue.mock.calls.slice(1)).toEqual([
+		["developerMode", false],
+		["indicateFailures", false],
+		["debugMode", false],
+	])
+	expect(toggle().attributes("modelvalue")).toBe("false")
+})
+
+test.each([false, true])("renders the search registry's rows with developer mode %s", async (developerMode) => {
+	config.getProps.mockResolvedValue([{ key: "developerMode", value: developerMode }] as ConfigProp[])
+	expectOwnedRows(await mountAdvanced(), "/popup/settings/developer", settingsContext({ developerMode }))
 })

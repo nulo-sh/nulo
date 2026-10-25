@@ -7,12 +7,14 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
+import { isValidAztecAddress } from "@/utils/aztec-address"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/browser"
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
 import { contactRow, senderChip } from "../fixtures/helpers"
+import { callService } from "../fixtures/session"
 import { settleClosedPopup } from "../fixtures/popup-leave"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./backup-export"
+import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 export const importRow = (name: string) => `${sel("import-contact-row")}[data-contact-name="${name}"]`
@@ -30,6 +32,35 @@ export function contactsFiles(): { write: (content: unknown) => string; cleanup:
 		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	}
 }
+
+/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
+function onCurveAddresses(count: number): string[] {
+	let state = 0x9e3779b9
+	const next = () => {
+		state ^= state << 13
+		state ^= state >>> 17
+		state ^= state << 5
+		return state >>> 0
+	}
+	const found = new Set<string>()
+	while (found.size < count) {
+		// A leading zero byte keeps the value below the field modulus.
+		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
+			.join("")
+			.slice(2)}`
+		if (isValidAztecAddress(address)) found.add(address)
+	}
+	return [...found]
+}
+
+/** Enough rows that an import is still writing seconds after its first row is stored. */
+export const LONG_IMPORT_ROWS = 500
+
+/** The same version-2 file on every run: `LONG_IMPORT_ROWS` named, on-curve contacts. */
+export const longImportContacts = () => ({
+	version: 2,
+	contacts: onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })),
+})
 
 /** Refuses the Testnet RPC for the rest of the launch: the Contacts page asks every network's PXE
  *  for its senders, and the export probes every network, so a run would otherwise depend on the
@@ -50,9 +81,9 @@ export async function pickContactsFile(page: Page, path: string): Promise<void> 
 export async function exportContactsFile(page: Page): Promise<string> {
 	await clickByTestId(page, "contacts-menu-trigger")
 	await page.waitForSelector(sel("contacts-menu-export"), { visible: true, timeout: 5_000 })
-	await armBackupDownloadCapture(page, { gzip: false })
+	await armDownloadCapture(page, { gzip: false })
 	await toastAfter(page, () => clickByTestId(page, "contacts-menu-export"), "Contacts exported successfully")
-	return readCapturedBackupDownload(page)
+	return readCapturedDownload(page)
 }
 
 export type ShownRow = { name: string; kind: string; selected: boolean }
@@ -146,7 +177,7 @@ export async function waitForInputValue(page: Page, testid: string, value: strin
 /** Presses a row on its target, the button that covers the row. A row that can't be imported keeps
  *  its target pressable (it explains itself), so this does not wait for an enabled one. */
 export function pressRow(page: Page, name: string): Promise<void> {
-	return clickSelector(page, `${importRow(name)} ${sel("import-contact-target")}`)
+	return clickSelector(page, `${importRow(name)} ${sel("import-contact-target")}`, { pressAriaDisabled: true })
 }
 
 /** Presses the popup's Cancel or Import selected and waits for the popup to have closed. */
@@ -159,7 +190,7 @@ type ToastLog = { titles: string[]; observer: MutationObserver }
 
 /** Runs `act` and waits for a toast reading `text` that was not on screen before it, and returns
  *  that toast's whole title. Toasts are recorded from before `act` starts, so one that has already
- *  left by the time `act` returns (a success toast lasts six seconds) still counts. */
+ *  left by the time `act` returns (a success toast lasts two seconds) still counts. */
 export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<string> {
 	await page.evaluate((s: string) => {
 		const w = window as unknown as { __e2eToastLog?: ToastLog }
@@ -227,14 +258,20 @@ export async function shownToast(page: Page, text: string, timeout = 15_000): Pr
 
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }
 
-/** Every stored contact row, ordered by id. */
-export function storedContacts(page: Page): Promise<StoredContact[]> {
+/** Every contact the active profile stores, as the wallet reads them (rows are sealed at rest),
+ *  ordered by id. */
+export async function storedContacts(page: Page): Promise<StoredContact[]> {
+	const contacts = await callService<StoredContact[]>(page, "contact", "getContacts")
+	return contacts.sort((x, y) => x.id.localeCompare(y.id))
+}
+
+/** Every stored contact row as the raw string an at-rest reader of storage sees. */
+export function rawContactRows(page: Page): Promise<string[]> {
 	return page.evaluate(async () => {
 		const all = await chrome.storage.local.get()
 		return Object.entries(all)
 			.filter(([key]) => key.startsWith("nulo:core:contacts@"))
-			.map(([, value]) => JSON.parse(value as string) as StoredContact)
-			.sort((x, y) => x.id.localeCompare(y.id))
+			.map(([, value]) => String(value))
 	})
 }
 

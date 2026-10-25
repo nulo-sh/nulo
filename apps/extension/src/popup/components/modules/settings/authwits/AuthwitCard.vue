@@ -13,18 +13,22 @@ const props = defineProps({
 const emit = defineEmits(["open", "revoke"])
 
 const titleId = useId()
+const pendingId = useId()
 </script>
 
 <template>
 	<div @click="emit('open', authwit)" :class="$style.card">
-		<RowTarget :labelledby="titleId" />
+		<RowTarget :labelledby="authwit.pending ? `${titleId} ${pendingId}` : titleId" />
 
 		<div :class="$style.header">
-			<span :id="titleId" :class="$style.type">{{ authwit.kindName ?? "Custom Authwit" }}</span>
+			<span :class="$style.title">
+				<span :id="titleId" :class="$style.type">{{ authwit.kindName ?? "Custom Authwit" }}</span>
+				<span v-if="authwit.pending" :id="pendingId" data-testid="authwit-pending-chip" :class="$style.pending">Pending</span>
+			</span>
 
 			<Tooltip position="end">
 				<RowAction label="Revoke authwit" :class="$style.revoke" @click="emit('revoke', authwit)">
-					<Icon name="close-circle" color="secondary" size="16" />
+					<Icon name="close" color="secondary" size="16" />
 				</RowAction>
 				<template #content>Revoke authwit</template>
 			</Tooltip>
@@ -81,6 +85,18 @@ const titleId = useId()
 
 .type {
 	composes: type from "../record-card.module.css";
+}
+
+/* Holds the chip beside the kind: on its own, the kind's `flex: 1` would push the chip against Revoke. */
+.title {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.pending {
+	composes: chip from "../../../../../components/composite/activity/activity-card.module.css";
 }
 
 .revoke {

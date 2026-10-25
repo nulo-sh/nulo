@@ -1,15 +1,16 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
 import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { captureOwnWindow, releaseOwnWindow } from "@/utils/own-window"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
@@ -73,7 +74,7 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 		onReject: vi.fn(),
 	}),
 }))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 vi.mock("@/utils/lastActiveProfile", () => ({
 	getLastActiveProfileId: vi.fn(async () => undefined),
 	setLastActiveProfileId: (...args: unknown[]) => setLastActiveProfileIdMock(...(args as [])),
@@ -90,7 +91,7 @@ beforeEach(() => {
 	unlockPasskeyProfile.mockReset()
 	getPasskeyCredentialId.mockReset()
 	runCeremony.mockReset()
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	openToastMock.mockReset()
 	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
@@ -98,16 +99,10 @@ beforeEach(() => {
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
 	waitHolder.mock.mockReset().mockImplementation((...a: unknown[]) => waitHolder.real(...a))
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: {
-				get: vi.fn(async () => ({})),
-				set: vi.fn(async () => undefined),
-				remove: vi.fn(async () => undefined),
-			},
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -129,7 +124,6 @@ function mountAuth() {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
 				Tooltip: { template: `<div><slot /></div>` },
-				MaterialIcon: true,
 				Flex: { template: `<div><slot /></div>` },
 				AuthProfilePill: true,
 				PasskeyCeremonyDialog: true,
@@ -448,7 +442,7 @@ describe("auth.vue — passkey unlock", () => {
 	})
 
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		await submitPasskeyUnlock()
 		expect(unlockPasskeyProfile).toHaveBeenCalledTimes(1)
 		expect(unlockPasskeyProfile.mock.calls[0]).toEqual(["p1"])
@@ -489,25 +483,28 @@ describe("auth.vue — what a failed unlock says", () => {
 		expect(unlockProfile).toHaveBeenCalledTimes(2)
 	})
 
-	test("Continue again closes the last failure's toast before the new attempt; another surface's toast stays", async () => {
+	test("Continue closes whatever error toast shows before the new attempt; an info toast stays", async () => {
 		const { toast, openToast } = useToast()
 		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
 		expect(toast.value).toMatchObject({ label: "Something went wrong", sub: "Try unlocking again." })
+		/** The toast before the attempt answers: the close must not wait for the unlock. */
+		const retry = async () => {
+			let answer!: (profile: unknown) => void
+			unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+			await wrapper.find("form").trigger("submit")
+			const shown = toast.value
+			answer(undefined)
+			await flushPromises()
+			return shown
+		}
 
-		let answer!: (profile: unknown) => void
-		unlockProfile.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
-		await wrapper.find("form").trigger("submit")
-		expect(unlockProfile).toHaveBeenCalledTimes(2)
-		expect(toast.value).toBeNull()
-		answer(undefined)
-		await flushPromises()
-
-		const handOff = { kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." } as const
-		openToast(handOff)
-		unlockProfile.mockReturnValueOnce(new Promise(() => {}))
-		await wrapper.find("form").trigger("submit")
-		expect(unlockProfile).toHaveBeenCalledTimes(3)
-		expect(toast.value).toMatchObject(handOff)
+		expect(await retry()).toBeNull()
+		openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })
+		expect(await retry()).toBeNull()
+		const info = { kind: "info", label: "Importing" } as const
+		openToast(info)
+		expect(await retry()).toMatchObject(info)
+		expect(unlockProfile).toHaveBeenCalledTimes(4)
 	})
 
 	test("a wrong password keeps its inline error and gets no toast", async () => {
@@ -550,7 +547,7 @@ describe("auth.vue — the password field's controls, real Input", () => {
 			attachTo: document.body,
 			global: {
 				plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
-				components: { Flex, Input, MaterialIcon, Text },
+				components: { Flex, Input, Text, Icon },
 				stubs: {
 					Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
 					Tooltip: { template: `<div><slot /></div>` },

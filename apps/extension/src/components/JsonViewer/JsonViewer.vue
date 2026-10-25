@@ -20,6 +20,7 @@ import { copyWithToast } from "@/utils/clipboard"
 
 /** Services */
 import { customViewerTheme } from "./theme.js"
+import { editorShadowRoot } from "./editor-shadow"
 
 const props = defineProps({
 	data: {
@@ -67,7 +68,7 @@ const initViewer = () => {
 
 	const editorView = new EditorView({
 		state,
-		parent: editorRef.value,
+		parent: editorShadowRoot(editorRef.value),
 	})
 }
 
@@ -110,13 +111,13 @@ onMounted(() => {
 
 		<Icon
 			@click="handleCopy"
-			:name="isCopied ? 'check-circle' : 'copy'"
+			:name="isCopied ? 'square-check' : 'copy'"
 			size="16"
 			:color="isCopied ? 'green' : 'tertiary'"
 			:class="$style.copy_icon"
 		/>
 
-		<div ref="editorRef" :class="$style.editor" />
+		<div ref="editorRef" data-testid="json-editor" :class="$style.editor" />
 	</div>
 </template>
 
@@ -142,7 +143,6 @@ onMounted(() => {
 	background: transparent;
 	box-sizing: content-box;
 	cursor: pointer;
-	border-radius: 5px;
 
 	padding: 4px;
 
@@ -162,7 +162,6 @@ onMounted(() => {
 	background: transparent;
 	box-sizing: content-box;
 	cursor: pointer;
-	border-radius: 5px;
 
 	padding: 4px;
 

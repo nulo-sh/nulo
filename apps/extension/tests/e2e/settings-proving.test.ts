@@ -88,3 +88,26 @@ test("a check that finds nothing shows the not-running card and the Get Presto r
 	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 })
+
+test("HTTPS refused + a detailed HTTP body without https_port is the encrypted-connection card (https-disabled)", async ({
+	registeredExtensionPerTest,
+}) => {
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general")
+	// Only the plain-HTTP fallback reaches this diagnosis, so the page's real loopback fetch must get through.
+	const { https_port: _omitted, ...withoutHttpsPort } = PRESTO_DETAILED_HEALTH
+	await interceptHealth(page, { https: "refused", http: { status: 200, body: withoutHttpsPort } })
+
+	await navigateToSettings(page, "proving")
+	await page.waitForSelector(cardSelector("idle"), { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "settings-proving-retry")
+	await page.waitForSelector(cardSelector("secure-connection-unavailable"), { visible: true, timeout: 10_000 })
+	const card = await page.$eval('[data-testid="settings-proving-status"]', (el) => ({
+		diagnosis: el.getAttribute("data-diagnosis"),
+		steps: el.querySelectorAll("li").length,
+	}))
+	expect(card).toEqual({ diagnosis: "https-disabled", steps: 3 })
+
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
+})

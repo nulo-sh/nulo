@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { assertLiveChainIdentity, chainInfoFrom } from "./chain-identity"
+import { assertLiveChainIdentity, assertNodeServesChain, chainInfoFrom } from "./chain-identity"
 
 const MAINNET_L1 = 1
 const MAINNET_ROLLUP = 4248422647
@@ -49,12 +49,20 @@ describe("assertLiveChainIdentity", () => {
 		expect(() => assertLiveChainIdentity(MAINNET, { l1ChainId: MAINNET_L1, rollupVersion: 0.5 })).toThrow(/non-canonical rollupVersion/)
 	})
 
-	test("local networks (stored chainId === 0) skip only the composite: the exact l1ChainId still binds", () => {
+	test("chain 0 binds the local L1 and accepts any rollup version on it", () => {
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 31337, rollupVersion: 0 })).not.toThrow()
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 31337, rollupVersion: 42 })).not.toThrow()
-		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 1337 }, { l1ChainId: 1337, rollupVersion: 7 })).not.toThrow()
 		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 31337 }, { l1ChainId: 1337, rollupVersion: 0 })).toThrow(
 			/l1ChainId=31337 but live node reports l1ChainId=1337/,
+		)
+	})
+
+	test.each([
+		["another rollup", { l1ChainId: 11155111, rollupVersion: 1 }],
+		["a rollup version equal to the L1", { l1ChainId: 11155111, rollupVersion: 11155111 }],
+	])("chain 0 on any L1 but the local one is refused, whatever the node answers (%s)", (_name, live) => {
+		expect(() => assertLiveChainIdentity({ chainId: 0, l1ChainId: 11155111 }, live)).toThrow(
+			/chain 0 with l1ChainId=11155111, but chain 0 is the local development chain \(l1ChainId=31337\)/,
 		)
 	})
 
@@ -65,6 +73,25 @@ describe("assertLiveChainIdentity", () => {
 
 	test("the live composite it compares and reports is unsigned", () => {
 		expect(() => assertLiveChainIdentity(SEPOLIA, { l1ChainId: 11155111, rollupVersion: 4127419662 })).toThrow(/composite=4138294185 /)
+	})
+})
+
+describe("assertNodeServesChain", () => {
+	const V6_ROLLUP = 2070860440
+	const V6_CHAIN = (MAINNET_L1 ^ V6_ROLLUP) >>> 0
+
+	test.each([
+		["the chain's own rollup", V6_CHAIN, { l1ChainId: MAINNET_L1, rollupVersion: V6_ROLLUP }],
+		["chain 0, any rollup on any L1", 0, { l1ChainId: 11155111, rollupVersion: 42 }],
+	])("passes on %s", (_name, chainId, live) => {
+		expect(() => assertNodeServesChain(chainId, live)).not.toThrow()
+	})
+
+	test.each([
+		["another rollup on the same L1", { l1ChainId: MAINNET_L1, rollupVersion: MAINNET_ROLLUP }],
+		["the rollup-version alias above bit 32", { l1ChainId: MAINNET_L1, rollupVersion: V6_ROLLUP + 2 ** 32 }],
+	])("refuses %s", (_name, live) => {
+		expect(() => assertNodeServesChain(V6_CHAIN, live)).toThrow(/Refusing to open its PXE store/)
 	})
 })
 

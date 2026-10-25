@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import { reactive, ref } from "vue"
 import type { ToastState } from "@/composables/toast"
@@ -45,16 +46,6 @@ function shell(profiles = [p1]) {
 	return { store, toast, routes, onLocked, ...locked }
 }
 
-function held<T>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { read: () => promise, resolve, reject }
-}
-
 function expectSealed(s: ReturnType<typeof shell>) {
 	expect(s.toast.value).toBeNull()
 	expect(s.store.scopeEpoch).toBeGreaterThan(0)
@@ -74,8 +65,11 @@ describe("a session opened without a lock", () => {
 describe("the lock event", () => {
 	test("seals the popup before its profile lookup answers, and lands once it does", async () => {
 		const s = shell()
-		const lookup = held<{ id: string }[]>()
-		const done = s.onLockEvent(lookup.read, () => true)
+		const lookup = deferred<{ id: string }[]>()
+		const done = s.onLockEvent(
+			() => lookup.promise,
+			() => true,
+		)
 
 		expectSealed(s)
 		expect(s.routes).toEqual([])
@@ -88,9 +82,12 @@ describe("the lock event", () => {
 
 	test("a newer profile event supersedes the landing, never the seal", async () => {
 		const s = shell()
-		const lookup = held<{ id: string }[]>()
+		const lookup = deferred<{ id: string }[]>()
 		let current = true
-		const done = s.onLockEvent(lookup.read, () => current)
+		const done = s.onLockEvent(
+			() => lookup.promise,
+			() => current,
+		)
 		expectSealed(s)
 
 		current = false
@@ -102,8 +99,11 @@ describe("the lock event", () => {
 
 	test("a rejected lookup lands on the cached list", async () => {
 		const s = shell()
-		const lookup = held<{ id: string }[]>()
-		const done = s.onLockEvent(lookup.read, () => true)
+		const lookup = deferred<{ id: string }[]>()
+		const done = s.onLockEvent(
+			() => lookup.promise,
+			() => true,
+		)
 		lookup.reject(new Error("port closed"))
 		await done
 		expectSealed(s)

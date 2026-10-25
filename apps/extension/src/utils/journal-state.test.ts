@@ -7,6 +7,8 @@
  * if someone changes the kind→state routing.
  */
 
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
 import { KNOWN_JOB_ERROR_KINDS, type SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationKind, OperationRecord } from "@/wallet/services/operation-journal/spec"
@@ -16,6 +18,9 @@ import {
 	type CategoricalFailureLabel,
 	categoricalLabel,
 	humanizeErrorKind,
+	journalCallTitle,
+	journalCardOriginLabel,
+	journalCardTitle,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
 	type SendOutcome,
@@ -45,17 +50,17 @@ function recordWith(overrides: Partial<OperationRecord> = {}): OperationRecord {
 // These tests assert the canonical names actually present in the icon set,
 // so a future regression to an invented name fails CI.
 describe("journalTerminalDisplay — icon names exist in the @nulo/design icon set", () => {
-	test("cancelled → `cancel`", () => {
+	test("cancelled → `square-cross`", () => {
 		const op = recordWith({ progress: { stage: "cancelled" }, error: null })
-		expect(journalTerminalDisplay(op)?.icon).toBe("cancel")
+		expect(journalTerminalDisplay(op)?.icon).toBe("square-cross")
 	})
-	test("interrupted → `refresh-circle`", () => {
+	test("interrupted → `refresh`", () => {
 		const op = recordWith({ error: { kind: "stuck_proving", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)?.icon).toBe("refresh-circle")
+		expect(journalTerminalDisplay(op)?.icon).toBe("refresh")
 	})
-	test("failed → `close-circle`", () => {
+	test("failed → `square-cross`", () => {
 		const op = recordWith({ error: { kind: "network", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)?.icon).toBe("close-circle")
+		expect(journalTerminalDisplay(op)?.icon).toBe("square-cross")
 	})
 })
 
@@ -77,7 +82,7 @@ describe("journalTerminalDisplay — Cancelled state", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "cancelled",
 			subtitle: "Cancelled",
-			icon: "cancel",
+			icon: "square-cross",
 			color: "gray",
 		})
 	})
@@ -89,12 +94,12 @@ describe("journalTerminalDisplay — Cancelled state", () => {
 })
 
 describe("journalTerminalDisplay — Interrupted state (3 kinds)", () => {
-	test("error.kind === 'sw_restart_post_prove' → interrupted (amber, refresh-circle)", () => {
+	test("error.kind === 'sw_restart_post_prove' → interrupted (amber, refresh)", () => {
 		const op = recordWith({ error: { kind: "sw_restart_post_prove", message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "interrupted",
 			subtitle: "Transaction was interrupted",
-			icon: "refresh-circle",
+			icon: "refresh",
 			color: "amber",
 		})
 	})
@@ -116,7 +121,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Network error",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 	})
@@ -143,7 +148,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 
 	test("error.kind === 'scope_refused' → 'Not allowed', on the red failed card", () => {
 		const op = recordWith({ error: { kind: "scope_refused", message: "...", normalizedRaw: null } })
-		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "close-circle", color: "red" })
+		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "square-cross", color: "red" })
 	})
 
 	test("error.kind === 'duplicate_initialization' → the honest init-race subtitle", () => {
@@ -156,7 +161,7 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Stopped when the wallet locked",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 	})
@@ -218,7 +223,7 @@ const TEST_TOKEN_BY_ID = (id: number) =>
 		: id === 7
 			? { symbol: "ETH", decimals: 18, hasDecimals: true }
 			: undefined
-const TEST_CTX = { tokenById: TEST_TOKEN_BY_ID }
+const TEST_CTX = { tokenById: TEST_TOKEN_BY_ID, tokens: [] }
 
 function transferRecord(overrides: Partial<OperationRecord> = {}): OperationRecord {
 	return recordWith({
@@ -235,11 +240,12 @@ describe("buildJournalTerminalCardProps", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ progress: { stage: "cancelled" }, error: null }), TEST_CTX)
 		expect(props).not.toBeNull()
 		expect(props?.title).toBe("USDC")
-		expect(props?.activityIcon).toBe("arrow-narrow-up-right")
+		expect(props?.activityIcon).toBe("send")
 		expect(props?.originLabel).toBeNull()
 		expect(props?.amount).toBe("1.5")
 		expect(props?.amountSymbol).toBe("USDC")
 		expect(props?.state).toBe("cancelled")
+		expect(props?.oneLineTitle).toBe(false)
 	})
 
 	test("transfer + failed → title=token symbol, state=failed, amount present", () => {
@@ -278,6 +284,22 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props?.originLabel).toBe("uniswap.example")
 		expect(props?.amount).toBeNull()
 		expect(props?.state).toBe("failed")
+		expect(props?.oneLineTitle).toBe(true)
+	})
+
+	test("dapp_execute from a dApp that named itself nothing keeps the dApp chip and its one-line title", () => {
+		const props = buildJournalTerminalCardProps(
+			recordWith({
+				kind: "dapp_execute",
+				title: "swapexacttokensfortokens",
+				subtitle: "",
+				progress: { stage: "cancelled" },
+				error: null,
+			}),
+			TEST_CTX,
+		)
+		expect(props?.originLabel).toBe("dApp")
+		expect(props?.oneLineTitle).toBe(true)
 	})
 
 	test("dapp_execute with no title → fallback to 'Transaction'", () => {
@@ -338,16 +360,16 @@ describe("buildJournalTerminalCardProps", () => {
 		const tokenById = vi.fn(TEST_TOKEN_BY_ID)
 		const props = buildJournalTerminalCardProps(
 			recordWith({ kind: "dapp_execute", tokenId: 42, amountRaw: "1500000", title: "swap" }),
-			{ tokenById },
+			{ tokenById, tokens: [] },
 		)
 		expect(tokenById).not.toHaveBeenCalled()
 		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, transferTypeLabel: null })
 	})
 
 	test("a token whose decimals the wallet does not know shows no amount and no symbol; known, it shows both", () => {
-		const unknown = { tokenById: () => ({ symbol: "USDC", decimals: 0, hasDecimals: false }) }
+		const unknown = { tokenById: () => ({ symbol: "USDC", decimals: 0, hasDecimals: false }), tokens: [] }
 		expect(buildJournalTerminalCardProps(transferRecord(), unknown)).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
-		const known = { tokenById: () => ({ symbol: "USDC", decimals: 6, hasDecimals: true }) }
+		const known = { tokenById: () => ({ symbol: "USDC", decimals: 6, hasDecimals: true }), tokens: [] }
 		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
 	})
 
@@ -357,8 +379,17 @@ describe("buildJournalTerminalCardProps", () => {
 	})
 
 	test("a token whose symbol is empty titles the card 'Transfer' and keeps the empty symbol beside the amount", () => {
-		const props = buildJournalTerminalCardProps(transferRecord(), { tokenById: () => ({ symbol: "", decimals: 6, hasDecimals: true }) })
+		const props = buildJournalTerminalCardProps(transferRecord(), {
+			tokenById: () => ({ symbol: "", decimals: 6, hasDecimals: true }),
+			tokens: [],
+		})
 		expect(props).toMatchObject({ title: "Transfer", amount: "1.5", amountSymbol: "" })
+	})
+
+	test("a token whose symbol is only spaces titles the card with the empty-value dash and keeps the spaces beside the amount", () => {
+		const ctx = { tokenById: () => ({ symbol: "   ", decimals: 6, hasDecimals: true }), tokens: [] }
+		expect(buildJournalTerminalCardProps(transferRecord(), ctx)).toMatchObject({ title: "—", amount: "1.5", amountSymbol: "   " })
+		expect(journalCardTitle(transferRecord(), ctx)).toBe("—")
 	})
 
 	test("the transfer-type chip reads type 0 (private) and is absent without a type", () => {
@@ -381,11 +412,16 @@ function transferSend(progress: OperationRecord["progress"], kind = "transfer"):
 	return transferRecord({ progress, error: { kind, message: "fetch failed", normalizedRaw: null } })
 }
 
-/** Shaped as the wallet records a dApp's `aztec_sendTx`, the app's own name in `subtitle`. */
+/** A listed token, by the contract and class its add recorded. */
+const DAPP_TOKEN = { contract: `0x${"0d".repeat(32)}`, classId: `0x${"0e".repeat(32)}` }
+
+/** Shaped as the wallet records a dApp's `aztec_sendTx` once its build ran: the app's own name in
+ *  `subtitle`, the built call on a listed token. */
 function dappSend(progress: OperationRecord["progress"], kind = "dapp_execute"): OperationRecord {
 	return recordWith({
 		kind: "dapp_execute",
 		title: "transfer_in_public",
+		call: { ...DAPP_TOKEN, argCount: 4 },
 		subtitle: "playground.aztec.example",
 		accountAddress: `0x${"0c".repeat(32)}`,
 		networkId: "testnet",
@@ -398,19 +434,19 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 	[
 		"checking",
 		undefined,
-		{ state: "checking", subtitle: "Not confirmed yet", icon: "clock-circle", color: "gray" },
+		{ state: "checking", subtitle: "Not confirmed yet", icon: "square-half", color: "gray" },
 		{ label: "Not confirmed yet", context: "Your wallet is checking whether this reached the network. Don't send it again yet." },
 	],
 	[
 		"sent",
 		"sent",
-		{ state: "sent", subtitle: "Sent", icon: "check-circle", color: "green" },
+		{ state: "sent", subtitle: "Sent", icon: "square-check", color: "green" },
 		{ label: "Went through", context: "The network confirmed this transaction." },
 	],
 	[
 		"reverted",
 		"reverted",
-		{ state: "failed", subtitle: "Reverted", icon: "close-circle", color: "red" },
+		{ state: "failed", subtitle: "Reverted", icon: "square-cross", color: "red" },
 		{ label: "Reverted", context: "The network included this transaction, but it reverted. The fee was still paid." },
 	],
 	[
@@ -425,10 +461,19 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 	[
 		"expired",
 		"expired",
-		{ state: "failed", subtitle: "Won't go through", icon: "close-circle", color: "red" },
+		{ state: "failed", subtitle: "Won't go through", icon: "square-cross", color: "red" },
 		{
 			label: "Won't go through",
 			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
+		},
+	],
+	[
+		"refused",
+		"refused",
+		{ state: "failed", subtitle: "Refused by the network", icon: "square-cross", color: "red" },
+		{
+			label: "Refused by the network",
+			context: "The network refused this transaction, so it won't go through. Check the details before sending it again.",
 		},
 	],
 ]
@@ -446,7 +491,7 @@ describe("a failed send that may have reached the network reads as its check's a
 		const op = dappSend(maybeSent(check))
 		expect(sendOutcome(op)).toBe(outcome)
 		expect(categoricalLabel(op)).toEqual(category)
-		expect(buildJournalTerminalCardProps(op, TEST_CTX)).toEqual({
+		expect(buildJournalTerminalCardProps(op, { ...TEST_CTX, tokens: [DAPP_TOKEN] })).toEqual({
 			...display,
 			title: "Transfer (public)",
 			activityIcon: "zap",
@@ -454,6 +499,7 @@ describe("a failed send that may have reached the network reads as its check's a
 			transferTypeLabel: null,
 			amount: null,
 			amountSymbol: null,
+			oneLineTitle: true,
 		})
 	})
 
@@ -475,7 +521,7 @@ describe("a failed send its record proves never left the wallet", () => {
 			label: "Stopped before broadcast",
 			context: "Your wallet caught this before reaching the network. Often balance, fees, or invalid call.",
 		})
-		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Transaction failed", icon: "close-circle", color: "red" })
+		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Transaction failed", icon: "square-cross", color: "red" })
 	})
 
 	test.each([
@@ -490,7 +536,7 @@ describe("a failed send its record proves never left the wallet", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "interrupted",
 			subtitle: "Transaction was interrupted",
-			icon: "refresh-circle",
+			icon: "refresh",
 			color: "amber",
 		})
 	})
@@ -501,13 +547,53 @@ describe("a failed send its record proves never left the wallet", () => {
 		expect(journalTerminalDisplay(op)).toEqual({
 			state: "failed",
 			subtitle: "Stopped when the wallet locked",
-			icon: "close-circle",
+			icon: "square-cross",
 			color: "red",
 		})
 		expect(categoricalLabel(op)).toEqual({
 			label: "Stopped when the wallet locked",
 			context: "The wallet locked while this was in progress.",
 		})
+	})
+})
+
+describe("journalCallTitle — a dApp call reads by its settled rule from what its record holds", () => {
+	const FEE_JUICE = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+	const OTHER_CLASS = `0x${"0a".repeat(32)}`
+	const title = (call: OperationRecord["call"], method = "transfer_in_public") =>
+		journalCallTitle(recordWith({ title: method, call }), [DAPP_TOKEN])
+
+	test("a movement label only on a listed token whose class the build recorded, with the vocabulary's count", () => {
+		expect(title({ ...DAPP_TOKEN, argCount: 4 })).toBe("Transfer (public)")
+		expect(title(undefined)).toBe("Transfer In Public")
+		expect(title({ contract: DAPP_TOKEN.contract, argCount: 4 })).toBe("Transfer In Public")
+		expect(title({ ...DAPP_TOKEN, classId: OTHER_CLASS, argCount: 4 })).toBe("Transfer In Public")
+		expect(title({ ...DAPP_TOKEN, argCount: 3 })).toBe("Transfer In Public")
+		expect(title({ contract: `0x${"0c".repeat(32)}`, classId: DAPP_TOKEN.classId, argCount: 4 })).toBe("Transfer In Public")
+	})
+
+	test("a protocol label only on its contract once the record names one", () => {
+		expect(title({ contract: DAPP_TOKEN.contract, argCount: 2 }, "claim")).toBe("Claim")
+		expect(title({ contract: FEE_JUICE, argCount: 2 }, "claim")).toBe("Claim Fee Juice")
+		expect(title(undefined, "claim")).toBe("Claim Fee Juice")
+	})
+
+	test("a record with no title reads Transaction", () => {
+		expect(journalCallTitle(recordWith({ call: { ...DAPP_TOKEN, argCount: 4 } }), [DAPP_TOKEN])).toBe("Transaction")
+	})
+})
+
+describe("journalCardOriginLabel — a dApp operation's app chip and App row", () => {
+	test.each([
+		["", "dApp"],
+		["uniswap.example", "uniswap.example"],
+		["https://evil.example", "[https://evil.example]"],
+	])("a dApp named %j reads %j", (subtitle, label) => {
+		expect(journalCardOriginLabel(recordWith({ kind: "dapp_execute", subtitle, terminalAt: null }))).toBe(label)
+	})
+
+	test("a transfer has no app chip", () => {
+		expect(journalCardOriginLabel(recordWith({ kind: "transfer", subtitle: "", terminalAt: null }))).toBeNull()
 	})
 })
 
@@ -666,10 +752,11 @@ describe("refusals filed before any window: card and detail", () => {
 		["terms_refused", "Terms not accepted", "Accept Nulo's Terms to let apps send. Nothing was sent."],
 		["wallet_refused", "Refused before sending", "The wallet refused this request before anything was signed. Nothing was sent."],
 		["scope_refused", "Not allowed", "The app asked for more than you allowed. Nothing was sent."],
+		["registry_refused", "Not allowed", "Apps cannot change your public authorizations. Nothing was sent."],
 	])("%s reads %s on the card and in the detail", (kind, label, context) => {
 		const op = refused(kind)
 		expect(categoricalLabel(op)).toEqual({ label, context })
-		expect(buildJournalTerminalCardProps(op, { tokenById: () => undefined })).toMatchObject({
+		expect(buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })).toMatchObject({
 			title: "Transaction",
 			state: "failed",
 			subtitle: label,
@@ -689,6 +776,38 @@ describe("refusals filed before any window: card and detail", () => {
 		const op = refused("popup_bound")
 		expect(categoricalLabel(op).label).toBe("Popup closed early")
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
+	})
+})
+
+/**
+ * The waiting-sends cap fails the row before `submitting`: from `pending` on the silent path, from
+ * `queued` once a window approved it. Either way it says the wallet refused it, and why.
+ */
+describe("a send the waiting-sends cap refused: card and detail", () => {
+	function failedFrom(from: "pending" | "queued", kind: string): OperationRecord {
+		return recordWith({
+			progress: { stage: "failed", from },
+			error: { kind, message: 'ExecutionMutex capacity reached for key "p1|1"', normalizedRaw: null },
+		})
+	}
+
+	test.each(["pending", "queued"] as const)("failed from %s, it reads as refused for the waiting sends", (from) => {
+		const op = failedFrom(from, "too_many_pending")
+		expect(sendOutcome(op)).toBe("nothing_sent")
+		expect(categoricalLabel(op)).toEqual({
+			label: "Refused before sending",
+			context: "Too many sends were already waiting. Nothing was sent.",
+		})
+		expect(buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })).toMatchObject({
+			state: "failed",
+			subtitle: "Refused before sending",
+		})
+	})
+
+	test("a wallet_refused record keeps its own line (control)", () => {
+		expect(categoricalLabel(failedFrom("queued", "wallet_refused")).context).toBe(
+			"The wallet refused this request before anything was signed. Nothing was sent.",
+		)
 	})
 })
 

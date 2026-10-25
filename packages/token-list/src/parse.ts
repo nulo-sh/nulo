@@ -27,7 +27,8 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/
 const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 
 const ENTRY_KEYS = ["chainId", "address", "classId", "symbol", "decimals", "name", "priceId"] as const
-const PAYLOAD_KEYS = ["format", "sequence", "issuedAt", "tokens"] as const
+const PAYLOAD_KEYS = ["format", "sequence", "issuedAt", "tokens", "flagged"] as const
+const PAIR_KEYS = ["chainId", "address"] as const
 
 export type ParseMode = "wallet" | "strict"
 
@@ -42,11 +43,15 @@ export type TokenListEntry = {
 	priceId?: string
 }
 
+export type TokenListPair = { chainId: number; address: string }
+
 export type TokenListPayload = {
 	format: typeof PAYLOAD_FORMAT
 	sequence: number
 	issuedAt: string
 	tokens: TokenListEntry[]
+	/** Tokens the publisher flags as scams; never listed in `tokens`. `[]` when the payload has none. */
+	flagged: TokenListPair[]
 }
 
 /** A refused payload. `path` names the field (`tokens[3].address`) and never echoes its value. */
@@ -93,10 +98,17 @@ function checkPriceId(value: unknown, path: string, mode: ParseMode): string | u
 	return value as string
 }
 
-function checkEntry(value: unknown, path: string, mode: ParseMode): TokenListEntry {
-	const f = record(value, path, ENTRY_KEYS, mode)
+const pairKey = (pair: TokenListPair) => `${pair.chainId}:${pair.address}`
+
+function checkPair(f: Fields, path: string): TokenListPair {
 	ensure(isIntIn(f.chainId, 0, MAX_UINT32), `${path}.chainId`)
 	ensure(isFieldHex(f.address), `${path}.address`)
+	return { chainId: f.chainId as number, address: f.address as string }
+}
+
+function checkEntry(value: unknown, path: string, mode: ParseMode): TokenListEntry {
+	const f = record(value, path, ENTRY_KEYS, mode)
+	const { chainId, address } = checkPair(f, path)
 	ensure(isFieldHex(f.classId), `${path}.classId`)
 	ensure(mode === "wallet" || BUNDLED_TOKEN_CLASS_IDS.includes(f.classId as string), `${path}.classId`)
 	ensure(isText(f.symbol, 32), `${path}.symbol`)
@@ -104,8 +116,8 @@ function checkEntry(value: unknown, path: string, mode: ParseMode): TokenListEnt
 	ensure(isText(f.name, 80), `${path}.name`)
 	const priceId = checkPriceId(f.priceId, `${path}.priceId`, mode)
 	const entry: TokenListEntry = {
-		chainId: f.chainId as number,
-		address: f.address as string,
+		chainId,
+		address,
 		classId: f.classId as string,
 		symbol: f.symbol as string,
 		decimals: f.decimals as number,
@@ -123,7 +135,7 @@ export function checkTokens(value: unknown, path: string, mode: ParseMode): Toke
 	const seen = new Set<string>()
 	const perChain = new Map<number, number>()
 	tokens.forEach((token, i) => {
-		const key = `${token.chainId}:${token.address}`
+		const key = pairKey(token)
 		ensure(!seen.has(key), `${path}[${i}]`)
 		seen.add(key)
 		const count = (perChain.get(token.chainId) ?? 0) + 1
@@ -133,19 +145,38 @@ export function checkTokens(value: unknown, path: string, mode: ParseMode): Toke
 	return tokens
 }
 
+/** Validates the flagged set: every pair unique, and none of them listed in `tokens`, in both modes. */
+export function checkFlagged(value: unknown, path: string, mode: ParseMode, tokens: readonly TokenListEntry[]): TokenListPair[] {
+	if (value === undefined) return []
+	ensure(Array.isArray(value) && value.length <= MAX_TOKENS, path)
+	const taken = new Set(tokens.map(pairKey))
+	return (value as unknown[]).map((item, i) => {
+		const pair = checkPair(record(item, `${path}[${i}]`, PAIR_KEYS, mode), `${path}[${i}]`)
+		ensure(!taken.has(pairKey(pair)), `${path}[${i}]`)
+		taken.add(pairKey(pair))
+		return pair
+	})
+}
+
 export function checkPayload(value: unknown, mode: ParseMode): TokenListPayload {
 	const f = record(value, "payload", PAYLOAD_KEYS, mode)
 	ensure(f.format === PAYLOAD_FORMAT, "payload.format")
 	ensure(typeof f.sequence === "number" && Number.isSafeInteger(f.sequence) && f.sequence >= 1, "payload.sequence")
 	ensure(typeof f.issuedAt === "string" && ISO_INSTANT.test(f.issuedAt) && !Number.isNaN(Date.parse(f.issuedAt)), "payload.issuedAt")
 	const tokens = checkTokens(f.tokens, "payload.tokens", mode)
-	return { format: PAYLOAD_FORMAT, sequence: f.sequence as number, issuedAt: f.issuedAt as string, tokens }
+	const flagged = checkFlagged(f.flagged, "payload.flagged", mode, tokens)
+	return { format: PAYLOAD_FORMAT, sequence: f.sequence as number, issuedAt: f.issuedAt as string, tokens, flagged }
 }
 
-/** Validates `list.source.json`: `{ tokens }` and nothing else, every rule in `strict` mode. */
-export function checkSource(value: unknown): { tokens: TokenListEntry[] } {
-	const f = record(value, "source", ["tokens"], "strict")
-	return { tokens: checkTokens(f.tokens, "source.tokens", "strict") }
+/**
+ * Validates `list.source.json`: `{ tokens, flagged? }` and nothing else, every rule in `strict` mode.
+ * `flagged` comes back only when the source has it, so a source without one stays canonical.
+ */
+export function checkSource(value: unknown): { tokens: TokenListEntry[]; flagged?: TokenListPair[] } {
+	const f = record(value, "source", ["tokens", "flagged"], "strict")
+	const tokens = checkTokens(f.tokens, "source.tokens", "strict")
+	if (f.flagged === undefined) return { tokens }
+	return { tokens, flagged: checkFlagged(f.flagged, "source.flagged", "strict", tokens) }
 }
 
 /** Decodes and validates payload bytes, which must already have passed `verifyEnvelope`. */

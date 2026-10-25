@@ -1,5 +1,11 @@
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { NoteSelector } from "@aztec-labs/stdlib/abi"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { AppTaggingSecret } from "@aztec-labs/stdlib/logs"
+import { Note } from "@aztec-labs/stdlib/note"
+import { NoteAndSlot } from "@aztec-labs/stdlib/tx"
 import { describe, expect, test } from "vitest"
-import { trim } from "./utils"
+import { scrubHex32, trim } from "./utils"
 
 /**
  * `trim()` is the only redaction between a log call and the log store, and until now it had no
@@ -19,6 +25,7 @@ describe("trim — secret key names", () => {
 		["importedKeysKey", SECRET],
 		["importedKeyRows", [{ encryptedSigningKey: SECRET }]],
 		["sourceDek", SECRET],
+		["destinationDek", SECRET],
 		["transferKey", SECRET],
 		["dek", SECRET],
 		["dekSealed", SECRET],
@@ -26,6 +33,8 @@ describe("trim — secret key names", () => {
 		["signingKey", SECRET],
 		["privateKey", SECRET],
 		["entropy", SECRET],
+		["plainEntropy", SECRET],
+		["plainSecret", SECRET],
 		["mnemonic", [SECRET]],
 		["seedPhrase", SECRET],
 		["password", SECRET],
@@ -67,6 +76,34 @@ describe("trim — secret key names", () => {
 	test("still blanks the original five proof-material keys", () => {
 		const out = trim({ acir: SECRET, authWitnesses: SECRET, partialWitness: SECRET, publicInputs: SECRET, vk: SECRET })
 		expect(JSON.stringify(out)).not.toContain(SECRET)
+	})
+
+	// `LoggerStore` trims a call's argument list, so each value sits one level below the list.
+	const executionMaterial: Array<[string, unknown, string]> = [
+		[
+			"newNotes",
+			[new NoteAndSlot(new Note([new Fr(1n)]), new Fr(2n), new Fr(918_273_645_011n), NoteSelector.fromField(new Fr(3n)))],
+			"918273645011",
+		],
+		[
+			"taggingIndexRanges",
+			[
+				{
+					extendedSecret: new AppTaggingSecret(new Fr(918_273_645_012n), AztecAddress.fromBigIntUnsafe(4n)),
+					lowestIndex: 0,
+					highestIndex: 1,
+				},
+			],
+			"918273645012",
+		],
+		["witness", [[0, `0x${"0".repeat(52)}918273645013`]], "918273645013"],
+	]
+
+	test.each(executionMaterial)("blanks %s inside a log call's argument list", (key, value, sentinel) => {
+		const out = trim([{ [key]: value, keepMe: "visible" }]) as Array<Record<string, unknown>>
+		expect(JSON.stringify(out, (_, v) => (typeof v === "bigint" ? v.toString() : v))).not.toContain(sentinel)
+		expect(out[0][key]).toBe(`[${key}]`)
+		expect(out[0].keepMe).toBe("visible")
 	})
 
 	test("blanks a nested secret, not just a top-level one", () => {
@@ -301,5 +338,27 @@ describe("trim — structural guards retained", () => {
 
 	test("walks arrays", () => {
 		expect(trim([{ password: SECRET }, "safe"])).toEqual([{ password: "[password]" }, "safe"])
+	})
+})
+
+describe("scrubHex32", () => {
+	const HEX32 = `0x${"ab".repeat(32)}`
+
+	test("replaces every 32-byte or longer hex run in a string, a nested value and a key, in a copy", () => {
+		const longer = `0x${"AB".repeat(32)}${"cd".repeat(32)}`
+		const value = { [HEX32]: [`id ${HEX32}, then ${longer}`] }
+		expect(scrubHex32(value)).toEqual({ "[32 bytes]": ["id [32 bytes], then [32 bytes]"] })
+		expect(value).toEqual({ [HEX32]: [`id ${HEX32}, then ${longer}`] })
+	})
+
+	test("replaces a hex run cut short by a trailing ellipsis, and a field-sized bigint", () => {
+		expect(scrubHex32(`class 0x${"ab".repeat(20)}…`)).toBe("class [32 bytes]…")
+		expect(scrubHex32({ id: 2n ** 200n, amount: 10n ** 18n })).toEqual({ id: "[32 bytes]", amount: 10n ** 18n })
+		expect(scrubHex32("0x1234…abcd")).toBe("0x1234…abcd")
+	})
+
+	test("passes a shorter hex value, plain text and non-strings unchanged (control)", () => {
+		const value = { selector: "0x12345678", l1: `0x${"ef".repeat(20)}`, text: "ready", block: 12, ok: true, none: null }
+		expect(scrubHex32(value)).toEqual(value)
 	})
 })

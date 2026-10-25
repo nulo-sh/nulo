@@ -25,7 +25,9 @@ export interface TransferSnapshot {
 	precomputedEstimateId: string | undefined
 	/** Queued against this fee in base units; then no estimate exists to reuse. */
 	feeCap?: string
-	/** The token contract, for the awaiting row only. */
+	/** The estimate shown for a send the person pays that was not queued, in base units. */
+	shownFee?: string
+	/** The token contract the person approved: the send is bound to it, and the awaiting row shows it. */
 	contract: string
 	/** The token's symbol and decimals, for the result's text; the symbol is contract-controlled. */
 	symbol: string
@@ -39,12 +41,14 @@ export interface SubmitDeps {
 		networkId: string,
 		accountAddress: string,
 		tokenId: number,
+		tokenContract: string,
 		transferType: number,
 		destination: string,
 		amount: bigint,
 		feeSettings: unknown,
 		precomputedEstimateId: string | undefined,
 		feeCap: string | undefined,
+		shownFee: string | undefined,
 	) => Promise<string>
 	awaiting: {
 		add: (row: { id: string; account: string; destination: string; contract: string }) => void
@@ -75,12 +79,14 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 		snap.networkId,
 		snap.accountAddress,
 		snap.tokenId,
+		snap.contract,
 		snap.transferType,
 		snap.destination,
 		snap.amount,
 		snap.feeSettings,
 		snap.precomputedEstimateId,
 		snap.feeCap,
+		snap.shownFee,
 	)
 		.then((hash) => {
 			if (!deps.isCurrent(snap.epoch)) return

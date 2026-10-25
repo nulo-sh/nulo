@@ -11,7 +11,7 @@
  * window so the user sees the reason, then auto-dismisses.
  */
 
-import { trimAddress } from "@/utils/string"
+import { dashIfBlank, trimAddress } from "@/utils/string"
 
 const props = defineProps({
 	op: {
@@ -32,7 +32,7 @@ const shortAddress = computed(() => {
 const hasName = computed(() => typeof props.op?.title === "string" && props.op.title.length > 0)
 
 const title = computed(() => {
-	if (hasName.value) return props.op.title
+	if (hasName.value) return dashIfBlank(props.op.title)
 	return shortAddress.value || "Token"
 })
 
@@ -57,7 +57,7 @@ const subtitle = computed(() => {
 		<Flex v-if="isInFlight" align="center" gap="6" data-testid="token-import-spinner">
 			<Spinner size="12" color="--txt-tertiary" />
 		</Flex>
-		<Icon v-else-if="isFailed" name="close-circle" size="14" color="red" data-testid="token-import-failed" />
+		<Icon v-else-if="isFailed" name="square-cross" size="14" color="red" data-testid="token-import-failed" />
 	</Flex>
 </template>
 
@@ -78,7 +78,7 @@ const subtitle = computed(() => {
 }
 
 .address {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 

@@ -2,7 +2,7 @@
  * Each passkey step a page starts is refused once, as a dismissed prompt refuses it, and then tried
  * again: the toast says the passkey was not confirmed, the control that started the step is offered
  * again, the second try takes the toast away as it starts, and it finishes the step. Firefox's
- * toolbar runs its steps in windows of their own; `passkey-toolbar-panel.test.ts` refuses them there.
+ * toolbar runs its steps in windows of their own; `toolbar-panel.test.ts` refuses them there.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
@@ -34,7 +34,7 @@ import {
 async function backUpAndDeletePasskeyProfile(page: Page): Promise<{ file: string; address: string }> {
 	await registerPasskeyProfile(page)
 	const passkey = await readRegisteredPasskey(page)
-	const file = writeBackupToTemp(buildSyntheticPasskeyBackup(passkey), "passkey-backup.json")
+	const file = writeBackupToTemp(await buildSyntheticPasskeyBackup(page, passkey), "passkey-backup.json")
 	await navigateByHash(page, "#/popup/settings/security/reset")
 	await completeResetRitual(page, "#/popup/register")
 	return { file, address: passkey.account.address }
@@ -95,7 +95,7 @@ const STEPS: Step[] = [
 			return undefined
 		},
 		control: "onboarding-submit-create",
-		finished: (page) => waitForHash(page, "#/onboarding/learn", 60_000),
+		finished: (page) => waitForHash(page, "#/onboarding/done", 60_000),
 	},
 	{
 		where: "the popup's unlock",
@@ -125,7 +125,7 @@ const STEPS: Step[] = [
 	},
 	...[
 		{ where: "the popup's passkey import", to: toPopupImport, landing: "#/popup/general" },
-		{ where: "onboarding's passkey import", to: toOnboardingImport, landing: "#/onboarding/learn" },
+		{ where: "onboarding's passkey import", to: toOnboardingImport, landing: "#/onboarding/done" },
 	].map(
 		({ where, to, landing }): Step => ({
 			where,

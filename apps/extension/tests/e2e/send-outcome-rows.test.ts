@@ -20,6 +20,7 @@ const RAW_TOKEN_ID = 42
 const LANDED = hex("5e")
 
 const RECORDS = {
+	refused: { id: "f6f6f6f6f6f6f6f6", txHash: hex("76") },
 	unconfirmed: { id: "a1a1a1a1a1a1a1a1", txHash: hex("71") },
 	failed: { id: "b2b2b2b2b2b2b2b2" },
 	sent: { id: "c3c3c3c3c3c3c3c3", txHash: hex("73") },
@@ -27,13 +28,13 @@ const RECORDS = {
 	raw: { id: "e5e5e5e5e5e5e5e5" },
 } as const
 
-/** Home with a landed send's tx row and five ended sends: amber, red, green, the landed one's own
- *  record, and a red one of a token whose decimals are unknown. */
+/** A landed send's tx row and six ended sends: refused, amber, red, green, the landed one's own
+ *  record, and a red one of a token whose decimals are unknown. Home shows the newest five. */
 async function openSeeded(ctx: ExtensionContext): Promise<{ page: Page; scope: ActivityScope }> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page)
-	expect(scope.chainId, "the smoke build's network is Testnet, the one chain an explorer covers").toBe(CHAIN_IDS.TESTNET)
+	expect(scope.chainId, "a new profile is on Mainnet, the default network, which an explorer covers").toBe(CHAIN_IDS.MAINNET)
 	const now = Date.now()
 	await seedTokenRow(page, scope, TOKEN_ID)
 	await seedTokenRow(page, scope, RAW_TOKEN_ID, {
@@ -43,6 +44,12 @@ async function openSeeded(ctx: ExtensionContext): Promise<{ page: Page; scope: A
 	await seedTransaction(page, scope, { hash: LANDED, amount: "1500000", at: now - 4_000 })
 	const fromSubmitting = (txHash: string, check: string) => ({ stage: "failed" as const, from: "submitting", txHash, check })
 	const base = { tokenId: TOKEN_ID, amount: "1500000", errorKind: "transfer" }
+	await seedJournalRecord(page, scope, {
+		...base,
+		id: RECORDS.refused.id,
+		progress: fromSubmitting(RECORDS.refused.txHash, "refused"),
+		at: now - 500,
+	})
 	await seedJournalRecord(page, scope, {
 		...base,
 		id: RECORDS.unconfirmed.id,
@@ -116,13 +123,19 @@ test("Home shows one card per send; each status icon wears its status line's col
 	const { page } = await openSeeded(ctx)
 
 	const home = await readCards(page, 5)
-	expect(home.map((c) => c.journal ?? c.tx)).toEqual([RECORDS.unconfirmed.id, RECORDS.failed.id, RECORDS.sent.id, LANDED, RECORDS.raw.id])
+	expect(home.map((c) => c.journal ?? c.tx)).toEqual([
+		RECORDS.refused.id,
+		RECORDS.unconfirmed.id,
+		RECORDS.failed.id,
+		RECORDS.sent.id,
+		LANDED,
+	])
 	await shotSend(page, "home-one-card-per-send", "activity-feed-root")
 
 	await navigateByHash(page, "#/popup/activity")
 	for (const theme of ["light", "dark"] as const) {
 		await setThemeAttribute(page, theme)
-		const history = (await readCards(page, 6)).filter((c) => c.journal !== null)
+		const history = (await readCards(page, 7)).filter((c) => c.journal !== null)
 		expect(history.map((c) => c.journal)).toEqual(Object.values(RECORDS).map((r) => r.id))
 		for (const card of history) {
 			expect(card.iconFill, `${theme}: ${card.journal}'s icon`).toBe(card.lineColor)
@@ -144,6 +157,17 @@ test("Home shows one card per send; each status icon wears its status line's col
 	await page.mouse.move(box.x + box.width / 2, 4)
 	await page.mouse.up()
 
+	await navigateByHash(page, `#/popup/journal/${RECORDS.refused.id}`)
+	await page.waitForFunction(
+		(s: string) => document.querySelector(s)?.textContent?.trim() === "Refused by the network",
+		{ timeout: 10_000, polling: 100 },
+		sel("journal-detail-category"),
+	)
+	await shotSend(page, "journal-refused", "journal-detail-state")
+	// A new id alone does not reload the journal page: the next record opens from History.
+	await navigateByHash(page, "#/popup/activity")
+	await readCards(page, 7)
+
 	await navigateByHash(page, `#/popup/journal/${RECORDS.raw.id}`)
 	await page.waitForSelector(sel("journal-detail-state"), { visible: true, timeout: 10_000 })
 	expect(await page.$(sel("journal-detail-amount")), "the journal page shows no figure without known decimals").toBeNull()
@@ -157,7 +181,7 @@ test("a checked send's page shows its hash with the explorer's link, and under e
 }) => {
 	const { page } = await openSeeded(ctx)
 	const { id, txHash } = RECORDS.unconfirmed
-	const url = getTransactionExplorerUrl(CHAIN_IDS.TESTNET, "aztecscan", txHash)
+	const url = getTransactionExplorerUrl(CHAIN_IDS.MAINNET, "aztecscan", txHash)
 
 	await navigateByHash(page, `#/popup/journal/${id}`)
 	await page.waitForSelector(sel("journal-detail-tx-hash-link"), { visible: true, timeout: 10_000 })

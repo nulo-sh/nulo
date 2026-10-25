@@ -15,7 +15,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ChainInfo } from "@aztec-labs/entrypoints/interfaces"
-import { walletChainId } from "@nulo/wallet-core/utils"
+import { LOCAL_L1_CHAIN_ID, walletChainId } from "@nulo/wallet-core/chain-id"
 import { assertCanonicalL1ChainId } from "@nulo/wallet-crypto"
 
 export interface LiveNodeChainInfo {
@@ -23,8 +23,8 @@ export interface LiveNodeChainInfo {
 	rollupVersion: number
 }
 
-/** The stored network's identity: the XOR composite used for storage scoping (`0` for
- *  local networks) AND the exact L1 chain id written at enrollment. */
+/** The stored network's identity: the XOR composite used for storage scoping (`0` for the local
+ *  development chain) AND the exact L1 chain id written at enrollment. */
 export interface SelectedNetworkChainInfo {
 	chainId: number
 	l1ChainId: number
@@ -41,9 +41,10 @@ const U32_MAX = 0xffffffff
  * value. Within u32, XOR with the pinned `l1ChainId` is a bijection, so exact-L1 equality
  * plus the composite pins `rollupVersion` exactly.
  *
- * Local networks store `chainId === 0` (no composite to compare — the loopback URL
- * allowlist is the substitute defense for the rollup half); the exact `l1ChainId` check
- * still runs against the stored row, which carries the seeded or probed local value.
+ * `chainId === 0` is the local development chain, whose rollup redeploys with every sandbox, so it
+ * has no composite to compare: there the stored row must name `LOCAL_L1_CHAIN_ID` and the live L1
+ * must equal it, which binds everything built for the row to the development L1. The network
+ * service grants 0 only to a loopback node and refuses a composite that computes to 0.
  */
 export function assertLiveChainIdentity(network: SelectedNetworkChainInfo, nodeInfo: LiveNodeChainInfo): void {
 	assertCanonicalL1ChainId(nodeInfo.l1ChainId)
@@ -57,11 +58,36 @@ export function assertLiveChainIdentity(network: SelectedNetworkChainInfo, nodeI
 			`Chain identity mismatch: selected network has l1ChainId=${network.l1ChainId} but live node reports l1ChainId=${nodeInfo.l1ChainId} (rollupVersion=${nodeInfo.rollupVersion}). Refusing to sign/prove against a drifted endpoint.`,
 		)
 	}
-	if (network.chainId === 0) return
+	if (network.chainId === 0) {
+		if (network.l1ChainId !== LOCAL_L1_CHAIN_ID) {
+			throw new Error(
+				`Chain identity mismatch: selected network is chain 0 with l1ChainId=${network.l1ChainId}, but chain 0 is the local development chain (l1ChainId=${LOCAL_L1_CHAIN_ID}). Refusing to sign/prove.`,
+			)
+		}
+		return
+	}
 	const liveComposite = walletChainId(nodeInfo.l1ChainId, nodeInfo.rollupVersion)
 	if (network.chainId !== liveComposite) {
 		throw new Error(
 			`Chain identity mismatch: selected network has chainId=${network.chainId} but live node reports composite=${liveComposite} (l1ChainId=${nodeInfo.l1ChainId}, rollupVersion=${nodeInfo.rollupVersion}). Refusing to sign/prove against a drifted endpoint.`,
+		)
+	}
+}
+
+/**
+ * Throws unless the live node serves `chainId`; run before a PXE store opens. A store keeps the
+ * rollup address it was first opened against and refuses every other, so one first opened against
+ * another chain's node never opens on its own. Chain 0 redeploys its rollup with every sandbox and
+ * has no composite to compare.
+ */
+export function assertNodeServesChain(chainId: number, nodeInfo: LiveNodeChainInfo): void {
+	if (chainId === 0) return
+	assertCanonicalL1ChainId(nodeInfo.l1ChainId)
+	const { rollupVersion } = nodeInfo
+	const canonical = Number.isSafeInteger(rollupVersion) && rollupVersion >= 0 && rollupVersion <= U32_MAX
+	if (!canonical || walletChainId(nodeInfo.l1ChainId, rollupVersion) !== chainId) {
+		throw new Error(
+			`Chain identity mismatch: network chainId=${chainId} but live node reports l1ChainId=${nodeInfo.l1ChainId}, rollupVersion=${rollupVersion}. Refusing to open its PXE store.`,
 		)
 	}
 }

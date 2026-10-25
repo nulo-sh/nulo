@@ -4,7 +4,14 @@
 import { parseAmountToBaseUnits, readAmountText } from "@/utils/amount"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 
-export type ValidateSendAmountReason = "empty" | "invalid" | "tooManyDecimals" | "belowMinimum" | "exceedsBalance" | "decimalsUnknown"
+export type ValidateSendAmountReason =
+	| "empty"
+	| "invalid"
+	| "tooManyDecimals"
+	| "belowMinimum"
+	| "exceedsBalance"
+	| "balanceUnknown"
+	| "decimalsUnknown"
 
 export type ValidateSendAmount = { valid: true; integerized: bigint } | { valid: false; reason: ValidateSendAmountReason }
 
@@ -62,18 +69,21 @@ export function validateSendAmount(opts: ValidateSendAmountInput): ValidateSendA
 		return { valid: false, reason: "belowMinimum" }
 	}
 
-	if (balanceRaw === undefined || balanceRaw === null) {
-		// No balance loaded — treat as unknown rather than 0; caller should
-		// also gate UI on its own loading state.
-		return { valid: false, reason: "exceedsBalance" }
+	// Unknown is not zero: `exceedsBalance` is shown to the person, so only a balance read earns it.
+	const balance = readBalance(balanceRaw)
+	if (balance === undefined) {
+		return { valid: false, reason: "balanceUnknown" }
 	}
-
-	const balanceBigint = typeof balanceRaw === "bigint" ? balanceRaw : safeBigInt(balanceRaw)
-	if (balanceBigint === undefined || integerized > balanceBigint) {
+	if (integerized > balance) {
 		return { valid: false, reason: "exceedsBalance" }
 	}
 
 	return { valid: true, integerized }
+}
+
+function readBalance(raw: bigint | string | undefined | null): bigint | undefined {
+	if (typeof raw === "bigint") return raw
+	return typeof raw === "string" ? safeBigInt(raw) : undefined
 }
 
 function safeBigInt(value: string): bigint | undefined {

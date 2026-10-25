@@ -1,0 +1,7 @@
+# logs-keyboard-1: phase 0 (planning)
+
+- Recon: one Explore sweep on Sonnet, eight capabilities; its findings verified and persisted in [recon.md](../recon.md). Its one wrong premise (a control between more and Source) was its own correction: the toolbar's order is Source, Level, more.
+- Spike (scratch page under Puppeteer 25.8, Chrome 152 and Firefox BiDi, headless): refocusing the trigger inside the Tab keydown without `preventDefault()` lets the browser's Tab go on from it; Shift+Tab with `preventDefault()` stays on the trigger; script focus after Enter matches `:focus-visible`, after a mouse click it does not. Chrome needed the harness's `--no-sandbox` on this host.
+- Consult 1, Codex (gpt-6.1-sol, high, session `01a15493`), the full audit packet: `conditional approve`, four findings (a leaving card still focusable, the red-gate wording, D7's claim, two e2e gaps), all taken. Same round, Opus 5.5 Plan: `conditional approve`, ten findings; taken but two: the leaving card "harmless" (Codex's trace taken) and D5 narrowed to keyboard opens (kept: a screen reader's activation may lack keyboard modality). Its Vue scheduler trace confirmed the focus-in check runs after the Source field's autofocus.
+- The sweep's "`#popover` after the app root" was wrong (`app.vue:544` precedes the header and router view); the driver caught it while weighing Codex's finding 1.
+- Consult 2, Codex resumed: `approve`, no finding.

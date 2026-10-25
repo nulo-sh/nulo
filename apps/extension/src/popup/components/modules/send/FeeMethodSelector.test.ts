@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import { Flex, Skeleton } from "@nulo/design"
 
 // The real-Dropdown suite below runs without a layout engine: no focus trap, no outside-click wiring.
@@ -13,7 +14,6 @@ const STUBS = {
 	Skeleton,
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
-	MaterialIcon: { template: "<i />" },
 	Icon: { template: '<svg data-testid="stub-glyph" :data-name="name" />', props: ["name", "size"] },
 	Dropdown: {
 		template: '<div><slot name="trigger" /><div data-popup><slot name="popup" /></div></div>',
@@ -46,6 +46,19 @@ describe("FeeMethodSelector", () => {
 		const w = factory()
 		const trigger = w.find('[data-testid="send-fee-method-trigger"]')
 		expect(trigger.text()).toContain("Select method")
+	})
+
+	test("while the card reads, the trigger draws a bar a screen reader hears as Checking; a previewed pick names itself", () => {
+		const trigger = (w: ReturnType<typeof factory>) => w.get('[data-testid="send-fee-method-trigger"]')
+		const reading = factory({ pending: true })
+		expect(trigger(reading).text()).toBe("Checking")
+		expect(trigger(reading).attributes("aria-busy")).toBe("true")
+		expect(trigger(reading).findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
+		const previewed = factory({ pending: true, modelValue: baseMethods[0] })
+		expect(trigger(previewed).text()).toBe("Public Fee Juice")
+		expect(trigger(previewed).attributes("aria-busy")).toBeUndefined()
+		expect(trigger(previewed).findComponent(Skeleton).exists()).toBe(false)
+		expect(trigger(factory()).findComponent(Skeleton).exists()).toBe(false)
 	})
 
 	test("trigger shows the active method title", () => {
@@ -131,7 +144,7 @@ describe("FeeMethodSelector", () => {
 		expect(w.find(TAG).attributes("data-notice-shape")).toBe("private-public")
 		expect(w.find(TAG).text()).toBe("NAMES YOUR ADDRESS")
 		expect(w.find(TAG).classes()).toContain(mark.exposed)
-		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("data-name")).toBe("globe")
+		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("data-name")).toBe("public")
 		expect(w.find(`${TAG} [data-testid="stub-glyph"]`).attributes("aria-hidden")).toBe("true")
 		expect(w.find('[data-testid="send-fee-method-trigger"]').text()).toContain("Public Fee Juice")
 
@@ -203,7 +216,7 @@ describe("FeeMethodSelector — in the real menu", () => {
 			attachTo: document.body,
 			global: {
 				components: { DropdownItem },
-				stubs: { ...FLEX, Text: STUBS.Text, MaterialIcon: STUBS.MaterialIcon, Icon: STUBS.Icon },
+				stubs: { ...FLEX, Text: STUBS.Text, Icon: STUBS.Icon },
 			},
 		})
 	const isOpen = (w: ReturnType<typeof mount>) => w.find("[data-dropdown-open]").attributes("data-dropdown-open") === "true"
@@ -226,12 +239,12 @@ describe("FeeMethodSelector — in the real menu", () => {
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)
 
-		row("private")?.click()
+		expect(sendEvent(row("private")!, "click")).toBeDefined()
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 
-		row("sponsored")?.click()
+		sendEvent(row("sponsored")!, "click")
 		await flushPromises()
 		expect(w.emitted("update:modelValue")?.[0]?.[0]).toMatchObject({ fpc: { id: "s1" } })
 		expect(isOpen(w)).toBe(false)
@@ -243,13 +256,13 @@ describe("FeeMethodSelector — in the real menu", () => {
 		const w = mount(FeeMethodSelector, {
 			props: { methods: baseMethods },
 			attachTo: document.body,
-			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, MaterialIcon: STUBS.MaterialIcon, Icon: STUBS.Icon } },
+			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, Icon: STUBS.Icon } },
 		})
 		const trigger = w.get('[data-testid="send-fee-method-trigger"]')
 		expect(trigger.element.tagName).toBe("BUTTON")
 		expect(trigger.attributes("type")).toBe("button")
-		// The chevron is a ligature: its text would join the button's spoken name.
-		expect(trigger.get("i").attributes("aria-hidden")).toBe("true")
+		// The chevron is decoration: hidden, it stays out of the button's spoken name.
+		expect(trigger.get('[data-testid="stub-glyph"][data-name="chevron"]').attributes("aria-hidden")).toBe("true")
 		;(trigger.element as HTMLButtonElement).click()
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)

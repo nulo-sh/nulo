@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -53,12 +54,10 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 beforeEach(() => {
 	mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
 	vi.stubGlobal("chrome", {
-		storage: {
-			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
-			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-		},
+		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -201,6 +200,46 @@ describe("the hash of a send that reached the send line", () => {
 	})
 })
 
+describe("the App row of a dApp's operation", () => {
+	/** No break opportunity anywhere in it: only breaking anywhere keeps it inside the box. */
+	const HOST = "verylongsubdomainwithoutbreaks.example.com"
+
+	test("shows the dApp's host whole, in the shared value that breaks anywhere, beside the shared label", async () => {
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const w = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "swap", subtitle: HOST })
+		expect(row(w, "origin").text()).toBe(HOST)
+		expect(row(w, "origin").classes().join(" ")).toMatch(/app_value/)
+		expect(row(w, "app-label").text()).toBe("App")
+		expect(row(w, "app-label").classes().join(" ")).toMatch(/app_key/)
+	})
+
+	test("reads dApp for a dApp that named itself nothing, as its activity row does; a transfer has no App row", async () => {
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const nameless = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "swap", subtitle: "" })
+		expect(row(nameless, "origin").text()).toBe("dApp")
+		expect(row(nameless, "app-label").text()).toBe("App")
+
+		const transfer = await mountPage(failedSend())
+		expect(row(transfer, "state").exists()).toBe(true)
+		expect(row(transfer, "origin").exists()).toBe(false)
+		expect(row(transfer, "app-label").exists()).toBe(false)
+	})
+})
+
+describe("the title and Method row of a dApp's call", () => {
+	test("both read the call by its settled rule: a movement label once the build recorded a listed token's class", async () => {
+		const token = { contract: `0x${"0d".repeat(32)}`, classId: `0x${"0e".repeat(32)}` }
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true, ...token }]
+		const { tokenId: _tokenId, amountRaw: _amountRaw, ...base } = failedSend()
+		const read = async (call: OperationRecord["call"]) => {
+			const w = await mountPage({ ...base, kind: "dapp_execute", origin: "dapp", title: "transfer_in_public", call })
+			return [w.find("sub-page-header-stub").attributes("title"), row(w, "method").text()]
+		}
+		expect(await read({ ...token, argCount: 4 })).toEqual(["Transfer (public)", "Transfer (public)"])
+		expect(await read({ contract: token.contract, argCount: 4 })).toEqual(["Transfer In Public", "Transfer In Public"])
+	})
+})
+
 describe("the To row of a send that named its recipient", () => {
 	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
 	const RECIPIENT = `0x${"09".repeat(32)}`
@@ -220,5 +259,14 @@ describe("the To row of a send that named its recipient", () => {
 		const w = await mountPage(record, { ...TESTNET, defaultExplorer })
 		expect(row(w, "recipient-link").exists()).toBe(false)
 		expect(row(w, "recipient").text()).toBe("0x0909…0909")
+	})
+})
+
+describe("the journal page's title", () => {
+	test("a send is titled with its token's symbol, or the empty-value dash for a blank one", async () => {
+		const title = async () => (await mountPage(failedSend())).get("sub-page-header-stub").attributes("title")
+		expect(await title()).toBe("TST")
+		mocks.tokens = [{ id: 7, symbol: "   ", decimals: 0, hasDecimals: true }]
+		expect(await title()).toBe("—")
 	})
 })

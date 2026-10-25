@@ -191,10 +191,13 @@ describe("light palette landed (was the root cause)", () => {
 })
 
 // A focus ring or a graphic needs 3:1 against what it sits on (WCAG 1.4.11), link text 4.5:1.
-describe("theme contrast — home links, focus rings and the step bar (required)", () => {
+describe("theme contrast — home links, meta text, focus rings and the step bar (required)", () => {
 	const AA_NON_TEXT = 3
 	const pairs: Pair[] = [
-		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link on the page" },
+		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link or meta text on the page" },
+		{ fg: "--nulo-secondary", bg: "--nulo-surface-low", min: AA_TEXT, label: "meta text on a row's hover tint" },
+		{ fg: "--nulo-secondary", bg: "--nulo-surface-high", min: AA_TEXT, label: "meta text on a row's pressed tint" },
+		{ fg: "--nulo-secondary", bg: "--dropdown-bg", min: AA_TEXT, label: "a placeholder in a popover" },
 		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
 		{ fg: "--nulo-accent", bg: "--nulo-surface-low", min: AA_NON_TEXT, label: "the accent ring on a row's hover tint" },
 		{ fg: "--nulo-accent", bg: "--nulo-surface-high", min: AA_NON_TEXT, label: "the accent ring on a row's pressed tint" },
@@ -226,6 +229,23 @@ describe("theme contrast — status text (required)", () => {
 		test(`dark: --txt-danger on ${bg} >= ${AA_TEXT}:1`, () => {
 			expect(contrast("--txt-danger", bg, "dark")).toBeGreaterThanOrEqual(AA_TEXT)
 		})
+	}
+	// Error text also sits on a window's footer, which `--nulo-surface` paints, as it does a popup card.
+	for (const theme of ["light", "dark"] as const) {
+		test(`${theme}: --txt-danger on --nulo-surface >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-danger", "--nulo-surface", theme)).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	}
+	const LOG_LINES = [
+		["ERROR", "--log-error-color", "--log-error-background"],
+		["WARN", "--log-warn-color", "--log-warn-background"],
+	] as const
+	for (const theme of ["light", "dark"] as const) {
+		for (const [level, fg, bg] of LOG_LINES) {
+			test(`${theme}: a log viewer's ${level} line on its tint >= ${AA_TEXT}:1`, () => {
+				expect(contrast(fg, bg, theme)).toBeGreaterThanOrEqual(AA_TEXT)
+			})
+		}
 	}
 	for (const [fg, status] of Object.entries({ "--txt-warning": "--yellow", "--txt-success": "--green" })) {
 		test(`dark: ${fg} is ${status}`, () => {

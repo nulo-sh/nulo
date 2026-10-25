@@ -22,11 +22,12 @@ import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Logs helpers */
-import { droppedPrefixLength, formatLogs, formatSingleLog, logsDocument } from "./logs-format"
+import { droppedPrefixLength, formatSingleLog, logsDocument } from "./logs-format"
 import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
 import { createLoggerTheme } from "./creator.js"
+import { editorShadowRoot } from "./editor-shadow"
 
 const editorRef = ref(null)
 let view = null
@@ -49,6 +50,8 @@ const maxLogsCount = ref(defaultConfig().debugMode ? 10_000 : 1_000)
 const shouldAutoScroll = ref(true)
 const showScrollBtn = ref(false)
 let scrollTimeout = null
+let snapshotPending = false
+let lastScrollTop = 0
 
 function onLogAdded(log) {
 	logs.value.push(log)
@@ -61,11 +64,27 @@ function onLogAdded(log) {
 	if (trimmed) changes.push({ from: 0, to: trimmed })
 	const appended = filters.isLogInclude(log)
 	if (appended) changes.push({ from: view.state.doc.length, insert: `${formatSingleLog(log)}\n` })
-	if (changes.length) view.dispatch({ changes })
+	if (changes.length) {
+		const set = view.state.changes(changes)
+		view.dispatch({ changes: set, effects: holdPlace(set) })
+	}
 	if (!appended) return
 
 	if (shouldAutoScroll.value) scrollToBottom()
 	else showScrollBtn.value = true
+}
+
+// CodeMirror keeps a view resting within 4px of its end at its end, which would carry a selection
+// or a search held there away, so while not following a change carries the view's place. A snapshot
+// taken before CodeMirror measures reads the old scroll offset against a trimmed document: a later
+// change in the same frame leaves the pending one for CodeMirror to map through its changes.
+function holdPlace(changes) {
+	if (shouldAutoScroll.value || snapshotPending) return []
+	snapshotPending = true
+	view.requestMeasure({ read: () => (snapshotPending = false) })
+	// The snapshot replaces a follow still due, whose scroll then never comes to lower the reference.
+	lastScrollTop = Math.min(lastScrollTop, view.scrollDOM.scrollTop)
+	return view.scrollSnapshot().map(changes)
 }
 
 function enableAutoScroll() {
@@ -79,22 +98,37 @@ function disableAutoScroll() {
 		shouldAutoScroll.value = true
 	}, AUTO_SCROLL_TIMEOUT_MS)
 }
+// Only a scroll that moved the view down resumes the follow at the end: a trim's held view comes
+// back up into the end band, and must stay held.
 function updateShouldAutoScroll() {
 	const el = view?.scrollDOM
 	if (!el) return
-	const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_DISABLE_THRESHOLD
-	if (isAtBottom) {
-		showScrollBtn.value = false
-		enableAutoScroll()
-	} else {
+	const movedDown = el.scrollTop > lastScrollTop
+	lastScrollTop = el.scrollTop
+	if (el.scrollHeight - el.scrollTop - el.clientHeight >= SCROLL_DISABLE_THRESHOLD) {
 		showScrollBtn.value = true
 		disableAutoScroll()
+	} else if (movedDown) {
+		showScrollBtn.value = false
+		enableAutoScroll()
 	}
 }
+// Chrome reports a selection inside a shadow root only through the root, retargeting the
+// document's to the host; Firefox's root has no `getSelection` and its document's reaches inside.
+function editorSelection() {
+	const root = editorRef.value?.shadowRoot
+	return root?.getSelection ? root.getSelection() : document.getSelection()
+}
+// Resumes the follow itself: at the end the scroll moves nothing, so no scroll event would.
 function scrollToBottom() {
 	if (!view) return
+	enableAutoScroll()
 	const lastLine = view.state.doc.line(view.state.doc.lines)
 	view.dispatch({ effects: EditorView.scrollIntoView(lastLine.from, { y: "end" }) })
+	// The follow's own landing must not read as the reader moving down: no scroll does until the next
+	// scroll event resets this, once CodeMirror's listener, registered first, has landed every follow
+	// still due. Reading the end instead would force a layout per line.
+	lastScrollTop = Number.POSITIVE_INFINITY
 	showScrollBtn.value = false
 }
 
@@ -116,11 +150,19 @@ function scrollToTargetLog(targetLogId) {
 	if (!view) return
 	const idx = logs.value.findIndex((l) => l.id === targetLogId)
 	if (idx === -1) return
-	const pos = formatLogs(logs.value.slice(0, idx)).length + 1
+	// The editor stores every line break as "\n": measure the logs before it as the editor holds them.
+	const pos = view.state.toText(logsDocument(logs.value.slice(0, idx))).length
 	view.dispatch({
 		effects: EditorView.scrollIntoView(pos, { y: "center" }),
 		selection: { anchor: pos },
 	})
+	// A held line must not replace the pending target with its snapshot: CodeMirror maps a pending
+	// target through later changes, but a later scroll effect replaces it, and it runs this read in the
+	// measure that applies the target, before applying it. The target's landing is the viewer's own
+	// scroll, which must not read as the reader moving down.
+	snapshotPending = true
+	view.requestMeasure({ read: () => (snapshotPending = false) })
+	lastScrollTop = Number.POSITIVE_INFINITY
 }
 
 const handleToggleFilter = (kind, value) => {
@@ -216,7 +258,7 @@ onMounted(async () => {
 	logs.value = await getLogs()
 
 	view = new EditorView({
-		parent: editorRef.value,
+		parent: editorShadowRoot(editorRef.value),
 		state: EditorState.create({
 			doc: logsDocument(logs.value),
 			extensions: [
@@ -232,12 +274,14 @@ onMounted(async () => {
 	view.scrollDOM?.addEventListener("scroll", updateShouldAutoScroll)
 
 	document.addEventListener("selectionchange", () => {
-		const selection = document.getSelection()
+		const selection = editorSelection()
 		if (selection && !selection.isCollapsed) disableAutoScroll()
 	})
 
-	document.addEventListener("focusin", (e) => {
-		if (e.target?.closest(".cm-panel.cm-search")) disableAutoScroll()
+	// On the shadow root, not the document: focus moving inside the root, as from the content to the
+	// search panel, never leaves it, its target and related target both retargeting to the host.
+	editorRef.value.shadowRoot.addEventListener("focusin", (e) => {
+		if (e.target.closest?.(".cm-panel.cm-search")) disableAutoScroll()
 	})
 
 	const params = new URLSearchParams(window.location.search)
@@ -274,11 +318,11 @@ onBeforeUnmount(() => {
 			@clearLogs="handleClearLogs"
 		/>
 
-		<Flex v-if="showScrollBtn" @click="scrollToBottom" align="center" :class="$style.scroll_btn">
-			<Icon name="arrow-right" size="24" rotate="90" color="tertiary" />
+		<Flex v-if="showScrollBtn" data-testid="logs-scroll-btn" @click="scrollToBottom" align="center" :class="$style.scroll_btn">
+			<Icon name="forward" size="24" rotate="90" color="tertiary" />
 		</Flex>
 
-		<div ref="editorRef" :class="$style.logs_viewer" />
+		<div ref="editorRef" data-testid="logs-editor" :class="$style.logs_viewer" />
 	</div>
 </template>
 
@@ -296,7 +340,15 @@ onBeforeUnmount(() => {
 	overflow: hidden;
 }
 
+/* The view's width runs a pixel past the window's border; below the popup's width the log takes the box it sits in. */
+@media (width < 359px) {
+	.wrapper {
+		width: 100%;
+	}
+}
+
 .scroll_btn {
+	user-select: none;
 	position: absolute;
 	right: 18px;
 	bottom: 18px;
@@ -313,8 +365,8 @@ onBeforeUnmount(() => {
 	&:hover {
 		background: var(--dropdown-bg);
 		border-color: var(--nulo-outline);
-		* {
-			fill: var(--txt-secondary);
+		svg {
+			color: var(--txt-secondary);
 		}
 	}
 

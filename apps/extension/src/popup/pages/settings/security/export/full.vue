@@ -13,131 +13,64 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 /** Services */
 import { managers } from "@/utils/core"
-import { ACCOUNT_SERVICE_NAME, AccountServiceClient, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/client"
-import { ACCOUNT_STATE_SERVICE_NAME, AccountStateServiceClient } from "@/wallet/services/account-state/client"
-import { AUTH_REGISTRY_SERVICE_NAME, AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
-import { CONFIG_SERVICE_NAME, ConfigServiceClient } from "@/wallet/services/config/client"
-import { CONTACT_SERVICE_NAME, ContactServiceClient } from "@/wallet/services/contact/client"
-import { PROFILE_SERVICE_NAME, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { TOKEN_SERVICE_NAME, TokenServiceClient } from "@/wallet/services/token/client"
-import { TOKEN_BALANCE_SERVICE_NAME, TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
-import { TRANSACTION_SERVICE_NAME, TransactionServiceClient } from "@/wallet/services/transaction/client"
-import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH } from "@/wallet/services/backup/backup-migration-registry"
-import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
 
 /** Utils */
-import { downloadFile } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
-import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { goBack } from "@/utils/page-back"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
-import { useToast } from "@/composables/toast.js"
+import { useFullBackupExport } from "@/composables/useFullBackupExport"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
-const { openToast } = useToast()
 
-// Path A passkey ceremony — replaces the prior SW-driven popup window for
-// passkey profile backup-export. Mounted as `<PasskeyCeremonyDialog>` in
-// the template; driven imperatively from `handleBackup` below.
 const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
-import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
-const popupStore = usePopupStore()
 
 const router = useRouter()
 
-// Sealed artifact strings, published only by a completed run — never a mutable
-// draft object. `payloadPretty` is the plain download body, `payloadCompact`
-// the encryption input (both derive from the SAME sealed snapshot inside
-// `assembleFullBackup`, so the embedded checksum covers exactly these bytes).
-let payloadPretty = null
-let payloadCompact = null
-let encryptedB64 = null
+const closeButton = useTemplateRef("closeButton")
 
-// Re-entry latch + currency fence (the export/account.vue idiom): `isBusy`
-// closes synchronously before the first await so a double click / double
-// Enter cannot start a second assembly; `generation` is bumped on unmount so
-// a superseded run can neither publish state nor resurrect scrubbed secrets.
-const isBusy = ref(false)
-const isDownloading = ref(false)
-let generation = 0
-// The in-flight run's clients, for unmount teardown (per-run construction —
-// see `buildBackupServices`).
-let activeRunClients = null
+const {
+	password,
+	repeatedPassword,
+	isAgreed,
+	backupStatus,
+	isBusy,
+	isDownloading,
+	showRecommendation,
+	isWrongPassword,
+	isPasswordMismatch,
+	dekReplaced,
+	chainStateOmitted,
+	unopenedImportedKeys,
+	importsOnAddedNetworks,
+	savedPlain,
+	isPasskeyProfile,
+	canDownload,
+	handleBackup,
+	handleEncrypt,
+	downloadBackup,
+	handleDownloadClick,
+	reset,
+	dispose,
+} = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
 
-// One bad disconnect must not block the remaining disconnects or the secret
-// scrub that follows — teardown is best-effort per client, never throwing.
-const disconnectAll = (clients) => {
-	for (const { client } of clients) {
-		try {
-			client.disconnect()
-		} catch (err) {
-			console.error("[export/full] client disconnect failed:", err)
-		}
-	}
-}
-
-// Slice keys are the services' OWN name constants — the import path's slice
-// registry rejects anything else. (Client instances expose no `name` field:
-// the old `s.name?.replace("-client", "")` keying read `undefined` and
-// silently collapsed every slice onto one bogus key.)
-// Constructed PER RUN so two runs can never share a client and an aborted
-// run's teardown cannot touch a later run's connections.
-const buildBackupServices = () => {
-	const importedKeysBackupClient = new AccountServiceClient()
-	return [
-		{ name: PROFILE_SERVICE_NAME, client: new ProfileServiceClient() },
-		{ name: ACCOUNT_SERVICE_NAME, client: new AccountServiceClient() },
-		// The imported-keys slice shares AccountService but has its OWN backup name/root — a thin
-		// adapter routes `.backup()` to `backupImportedKeys()`.
-		{
-			name: IMPORTED_KEYS_SERVICE_NAME,
-			client: {
-				backup: () => importedKeysBackupClient.backupImportedKeys(),
-				disconnect: () => importedKeysBackupClient.disconnect(),
-			},
-		},
-		{ name: TRANSACTION_SERVICE_NAME, client: new TransactionServiceClient() },
-		{ name: TOKEN_SERVICE_NAME, client: new TokenServiceClient() },
-		{ name: TOKEN_BALANCE_SERVICE_NAME, client: new TokenBalanceServiceClient() },
-		{ name: ACCOUNT_STATE_SERVICE_NAME, client: new AccountStateServiceClient() },
-		{ name: AUTH_REGISTRY_SERVICE_NAME, client: new AuthRegistryServiceClient() },
-		{ name: CONTACT_SERVICE_NAME, client: new ContactServiceClient() },
-		{ name: CONFIG_SERVICE_NAME, client: new ConfigServiceClient() },
-	]
-}
-const version = __VERSION__
-const aztecVersion = __AZTEC_VERSION__
-
-const isPasskeyProfile = computed(() => appStore.profile.type === "passkey")
-const password = ref()
-const repeatedPassword = ref()
-const isWrongPassword = ref(false)
-const isPasswordMismatch = ref(false)
-
-const showRecommendation = ref(false)
-// Two distinct losses the user must know about before trusting the download. `dekReplaced`: the
-// stored imported-keys key no longer opens, so the file carries a FRESH one and every imported
-// account must be re-imported. `chainStateOmitted`: the profile is in recovery mode, so the PXE
-// contract/sender state was left out — the imported-key ciphertext itself may still be intact
-// (a corrupt envelope MAC alone lands here) and travels in the file.
-const dekReplaced = ref(false)
-const chainStateOmitted = ref(false)
-/** Imported-key rows that did not open, so travel as stored and will not restore. A replaced DEK
- *  has its own warning, which covers them. */
-const unopenedImportedKeys = ref(0)
+const addedNetworksText = computed(() => {
+	const { accounts, networks } = importsOnAddedNetworks.value
+	const count = accounts === 1 ? "1 imported account is" : `${accounts} imported accounts are`
+	const one = networks === 1
+	return `${count} on ${one ? "a network" : "networks"} you added. A restore re-creates only the default networks, so add ${one ? "that network" : "those networks"} again to restore ${accounts === 1 ? "it" : "them"}.`
+})
 
 /** A reset in progress: its journal holds accounts a backup made now would miss. */
 const pendingReset = ref(null)
@@ -151,336 +84,17 @@ const syncPendingReset = async () => {
 managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
 void syncPendingReset()
 
-const isAgreed = ref(false)
 const handleAgree = () => {
 	if (pendingReset.value) return
 	isAgreed.value = true
 	if (isPasskeyProfile.value) handleBackup()
 }
 
-const backupStatus = ref("")
-// A password profile's unencrypted file holds its master secret and every key, so only its encrypted
-// file leaves the page. A passkey profile's plain file reaches no funds without the passkey, so it
-// may leave once the person confirms what it exposes.
-const canDownload = computed(() => backupStatus.value === "encrypted" || (isPasskeyProfile.value && backupStatus.value === "finished"))
-
 /** After a failed passkey step: back, or in an own window, which has no page behind it, the
  *  agreement step. */
 function leaveAfterPasskeyFailure() {
 	if (ownWindowRoute() === undefined) router.go(-1)
 	else isAgreed.value = false
-}
-
-/** Path A: collect the WebAuthn credential via the in-page modal BEFORE
- *  calling the service. Targeted `get` against this profile's stored
- *  credentialId so the OS prompt is bound to the right key. Returns "handled"
- *  when the flow already resolved the failure UI (or was superseded). */
-async function acquirePasskeyCredential(gen) {
-	try {
-		const credentialId = await managers.profile.getPasskeyCredentialId(appStore.profile.id)
-		if (gen !== generation) return "handled"
-		const credentialData = await runCeremony({ mode: "get", credentialId, step: "export", profileName: appStore.profile.name })
-		return { credentialData }
-	} catch (err) {
-		if (gen !== generation) return "handled"
-		backupStatus.value = ""
-		// A cancel or an unconfirmed prompt resets the agreement gate so the user can re-confirm or
-		// back out without bouncing off the page — passkey export auto-fires on agree (no "Create
-		// Backup" CTA), so without this reset they'd be stuck on a dead form.
-		if (handleCancelOrUnconfirmed(err, openToast)) {
-			isAgreed.value = false
-			return "handled"
-		}
-		// User-facing copy stays generic; the underlying error goes to the console so a failed
-		// export is diagnosable (this catch and the exportPlain one below are otherwise
-		// indistinguishable — same toast, same navigation).
-		console.error("[export/full] passkey credential acquisition failed:", err)
-		openToast({ kind: "error", label: "Failed to authenticate by passkey" })
-		leaveAfterPasskeyFailure()
-		return "handled"
-	}
-}
-
-/** Stage 2: the authenticated key-material export, discriminated per profile
- *  type. Returns "handled" when the failure UI already resolved (wrong
- *  password / passkey failure / superseded run). */
-async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
-	try {
-		if (isPasskeyProfile.value) {
-			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
-			// the master re-derives from the passkey PRF at restore. The imported-keys DEK travels
-			// as a SEALED blob (the restore ceremony's wrap key opens it) — the stored one, or a
-			// fresh one when the stored slot no longer opens. The file carries the key rows it counted.
-			const passkeyKeys = await accountClient.exportPasskeyBackupKeys(fence, credentialData)
-			if (gen !== generation) return "handled"
-			return {
-				key: passkeyKeys.credentialId,
-				dekSealedB64: passkeyKeys.dekSealed,
-				dekReplaced: passkeyKeys.dekReplaced,
-				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
-				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
-			}
-		}
-		// The file carries a key made for this backup alone, never the profile's imported-keys DEK.
-		const material = await accountClient.exportFullBackupKeys(fence, password.value)
-		return {
-			key: material.masterKey,
-			entropyB64: material.entropy,
-			dekB64: material.importedKeysKey,
-			dekReplaced: material.dekReplaced,
-			unopenedImportedKeys: material.unopenedImportedKeys,
-			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
-		}
-	} catch (error) {
-		if (gen !== generation) return "handled"
-		backupStatus.value = ""
-		if (!isPasskeyProfile.value) {
-			isWrongPassword.value = true
-		} else {
-			// See the acquisition catch above — stage-tagged so the two failure points are
-			// distinguishable in the console while the user-facing copy stays generic.
-			console.error("[export/full] passkey export failed:", error)
-			openToast({ kind: "error", label: "Failed to authenticate by passkey" })
-			leaveAfterPasskeyFailure()
-		}
-		return "handled"
-	}
-}
-
-/** Two orthogonal version fields replace the legacy conflated
- *  `schema-version: 2`: the NON-migratable account-contract epoch and the
- *  MIGRATABLE storage schema version the import path migrates forward from.
- *  Constants are single-sourced with the import gates. `data` and
- *  `checksum` are the assembler's to add — in that order, so the sealed
- *  key order matches what the import side re-serializes. */
-function buildBackupEnvelope({ key, entropyB64, dekB64, dekSealedB64 }) {
-	return {
-		"wallet-version": version,
-		"aztec-version": aztecVersion,
-		[COMPAT_EPOCH_FIELD]: CURRENT_COMPAT_EPOCH,
-		[BACKUP_SCHEMA_VERSION_FIELD]: CURRENT_BACKUP_SCHEMA_VERSION,
-		"master-key": key,
-		// Password blobs REQUIRE this; passkey blobs must NOT carry it (`undefined` is dropped
-		// by JSON.stringify). Restore verifies PBKDF2(words(entropy)) == master-key before
-		// sealing either.
-		entropy: entropyB64,
-		// Imported-keys key carriers (epoch-4 REQUIRED, per profile type; the other stays
-		// undefined → dropped): for password blobs, plaintext beside the plaintext master, the key
-		// made for this backup alone that its imported-key rows open under; for passkey blobs, the
-		// profile's sealed DEK. Restore feeds it ONLY into the rewrap context (the restored row
-		// mints a FRESH dek — clone divergence).
-		"imported-keys-dek": dekB64,
-		"imported-keys-dek-sealed": dekSealedB64,
-		// The active-network preference names a CHAIN (row ids are per install and the backup
-		// carries no network rows); restore honours it only for a seeded chain, else the primary
-		// seed stays active. `undefined` is dropped by JSON.stringify when there is no active network.
-		"active-chain-id": appStore.network?.chainId,
-	}
-}
-
-/** Export-side half of the shared size invariant: never ship a file the
- *  import gate would reject — fail loud here instead of silently at
- *  restore time. Measured in UTF-8 BYTES to match the import side's
- *  `file.size` (string .length counts UTF-16 code units and undercounts
- *  multi-byte content like emoji in profile/contact names).
- *  Deliberately synchronous — runs inside the post-assembly fenced span. */
-function rejectOversizedBackup(pretty) {
-	if (new TextEncoder().encode(pretty).length <= MAX_BACKUP_FILE_BYTES) return false
-	backupStatus.value = ""
-	if (isPasskeyProfile.value) isAgreed.value = false
-	openToast({ kind: "error", label: "Backup is too large to create" })
-	return true
-}
-
-/** The assembly-failure UI (deliberately synchronous — runs inside the catch's
- *  span; owns the currency fence: a superseded run stays silent — the page
- *  that could show the error is gone). */
-function reportAssemblyFailure(gen, err) {
-	if (gen !== generation) return
-	backupStatus.value = ""
-	if (isPasskeyProfile.value) isAgreed.value = false
-	console.error("[export/full] backup assembly failed:", err)
-	openToast({ kind: "error", label: "Failed to create the backup" })
-}
-
-function backupSources(runClients, heldSlices = {}) {
-	return runClients.map(({ name, client }) => ({
-		name,
-		backup: name in heldSlices ? async () => heldSlices[name] : () => client.backup(),
-	}))
-}
-
-/** Stage 1: the run's fence, then a passkey profile's credential. Slices resolve the active
- *  profile on their own and a profile switch updates this page in place, so the run is bound to
- *  one session of one profile in one worker: a lock, a switch (even away and back) or a worker
- *  restart before publication fails it. Returns "handled" when the run already ended. */
-async function openRun(gen) {
-	const fence = await managers.profile.captureRunFence()
-	if (gen !== generation) return "handled"
-	if (fence.profileId !== appStore.profile.id) throw new Error("The active profile is not the one being backed up")
-	if (!isPasskeyProfile.value) return { fence }
-	const acquired = await acquirePasskeyCredential(gen)
-	if (acquired === "handled" || gen !== generation) return "handled"
-	return { fence, credentialData: acquired.credentialData }
-}
-
-async function handleBackup() {
-	// Re-entry latch: closes synchronously, BEFORE the ceremony/KDF awaits —
-	// the empty-status window during PBKDF2 was where double-fires slipped in.
-	if (isBusy.value) return
-	isBusy.value = true
-	const gen = generation
-	backupStatus.value = "progress"
-	let runClients = null
-	try {
-		const run = await openRun(gen)
-		if (run === "handled") return
-
-		runClients = buildBackupServices()
-		activeRunClients = runClients
-		const accountClient = runClients.find(({ name }) => name === ACCOUNT_SERVICE_NAME).client
-		const { fence, credentialData } = run
-		const material = await exportKeyMaterial(gen, fence, credentialData, accountClient)
-		if (material === "handled" || gen !== generation) return
-		dekReplaced.value = !!material.dekReplaced
-		unopenedImportedKeys.value = material.dekReplaced ? 0 : (material.unopenedImportedKeys ?? 0)
-		chainStateOmitted.value = !!appStore.profile.recoveryMode
-		const envelope = buildBackupEnvelope(material)
-
-		const result = await assembleFullBackup(envelope, backupSources(runClients, material.heldSlices), () => gen === generation)
-		await managers.profile.assertRunFence(fence)
-		// Fence first: a superseded run must not run the oversize UI writes.
-		if (gen !== generation || rejectOversizedBackup(result.pretty)) return
-
-		payloadCompact = result.compact
-		payloadPretty = result.pretty
-		backupStatus.value = "finished"
-		showRecommendation.value = true
-	} catch (err) {
-		reportAssemblyFailure(gen, err)
-	} finally {
-		if (runClients) disconnectAll(runClients)
-		// A null runClients matches only a null activeRunClients — no-op either way.
-		if (activeRunClients === runClients) activeRunClients = null
-		if (gen === generation) isBusy.value = false
-	}
-}
-
-/** Passkey profiles type the encryption password on this page, so it needs
- *  the empty/mismatch checks here. Returns true when encryption must not start. */
-function passkeyPasswordBlocked() {
-	if (!isPasskeyProfile.value) return false
-	showRecommendation.value = false
-	if (!password.value) return true
-	if (password.value !== repeatedPassword.value) {
-		isPasswordMismatch.value = true
-		return true
-	}
-	return false
-}
-
-async function handleEncrypt() {
-	// Same latch + fence discipline as creation: `isBusy` blocks a double
-	// start before Vue re-renders the disabled CTA; the fence suppresses any
-	// stale success/error write after unmount scrubbed the payloads. The
-	// cross-guard on `isDownloading` (account.vue idiom) stops encryption
-	// starting mid-download — the plaintext file would land on disk while the
-	// page ends up saying "successfully encrypted".
-	if (isBusy.value || isDownloading.value) return
-	if (passkeyPasswordBlocked()) return
-	isBusy.value = true
-	const gen = generation
-	const plaintext = payloadCompact
-
-	backupStatus.value = "encrypting"
-	showRecommendation.value = false
-
-	try {
-		const sealed = await sealFullBackupText(plaintext, password.value)
-		if (gen !== generation) return
-		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
-		// overhead could in principle cross the line a plain file sits under).
-		// The text is pure ASCII, so string length IS the byte count here.
-		if (sealed.length > MAX_BACKUP_FILE_BYTES) {
-			backupStatus.value = "finished"
-			openToast({ kind: "error", label: "Backup is too large to create" })
-			return
-		}
-		encryptedB64 = sealed
-		backupStatus.value = "encrypted"
-	} catch (error) {
-		if (gen !== generation) return
-		console.error("Failed to encrypt the backup", error)
-		openToast({ kind: "error", label: "Failed to encrypt the backup" })
-		backupStatus.value = "finished"
-	} finally {
-		if (gen === generation) isBusy.value = false
-	}
-}
-
-async function downloadBackup(isEncrypted) {
-	if (isDownloading.value || isBusy.value) return
-	// `canDownload`'s rule, held again where the file is written.
-	if (!isEncrypted && !isPasskeyProfile.value) return
-	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
-	if (!fileContent) return
-	isDownloading.value = true
-	const gen = generation
-	let filename = `_${appStore.profile.name.replace(" ", "_")}_${Math.floor(Date.now() / 1000)}`
-	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
-
-	try {
-		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
-		if (gen !== generation) return
-		openToast({ kind: "success", label: "Backup downloaded successfully" })
-	} catch (err) {
-		if (gen !== generation) return
-		console.error("Download failed:", { error: err })
-		openToast({ kind: "error", label: "Failed to download backup" })
-	} finally {
-		if (gen === generation) isDownloading.value = false
-	}
-}
-
-/** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
- *  the callback downloads only the plain file of the run the person was warned about. */
-function confirmPlainDownload() {
-	const gen = generation
-	cacheStore.confirm = {
-		pre_title: "Not encrypted",
-		title: "Download without a password?",
-		description:
-			"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
-		confirm_color: "red",
-		confirm_variant: "destructive",
-		confirm_text: "Download anyway",
-		callback: () => {
-			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
-		},
-	}
-	popupStore.open("confirm")
-}
-
-function handleDownloadClick() {
-	if (backupStatus.value === "encrypted") void downloadBackup(true)
-	else if (canDownload.value) confirmPlainDownload()
-}
-
-/** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
- *  resurrect state; then services (cleanup-order rule), then the secret scrub: the payload strings
- *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
- *  pending operations keep what they captured until they settle). */
-function discardRun() {
-	generation++
-	if (activeRunClients) {
-		disconnectAll(activeRunClients)
-		activeRunClients = null
-	}
-	payloadPretty = null
-	payloadCompact = null
-	encryptedB64 = null
-	password.value = null
-	repeatedPassword.value = null
 }
 
 const onKeydown = (e) => {
@@ -496,28 +110,30 @@ const onKeydown = (e) => {
 			downloadBackup(true)
 			break
 		default:
-			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
+			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
+			// starts nothing.
 			break
 	}
 }
+
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
+}
+
+watch(backupStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // A profile switch made elsewhere updates this page in place. A backup it holds is the previous
 // profile's, and the download rule would read the new profile's type, so the page starts over.
 watch(
 	() => appStore.profile?.id,
 	() => {
-		discardRun()
+		reset()
 		onCeremonyReject(new Error("The active profile changed"))
-		isBusy.value = false
-		isDownloading.value = false
-		isAgreed.value = false
-		backupStatus.value = ""
-		showRecommendation.value = false
-		isWrongPassword.value = false
-		isPasswordMismatch.value = false
-		dekReplaced.value = false
-		unopenedImportedKeys.value = 0
-		chainStateOmitted.value = false
 		pendingReset.value = null
 		void syncPendingReset()
 	},
@@ -527,12 +143,12 @@ watch(
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
+	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
 })
 
 onBeforeUnmount(() => {
 	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
-	discardRun()
+	dispose()
 })
 </script>
 
@@ -588,49 +204,19 @@ onBeforeUnmount(() => {
 			-->
 
 			<template v-else-if="backupStatus">
-				<!--
-				Working states (progress = bundling the backup, encrypting =
-				sealing it with a password). Previously this block rendered
-				nothing while the button below ticked through "Creating
-				Backup…" / "Encrypting…" — the page looked empty for ~1-3s.
-				This inline status card mirrors the in-page-modal vibe
-				without hijacking the screen (the modal is reserved for
-				user-driven waits like the passkey ceremony).
-
-				Wrapped in `export_section_last` so it participates in the
-				page's existing 20px vertical rhythm (matches the agreement
-				gate's section frame above).
-
-				A11y: the wrapper is announced via `role="status"` +
-				`aria-live="polite"` (same pattern as
-				TransactionAwaitingCard.vue:37), the spinner is decorative
-				(`aria-hidden`), and the heading is left as a plain span so
-				the page's existing heading hierarchy isn't fractured
-				(CollapsingHeroLayout.vue:63 uses spans for the hero, no h1).
-				-->
 				<div
 					v-if="backupStatus === 'progress' || backupStatus === 'encrypting'"
 					class="export_section_last"
 				>
-					<div
-						:class="$style.status_card"
+					<StatusCard
+						:title="backupStatus === 'encrypting' ? 'Encrypting your backup' : 'Creating your backup'"
+						:description="
+							backupStatus === 'encrypting'
+								? 'Sealing the file with your password. Only you can open it.'
+								: 'Gathering your wallet data into your backup file.'
+						"
 						data-testid="backup-status-card"
-						role="status"
-						aria-live="polite"
-						aria-atomic="true"
-					>
-						<Spinner size="28" color="--nulo-accent" aria-hidden="true" />
-						<span :class="$style.status_title">
-							{{ backupStatus === "encrypting" ? "Encrypting your backup" : "Creating your backup" }}
-						</span>
-						<p :class="$style.status_subtitle">
-							{{
-								backupStatus === "encrypting"
-									? "Sealing the file with your password. Only you can open it."
-									: "Gathering your wallet data into your backup file."
-							}}
-						</p>
-					</div>
+					/>
 				</div>
 
 				<div v-else class="export_section">
@@ -662,8 +248,20 @@ onBeforeUnmount(() => {
 						<template #description>
 							<Text color="secondary" height="140">
 								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
-								could not be opened, so they will not be restored. Import their keys again after the restore.
+								could not be opened, so {{ unopenedImportedKeys === 1 ? "it" : "they" }} will not be restored. Import
+								their keys again after the restore.
 							</Text>
+						</template>
+					</Banner>
+					<Banner
+						v-if="importsOnAddedNetworks.accounts > 0"
+						variant="warning"
+						direction="vertical"
+						data-testid="backup-imported-network-banner"
+					>
+						<template #title> Some imported accounts need their network </template>
+						<template #description>
+							<Text color="secondary" height="140">{{ addedNetworksText }}</Text>
 						</template>
 					</Banner>
 					<Banner v-if="chainStateOmitted" variant="warning" direction="vertical" data-testid="backup-chain-state-omitted-banner">
@@ -690,9 +288,18 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<Banner v-if="backupStatus === 'encrypted'" variant="done" direction="vertical">
-						<template #title> Backup is successfully encrypted </template>
-						<template #description>
+					<!-- Banner always lays out its description, so a lone title sits on one row, where the empty
+					     description takes no height. -->
+					<Banner
+						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
+						variant="done"
+						:direction="savedPlain ? 'horizontal' : 'vertical'"
+						data-testid="backup-done-banner"
+					>
+						<template #title>
+							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
+						</template>
+						<template v-if="!savedPlain" #description>
 							<Text color="secondary" height="140">
 								Don't forget your
 								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>
@@ -785,6 +392,17 @@ onBeforeUnmount(() => {
 					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
 				</Button>
 				<Button
+					v-if="backupStatus === 'downloaded'"
+					ref="closeButton"
+					@click="handleClose"
+					@keydown.enter="refuseRepeatEnter"
+					variant="cta"
+					data-testid="backup-close-btn"
+				>
+					Close
+				</Button>
+				<Button
+					v-else
 					@click="handleDownloadClick"
 					@keydown.enter="refuseRepeatEnter"
 					:disabled="!canDownload || isDownloading"
@@ -810,45 +428,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-/* In-page status card for the working states (progress / encrypting).
-   Visual language echoes PasskeyCeremonyDialog (centered, padded, light
-   border, spinner + title + subtitle) so the wallet feels cohesive
-   across waiting moments — but inline, not as a screen-blocking modal.
-
-   Outer spacing intentionally NOT defined here — the `export_section_last`
-   wrapper class supplies the page's standard 20px vertical rhythm. We
-   only style the card interior (centered column, padded surface, border). */
-.status_card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 14px;
-
-	padding: 32px 24px;
-
-	border: 1px solid var(--nulo-border);
-	background: var(--nulo-surface-low);
-
-	text-align: center;
-}
-
-.status_title {
-	composes: type--row-title from global;
-	font-size: 16px;
-	color: var(--txt-primary);
-}
-
-.status_subtitle {
-	composes: type--body from global;
-	line-height: 1.5;
-	color: var(--nulo-secondary);
-	margin: 0;
-	max-width: 280px;
-}
-
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: 4px;
 	display: block;
 }

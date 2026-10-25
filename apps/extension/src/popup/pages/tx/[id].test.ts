@@ -1,6 +1,9 @@
 import { flushPromises, mount } from "@vue/test-utils"
-import { afterEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
+import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
 import TxDetail from "./[id].vue"
 
@@ -32,17 +35,9 @@ vi.mock("@/wallet/services/config/client", () => ({
 		return { getProps: vi.fn(async () => []), disconnect: vi.fn() }
 	}),
 }))
-vi.mock("@/wallet/services/price/client", () => ({
-	PriceServiceClient: vi.fn(function () {
-		return {
-			disconnect: vi.fn(),
-			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
-			onConnected: { add: vi.fn(), remove: vi.fn() },
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
-			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
-		}
-	}),
-}))
+vi.mock("@/wallet/services/price/client", async () => (await import("../../../../tests/helpers/price-client-fake")).priceClientModule())
+
+beforeEach(() => priceFake.reset(undefined))
 
 afterEach(() => {
 	vi.clearAllMocks()
@@ -88,10 +83,11 @@ const dappMint = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
 	{ contract: TOKEN, method: "mint_to_public", args: [ACCOUNT, field(10n ** 18n)], classId: CLASS },
 ])
 
-async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<string, unknown> = {}) {
+async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<string, unknown> = {}, attachTo?: HTMLElement) {
 	mocks.store.transactions = [tx]
 	mocks.getTokens.mockReturnValue(tokens)
 	const w = mount(TxDetail, {
+		attachTo,
 		global: {
 			stubs: {
 				SubPageHeader: true,
@@ -124,16 +120,125 @@ describe("the transaction page's amount", () => {
 		expect(w.find("[class*='amount_caption']").text()).toBe("Mint amount")
 	})
 
-	test("a restored transfer whose symbol is not text still shows the missing-token banner", async () => {
-		const banner = { template: "<div data-testid='missing-banner'><slot name='title' /></div>" }
+	const banner = { template: "<div data-testid='missing-banner'><slot name='title' /></div>" }
+	const bannerTitle = (w: Awaited<ReturnType<typeof mountPage>>) => w.get("[data-testid='missing-banner']").text()
+
+	test("an unlisted token's banner names its symbol", async () => {
+		const w = await mountPage(sentTransfer, Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("TST is missing")
+	})
+
+	test("a restored transfer whose symbol is not text reads a noun in the missing-token banner", async () => {
 		const w = await mountPage(transferRecord(42), Promise.resolve([]), { Banner: banner })
-		expect(w.get("[data-testid='missing-banner']").text()).toBe("is missing")
+		expect(bannerTitle(w)).toBe("This token is missing")
+	})
+
+	test("a symbol of spaces reads a noun in the banner, and stays raw after the amount", async () => {
+		const w = await mountPage(transferRecord("   "), Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("This token is missing")
+		expect(w.get("[class*='amount_symbol']").element.textContent).toBe("   ")
+	})
+
+	test("a run of spaces longer than the cap still reads a noun in the banner", async () => {
+		const w = await mountPage(transferRecord(" ".repeat(33)), Promise.resolve([]), { Banner: banner })
+		expect(bannerTitle(w)).toBe("This token is missing")
 	})
 
 	test("a dApp mint of an unlisted token renders no amount block", async () => {
 		const w = await mountPage(dappMint, Promise.resolve([]))
 		expect(amountBlock(w).exists()).toBe(false)
 		expect(w.text()).not.toContain("Mint amount")
+	})
+})
+
+describe("the transaction page's fee", () => {
+	const GAS = {
+		feePerL2Gas: "1000000000000",
+		feePerDaGas: "2000000000000",
+		l2GasLimit: 1_000,
+		daGasLimit: 500,
+		teardownL2GasLimit: 0,
+		teardownDaGasLimit: 0,
+	}
+	/** The row's header figure: the fee and, when priced, its dollars. */
+	const headerOf = (w: Awaited<ReturnType<typeof mountPage>>) => w.get("[class*='fee_row_toggle'] > span")
+
+	test("a settled send reads its paid fee, half up, and its estimate in the breakdown, both at the page's one quote", async () => {
+		priceFake.reset(0.06)
+		const tx = { ...sentTransfer, fee: "3577823500000000001", estimatedFee: "4000000000000000000", gasDetails: GAS }
+		const w = await mountPage(tx, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(headerOf(w).text()).toBe("~3.577824 FJ ($0.215)")
+		await w.get("[class*='fee_row_toggle']").trigger("click")
+		expect(w.get('[data-testid="tx-estimate-usd"]').element.parentElement?.textContent).toBe("~4 FJ ($0.240)")
+	})
+
+	test("before the receipt, the estimate alone, in the same grammar", async () => {
+		priceFake.reset(0.06)
+		const w = await mountPage({ ...sentTransfer, estimatedFee: "4000000000000000000" }, Promise.resolve([listed]), { TxFeeRow: false })
+		expect(w.text()).toContain("Estimated fee")
+		expect(headerOf(w).text()).toBe("~4 FJ ($0.240)")
+	})
+
+	test("an app's own fee contract reads as the app's, whatever it names its fee function; the person's pick reads its method", async () => {
+		const transfer = { contract: TOKEN, method: "transfer_in_private", args: [ACCOUNT, ACCOUNT, field(5n), field(0n)], classId: CLASS }
+		const dappSend = (feeCall: unknown) => ({
+			...settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [feeCall, transfer]),
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+		})
+		const appFpc = {
+			contract: `0x${"1d".repeat(32)}`,
+			method: "fee_entrypoint_private",
+			args: [field(1n), field(2n)],
+			classId: field(0xfc1n),
+		}
+		const embedded = await mountPage(dappSend(appFpc), Promise.resolve([listed]))
+		expect(embedded.text()).toContain("Set by example.dapp.io")
+		expect(embedded.text()).not.toContain("Private Fee Juice")
+		const privateFpc = { contract: PRIVATE_FPC_ADDRESS, method: "pay_fee", args: [], classId: field(0xfc2n) }
+		const picked = await mountPage(dappSend(privateFpc), Promise.resolve([listed]))
+		expect(picked.text()).toContain("Private Fee Juice")
+		expect(picked.text()).not.toContain("Set by")
+	})
+})
+
+describe("the transaction page's words for a call", () => {
+	const header = { props: ["title"], template: "<h1 data-testid='header'>{{ title }}</h1>" }
+	const words = (w: Awaited<ReturnType<typeof mountPage>>) => [
+		w.get("[data-testid='header']").text(),
+		w.get("[data-testid='tx-call-method']").text(),
+	]
+	const OTHER = `0x${"0b".repeat(32)}`
+	const dappTransfer = (contract: string) =>
+		settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
+			{ contract, method: "transfer_in_private", args: [ACCOUNT, OTHER, field(5n), field(0n)], classId: CLASS },
+		])
+
+	test("a listed mint reads its own name until the token list loads, then the window's label", async () => {
+		let resolve: (tokens: unknown[]) => void = () => {}
+		const w = await mountPage(dappMint, new Promise((r) => (resolve = r)), { SubPageHeader: header })
+		expect(words(w)).toEqual(["Mint To Public", "Mint To Public"])
+		resolve([listed])
+		await flushPromises()
+		expect(words(w)).toEqual(["Mint (public)", "Mint (public)"])
+	})
+
+	test("a transfer on a contract the wallet did not list reads as its contract spells it; on a listed token, as the wallet read it", async () => {
+		const unread = await mountPage(dappTransfer(OTHER), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(unread)).toEqual(["Transfer In Private", "Transfer In Private"])
+		const read = await mountPage(dappTransfer(TOKEN), Promise.resolve([listed]), { SubPageHeader: header })
+		expect(words(read)).toEqual(["Transfer (private)", "Transfer (private)"])
+	})
+
+	test("the wallet's own send reads its type's label in the header and the Calls box", async () => {
+		expect(words(await mountPage(sentTransfer, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual([
+			"Transfer (private)",
+			"Transfer (private)",
+		])
+	})
+
+	test('a dApp\'s `claim` off the Fee Juice contract reads "Claim" in the header and the Calls box', async () => {
+		const claim = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [{ contract: OTHER, method: "claim", args: [ACCOUNT] }])
+		expect(words(await mountPage(claim, Promise.resolve([listed]), { SubPageHeader: header }))).toEqual(["Claim", "Claim"])
 	})
 })
 
@@ -163,10 +268,10 @@ describe("the transaction page's explorer links", () => {
 	}
 	const at = (w: Awaited<ReturnType<typeof mountPage>>, id: string) => w.find(`[data-testid="${id}"]`)
 
-	async function mountMined(explorer: string | null) {
+	async function mountMined(explorer: string | null, stubs: Record<string, unknown> = {}, attachTo?: HTMLElement) {
 		mocks.store.network = { chainId: CHAIN_IDS.TESTNET }
 		mocks.store.defaultExplorer = explorer
-		return mountPage(mined, Promise.resolve([listed]))
+		return mountPage(mined, Promise.resolve([listed]), stubs, attachTo)
 	}
 
 	test("the block hash and each address card open their explorer pages", async () => {
@@ -200,5 +305,19 @@ describe("the transaction page's explorer links", () => {
 		expect(mocks.copy).not.toHaveBeenCalled()
 		await at(w, "tx-to-address").element.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(RECIPIENT, expect.any(Function), "Successfully copied")
+	})
+
+	test("a drag that selects part of the From card's address copies nothing; a click on it copies", async () => {
+		const shown = { props: ["address"], template: "<span>{{ address }}</span>" }
+		const w = await mountMined("aztecscan", { AddressDisplay: shown }, document.body)
+		const address = at(w, "tx-from-address").element
+		const text = address.firstChild as Text
+		window.getSelection()?.setBaseAndExtent(text, 2, text, 12)
+		address.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(mocks.copy).not.toHaveBeenCalled()
+		window.getSelection()?.removeAllRanges()
+		address.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(ACCOUNT, expect.any(Function), "Successfully copied")
+		w.unmount()
 	})
 })

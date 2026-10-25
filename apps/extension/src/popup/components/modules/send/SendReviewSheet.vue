@@ -14,6 +14,7 @@ import {
 	paidBy,
 	type PublishFacts,
 	publishGlyph,
+	QUEUED_SPONSORED_COPY,
 	rowSentence,
 	UNVOUCHED_FEE_SENTENCE,
 } from "@/components/composite/send/publish-facts"
@@ -41,8 +42,10 @@ const props = defineProps<{
 	ready: boolean
 	/** Set while the send is queued against a cap: the cap as the fee card words it. */
 	queuedCapText?: string
+	/** Set while the send is queued with Nulo's sponsor paying, which needs no cap. */
+	queuedSponsored?: boolean
 	/** Set for a queued send whose fee came out above the cap the person accepted. */
-	reask?: { now: string; nowAmount: string; capAmount: string }
+	reask?: { now: string; cap: string }
 }>()
 const emit = defineEmits<{ close: []; send: [] }>()
 
@@ -60,8 +63,9 @@ const toLine = computed(() => {
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
 const submitLabel = computed(() => {
-	if (props.reask) return `Send for ${props.reask.nowAmount} FJ`
-	return props.queuedCapText ? "Queue send" : "Send now"
+	// The re-asked figure stays on the fee line above: in the label it clips at 360 px.
+	if (props.reask) return "Send"
+	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
 })
 
 const rows = computed(() =>
@@ -107,7 +111,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 <template>
 	<div data-testid="send-review-sheet" :data-open="show" hidden />
 	<Popup :show="show" :displaceIdx="order" initial-focus="#send-review-title" @onClose="emit('close')">
-		<PopupCard :displaceIdx="depth" fit>
+		<PopupCard :displaceIdx="depth">
 			<div role="dialog" aria-modal="true" aria-labelledby="send-review-title">
 				<PopupHeader closable @onClose="emit('close')">
 					<template #title>
@@ -159,10 +163,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
-						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.capAmount }} FJ you accepted.</span>
+						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
+						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
-						<b v-if="paid" class="type--data">{{ paid }}</b>
+						<b v-if="paid" class="type--meta">{{ paid }}</b>
 					</div>
 
 					<Button
@@ -244,7 +249,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .to {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
@@ -256,7 +261,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .rows_head {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	padding: 6px 10px;
 	border-bottom: 1px solid var(--nulo-border);
 
@@ -304,7 +309,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .row_word {
-	composes: type--tag from global;
+	composes: type--label-section from global;
 }
 
 .why {
@@ -314,7 +319,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .remedy {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	align-self: flex-start;
 	margin-top: 2px;
 
@@ -324,7 +329,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .fee {
-	composes: type--data from global;
+	composes: type--meta from global;
 	display: flex;
 	justify-content: space-between;
 	gap: 8px;

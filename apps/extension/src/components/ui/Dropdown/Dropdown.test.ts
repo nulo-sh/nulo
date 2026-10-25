@@ -153,13 +153,13 @@ describe("ui/Dropdown — DropdownTrigger", () => {
 		expect(w.find('[data-name="chevron"]').exists()).toBe(true)
 	})
 
-	test("clearable + value renders close-circle Icon and emits onClear when clicked", async () => {
+	test("clearable + value renders the close Icon and emits onClear when clicked", async () => {
 		const w = mount(DropdownTrigger, {
 			props: { clearable: true, value: { id: 1 } },
 			slots: { default: "X" },
 			global: { stubs: STUBS },
 		})
-		const closeIcon = w.find('[data-name="close-circle"]')
+		const closeIcon = w.find('[data-name="close"]')
 		expect(closeIcon.exists()).toBe(true)
 		await closeIcon.trigger("click")
 		expect(w.emitted("onClear")).toBeTruthy()

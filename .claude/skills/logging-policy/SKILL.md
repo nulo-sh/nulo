@@ -35,8 +35,21 @@ to log something sensitive.
 - **Never log**: decrypted note contents, simulation/utility return values, contact name or
   address, page or navigation URLs, balances, whole RPC envelopes (`params`/`result` carry
   passwords and export returns), or whole backup rows.
+- **A sealed row that does not open logs a category, never the row.** `SealedEntityStorage` warns
+  `sealed-authentication` (the AEAD refused it: moved, swapped or edited), `sealed-format` (it
+  opened to something that is not a row) or `sealed-identity` (it opened to another profile's
+  row), with the root and the key's shape from `describeKey` (`<root>@<id:N chars>`): never the
+  id, the ciphertext, the WebCrypto message or the row. A row whose profile has no keys in this
+  worker is the normal locked case and logs at `debug`. A new refusal adds a category; it never
+  passes the row or the caught error.
 - **Endpoint URLs** are reduced to their origin (`scrubUrls`, `@/utils/scrub-urls`) — providers
   embed API keys in the path — on both the log path and the dApp-facing error envelope.
+- **Aztec dependency loggers emit `warn` and above.** The build defines `process.env.LOG_LEVEL` as
+  `DEPENDENCY_LOG_LEVEL` (`apps/extension/vite.shared.ts`), which every upstream `createLogger` reads.
+- **The PXE host frame drops 32-byte values.** `offscreen/frame-logger.ts` runs `trim`, then
+  `scrubHex32`, over the lines of the frame's console hooks, its rejection handler and the logger
+  `createPxeOffscreen` receives, so none carries a `0x` + 64-hex run or a field-sized bigint,
+  full class ids and hashes included.
 - **Pick the level by REACH, not by tone.** Services call `this.log{Debug,Info,Warn,Error}`; UI
   calls `console.{debug,warn,error}`. `LoggerStore.log` drops only `level < logLevel`, and
   `logLevel` is `Info` unless `debugMode` is on — so **`warn` and `error` are captured for every

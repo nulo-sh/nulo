@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { createApp, customRef, h, ref } from "vue"
 
 const holder = vi.hoisted(() => ({
@@ -20,8 +21,8 @@ vi.mock("@/composables/useProfileImportFlow", () => ({
 	},
 }))
 vi.mock("@/composables/completeImportWithRecovery", () => ({ completeImportWithRecovery: vi.fn(async () => "active") }))
-vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: vi.fn() }) }))
-vi.mock("@/composables/waitForProfileActive", () => ({ waitForProfileActive: vi.fn() }))
+const boot = vi.hoisted(() => ({ hydrate: vi.fn() }))
+vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile: boot.hydrate }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: vi.fn(async () => undefined) }))
 vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
@@ -33,22 +34,25 @@ const surface = vi.hoisted(() => ({
 	close: vi.fn(async () => false),
 	release: vi.fn(),
 }))
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: () => surface.needsOwnWindow() }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.needsOwnWindow() }))
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
+	leavePanelFor: async (route: string) => surface.needsOwnWindow() && (await surface.move(route)),
 	closeOwnWindow: () => surface.close(),
 	releaseOwnWindow: () => surface.release(),
 }))
 
 import { openSearchPanel } from "@codemirror/search"
 import { EditorView } from "@codemirror/view"
-import { Flex, Input, MaterialIcon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { pressOn } from "../../../tests/helpers/press-key"
 import { enterOn, expectNativeAttrs, IGNORED_ENTERS, nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
 import JsonViewer from "@/components/JsonViewer/JsonViewer.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import { completeImportWithRecovery } from "@/composables/completeImportWithRecovery"
+import { useAppStore } from "@/stores/app.store"
 import ImportPage from "./import.vue"
 
 /** The flow's surface with a decrypted password-profile backup chosen and a valid new password. */
@@ -74,7 +78,7 @@ function makeFlow() {
 		isAllowedToImportBySeedPhrase: ref(false),
 		selectedBackup: ref({
 			name: "backup.txt",
-			type: "encrypted",
+			kind: "opened",
 			profileType: "password",
 			backup: { data: { profile: { name: "Main" } } },
 		}),
@@ -119,7 +123,7 @@ async function mountImport() {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			components: { Flex, Input, MaterialIcon, SubPageHeader, Text },
+			components: { Flex, Input, SubPageHeader, Text, Icon },
 			stubs: {
 				Button: { template: "<button><slot /></button>" },
 				Icon: true,
@@ -144,7 +148,8 @@ function giveRangesEmptyRects(): () => void {
 }
 
 /** Shows the real viewer in an app of its own outside the page, where the shell's popup manager
- *  renders it (a second VTU mount would drop the page's stubs), and returns its editor. */
+ *  renders it (a second VTU mount would drop the page's stubs), and returns its editor, which sits
+ *  in the viewer's shadow root. */
 async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorView> {
 	const restoreRects = giveRangesEmptyRects()
 	const app = createApp({ render: () => h(JsonViewer, { data }) })
@@ -152,7 +157,7 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	const host = document.body.appendChild(document.createElement("div"))
 	app.mount(host)
 	await flushPromises()
-	const editor = host.querySelector<HTMLElement>(".cm-editor")
+	const editor = [...host.querySelectorAll("*")].find((el) => el.shadowRoot)?.shadowRoot?.querySelector<HTMLElement>(".cm-editor")
 	const view = editor && EditorView.findFromDOM(editor)
 	cleanups.push(() => {
 		// Destroying the view cancels its pending measure before the rects go.
@@ -164,7 +169,8 @@ async function showErrorViewer(data: Record<string, unknown[]>): Promise<EditorV
 	return view
 }
 
-const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true })
+// Composed, as a real key event is: one from inside the viewer's shadow root reaches the document.
+const enterKey = () => new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true, composed: true })
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -173,11 +179,7 @@ beforeEach(() => {
 	surface.move.mockResolvedValue(true)
 	surface.close.mockResolvedValue(false)
 	holder.flow = makeFlow()
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -199,7 +201,7 @@ describe("popup import — full backup, a restore ready", () => {
 
 	test("(preservation) Enter in the repeat-password field restores once", async () => {
 		const w = await mountImport()
-		w.get('[data-testid="import-full-backup-password-confirm-input"] input').element.dispatchEvent(enterKey())
+		enterOn(w.get('[data-testid="import-full-backup-password-confirm-input"] input').element)
 		await flushPromises()
 		expect(holder.flow.restoreBackup).toHaveBeenCalledTimes(1)
 	})
@@ -378,6 +380,61 @@ describe("popup import — in its own window", () => {
 	})
 })
 
+describe("popup import — the activation wait", () => {
+	async function startImport() {
+		const real = await vi.importActual<typeof import("@/composables/completeImportWithRecovery")>(
+			"@/composables/completeImportWithRecovery",
+		)
+		vi.mocked(completeImportWithRecovery).mockImplementationOnce(real.completeImportWithRecovery)
+		await mountImport()
+		const appStore = useAppStore()
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const done = holder.opts.completeImport({ id: "p1" })
+		await vi.advanceTimersByTimeAsync(0)
+		return { appStore, done }
+	}
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("a failure recorded for the imported profile ends the wait at once; another profile's does not", async () => {
+		const { appStore, done } = await startImport()
+		appStore.bootstrapFailure = { profileId: "p2", message: "theirs" }
+		await vi.advanceTimersByTimeAsync(0)
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
+
+		appStore.bootstrapFailure = { profileId: "p1", message: "boom" }
+		await done
+
+		expect(boot.hydrate).toHaveBeenCalledTimes(1)
+		expect(nav.push).toHaveBeenCalledWith("/popup/auth")
+	})
+
+	test("an activation of the imported profile shows the wallet with no recovery", async () => {
+		const { appStore, done } = await startImport()
+		appStore.profile = { id: "p1" } as typeof appStore.profile
+		appStore.isLogined = true
+		await done
+
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).toHaveBeenCalledWith("/popup/general")
+	})
+
+	test("with no signal the wait holds to its 30 s bound, then recovers", async () => {
+		const { done } = await startImport()
+		await vi.advanceTimersByTimeAsync(29_999)
+		expect(boot.hydrate).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(1)
+		await done
+
+		expect(boot.hydrate).toHaveBeenCalledTimes(1)
+		expect(nav.push).toHaveBeenCalledWith("/popup/auth")
+	})
+})
+
 describe("popup import — the profile-name field", () => {
 	const NAME = "import-name-input"
 	beforeEach(() => {
@@ -466,8 +523,8 @@ function popupCtas(w: VueWrapper): PopupCta[] {
 		])
 }
 
-const ENCRYPTED = { name: "backup.txt", type: "encrypted", profileType: null, backup: "ciphertext" }
-const PLAIN = { name: "backup.json", type: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
+const ENCRYPTED = { name: "backup.txt", kind: "sealed", profileType: null, backup: "ciphertext" }
+const PLAIN = { name: "backup.json", kind: "plain", profileType: "password", backup: { data: { profile: { name: "Main" } } } }
 const BACK: PopupCta = ["Back", null, false, null, "cta_outline"]
 const BACK_OFF: PopupCta = ["Back", null, true, null, "cta_outline"]
 const IMPORT_MAIN: PopupCta = ["Import Main", "import-full-backup-submit-btn", false, null, "cta"]
@@ -620,7 +677,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.selectedBackup.value = ENCRYPTED as never
 		holder.flow.decryptionPassword.value = "pw"
 		const w = await mountImport()
-		w.get('[data-testid="import-full-backup-decrypt-password-input"] input').element.dispatchEvent(enterKey())
+		enterOn(w.get('[data-testid="import-full-backup-decrypt-password-input"] input').element)
 		await flushPromises()
 		expect(holder.flow.decryptBackup).toHaveBeenCalledTimes(1)
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
@@ -630,7 +687,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.restoreStatus.value = "failed"
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 	})
@@ -639,13 +696,13 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.isAllowedToImportBackup.value = false
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 
 		holder.flow.isAllowedToImportBackup.value = true
 		await flushPromises()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).toHaveBeenCalledTimes(1)
 	})
@@ -654,7 +711,7 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.restoreStatus.value = "progress"
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 		expect(holder.flow.decryptBackup).not.toHaveBeenCalled()
@@ -665,13 +722,13 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		holder.flow.nameFieldState.value = "shown"
 		finishWithErrors()
 		const w = await mountImport()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.continueImport).toHaveBeenCalledTimes(1)
 
 		holder.flow.isRetryingAccountState.value = true
 		await flushPromises()
-		nameInput(w).dispatchEvent(enterKey())
+		enterOn(nameInput(w))
 		await flushPromises()
 		expect(holder.flow.continueImport).toHaveBeenCalledTimes(1)
 	})

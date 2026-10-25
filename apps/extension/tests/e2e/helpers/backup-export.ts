@@ -1,24 +1,10 @@
-/**
- * Capture a full-backup download IN-PAGE, without the filesystem: the stub
- * replaces `chrome.downloads.download`, fetches the blob URL INSIDE the stub
- * (before `downloadFile`'s `finally` revokes it) and gunzips it with the
- * page's own `DecompressionStream`.
- *
- * Two-phase on purpose: `armBackupDownloadCapture` BEFORE clicking the
- * download CTA, `readCapturedBackupDownload` after. The captured string is
- * the decompressed file content — parsed JSON for a plain backup, the base64
- * ciphertext for an encrypted one. `{ gzip: false }` captures a download the
- * wallet writes uncompressed (the contacts export) as it was written.
- */
-import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
+import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, replaceInputValue, waitForHash } from "../fixtures/extension"
 import { navigateByHash } from "../fixtures/helpers"
-import { openFullBackupText } from "@/utils/full-backup-helpers"
-
-/** A full backup's content: the plain file's JSON, or an encrypted file's once opened. */
-export type PlainBackup = { checksum?: string; data: Record<string, unknown> } & Record<string, unknown>
+import type { PlainBackup } from "./backup-seal"
+import { armDownloadCapture, readCapturedDownload } from "./download-capture"
 
 /** A press on a testid: `clickByTestId`, or real pointer input where a spec proves nothing covers it. */
 export type Press = (page: Page, testid: string) => Promise<void>
@@ -28,61 +14,25 @@ const enabled = (testid: string) => {
 	return !!el && !el.disabled
 }
 
-export async function armBackupDownloadCapture(page: Page, { gzip = true }: { gzip?: boolean } = {}): Promise<void> {
-	await page.evaluate((gunzip: boolean) => {
-		const w = window as unknown as { __backupCapture?: Promise<string> }
-		w.__backupCapture = new Promise<string>((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error("backup download was not captured within 30s")), 30_000)
-			const c = chrome as unknown as {
-				downloads: { download: (opts: { url: string }, cb: (id: number) => void) => void }
-			}
-			c.downloads = {
-				download: (opts, cb) => {
-					fetch(opts.url)
-						.then((r) => r.blob())
-						.then(async (blob) => {
-							const text = gunzip
-								? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
-								: await blob.text()
-							clearTimeout(timer)
-							resolve(text)
-							cb(1)
-						})
-						.catch((err) => {
-							clearTimeout(timer)
-							reject(err instanceof Error ? err : new Error(String(err)))
-						})
-				},
-			}
-		})
-		// Swallow the (test-only) unhandled rejection if the click never fires.
-		w.__backupCapture.catch(() => {})
-	}, gzip)
-}
-
-export async function readCapturedBackupDownload(page: Page): Promise<string> {
-	return await page.evaluate(() => (window as unknown as { __backupCapture: Promise<string> }).__backupCapture)
-}
-
 /** A password profile's ready backup, encrypted with the profile password and downloaded: its file
  *  never leaves the page unencrypted. Returns the file's text. */
 export async function downloadEncryptedBackup(page: Page, press: Press = clickByTestId, readyMs = 120_000): Promise<string> {
 	await page.waitForFunction(enabled, { timeout: readyMs, polling: 250 }, "protect-password-btn")
 	await press(page, "protect-password-btn")
 	await page.waitForFunction(enabled, { timeout: 60_000, polling: 250 }, "download-backup-btn")
-	await armBackupDownloadCapture(page)
+	await armDownloadCapture(page, { gzip: true })
 	await press(page, "download-backup-btn")
-	return await readCapturedBackupDownload(page)
+	return await readCapturedDownload(page)
 }
 
 /** A passkey profile's ready backup, downloaded unencrypted through the confirmation that names what
  *  the file exposes. Returns the file's text. */
 export async function downloadPlainPasskeyBackup(page: Page, press: Press = clickByTestId, readyMs = 180_000): Promise<string> {
 	await page.waitForFunction(enabled, { timeout: readyMs, polling: 250 }, "download-backup-btn")
-	await armBackupDownloadCapture(page)
+	await armDownloadCapture(page, { gzip: true })
 	await press(page, "download-backup-btn")
 	await press(page, "confirm-submit")
-	return await readCapturedBackupDownload(page)
+	return await readCapturedDownload(page)
 }
 
 /** An encrypted full backup's content, opened with the production codec the restore runs. */
@@ -93,6 +43,11 @@ export async function openEncryptedBackup(text: string, password = TEST_PASSWORD
 /** Exports the unlocked password profile's full backup through Settings on a page of its own, which
  *  it closes, and returns its content. */
 export async function exportBackupContent(ctx: ExtensionContext): Promise<PlainBackup> {
+	return await openEncryptedBackup(await exportBackupFile(ctx))
+}
+
+/** {@link exportBackupContent}'s file, encrypted, as the browser downloaded it. */
+export async function exportBackupFile(ctx: ExtensionContext): Promise<string> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
 	await navigateByHash(page, "#/popup/settings/security/export/full")
@@ -102,7 +57,7 @@ export async function exportBackupContent(ctx: ExtensionContext): Promise<PlainB
 	await clickByTestId(page, "unlock-submit-btn")
 	const exported = await downloadEncryptedBackup(page)
 	await page.close()
-	return await openEncryptedBackup(exported)
+	return exported
 }
 
 /** The chain `address`'s account row names; the wallet seeds several networks, and the funded
@@ -112,14 +67,6 @@ export function accountChainId(backup: PlainBackup, address: string): number {
 	const chainId = accounts.find((a) => a.address === address)?.chainId
 	if (chainId === undefined) throw new Error(`account ${address} is missing from the exported backup`)
 	return chainId
-}
-
-/** The file content of `backup` with its checksum recomputed over the doctored body: a plain
- *  backup's checksum detects corruption and authenticates nothing. */
-export function sealPlainBackup(backup: PlainBackup): string {
-	const { checksum: _stale, ...body } = backup
-	const checksum = createHash("sha256").update(JSON.stringify(body)).digest("hex")
-	return JSON.stringify({ ...body, checksum })
 }
 
 /** Keeps only `chainId`'s account-state items: public-chain recovery material would make the import

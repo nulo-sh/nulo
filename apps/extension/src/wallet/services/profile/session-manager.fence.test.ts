@@ -13,21 +13,11 @@
 import { asImportedKeysDek, asMasterSecretBytes, asPasshash, type MasterSecretBytes } from "@nulo/wallet-crypto"
 import { describe, expect, test } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { ActiveSession, Profile, ProfileInfo } from "./spec"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
-
-function _deferred<T = void>() {
-	let resolve!: (value: T) => void
-	let reject!: (reason?: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
-}
 
 function fakeConfig(initialTtl: number): IConfig {
 	const onUpdate = new EventHandler<ConfigProp>()
@@ -125,7 +115,7 @@ describe("SessionManager artifact fence", () => {
 		expireActive(manager)
 
 		// Gate the row delete: A's expiry close will park INSIDE the mutex.
-		const gate = _deferred()
+		const gate = deferred()
 		api.storage.session.remove = async (keys: string | string[]) => {
 			events.push("row-delete")
 			await gate.promise
@@ -149,6 +139,35 @@ describe("SessionManager artifact fence", () => {
 		const lastClear = events.lastIndexOf("alarm-clear")
 		const bCreate = events.lastIndexOf("alarm-create")
 		expect(bCreate).toBeGreaterThan(lastClear)
+		expect((manager as unknown as { activeSession?: ActiveSession }).activeSession?.profile.id).toBe("prof-B")
+	})
+
+	test("a close whose first delete fails makes its second attempt before the successor open lands", async () => {
+		const { api, manager } = setup()
+		const { events, rawRemove } = instrument(api)
+		await manager.open(profileA, secretBuffer())
+		expireActive(manager)
+
+		const gate = deferred()
+		let attempts = 0
+		api.storage.session.remove = async (keys: string | string[]) => {
+			events.push("row-delete")
+			if (++attempts > 1) return rawRemove(keys)
+			await gate.promise
+			throw new Error("storage remove failed")
+		}
+		const closing = manager.getActive()
+		await new Promise((r) => setTimeout(r, 0))
+		const opening = manager.open(profileB, secretBuffer())
+		await new Promise((r) => setTimeout(r, 0))
+
+		gate.resolve()
+		await Promise.all([closing, opening])
+
+		expect(attempts).toBe(2)
+		expect(events.lastIndexOf("row-delete")).toBeLessThan(events.indexOf("row-set:prof-B"))
+		expect(await readRow(api)).toBe("prof-B")
+		expect(events.lastIndexOf("alarm-create")).toBeGreaterThan(events.lastIndexOf("alarm-clear"))
 		expect((manager as unknown as { activeSession?: ActiveSession }).activeSession?.profile.id).toBe("prof-B")
 	})
 
@@ -325,7 +344,7 @@ describe("SessionManager artifact fence", () => {
 		// Park open(B) at wrapPair — the section's one slow crypto await,
 		// deliberately OUTSIDE the mutex — so the expiry close can run to
 		// completion while B prepares.
-		const gate = _deferred()
+		const gate = deferred()
 		const box = (manager as unknown as { sessionSecretBox: { wrapPair: () => Promise<unknown> } }).sessionSecretBox
 		box.wrapPair = async () => {
 			await gate.promise

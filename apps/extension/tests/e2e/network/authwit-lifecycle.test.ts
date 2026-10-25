@@ -1,9 +1,11 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, openPopup, test } from "../fixtures/extension"
 import { openAccountState, switchAccountByAddress } from "../fixtures/helpers"
-import { assertPgOk, formatPgMismatch, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, formatPgMismatch, selectPgAccount, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, pickFeeAndSubmitAuthwitPopup, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
+import { pollUntil } from "../fixtures/poll"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
 import { isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 
@@ -65,23 +67,20 @@ test.skipIf(!hasConfig)(
 				{ token: aztecConfig!.tokenAddress, owner: ownerA, caller: callerB, n: nonce },
 			)
 		}
-		const selectPgAccount = async (addr: string) => {
-			await page.evaluate((a: string) => {
-				const select = document.querySelector<HTMLSelectElement>('[data-testid="pg-select-account"]')
-				if (!select) throw new Error("pg-select-account not present")
-				select.value = a
-				select.dispatchEvent(new Event("change", { bubbles: true }))
-			}, addr)
-		}
 		// Grant as owner A: grantPublicAuthwit → on-chain set_authorized(hash, true). Mined on return.
 		const grant = async (nonce: string) => {
-			await selectPgAccount(ownerA)
+			await selectPgAccount(page, ownerA)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)
 			const popupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
 			await clickByTestId(page, "pg-btn-grantPublicAuthwit")
 			const popup = await popupP
 			await waitForExecuteContent(popup)
+			// The card reads the amount from the fields the grant's signature hashes, before Confirm.
+			const amount =
+				'[data-testid="execute-grant-decoded-param"][data-param="amount"] [data-testid="execute-grant-decoded-param-value"]'
+			await popup.waitForSelector(amount, { visible: true, timeout: 60_000 })
+			expect(await popup.$eval(amount, (el) => el.textContent?.trim())).toBe("1")
 			await approveExecute(popup)
 			const res = await waitForPgResult(page, "grantPublicAuthwit", seq, 360_000)
 			await assertPgOk(page, res, "authwit-lifecycle:res")
@@ -92,7 +91,7 @@ test.skipIf(!hasConfig)(
 		// — a revoked/blocked consume reverts at sequencing; the NO_WAIT dApp result is
 		// `{ txHash, ... }`, so pull the hash out of either shape.
 		const consume = async (nonce: string): Promise<"ok" | `error: ${string}`> => {
-			await selectPgAccount(callerB)
+			await selectPgAccount(page, callerB)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)
 			const popupP = waitForPopup(ctx, "execute", { timeout: 30_000 })
@@ -140,27 +139,18 @@ test.skipIf(!hasConfig)(
 		// hash (tx-request-builder passes ONE messageHash to both trackAuthwit + set_authorized).
 		const trackedHashesForA = async (): Promise<{ account: string; hash: string }[]> => {
 			const p = await openPopup(ctx)
-			const rows = await p.evaluate(async () => {
-				const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
-				return Object.entries(all)
-					.filter(([k]) => k.startsWith("nulo:core:auth-registry@"))
-					.map(([, v]) => JSON.parse(v as string) as { account: string; hash: string })
-					.map((a) => ({ account: a.account, hash: a.hash }))
-			})
+			const rows = (await readSealedRows<{ account: string; hash: string }>(p, "authRegistry")).map(({ row }) => ({
+				account: row.account,
+				hash: row.hash,
+			}))
 			await p.close()
 			return rows.filter((r) => r.account === ownerA)
 		}
 
 		// Poll the on-chain registry until `predicate` holds. The settings flows wait for
 		// proven internally, but poll for robustness against submit→mine settling.
-		const waitForRegistry = async (predicate: () => Promise<boolean>, label: string, timeoutMs = 180_000) => {
-			const deadline = Date.now() + timeoutMs
-			for (;;) {
-				if (await predicate()) return
-				if (Date.now() > deadline) throw new Error(`waitForRegistry timeout: ${label}`)
-				await new Promise((r) => setTimeout(r, 2_000))
-			}
-		}
+		const waitForRegistry = (predicate: () => Promise<boolean>, label: string, timeoutMs = 180_000) =>
+			pollUntil(predicate, (holds) => holds, { label: `waitForRegistry: ${label}`, timeoutMs, intervalMs: 2_000 })
 
 		// ── Step 1: G1 grant → on-chain approved → consume OK (the mechanism works) ──
 		step("G1 grant")

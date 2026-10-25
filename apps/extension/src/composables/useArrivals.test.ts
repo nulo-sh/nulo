@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, type Mock, test, vi } from "vitest"
-import { defineComponent, effectScope, h, nextTick, type Ref, ref } from "vue"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { defineComponent, effectScope, h, nextTick, type Ref, ref, watch } from "vue"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { formatSnackAmount } from "@/utils/snack-amount"
 import type { ConfigProp } from "@/wallet/config"
 import { type ArrivalState, isArrivalEligible } from "@/wallet/services/incoming-transfer/arrival-state"
@@ -35,7 +35,6 @@ function receipt(block: number, over: Partial<IncomingTransferRecord> = {}): Inc
 		indexInTx: 0,
 		hidden: false,
 		discoveredAt: Date.now(),
-		siloedNullifier: `${seq}`,
 		noteHash: "0x1",
 		owner: "0xa",
 		...over,
@@ -74,7 +73,8 @@ function fakeService() {
 	return { svc, store }
 }
 
-/** Holds the mock's next call after computing its answer at call time: `release` hands it over, `fail` rejects. */
+/** Holds the mock's next call after computing its answer at call time: `reached` settles once it has,
+ *  `release` hands it over, `fail` rejects. */
 function hold<A extends unknown[], R>(mock: Mock<(...args: A) => Promise<R>>) {
 	const real = mock.getMockImplementation()
 	if (!real) throw new Error("no implementation to hold")
@@ -85,14 +85,18 @@ function hold<A extends unknown[], R>(mock: Mock<(...args: A) => Promise<R>>) {
 		fail = () => reject(new Error("held call failed"))
 	})
 	gate.catch(() => {})
+	const reached = deferred()
 	mock.mockImplementationOnce(async (...args: A) => {
-		const out = await real(...args)
+		const answer = real(...args)
+		reached.resolve()
+		const out = await answer
 		await gate
 		return out
 	})
-	return { release: () => release(), fail: () => fail() }
+	return { reached: reached.promise, release: () => release(), fail: () => fail() }
 }
 
+/** Reads, claims and snacks run off void listeners, so a "nothing happened" has no completion to await. */
 const settle = async () => {
 	for (let i = 0; i < 60; i++) await Promise.resolve()
 }
@@ -128,6 +132,9 @@ function setup(opts: { route?: string; fake?: ReturnType<typeof fakeService>; to
 	return { ...fake, config, prices, route, epoch, scope, account, openToast, openReceipt, lookupToken, effect, arrivals }
 }
 type Harness = ReturnType<typeof setup>
+
+/** Settles on the chip's next assignment, the step a chip assertion reads; arm it before the presentation. */
+const nextChip = (c: Harness) => new Promise<void>((resolve) => watch(c.arrivals.latest, () => resolve(), { flush: "sync", once: true }))
 
 /** A list that renders each row's `arriving` the way the activity lists do. */
 function list(c: Harness, rows: Ref<IncomingTransferRecord[]>) {
@@ -205,8 +212,9 @@ describe("useArrivals — rows", () => {
 		c.store.records.push(older, newer, unrendered)
 		await c.arrivals.load(SCOPE)
 		list(c, ref([older, newer]))
+		const chip = nextChip(c)
 		c.arrivals.present([older, newer, unrendered])
-		await settle()
+		await chip
 		expect(c.svc.claimArrivals).toHaveBeenCalledWith("p", "n", "0xa", [older.id, newer.id])
 		expect(c.arrivals.latest.value).toEqual({ id: newer.id, label: `+${AMOUNT} USDC` })
 	})
@@ -237,9 +245,10 @@ describe("useArrivals — rows", () => {
 		list(c, ref([newer, older]))
 		const lookup = hold(c.lookupToken)
 		c.arrivals.present([older])
-		await settle()
+		await lookup.reached
+		const chip = nextChip(c)
 		c.arrivals.present([newer])
-		await settle()
+		await chip
 		expect(c.arrivals.latest.value?.id).toBe(newer.id)
 		lookup.release()
 		await settle()
@@ -254,7 +263,7 @@ describe("useArrivals — rows", () => {
 		list(c, ref([r]))
 		const lookup = hold(c.lookupToken)
 		c.arrivals.present([r])
-		await settle()
+		await lookup.reached
 		c.route.value = SETTINGS
 		c.route.value = HOME
 		lookup.release()
@@ -358,7 +367,7 @@ describe("useArrivals — the state a list is judged under", () => {
 		c.store.sinceBlock = 5
 		const held = hold(c.svc.getArrivalState)
 		const older = c.arrivals.load(SCOPE)
-		await settle()
+		await held.reached
 		c.store.sinceBlock = 10
 		await c.arrivals.load(SCOPE)
 		held.release()
@@ -383,7 +392,7 @@ describe("useArrivals — the state a list is judged under", () => {
 		await arrive(c, r)
 		const state = hold(c.svc.getArrivalState)
 		quote(c)
-		await settle()
+		await state.reached
 		token.release()
 		await settle()
 		expect(c.openToast).toHaveBeenCalledTimes(1)
@@ -400,14 +409,14 @@ describe("useArrivals — the state a list is judged under", () => {
 		const pending = c.arrivals.load(SCOPE).then(() => {
 			done = true
 		})
-		await settle()
+		await loadHold.reached
 		const allowed = [receipt(15), receipt(16)]
 		c.store.records.push(...allowed)
 		c.store.floors["0xc"] = 20
 		const readHold = hold(c.svc.getArrivalState)
 		for (const r of allowed) c.svc.onIncomingTransferAdded.invoke(r)
 		vi.advanceTimersByTime(250)
-		await settle()
+		await readHold.reached
 		loadHold.release()
 		await settle()
 		expect(done).toBe(false)
@@ -424,7 +433,7 @@ describe("useArrivals — the state a list is judged under", () => {
 		const pending = c.arrivals.load(SCOPE).then(() => {
 			done = true
 		})
-		await settle()
+		await loadHold.reached
 		const allowed = [receipt(15), receipt(16)]
 		c.store.records.push(...allowed)
 		const readHold = hold(c.svc.getIncomingTransfers)
@@ -755,7 +764,7 @@ describe("useArrivals — the elsewhere snack, after seeding on Settings", () =>
 		c.store.visible = true
 		const claim = hold(c.svc.claimArrivals)
 		vi.advanceTimersByTime(250)
-		await settle()
+		await claim.reached
 		early.release()
 		await settle()
 		claim.release()
@@ -811,7 +820,7 @@ describe("useArrivals — the elsewhere snack, after seeding on Settings", () =>
 			await arrive(c, r)
 			const newer = hold(c.svc.getIncomingTransfers)
 			quote(c)
-			await settle()
+			await newer.reached
 			c.svc.onIncomingTransferDeleted.invoke(deleteOther ? receipt(99) : r)
 			newer.release()
 			claim.release()

@@ -1,8 +1,9 @@
 /**
  * A service graph just deep enough to boot the SDK handler in a unit test. The dApp-session rows
  * are what discovery admission and establishment read: a remembered row auto-approves its origin
- * and, when trusted, establishes without a verify window. A row given `FAKE_SENDER`'s account and a
- * transaction grant lets an established session's `sendTx` reach the journal and the dispatcher.
+ * with no connect window, and its session still shows the check. A row given `FAKE_SENDER`'s
+ * account and a transaction grant lets an established session's `sendTx` reach the journal and the
+ * dispatcher.
  */
 import { EventHandler } from "@nulo/wallet-core/utils"
 
@@ -13,7 +14,10 @@ export type FakeDappSessionRow = {
 	id: string
 	profileId: string
 	chainId: string
-	trustedVerification: boolean
+	/** Read by no wallet path. */
+	trustedVerification?: boolean
+	/** Written by establishment; absent on a row no key exchange has reached. */
+	verificationHash?: string
 	accounts?: string[]
 	capabilityGrants?: Array<{ capability: { type: string } }>
 }
@@ -21,8 +25,8 @@ export type FakeDappSessionRow = {
 export function fakeSdkServices(
 	opts: {
 		/** A row for the origin on chain 0 (the `{ chainId: "1", version: "1" }` the tests discover with). */
-		remembered?: { trusted: boolean }
-		popup?: (params: unknown, requestId: string) => Promise<{ approved: boolean; windowId?: number }>
+		remembered?: boolean
+		popup?: (params: unknown, requestId: string) => Promise<{ approved: boolean }>
 		/** The network-unavailable notice; settles at once by default. */
 		notice?: (params: { dappMetadata: { name: string; url: string } }) => Promise<void>
 		/** Whether the profile has a network for a chain; every chain by default. */
@@ -40,6 +44,10 @@ export function fakeSdkServices(
 		setVerificationHash?: () => Promise<unknown>
 		/** The operation journal; empty by default. */
 		operationJournal?: Record<string, unknown>
+		/** A dApp-session service in place of the row map, which then stays empty. */
+		dappSession?: unknown
+		/** Receives the restart preparation the handler registers. */
+		setRestartPreparation?: (prepare: () => void) => void
 	} = {},
 ): {
 	services: never
@@ -61,7 +69,6 @@ export function fakeSdkServices(
 			id: `row-${++rowSeq}`,
 			profileId: "p1",
 			chainId: "0",
-			trustedVerification: opts.remembered.trusted,
 		})
 	const services = {
 		get: (name: string) =>
@@ -79,6 +86,7 @@ export function fakeSdkServices(
 					onActiveProfileChanged,
 					getActiveProfile,
 					getDeletionState: () => ({ capture: () => 0 }),
+					setRestartPreparation: opts.setRestartPreparation ?? (() => {}),
 					captureExecutionFence: async () => {
 						const profile = await getActiveProfile()
 						if (!profile) throw new Error("Wallet locked")
@@ -89,13 +97,13 @@ export function fakeSdkServices(
 					discover: opts.popup ?? (async () => ({ approved: true })),
 					notifyNetworkUnavailable: opts.notice ?? (async () => undefined),
 				},
-				"dapp-session": {
+				"dapp-session": opts.dappSession ?? {
 					onDappSessionDeleted,
 					onVerificationRefused,
 					onVerificationConfirmed,
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
-						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId, trustedVerification: false }
+						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId }
 						rows.set(`${metadata.url}|${chainId}`, row)
 						return row
 					},
@@ -103,7 +111,11 @@ export function fakeSdkServices(
 					deleteDappSession: async (id: string) => {
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
-					setVerificationHash: opts.setVerificationHash ?? (async () => undefined),
+					setVerificationHash:
+						opts.setVerificationHash ??
+						(async (id: string, hash: string) => {
+							for (const row of rows.values()) if (row.id === id) row.verificationHash = hash
+						}),
 				},
 				"operation-journal": opts.operationJournal ?? {},
 				token: { getTokens: async () => [] },

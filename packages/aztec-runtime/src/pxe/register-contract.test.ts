@@ -2,8 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
+const compiledIn = vi.hoisted(() => new Map<string, unknown>())
 vi.mock("./known-artifacts", () => ({
-	loadProductionKnownArtifacts: async () => ({ artifacts: new Map(), instances: new Map() }),
+	loadProductionKnownArtifacts: async () => ({ artifacts: compiledIn, instances: new Map() }),
 }))
 vi.mock("./note-schemas", () => ({
 	loadProductionNoteSchemas: async () => new Map<string, unknown>(),
@@ -27,13 +28,16 @@ const noopProfiles: IProfileReader = {
 const network: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://localhost:8080" }
 const seed = Fr.fromHexString("0x0000000000000000000000000000000000000000000000000000000000000002")
 
-function makeHarness() {
+function makeHarness(stored = new Map<string, unknown>()) {
 	const writes: string[] = []
+	const registeredClasses: unknown[] = []
 	const factory: PxeFactory = {
 		createChainRuntime: async (n) => {
 			const pxe = {
-				registerContractClass: async () => {
+				getContractArtifact: async (id: Fr) => stored.get(id.toString()),
+				registerContractClass: async (artifact: unknown) => {
 					writes.push("registerContractClass")
+					registeredClasses.push(artifact)
 				},
 				registerContract: async (instance: ContractInstanceWithAddress) => {
 					writes.push("registerContract")
@@ -45,7 +49,7 @@ function makeHarness() {
 	}
 	const service = new PxeService(noopProfiles, noopLogger, factory)
 	;(service as unknown as { initialized: boolean }).initialized = true
-	return { service, writes }
+	return { service, writes, registeredClasses }
 }
 
 /** The service parses the RPC wire form (hex strings), so serialize the real instance first. */
@@ -82,6 +86,16 @@ describe("PxeService.registerContract derives the address before writing", () =>
 		expect(writes).toEqual([])
 	})
 
+	test("a current class id other than the original is rejected with NO write", async () => {
+		const { service, writes } = makeHarness()
+		const instance = await genuineInstance()
+		const otherClass = { ...instance, currentContractClassId: new Fr(7n).toString() }
+		await expect(service.registerContract(network, { instance: otherClass as never, artifact: WIRE_ARTIFACT })).rejects.toThrow(
+			/registerContract class mismatch/,
+		)
+		expect(writes).toEqual([])
+	})
+
 	test("a tampered preimage field under the genuine address is rejected with NO write", async () => {
 		const { service, writes } = makeHarness()
 		const instance = await genuineInstance()
@@ -90,5 +104,42 @@ describe("PxeService.registerContract derives the address before writing", () =>
 			/registerContract address mismatch/,
 		)
 		expect(writes).toEqual([])
+	})
+})
+
+describe("PxeService.registerContract writes the wallet's copy of a class it has one of", () => {
+	beforeEach(() => {
+		vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} }, sendMessage: () => {} } })
+	})
+	afterEach(() => {
+		compiledIn.clear()
+		vi.unstubAllGlobals()
+	})
+
+	test("for a compiled-in class, the compiled-in copy is written, not the provided one", async () => {
+		const instance = await genuineInstance()
+		const ownCopy = { name: "the compiled-in copy" }
+		compiledIn.set(String(instance.currentContractClassId), ownCopy)
+		const { service, registeredClasses } = makeHarness()
+		await service.registerContract(network, { instance: instance as never, artifact: WIRE_ARTIFACT })
+		expect(registeredClasses).toHaveLength(1)
+		expect(registeredClasses[0]).toBe(ownCopy)
+	})
+
+	test("for a class only the store holds, the stored copy is written", async () => {
+		const instance = await genuineInstance()
+		const stored = new Map<string, unknown>([[String(instance.currentContractClassId), FrozenSchnorrAccountArtifact]])
+		const { service, registeredClasses } = makeHarness(stored)
+		await service.registerContract(network, { instance: instance as never, artifact: WIRE_ARTIFACT })
+		expect(registeredClasses).toHaveLength(1)
+		expect(registeredClasses[0]).toBe(FrozenSchnorrAccountArtifact)
+	})
+
+	test("for a class the wallet has no copy of, the provided artifact is written (control)", async () => {
+		const { service, registeredClasses } = makeHarness()
+		await service.registerContract(network, { instance: (await genuineInstance()) as never, artifact: WIRE_ARTIFACT })
+		expect(registeredClasses).toHaveLength(1)
+		expect(registeredClasses[0]).not.toBe(FrozenSchnorrAccountArtifact)
+		expect((registeredClasses[0] as { name: string }).name).toBe(FrozenSchnorrAccountArtifact.name)
 	})
 })

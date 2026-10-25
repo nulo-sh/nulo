@@ -21,8 +21,8 @@ import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { recordWrites } from "../storage-write-log"
 import { AccessLevel, DappSessionService } from "./service"
-import { RecoveryModeError } from "@nulo/extension-messaging/errors"
-import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey } from "@nulo/wallet-crypto"
+import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { asImportedKeysDek, asMasterSecretBytes, deriveDappSessionMacKey, deriveRowKeys, type RowKeys, sealRow } from "@nulo/wallet-crypto"
 import { signDappSession } from "./integrity"
 import type { CapabilityDecision, DappSession, GrantedCapabilityRecord } from "./spec"
 
@@ -40,7 +40,13 @@ const realMacKey = (profileId: string) =>
 		asImportedKeysDek(new Uint8Array(32).fill(DEK_BY_PROFILE[profileId] ?? 0x33) as Uint8Array<ArrayBuffer>),
 	)
 
-function makeProfileStub() {
+/** Row keys as a worker that opened every listed profile holds them: master-only, so same-phrase
+ *  siblings derive them alike apart from the profile binding. */
+async function rowKeysOf(...profileIds: string[]): Promise<Map<string, RowKeys>> {
+	return new Map(await Promise.all(profileIds.map(async (id) => [id, await deriveRowKeys(SHARED_MASTER, id, `gen-${id}`)] as const)))
+}
+
+function makeProfileStub(rowKeys: Map<string, RowKeys>) {
 	const deletionState = new ProfileDeletionState()
 	return {
 		name: PROFILE_SERVICE_NAME,
@@ -57,6 +63,9 @@ function makeProfileStub() {
 			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
 			return realMacKey(profileId)
 		}),
+		rowKeys: (profileId: string) => rowKeys.get(profileId),
+		keyring: rowKeys,
+		onRowKeysReady: new EventHandler<string>(),
 		async start() {},
 	}
 }
@@ -71,7 +80,7 @@ async function makeService(): Promise<{
 	browserApi.reset()
 	const service = new DappSessionService(logger, browserApi)
 	const collection = new ServiceCollection()
-	const profileStub = makeProfileStub()
+	const profileStub = makeProfileStub(await rowKeysOf("p1", "p2", "p2-own"))
 	collection.add(profileStub as never)
 	collection.add(service)
 	await collection.start()
@@ -151,7 +160,7 @@ describe("DappSessionService active-profile guards (preservation pins)", () => {
 	test('addDappSession throws "Wallet is locked" when the wallet is locked', async () => {
 		const { service: svc } = await makeService()
 		activeProfile = undefined
-		await expect(svc.addDappSession({} as never, [], [], 0 as never, "1")).rejects.toThrow("Wallet is locked")
+		await expect(svc.addDappSession({} as never, [], [], 0 as never, "1", "p1")).rejects.toThrow("Wallet is locked")
 	})
 
 	test("tryGetDappSessionByOriginAndChain SILENTLY returns undefined when locked (deliberate non-thrower, NOT swept)", async () => {
@@ -179,7 +188,7 @@ describe("DappSessionService active-profile guards (preservation pins)", () => {
 		}) as typeof browserApi.storage.local.get
 
 		const writes = recordWrites(browserApi.storage.local, `${ROW_ROOT}@`)
-		const run = svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1")
+		const run = svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
 		await new Promise((r) => setTimeout(r, 0))
 		profileStub.deletionState.beginDeletion("p1")
 		profileStub.deletionState.release("p1")
@@ -199,13 +208,48 @@ describe("DappSessionService active-profile guards (preservation pins)", () => {
 		svc.onDappSessionAdded.add((s) => emitted.push(s))
 		const writes = recordWrites(browserApi.storage.local, `${ROW_ROOT}@`, () => profileStub.deletionState.beginDeletion("p1"))
 
-		await expect(svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1")).rejects.toThrow(
+		await expect(svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")).rejects.toThrow(
 			/^profile p1 deleted$/,
 		)
 		writes.restore()
 		expect(writes.log).toHaveLength(2)
 		expect(writes.log[1]).toBe(writes.log[0]?.replace(/^set:/, "remove:"))
 		expect(emitted).toHaveLength(0)
+	})
+
+	/** A service whose row writes and added events are recorded; `add` names the expected profile. */
+	async function adding() {
+		const { service: svc, browserApi } = await makeService()
+		const emitted: DappSession[] = []
+		svc.onDappSessionAdded.add((s) => emitted.push(s))
+		const writes = recordWrites(browserApi.storage.local, `${ROW_ROOT}@`)
+		const add = (expectedProfileId: string | undefined) =>
+			svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", expectedProfileId as never)
+		return { add, writes: writes.log, emitted }
+	}
+
+	test("addDappSession refuses with SessionEndedError when the fence names another profile: no write, no event", async () => {
+		activeProfile = { id: "p2" }
+		const h = await adding()
+		await expect(h.add("p1")).rejects.toBeInstanceOf(SessionEndedError)
+		expect(h.writes).toEqual([])
+		expect(h.emitted).toEqual([])
+	})
+
+	test("addDappSession refuses a call with no expected profile the same way", async () => {
+		const h = await adding()
+		await expect(h.add(undefined)).rejects.toBeInstanceOf(SessionEndedError)
+		expect(h.writes).toEqual([])
+		expect(h.emitted).toEqual([])
+	})
+
+	test("addDappSession writes the row under the expected profile when the fence names it", async () => {
+		activeProfile = { id: "p2" }
+		const h = await adding()
+		const row = await h.add("p2")
+		expect(row.profileId).toBe("p2")
+		expect(h.writes).toEqual([`set:${ROW_ROOT}@${row.id}`])
+		expect(h.emitted).toEqual([row])
 	})
 })
 
@@ -223,7 +267,7 @@ describe("applyCapabilityDecision requiresGrant", () => {
 
 	async function sessionWithGrant() {
 		const { service: svc } = await makeService()
-		await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1")
+		await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
 		const session = await svc.tryGetDappSessionByOriginAndChain("https://dapp.example", "1", "p1")
 		await svc.applyCapabilityDecision(session!.id, {
 			addAccounts: ["aztec:1:0xaa"],
@@ -317,7 +361,7 @@ describe("stored grants are read and written through the projection", () => {
 describe("tryGetDappSessionByOriginAndChain anchoring", () => {
 	test("forProfileId filters to the given profile and bypasses the live-profile read (silently revertible without this pin)", async () => {
 		const { service: svc, profileStub } = await makeService()
-		await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1")
+		await svc.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
 
 		profileStub.getActiveProfile.mockClear()
 		const anchored = await svc.tryGetDappSessionByOriginAndChain("https://dapp.example", "1", "p1")
@@ -356,7 +400,7 @@ describe("the authorizations consent", () => {
 
 	async function holding(grants: GrantedCapabilityRecord[], consent?: { broad: boolean }) {
 		const made = await makeService()
-		await made.service.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1")
+		await made.service.addDappSession({ url: "https://dapp.example" } as never, [], [], 0 as never, "1", "p1")
 		const id = (await made.service.tryGetDappSessionByOriginAndChain("https://dapp.example", "1", "p1"))?.id as string
 		await made.service.setCapabilityGrants(id, grants)
 		if (consent) await made.service.applyCapabilityDecision(id, decision({ authorizations: consent }))
@@ -513,7 +557,7 @@ describe("the authorizations consent", () => {
 		await svc.applyCapabilityDecision(id, decision({ grantRecords: projected, approvedTypes: ["contracts", "simulation"] }))
 		const reader = new DappSessionService(new LoggerStore(new ConfigStore()), browserApi)
 		const collection = new ServiceCollection()
-		collection.add(makeProfileStub() as never)
+		collection.add(makeProfileStub(await rowKeysOf("p1", "p2", "p2-own")) as never)
 		collection.add(reader)
 		await collection.start()
 		const row = await reader.getDappSession(id)
@@ -597,6 +641,23 @@ describe("refuseVerification", () => {
 		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["moved", "replacement"])
 	})
 
+	test("sealed rows the scan held no key for answer unavailable, even when an unlock lands during the deletes", async () => {
+		const svc = await makeLockAwareService()
+		const p1Keys = svc.profileStub.keyring.get("p1")
+		if (!p1Keys) throw new Error("p1 is unlocked")
+		const { mac: _drop, ...signable } = { ...rowFor("p1"), id: "sealed" }
+		const sealedKey = `${ROW_ROOT}@sealed`
+		const text = JSON.stringify({ ...signable, mac: await signDappSession(await realMacKey("p1"), signable) })
+		const sealed = await sealRow(p1Keys, text, { root: ROW_ROOT, storageKey: sealedKey, profileId: "p1" })
+		await svc.browserApi.storage.local.set({ [sealedKey]: JSON.stringify({ profileId: "p1", sealed }) })
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		svc.profileStub.keyring.delete("p1")
+		svc.service.onDappSessionDeleted.add(() => svc.profileStub.keyring.set("p1", p1Keys))
+
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("unavailable")
+		expect(await svc.stored()).toEqual([sealedKey])
+	})
+
 	test.each([
 		["no profile id", { ...TUPLE, profileId: "" }],
 		["no origin", { ...TUPLE, origin: undefined }],
@@ -638,15 +699,15 @@ describe("purgeForChain", () => {
 		const browserApi = new FakeBrowserApi()
 		browserApi.reset()
 		const collection = new ServiceCollection()
-		collection.add(makeProfileStub() as never)
+		collection.add(makeProfileStub(await rowKeysOf("p1", "p2", "p2-own")) as never)
 		const service = new DappSessionService(logger, browserApi)
 		collection.add(service)
 		await collection.start()
-		const kept = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "2")
-		await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
-		await service.addDappSession({ url: "https://b.example" }, [], [], AccessLevel.Transactions, "1")
+		const kept = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "2", "p1")
+		await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1", "p1")
+		await service.addDappSession({ url: "https://b.example" }, [], [], AccessLevel.Transactions, "1", "p1")
 		activeProfile = { id: "p2" }
-		const other = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1")
+		const other = await service.addDappSession({ url: "https://a.example" }, [], [], AccessLevel.Transactions, "1", "p2")
 		const deleted: string[] = []
 		service.onDappSessionDeleted.add(async (row) => {
 			deleted.push(row.chainId)

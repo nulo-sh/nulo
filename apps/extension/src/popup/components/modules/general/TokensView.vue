@@ -15,15 +15,16 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
+import { managers } from "@/utils/core"
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
-import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { orderTokenRows } from "@/utils/token-order"
 import { capHomeSlots, defaultKey, homeSlots, isDefaultPending } from "./home-slots"
 
 /** Composables */
 import { usePinnedTokens, pinScopeOf } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
+import { useJournalMirror } from "@/composables/useJournalMirror"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
 
 /** Store */
@@ -55,7 +56,17 @@ const tasks = ref([])
 const FAILED_RETENTION_MS = 30_000
 /** The one journal kind this view scopes to: the filters and the query must not drift apart. */
 const TOKENS_VIEW_KIND = "token_import"
-const tokenImports = ref([])
+const journalService = new OperationJournalServiceClient()
+const {
+	rows: tokenImports,
+	resnapshot: resnapshotImports,
+	dispose: disposeImports,
+	...importEvents
+} = useJournalMirror({
+	read: () => journalService.getOperations({ kind: TOKENS_VIEW_KIND }),
+	accept: (op) => op.kind === TOKENS_VIEW_KIND,
+	place: "back",
+})
 // 5s tick is a generous fraction of the 30s retention window — the failed
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
@@ -82,9 +93,10 @@ const anyRefreshing = computed(() => tokenBalances.value.some((tb) => tb.isUpdat
 /** Prices order the rows; the client is disconnected AFTER the composable is disposed (cleanup order). */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
-const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const fiatOf = prices.fiatOfRow
 
 const pins = usePinnedTokens({
+	preferences: managers.uiPreference,
 	getScope: () => pinScopeOf(appStore.profile?.id, appStore.network?.chainId),
 	knownContracts: () => new Set(tokenBalances.value.map((tb) => tb.token.contract)),
 })
@@ -217,32 +229,18 @@ tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
 
-const journalService = new OperationJournalServiceClient()
-journalService.onOperationAdded.add(onJournalAdded)
-journalService.onOperationUpdated.add(onJournalUpdated)
-journalService.onOperationDeleted.add(onJournalDeleted)
+journalService.onOperationAdded.add(importEvents.onOperationAdded)
+journalService.onOperationUpdated.add(importEvents.onOperationUpdated)
+journalService.onOperationDeleted.add(importEvents.onOperationDeleted)
 journalService.onConnected.add(fetchTokenImports)
-function onJournalAdded(op) {
-	if (op.kind !== TOKENS_VIEW_KIND) return
-	tokenImports.value.push(op)
-}
-function onJournalUpdated(op) {
-	if (op.kind !== TOKENS_VIEW_KIND) return
-	const idx = tokenImports.value.findIndex((x) => x.id === op.id)
-	if (idx === -1) tokenImports.value.push(op)
-	else tokenImports.value[idx] = op
-}
-function onJournalDeleted(op) {
-	tokenImports.value = tokenImports.value.filter((x) => x.id !== op.id)
-}
 // SW restarts / port reconnects can leave the list stale (an event fired
 // while we were disconnected is dropped). Resnapshot the kind-scoped slice
 // every time the port reconnects — same pattern as RecentActivityView.
 async function fetchTokenImports() {
 	try {
-		tokenImports.value = await journalService.getOperations({ kind: TOKENS_VIEW_KIND })
+		await resnapshotImports()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		// The mirror reads again on this run.
 	}
 }
 
@@ -336,6 +334,7 @@ onBeforeUnmount(() => {
 	taskService.disconnect()
 	disposeBalances()
 	tokenBalanceService.disconnect()
+	disposeImports()
 	journalService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
@@ -358,13 +357,13 @@ onBeforeUnmount(() => {
 				<RouterLink v-if="overflowCount > 0" to="/popup/holdings" data-testid="tokens-view-all" :class="$style.view_all">View all</RouterLink>
 				<Dropdown>
 					<Button variant="secondary" size="micro" data-testid="tokens-menu-trigger">
-						<Icon name="dots" size="12" color="secondary" />
+						<Icon name="more" size="12" color="secondary" />
 					</Button>
 
 					<template #popup>
 						<DropdownItem @click="popupStore.open('new_token')" data-testid="tokens-menu-import">
 							<Flex align="center" gap="8">
-								<Icon name="plus-circle" size="14" color="primary" />
+								<Icon name="add" size="14" color="primary" />
 								Import token
 							</Flex>
 						</DropdownItem>
@@ -404,13 +403,13 @@ onBeforeUnmount(() => {
 			</template>
 			<template v-if="showGhostRows">
 				<div v-for="n in GHOST_ROWS" :key="n" data-testid="tokens-skeleton-row" aria-hidden="true" :class="$style.ghost_row">
-					<Flex direction="column" gap="5">
+					<Flex direction="column" gap="2">
 						<Skeleton :width="52" :height="14" />
-						<Skeleton :width="84" :height="9" />
+						<Skeleton :width="84" :height="11" />
 					</Flex>
-					<Flex direction="column" align="end" gap="5">
+					<Flex direction="column" align="end" justify="center" gap="2" :class="$style.loading_block">
 						<Skeleton :width="64" :height="13" />
-						<Skeleton :width="92" :height="9" />
+						<Skeleton :width="92" :height="11" />
 					</Flex>
 				</div>
 			</template>
@@ -467,7 +466,8 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	composes: type--label from global;
+	composes: type--label-section from global;
+	user-select: none;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
@@ -494,6 +494,10 @@ onBeforeUnmount(() => {
 
 	min-height: 32px;
 	padding: 8px 0;
+}
+
+.loading_block {
+	composes: loading_block from "./token-row.module.css";
 }
 
 .empty_state {

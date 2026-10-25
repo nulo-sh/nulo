@@ -20,15 +20,17 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
+import { StepContent, type TaskService, TaskStatus, type WrappedTask } from "@/wallet/services/task/service"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { DuplicateInitializationError, SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { profileKeysStub } from "@/wallet/services/composition-harness"
 import { ExecutionCoordinator, type ProveAndSendContext } from "./execution-coordinator"
 
-const fakeTask = { complete: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
+const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
 ;(fakeTask.startSubtask as ReturnType<typeof vi.fn>).mockReturnValue(fakeTask)
 
 const ACCEPTED: LegalAdmission = { assertCurrent: async () => {} }
@@ -213,6 +215,7 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 		api.reset()
 		const journal = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p1"))
 		services.add(journal)
 		await services.start()
 		const { id } = await journal.createOperation({ kind: "transfer", origin: "popup", profileId: "p1" })
@@ -230,13 +233,18 @@ describe("proveAndSend: the submitting write is the send's precondition", () => 
 	}
 
 	test("a refused submitting write sends nothing, and the row then fails from proving", async () => {
-		const { ctx, node, api, journal, id, failRow } = await journaled()
+		const { ctx, node, pxe, provedTx, api, journal, id, failRow } = await journaled()
 		const write = api.storage.local.set.bind(api.storage.local)
-		let refused = false
+		// Rows are sealed, so the submitting write is told apart by order: the first journal write
+		// after the proof.
+		let armed = false
+		;(pxe.proveTx as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+			armed = true
+			return provedTx
+		})
 		vi.spyOn(api.storage.local, "set").mockImplementation(async (entries) => {
-			const submitting = Object.values(entries).some((v) => typeof v === "string" && v.includes('"stage":"submitting"'))
-			if (submitting && !refused) {
-				refused = true
+			if (armed && `nulo:journal@${id}` in entries) {
+				armed = false
 				throw new Error("storage write failed")
 			}
 			return write(entries)
@@ -378,6 +386,42 @@ describe("proveAndSend: the session checks", () => {
 		await expect(run).resolves.toMatchObject({})
 		expect(calls.slice(-2)).toEqual(["record", "journal:succeeded"])
 		expect(ctx.assertLive).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("proveAndSend under a profile switch (real TaskService)", () => {
+	async function sendUnderTasks(sendTx: (switchToProfile: (id: string) => void) => Promise<void>) {
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const parentTask = tasks.startNewTask(new StepContent("Transfer"))
+		const { ctx, calls } = makeHarness({ parentTask })
+		;(ctx.node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(() => sendTx(switchToProfile))
+		const coordinator = new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), ACCEPTED)
+		return { run: coordinator.proveAndSend(ctx), ctx, calls, parentTask }
+	}
+
+	test("a switch while the node takes the send still records it and marks it succeeded", async () => {
+		const { run, ctx, calls, parentTask } = await sendUnderTasks(async (switchToProfile) => switchToProfile("p2"))
+		await expect(run).resolves.toMatchObject({ txHash: { toString: expect.any(Function) } })
+		expect(calls.slice(-2)).toEqual(["record", "journal:succeeded"])
+		expect(ctx.recordTransaction).toHaveBeenCalledWith("0xhash")
+		expect(ctx.markJournal).toHaveBeenLastCalledWith({ stage: "succeeded", txHash: "0xhash" })
+		expect(parentTask.exists).toBe(false)
+	})
+
+	test("control: with no switch the send step completes and its parent can finish", async () => {
+		const { run, parentTask } = await sendUnderTasks(async () => {})
+		await expect(run).resolves.toMatchObject({})
+		parentTask.complete()
+		expect(parentTask.status).toBe(TaskStatus.Completed)
+	})
+
+	test("a node refusal still rejects with its own error and records nothing", async () => {
+		const refusal = new Error("node refused")
+		const { run, ctx } = await sendUnderTasks(async () => {
+			throw refusal
+		})
+		await expect(run).rejects.toBe(refusal)
+		expect(ctx.recordTransaction).not.toHaveBeenCalled()
 	})
 })
 

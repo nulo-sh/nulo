@@ -2,9 +2,9 @@
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
-import { execSync } from "node:child_process"
 import type { TestProject } from "vitest/node"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
+import { killChromesLoading } from "./sandbox-ownership"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Resolved before setup runs, so an unusable selector fails ahead of the orphan sweep rather than
@@ -17,20 +17,6 @@ const EXTENSION_PATH = process.env.EXTENSION_PATH
 	? path.resolve(process.env.EXTENSION_PATH)
 	: path.resolve(__dirname, "../../dist", BROWSER)
 
-/**
- * Kill orphan Chrome test processes started by THIS extension build only.
- *
- * Scoping by extension path lets a parallel impl in a different folder run its
- * own Chromes without us murdering each other's test runs.
- */
-function cleanupOrphanChromeProcesses() {
-	try {
-		execSync(`pkill -f "chrome.*--load-extension=${EXTENSION_PATH}" 2>/dev/null || true`, { stdio: "ignore" })
-	} catch {
-		// Ignore errors — processes may not exist
-	}
-}
-
 const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
 
 /**
@@ -38,10 +24,7 @@ const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS
  * spec (`fixtures/token-list.ts`), so no source profile holds a list it did not ask for. The
  * token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
  */
-function assertArmedSmokeBuild(): void {
-	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
-	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
-	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
+function assertArmedSmokeBuild(stamped: (stamp: string) => boolean): void {
 	if (stamped("NULO_E2E_TOKEN_SEEDS_BUILD_STAMP") && stamped("NULO_E2E_TOKEN_LIST_BUILD_STAMP")) return
 	throw new Error(
 		[
@@ -61,7 +44,7 @@ export default async function setupWithTeardown(project: TestProject): Promise<(
 }
 
 export async function setup(project: TestProject) {
-	cleanupOrphanChromeProcesses()
+	killChromesLoading(EXTENSION_PATH)
 
 	const manifest = path.join(EXTENSION_PATH, "manifest.json")
 	if (!fs.existsSync(manifest)) {
@@ -70,20 +53,23 @@ export async function setup(project: TestProject) {
 	// Every smoke run is guarded. Only a release build pins the production keys, so only an artifact
 	// run may start the live spec's launch, which checks the published list against the live chain.
 	const liveLeg = process.env.NULO_E2E_ARTIFACT_RUN === "1"
-	if (!liveLeg) assertArmedSmokeBuild()
+	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
+	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
+	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
+	if (!liveLeg) assertArmedSmokeBuild(stamped)
 	project.provide("extensionPath", EXTENSION_PATH)
 	project.provide("egressGuard", true)
 	project.provide("liveLeg", liveLeg)
 }
 
 export async function teardown() {
-	cleanupOrphanChromeProcesses()
+	killChromesLoading(EXTENSION_PATH)
 }
 
 declare module "vitest" {
 	export interface ProvidedContext {
 		extensionPath: string
-		/** Only the smoke setup provides it; elsewhere it is undefined and launches are unguarded. */
+		/** Both e2e setups provide `true`. */
 		egressGuard?: boolean
 		/** Only the smoke setup provides it: whether a launch may send the Testnet node direct. */
 		liveLeg?: boolean

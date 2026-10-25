@@ -4,7 +4,7 @@
  * No vue, no chrome.*, no service clients — safe to import anywhere.
  */
 
-import { EncryptionKey, zeroize } from "@nulo/wallet-crypto"
+import { EncryptionKey, PasskeyCredential, type PasskeyCredentialData, computeBackupMac, zeroize } from "@nulo/wallet-crypto"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
@@ -34,12 +34,21 @@ export const MAX_BACKUP_FILE_BYTES = 64 * 1024 * 1024
 
 export type BackupFileType = "plain" | "encrypted" | "unknown"
 
-export interface BackupSelection {
-	name: string
-	backup: unknown
-	type: BackupFileType
-	profileType: string | null
-}
+/**
+ * A picked full backup. Its content stays untrusted (`unknown`) until `validateAndMigrateBackup`;
+ * every kind carries `backup` and `profileType`, so a reader that checks `profileType` first needs no
+ * narrowing.
+ */
+export type BackupSelection =
+	| { kind: "unreadable"; name: string; backup: null; profileType: null }
+	| { kind: "plain"; name: string; backup: unknown; profileType: string | null }
+	| { kind: "sealed"; name: string; backup: string; profileType: null }
+	| { kind: "opened"; name: string; backup: unknown; profileType: string | null }
+
+/** Read unchecked on purpose: narrowing a malformed value would change which CTAs a malformed file
+ *  shows, and restore validates the whole body before it trusts any field. */
+const profileTypeOf = (backup: unknown): string | null =>
+	(backup as { data?: { profile?: { type?: string } } } | null)?.data?.profile?.type ?? null
 
 export function detectBackupType(text: string): BackupFileType {
 	const trimmed = text.trim()
@@ -104,17 +113,22 @@ export async function openFullBackupText(text: string, password: string): Promis
 	}
 }
 
-/** The decrypt + parse chain of a picked encrypted backup, stale-fenced after the KDF and decrypt: a
- *  re-pick (or the too-large clear) meanwhile must not have its error wiped or its selection
- *  resurrected by a late publication. */
-export async function openEncryptedBackup(
-	sealed: string,
+/**
+ * The decrypt + parse chain of a selection that holds sealed text: a picked encrypted file, or an
+ * opened one whose decrypted JSON was itself a string (a file sealed twice). Any other selection
+ * rejects. Stale-fenced after the KDF and decrypt: a re-pick (or the too-large clear) meanwhile must
+ * not have its error wiped or its selection resurrected by a late publication.
+ */
+export async function openSelection(
+	target: BackupSelection,
 	password: string,
 	isStale: () => boolean,
-): Promise<{ kind: "stale" } | { kind: "ok"; backupObject: { data?: { profile?: { type?: string; name?: string } } } }> {
-	const decodedJson = await openFullBackupText(sealed, password)
+): Promise<{ kind: "stale" } | { kind: "opened"; selection: Extract<BackupSelection, { kind: "opened" }> }> {
+	if (typeof target.backup !== "string") throw new Error("Not an encrypted backup")
+	const decodedJson = await openFullBackupText(target.backup, password)
 	if (isStale()) return { kind: "stale" }
-	return { kind: "ok", backupObject: JSON.parse(decodedJson) as { data?: { profile?: { type?: string; name?: string } } } }
+	const backup: unknown = JSON.parse(decodedJson)
+	return { kind: "opened", selection: { kind: "opened", name: target.name, backup, profileType: profileTypeOf(backup) } }
 }
 
 export interface ProcessBackupResult {
@@ -128,9 +142,10 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	// advertised ceiling before any later check sees it. Belt over the
 	// pickFile-side cap: this helper must hold its own even for callers that
 	// hand it an arbitrary File.
+	const unreadable = () => ({ kind: "unreadable", name: file.name, backup: null, profileType: null }) as const
 	if (file.size > MAX_BACKUP_FILE_BYTES) {
 		return {
-			selection: { name: file.name, backup: null, type: "unknown", profileType: null },
+			selection: unreadable(),
 			parseError: {
 				title: "Backup File Too Large",
 				tooltip: "The backup file is too large to import. Please select a correct backup file.",
@@ -139,28 +154,21 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	}
 	const text = await file.text()
 	const detectedType = detectBackupType(text)
-	let backup: unknown = null
-	let profileType: string | null = null
-	let parseError: ProcessBackupResult["parseError"] | undefined
-
-	if (detectedType === "plain") {
-		try {
-			backup = JSON.parse(text)
-			profileType = (backup as { data?: { profile?: { type?: string } } })?.data?.profile?.type ?? null
-		} catch {
-			parseError = {
+	if (detectedType === "encrypted") return { selection: { kind: "sealed", name: file.name, backup: text, profileType: null } }
+	if (detectedType === "unknown") return { selection: unreadable() }
+	let backup: unknown
+	try {
+		backup = JSON.parse(text)
+	} catch {
+		return {
+			selection: unreadable(),
+			parseError: {
 				title: "Invalid JSON Format",
 				tooltip: "The selected file is not a valid JSON backup. Please select a correct backup file.",
-			}
+			},
 		}
-	} else {
-		backup = text
 	}
-
-	return {
-		selection: { name: file.name, backup, type: detectedType, profileType },
-		parseError,
-	}
+	return { selection: { kind: "plain", name: file.name, backup, profileType: profileTypeOf(backup) } }
 }
 
 /** A backup-slice producer: the service's own name constant plus its backup call. */
@@ -180,6 +188,15 @@ export interface AssembledBackup {
 	checksum: string
 }
 
+/** A passkey backup's check over its checksum. It sits beside `checksum`, outside the body the
+ *  checksum hashes. */
+export const BACKUP_MAC_FIELD = "backup-mac"
+
+/** Makes the check a passkey backup carries, under the passkey the export ceremony returned. */
+export function passkeyBackupAuthenticator(credentialData: PasskeyCredentialData): (checksum: string) => Promise<string> {
+	return async (checksum) => computeBackupMac(await PasskeyCredential.create(credentialData), checksum)
+}
+
 /**
  * Assembles a full-backup artifact from an envelope and slice sources, sealed
  * from ONE serialization: the checksum hashes exactly `JSON.stringify(draft)`
@@ -190,14 +207,16 @@ export interface AssembledBackup {
  * string exactly (key insertion order survives parse → stringify).
  *
  * `onSlice` is a currency probe: consulted before every slice and before
- * sealing; returning false aborts with `AssemblyAbortedError`.
+ * sealing; returning false aborts with `AssemblyAbortedError`. `authenticate`
+ * signs the checksum; its result lands in `BACKUP_MAC_FIELD`.
  */
 export async function assembleFullBackup(
 	envelope: Record<string, unknown>,
 	sources: BackupSource[],
 	onSlice?: () => boolean,
+	authenticate?: (checksum: string) => Promise<string>,
 ): Promise<AssembledBackup> {
-	if ("checksum" in envelope) throw new Error("Backup envelope must not carry a checksum")
+	if ("checksum" in envelope || BACKUP_MAC_FIELD in envelope) throw new Error("Backup envelope must not carry a checksum or its MAC")
 	const data: Record<string, unknown> = {}
 	const draft: Record<string, unknown> = { ...envelope, data }
 	for (const { name, backup } of sources) {
@@ -209,12 +228,14 @@ export async function assembleFullBackup(
 	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
 	const unsigned = JSON.stringify(draft)
 	const checksum = await EncryptionKey.getHashHex(unsigned)
+	const mac = authenticate ? await authenticate(checksum) : undefined
 	// Re-probe after the hash await too: the parse + two stringifies below are
 	// the most expensive steps at large sizes — don't spend them for an
 	// abandoned run.
 	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
 	const sealed = JSON.parse(unsigned) as Record<string, unknown>
 	sealed.checksum = checksum
+	if (mac !== undefined) sealed[BACKUP_MAC_FIELD] = mac
 	return { compact: JSON.stringify(sealed), pretty: JSON.stringify(sealed, null, 2), checksum }
 }
 
@@ -444,10 +465,8 @@ function collectAccountStateErrors(data: unknown[]): unknown[] | null {
 }
 
 /**
- * Rewrite EVERY row's `idKey` to `newId`, ignoring its current value. For a
- * single-valued key like `profileId`: a full backup is exactly one profile's
- * data, so every child row must bind to the created profile — this normalizes
- * any hostile foreign `profileId` a crafted backup smuggled onto a child row.
+ * Rewrite `idKey` to `newId` on every row that carries it, whatever its value: a full backup is
+ * one profile's data. A row without the key stays without it; the owning store binds it on restore.
  */
 export function normalizeAllIds(data: Record<string, unknown>, idKey: string, newId: string): void {
 	for (const key of Object.keys(data)) {

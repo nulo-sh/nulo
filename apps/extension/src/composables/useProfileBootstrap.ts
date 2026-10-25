@@ -11,13 +11,14 @@
  */
 
 import { managers, initTransactionService } from "@/utils/core"
-import { AccountServiceClient, AccountType, DEFAULT_ACCOUNT_NAME } from "@/wallet/services/account/client"
+import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { useAppStore } from "@/stores/app.store"
 import { createRunFence } from "@/composables/runFence"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { runsUnattended, runUnattended } from "@/composables/useStaleNetwork"
+import { ensureDefaultAccountOrWait } from "@/composables/internal/default-account"
 
 /**
  * Single-flight the activation core per profile id, module-level so it
@@ -167,12 +168,12 @@ export function useProfileBootstrap() {
 	const initAccount = async (isCurrent: () => boolean = () => true) => {
 		if (!isCurrent() || !appStore.profile || !appStore.network) return
 		const profileId = appStore.profile.id
-		const chainId = appStore.network.chainId
+		const { id: networkId, chainId } = appStore.network
 		managers.account?.disconnect()
 		const account = new AccountServiceClient()
 		managers.account = account
-		if (appStore.staleNetwork?.networkId === appStore.network.id) return clearQuarantinedAccounts(appStore)
-		await account.ensureDefaultAccount(profileId, chainId, AccountType.Nulo_v1, DEFAULT_ACCOUNT_NAME)
+		if (appStore.staleNetwork?.networkId === networkId) return clearQuarantinedAccounts(appStore)
+		await ensureDefaultAccountOrWait(account, profileId, chainId, () => isCurrent() && appStore.markNetworkInactive(networkId))
 		if (!isCurrent()) return
 		const accounts = await account.getAccounts(profileId, chainId, true)
 		if (!isCurrent()) return

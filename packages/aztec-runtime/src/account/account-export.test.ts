@@ -32,19 +32,19 @@ const V5_EXPORT = {
 	checksum: "2978e6afcf2e095102f3e1be38a00cae6ed22f8388dc4da0423399a19d7f9736",
 }
 
-/** The same row exported by a V6 build bound to `nulo-v6`, the entry this build's regime supersedes. */
-const NULO_V6_EXPORT = {
+/** The same row exported by a V6 build bound to `nulo-v6.1`, the entry this build's regime supersedes. */
+const NULO_V6_1_EXPORT = {
 	format: "nulo-account-export",
 	version: 1,
-	regime: "nulo-v6",
-	artifactSha256: "4b4933a146a80872b184f47af22cd8ba3faa00f810d7a26217490c9d13507f94",
-	classId: "0x010cc0891c8748de2009734bf117485efbaf3aad0be125f151b4e6744f8f1842",
+	regime: "nulo-v6.1",
+	artifactSha256: "9aebda2a0b8cf96e833dba4379bef6a2ed0f93e975e9689afaa26ac71203cdc8",
+	classId: "0x2a5784fa8315d0150f36a1fba87b41cdb9cd8ebea611ceaa80c7a787e83efa60",
 	descriptorDigest: "3883065f0d6603d1be25db42348ec25b7a9dc29746d85b925b09efbd2a460605",
 	kdfDigest: "29eca1a04b7acde8bb95905a2ac630b29f1edcf04d584274e90fd9f81736166d",
 	l1ChainId: 31337,
-	address: "0x02913c8dcfc07e9d1c3ac528fcdd76fc607d0c7f6154d23479bb8a1a90f0fa94",
+	address: "0x0b4f47f16f0ceb6f4e26f75ebcf0c247bc5d85a870879e066bcd5918dde4fd0e",
 	signingKey: "0x2aabed87d5340c673eae6dc5faaa57382b8d773fa38247a80bdafbd5277729e3",
-	checksum: "b82c4c50f36f8bde2e564e27913e4c5a2ea41089549bcd9779532bc50180721e",
+	checksum: "16f3e4b6ca65c0f2116aa67ee18c2532795903405db64470c4468a520987716a",
 }
 
 describe("NuloAccount.fromSigningKey", () => {
@@ -87,7 +87,7 @@ describe("account-export envelope (NULO-ACCOUNT-EXPORT v1)", () => {
 			.update(JSON.stringify(pairs.map((k) => [k, (body as Record<string, unknown>)[k]])), "utf8")
 			.digest("hex")
 		expect(checksum).toBe(reference)
-		expect(checksum).toBe("9ca3f3142d203d62417bd283fc8489d3938fcf5d6e94255018d7862a0b8e2cd3")
+		expect(checksum).toBe("f1d0a416be7da0cbf222293a10115c61d1041a551acea3e4c70a7966bcb75683")
 	})
 
 	test("the file embeds this build's frozen regime digests", () => {
@@ -117,11 +117,11 @@ describe("account-export envelope (NULO-ACCOUNT-EXPORT v1)", () => {
 		)
 	})
 
-	test("refuses a file from the superseded nulo-v6 entry, and one relabelled as this regime", () => {
-		expect(() => parseAccountExport(JSON.stringify(NULO_V6_EXPORT))).toThrow(
+	test("refuses a file from the superseded nulo-v6.1 entry, and one relabelled as this regime", () => {
+		expect(() => parseAccountExport(JSON.stringify(NULO_V6_1_EXPORT))).toThrow(
 			"Account export is for a different Nulo regime (regime mismatch)",
 		)
-		expect(() => parseAccountExport(JSON.stringify({ ...NULO_V6_EXPORT, regime: EXPORT_REGIME_DIGESTS.regime }))).toThrow(
+		expect(() => parseAccountExport(JSON.stringify({ ...NULO_V6_1_EXPORT, regime: EXPORT_REGIME_DIGESTS.regime }))).toThrow(
 			"Account export is for a different Nulo regime (artifactSha256 mismatch)",
 		)
 	})

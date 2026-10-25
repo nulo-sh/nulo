@@ -10,12 +10,12 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
-import { FEE_JUICE_DECIMALS, formatGasBalance } from "@/utils/fee-estimation"
+import { BALANCE_DECIMALS, FEE_JUICE_DECIMALS, formatGasBalance } from "@/utils/fee-estimation"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
-import { useBalancesStore } from "@/stores/balances.store"
+import { selectedBalanceScope, useBalancesStore } from "@/stores/balances.store"
 const appStore = useAppStore()
 const balancesStore = useBalancesStore()
 
@@ -23,16 +23,7 @@ const balancesStore = useBalancesStore()
  *  refresh), no backoff retry — exactly its pre-store traffic. */
 const CARD_CAPS = { legs: ["gas"], retry: false, txRefresh: true, peek: true }
 
-const scope = computed(() =>
-	appStore.profile?.id && appStore.network?.id && appStore.account?.address
-		? {
-				profileId: appStore.profile.id,
-				networkId: appStore.network.id,
-				chainId: appStore.network.chainId,
-				accountAddress: appStore.account.address,
-			}
-		: null,
-)
+const scope = computed(() => selectedBalanceScope(appStore))
 const entry = computed(() => (scope.value ? balancesStore.entry(scope.value) : undefined))
 const gas = computed(() => entry.value?.gas)
 
@@ -68,7 +59,9 @@ const isStale = computed(() => (entry.value?.stale ?? false) || gas.value?.statu
 const isRefreshing = computed(() => gas.value?.status === "fetching" && hasLoaded.value && isStale.value)
 
 // Null = the read failed (unknown) — an em dash, never a confident zero.
-const publicFormatted = computed(() => (displayedPublic.value === null ? "—" : formatGasBalance(displayedPublic.value, 2)))
+const publicFormatted = computed(() =>
+	displayedPublic.value === null ? "—" : formatGasBalance(displayedPublic.value, BALANCE_DECIMALS.home),
+)
 
 /** D2: fiat under non-zero balances, only with a usable AZTEC quote. */
 const priceService = new PriceServiceClient()
@@ -85,7 +78,7 @@ const privateFiat = computed(() => fiatFor(displayedPrivate.value))
 // Treat null (PrivateFPC not yet discovered or query errored) as 0 so the
 // column always renders. Keeps the gas-balance card stable instead of
 // collapsing/expanding mid-load.
-const privateFormatted = computed(() => formatGasBalance(displayedPrivate.value ?? "0", 2))
+const privateFormatted = computed(() => formatGasBalance(displayedPrivate.value ?? "0", BALANCE_DECIMALS.home))
 
 /** Service clients — tx client is retained for the ADDED event only (the
  *  optimistic overlay); the settle→refresh trigger is owned by the store. */
@@ -222,12 +215,12 @@ onBeforeUnmount(() => {
 }
 
 .label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .amount {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--nulo-accent);
 	transition: opacity 0.2s var(--bezier, ease);
 }

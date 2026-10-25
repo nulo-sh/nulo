@@ -21,6 +21,7 @@ import { test, openPopup, waitForHash } from "../fixtures/extension"
 import { switchToLocalNetwork } from "../fixtures/helpers"
 import { seedSandboxDefaultToken } from "../fixtures/token-seeds"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -75,13 +76,9 @@ test.skipIf(!hasConfig)(
 
 		// The row must come from the seeder, not a stray import: seeding records
 		// its outcome in the per-profile marker blob.
-		const marker = await page.evaluate(async () => {
-			const all = await chrome.storage.local.get(null)
-			const key = Object.keys(all).find((k) => k.startsWith("nulo:core:token-seeded@"))
-			return key ? (all[key] as string) : undefined
-		})
+		const [marker] = await readSealedRows<Record<string, { outcome?: string }>>(page, "tokenSeeded")
 		expect(marker, "seed marker blob missing — the token did not come from the seeder").toBeDefined()
-		const outcomes = Object.values(JSON.parse(marker as string) as Record<string, { outcome?: string }>)
+		const outcomes = Object.values(marker.row)
 		expect(outcomes.some((e) => e.outcome === "seeded")).toBe(true)
 
 		expect(registeredExtensionPerTest.pageErrors).toEqual([])

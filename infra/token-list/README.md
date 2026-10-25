@@ -8,35 +8,61 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 
 | File | Purpose |
 |---|---|
-| `list.source.json` | The tokens, and nothing else. Edit this in a PR; the sequence is assigned at signing. |
+| `list.source.json` | The tokens and, once there is one, the `flagged` pairs; nothing else. Edit this in a PR; the sequence is assigned at signing. |
 | `public/v1/list.json` | The signed envelope. Written only by the publish PR; absent until the first publish. |
 | `public/_headers` | The response policy (CORS `*`, `max-age=300`, `nosniff`, CSP `default-src 'none'`, HSTS, `no-referrer`). Parsed by wrangler, never served. |
 | `wrangler.jsonc` | Static assets only, `workers_dev` and preview URLs off, observability off. |
 | `keys.env.example` | Keyed-run template for the key ceremony. |
 | `scripts/check.ts` | The tree invariants (`bun run check`); `test/tree.test.ts` asserts them. |
 | `scripts/summary.ts` | The `prepare` job's review summary and tokens digest. |
+| `scripts/live-check.ts` | The `prepare` job's advisory live check: each entry's instance, class, symbol and decimals as a public node holds them. |
 | `scripts/open-publish-pr.ts` | The `publish-pr` job: branch, commit, PR, close older publish PRs. |
+| `scripts/floor.ts` | When a list raises the compiled floor (`packages/token-list/src/floor.json`), and that file's canonical form. |
 
 ## Invariants
 
 - **The wallet trusts the signature and the sequence, never the host.** DNS, Cloudflare, a deploy or a
   bad commit can serve anything; a wallet accepts only a list signed by a pinned key, with a sequence
-  above the last it accepted.
+  above the last it accepted and at or above the floor its release compiles.
+- **A delisting or a flag raises the floor.** The publish PR of a list that drops a served token or
+  flags a new pair also sets `packages/token-list/src/floor.json` to its sequence, so every release
+  built after it refuses an older list. That file is under the extension e2e lanes' path filters,
+  so such a PR runs them. The tree tests refuse a floor below 1 or above the committed list. A list
+  at the head of a publish PR (open or closed unmerged) or of a publish branch, signed from the floor
+  up to the new list, counts as served for this rule, so such a list, signed but never served, is
+  retired as a served one would be; one that cannot be read raises the floor too.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
   canonical form; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
   `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
-  parses strictly.
+  parses strictly; the floor is canonical, at least 1 and at most the committed list's sequence.
 - **One name.** `tokens.nulo.sh` only: no workers.dev origin, no preview URLs, no route in the file.
 
 ## Publishing a change
 
 1. Edit `list.source.json` in a PR (keys in payload order, tab indent; `bun run check` says so) and
    merge it into `dev`.
-2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token diff,
-   the tokens digest, and every signing-relevant change since the last publish.
+2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token and
+   flag diffs, the digest of both, the signing-relevant changes it lists since the last publish, and
+   the live check, one row per entry: `matches`, the difference (the chain's value beside the list's), or
+   `not checked` with its reason. It is advisory: no failure of it blocks `sign`, which it delays by
+   at most its 5 min timeout, and `matches` means only that the public node agrees, since the wallet
+   checks every entry again on its own node.
+   `bun infra/token-list/scripts/live-check.ts <nodeUrl>...` runs it locally against keyless nodes.
+   That list of changes is produced by the revision under approval and is informational only;
+   GitHub's compare view of the range is the authoritative review.
 3. Approve `sign` in the `token-list` environment.
-4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens. Workers Builds deploys
-   `dev`; the nightly `token-list-host-live` job checks the served list.
+4. Merge the `chore(token-list): publish sequence <n>` PR the release App opens; when the list delists
+   or flags against any list the floor rule reads, or one of them cannot be read, it also raises the
+   floor and its body says why. Workers Builds deploys `dev`; the nightly
+   `token-list-host-live` job checks the served list.
+
+A run whose base no longer holds the list `dev` serves fails before it opens a PR: its summary and its
+floor decision compared against a list no longer served. A publish PR that conflicts with `dev` on
+`list.json` is stale the same way: close it and re-dispatch, never resolve the conflict. A closed
+publish PR's list stays on record: the next publish's floor rule reads it at the PR's head commit,
+whether or not its branch is deleted. A run that stops before its publish branch has a commit (the
+stale-base stop, a failure or a cancel) leaves its signed list only in the run's `token-list-envelope`
+artifact, kept 7 days: the floor rule does not read it (known limit #1001).
 
 `gh workflow run publish-token-list.yml --ref dev` re-signs the current source with a new sequence.
 
@@ -51,7 +77,9 @@ file ever holds one.
   two public keys, which go into `packages/token-list/src/keys.ts` and the table in `FORMAT.md`.
 - **Rotation** after a suspected leak: delete the `TOKEN_LIST_SIGNING_KEY` secret; sign the current
   source with the recovery key as a keyed run (`sign-cli.ts --key-id nulo-recovery-1 --seed-env
-  TOKEN_LIST_RECOVERY_SEED`) and commit the envelope; generate a new CI key; ship a wallet release whose
+  TOKEN_LIST_RECOVERY_SEED`) and commit the envelope, with `floor.json` set to its sequence when it
+  delists or flags against the served list or a list at a publish PR or branch head signed since the
+  floor (`raisesFloor` in `scripts/floor.ts`); generate a new CI key; ship a wallet release whose
   `keys.ts` drops the leaked key. Until that release, the leaked key still verifies (`SECURITY.md`).
 
 ## Cloudflare (owner steps, outside this file)

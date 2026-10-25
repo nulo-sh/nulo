@@ -1,6 +1,6 @@
 <script setup>
 /** Utils */
-import { joinNames } from "@/components/composite/import/restore-warning"
+import { restoreReminderText } from "@/components/composite/import/restore-warning"
 import { restoreOutcomeKey } from "@/utils/profile-ui-keys"
 import { clearRestoreOutcome, readRestoreOutcome } from "@/utils/restore-outcome"
 
@@ -26,7 +26,7 @@ const names = computed(() => {
 	return networks.filter((network) => unrestored.has(network.id)).map((network) => network.name)
 })
 
-const namesText = computed(() => joinNames(names.value))
+const reminderText = computed(() => restoreReminderText(names.value))
 
 let readSeq = 0
 let leaseTimer
@@ -91,9 +91,7 @@ onBeforeUnmount(() => {
 		<template #title> Some networks weren't restored </template>
 		<template #description>
 			<Flex direction="column" gap="8">
-				<Text color="secondary" height="140">
-					{{ namesText }} didn't finish restoring. Restore the backup again to bring them back.
-				</Text>
+				<Text color="secondary" height="140">{{ reminderText }}</Text>
 				<Flex align="center" gap="16">
 					<button type="button" :class="$style.action" data-testid="restore-outcome-restore" @click="restoreAgain">
 						Restore again
@@ -110,7 +108,7 @@ onBeforeUnmount(() => {
 <style module>
 /* Banner's own action, for the second action its single `action` prop cannot carry. */
 .action {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-accent);
 	background: transparent;
 	border: none;

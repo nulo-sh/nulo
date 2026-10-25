@@ -78,8 +78,8 @@ export const FONT_ASSET = /\.(woff2?|ttf|otf|eot)$/i
 
 export const FONT_ALLOWED: ReadonlySet<string> = new Set(["OFL-1.1", "Apache-2.0"])
 
-const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.3"
-const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0-rc.6"
+const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0"
+const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0"
 const NOIR_COMMIT = "https://github.com/noir-lang/noir/blob/5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 const SQLITE3MC_TAG = "https://github.com/utelle/SQLite3MultipleCiphers/blob/v2.3.5"
 
@@ -89,7 +89,7 @@ const SQLITE3MC_NOTE =
 const SQLITE3MC_TEXTS = ["sqlite3mc.MIT.txt", "sqlite-wasm-bundle-header.txt", "emscripten.MIT.txt", "musl.MIT.txt"] as const
 
 const AZTEC_NODE_LICENCE = {
-	reviewedVersion: "6.0.0-rc.3",
+	reviewedVersion: "6.0.0",
 	license: "Apache-2.0",
 	source: `${AZTEC_NODE_TAG}/LICENSE`,
 	texts: ["aztec-node.Apache-2.0.txt"],
@@ -126,7 +126,7 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/bb.js"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "Apache-2.0",
 		declared: "MIT",
 		source: `${AZTEC_PACKAGES_TAG}/barretenberg/LICENSE`,
@@ -135,7 +135,7 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/l1-artifacts"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "Apache-2.0",
 		source: `${AZTEC_PACKAGES_TAG}/LICENSE`,
 		texts: ["aztec-packages.Apache-2.0.txt"],
@@ -143,23 +143,23 @@ export const OVERRIDES: readonly Override[] = [
 	},
 	{
 		names: ["@aztec-foundation/noir-acvm_js"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "MIT",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-foundation/noir-noirc_abi"],
-		reviewedVersion: "6.0.0-rc.6",
+		reviewedVersion: "6.0.0",
 		license: "(MIT OR Apache-2.0)",
 		source: `${NOIR_COMMIT}/LICENSE-MIT`,
 		texts: ["noir.MIT.txt", "noir.Apache-2.0.txt"],
-		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.6 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+		note: "Built from the noir submodule commit aztec-packages v6.0.0 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
 	},
 	{
 		names: ["@aztec-labs/sqlite3mc-wasm"],
-		reviewedVersion: "6.0.0-rc.3",
+		reviewedVersion: "6.0.0",
 		license: "MIT",
 		source: `${SQLITE3MC_TAG}/LICENSE`,
 		texts: SQLITE3MC_TEXTS,
@@ -204,7 +204,7 @@ export const VENDORED: readonly Vendored[] = [
 		],
 	},
 	{
-		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0-rc.6" },
+		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0" },
 		components: [
 			{
 				name: "@aztec/l1-contracts",
@@ -318,20 +318,6 @@ export const VENDORED: readonly Vendored[] = [
 			},
 		],
 	},
-	{
-		trigger: { asset: /^assets\/MaterialSymbolsOutlined-[\w-]+\.woff2$/ },
-		font: { sha256: ["d7706dbc272274f7a6a4278df7a10a838f2a7c1eb14a3e39106dec04192b91a8"] },
-		components: [
-			{
-				name: "Material Symbols Outlined",
-				version: "2.930",
-				license: "Apache-2.0",
-				source: "https://github.com/google/material-design-icons/blob/68e015dbbb6b730b5fe4934e8507cd5a465c8a3d/LICENSE",
-				texts: ["material-symbols.Apache-2.0.txt"],
-				note: "Icon font, bundled by @nulo/design. Copyright Google LLC. The upstream repository ships no NOTICE file.",
-			},
-		],
-	},
 ]
 
 export const DERIVED: readonly VendoredComponent[] = [
@@ -341,6 +327,14 @@ export const DERIVED: readonly VendoredComponent[] = [
 		source: "https://github.com/AzguardWallet/azguard-wallet/blob/845abb7ec1dff689b9330f6648c28105fa8a1ee3/LICENSE.md",
 		texts: ["azguard-wallet.Apache-2.0.txt"],
 		note: 'Nulo is derived from Azguard Wallet; each source file derived from it carries a "Modified from Azguard Wallet" notice, or is listed in ACKNOWLEDGEMENTS.md if its format cannot carry one. The upstream repository ships no NOTICE file.',
+	},
+	{
+		name: "Tabler Icons",
+		version: "3.49.0",
+		license: "MIT",
+		source: "https://github.com/tabler/tabler-icons/blob/bbed884d15354b5cebf2493371f20dc2d5e83eaf/LICENSE",
+		texts: ["tabler-icons.MIT.txt"],
+		note: "The path data of every glyph in packages/design/src/core/glyphs.ts, generated from @tabler/icons 3.49.0 (npm integrity sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw==, tag v3.49.0 at the source commit). Each path is as published but for a space after its M command.",
 	},
 ]
 

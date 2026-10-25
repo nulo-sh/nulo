@@ -5,7 +5,7 @@ const meta: Meta<typeof TransactionCardLayout> = {
 	title: "Composite / TransactionCardLayout",
 	component: TransactionCardLayout,
 	tags: ["autodocs"],
-	args: { title: "Sending 5 USDC", icon: "arrow-narrow-up-right" },
+	args: { title: "Sending 5 USDC", icon: "send" },
 	render: (args) => ({
 		components: { TransactionCardLayout },
 		setup: () => ({ args }),

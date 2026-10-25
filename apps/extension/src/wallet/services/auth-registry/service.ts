@@ -23,15 +23,14 @@ import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
 import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
 import { TransactionService, OriginType } from "@/wallet/services/transaction/service"
 import { type Tx, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
-import { EntityStorage } from "@/wallet/storage"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { array_max, Lock, sleep } from "@/wallet/utils"
 import { getAuthRegistryAddress, isAuthRegistryEnabled, isAuthwitConsumable } from "@/wallet/utils/auth-registry"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import {
-	AUTH_REGISTRY_ENABLED_STORAGE_ROOT,
 	AUTH_REGISTRY_SERVICE_NAME,
-	AUTH_REGISTRY_STORAGE_ROOT,
 	type Authwit,
 	type AuthwitRegistryScope,
 	authwitStatusRowId,
@@ -40,13 +39,13 @@ import {
 	MAX_TRACKED_AUTHWITS_PER_ACCOUNT,
 	type Methods,
 	AuthwitSchema,
-	AuthwitStatusSchema,
 	parseAuthwitStatusRowId,
 	type SendStarted,
 } from "./spec"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { type FeeSettingsReaders, type IExecutionHooks, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { TxHash } from "@aztec-labs/stdlib/tx"
+import { GRANT_BLOCK_WAIT_MS, awaitGrantBlock, grantBlockOf } from "./grant-block"
 
 export * from "./spec"
 
@@ -68,6 +67,9 @@ type AuthwitScope = { profileId: string; chainId: number; account: string }
 function assertRevokeCount(ids: number[]): void {
 	if (ids.length > MAX_REVOKES_PER_TX) throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
 }
+
+const grantNotInBlock = (authwit: Authwit): Error =>
+	new Error(`Authwit #${authwit.id}'s grant is not in a block yet. Revoke it again later.`)
 
 function registryToggleOperation(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): SendTransactionOperation {
 	const contract = getAuthRegistryAddress().toString()
@@ -94,13 +96,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public static name = AUTH_REGISTRY_SERVICE_NAME
 
 	public readonly onAuthwitAdded = new EventHandler<Authwit>()
+	public readonly onAuthwitUpdated = new EventHandler<Authwit>()
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onSendStarted = new EventHandler<SendStarted>()
 
-	private readonly authwits: EntityStorage<Authwit>
-	private readonly statuses: EntityStorage<boolean>
+	private readonly authwits: SealedEntityStorage<Authwit>
+	private readonly statuses: SealedEntityStorage<boolean>
 	private readonly lock = new Lock()
 
 	private profileService: ProfileService = null!
@@ -116,18 +119,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// storage key from the row's embedded id — so a raw-storage row copied under a foreign
 		// key (id aliasing) would make revoke/delete/reconcile operate on the wrong row. The
 		// id/key guard hides such rows at read time; honest rows always agree.
-		this.authwits = new EntityStorage<Authwit>(
-			AUTH_REGISTRY_STORAGE_ROOT,
-			browserApi.storage.local,
-			(raw) => AuthwitSchema.parse(raw),
-			{
-				requireKeyIdentityMatch: true,
-				keyIdentityMode: "numeric",
-			},
-		)
-		this.statuses = new EntityStorage<boolean>(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, browserApi.storage.local, (raw) =>
-			AuthwitStatusSchema.parse(raw),
-		)
+		const rowKeys = (profileId: string) => this.profileService.rowKeys(profileId)
+		this.authwits = sealedEntityStorage("authRegistry", browserApi.storage.local, rowKeys)
+		this.statuses = sealedEntityStorage("authRegistryEnabled", browserApi.storage.local, rowKeys)
 	}
 
 	/** An unknown speed level is refused before the method runs; fee math never reads one. */
@@ -160,6 +154,17 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.transactionService.onTransactionUpdated.add((tx) => {
 			void this.reconcileFromTx(tx).catch(() => {})
 		})
+		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext authwits and flags under the lock every writer of both holds. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+			await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext authorizations failed; the next worker retries", { error })
+		}
 	}
 
 	/** Map a tx's settled on-chain outcome to a pending-authwit reconcile, scoped to the tx's own
@@ -170,8 +175,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 *  answers happen behind load-balanced RPCs), and a row removed here can never be reconfirmed —
 	 *  authwit hashes aren't enumerable from chain. ACCEPTED RESIDUAL: a genuinely dropped tx's row
 	 *  then lingers as pending — `syncAuthwit` skips pending rows on purpose, so nothing prunes it.
-	 *  That is the safe direction (over-claiming; revoking a never-landed grant is a no-op); it
-	 *  stays user-visible/revocable and only costs headroom against the tracked-authwit cap. */
+	 *  That is the safe direction (over-claiming): the row stays listed, a revoke keeps it and fails
+	 *  on it, and it costs headroom against the tracked-authwit cap. */
 	private async reconcileFromTx(tx: Tx): Promise<void> {
 		if (!tx.profileId) return
 		const scope: AuthwitScope = { profileId: tx.profileId, chainId: tx.chainId, account: tx.account }
@@ -285,7 +290,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			)
 			for (const row of rows) {
 				if (outcome === "mined") {
-					await this.authwits.set(`${row.id}`, { ...row, pending: false })
+					const confirmed = { ...row, pending: false }
+					await this.authwits.set(`${row.id}`, confirmed)
+					this.emit("onAuthwitUpdated", confirmed)
 				} else {
 					await this.authwits.delete(`${row.id}`)
 					this.emit("onAuthwitDeleted", row)
@@ -376,6 +383,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 
 		const task = this.taskService.startNewTask(new RevokeAuthwitsContent(ids))
 		try {
+			await this.awaitGrantBlocks(network, authwits)
 			const txHash = await this.executionService.executeSendTransaction(
 				operation,
 				{ type: OriginType.UI },
@@ -384,17 +392,18 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				fence,
 			)
 
-			await this.transactionService.waitForTx(txHash, task)
+			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
 			const node = await this.nodeFor(network)
 			// `waitForTx` only confirms the tx left the pending queue (submitted),
 			// not that its PUBLIC effect is mined + visible. Poll the on-chain state
 			// so a fast (proverless) follow-up consume can't race a not-yet-mined
 			// revoke. See waitForOnChainState.
-			await this.waitForTxProven(node, txHash)
-			await this.syncAuthwits(node, scope, task, authwits)
+			const revokeBlock = await this.waitForTxProven(node, txHash)
+			// No subtask past the send: a profile switch clears the registry, and the prune must still land.
+			await this.verifyRevoked(network, node, scope, authwits, revokeBlock)
 
-			task.complete()
+			task.completeIfTracked()
 		} catch (error) {
 			// Convert the internal sentinel to the structured RPC-boundary
 			// error so the popup's `classifyCancellableRejection` works.
@@ -407,7 +416,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public async getRegistryEnabled(chainId: number, account: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account))) ?? true
+		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account), profile.id)) ?? true
 	}
 
 	public async setRegistryEnabled(
@@ -432,15 +441,16 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				fence,
 			)
 
-			await this.transactionService.waitForTx(txHash, task)
+			await this.transactionService.waitForTx(txHash, fence.profileId, task)
 
 			const node = await this.nodeFor(network)
 			// Ensure the registry toggle is mined + visible before returning, so a
 			// fast follow-up consume reads the new state (see waitForOnChainState).
 			await this.waitForTxProven(node, txHash)
-			await this.syncStatus(node, scope, task)
+			// No subtask past the send: a profile switch clears the registry, and the status must still land.
+			await this.applyStatus(node, scope)
 
-			task.complete()
+			task.completeIfTracked()
 		} catch (error) {
 			// Convert the internal sentinel to the structured RPC-boundary
 			// error so the popup's `classifyCancellableRejection` works.
@@ -471,27 +481,27 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 * authwit consume's `AuthRegistry.consume` — against PROVEN state, so a
 	 * revoke/toggle visible only at `latest` is invisible to that execution and a
 	 * fast consume can still spend a "revoked" grant. Poll the proven tip past the
-	 * tx's receipt block. Throws on timeout — never report an unverifiable
+	 * tx's receipt block, and return that block. Throws on timeout — never report an unverifiable
 	 * security mutation as success. (Proven advances normally here: grants reach
 	 * proven within the test's own step timing, which is why their consumes work.)
 	 */
-	private async waitForTxProven(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<void> {
+	private async waitForTxProven(node: AztecNode, txHash: string, timeoutMs = 120_000): Promise<number> {
 		const receipt = await node.getTxReceipt(TxHash.fromString(txHash))
 		const target = receipt.blockNumber
 		if (target === undefined) throw new Error(`waitForTxProven: tx ${txHash} has no block number`)
 		const start = Date.now()
 		while (Date.now() - start < timeoutMs) {
-			if ((await node.getChainTips()).proven.block.number >= target) return
+			if ((await node.getChainTips()).proven.block.number >= target) return target
 			await sleep(1_000)
 		}
 		throw new Error(`waitForTxProven: tx ${txHash} (block ${target}) not proven within ${timeoutMs}ms`)
 	}
 
-	private async syncAuthwits(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask, authwits?: Authwit[]) {
+	private async syncAuthwits(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask) {
 		const task = parentTask.startSubtask(new StepContent("Sync authwits"))
 		try {
-			const _authwits = authwits ?? (await this.rowsForScope(scope))
-			await Promise.all(_authwits.map((authwit) => this.syncAuthwit(node, scope, authwit, task)))
+			const authwits = await this.rowsForScope(scope)
+			await Promise.all(authwits.map((authwit) => this.syncAuthwit(node, scope, authwit, task)))
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -500,34 +510,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	private async syncAuthwit(node: AztecNode, scope: AuthwitScope, authwit: Authwit, parentTask: WrappedTask) {
-		// Skip no-op syncs BEFORE starting a subtask: a started-but-unfinished subtask blocks
-		// the PARENT task from completing (TaskService refuses a parent with open children),
-		// which is exactly what wedged `revokeAuthwits`' syncAuthwits when the revoked grants
-		// were still `pending`. A `pending` row is reconciled by its tx outcome
-		// (onTransactionUpdated), not by sync; a still-consumable row is live. Sync only prunes
-		// confirmed-but-vanished rows.
+		// A `pending` row's grant may still land, so a node that reads its hash unauthorized proves
+		// nothing about it: its tx outcome reconciles it, or a revoke that saw the grant's block
+		// prunes it. Skipped before the subtask starts, so no open subtask blocks the parent.
 		if (authwit.pending) return
 		if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) return
 		const task = parentTask.startSubtask(new StepContent(`Sync authwit #${authwit.id}`))
 		try {
-			await this.lock.withLock(async () => {
-				// Re-read UNDER the lock and delete only if the row still holds the SAME
-				// scope + hash + pending state the sync captured: a purge + restore during
-				// the (lock-free) node await can hand this numeric id to a different tuple,
-				// and an id-keyed delete would then destroy the wrong row.
-				const current = await this.authwits.get(`${authwit.id}`)
-				if (
-					current &&
-					!current.pending &&
-					current.profileId === scope.profileId &&
-					current.chainId === scope.chainId &&
-					current.account === scope.account &&
-					current.hash === authwit.hash
-				) {
-					await this.authwits.delete(`${authwit.id}`)
-					this.emit("onAuthwitDeleted", current)
-				}
-			})
+			await this.deleteTracked(scope, authwit, { confirmedOnly: true })
 			task.complete()
 		} catch (error) {
 			task.fail(error)
@@ -535,28 +525,107 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		}
 	}
 
+	/** Deletes `authwit`'s row under the lock only while it still holds the same scope, hash and grant
+	 *  transaction: a purge and restore during an unlocked node read can hand its id to another row.
+	 *  `confirmedOnly` also keeps a row that is `pending` now. */
+	private async deleteTracked(scope: AuthwitScope, authwit: Authwit, { confirmedOnly }: { confirmedOnly: boolean }): Promise<void> {
+		await this.lock.withLock(async () => {
+			const current = await this.authwits.get(`${authwit.id}`)
+			if (
+				!current ||
+				(confirmedOnly && current.pending) ||
+				current.profileId !== scope.profileId ||
+				current.chainId !== scope.chainId ||
+				current.account !== scope.account ||
+				current.hash !== authwit.hash ||
+				current.txHash !== authwit.txHash
+			) {
+				return
+			}
+			await this.authwits.delete(`${authwit.id}`)
+			this.emit("onAuthwitDeleted", current)
+		})
+	}
+
+	/** The single-attempt client of the operation's own network, for reads the caller repeats itself. */
+	private async singleAttemptNodeFor(network: Network): Promise<AztecNode> {
+		const url = primaryEndpointUrl(network)
+		if (!url) throw new Error(`network ${network.id} has no primary endpoint`)
+		return this.networkService.getSingleAttemptNodeForUrl(url)
+	}
+
+	/** Waits until the grant of every selected `pending` row is in a block, so the revoke is not
+	 *  included before a grant it names. Refuses before any send when a row has no grant transaction,
+	 *  or a grant still reads pending or unreadable once polling stops. A grant still read dropped then
+	 *  does not hold back the rest of the batch: `verifyRevoked` keeps its row and fails the revoke
+	 *  unless the grant has since landed at or below the revoke's block. */
+	private async awaitGrantBlocks(network: Network, authwits: Authwit[]): Promise<void> {
+		const pending = authwits.filter((authwit) => authwit.pending)
+		const untracked = pending.find((authwit) => !authwit.txHash)
+		if (untracked) throw grantNotInBlock(untracked)
+		if (!pending.length) return
+		const node = await this.singleAttemptNodeFor(network)
+		const txHashes = [...new Set(pending.map((authwit) => authwit.txHash as string))]
+		const deadline = Date.now() + GRANT_BLOCK_WAIT_MS
+		const reads = await Promise.all(txHashes.map((txHash) => awaitGrantBlock(node, txHash, deadline)))
+		const unseen = new Set(txHashes.filter((_, i) => reads[i] === undefined))
+		const waiting = pending.find((authwit) => unseen.has(authwit.txHash as string))
+		if (waiting) throw grantNotInBlock(waiting)
+	}
+
+	/** Prunes every revoked row the node now reads unauthorized, then fails on the first row it could
+	 *  not verify. A `pending` row goes only when its grant's block is at or below `revokeBlock`: a grant
+	 *  included after the revoke would still be live. */
+	private async verifyRevoked(
+		network: Network,
+		node: AztecNode,
+		scope: AuthwitScope,
+		authwits: Authwit[],
+		revokeBlock: number,
+	): Promise<void> {
+		const grantNode = authwits.some((authwit) => authwit.pending) ? await this.singleAttemptNodeFor(network) : undefined
+		const outcomes = await Promise.allSettled(
+			authwits.map(async (authwit) => {
+				if (await isAuthwitConsumable(node, authwit.account, authwit.hash)) {
+					throw new Error(`Authwit #${authwit.id} is still authorized after the revoke`)
+				}
+				if (authwit.pending) {
+					const grantBlock = grantNode && authwit.txHash ? await grantBlockOf(grantNode, authwit.txHash) : undefined
+					if (grantBlock === undefined || grantBlock > revokeBlock) throw grantNotInBlock(authwit)
+				}
+				await this.deleteTracked(scope, authwit, { confirmedOnly: false })
+			}),
+		)
+		const failure = outcomes.find((outcome) => outcome.status === "rejected")
+		if (failure) throw failure.reason
+	}
+
 	private async syncStatus(node: AztecNode, scope: AuthwitScope, parentTask: WrappedTask): Promise<void> {
 		const task = parentTask.startSubtask(new StepContent("Sync status"))
-		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
 		try {
-			const isEnabled = await isAuthRegistryEnabled(node, scope.account)
-			await this.lock.withLock(async () => {
-				const enabled = (await this.statuses.get(rowId)) ?? true
-				if (enabled !== isEnabled) {
-					if (isEnabled) {
-						await this.statuses.delete(rowId)
-						this.emit("onRegistryEnabled", scope)
-					} else {
-						await this.statuses.set(rowId, isEnabled)
-						this.emit("onRegistryDisabled", scope)
-					}
-				}
-			})
+			await this.applyStatus(node, scope)
 			task.complete()
 		} catch (error) {
 			task.fail(error)
 			throw error
 		}
+	}
+
+	private async applyStatus(node: AztecNode, scope: AuthwitScope): Promise<void> {
+		const rowId = authwitStatusRowId(scope.profileId, scope.chainId, scope.account)
+		const isEnabled = await isAuthRegistryEnabled(node, scope.account)
+		await this.lock.withLock(async () => {
+			const enabled = (await this.statuses.get(rowId, scope.profileId)) ?? true
+			if (enabled !== isEnabled) {
+				if (isEnabled) {
+					await this.statuses.delete(rowId, scope.profileId)
+					this.emit("onRegistryEnabled", scope)
+				} else {
+					await this.statuses.set(rowId, isEnabled)
+					this.emit("onRegistryDisabled", scope)
+				}
+			}
+		})
 	}
 
 	public async backup(): Promise<Authwit[] | undefined> {
@@ -645,13 +714,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		await this.purgeStatuses(match.status)
 	}
 
-	/** Delete every registry-enabled row whose canonical tuple key matches `keep`. Attribution is
-	 *  off the byte-canonical KEY, never a value (a status row's value is a bare boolean with no
-	 *  identity), so a non-canonical/foreign key is left untouched. Caller holds the lock. */
+	/** Delete every readable registry-enabled row whose canonical tuple id matches `keep`, legacy
+	 *  twins included. Attribution is off the byte-canonical natural id, never a value (a status
+	 *  row's value is a bare boolean with no identity), so a non-canonical/foreign key is left
+	 *  untouched; a sealed row no key opens is left to its profile's deletion. Caller holds the lock. */
 	private async purgeStatuses(keep: (scope: { profileId: string; chainId: number; account: string }) => boolean): Promise<void> {
-		for (const key of await this.statuses.getKeys()) {
-			const scope = parseAuthwitStatusRowId(key)
-			if (scope && keep(scope)) await this.statuses.delete(key)
+		for (const { located } of await this.statuses.entries()) {
+			const scope = parseAuthwitStatusRowId(located.naturalId)
+			if (scope && keep(scope)) await this.statuses.deleteStorageId(located.storageId)
 		}
 	}
 
@@ -671,22 +741,14 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 			// payloads — decoded reads hide malformed rows whose tuples must still block
 			// duplicates; a row too corrupt to yield its fields has no identity to collide with.
 			// NO cap check: these are already-granted authorizations, and rejecting a unique row
-			// would destroy the only revocation index.
+			// would destroy the only revocation index. The profile's sealed rows are opened, with no
+			// codec, through the keys the restore commit put in the keyring.
 			const pairKeyOf = (chainId: number, account: string, hash: string) => JSON.stringify([profileId, chainId, account, hash])
 			const seen = new Set<string>()
-			for (const [, raw] of await this.authwits.rawStringEntries()) {
-				try {
-					const v = JSON.parse(raw) as { profileId?: unknown; chainId?: unknown; account?: unknown; hash?: unknown }
-					if (
-						v.profileId === profileId &&
-						typeof v.chainId === "number" &&
-						typeof v.account === "string" &&
-						typeof v.hash === "string"
-					) {
-						seen.add(pairKeyOf(v.chainId, v.account, v.hash))
-					}
-				} catch {
-					// No extractable identity — nothing to dedupe against.
+			for (const { row } of (await this.authwits.rawRowsOf(profileId)).rows) {
+				const v = row as { chainId?: unknown; account?: unknown; hash?: unknown }
+				if (typeof v.chainId === "number" && typeof v.account === "string" && typeof v.hash === "string") {
+					seen.add(pairKeyOf(v.chainId, v.account, v.hash))
 				}
 			}
 			// Occupancy from the PHYSICAL key space: the cursor must never land on
@@ -720,8 +782,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				if (seen.has(pairKey)) {
 					throw new Error("authwit already exists (profile+chain+account+hash)")
 				}
+				const write = await this.authwits.prepare(`${id}`, row)
 				assertRestoreEpoch(deletion, epochs, profileId)
-				await this.authwits.set(`${id}`, row)
+				await write.commit()
 				occupied.add(`${id}`)
 				seen.add(pairKey)
 				id++

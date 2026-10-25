@@ -1,3 +1,5 @@
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+
 /**
  * Wallet-injected fee/entrypoint methods. NOT the user's intent. Sites that
  * derive a journal-record title or activity-card label from a call list must
@@ -90,4 +92,28 @@ export function pickPrimaryIndex(items: ReadonlyArray<MethodCarrier> | undefined
 	const second = user[1]
 	if (second !== undefined && named[second].startsWith("mint")) return namedPos[second]
 	return namedPos[user[0]]
+}
+
+/** A dApp-supplied method name as a stored title, cleaned to the approval window's bound for a function
+ *  name; a name with nothing visible left has no title. */
+export function wireTitle(name: string | undefined): string | undefined {
+	const title = name === undefined ? "" : sanitizeWireString(name, 64)
+	return title === "" ? undefined : title
+}
+
+/**
+ * The primary call of a dApp's wire call list, with its title. A call is read by its `name`, the key
+ * the wallet checks, never by a `method` it may also carry. Names are cleaned before
+ * {@link pickPrimaryIndex} picks, as a settled transaction records them, so the queued and settled
+ * titles skip the same fee calls.
+ */
+export function pickPrimaryWireCall(calls: unknown): { name: string; call: { to?: unknown; args?: unknown } } | undefined {
+	if (!Array.isArray(calls)) return undefined
+	const named = calls.map((call: unknown) => {
+		const name = typeof call === "object" && call !== null ? (call as { name?: unknown }).name : undefined
+		return { name: typeof name === "string" ? wireTitle(name) : undefined }
+	})
+	const idx = pickPrimaryIndex(named)
+	const name = idx === undefined ? undefined : named[idx].name
+	return idx === undefined || name === undefined ? undefined : { name, call: calls[idx] }
 }

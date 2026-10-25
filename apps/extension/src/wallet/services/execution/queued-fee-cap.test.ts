@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import { FEE_READOUT_UNIT, feeDisplay } from "@/utils/fee-estimation"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, TransferType, type Tx, type TxCall } from "@/wallet/services/transaction/spec"
 import { QueuedFeeAnswers, type SendShape, queuedFeeBasis, queuedFeeCap, queuedFeePayer, sendShapeOf } from "./queued-fee-cap"
@@ -98,6 +99,12 @@ describe("queuedFeeCap", () => {
 		expect(queuedFeeCap("3577824000000000000")).toBe("4472280000000000000")
 		expect(queuedFeeCap("3577824000000000001")).toBe("4472280000000000000")
 		expect(queuedFeeCap("3577824999999999999")).toBe("4472281000000000000")
+	})
+
+	test("the cap on screen is the cap enforced: a whole number of readout units, printed exactly", () => {
+		const cap = queuedFeeCap("3577824999999999999")!
+		expect(BigInt(cap) % FEE_READOUT_UNIT).toBe(0n)
+		expect(feeDisplay(cap, undefined).amount).toBe("4.472281")
 	})
 
 	test("is none when the cap rounds to 0 or is wider than a fee", () => {

@@ -34,7 +34,6 @@ vi.mock("@/wallet/services/dapp-session/client", () => ({
 			connect: () => {},
 			disconnect: () => {},
 			getDappSession: () => readSession(),
-			setTrustedVerification: async () => undefined,
 		}
 	}),
 }))
@@ -66,7 +65,7 @@ const STUBS = {
 	SectionLabel: { props: ["label"], template: "<div />" },
 	Toggle: { props: ["modelValue"], template: "<div />" },
 	EmojiGrid: { props: ["emojis"], template: '<div data-testid="emoji-grid-stub">{{ emojis }}</div>' },
-	DappIdentityBlock: { props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel"], template: "<div />" },
+	DappIdentityBlock: { props: ["dapp", "actionLabel"], template: "<div />" },
 	// As the real primitive: only `disabled` sets the attribute, and listeners reach the button.
 	Button: { props: ["disabled", "loading"], template: '<button :disabled="disabled"><slot /></button>' },
 }
@@ -173,21 +172,12 @@ describe("windows/verify — the grid and the keyboard", () => {
 	})
 })
 
-describe("windows/verify — the connect step bar", () => {
-	test("a new connection's check shows step 2 of the connect bar, and a reconnect's shows none", async () => {
-		const fresh = await mountCheck()
-		expect(fresh.get('[data-testid="connect-step-bar"]').attributes("data-step")).toBe("2")
-		const reconnect = await mountCheck({ isReconnect: "true" })
-		expect(reconnect.find('[data-testid="connect-step-bar"]').exists()).toBe(false)
-	})
-})
-
 const CHECK_ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 const LOOKALIKE_WARNING =
 	"This hostname contains non-ASCII or punycoded characters. Verify carefully. Some characters can imitate Latin letters."
 
-describe("windows/verify — the swap to the check is announced", () => {
+describe("windows/verify — the check is announced as it opens", () => {
 	const region = (w: ReturnType<typeof mount>) => w.get('[data-testid="verify-announce"]')
 	const said = (w: ReturnType<typeof mount>) => region(w).element.textContent
 	const leaksTheApp = (text: string) =>

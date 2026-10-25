@@ -35,6 +35,7 @@ const SNAP: TransferSnapshot = {
 	amount: 1_500_000_000_000_000_000n,
 	feeSettings: { paymentMethod: { kind: "fj" } },
 	precomputedEstimateId: "est-1",
+	shownFee: "16000000000000000",
 	contract: "0xtoken",
 	symbol: "USDC",
 	decimals: 18,
@@ -136,7 +137,7 @@ describe("send-submit", () => {
 	})
 	afterEach(() => vi.restoreAllMocks())
 
-	test("posts the awaiting row under a fresh id and fires the transfer with the snapshot, in order", () => {
+	test("posts the awaiting row under a fresh id and fires the transfer with the snapshot, bound to its contract, in order", () => {
 		const { deps } = harness()
 		const id = submitTransfer(deps, SNAP)
 		expect(deps.awaiting.add).toHaveBeenCalledWith({ id, account: "0xacct", destination: DESTINATION, contract: "0xtoken" })
@@ -144,12 +145,14 @@ describe("send-submit", () => {
 			"n1",
 			"0xacct",
 			7,
+			"0xtoken",
 			0,
 			DESTINATION,
 			SNAP.amount,
 			SNAP.feeSettings,
 			"est-1",
 			undefined,
+			"16000000000000000",
 		)
 		expect(submitTransfer(deps, SNAP)).not.toBe(id)
 	})

@@ -43,11 +43,11 @@ const handleReview = async () => {
 
 		<Flex direction="column" :class="$style.card">
 			<Flex v-for="line in STILL_YOURS" :key="line" gap="10" align="center" :class="$style.row" data-testid="legal-declined-kept">
-				<MaterialIcon name="check" :size="16" color="green" />
+				<Icon name="check" :size="16" color="green" />
 				<Text variant="body" color="primary">{{ line }}</Text>
 			</Flex>
 			<Flex v-for="line in PAUSED" :key="line" gap="10" align="center" :class="$style.row" data-testid="legal-declined-paused">
-				<MaterialIcon name="close" :size="16" color="red" />
+				<Icon name="close" :size="16" color="red" />
 				<Text variant="body" color="secondary">{{ line }}</Text>
 			</Flex>
 		</Flex>

@@ -82,7 +82,6 @@ describe("getContractInstance pxeOnly pin", () => {
 
 describe("orphan sweep barrier-pending pin", () => {
 	test("a provision landing while enterWrite is PENDING is seen by the post-barrier re-check", async () => {
-		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		let service: PxeService = null!
 		const profiles: IProfileReader = {
 			connect: async () => {},

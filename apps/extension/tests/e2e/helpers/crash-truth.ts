@@ -8,9 +8,10 @@
  */
 import type { Page } from "puppeteer"
 import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext, waitForServiceReady } from "../fixtures/extension"
-import { getActiveProfileName } from "../fixtures/helpers"
-import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "./backup-export"
-import { POPUP_IMPORT_SHELL, submitFullBackupImport, submitWhenEnabled, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
+import { confirmProfileReset } from "../fixtures/helpers"
+import { accountChainId, exportBackupContent, keepChainAccountState } from "./backup-export"
+import { sealPlainBackup } from "./backup-seal"
+import { POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
 
 // The rollback/delete budget is STRUCTURAL, not sampled: the crash path's
 // worst case is the liveness gate's 60s ceiling followed by one deleteProfile
@@ -49,19 +50,7 @@ export async function readProfileGen(page: Page): Promise<{ id: string; gen: str
  *  profile remains, the lock screen while another does. The page must already
  *  be AT `#/popup/settings/security/reset`. */
 export async function completeResetRitual(page: Page, landing: "#/popup/register" | "#/popup/auth" = "#/popup/register"): Promise<void> {
-	await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: 10_000 })
-	await clickByTestId(page, "reset-checkbox-permanent")
-	await clickByTestId(page, "reset-checkbox-undone")
-	await clickByTestId(page, "reset-checkbox-sure")
-	const profileName = await getActiveProfileName(page)
-	await page.evaluate((expectedName: string) => {
-		const input = document.querySelector<HTMLInputElement>('[data-testid="reset-confirm-input"] input')
-		if (!input) throw new Error("reset-confirm-input not found")
-		const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-		setter?.call(input, expectedName)
-		input.dispatchEvent(new Event("input", { bubbles: true }))
-	}, profileName)
-	await submitWhenEnabled(page, "reset-submit-btn")
+	await confirmProfileReset(page, 10_000)
 	// The delete rides deleteProfile's full awaited purge before reset.vue routes.
 	await waitForHash(page, landing, ROLLBACK_BUDGET_MS)
 }
@@ -103,20 +92,20 @@ export async function reimportToTerminal(page: Page, filePath: string): Promise<
 	return summaryText
 }
 
-/** Stage 1: export a REAL backup from the funded wallet once per test file
- *  and reuse the file (module-level cache — each vitest file gets its own
- *  module registry, so the two crash-truth files each export once). Only the
- *  funded chain's account-state survives, so the import dials no public node. */
-let exported: { filePath: string; funded: string } | null = null
+/** Export a REAL backup from the funded wallet once per test file (module-level cache — each
+ *  vitest file gets its own module registry) and write it to a file the calling test owns. Only
+ *  the funded chain's account-state survives, so the import dials no public node. */
+let exported: { sealed: string; funded: string } | null = null
 export async function exportFundedBackup(
 	ctx: ExtensionContext & { accountAddress: string },
 	tokenAddress: string,
 ): Promise<{ filePath: string; funded: string }> {
-	if (exported) return exported
-	const backup = await exportBackupContent(ctx)
-	keepChainAccountState(backup.data, accountChainId(backup, ctx.accountAddress), tokenAddress)
-	exported = { filePath: writeBackupToTemp(sealPlainBackup(backup)), funded: ctx.accountAddress }
-	return exported
+	if (!exported) {
+		const backup = await exportBackupContent(ctx)
+		keepChainAccountState(backup.data, accountChainId(backup, ctx.accountAddress), tokenAddress)
+		exported = { sealed: sealPlainBackup(backup), funded: ctx.accountAddress }
+	}
+	return { filePath: writeBackupToTemp(exported.sealed), funded: exported.funded }
 }
 
 /** Drive the popup import flow up to (and including) submit, WITHOUT the

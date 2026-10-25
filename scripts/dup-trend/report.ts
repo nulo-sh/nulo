@@ -10,8 +10,8 @@ import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-/** Exact-pinned (immutable) — bump manually, keeping the version ≥7 days old on npm. */
-export const JSCPD_VERSION = "5.0.16"
+/** The root devDependency's launcher, run on Bun: the copy `bun.lock` pins, with no Node on PATH. */
+const JSCPD = join(import.meta.dir, "..", "..", "node_modules", ".bin", "jscpd")
 
 const SCAN_PATHS = ["apps", "packages", "scripts"]
 const IGNORE = [
@@ -132,19 +132,8 @@ export function formatDupReport(report: JscpdReport): string {
 function main(): void {
 	const outDir = mkdtempSync(join(tmpdir(), "jscpd-"))
 	const res = spawnSync(
-		"bunx",
-		[
-			`jscpd@${JSCPD_VERSION}`,
-			...SCAN_PATHS,
-			"--ignore",
-			IGNORE,
-			"--min-tokens",
-			"50",
-			"--reporters",
-			"json,silent",
-			"--output",
-			outDir,
-		],
+		process.execPath,
+		[JSCPD, ...SCAN_PATHS, "--ignore", IGNORE, "--min-tokens", "50", "--reporters", "json,silent", "--output", outDir],
 		{ encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
 	)
 	if (res.error || res.status !== 0) {

@@ -47,6 +47,46 @@ export async function evaluateViaFrameScript<T>(session: WebDriverSession, targe
 	return reply.value as T
 }
 
+/**
+ * Clicks the centre of the element with `testid`, in the document `target` locates, with a real
+ * pointer in the window `chromeScript` runs in, which also gives that document focus. The element is
+ * scrolled into view first, as WebDriver's element click does; one still outside the view is refused,
+ * since no person could click it there. The document's coordinates are mapped onto the window's,
+ * which holds only while both share one scale.
+ */
+export async function clickWithPointer(session: WebDriverSession, target: FrameScriptTarget, testid: string): Promise<void> {
+	const point = await evaluateViaFrameScript<{ x: number; y: number; scale: number; inView: boolean } | null>(
+		session,
+		target,
+		`const el = content.document.querySelector(${JSON.stringify(`[data-testid="${testid}"]`)});
+		if (!el) return null;
+		el.scrollIntoView({ block: "nearest", inline: "nearest" });
+		const rect = el.getBoundingClientRect();
+		const x = rect.left + rect.width / 2;
+		const y = rect.top + rect.height / 2;
+		return { x: content.mozInnerScreenX + x, y: content.mozInnerScreenY + y, scale: content.devicePixelRatio, inView: x >= 0 && y >= 0 && x < content.innerWidth && y < content.innerHeight };`,
+	)
+	if (!point) throw new Error(`no ${testid} there`)
+	if (!point.inView) throw new Error(`${testid} is outside the view`)
+	const origin = await session.chromeScript<{ x: number; y: number; scale: number }>(
+		`const [done] = arguments; done({ x: window.mozInnerScreenX, y: window.mozInnerScreenY, scale: window.devicePixelRatio });`,
+	)
+	if (origin.scale !== point.scale)
+		throw new Error(`the document is zoomed (scale ${point.scale}, its window ${origin.scale}), so the click would miss`)
+	await session.chromeActions([
+		{
+			type: "pointer",
+			id: "mouse",
+			parameters: { pointerType: "mouse" },
+			actions: [
+				{ type: "pointerMove", x: Math.round(point.x - origin.x), y: Math.round(point.y - origin.y), origin: "viewport" },
+				{ type: "pointerDown", button: 0 },
+				{ type: "pointerUp", button: 0 },
+			],
+		},
+	])
+}
+
 /** The event page Firefox runs the wallet's `background.scripts` in — absent while it is not running. */
 export const LOCATE_BACKGROUND_PAGE = `
 	const { extension } = WebExtensionPolicy.getByID(addonId);

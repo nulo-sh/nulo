@@ -17,10 +17,10 @@ vi.mock("@/wallet/utils/create-passkey-profile", () => ({
 	createPasskeyProfileWithRetry: vi.fn(async () => ({ id: "p1", name: "Created", type: "passkey" })),
 }))
 
-vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => false) }))
+vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 
 import { managers } from "@/utils/core"
-import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { createPasskeyProfileWithRetry } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { useProfileCreateFlow, type UseProfileCreateFlowOptions } from "./useProfileCreateFlow"
@@ -46,12 +46,17 @@ function makeFlow(overrides: Partial<UseProfileCreateFlowOptions> = {}) {
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
-	vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(false)
+	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 })
 
 describe("useProfileCreateFlow", () => {
+	test("both create pages open on Passkey", () => {
+		expect(makeFlow().flow.authMethod.value).toBe("passkey")
+	})
+
 	test("password create happy path creates + activates once", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
@@ -73,7 +78,7 @@ describe("useProfileCreateFlow", () => {
 	})
 
 	test("in Firefox's toolbar panel, passkey create goes to the background once, with no in-page ceremony", async () => {
-		vi.mocked(passkeyNeedsOwnWindow).mockReturnValue(true)
+		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
 		flow.authMethod.value = "passkey"
@@ -87,6 +92,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("latch: two synchronous submits create only once", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
@@ -97,6 +103,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("a first profile shows no name field and is created as Main", async () => {
 		const { flow } = makeFlow()
+		flow.authMethod.value = "password"
 		await flushPromises()
 		expect(flow.nameFieldState.value).toBe("hidden")
 		flow.password.value = "password123"
@@ -123,6 +130,7 @@ describe("useProfileCreateFlow", () => {
 
 	test("a rejected profile read releases the latch and notifies; a retry creates", async () => {
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		await flushPromises()
 		profileApi.getProfiles.mockRejectedValueOnce(new Error("worker gone"))
 		flow.password.value = "password123"
@@ -171,6 +179,7 @@ describe("useProfileCreateFlow", () => {
 	test("password create failure notifies with isPasskey=false", async () => {
 		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
 		const { flow, opts } = makeFlow()
+		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"

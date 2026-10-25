@@ -9,10 +9,13 @@ import type { ILogger } from "@/wallet/logger"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
-import { EntityStorage } from "@/wallet/storage"
+import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import {
 	type Events,
+	type JournalMetadata,
+	type JournalRetitle,
 	type Methods,
 	type NewOperationInput,
 	OPERATION_JOURNAL_SERVICE_NAME,
@@ -20,7 +23,6 @@ import {
 	type OperationFilter,
 	OperationJournalMethodSchemas,
 	type OperationRecord,
-	OperationRecordSchema,
 	type SendCheckState,
 	isSendCheckMove,
 } from "./spec"
@@ -53,7 +55,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	public readonly onOperationUpdated = new EventHandler<OperationRecord>()
 	public readonly onOperationDeleted = new EventHandler<OperationRecord>()
 
-	private readonly storage: EntityStorage<OperationRecord>
+	/** Sealed at rest under each record's profile's row keys, which `ProfileService` holds; with no
+	 *  `ProfileService` registered no profile has keys, so nothing is written. */
+	private readonly storage: SealedEntityStorage<OperationRecord>
 
 	/**
 	 * Serializes `transitionOperation` calls across ALL records.
@@ -88,7 +92,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	/** Optional network-liveness fence for `createOperation` — see `init`. */
 	private networkService: NetworkService | null = null
 
-	public constructor(logger: ILogger, browserApi?: BrowserApi) {
+	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(OPERATION_JOURNAL_SERVICE_NAME, logger)
 		// Local storage: records survive SW restart AND full browser exit.
 		// Originally used `chrome.storage.session` on the rationale that
@@ -99,9 +103,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// (users expect to keep it). The reaper's boot-sweep still marks
 		// surviving non-terminal records as failed on SW restart — same
 		// behavior as before, just the durability layer changed.
-		this.storage = browserApi
-			? new EntityStorage<OperationRecord>("nulo:journal", browserApi.storage.local, (raw) => OperationRecordSchema.parse(raw))
-			: new EntityStorage<OperationRecord>("nulo:journal", chrome.storage.local, (raw) => OperationRecordSchema.parse(raw))
+		this.storage = sealedEntityStorage("journal", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
 		// Instantiated in the constructor (not as a field initializer) so the
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the
@@ -162,13 +164,23 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			// NetworkService not registered in this collection — skip cascade wiring.
 			this.networkService = null
 		}
-		// Same optionality for the profile-existence fence in `createOperation`:
-		// absent ProfileService (minimal fixtures) means no fence, matching the
-		// pre-fence behavior those fixtures pin.
+		// Absent ProfileService means no profile-existence fence and no row keys,
+		// so every write refuses and only plaintext rows read.
 		try {
 			this.profileService = services.get(ProfileService.name) as ProfileService
 		} catch {
 			this.profileService = null
+		}
+		this.profileService?.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+	}
+
+	/** Seals the profile's plaintext records under the transition lock, which every journal writer
+	 *  holds, so no transition lands between a row's read and its sealed commit. */
+	private async sealLegacyRows(profileId: string): Promise<void> {
+		try {
+			await this.storage.sealLegacy(profileId, (fn) => this.transitionLock.withLock(fn))
+		} catch (error) {
+			this.logWarn("sealing the profile's plaintext journal failed; the next worker retries", { error })
 		}
 	}
 
@@ -308,15 +320,20 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			attempts: 0,
 			createdAt: now,
 			updatedAt: now,
-			accountAddress: input.accountAddress,
-			networkId: input.networkId,
-			tokenId: input.tokenId,
-			title: input.title,
-			subtitle: input.subtitle,
-			amountRaw: input.amountRaw,
-			recipientAddress: input.recipientAddress,
-			contractAddress: input.contractAddress,
-			transferType: input.transferType,
+			// Every key is named, so a metadata field added to the type fails to compile until it is
+			// forwarded, and an input-only field (`profileEpoch`, `initialStage`) is never stored.
+			...({
+				accountAddress: input.accountAddress,
+				networkId: input.networkId,
+				tokenId: input.tokenId,
+				title: input.title,
+				subtitle: input.subtitle,
+				amountRaw: input.amountRaw,
+				recipientAddress: input.recipientAddress,
+				contractAddress: input.contractAddress,
+				transferType: input.transferType,
+				call: input.call,
+			} satisfies { [K in keyof Required<JournalMetadata>]: JournalMetadata[K] | undefined }),
 		}
 		await this.storage.set(record.id, record)
 		this.emit("onOperationAdded", record)
@@ -327,18 +344,18 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * Transition a record's stage. Enforces the FSM legality rules in
 	 * `@nulo/wallet-core/jobs` and the "error iff failed" invariant.
 	 *
-	 * Sets `terminalAt` if the new stage is terminal. `failedTitle` retitles the record in the same
-	 * write that fails it, so only the producer whose transition lands renames the row.
+	 * Sets `terminalAt` if the new stage is terminal. `retitle` renames the record in the same write
+	 * that fails it, so only the producer whose transition lands renames the row.
 	 */
 	public async transitionOperation(
 		id: string,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<OperationRecord> {
 		validateParams(
 			OperationJournalMethodSchemas.transitionOperation.params,
-			[id, progress, error ?? null, failedTitle],
+			[id, progress, error ?? null, retitle],
 			"transitionOperation",
 		)
 		await this.ensureInitialized()
@@ -347,7 +364,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// the claim-vs-cancel race this closes. Critical section is small
 		// (one load + one validate + one write), so global is acceptable.
 		return await this.transitionLock.withLock(async () => {
-			return await this._transitionLocked(id, progress, error, failedTitle)
+			return await this._transitionLocked(id, progress, error, retitle)
 		})
 	}
 
@@ -355,7 +372,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		id: string,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<OperationRecord> {
 		const existing = await this._loadValidated(id)
 		if (!existing) {
@@ -365,7 +382,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// FSM legality — throws IllegalTransitionError on a bad transition.
 		assertCanTransition(existing.progress.stage, progress.stage)
 		assertErrorInvariant(progress, error)
-		if (failedTitle !== undefined && progress.stage !== "failed") {
+		if (retitle !== undefined && progress.stage !== "failed") {
 			throw new ValidationError("transitionOperation: a title rides only a transition to 'failed'")
 		}
 		if (progress.stage === "succeeded") {
@@ -380,7 +397,8 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			error: error ?? null,
 			terminalAt: isTerminal(progress.stage) ? now : existing.terminalAt,
 			updatedAt: now,
-			title: failedTitle ?? existing.title,
+			title: retitle?.title ?? existing.title,
+			call: retitle ? retitle.call : existing.call,
 		}
 		await this.storage.set(id, updated)
 		this.emit("onOperationUpdated", updated)
@@ -416,7 +434,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	}
 
 	/**
-	 * Update title / subtitle on an existing record. Does NOT transition the
+	 * Update title / subtitle / call on an existing record. Does NOT transition the
 	 * stage and does NOT touch terminalAt. Used by `tokenService.addToken` to
 	 * backfill the resolved symbol as the title — the journal entry is created
 	 * with `title: undefined` up-front so the in-flight row appears
@@ -428,7 +446,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * affects nothing user-visible. That keeps the caller simple (no need to
 	 * race against the success transition).
 	 */
-	public async setOperationMeta(id: string, meta: { title?: string; subtitle?: string }): Promise<OperationRecord> {
+	public async setOperationMeta(id: string, meta: Pick<JournalMetadata, "title" | "subtitle" | "call">): Promise<OperationRecord> {
 		validateParams(OperationJournalMethodSchemas.setOperationMeta.params, [id, meta], "setOperationMeta")
 		await this.ensureInitialized()
 		// Load → merge → write on the same row, so it takes the same lock as
@@ -443,6 +461,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 				...existing,
 				title: meta.title !== undefined ? meta.title : existing.title,
 				subtitle: meta.subtitle !== undefined ? meta.subtitle : existing.subtitle,
+				call: meta.call !== undefined ? meta.call : existing.call,
 				updatedAt: Date.now(),
 			}
 			await this.storage.set(id, updated)
@@ -573,14 +592,14 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * snapshot (equality CAS; a monotonic check would mishandle clock rollback).
 	 * The reaper's sweep decisions ride this: its snapshot goes stale across the
 	 * per-record awaits, and an unconditional transition would fail a record
-	 * that was claimed or heartbeat-touched mid-sweep. A no-op writes no `failedTitle`.
+	 * that was claimed or heartbeat-touched mid-sweep. A no-op writes no `retitle`.
 	 */
 	public async transitionIfStage(
 		id: string,
 		allowedStages: readonly JobProgress["stage"][],
 		progress: JobProgress,
 		error?: JobError | null,
-		opts?: { ifUpdatedAtIs?: number; failedTitle?: string },
+		opts?: { ifUpdatedAtIs?: number; retitle?: JournalRetitle },
 	): Promise<
 		| { outcome: "transitioned"; record: OperationRecord }
 		| { outcome: "missing" }
@@ -593,7 +612,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			if (!existing) return { outcome: "missing" }
 			if (!allowedStages.includes(existing.progress.stage)) return { outcome: "stage", stage: existing.progress.stage }
 			if (opts?.ifUpdatedAtIs !== undefined && existing.updatedAt !== opts.ifUpdatedAtIs) return { outcome: "touched" }
-			const record = await this._transitionLocked(id, progress, error, opts?.failedTitle)
+			const record = await this._transitionLocked(id, progress, error, opts?.retitle)
 			return { outcome: "transitioned", record }
 		})
 	}

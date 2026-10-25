@@ -111,7 +111,7 @@ describe("finalizeGasLimits: exact slot projection", () => {
 	test("computed path: limits = simulated × padding, fees = min × multiplier, priority preserved", async () => {
 		const tx = makeTxRequest()
 		// Distinct simulated sentinels; padding 1 keeps them byte-readable.
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, undefined, 2)
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), { gasPadding: 1, feeMultiplier: 2 })
 		expect(shape(tx)).toEqual({
 			gasDa: 31_000,
 			gasL2: 32_000,
@@ -132,22 +132,28 @@ describe("finalizeGasLimits: exact slot projection", () => {
 			getPredictedMinFees: async () => [new GasFees(600n, 700n), new GasFees(560n, 900n)],
 		} as unknown as AztecNode
 		const tx = makeTxRequest()
-		await finalizeGasLimits(predictedNode, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, undefined, 2)
+		await finalizeGasLimits(predictedNode, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), { gasPadding: 1, feeMultiplier: 2 })
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([1_200n, 1_800n])
 	})
 
 	test("explicit maxFeesPerGas wins over node min fees", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, new GasFees(777n, 888n))
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			maxFeesPerGas: new GasFees(777n, 888n),
+		})
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([777n, 888n])
 	})
 
 	test("customLimits.maxFeesPerGas wins when no explicit maxFees", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, {
-			maxFeesPerGas: { feePerDaGas: "991", feePerL2Gas: "992" },
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: {
+				maxFeesPerGas: { feePerDaGas: "991", feePerL2Gas: "992" },
+			},
 		})
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([991n, 992n])
@@ -155,24 +161,23 @@ describe("finalizeGasLimits: exact slot projection", () => {
 
 	test("customLimits.maxFeesPerGas below the node min is committed as is: no multiplier, no floor", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(
-			NODE,
-			tx,
-			makeSimulated(31_000, 32_000, 3_500, 3_600),
-			1,
-			undefined,
-			{ maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" } },
-			3,
-		)
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: { maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" } },
+			feeMultiplier: 3,
+		})
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([5n, 6n])
 	})
 
 	test("customLimits gas + teardown win over simulated values", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, {
-			gasLimits: { daGas: 81_000, l2Gas: 82_000 },
-			teardownGasLimits: { daGas: 83_000, l2Gas: 84_000 },
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: {
+				gasLimits: { daGas: 81_000, l2Gas: 82_000 },
+				teardownGasLimits: { daGas: 83_000, l2Gas: 84_000 },
+			},
 		})
 		const s = shape(tx)
 		expect([s.gasDa, s.gasL2, s.teardownDa, s.teardownL2]).toEqual([81_000, 82_000, 83_000, 84_000])
@@ -180,7 +185,7 @@ describe("finalizeGasLimits: exact slot projection", () => {
 
 	test("gas padding multiplies simulated limits (1.05 default path)", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(10_000, 20_000, 1_000, 2_000), 1.05, undefined, undefined, 2)
+		await finalizeGasLimits(NODE, tx, makeSimulated(10_000, 20_000, 1_000, 2_000), { gasPadding: 1.05, feeMultiplier: 2 })
 		const s = shape(tx)
 		expect([s.gasDa, s.gasL2]).toEqual([10_500, 21_000])
 		expect([s.teardownDa, s.teardownL2]).toEqual([1_050, 2_100])
@@ -188,14 +193,14 @@ describe("finalizeGasLimits: exact slot projection", () => {
 
 	test("multiplier fallback: omitted feeMultiplier uses DEFAULT_FEE_MULTIPLIER (2 in test env)", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1)
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), { gasPadding: 1 })
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([1_110n, 1_332n])
 	})
 
 	test("embedded contract: multiplier 1 keeps fees at node min exactly", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, undefined, 1)
+		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), { gasPadding: 1, feeMultiplier: 1 })
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([555n, 666n])
 	})
@@ -205,15 +210,11 @@ describe("finalizeGasLimits: exact slot projection", () => {
 
 	test("embedded (no explicit fee): reuses the committed cap, does NOT refetch (drift fix)", async () => {
 		const tx = makeTxRequest() // committed cap = 555/666 (set by applyEmbeddedFpcGasCap upstream)
-		await finalizeGasLimits(
-			DRIFT_NODE,
-			tx,
-			makeSimulated(31_000, 32_000, 3_500, 3_600),
-			1,
-			undefined,
-			{ embeddedFeePayment: "fjwc" } as never,
-			1,
-		)
+		await finalizeGasLimits(DRIFT_NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: { embeddedFeePayment: "fjwc" } as never,
+			feeMultiplier: 1,
+		})
 		const s = shape(tx)
 		// Reused the committed cap (555/666) — NOT the post-sim node refetch (999/1111). The FPC budget is
 		// reasoned against exactly what gets committed.
@@ -225,33 +226,25 @@ describe("finalizeGasLimits: exact slot projection", () => {
 		const gs = tx.txContext.gasSettings
 		// What `applyEmbeddedFpcGasCap` leaves on the request for an app cap of (1_500, 1_800).
 		tx.txContext.gasSettings = new GasSettings(gs.gasLimits, gs.teardownGasLimits, new GasFees(1_500n, 1_800n), PRIORITY)
-		await finalizeGasLimits(
-			DRIFT_NODE,
-			tx,
-			makeSimulated(31_000, 32_000, 3_500, 3_600),
-			1,
-			undefined,
-			{
+		await finalizeGasLimits(DRIFT_NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: {
 				embeddedFeePayment: "fjwc",
 				maxFeesPerGas: { feePerDaGas: 1_500n, feePerL2Gas: 1_800n },
 			} as never,
-			1,
-		)
+			feeMultiplier: 1,
+		})
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([1_500n, 1_800n])
 	})
 
 	test("NON-embedded with an app priority fee and no cap: node min × multiplier plus the priority; the priority is the build's", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(
-			DRIFT_NODE,
-			tx,
-			makeSimulated(31_000, 32_000, 3_500, 3_600),
-			1,
-			undefined,
-			{ maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } },
-			2,
-		)
+		await finalizeGasLimits(DRIFT_NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), {
+			gasPadding: 1,
+			customLimits: { maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" } },
+			feeMultiplier: 2,
+		})
 		const s = shape(tx)
 		expect([s.feeDa, s.feeL2]).toEqual([2_005n, 2_230n])
 		expect([s.priorityDa, s.priorityL2]).toEqual([PRIORITY.feePerDaGas, PRIORITY.feePerL2Gas])
@@ -259,7 +252,7 @@ describe("finalizeGasLimits: exact slot projection", () => {
 
 	test("NON-embedded (no explicit fee): still refetches node min × multiplier (general default preserved)", async () => {
 		const tx = makeTxRequest()
-		await finalizeGasLimits(DRIFT_NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, undefined, 2)
+		await finalizeGasLimits(DRIFT_NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), { gasPadding: 1, feeMultiplier: 2 })
 		const s = shape(tx)
 		// Non-embedded path is unchanged: refetch (999/1111) × 2 — proves the drift fix is embedded-gated.
 		expect([s.feeDa, s.feeL2]).toEqual([1_998n, 2_222n])

@@ -1,8 +1,11 @@
+import "@nulo/wallet-sdk-schema-patch/register"
 import { describe, test, expect, beforeAll } from "vitest"
 import {
+	AuthRegistryRefusalError,
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
+	OwnAccountIntentRefusalError,
 	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeStaleAnchorError,
@@ -11,12 +14,13 @@ import {
 	ValidationError,
 } from "@nulo/extension-messaging/errors"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { NoUsableAccountError } from "./account-resolution"
 import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOperationResult, WalletSdkDispatcher } from "./dispatcher"
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
 import type { CapabilityParams, CapabilityResult } from "./dapp-interaction-protocol"
 import { authorizationsEffective } from "./method-scope-checkers"
-import type { Operation } from "./operation"
+import type { AztecGetContractMetadataOperation, Operation } from "./operation"
 import type { OperationResult } from "./operation-result"
 import type {
 	CapabilityDecision,
@@ -27,6 +31,7 @@ import type {
 	IExecutionHooks,
 	IExecutionRunner,
 	INetworkReader,
+	ITokenRegistryReader,
 } from "./services-contract"
 
 /** Shared fake of the real DappSessionService.applyCapabilityDecision merge: deltas merged
@@ -57,7 +62,7 @@ function applyDecisionTo(session: IDappSessionRef, decision: CapabilityDecision)
 	if (accounts?.canCreateAuthWit !== true) next.authorizationsWithoutAsking = undefined
 	return next
 }
-import type { IAccountRef, IDappSessionRef, INetworkRef } from "./session-types"
+import type { IDappSessionRef, INetworkRef } from "./session-types"
 import { LogLevel, type ILogger } from "@nulo/wallet-core/logger"
 import { DAPP_SELF_PAY_FEATURE, WALLET_FEATURES } from "./wallet-features"
 import { onWire, wireAddress, wireCall, wirePayload, withHeader } from "./testing/wire"
@@ -75,6 +80,10 @@ const noopLogger: ILogger = { log: () => {} }
 
 const stubNetwork: INetworkReader = {
 	getNetworksRaw: async () => [],
+}
+/** A chain the wallet serves, for routes that must get past the dispatch-level chain check. */
+const servingNetwork: INetworkReader = {
+	getNetworksRaw: async () => [{ id: "net-0", chainId: 0 } as INetworkRef],
 }
 const stubAccount: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 const stubExecution: IExecutionRunner = {
@@ -95,27 +104,17 @@ function makeSession(overrides: Partial<IDappSessionRef> = {}): IDappSessionRef 
 	} as IDappSessionRef
 }
 
+type TestSessionWriter = IDappSessionWriter & { getDappSession(id: string): Promise<IDappSessionRef> }
+
 function makeSessionWriter(initial: IDappSessionRef) {
 	let session = initial
 	const calls: { setRejections: RejectedCapabilityRecord[][]; setGrants: GrantedCapabilityRecord[][] } = {
 		setRejections: [],
 		setGrants: [],
 	}
-	const writer: IDappSessionWriter = {
+	const writer: TestSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => session,
 		getDappSession: async () => session,
-		updateDappSession: async () => session,
-		setAccountAliases: async () => session,
-		setCapabilityGrants: async (_id, grants) => {
-			calls.setGrants.push(grants)
-			session = { ...session, capabilityGrants: grants } as IDappSessionRef
-			return session
-		},
-		setCapabilityRejections: async (_id, rejections) => {
-			calls.setRejections.push(rejections)
-			session = { ...session, capabilityRejections: rejections } as IDappSessionRef
-			return session
-		},
 		applyCapabilityDecision: async (_id, decision) => {
 			session = applyDecisionTo(session, decision)
 			// Mirror the merged session onto the call trackers the tests assert on. A
@@ -130,15 +129,39 @@ function makeSessionWriter(initial: IDappSessionRef) {
 	return { writer, calls }
 }
 
-function makeDispatcher(
-	sessionWriter: IDappSessionWriter,
-	requestCapabilitiesImpl: (params: unknown) => Promise<CapabilityResult>,
-): WalletSdkDispatcher {
-	const interaction: IDappInteractionRunner = {
-		execute: async () => ({}) as never,
-		requestCapabilities: requestCapabilitiesImpl as never,
-	}
-	return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, sessionWriter, noopLogger)
+/** A wallet holding no row for the origin: every route that needs one must fail closed. */
+const noSessionWriter: IDappSessionWriter = {
+	tryGetDappSessionByOriginAndChain: async () => null as unknown as IDappSessionRef,
+	applyCapabilityDecision: async () => null as unknown as IDappSessionRef,
+}
+
+const stubInteraction: IDappInteractionRunner = {
+	execute: async () => ({}) as never,
+	requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
+}
+
+type DispatcherOptions = {
+	network?: INetworkReader
+	account?: AccountFake
+	execution?: IExecutionRunner
+	/** Merged over `stubInteraction`, so a test names only the methods it observes. */
+	interaction?: Partial<IDappInteractionRunner>
+	/** Defaults to a writer over a fresh session with no grants. */
+	sessionWriter?: IDappSessionWriter
+	logger?: ILogger
+	tokenRegistryReader?: ITokenRegistryReader
+}
+
+function makeDispatcher(opts: DispatcherOptions = {}): WalletSdkDispatcher {
+	return new WalletSdkDispatcher(
+		opts.network ?? servingNetwork,
+		opts.account ?? stubAccount,
+		opts.execution ?? stubExecution,
+		{ ...stubInteraction, ...opts.interaction },
+		opts.sessionWriter ?? makeSessionWriter(makeSession()).writer,
+		opts.logger ?? noopLogger,
+		opts.tokenRegistryReader,
+	)
 }
 
 const ctx = {
@@ -156,8 +179,13 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 		// The popup's Reject arrives as this typed instance; the dispatcher must
 		// rethrow it unchanged so the wallet-sdk envelope can classify it as 4001.
 		const rejection = new UserRejectedError("User rejected")
-		const dispatcher = makeDispatcher(writer, async () => {
-			throw rejection
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					throw rejection
+				},
+			},
 		})
 
 		const manifest = {
@@ -182,9 +210,14 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 		const { writer } = makeSessionWriter(session)
 
 		let observedReRequested: string[] | undefined
-		const dispatcher = makeDispatcher(writer, async (params) => {
-			observedReRequested = (params as { reRequested?: string[] }).reRequested
-			throw new Error("User rejected")
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async (params) => {
+					observedReRequested = (params as { reRequested?: string[] }).reRequested
+					throw new Error("User rejected")
+				},
+			},
 		})
 
 		const manifest = {
@@ -201,8 +234,13 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 	test("user-reject does NOT persist grants", async () => {
 		const session = makeSession()
 		const { writer, calls } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => {
-			throw new Error("User rejected")
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					throw new Error("User rejected")
+				},
+			},
 		})
 
 		const manifest = { capabilities: [{ type: "data", addressBook: true }] }
@@ -216,13 +254,18 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 		let resolveA!: () => void
 		const gateA = new Promise<void>((r) => (resolveA = r))
 		let n = 0
-		const dispatcher = makeDispatcher(writer, async () => {
-			n += 1
-			if (n === 1) {
-				await gateA
-				return { granted: [{ type: "data", addressBook: true }] } as CapabilityResult
-			}
-			return { granted: [{ type: "transaction", scope: [{ contract: "*", function: "*" }] }] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					n += 1
+					if (n === 1) {
+						await gateA
+						return { granted: [{ type: "data", addressBook: true }] } as CapabilityResult
+					}
+					return { granted: [{ type: "transaction", scope: [{ contract: "*", function: "*" }] }] } as CapabilityResult
+				},
+			},
 		})
 
 		// A snapshots the empty session then parks in its popup.
@@ -253,16 +296,18 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 		})
 		const { writer } = makeSessionWriter(session)
 		// The popup approves the delta 'data' AND echoes the existing 'transaction' grant.
-		const dispatcher = makeDispatcher(
-			writer,
-			async () =>
-				({
-					granted: [
-						{ type: "data", addressBook: true },
-						{ type: "transaction", scope: [{ contract: "*", function: "*" }] },
-					],
-				}) as never,
-		)
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () =>
+					({
+						granted: [
+							{ type: "data", addressBook: true },
+							{ type: "transaction", scope: [{ contract: "*", function: "*" }] },
+						],
+					}) as never,
+			},
+		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [{ type: "data", addressBook: true }] })], ctx)
 		const stored = await writer.getDappSession("test-session-id")
 		// Only delta-approved types clear their rejection — echoing an unrelated existing
@@ -275,8 +320,13 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 			capabilityRejections: [{ capabilityType: "transaction", rejectedAt: 500 }],
 		})
 		const { writer, calls } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => {
-			throw new Error("User rejected")
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					throw new Error("User rejected")
+				},
+			},
 		})
 
 		const manifest = { capabilities: [{ type: "data", addressBook: true }] }
@@ -290,9 +340,14 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 	test("successful approval persists grants AND rejections (regression)", async () => {
 		const session = makeSession()
 		const { writer, calls } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({
-			granted: [{ type: "data", addressBook: true }],
-		}))
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => ({
+					granted: [{ type: "data", addressBook: true }],
+				}),
+			},
+		})
 
 		const manifest = {
 			capabilities: [
@@ -310,11 +365,6 @@ describe("dispatcher.requestCapabilities reject persistence", () => {
 })
 
 describe("dispatcher.handleBatch", () => {
-	function networkWithChainId(chainId: number): INetworkReader {
-		const network: INetworkRef = { id: `net-${chainId}`, chainId }
-		return { getNetworksRaw: async () => [network] }
-	}
-
 	// Programmable executeOperations stub: each call shifts the next pre-loaded
 	// result. Underflow throws — silently defaulting would hide a test that
 	// expected fewer dispatches than the SUT actually made.
@@ -334,20 +384,10 @@ describe("dispatcher.handleBatch", () => {
 		return stub
 	}
 
-	function makeBatchDispatcher(execution: IExecutionRunner): WalletSdkDispatcher {
-		const session = makeSession()
-		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
-		}
-		return new WalletSdkDispatcher(networkWithChainId(0), stubAccount, execution, interaction, writer, noopLogger)
-	}
-
 	test("happy path — two legs both succeed, returns them in order", async () => {
 		const execution = mutableExecution()
 		execution.results.push({ status: "ok", result: { chainInfo: "a" } }, { status: "ok", result: { chainInfo: "b" } })
-		const dispatcher = makeBatchDispatcher(execution)
+		const dispatcher = makeDispatcher({ execution })
 
 		const result = await dispatcher.dispatch(
 			"batch",
@@ -374,7 +414,7 @@ describe("dispatcher.handleBatch", () => {
 		// "no programmed result" message — not the leg-1 error we want to
 		// assert. Picking up the right error proves the abort.
 		execution.results.push({ status: "failed", error: "boom from leg 1" })
-		const dispatcher = makeBatchDispatcher(execution)
+		const dispatcher = makeDispatcher({ execution })
 
 		await expect(
 			dispatcher.dispatch(
@@ -467,24 +507,13 @@ function makeGetAccountsDispatcher(opts: {
 }): { dispatcher: WalletSdkDispatcher; loggerCalls?: Array<{ level: LogLevel; msg: string }> } {
 	const sessionWriter: IDappSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => opts.session,
-		getDappSession: async () => opts.session,
-		updateDappSession: async () => opts.session,
-		setAccountAliases: async () => opts.session,
-		setCapabilityGrants: async () => opts.session,
-		setCapabilityRejections: async () => opts.session,
 		applyCapabilityDecision: async (_id, decision) => applyDecisionTo(opts.session, decision),
 	}
-	const network: INetworkRef = { id: "net-0", chainId: 0 }
-	const networkReader: INetworkReader = { getNetworksRaw: async () => [network] }
-	const accountReader: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => opts.accounts ?? [] }
-	const interaction: IDappInteractionRunner = {
-		execute: async () => ({}) as never,
-		requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
-	}
+	const account: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => opts.accounts ?? [] }
 	const cap = capturingLogger()
 	const logger = opts.logger ?? cap.logger
 	return {
-		dispatcher: new WalletSdkDispatcher(networkReader, accountReader, stubExecution, interaction, sessionWriter, logger),
+		dispatcher: makeDispatcher({ account, sessionWriter, logger }),
 		loggerCalls: opts.logger ? undefined : cap.calls,
 	}
 }
@@ -495,22 +524,7 @@ describe("dispatcher.handleGetAccounts contract rows", () => {
 		// rather than returning [] and letting network-only methods run unchecked after the
 		// user revoked the dApp. The live-transport teardown in wallet-sdk/background.ts
 		// is its pair.
-		const sessionWriter: IDappSessionWriter = {
-			tryGetDappSessionByOriginAndChain: async () => null as unknown as IDappSessionRef,
-			getDappSession: async () => null as unknown as IDappSessionRef,
-			updateDappSession: async () => null as unknown as IDappSessionRef,
-			setAccountAliases: async () => null as unknown as IDappSessionRef,
-			setCapabilityGrants: async () => null as unknown as IDappSessionRef,
-			setCapabilityRejections: async () => null as unknown as IDappSessionRef,
-			applyCapabilityDecision: async () => null as unknown as IDappSessionRef,
-		}
-		const network: INetworkRef = { id: "net-0", chainId: 0 }
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [network] }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
-		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, stubAccount, stubExecution, interaction, sessionWriter, noopLogger)
+		const dispatcher = makeDispatcher({ sessionWriter: noSessionWriter })
 
 		await expect(dispatcher.dispatch("getAccounts", [], ctx)).rejects.toBeInstanceOf(CapabilityNotGrantedError)
 	})
@@ -583,22 +597,6 @@ describe("dispatcher.handleGetAccounts contract rows", () => {
 // ---------------------------------------------------------------------------
 
 describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
-	/** These tests go through `enrichGrantedCapabilities` which calls
-	 *  `resolveNetwork()` — so we need a network reader configured for the
-	 *  ctx.chainId (0). The default `stubNetwork` returns [], which throws. */
-	function makePhase15Dispatcher(
-		writer: IDappSessionWriter,
-		requestCapabilitiesImpl: (params: unknown) => Promise<CapabilityResult>,
-	): WalletSdkDispatcher {
-		const network: INetworkRef = { id: "net-0", chainId: 0 }
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [network] }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: requestCapabilitiesImpl as never,
-		}
-		return new WalletSdkDispatcher(networkReader, stubAccount, stubExecution, interaction, writer, noopLogger)
-	}
-
 	test("granted accounts(canCreateAuthWit:false) + re-requested SAME shape → no popup (same-shape no-op)", async () => {
 		// Regression pin: the field-aware filter must not over-trigger. If two
 		// requests are shape-equal, the second one short-circuits via the
@@ -614,9 +612,14 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 			capabilityGrants: [{ capability: existingAccountsCap, grantedAt: 1 }],
 		})
 		const { writer } = makeSessionWriter(session)
-		const dispatcher = makePhase15Dispatcher(writer, async () => {
-			popupCalls++
-			return { granted: [{ type: "accounts" }] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					popupCalls++
+					return { granted: [{ type: "accounts" }] } as CapabilityResult
+				},
+			},
 		})
 
 		const manifest = { capabilities: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] }
@@ -640,9 +643,14 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 			capabilityGrants: [{ capability: existingAccountsCap, grantedAt: 1 }],
 		})
 		const { writer } = makeSessionWriter(session)
-		const dispatcher = makePhase15Dispatcher(writer, async () => {
-			popupCalls++
-			return { granted: [{ type: "accounts", canGet: true, canCreateAuthWit: true }] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					popupCalls++
+					return { granted: [{ type: "accounts", canGet: true, canCreateAuthWit: true }] } as CapabilityResult
+				},
+			},
 		})
 
 		const manifest = { capabilities: [{ type: "accounts", canGet: true, canCreateAuthWit: true }] }
@@ -671,8 +679,13 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		// the upgrade. The bug pinned here is that the dApp would still see
 		// `canCreateAuthWit:true` in the wire response because the OLD code
 		// spread the REQUESTED cap shape, not the stored one.
-		const dispatcher = makePhase15Dispatcher(writer, async () => {
-			return { granted: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					return { granted: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] } as CapabilityResult
+				},
+			},
 		})
 
 		const manifest = { capabilities: [{ type: "accounts", canGet: true, canCreateAuthWit: true }] }
@@ -700,9 +713,14 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		let popupCalls = 0
 		const session = makeSession({ capabilityGrants: [{ capability: existing, grantedAt: 1 }] })
 		const { writer } = makeSessionWriter(session)
-		const dispatcher = makePhase15Dispatcher(writer, async () => {
-			popupCalls++
-			return { granted: [requested] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					popupCalls++
+					return { granted: [requested] } as CapabilityResult
+				},
+			},
 		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [requested] })], ctx)
 		expect(popupCalls).toBe(1)
@@ -713,9 +731,14 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		const existing: Capability = { type: "data", privateEvents: { contracts: "*" } }
 		const session = makeSession({ capabilityGrants: [{ capability: existing, grantedAt: 1 }] })
 		const { writer } = makeSessionWriter(session)
-		const dispatcher = makePhase15Dispatcher(writer, async () => {
-			popupCalls++
-			return { granted: [{ type: "data", addressBook: true, privateEvents: { contracts: "*" } }] } as CapabilityResult
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					popupCalls++
+					return { granted: [{ type: "data", addressBook: true, privateEvents: { contracts: "*" } }] } as CapabilityResult
+				},
+			},
 		})
 		const manifest = { capabilities: [{ type: "data", addressBook: true }] }
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
@@ -732,7 +755,7 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		const a3 = `0x${"33".repeat(32)}`
 		const caip1 = `aztec:0:${a1}`
 		const caip2 = `aztec:0:${a2}`
-		const accountReader: AccountFake = {
+		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [
 				{ address: a1, name: "Name1", chainId: 0 },
@@ -740,7 +763,6 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 				{ address: a3, name: "Name3", chainId: 0 }, // NOT a session account → filtered out
 			],
 		}
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 		const session = makeSession({
 			accounts: [caip1, caip2],
 			accountAliases: { [caip1]: "alias-1" }, // a1 → alias hit; a2 → name fallback
@@ -749,11 +771,8 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 			],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({ granted: [{ type: "accounts", canGet, canCreateAuthWit: false }] })) as never,
-		}
-		return { dispatcher: new WalletSdkDispatcher(networkReader, accountReader, stubExecution, interaction, writer, noopLogger) }
+		const requestCapabilities = (async () => ({ granted: [{ type: "accounts", canGet, canCreateAuthWit: false }] })) as never
+		return { dispatcher: makeDispatcher({ account, interaction: { requestCapabilities }, sessionWriter: writer }) }
 	}
 
 	test("enrichGrantedCapabilities projects the session accounts array (alias hit / name fallback / filtered) — Q11", async () => {
@@ -779,23 +798,15 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		expect(accounts?.accounts).toEqual([])
 	})
 
-	test("enrichGrantedCapabilities resolves the network UNCONDITIONALLY — canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
-		// Behavior-preservation pin: resolveNetwork
-		// runs BEFORE the canGet gate, so a future gate-hoist can't silently turn a
-		// throw into accounts:[]. networkReader returns no networks → resolve throws.
-		const accountReader: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [] }
+	test("requestCapabilities with canGet:false on an unresolvable chain THROWS, not [] — Q11", async () => {
 		const session = makeSession({
 			capabilityGrants: [
 				{ capability: { type: "accounts", canGet: false, canCreateAuthWit: false, accounts: [] } as Capability, grantedAt: 1 },
 			],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({ granted: [{ type: "accounts", canGet: false, canCreateAuthWit: false }] })) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, accountReader, stubExecution, interaction, writer, noopLogger)
+		const requestCapabilities = (async () => ({ granted: [{ type: "accounts", canGet: false, canCreateAuthWit: false }] })) as never
+		const dispatcher = makeDispatcher({ network: stubNetwork, interaction: { requestCapabilities }, sessionWriter: writer })
 		const manifest = { capabilities: [{ type: "accounts", canGet: false, canCreateAuthWit: false }] }
 		await expect(dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)).rejects.toBeInstanceOf(ChainNotSupportedError)
 	})
@@ -803,11 +814,10 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 	test('projection alias falls back to "" when an account has neither alias nor name — Q11', async () => {
 		const a = `0x${"44".repeat(32)}`
 		const caip = `aztec:0:${a}`
-		const accountReader: AccountFake = {
+		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [{ address: a, name: "", chainId: 0 }],
 		}
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 		const session = makeSession({
 			accounts: [caip],
 			capabilityGrants: [
@@ -815,11 +825,8 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 			],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({ granted: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] })) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, accountReader, stubExecution, interaction, writer, noopLogger)
+		const requestCapabilities = (async () => ({ granted: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] })) as never
+		const dispatcher = makeDispatcher({ account, interaction: { requestCapabilities }, sessionWriter: writer })
 		const manifest = { capabilities: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] }
 		const result = (await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)) as {
 			granted: Array<Record<string, unknown>>
@@ -845,8 +852,7 @@ describe("dispatcher batch hooks isolation", () => {
 			],
 		})
 		const { writer } = makeSessionWriter(session)
-		// requestCapabilities not called in this test; pass a stub.
-		const dispatcher = makeDispatcher(writer, async () => ({}) as CapabilityResult)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 
 		// Hooks that a top-level caller might supply. We want to verify they
 		// don't leak into recursive leg dispatches.
@@ -898,12 +904,11 @@ describe("dispatcher sendTx hook forwarding", () => {
 		const { writer } = makeSessionWriter(session)
 
 		let observedHooks: IExecutionHooks | undefined
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (_params, _cancellationToken, hooks) => {
 				observedHooks = hooks
 				return [{ status: "ok", result: undefined }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
 		const network: INetworkReader = {
 			getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[],
@@ -914,7 +919,7 @@ describe("dispatcher sendTx hook forwarding", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		const release = () => {}
 		// Empty exec.calls → scope enforcement is vacuously satisfied.
@@ -939,12 +944,11 @@ describe("dispatcher sendTx hook forwarding", () => {
 		})
 		const { writer } = makeSessionWriter(session)
 		let observedHooks: IExecutionHooks | undefined
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (_params, _cancellationToken, hooks) => {
 				observedHooks = hooks
 				return [{ status: "ok", result: undefined }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
 		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
@@ -953,7 +957,7 @@ describe("dispatcher sendTx hook forwarding", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		// No 4th-arg hooks — the per-origin cap must still receive originKey so a
 		// dApp that arrives without the FIFO-baton hooks can't bypass the cap.
@@ -990,19 +994,17 @@ describe("dispatcher.handleSendTx — opts.from resolution (multi-account sessio
 		})
 		const { writer } = makeSessionWriter(session)
 		const captured: { account?: string; executionMode?: string } = {}
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params) => {
 				const op = (params as { operations: Array<{ account?: string; executionMode?: string }> }).operations?.[0]
 				captured.account = op?.account
 				captured.executionMode = op?.executionMode
 				return [{ status: "ok", result: "0xtx" }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => accounts }
 		return {
-			dispatcher: new WalletSdkDispatcher(network, account, stubExecution, interaction, writer, noopLogger),
+			dispatcher: makeDispatcher({ account, interaction, sessionWriter: writer }),
 			captured,
 		}
 	}
@@ -1066,19 +1068,17 @@ describe("dispatcher.handleSendTx — logs none of the request's values", () => 
 			},
 		}
 		const sent: unknown[] = []
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params) => {
 				sent.push(params)
 				return [{ status: "ok", result: "0xtx" }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [{ address: ACCOUNT, name: "A", chainId: 0 }],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, stubExecution, interaction, writer, logger)
+		const dispatcher = makeDispatcher({ account, interaction, sessionWriter: writer, logger })
 		const exec = wirePayload([wireCall(TARGET, "transfer")], FEE_PAYER)
 		await expect(dispatcher.dispatch("sendTx", [exec, { from: ACCOUNT, additionalScopes }], ctx)).resolves.toBe("0xtx")
 		expect(sent).toHaveLength(1)
@@ -1103,19 +1103,17 @@ describe("dispatcher.sendTx — a scope refusal is typed and names no request va
 		})
 		const { writer } = makeSessionWriter(session)
 		const sent: unknown[] = []
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params) => {
 				sent.push(params)
 				return [{ status: "ok", result: "0xtx" }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [{ address: ACCOUNT, name: "A", chainId: 0 }],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ account, interaction, sessionWriter: writer })
 		return dispatcher.dispatch("sendTx", args, ctx).then(
 			() => {
 				throw new Error("the send was not refused")
@@ -1195,10 +1193,8 @@ describe("dispatcher — simulateTx / profileTx act as the account named in `opt
 				return [{ status: "ok", result: "0xr" }] as OperationResult[]
 			},
 		}
-		const interaction: IDappInteractionRunner = { execute: async () => [] as never, requestCapabilities: async () => ({}) as never }
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => accounts }
-		return { dispatcher: new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger), ops, fences }
+		return { dispatcher: makeDispatcher({ account, execution, sessionWriter: writer }), ops, fences }
 	}
 
 	function accountAndFrom(op: Operation | undefined): { accountAddress?: string; from?: unknown } {
@@ -1359,11 +1355,9 @@ describe("dispatcher — simulateTx / profileTx act as the account named in `opt
 
 describe("dispatcher — registerToken reachability + routing", () => {
 	test("schema patch extends WalletSchema with a 2-arg `registerToken` entry", async () => {
-		// Import the production patch from the extension package. This is the
-		// reachability assertion: if the side-effect import drifts (renamed,
-		// moved, or accidentally tree-shaken by a future bundler), this test
-		// fails.
-		await import("@nulo/wallet-sdk-schema-patch/register")
+		// The file's first import is the production activation, so this is the
+		// reachability assertion: if that side-effect import is renamed or
+		// moved, this test fails.
 		const { WalletSchema } = await import("@aztec-labs/aztec.js/wallet")
 		expect("registerToken" in WalletSchema).toBe(true)
 		// biome-ignore lint/suspicious/noExplicitAny: WalletSchema entry shape is upstream-typed but per-key access is opaque
@@ -1392,12 +1386,11 @@ describe("dispatcher — registerToken reachability + routing", () => {
 
 		const executeCalls: unknown[] = []
 		const executionCalls: unknown[] = []
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params: unknown) => {
 				executeCalls.push(params)
 				return [{ status: "ok", result: undefined }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
 		const execution: IExecutionRunner = {
 			executeOperations: async (ops) => {
@@ -1414,7 +1407,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, execution, interaction, sessionWriter: writer })
 
 		await dispatcher.dispatch(
 			"registerToken",
@@ -1454,12 +1447,8 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		})
 		const { writer } = makeSessionWriter(session)
 
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
-		}
-		const execution: IExecutionRunner = {
-			executeOperations: async () => [] as OperationResult[],
 		}
 		const network: INetworkReader = {
 			getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[],
@@ -1471,7 +1460,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000bad", name: "extra", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		// dApp asks the wallet to register a token for …bad — an
 		// account that exists on the wallet but is NOT in the session's
@@ -1494,11 +1483,9 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		// (the helper sendTx/createAuthWit already used). These pins cover the two
 		// branches the inline copy could NOT distinguish: no wallet accounts at
 		// all, and a session with an empty authorized set.
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = {
 			getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[],
 		}
@@ -1516,12 +1503,11 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		]
 
 		// Branch 1: NO wallet accounts on this profile/chain.
-		const emptyWallet: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 		const s1 = makeSession({
 			capabilityGrants: grants,
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
-		const d1 = new WalletSdkDispatcher(network, emptyWallet, execution, interaction, makeSessionWriter(s1).writer, noopLogger)
+		const d1 = makeDispatcher({ network, interaction, sessionWriter: makeSessionWriter(s1).writer })
 		const noWalletAccount = await d1
 			.dispatch(
 				"registerToken",
@@ -1544,7 +1530,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 			],
 		}
 		const s2 = makeSession({ capabilityGrants: grants, accounts: [] })
-		const d2 = new WalletSdkDispatcher(network, walletAccounts, execution, interaction, makeSessionWriter(s2).writer, noopLogger)
+		const d2 = makeDispatcher({ network, account: walletAccounts, interaction, sessionWriter: makeSessionWriter(s2).writer })
 		const noSessionAccount = await d2
 			.dispatch(
 				"registerToken",
@@ -1576,11 +1562,9 @@ describe("dispatcher — registerToken reachability + routing", () => {
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = {
 			getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[],
 		}
@@ -1591,7 +1575,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000bad", name: "extra", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 		await expect(
 			dispatcher.dispatch(
 				"grantPublicAuthwit",
@@ -1624,11 +1608,9 @@ describe("dispatcher — registerToken reachability + routing", () => {
 			},
 			{ capability: { type: "transaction", scope: "*" } as Capability, grantedAt: 1 },
 		]
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = {
 			getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[],
 		}
@@ -1643,12 +1625,11 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		]
 
 		// Branch 1: NO wallet accounts on this profile/chain.
-		const emptyWallet: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => [] }
 		const s1 = makeSession({
 			capabilityGrants: grants,
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
-		const d1 = new WalletSdkDispatcher(network, emptyWallet, execution, interaction, makeSessionWriter(s1).writer, noopLogger)
+		const d1 = makeDispatcher({ network, interaction, sessionWriter: makeSessionWriter(s1).writer })
 		await expect(d1.dispatch("grantPublicAuthwit", grantArgs, ctx)).rejects.toThrow(/No accounts found for profile/)
 
 		// Branch 2: wallet has accounts but the session's authorized set is EMPTY.
@@ -1659,7 +1640,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 			],
 		}
 		const s2 = makeSession({ capabilityGrants: grants, accounts: [] })
-		const d2 = new WalletSdkDispatcher(network, walletAccounts, execution, interaction, makeSessionWriter(s2).writer, noopLogger)
+		const d2 = makeDispatcher({ network, account: walletAccounts, interaction, sessionWriter: makeSessionWriter(s2).writer })
 		await expect(d2.dispatch("grantPublicAuthwit", grantArgs, ctx)).rejects.toThrow(/must call requestCapabilities/)
 	})
 
@@ -1669,9 +1650,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		// not the runtime-patched WalletSchema), the dispatcher must reject
 		// batched registerToken because it requires a popup gate that a
 		// batch result can't represent.
-		const session = makeSession()
-		const { writer } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({}) as CapabilityResult)
+		const dispatcher = makeDispatcher()
 
 		await expect(
 			dispatcher.dispatch(
@@ -1693,9 +1672,7 @@ describe("dispatcher — registerToken reachability + routing", () => {
 	})
 
 	test("batch([{name:'sendTx', ...}]) is also rejected (same popup-gated reason)", async () => {
-		const session = makeSession()
-		const { writer } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({}) as CapabilityResult)
+		const dispatcher = makeDispatcher()
 
 		await expect(dispatcher.dispatch("batch", [[{ name: "sendTx", args: [{}, {}] }]], ctx)).rejects.toThrow(
 			/cannot be used inside batch/i,
@@ -1703,18 +1680,14 @@ describe("dispatcher — registerToken reachability + routing", () => {
 	})
 
 	test("dispatch('getCompleteAddress', ...) is no longer supported (regression guard)", async () => {
-		const session = makeSession()
-		const { writer } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({}) as CapabilityResult)
+		const dispatcher = makeDispatcher()
 		await expect(
 			dispatcher.dispatch("getCompleteAddress", ["0x0000000000000000000000000000000000000000000000000000000000000acc"], ctx),
 		).rejects.toThrow(/Unsupported wallet method/)
 	})
 
 	test("dispatch('simulateViews', ...) is no longer supported (regression guard)", async () => {
-		const session = makeSession()
-		const { writer } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({}) as CapabilityResult)
+		const dispatcher = makeDispatcher()
 		await expect(dispatcher.dispatch("simulateViews", [[]], ctx)).rejects.toThrow(/Unsupported wallet method/)
 	})
 
@@ -1741,27 +1714,8 @@ describe("dispatcher — registerToken reachability + routing", () => {
  * session-lookup is invoked per dispatch() call.
  */
 describe("network-only methods fail-closed on missing session", () => {
-	function dispatcherNoSession(): WalletSdkDispatcher {
-		const writer: IDappSessionWriter = {
-			tryGetDappSessionByOriginAndChain: async () => null as unknown as IDappSessionRef,
-			getDappSession: async () => null as unknown as IDappSessionRef,
-			updateDappSession: async () => null as unknown as IDappSessionRef,
-			setAccountAliases: async () => null as unknown as IDappSessionRef,
-			setCapabilityGrants: async () => null as unknown as IDappSessionRef,
-			setCapabilityRejections: async () => null as unknown as IDappSessionRef,
-			applyCapabilityDecision: async () => null as unknown as IDappSessionRef,
-		}
-		const network: INetworkRef = { id: "net-0", chainId: 0 }
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [network] }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
-		}
-		return new WalletSdkDispatcher(networkReader, stubAccount, stubExecution, interaction, writer, noopLogger)
-	}
-
 	test("getPrivateEvents throws CapabilityNotGrantedError when session is missing (was: silently succeeded)", async () => {
-		const dispatcher = dispatcherNoSession()
+		const dispatcher = makeDispatcher({ sessionWriter: noSessionWriter })
 		await expect(
 			dispatcher.dispatch(
 				"getPrivateEvents",
@@ -1772,12 +1726,12 @@ describe("network-only methods fail-closed on missing session", () => {
 	})
 
 	test("getAddressBook throws CapabilityNotGrantedError when session is missing", async () => {
-		const dispatcher = dispatcherNoSession()
+		const dispatcher = makeDispatcher({ sessionWriter: noSessionWriter })
 		await expect(dispatcher.dispatch("getAddressBook", [], ctx)).rejects.toBeInstanceOf(CapabilityNotGrantedError)
 	})
 
 	test("registerContract throws CapabilityNotGrantedError when session is missing", async () => {
-		const dispatcher = dispatcherNoSession()
+		const dispatcher = makeDispatcher({ sessionWriter: noSessionWriter })
 		await expect(
 			dispatcher.dispatch(
 				"registerContract",
@@ -1792,7 +1746,7 @@ describe("network-only methods fail-closed on missing session", () => {
 		// dApp probe path. The base stubExecution returns an empty object; we
 		// only assert that the throw is NOT CapabilityNotGrantedError (the
 		// fail-closed missing-session path), not that the method succeeds end-to-end.
-		const dispatcher = dispatcherNoSession()
+		const dispatcher = makeDispatcher({ sessionWriter: noSessionWriter })
 		await expect(dispatcher.dispatch("getChainInfo", [], ctx)).rejects.not.toBeInstanceOf(CapabilityNotGrantedError)
 	})
 })
@@ -1806,17 +1760,6 @@ describe("dispatch() session lookup consolidation (TOCTOU defense)", () => {
 				counter.lookups += 1
 				return session as IDappSessionRef
 			},
-			getDappSession: async () => session as IDappSessionRef,
-			updateDappSession: async () => session as IDappSessionRef,
-			setAccountAliases: async () => session as IDappSessionRef,
-			setCapabilityGrants: async (_id, grants) => {
-				session = { ...(session as IDappSessionRef), capabilityGrants: grants } as IDappSessionRef
-				return session
-			},
-			setCapabilityRejections: async (_id, rejections) => {
-				session = { ...(session as IDappSessionRef), capabilityRejections: rejections } as IDappSessionRef
-				return session
-			},
 			applyCapabilityDecision: async (_id, decision) => {
 				session = applyDecisionTo(session as IDappSessionRef, decision)
 				return session
@@ -1828,23 +1771,10 @@ describe("dispatch() session lookup consolidation (TOCTOU defense)", () => {
 		return { writer, counter, setSession }
 	}
 
-	const networkWithChainId0: INetworkReader = {
-		getNetworksRaw: async () => [{ id: "net-0", chainId: 0 } as INetworkRef],
-	}
-
-	function dispatcherWith(writer: IDappSessionWriter, accounts: IAccountRef[] = []): WalletSdkDispatcher {
-		const accountReader: AccountFake = { provisionDefaultAccount: declineProvision, getAccounts: async () => accounts }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: async () => ({ granted: [] }) as CapabilityResult,
-		}
-		return new WalletSdkDispatcher(networkWithChainId0, accountReader, stubExecution, interaction, writer, noopLogger)
-	}
-
 	test("dispatch(requestCapabilities) issues exactly 1 session lookup (was 2 pre-refactor)", async () => {
 		const session = makeSession()
 		const { writer, counter } = makeCountingWriter(session)
-		const dispatcher = dispatcherWith(writer)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 		const manifest = { capabilities: [{ type: "data", addressBook: true }] }
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
 		expect(counter.lookups).toBe(1)
@@ -1865,14 +1795,14 @@ describe("dispatch() session lookup consolidation (TOCTOU defense)", () => {
 			],
 		})
 		const { writer, counter } = makeCountingWriter(session)
-		const dispatcher = dispatcherWith(writer)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 		await dispatcher.dispatch("getAccounts", [], ctx)
 		expect(counter.lookups).toBe(1)
 	})
 
 	test("dispatch(registerToken with no session) only consults storage once before throwing", async () => {
 		const { writer, counter } = makeCountingWriter(null)
-		const dispatcher = dispatcherWith(writer)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 		await expect(
 			dispatcher.dispatch(
 				"registerToken",
@@ -1893,7 +1823,6 @@ describe("dispatch() session lookup consolidation (TOCTOU defense)", () => {
 
 describe("dispatcher — getWalletFeatures", () => {
 	test("schema patch extends WalletSchema with a 0-arg string[] `getWalletFeatures` entry", async () => {
-		await import("@nulo/wallet-sdk-schema-patch/register")
 		const { WalletSchema } = await import("@aztec-labs/aztec.js/wallet")
 		expect("getWalletFeatures" in WalletSchema).toBe(true)
 		// biome-ignore lint/suspicious/noExplicitAny: WalletSchema entry shape is upstream-typed but per-key access is opaque
@@ -1904,11 +1833,7 @@ describe("dispatcher — getWalletFeatures", () => {
 
 	test("answers the static list to a session with no grants at all, and names the self-pay routing", async () => {
 		const { writer } = makeSessionWriter(makeSession({ capabilityGrants: [] }))
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 		const features = (await dispatcher.dispatch("getWalletFeatures", [], ctx)) as readonly string[]
 		expect(features).toEqual(WALLET_FEATURES)
 		expect(features).toContain(DAPP_SELF_PAY_FEATURE)
@@ -1930,18 +1855,9 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 			],
 		})
 
-	function makeReaderDispatcher(session: IDappSessionRef, registered: boolean) {
-		const { writer } = makeSessionWriter(session)
-		const reader = { isTokenRegistered: async () => registered }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
-	}
+	const registeredReader = { isTokenRegistered: async () => true }
 
 	test("schema patch extends WalletSchema with a 1-arg boolean `isTokenRegistered` entry", async () => {
-		await import("@nulo/wallet-sdk-schema-patch/register")
 		const { WalletSchema } = await import("@aztec-labs/aztec.js/wallet")
 		expect("isTokenRegistered" in WalletSchema).toBe(true)
 		// biome-ignore lint/suspicious/noExplicitAny: WalletSchema entry shape is upstream-typed but per-key access is opaque
@@ -1951,30 +1867,42 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 	})
 
 	test("granted address ⇒ boolean from the reader, NO interaction service involved", async () => {
-		const dispatcher = makeReaderDispatcher(contractsSession([TOKEN]), true)
+		const dispatcher = makeDispatcher({
+			sessionWriter: makeSessionWriter(contractsSession([TOKEN])).writer,
+			tokenRegistryReader: registeredReader,
+		})
 		const result = await dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)
 		expect(result).toBe(true)
 	})
 
 	test("ungranted address ⇒ scope violation (never a silent false)", async () => {
-		const dispatcher = makeReaderDispatcher(contractsSession([TOKEN]), true)
+		const dispatcher = makeDispatcher({
+			sessionWriter: makeSessionWriter(contractsSession([TOKEN])).writer,
+			tokenRegistryReader: registeredReader,
+		})
 		await expect(dispatcher.dispatch("isTokenRegistered", [OTHER], ctx)).rejects.toThrow(/Scope violation: isTokenRegistered/)
 	})
 
 	test("a held value that is not an address refuses every call, one naming it included", async () => {
-		const dispatcher = makeReaderDispatcher(contractsSession(["0xtok"]), true)
+		const dispatcher = makeDispatcher({
+			sessionWriter: makeSessionWriter(contractsSession(["0xtok"])).writer,
+			tokenRegistryReader: registeredReader,
+		})
 		const refusal = dispatcher.dispatch("isTokenRegistered", ["0xtok"], ctx)
 		await expect(refusal).rejects.toThrow(ValidationError)
 		await expect(refusal).rejects.toThrow("Malformed contracts capability")
 	})
 
 	test("contracts grant without canGetMetadata ⇒ scope violation", async () => {
-		const dispatcher = makeReaderDispatcher(contractsSession([TOKEN], false), true)
+		const dispatcher = makeDispatcher({
+			sessionWriter: makeSessionWriter(contractsSession([TOKEN], false)).writer,
+			tokenRegistryReader: registeredReader,
+		})
 		await expect(dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)).rejects.toThrow(/Scope violation/)
 	})
 
 	test("no contracts grant at all ⇒ capability refusal", async () => {
-		const dispatcher = makeReaderDispatcher(makeSession(), true)
+		const dispatcher = makeDispatcher({ tokenRegistryReader: registeredReader })
 		await expect(
 			dispatcher.dispatch("isTokenRegistered", ["0x000000000000000000000000000000000000000000000000000000000000070c"], ctx),
 		).rejects.toThrow()
@@ -1982,11 +1910,7 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 
 	test("a build without the reader refuses explicitly", async () => {
 		const { writer } = makeSessionWriter(contractsSession([TOKEN]))
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ sessionWriter: writer })
 		await expect(dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)).rejects.toThrow(/not available/)
 	})
 })
@@ -2019,7 +1943,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		const session = makeSession({ capabilityGrants: [txGrant([CLAIM, FJ])] })
 		const { writer } = makeSessionWriter(session)
 		const { state, popup } = promptTracking([])
-		const dispatcher = makeDispatcher(writer, popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: popup } })
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [{ type: "transaction", scope: [CLAIM] }] })], ctx)
 		expect(state.prompted).toBe(false)
 	})
@@ -2028,7 +1952,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		const session = makeSession({ capabilityGrants: [txGrant([CLAIM])] })
 		const { writer, calls } = makeSessionWriter(session)
 		const { state, popup } = promptTracking([{ type: "transaction", scope: [CLAIM, FJ] }])
-		const dispatcher = makeDispatcher(writer, popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: popup } })
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [{ type: "transaction", scope: [CLAIM, FJ] }] })], ctx)
 		expect(state.prompted).toBe(true)
 		const persisted = calls.setGrants.at(-1) ?? []
@@ -2037,7 +1961,10 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		expect((txGrants[0].capability as { scope: unknown[] }).scope).toHaveLength(2)
 		// Follow-up with the SAME scope is now covered - no second prompt.
 		const second = promptTracking([])
-		const dispatcher2 = makeDispatcher(makeSessionWriter({ ...session, capabilityGrants: persisted }).writer, second.popup)
+		const dispatcher2 = makeDispatcher({
+			sessionWriter: makeSessionWriter({ ...session, capabilityGrants: persisted }).writer,
+			interaction: { requestCapabilities: second.popup },
+		})
 		await dispatcher2.dispatch("requestCapabilities", [withHeader({ capabilities: [{ type: "transaction", scope: [FJ] }] })], ctx)
 		expect(second.state.prompted).toBe(false)
 	})
@@ -2048,7 +1975,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		const session = makeSession({ capabilityGrants: [txGrant([CLAIM]), txGrant([FJ])] })
 		const { writer } = makeSessionWriter(session)
 		const { state, popup } = promptTracking([{ type: "transaction", scope: [CLAIM, FJ] }])
-		const dispatcher = makeDispatcher(writer, popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: popup } })
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [{ type: "transaction", scope: [CLAIM, FJ] }] })], ctx)
 		expect(state.prompted).toBe(true)
 	})
@@ -2057,7 +1984,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		const session = makeSession({ capabilityGrants: [simGrant([CLAIM], [{ contract: TOKEN, function: "balance_of_public" }])] })
 		const { writer } = makeSessionWriter(session)
 		const { state, popup } = promptTracking([])
-		const dispatcher = makeDispatcher(writer, popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: popup } })
 		// Same utilities, superset transactions -> prompt.
 		await dispatcher.dispatch(
 			"requestCapabilities",
@@ -2083,7 +2010,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		})
 		const { writer } = makeSessionWriter(session)
 		const { state, popup } = promptTracking([])
-		const dispatcher = makeDispatcher(writer, popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: popup } })
 		await dispatcher.dispatch(
 			"requestCapabilities",
 			[withHeader({ capabilities: [{ type: "simulation", transactions: { scope: [FJ] } }] })],
@@ -2100,7 +2027,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		const session = makeSession({ capabilityGrants: [dataGrant] })
 		const { writer } = makeSessionWriter(session)
 		const widen = promptTracking([])
-		const dispatcher = makeDispatcher(writer, widen.popup)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, interaction: { requestCapabilities: widen.popup } })
 		await dispatcher.dispatch(
 			"requestCapabilities",
 			[withHeader({ capabilities: [{ type: "data", privateEvents: { contracts: [TOKEN, OTHER] } }] })],
@@ -2110,7 +2037,7 @@ describe("dispatcher — scope-list field-diff re-consent (transaction/simulatio
 		// A fresh session, so the rejection the widen dispatch recorded plays no part.
 		const subset = promptTracking([])
 		const fresh = makeSessionWriter(makeSession({ capabilityGrants: [dataGrant] }))
-		const dispatcher2 = makeDispatcher(fresh.writer, subset.popup)
+		const dispatcher2 = makeDispatcher({ sessionWriter: fresh.writer, interaction: { requestCapabilities: subset.popup } })
 		await dispatcher2.dispatch(
 			"requestCapabilities",
 			[withHeader({ capabilities: [{ type: "data", privateEvents: { contracts: [TOKEN] } }] })],
@@ -2187,9 +2114,14 @@ describe("dataFieldsCovered", () => {
 		const session = makeSession({ capabilityGrants: held.map((capability) => ({ capability, grantedAt: 1 })) })
 		const { writer } = makeSessionWriter(session)
 		let prompted = false
-		const dispatcher = makeDispatcher(writer, async () => {
-			prompted = true
-			throw new UserRejectedError("declined")
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					prompted = true
+					throw new UserRejectedError("declined")
+				},
+			},
 		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [requested] })], ctx).catch(() => {})
 		expect(prompted).toBe(!(expected.addressBook && expected.privateEvents))
@@ -2200,7 +2132,10 @@ describe("dispatcher — the data answer comes from the stored grant", () => {
 	const A = `0x${"0a".repeat(32)}`
 	const answerOf = async (session: IDappSessionRef, requested: Record<string, unknown>, granted: unknown[]) => {
 		const { writer } = makeSessionWriter(session)
-		const dispatcher = makeDispatcher(writer, async () => ({ granted }) as CapabilityResult)
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: { requestCapabilities: async () => ({ granted }) as CapabilityResult },
+		})
 		const result = (await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [requested] })], ctx)) as {
 			granted: Array<Record<string, unknown>>
 		}
@@ -2232,23 +2167,20 @@ function capabilityHarness(session: IDappSessionRef, answer?: (params: Capabilit
 	const counted: IDappSessionWriter = {
 		...makeSessionWriter(session).writer,
 		tryGetDappSessionByOriginAndChain: async () => current,
-		getDappSession: async () => current,
 		applyCapabilityDecision: async (_id, decision) => {
 			decisions.push(decision)
 			current = applyDecisionTo(current, decision)
 			return current
 		},
 	}
-	const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
-	const interaction: IDappInteractionRunner = {
-		execute: async () => ({}) as never,
+	const interaction: Partial<IDappInteractionRunner> = {
 		requestCapabilities: async (params: CapabilityParams) => {
 			seen.windows += 1
 			seen.params = params
 			return answer ? answer(params) : { granted: params.delta }
 		},
 	}
-	const dispatcher = new WalletSdkDispatcher(network, stubAccount, stubExecution, interaction, counted, noopLogger)
+	const dispatcher = makeDispatcher({ interaction, sessionWriter: counted })
 	const request = (capabilities: unknown[]) =>
 		dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities })], ctx) as Promise<{ granted: unknown[] }>
 	const row = async () => current
@@ -2703,19 +2635,17 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 				return opts.sign ? opts.sign() : signed
 			},
 		}
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => {
 				counts.windows += 1
 				return (opts.window ? await opts.window() : [{ status: "ok", result: "0xconfirmed" }]) as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [{ address: ACCOUNT, name: "A", chainId: 0 }],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ account, execution, interaction, sessionWriter: writer })
 		return {
 			counts,
 			authwit: (messageHashOrIntent: unknown) => dispatcher.dispatch("createAuthWit", [ACCOUNT, messageHashOrIntent], ctx),
@@ -2811,6 +2741,28 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 	test("a batch leg with the consent absent opens the window", async () => {
 		const h = harness({ capabilityGrants: [accounts, listed] })
 		await h.batch(intent(TOKEN))
+		expect(h.counts).toEqual({ signed: 0, windows: 1 })
+	})
+
+	test("an intent naming the authorization registry is refused under any scope and consent: nothing signs, no window opens", async () => {
+		const REGISTRY = STANDARD_AUTH_REGISTRY_ADDRESS.toString()
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit(intent(REGISTRY))).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		await expect(h.authwit({ consumer: REGISTRY, innerHash: `0x${"01".repeat(32)}` })).rejects.toBeInstanceOf(AuthRegistryRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit(intent(TOKEN))).resolves.toBe("0xsigned")
+		expect(h.counts).toEqual({ signed: 1, windows: 0 })
+	})
+
+	test("an inner hash whose consumer is the signing account is refused top-level and batched: nothing signs, no window opens", async () => {
+		const innerHash = `0x${"01".repeat(32)}`
+		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
+		await expect(h.authwit({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		await expect(h.batch({ consumer: ACCOUNT, innerHash })).rejects.toBeInstanceOf(OwnAccountIntentRefusalError)
+		expect(h.counts).toEqual({ signed: 0, windows: 0 })
+
+		await expect(h.authwit({ consumer: TOKEN, innerHash })).resolves.toBe("0xconfirmed")
 		expect(h.counts).toEqual({ signed: 0, windows: 1 })
 	})
 })
@@ -2931,9 +2883,14 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 		const session = makeSession({ capabilityGrants: [grant([OLD, B])] })
 		const { writer } = makeSessionWriter(session)
 		let prompted = false
-		const dispatcher = makeDispatcher(writer, async () => {
-			prompted = true
-			return { granted: [] } as never
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					prompted = true
+					return { granted: [] } as never
+				},
+			},
 		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest([OLD]))], ctx)
 		expect(prompted).toBe(false)
@@ -2943,9 +2900,14 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 		const session = makeSession({ capabilityGrants: [grant([OLD])] })
 		const { writer } = makeSessionWriter(session)
 		let prompted = false
-		const dispatcher = makeDispatcher(writer, async () => {
-			prompted = true
-			return { granted: [{ type: "contracts", contracts: [NEW], canRegister: true, canGetMetadata: true }] } as never
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					prompted = true
+					return { granted: [{ type: "contracts", contracts: [NEW], canRegister: true, canGetMetadata: true }] } as never
+				},
+			},
 		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest([NEW]))], ctx)
 		expect(prompted).toBe(true)
@@ -2955,16 +2917,18 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 		const session = makeSession({ capabilityGrants: [grant([OLD])] })
 		const { writer, calls } = makeSessionWriter(session)
 		// The popup echoes the existing cap alongside the newly approved delta (approvedNew + existing).
-		const dispatcher = makeDispatcher(
-			writer,
-			async () =>
-				({
-					granted: [
-						{ type: "contracts", contracts: [OLD, NEW], canRegister: true, canGetMetadata: true },
-						{ type: "contracts", contracts: [OLD], canRegister: true, canGetMetadata: true },
-					],
-				}) as never,
-		)
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () =>
+					({
+						granted: [
+							{ type: "contracts", contracts: [OLD, NEW], canRegister: true, canGetMetadata: true },
+							{ type: "contracts", contracts: [OLD], canRegister: true, canGetMetadata: true },
+						],
+					}) as never,
+			},
+		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest([OLD, NEW]))], ctx)
 		const stored = calls.setGrants.at(-1) ?? []
 		const contractsGrants = stored.filter((g) => g.capability.type === "contracts")
@@ -2974,9 +2938,14 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 
 		// And the follow-up request is now COVERED - no second prompt.
 		let promptedAgain = false
-		const dispatcher2 = makeDispatcher(writer, async () => {
-			promptedAgain = true
-			return { granted: [] } as never
+		const dispatcher2 = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					promptedAgain = true
+					return { granted: [] } as never
+				},
+			},
 		})
 		await dispatcher2.dispatch("requestCapabilities", [withHeader(manifest([OLD, NEW]))], ctx)
 		expect(promptedAgain).toBe(false)
@@ -2986,7 +2955,10 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 		const session = makeSession({ capabilityGrants: [grant([OLD])] })
 		const { writer } = makeSessionWriter(session)
 		// The user declines the widening — nothing new is approved.
-		const dispatcher = makeDispatcher(writer, async () => ({ granted: [] }) as never)
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: { requestCapabilities: async () => ({ granted: [] }) as never },
+		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest([OLD, NEW]))], ctx).catch(() => {})
 		// Assert the STORED state unconditionally: the denied widening must not drop or
 		// widen the older grant — storage still holds exactly [OLD].
@@ -3013,11 +2985,7 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 			],
 		} as Partial<IDappSessionRef>)
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network: stubNetwork, sessionWriter: writer })
 		// Success = getting PAST the account-scope gate. The stub harness has no network, so the
 		// dispatch fails DOWNSTREAM - the pin is that the failure is NOT the scope violation.
 		const failure = await dispatcher
@@ -3054,11 +3022,7 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 				return false
 			},
 		}
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger, reader)
+		const dispatcher = makeDispatcher({ sessionWriter: writer, tokenRegistryReader: reader })
 		await dispatcher.dispatch("isTokenRegistered", [TOKEN], { ...ctx, profileId: "profile-A", chainId: 42 })
 		expect(seen[0]).toEqual([TOKEN, "profile-A", 42])
 	})
@@ -3067,9 +3031,14 @@ describe("dispatcher — contracts field-diff re-consent", () => {
 		const session = makeSession({ capabilityGrants: [grant([OLD], { canRegister: true, canGetMetadata: false })] })
 		const { writer } = makeSessionWriter(session)
 		let prompted = false
-		const dispatcher = makeDispatcher(writer, async () => {
-			prompted = true
-			return { granted: [] } as never
+		const dispatcher = makeDispatcher({
+			sessionWriter: writer,
+			interaction: {
+				requestCapabilities: async () => {
+					prompted = true
+					return { granted: [] } as never
+				},
+			},
 		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest([OLD]))], ctx)
 		expect(prompted).toBe(true)
@@ -3087,7 +3056,6 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 	const OTHER = `0x${"08".repeat(32)}`
 
 	test("schema patch extends WalletSchema with a 2-arg `grantPublicAuthwit` entry", async () => {
-		await import("@nulo/wallet-sdk-schema-patch/register")
 		const { WalletSchema } = await import("@aztec-labs/aztec.js/wallet")
 		expect("grantPublicAuthwit" in WalletSchema).toBe(true)
 		// biome-ignore lint/suspicious/noExplicitAny: WalletSchema entry shape is upstream-typed but per-key access is opaque
@@ -3122,12 +3090,11 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 
 		const executeCalls: unknown[] = []
 		const executionCalls: unknown[] = []
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params: unknown) => {
 				executeCalls.push(params)
 				return [{ status: "ok", result: "0xtxhash" }] as never
 			},
-			requestCapabilities: async () => ({}) as never,
 		}
 		const execution: IExecutionRunner = {
 			executeOperations: async (ops) => {
@@ -3144,7 +3111,7 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, execution, interaction, sessionWriter: writer })
 
 		const grantContent = {
 			caller: "0x0000000000000000000000000000000000000000000000000000000000ca11e2",
@@ -3199,11 +3166,9 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
@@ -3211,7 +3176,7 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		await expect(
 			dispatcher.dispatch(
@@ -3252,11 +3217,9 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
@@ -3264,7 +3227,7 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		await expect(
 			dispatcher.dispatch(
@@ -3312,11 +3275,9 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
 		const { writer } = makeSessionWriter(session)
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async () => [{ status: "ok", result: undefined }] as never,
-			requestCapabilities: async () => ({}) as never,
 		}
-		const execution: IExecutionRunner = { executeOperations: async () => [] as OperationResult[] }
 		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net1", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
@@ -3324,7 +3285,7 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				{ address: "0x0000000000000000000000000000000000000000000000000000000000000acc", name: "main", chainId: 0 },
 			],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network, account, interaction, sessionWriter: writer })
 
 		// Grant for a DIFFERENT contract — must be scope-rejected.
 		await expect(
@@ -3342,6 +3303,39 @@ describe("dispatcher — grantPublicAuthwit reachability + routing", () => {
 				ctx,
 			),
 		).rejects.toThrow(/[Ss]cope/)
+	})
+})
+
+describe("dispatcher — the metadata op carries the session's accounts", () => {
+	const HELD = wireAddress("0a")
+	const ELSEWHERE = wireAddress("0d")
+	const CONTRACT = wireAddress("0b")
+	const GRANTS = [{ capability: { type: "contracts", contracts: "*", canGetMetadata: true }, grantedAt: 1 }] as GrantedCapabilityRecord[]
+
+	function harness(accounts: string[]) {
+		const { writer } = makeSessionWriter(makeSession({ capabilityGrants: GRANTS, accounts }))
+		const ops: Operation[] = []
+		const execution: IExecutionRunner = {
+			executeOperations: async (batch) => {
+				ops.push(...batch)
+				return [{ status: "ok", result: {} }]
+			},
+		}
+		const dispatcher = makeDispatcher({ execution, sessionWriter: writer })
+		return { dispatch: (method: string, args: unknown[]) => dispatcher.dispatch(method, args, ctx), ops }
+	}
+
+	test("this chain's session accounts only, as a top-level call and as a batch leg", async () => {
+		const h = harness([`aztec:0:${HELD}`, `aztec:1:${ELSEWHERE}`])
+		await h.dispatch("getContractMetadata", [CONTRACT])
+		await h.dispatch("batch", [[{ name: "getContractMetadata", args: [CONTRACT] }]])
+		expect(h.ops.map((op) => (op as AztecGetContractMetadataOperation).sessionAccounts)).toEqual([[HELD], [HELD]])
+	})
+
+	test("a session with no account on this chain carries none", async () => {
+		const h = harness([`aztec:1:${ELSEWHERE}`])
+		await h.dispatch("getContractMetadata", [CONTRACT])
+		expect((h.ops[0] as AztecGetContractMetadataOperation).sessionAccounts).toEqual([])
 	})
 })
 
@@ -3367,12 +3361,11 @@ describe("dispatcher — the schema parse", () => {
 		const { writer } = makeSessionWriter(makeSession({ capabilityGrants, accounts: [`aztec:0:${ACCOUNT}`] }))
 		const sent: Array<{ operations: Array<Record<string, unknown>> }> = []
 		const ran: Operation["kind"][] = []
-		const interaction: IDappInteractionRunner = {
+		const interaction: Partial<IDappInteractionRunner> = {
 			execute: async (params) => {
 				sent.push(params as never)
 				return [{ status: "ok", result: "0xtx" }] as never
 			},
-			requestCapabilities: async () => ({ granted: [] }) as never,
 		}
 		const execution: IExecutionRunner = {
 			executeOperations: async (ops) => {
@@ -3380,12 +3373,11 @@ describe("dispatcher — the schema parse", () => {
 				return [{ status: "ok", result: "0xran" }]
 			},
 		}
-		const network: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] as INetworkRef[] }
 		const account: AccountFake = {
 			provisionDefaultAccount: declineProvision,
 			getAccounts: async () => [{ address: ACCOUNT, name: "A", chainId: 0 }],
 		}
-		const dispatcher = new WalletSdkDispatcher(network, account, execution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ account, execution, interaction, sessionWriter: writer })
 		return { dispatch: (method: string, args: unknown[]) => dispatcher.dispatch(method, args, ctx), sent, ran }
 	}
 
@@ -3520,27 +3512,10 @@ describe("dispatcher — the schema parse", () => {
 })
 
 describe("dispatcher — arg guards: order, tolerance, batch-leg validation", () => {
-	function makeBareDispatcher(session: IDappSessionRef | undefined) {
-		const writer: IDappSessionWriter = {
-			tryGetDappSessionByOriginAndChain: async () => session,
-			getDappSession: async () => session as IDappSessionRef,
-			updateDappSession: async () => session as IDappSessionRef,
-			setAccountAliases: async () => session as IDappSessionRef,
-			setCapabilityGrants: async () => session as IDappSessionRef,
-			setCapabilityRejections: async () => session as IDappSessionRef,
-			applyCapabilityDecision: async (_id, decision) => applyDecisionTo(session as IDappSessionRef, decision),
-		}
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({})) as never,
-		}
-		return new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
-	}
-
 	test("guard rejects BEFORE capability enforcement — arity garbage on an ungranted method", async () => {
 		// Order pin: the arity guard runs pre-enforcement, so a missing-args call
 		// fails on arguments even when the capability would ALSO be missing.
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(dispatcher.dispatch("getContractMetadata", [], ctx)).rejects.toThrow(
 			"Invalid arguments for wallet method: getContractMetadata",
 		)
@@ -3550,21 +3525,21 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 		// simulateTx has NO arity guard: its arguments are parsed only after the
 		// capability check. With no grants + garbage args, the observable stays the
 		// capability rejection — proving no guard preempts it.
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(dispatcher.dispatch("simulateTx", [], ctx)).rejects.toThrow(CapabilityNotGrantedError)
 	})
 
 	test("optional trailing args pass the guard — registerSender with 1 arg reaches enforcement", async () => {
 		// The rejection is the CAPABILITY one (no data grant) — i.e. the call got PAST
 		// the arg guard with the alias omitted, pinning optional-trailing tolerance.
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(
 			dispatcher.dispatch("registerSender", ["0x000000000000000000000000000000000000000000000000000000000000add2"], ctx),
 		).rejects.toThrow(CapabilityNotGrantedError)
 	})
 
 	test("extra args beyond the read positions pass the guard (no max arity)", async () => {
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(
 			dispatcher.dispatch(
 				"getContractMetadata",
@@ -3577,14 +3552,14 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 	test("batch legs are validated by their OWN method's guard on re-entry", async () => {
 		// batch itself is exempt + its legs are well-formed, so dispatch recurses;
 		// the inner getContractMetadata leg then fails ITS arg guard.
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(dispatcher.dispatch("batch", [[{ name: "getContractMetadata", args: [] }]], ctx)).rejects.toThrow(
 			"Invalid arguments for wallet method: getContractMetadata",
 		)
 	})
 
 	test("an args value that is not an array is refused before any guard reads it", async () => {
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		for (const method of ["batch", "getContractMetadata", "simulateTx"]) {
 			for (const args of [null, undefined, "x", { 0: "y" }]) {
 				await expect(dispatcher.dispatch(method, args as never, ctx)).rejects.toThrow(InvalidWalletArgumentsError.forMethod(method))
@@ -3593,7 +3568,7 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 	})
 
 	test("malformed batch envelopes are rejected by batch's own guard", async () => {
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		await expect(dispatcher.dispatch("batch", ["not-legs"], ctx)).rejects.toThrow("Invalid arguments for wallet method: batch")
 		await expect(dispatcher.dispatch("batch", [[{ name: 42, args: [] }]], ctx)).rejects.toThrow(
 			"Invalid arguments for wallet method: batch",
@@ -3601,7 +3576,7 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 	})
 
 	test("requestCapabilities: a missing manifest asks for nothing; an object manifest needs its header and a list", async () => {
-		const dispatcher = makeBareDispatcher(makeSession())
+		const dispatcher = makeDispatcher()
 		// `[null]` is the JSON encoding of `requestCapabilities(undefined)`: no header to parse.
 		await expect(dispatcher.dispatch("requestCapabilities", [], ctx)).resolves.toMatchObject({ granted: [] })
 		await expect(dispatcher.dispatch("requestCapabilities", [null], ctx)).resolves.toMatchObject({ granted: [] })
@@ -3632,16 +3607,16 @@ describe("dispatcher session-lookup anchoring", () => {
 		const session = makeSession()
 		const { writer } = makeSessionWriter(session)
 		const seen: Array<[string, string, string | undefined]> = []
-		const dispatcher = makeDispatcher(
-			{
+		const dispatcher = makeDispatcher({
+			sessionWriter: {
 				...writer,
 				tryGetDappSessionByOriginAndChain: async (origin, chainId, forProfileId) => {
 					seen.push([origin, chainId, forProfileId])
 					return session
 				},
 			},
-			async () => ({ granted: [], rejected: [] }) as never,
-		)
+			interaction: { requestCapabilities: async () => ({ granted: [], rejected: [] }) as never },
+		})
 		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [] })], ctx).catch(() => {})
 		// The third argument is the establishment-stamped profile from ctx — an
 		// in-flight dispatch racing a profile switch must resolve its OWN
@@ -3650,12 +3625,7 @@ describe("dispatcher session-lookup anchoring", () => {
 	})
 
 	test("a session whose chain has no network gets the typed refusal, never a bare Error", async () => {
-		const { writer } = makeSessionWriter(makeSession())
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({ granted: [] })) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(stubNetwork, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network: stubNetwork })
 		const failure = await dispatcher.dispatch("getChainInfo", [], ctx).then(
 			() => null,
 			(e: unknown) => e,
@@ -3665,7 +3635,6 @@ describe("dispatcher session-lookup anchoring", () => {
 	})
 
 	test("resolveNetwork anchors the network read to ctx.profileId (silently revertible without this pin)", async () => {
-		const { writer } = makeSessionWriter(makeSession())
 		const seen: Array<[string, number | undefined]> = []
 		const networkReader: INetworkReader = {
 			getNetworksRaw: async (profileId, chainId) => {
@@ -3673,35 +3642,31 @@ describe("dispatcher session-lookup anchoring", () => {
 				return [{ id: "net-0", chainId: 0 } as INetworkRef]
 			},
 		}
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: (async () => ({ granted: [] })) as never,
-		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ network: networkReader })
 		await dispatcher.dispatch("getChainInfo", [], ctx).catch(() => {})
 		// Anchored, never the active profile: an accountless mutation racing a
 		// switch must carry the composing profile's network row so execution
 		// fails closed on the ownership check.
-		expect(seen).toEqual([["test-profile", 0]])
+		expect(seen).toEqual([
+			["test-profile", 0],
+			["test-profile", 0],
+		])
 	})
 })
 
 describe("dispatcher.requestCapabilities provisions the dApp chain's default account", () => {
 	const manifest = { capabilities: [{ type: "accounts", canGet: true, canCreateAuthWit: false }] }
-	const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 	const derived = { address: `0x${"aa".repeat(32)}`, name: "Account", chainId: 0 }
 
-	function makeDispatcher(account: AccountFake) {
-		const { writer } = makeSessionWriter(makeSession())
+	function makeProvisioningDispatcher(account: AccountFake) {
 		const seen: unknown[] = []
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
+		const interaction: Partial<IDappInteractionRunner> = {
 			requestCapabilities: async (params) => {
 				seen.push(params.availableAccounts)
 				return { granted: [], selectedAccounts: [] }
 			},
 		}
-		return { dispatcher: new WalletSdkDispatcher(networkReader, account, stubExecution, interaction, writer, noopLogger), seen }
+		return { dispatcher: makeDispatcher({ account, interaction }), seen }
 	}
 
 	test("an empty first read provisions once and the popup lists what the re-read returns", async () => {
@@ -3713,7 +3678,7 @@ describe("dispatcher.requestCapabilities provisions the dApp chain's default acc
 				provisions++
 			},
 		}
-		const { dispatcher, seen } = makeDispatcher(account)
+		const { dispatcher, seen } = makeProvisioningDispatcher(account)
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
 		expect(provisions).toBe(1)
 		expect(seen).toEqual([[derived]])
@@ -3727,7 +3692,7 @@ describe("dispatcher.requestCapabilities provisions the dApp chain's default acc
 				provisions++
 			},
 		}
-		const { dispatcher, seen } = makeDispatcher(account)
+		const { dispatcher, seen } = makeProvisioningDispatcher(account)
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
 		expect(provisions).toBe(0)
 		expect(seen).toEqual([[derived]])
@@ -3735,7 +3700,7 @@ describe("dispatcher.requestCapabilities provisions the dApp chain's default acc
 
 	test("a declined provision with an empty re-read reaches the popup as availableAccounts: []", async () => {
 		const account: AccountFake = { getAccounts: async () => [], provisionDefaultAccount: declineProvision }
-		const { dispatcher, seen } = makeDispatcher(account)
+		const { dispatcher, seen } = makeProvisioningDispatcher(account)
 		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
 		expect(seen).toEqual([[]])
 	})
@@ -3749,14 +3714,13 @@ describe("dispatcher.requestCapabilities provisions the dApp chain's default acc
 		}
 		const { writer, calls } = makeSessionWriter(makeSession())
 		let popups = 0
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
+		const interaction: Partial<IDappInteractionRunner> = {
 			requestCapabilities: async () => {
 				popups++
 				return { granted: [] }
 			},
 		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, account, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ account, interaction, sessionWriter: writer })
 		await expect(dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)).rejects.toThrow("unauthorized")
 		expect(popups).toBe(0)
 		expect(calls.setRejections).toEqual([])
@@ -3790,17 +3754,15 @@ describe("dispatcher.requestCapabilities — accounts widening", () => {
 					.filter((a) => (a.chainId ?? 0) === chainId)
 					.map((a) => ({ address: a.address, name: a.address.slice(0, 6), chainId })),
 		}
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 		const { writer } = makeSessionWriter(opts.session)
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
+		const interaction: Partial<IDappInteractionRunner> = {
 			requestCapabilities: (async (params: Record<string, unknown>) => {
 				popup.calls++
 				popup.params = params
 				return opts.answer?.(params) ?? { granted: [] }
 			}) as never,
 		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, account, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ account, interaction, sessionWriter: writer })
 		return { dispatcher, popup, current: () => writer.getDappSession("test-session-id") }
 	}
 	const approveAll = (params: Record<string, unknown>): CapabilityResult => {
@@ -3942,12 +3904,10 @@ describe("dispatcher.requestCapabilities — accounts widening", () => {
 				{ address: B, name: "B", chainId: 0 },
 			],
 		}
-		const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
+		const interaction: Partial<IDappInteractionRunner> = {
 			requestCapabilities: (async (params: Record<string, unknown>) => approveAll(params)) as never,
 		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, account, stubExecution, interaction, revokingWriter, noopLogger)
+		const dispatcher = makeDispatcher({ account, interaction, sessionWriter: revokingWriter })
 		await expect(dispatcher.dispatch("requestCapabilities", [withHeader(request)], ctx)).rejects.toBeInstanceOf(
 			CapabilityNotGrantedError,
 		)
@@ -3984,140 +3944,21 @@ describe("dispatcher.requestCapabilities — accounts widening", () => {
 	})
 })
 
-describe("dispatcher.requestCapabilities — the held accounts the window names", () => {
-	const A = `0x${"aa".repeat(32)}`
-	const B = `0x${"bb".repeat(32)}`
-	const C = `0x${"cc".repeat(32)}`
-	const caip = (address: string, chainId = 0) => `aztec:${chainId}:${address}`
-	const accountsGrant: Capability = { type: "accounts", canGet: true, canCreateAuthWit: true, accounts: [] }
-	const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
-	const addressBook = { capabilities: [{ type: "data", addressBook: true }] }
-	const named = (address: string, name: string, chainId = 0): IAccountRef => ({ address, name, chainId })
-
-	function harness(opts: { session: Partial<IDappSessionRef>; wallet: IAccountRef[]; onRead?: () => Promise<void> }) {
-		const reads: Array<[string, number]> = []
-		const logged: string[] = []
-		let provisions = 0
-		const account: AccountFake = {
-			getAccounts: async (profileId, chainId) => {
-				reads.push([profileId, chainId])
-				await opts.onRead?.()
-				return opts.wallet.filter((acc) => acc.chainId === chainId)
-			},
-			provisionDefaultAccount: async () => {
-				provisions++
-			},
-		}
-		const logger: ILogger = { log: (_scope, _level, ...data) => logged.push(JSON.stringify(data)) }
-		const { writer } = makeSessionWriter(
-			makeSession({ capabilityGrants: [{ capability: accountsGrant, grantedAt: 1 }], ...opts.session }),
-		)
-		const seen: { params?: CapabilityParams } = {}
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
-			requestCapabilities: async (params) => {
-				seen.params = params
-				return { granted: [] }
-			},
-		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, account, stubExecution, interaction, writer, logger)
-		return { dispatcher, writer, seen, reads, logged, provisions: () => provisions }
-	}
-
-	test("each member is named by the wallet, in the wallet's order, matched case-blind", async () => {
-		const wallet = [named(B, "Savings"), named(C, "Account 3"), named(A, "Account 1")]
-		const h = harness({ session: { accounts: [caip(A.toUpperCase()), caip(B)] }, wallet })
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		expect(h.seen.params?.heldAccounts).toEqual([
-			{ address: B, name: "Savings" },
-			{ address: A, name: "Account 1" },
-		])
-		expect(h.reads).toEqual([["test-profile", 0]])
-	})
-
-	test("one named member, for U1A's single account", async () => {
-		const h = harness({ session: { accounts: [caip(A)] }, wallet: [named(A, "Account 1")] })
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		expect(h.seen.params?.heldAccounts).toEqual([{ address: A, name: "Account 1" }])
-	})
-
-	test("a member the wallet no longer lists stays, unnamed, so two members never read as one", async () => {
-		const h = harness({ session: { accounts: [caip(A), caip(B)] }, wallet: [named(A, "Account 1")] })
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		expect(h.seen.params?.heldAccounts).toEqual([{ address: A, name: "Account 1" }, { address: B }])
-
-		const none = harness({ session: { accounts: [caip(A)] }, wallet: [] })
-		await none.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		expect(none.seen.params?.heldAccounts).toEqual([{ address: A }])
-	})
-
-	test("only the session's chain counts, and names come from the stamped profile's accounts", async () => {
-		const wallet = [named(A, "Account 1"), named(B, "Same address, chain 0"), named(C, "Chain 7", 7)]
-		const h = harness({ session: { accounts: [caip(A), caip(B, 7), caip(C, 7)] }, wallet })
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		expect(h.seen.params?.heldAccounts).toEqual([{ address: A, name: "Account 1" }])
-		expect(h.reads).toEqual([["test-profile", 0]])
-	})
-
-	test("a per-app alias and the request's own account names never name a member", async () => {
-		const hostile = {
-			capabilities: [
-				{ type: "accounts", canGet: true, canCreateAuthWit: true, accounts: [{ alias: "Treasury", item: A }] },
-				{ type: "data", addressBook: true },
-			],
-		}
-		const h = harness({
-			session: { accounts: [caip(A)], accountAliases: { [caip(A)]: "Renamed for this app" } } as Partial<IDappSessionRef>,
-			wallet: [named(A, "Account 1")],
-		})
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(hostile)], ctx)
-		expect(h.seen.params?.heldAccounts).toEqual([{ address: A, name: "Account 1" }])
-	})
-
-	test("read from the dispatch snapshot: later membership and name changes reach neither the params nor the log", async () => {
-		const wallet = [named(A, "Account 1"), named(B, "Account 2")]
-		let writer: IDappSessionWriter | undefined
-		const h = harness({
-			session: { accounts: [caip(A)] },
-			wallet,
-			onRead: async () => {
-				await writer?.applyCapabilityDecision("test-session-id", {
-					addAccounts: [caip(B)],
-					aliasPatch: {},
-					grantRecords: [],
-					replaceTypes: [],
-					approvedTypes: [],
-					rejectedTypes: [],
-				})
-			},
-		})
-		writer = h.writer
-		await h.dispatcher.dispatch("requestCapabilities", [withHeader(addressBook)], ctx)
-		wallet[0] = named(A, "Renamed later")
-		expect(h.seen.params?.heldAccounts).toEqual([{ address: A, name: "Account 1" }])
-		expect((await h.writer.getDappSession("test-session-id")).accounts).toEqual([caip(A), caip(B)])
-		expect(h.provisions()).toBe(0)
-		expect(h.logged.filter((line) => line.includes("Account 1") || line.toLowerCase().includes(A.slice(2, 12)))).toEqual([])
-	})
-})
-
 describe("dispatcher.requestCapabilities — a contracts permission that grants nothing", () => {
 	const A = `0x${"0a".repeat(32)}`
-	const networkReader: INetworkReader = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
 	const listedTx = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
 	const heldContracts: Capability = { type: "contracts", contracts: [A], canRegister: true }
 
 	function harness(session: IDappSessionRef, answer: (params: CapabilityParams) => CapabilityResult = () => ({ granted: [] })) {
 		const { writer, calls } = makeSessionWriter(session)
 		const popups: CapabilityParams[] = []
-		const interaction: IDappInteractionRunner = {
-			execute: async () => ({}) as never,
+		const interaction: Partial<IDappInteractionRunner> = {
 			requestCapabilities: async (params) => {
 				popups.push(params)
 				return answer(params)
 			},
 		}
-		const dispatcher = new WalletSdkDispatcher(networkReader, stubAccount, stubExecution, interaction, writer, noopLogger)
+		const dispatcher = makeDispatcher({ interaction, sessionWriter: writer })
 		const request = async (capabilities: unknown[]) =>
 			(await dispatcher.dispatch("requestCapabilities", [withHeader({ version: "1.0", capabilities })], ctx)) as {
 				granted: unknown[]
@@ -4191,5 +4032,108 @@ describe("dispatcher.requestCapabilities — a contracts permission that grants 
 		).rejects.toThrow(refusal)
 		expect(h.popups).toEqual([])
 		expect(h.calls).toEqual({ setRejections: [], setGrants: [] })
+	})
+})
+
+describe("dispatcher — a chain the wallet does not serve answers CHAIN_NOT_SUPPORTED on every route", () => {
+	const TOKEN = `0x${"07".repeat(32)}`
+	const held = (capability: Record<string, unknown>) => ({ capability, grantedAt: 1 }) as unknown as GrantedCapabilityRecord
+	const noNetwork: INetworkReader = { getNetworksRaw: async () => [] }
+
+	/** The routes whose handlers read no network of their own. */
+	const ROUTES: Array<{ route: string; method: string; args: unknown[]; grants: GrantedCapabilityRecord[]; reaches: string[] }> = [
+		{
+			route: "isTokenRegistered",
+			method: "isTokenRegistered",
+			args: [TOKEN],
+			grants: [held({ type: "contracts", contracts: [TOKEN], canGetMetadata: true })],
+			reaches: ["tokenRegistryReader"],
+		},
+		{
+			route: "requestCapabilities, every type held",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [{ type: "data", addressBook: true }] })],
+			grants: [held({ type: "data", addressBook: true })],
+			reaches: [],
+		},
+		{
+			route: "requestCapabilities, a new type",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [{ type: "data", addressBook: true }] })],
+			grants: [],
+			reaches: ["window", "applyCapabilityDecision"],
+		},
+		{
+			route: "requestCapabilities, an empty manifest",
+			method: "requestCapabilities",
+			args: [withHeader({ capabilities: [] })],
+			grants: [],
+			reaches: [],
+		},
+		{ route: "getWalletFeatures", method: "getWalletFeatures", args: [], grants: [], reaches: [] },
+		{
+			route: "getAccounts on an accounts grant with no account",
+			method: "getAccounts",
+			args: [],
+			grants: [held({ type: "accounts", canGet: true, canCreateAuthWit: false, accounts: [] })],
+			reaches: [],
+		},
+		{ route: "an empty batch", method: "batch", args: [[]], grants: [], reaches: [] },
+	]
+
+	function harness(networks: INetworkReader, grants: GrantedCapabilityRecord[]) {
+		const touched: string[] = []
+		const { writer } = makeSessionWriter(makeSession({ capabilityGrants: grants }))
+		const counted: IDappSessionWriter = {
+			...writer,
+			applyCapabilityDecision: async (id, decision) => {
+				touched.push("applyCapabilityDecision")
+				return writer.applyCapabilityDecision(id, decision)
+			},
+		}
+		const interaction: Partial<IDappInteractionRunner> = {
+			requestCapabilities: (async () => {
+				touched.push("window")
+				return { granted: [{ type: "data", addressBook: true }] }
+			}) as never,
+		}
+		const reader = {
+			isTokenRegistered: async () => {
+				touched.push("tokenRegistryReader")
+				return true
+			},
+		}
+		const dispatcher = makeDispatcher({ network: networks, interaction, sessionWriter: counted, tokenRegistryReader: reader })
+		return { dispatcher, touched }
+	}
+
+	test.each(ROUTES)("$route: refused before its handler runs", async ({ method, args, grants }) => {
+		const { dispatcher, touched } = harness(noNetwork, grants)
+		await expect(dispatcher.dispatch(method, args, ctx)).rejects.toBeInstanceOf(ChainNotSupportedError)
+		expect(touched).toEqual([])
+	})
+
+	test.each(ROUTES)("$route: answered on a served chain", async ({ method, args, grants, reaches }) => {
+		const { dispatcher, touched } = harness(servingNetwork, grants)
+		await expect(dispatcher.dispatch(method, args, ctx)).resolves.toBeDefined()
+		expect(touched).toEqual(reaches)
+	})
+
+	test("each batch leg is checked again: a chain that stops being served mid-batch refuses the next leg", async () => {
+		let reads = 0
+		const flipping: INetworkReader = { getNetworksRaw: async () => (reads++ < 2 ? [{ id: "net-0", chainId: 0 } as INetworkRef] : []) }
+		const { dispatcher } = harness(flipping, [])
+		const legs = [
+			{ name: "getWalletFeatures", args: [] },
+			{ name: "getWalletFeatures", args: [] },
+		]
+		await expect(dispatcher.dispatch("batch", [legs], ctx)).rejects.toBeInstanceOf(ChainNotSupportedError)
+		expect(reads).toBe(3)
+	})
+
+	test("the capability refusal keeps precedence over the chain check", async () => {
+		const { dispatcher, touched } = harness(noNetwork, [])
+		await expect(dispatcher.dispatch("isTokenRegistered", [TOKEN], ctx)).rejects.toBeInstanceOf(CapabilityNotGrantedError)
+		expect(touched).toEqual([])
 	})
 })

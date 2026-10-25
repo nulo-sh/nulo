@@ -5,7 +5,7 @@
  * on FakeBrowserApi storage and alarms, against a scripted `fetch` and per-run Ed25519 keys. No PXE,
  * no bb, no network. See `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { BUNDLED_TOKEN_CLASS_IDS, type PinnedKey } from "@nulo/token-list"
+import { BUNDLED_TOKEN_CLASS_IDS, type PinnedKey, SEQUENCE_FLOOR } from "@nulo/token-list"
 import { importSeed, publicKeyOf, signEnvelope } from "@nulo/token-list/envelope"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { fakeBrowser } from "@webext-core/fake-browser"
@@ -19,6 +19,8 @@ import { FAILURE_BACKOFF_MS, type FetchLike, TOKEN_LIST_REFRESH_ALARM_NAME, Toke
 const URL = "https://tokens.example/v1/list.json"
 const HOUR = 3_600_000
 const T0 = 1_760_000_000_000
+const aboveFloor = (n: number) => SEQUENCE_FLOOR + n
+const FLAGGED = [{ chainId: 7, address: `0x${"2".padStart(64, "0")}` }]
 
 async function signer(keyId = "nulo-ci-1") {
 	const seed = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("")
@@ -39,6 +41,7 @@ async function signer(keyId = "nulo-ci-1") {
 					name: "Test",
 				},
 			],
+			flagged: FLAGGED,
 		}
 		return JSON.stringify(await signEnvelope(new TextEncoder().encode(JSON.stringify(payload)), privateKey, keyId))
 	}
@@ -100,26 +103,26 @@ afterEach(() => {
 })
 
 describe("TokenListService admission", () => {
-	test("requests nothing before the Terms are accepted, then fetches on acceptance with no credentials", async () => {
+	test("requests nothing before the Terms are accepted, then fetches on acceptance with no credentials, referrer or HTTP cache", async () => {
 		const { pinned, sign } = await signer()
-		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(10) }] })
+		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(aboveFloor(10)) }] })
 		await h.service.onAlarmTick()
 		await h.service.refresh()
 		expect(h.calls).toEqual([])
 		expect(await h.alarm()).toBeUndefined()
 
 		await h.legal.accept("onboarding")
-		await vi.waitFor(() => expect(h.service.getSnapshot()?.sequence).toBe(10))
+		await vi.waitFor(() => expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(10)))
 
 		expect(h.calls).toEqual([
 			{
 				url: URL,
-				init: expect.objectContaining({ credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", cache: "no-cache" }),
+				init: expect.objectContaining({ credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", cache: "no-store" }),
 			},
 		])
 		expect(h.calls[0].init.headers).toBeUndefined()
-		expect(h.service.getSnapshot()?.sequence).toBe(10)
-		expect(h.changes.map((c) => c.sequence)).toEqual([10])
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: aboveFloor(10), flagged: FLAGGED })
+		expect(h.changes.map((c) => c.sequence)).toEqual([aboveFloor(10)])
 	})
 })
 
@@ -131,19 +134,19 @@ describe("TokenListService commit", () => {
 			keys: [pinned],
 			accepted: true,
 			answers: [
-				{ body: await sign(10) },
-				{ body: await sign(10, "SAME") },
-				{ body: await sign(9, "OLD") },
-				{ body: await forger.sign(99) },
+				{ body: await sign(aboveFloor(10)) },
+				{ body: await sign(aboveFloor(10), "SAME") },
+				{ body: await sign(aboveFloor(9), "OLD") },
+				{ body: await forger.sign(aboveFloor(99)) },
 			],
 		})
-		expect(h.service.getSnapshot()?.sequence).toBe(10)
+		expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
 		const kept = (await h.stored()).envelope
 		for (let i = 0; i < 3; i++) await h.service.refresh()
 
 		expect((await h.stored()).envelope).toBe(kept)
 		expect(h.service.getSnapshot()?.entries[0].symbol).toBe("USDC")
-		expect(h.changes.map((c) => c.sequence)).toEqual([10])
+		expect(h.changes.map((c) => c.sequence)).toEqual([aboveFloor(10)])
 		expect(h.outcomes).toEqual(["accepted", "unchanged", "older-sequence", "refused"])
 		expect((await h.stored()).failures).toBe(2)
 	})
@@ -151,24 +154,59 @@ describe("TokenListService commit", () => {
 	test("drops a stored list whose key is no longer pinned, and refetches at boot", async () => {
 		const old = await signer("nulo-ci-1")
 		const next = await signer("nulo-ci-2")
-		const first = await makeHarness({ keys: [old.pinned], accepted: true, answers: [{ body: await old.sign(10) }] })
-		expect(first.service.getSnapshot()?.sequence).toBe(10)
+		const first = await makeHarness({ keys: [old.pinned], accepted: true, answers: [{ body: await old.sign(aboveFloor(10)) }] })
+		expect(first.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
 
-		const h = await makeHarness({ keys: [next.pinned], api: first.api, answers: [{ body: await next.sign(5) }] })
+		const h = await makeHarness({ keys: [next.pinned], api: first.api, answers: [{ body: await next.sign(aboveFloor(5)) }] })
 		expect(h.calls).toHaveLength(1)
-		expect(h.service.getSnapshot()).toMatchObject({ sequence: 5, keyId: "nulo-ci-2" })
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: aboveFloor(5), keyId: "nulo-ci-2" })
 	})
 
 	test("drops a stored list whose payload no longer matches its signature, and refetches at boot", async () => {
 		const { pinned, sign } = await signer()
-		const first = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(10) }] })
+		const first = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(aboveFloor(10)) }] })
 		const state = await first.stored()
-		const swapped = { ...JSON.parse(state.envelope), payload: JSON.parse(await sign(10, "EVIL")).payload }
+		const swapped = { ...JSON.parse(state.envelope), payload: JSON.parse(await sign(aboveFloor(10), "EVIL")).payload }
 		await first.api.storage.local.set({ "nulo:core:token-list": JSON.stringify({ ...state, envelope: JSON.stringify(swapped) }) })
 
-		const h = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(11) }] })
+		const h = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(aboveFloor(11)) }] })
 		expect(h.calls).toHaveLength(1)
-		expect(h.service.getSnapshot()).toMatchObject({ sequence: 11, entries: [expect.objectContaining({ symbol: "USDC" })] })
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: aboveFloor(11), entries: [expect.objectContaining({ symbol: "USDC" })] })
+	})
+
+	test("a fresh install refuses a list below the compiled floor, keeps nothing, and takes one at the floor at its next deadline", async () => {
+		const { pinned, sign } = await signer()
+		const below = { body: await sign(SEQUENCE_FLOOR - 1) }
+		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [below, { body: await sign(SEQUENCE_FLOOR) }] })
+		expect(h.calls).toHaveLength(1)
+		expect(h.outcomes).toEqual(["refused"])
+		expect(h.service.getSnapshot()).toBeUndefined()
+		expect(await h.stored()).toEqual({ failures: 1, nextAttemptAt: T0 + FAILURE_BACKOFF_MS[0] })
+
+		h.clock.now = T0 + FAILURE_BACKOFF_MS[0]
+		await h.service.onAlarmTick()
+		expect(h.service.getSnapshot()?.sequence).toBe(SEQUENCE_FLOOR)
+		expect(h.outcomes).toEqual(["refused", "accepted"])
+	})
+
+	test("drops a stored list below the compiled floor despite a pending deadline, and refetches at boot", async () => {
+		const { pinned, sign } = await signer()
+		const api = new FakeBrowserApi()
+		api.reset()
+		const store = async (sequence: number) => {
+			const state = { envelope: await sign(sequence), failures: 0, nextAttemptAt: T0 + HOUR }
+			await api.storage.local.set({ "nulo:core:token-list": JSON.stringify(state) })
+		}
+		await store(SEQUENCE_FLOOR)
+		const kept = await makeHarness({ keys: [pinned], api, accepted: true })
+		expect(kept.calls).toEqual([])
+		expect(kept.service.getSnapshot()?.sequence).toBe(SEQUENCE_FLOOR)
+
+		await store(SEQUENCE_FLOOR - 1)
+		const h = await makeHarness({ keys: [pinned], api, answers: [{ body: await sign(aboveFloor(1)) }] })
+		expect(h.calls).toHaveLength(1)
+		expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(1))
+		expect(h.outcomes).toEqual(["accepted"])
 	})
 
 	test("refuses a body over 64 KiB without keeping it", async () => {
@@ -176,10 +214,10 @@ describe("TokenListService commit", () => {
 		const h = await makeHarness({
 			keys: [pinned],
 			accepted: true,
-			answers: [{ body: await sign(10) }, { body: "x".repeat(64 * 1024 + 1) }],
+			answers: [{ body: await sign(aboveFloor(10)) }, { body: "x".repeat(64 * 1024 + 1) }],
 		})
 		await h.service.refresh()
-		expect(h.service.getSnapshot()?.sequence).toBe(10)
+		expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
 		expect(h.outcomes).toEqual(["accepted", "oversize"])
 	})
 })
@@ -190,7 +228,7 @@ describe("TokenListService timing", () => {
 		const h = await makeHarness({
 			keys: [pinned],
 			accepted: true,
-			answers: [{ body: await sign(10) }, new TypeError("offline"), { body: "", status: 503 }],
+			answers: [{ body: await sign(aboveFloor(10)) }, new TypeError("offline"), { body: "", status: 503 }],
 		})
 		const daily = T0 + 24 * HOUR + HOUR
 		expect((await h.stored()).nextAttemptAt).toBe(daily)
@@ -208,18 +246,22 @@ describe("TokenListService timing", () => {
 		const first = await makeHarness({ keys: [pinned], accepted: true, answers: [new TypeError("offline")] })
 		expect((await first.stored()).nextAttemptAt).toBe(T0 + FAILURE_BACKOFF_MS[0])
 
-		const waiting = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(10) }] })
+		const waiting = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(aboveFloor(10)) }] })
 		expect(waiting.calls).toEqual([])
 		expect((await waiting.alarm())?.scheduledTime).toBe(T0 + FAILURE_BACKOFF_MS[0])
 
 		waiting.clock.now = T0 + FAILURE_BACKOFF_MS[0]
 		await waiting.service.onAlarmTick()
-		expect(waiting.service.getSnapshot()?.sequence).toBe(10)
+		expect(waiting.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
 	})
 
 	test("an alarm tick after the boot refresh has finished waits for the deadline that refresh set", async () => {
 		const { pinned, sign } = await signer()
-		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: "", status: 503 }, { body: await sign(10) }] })
+		const h = await makeHarness({
+			keys: [pinned],
+			accepted: true,
+			answers: [{ body: "", status: 503 }, { body: await sign(aboveFloor(10)) }],
+		})
 		expect(h.calls).toHaveLength(1)
 
 		await h.service.onAlarmTick()
@@ -229,7 +271,7 @@ describe("TokenListService timing", () => {
 
 	test("a download that stalls is abandoned after 10 s and counts as a failure", async () => {
 		const { pinned, sign } = await signer()
-		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(10) }, "stall"] })
+		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(aboveFloor(10)) }, "stall"] })
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const pending = h.service.refresh()
 		await vi.advanceTimersByTimeAsync(10_000)
@@ -241,7 +283,7 @@ describe("TokenListService timing", () => {
 
 	test("a runtime without Ed25519 backs off to daily instead of retrying", async () => {
 		const { pinned, sign } = await signer()
-		const body = await sign(10)
+		const body = await sign(aboveFloor(10))
 		vi.spyOn(crypto.subtle, "importKey").mockRejectedValue(Object.assign(new Error("no Ed25519"), { name: "NotSupportedError" }))
 		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body }] })
 		expect(h.service.getSnapshot()).toBeUndefined()
@@ -250,7 +292,7 @@ describe("TokenListService timing", () => {
 
 	test("overlapping triggers share one request", async () => {
 		const { pinned, sign } = await signer()
-		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(10) }] })
+		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(aboveFloor(10)) }] })
 		await h.legal.accept("onboarding")
 		await Promise.all([h.service.refresh(), h.service.onAlarmTick(), h.service.refresh()])
 		expect(h.calls).toHaveLength(1)

@@ -10,6 +10,17 @@ import {
 
 export const DAPP_SESSION_SERVICE_NAME = "dapp-session"
 
+/** EntityStorage root for dApp session rows. Frozen: renaming detaches every connected session. */
+export const DAPP_SESSION_STORAGE_ROOT = "nulo:core:dappSessions"
+
+/** Sealed root, one row per profile at the profile's id: the registrations dApps have made on each
+ *  chain (`registration-allowance.ts`). */
+export const DAPP_REGISTRATIONS_STORAGE_ROOT = "nulo:core:dappRegistrations"
+
+/** A profile's registration counts as their sealed root reads them: any JSON. The allowance's own
+ *  decoder is its read, so a chain's entry that does not parse drops only itself. */
+export const RegistrationCountsRowSchema = z.unknown()
+
 /**
  * Capability + scope types + AccessLevel + DappPermissions live in
  * `@nulo/wallet-bridge` (they belong to the wallet-sdk dispatcher layer,
@@ -88,10 +99,14 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	confirmationLevel: z.enum(AccessLevel),
 	expiry: z.number(),
 	verificationHash: z.string().optional(),
+	/** Read by nothing; kept because the row MAC covers every parsed key, so dropping it would
+	 *  delete each row that carries it. */
 	trustedVerification: z.boolean().optional(),
 	accountAliases: z.record(z.string(), z.string()).optional(),
-	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord)).optional(),
-	capabilityRejections: z.array(z.custom<RejectedCapabilityRecord>(tolerantRecord)).optional(),
+	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored")).optional(),
+	capabilityRejections: z
+		.array(z.custom<RejectedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored"))
+		.optional(),
 	authorizationsWithoutAsking: z.object({ broad: z.boolean() }).strict().optional(),
 	// The per-row integrity tag. Written by `DappSessionMacStorage`, which
 	// wraps this store — the schema MUST carry it so the boundary codec doesn't
@@ -120,13 +135,13 @@ export type Methods = {
 		accounts: string[],
 		confirmationLevel: AccessLevel,
 		chainId: string,
+		expectedProfileId: string,
 	): DappSession
 	updateDappSession(sessionId: string, permissions: DappPermissions[], accounts: string[], confirmationLevel: AccessLevel): DappSession
 	deleteDappSession(sessionId: string): DappSession
 	refuseVerification(target: VerificationRefusalTarget): VerificationRefusal
 	confirmVerification(verificationHash: string): void
 	setVerificationHash(sessionId: string, verificationHash: string): DappSession
-	setTrustedVerification(sessionId: string, trusted: boolean): DappSession
 	setAuthorizationsWithoutAsking(sessionId: string, on: boolean, shownBroad: boolean): DappSession
 	setAccountAliases(sessionId: string, aliases: Record<string, string>): DappSession
 	setCapabilityGrants(sessionId: string, grants: GrantedCapabilityRecord[]): DappSession

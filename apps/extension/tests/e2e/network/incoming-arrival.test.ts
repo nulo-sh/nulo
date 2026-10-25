@@ -34,8 +34,12 @@ import {
 	switchToLocalNetwork,
 	waitForHomeTotal,
 	waitForToast,
+	selectedAccount,
 } from "../fixtures/helpers"
-import { holdIncomingPoll, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { deliverWhileLocked, readIncomingPollStatus, releaseIncomingPoll, waitForIncomingPollPhase } from "../fixtures/incoming-poll-gate"
+import { pollUntil } from "../fixtures/poll"
+import { readSealedRow, readSealedRows } from "../fixtures/sealed-rows"
+import { findAccount, rewriteAccount } from "../helpers/identity-rows"
 import { confirmImport, exportAccountBody, previewImport } from "../helpers/account-io"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -96,13 +100,13 @@ function closeAtEnd(page: Page): Page {
 type Triple = { profileId: string; networkId: string; account: string }
 
 async function activeTriple(page: Page): Promise<Triple> {
-	const triple = await page.evaluate(async () => {
+	const stored = await page.evaluate(async () => {
 		const profileId = (await chrome.storage.local.get("nulo:ui:lastActiveProfile"))["nulo:ui:lastActiveProfile"]
-		const account = (await chrome.storage.local.get("nulo:ui:activeAccount"))["nulo:ui:activeAccount"]
 		const activeKey = `nulo:core:active-network@${profileId}`
 		const networkId = (await chrome.storage.local.get(activeKey))[activeKey]
-		return { profileId, account, networkId }
+		return { profileId, networkId }
 	})
+	const triple = { ...stored, account: await selectedAccount(page) }
 	const { profileId, networkId, account } = triple
 	if (typeof profileId !== "string" || typeof networkId !== "string" || typeof account !== "string") {
 		throw new Error(`could not resolve the active (profile, network, account): ${JSON.stringify(triple)}`)
@@ -112,31 +116,20 @@ async function activeTriple(page: Page): Promise<Triple> {
 
 type StoredRecord = { id: string; txHash: string; contract: string; l2BlockNumber: number; discoveredAt: number }
 
-/** Every committed incoming record of `account`, from storage. */
+/** Every committed incoming record of `account`, as the wallet reads it. */
 async function storedRecords(page: Page, account: string): Promise<StoredRecord[]> {
-	return page.evaluate(async (want: string) => {
-		const all = await chrome.storage.local.get(null)
-		return Object.entries(all)
-			.filter(([key, value]) => key.startsWith("nulo:core:incoming-transfers@") && typeof value === "string")
-			.map(([, value]) => JSON.parse(value as string))
-			.filter((rec) => rec.accountAddress === want)
-	}, account)
+	const records = await readSealedRows<StoredRecord & { accountAddress?: string }>(page, "incomingTransfers")
+	return records.map(({ row }) => row).filter((rec) => rec.accountAddress === account)
 }
 
 /** The first record of `account` whose id `known` does not hold, polled from storage. */
 async function waitForNewRecord(page: Page, account: string, known: Set<string>, contract?: string): Promise<StoredRecord> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
-		const fresh = (await storedRecords(page, account)).find((r) => !known.has(r.id) && (!contract || r.contract === contract))
-		if (fresh) return fresh
-		await new Promise((r) => setTimeout(r, 1_000))
-	}
-	throw new Error(`no new incoming record for ${account} within ${RECEIPT_BUDGET_MS}ms`)
-}
-
-async function readJson<T>(page: Page, key: string): Promise<T | undefined> {
-	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
-	return typeof raw === "string" ? (JSON.parse(raw) as T) : undefined
+	const fresh = await pollUntil(
+		async () => (await storedRecords(page, account)).find((r) => !known.has(r.id) && (!contract || r.contract === contract)),
+		(record) => record !== undefined,
+		{ label: `a new incoming record for ${account}`, timeoutMs: RECEIPT_BUDGET_MS, intervalMs: 1_000 },
+	)
+	return fresh as StoredRecord
 }
 
 type Recording = {
@@ -196,36 +189,42 @@ const recording = (page: Page) => page.evaluate(() => (window as unknown as { __
 
 /** Wait until the recorder has seen the row of receipt `id`. */
 async function waitForRow(page: Page, id: string): Promise<void> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
-		if (id in (await recording(page)).first) return
-		await new Promise((r) => setTimeout(r, 1_000))
-	}
-	throw new Error(`the row of ${id} never rendered within ${RECEIPT_BUDGET_MS}ms`)
+	await pollUntil(
+		async () => id in (await recording(page)).first,
+		(seen) => seen,
+		{
+			label: `the row of ${id} rendered`,
+			timeoutMs: RECEIPT_BUDGET_MS,
+			intervalMs: 1_000,
+		},
+	)
 }
 
 /** Wait until the receipt `txHash` delivered is stored and its row seen; returns the receipt's id.
  *  Refreshing balances meanwhile advances the wallet's PXE sync, so a note is discovered sooner. */
 async function waitForRowOf(page: Page, account: string, txHash: string): Promise<string> {
-	const deadline = Date.now() + RECEIPT_BUDGET_MS
-	while (Date.now() < deadline) {
+	const rowSeen = async () => {
 		const record = (await storedRecords(page, account)).find((r) => r.txHash === txHash)
-		if (record && record.id in (await recording(page)).first) return record.id
-		await refreshBalances(page).catch(() => undefined)
-		await new Promise((r) => setTimeout(r, 4_000))
+		return record && record.id in (await recording(page)).first ? record.id : undefined
 	}
-	throw new Error(`the row of ${txHash} never rendered within ${RECEIPT_BUDGET_MS}ms`)
+	const id = await pollUntil(rowSeen, (seen) => seen !== undefined, {
+		label: `the row of ${txHash} rendered`,
+		timeoutMs: RECEIPT_BUDGET_MS,
+		intervalMs: 4_000,
+		between: () => refreshBalances(page).catch(() => undefined),
+	})
+	return id as string
 }
 
 /** Drive the PXE until a scan discovers `txHash` and parks at the gate. */
 async function driveUntilHeld(page: Page, txHash: string): Promise<void> {
 	for (let i = 0; i < 40; i++) {
-		await refreshBalances(page).catch(() => undefined)
 		for (let j = 0; j < 15; j++) {
 			const status = await readIncomingPollStatus(page)
 			if (status?.phase === "discovery-held" && status.txHash === txHash) return
 			await new Promise((r) => setTimeout(r, 300))
 		}
+		await refreshBalances(page).catch(() => undefined)
 	}
 	throw new Error(`the scan never parked at the gate for ${txHash}`)
 }
@@ -234,8 +233,9 @@ const waitForSeeded = (page: Page) => page.waitForSelector('[data-arrivals-seede
 
 type Snack = { title: string; sub: string }
 
-async function waitForReceivedSnack(page: Page, timeout = RECEIPT_BUDGET_MS): Promise<Snack> {
-	const card = await waitForToast(page, "Received", timeout, { kind: "success" })
+/** `hold` keeps the card open for what follows it: a View, or a read of its layout. */
+async function waitForReceivedSnack(page: Page, timeout = RECEIPT_BUDGET_MS, hold = false): Promise<Snack> {
+	const card = await waitForToast(page, "Received", timeout, { kind: "success", hold })
 	return card.evaluate((el) => ({
 		title: el.querySelector('[data-testid="snackbar-title"]')?.textContent?.trim() ?? "",
 		sub: el.querySelector('[data-testid="snackbar-sub"]')?.textContent?.trim() ?? "",
@@ -308,7 +308,7 @@ async function armHeroSampler(page: Page): Promise<void> {
 	})
 }
 
-/** Home's hero once its quotes have landed: until then a holding without one counts as $0.00. */
+/** Home's hero once a priced figure shows: before the quote it reads a skeleton or "—", before the balance $0.00. */
 async function waitForPricedHero(page: Page): Promise<string> {
 	await page.waitForFunction(
 		() => {
@@ -356,9 +356,10 @@ test.skipIf(!hasConfig)(
 		const page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const triple = await activeTriple(page)
-		const arrival = await readJson<{ sinceBlock: number }>(
+		const arrival = await readSealedRow<{ sinceBlock: number }>(
 			page,
-			`nulo:core:incoming-arrivals@${triple.profileId}|${triple.networkId}|${triple.account}`,
+			"incomingArrivals",
+			`${triple.profileId}|${triple.networkId}|${triple.account}`,
 		)
 
 		const { deployTestToken, mintPublicTokens } = await import("../fixtures/aztec")
@@ -367,9 +368,10 @@ test.skipIf(!hasConfig)(
 		await mintPublicTokens(s.wallet, hostileToken, config.minterAddress, 3n * 10n ** 38n, config.minterAddress, s.feeOptions)
 
 		await importToken(page, hostileToken)
-		const trust = await readJson<{ arrivalFloor?: number }>(
+		const trust = await readSealedRow<{ arrivalFloor?: number }>(
 			page,
-			`nulo:core:incoming-trust@${triple.profileId}|${triple.networkId}|${hostileToken}`,
+			"incomingTrust",
+			`${triple.profileId}|${triple.networkId}|${hostileToken}`,
 		)
 		const floor = trust?.arrivalFloor
 		expect(typeof floor).toBe("number")
@@ -421,25 +423,27 @@ test.skipIf(!hasConfig)(
 	{ timeout: 900_000, retry: 0 },
 	async ({ tokenReadyExtension }) => {
 		const config = aztecConfig as Config
+		const delivering = closeAtEnd(await openPopup(tokenReadyExtension))
+		await waitForHash(delivering, "#/popup/general", 30_000)
+		const triple = await activeTriple(delivering)
+
+		const txHash = await deliverWhileLocked(
+			delivering,
+			{ profileId: triple.profileId, networkId: triple.networkId, accountAddress: triple.account, contract: config.tokenAddress },
+			() => sendPrivate(config, triple.account, 7n * D),
+		)
+		// A lock resets a page's arrivals scope, so the first half runs in a page opened after the
+		// unlock: it seeds on its mount, and the second half covers the seed an unlock starts.
 		const page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
-		const triple = await activeTriple(page)
-
-		const txHash = await sendPrivate(config, triple.account, 7n * D)
-		await holdIncomingPoll(page, {
-			profileId: triple.profileId,
-			networkId: triple.networkId,
-			accountAddress: triple.account,
-			contract: config.tokenAddress,
-			txHash,
-		})
+		await delivering.close()
 		await driveUntilHeld(page, txHash)
 		await clickNavTab(page, "settings")
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await releaseIncomingPoll(page)
 		await waitForIncomingPollPhase(page, "committed", txHash)
-		expectReceivedCopy(await waitForReceivedSnack(page, 30_000))
+		expectReceivedCopy(await waitForReceivedSnack(page, 30_000, true))
 		const viewed = await viewReceipt(page, triple.account)
 		expect(viewed.txHash).toBe(txHash)
 		await expectHomePlaysNothingFor(page, viewed.id)
@@ -451,7 +455,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await sendPublic(config, triple.account, 3n * D)
-		expectReceivedCopy(await waitForReceivedSnack(page))
+		expectReceivedCopy(await waitForReceivedSnack(page, RECEIPT_BUDGET_MS, true))
 		const record = await viewReceipt(page, triple.account)
 		await expectHomePlaysNothingFor(page, record.id)
 		await page.close()
@@ -521,20 +525,7 @@ test.skipIf(!hasConfig)(
 		let page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const account = await getAccountAddress(page)
-		await page.evaluate(
-			async (addr: string, name: string) => {
-				const all = await chrome.storage.local.get(null)
-				const rows: Record<string, string> = {}
-				for (const [key, value] of Object.entries(all)) {
-					if (!key.startsWith("nulo:core:accounts@") || typeof value !== "string") continue
-					const row = JSON.parse(value)
-					if (row.address === addr) rows[key] = JSON.stringify({ ...row, name })
-				}
-				await chrome.storage.local.set(rows)
-			},
-			account,
-			HOSTILE_NAME,
-		)
+		await rewriteAccount(page, account, (row) => ({ ...row, name: HOSTILE_NAME }))
 		await page.close()
 		await stopBackground(tokenReadyExtension)
 		page = closeAtEnd(await openPopup(tokenReadyExtension))
@@ -545,7 +536,7 @@ test.skipIf(!hasConfig)(
 		await waitForHash(page, "#/popup/settings")
 		await waitForSeeded(page)
 		await sendPublic(config, account, 10n ** 38n, hostileToken)
-		const snack = await waitForReceivedSnack(page)
+		const snack = await waitForReceivedSnack(page, RECEIPT_BUDGET_MS, true)
 		expect(snack.sub).not.toContain("\u202e")
 		const layout = await page.evaluate(() => {
 			const card = document.querySelector('[data-testid="snackbar"]') as HTMLElement
@@ -606,15 +597,7 @@ test.skipIf(!hasConfig)(
 		const page = closeAtEnd(await openPopup(tokenReadyExtension))
 		await waitForHash(page, "#/popup/general", 30_000)
 		const source = await getAccountAddress(page)
-		const name = await page.evaluate(async (addr: string) => {
-			const all = await chrome.storage.local.get(null)
-			for (const [key, value] of Object.entries(all)) {
-				if (!key.startsWith("nulo:core:accounts@") || typeof value !== "string") continue
-				const row = JSON.parse(value)
-				if (row.address === addr) return row.name as string
-			}
-			return ""
-		}, source)
+		const name = (await findAccount(page, undefined, source))?.name ?? ""
 		const body = await exportAccountBody(page, name, false)
 
 		await navigateByHash(page, "#/popup/general", 10_000)

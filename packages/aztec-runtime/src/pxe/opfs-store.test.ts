@@ -43,9 +43,9 @@ describe("opfs-store upstream pins", () => {
 	it("PXE_DATA_SCHEMA_VERSION_PIN matches the installed @aztec-labs/pxe (drift tripwire)", () => {
 		// Upstream does not export the constant; the injected-store path must stamp the SAME
 		// schema version the PXE writes with, or a future upstream bump would strand every
-		// store on a stale stamp (or wipe on every open). A pin mismatch here means: bump the
-		// PIN consciously alongside the @aztec upgrade — the wipe-on-mismatch is upstream's
-		// designed reset semantics, scoped per-chain by our injection.
+		// store on a stale stamp. A pin mismatch here means upstream moved its store schema: every
+		// chain's store stamped with the old one refuses to open, and a reset purges only its own
+		// chain's, so a bump that moves it is held.
 		const source = readFileSync(resolvePackageFile("@aztec-labs/pxe", "dest/storage/metadata.js"), "utf8")
 		const match = source.match(/PXE_DATA_SCHEMA_VERSION\s*=\s*(\d+)/)
 		expect(match).not.toBeNull()
@@ -92,11 +92,25 @@ describe("initStoreVersionStamp — refuse-and-preserve on mismatch (D-B2v3, 5.0
 	})
 
 	it("THROWS (never wipes) on an unparseable stamp — a hostile/corrupt blob is refused, not wiped", async () => {
-		const { store, calls } = fakeStore("not-a-valid-database-version-stamp")
+		const STAMP = "not-a-valid-database-version-stamp"
+		const { store, calls } = fakeStore(STAMP)
 		const { warn, log } = spyLog()
-		const refused = initStoreVersionStamp(store, ROLLUP, log)
-		await expect(refused).rejects.toBeInstanceOf(PxeStoreVersionMismatch)
-		await expect(refused).rejects.toThrow("stamp failed to parse (")
+		const refused = await initStoreVersionStamp(store, ROLLUP, log).then(
+			() => undefined,
+			(err: unknown) => err,
+		)
+		expect(refused).toBeInstanceOf(PxeStoreVersionMismatch)
+		// The message ends at the category; the parser's error, which quotes the stored bytes, is only the cause.
+		expect((refused as Error).message).toBe("PXE store version mismatch. Refusing to open (preserving data): stamp failed to parse")
+		const parserError = (() => {
+			try {
+				DatabaseVersion.fromBuffer(Buffer.from(STAMP, "utf-8"))
+			} catch (err) {
+				return err
+			}
+		})()
+		expect(parserError).toBeInstanceOf(Error)
+		expect((refused as Error).cause).toEqual(parserError)
 		expect(calls.cleared).toBe(false)
 		// The parser's message quotes the stored bytes, which the log line must never carry.
 		expect(warn.mock.calls).toEqual([[REFUSAL, { reason: "stamp failed to parse" }]])

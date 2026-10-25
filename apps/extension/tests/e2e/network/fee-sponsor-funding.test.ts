@@ -5,7 +5,9 @@
  * as the fee payer, and the node would refuse its send for want of a balance. An app that pays
  * through it is read from the final simulation's kernel the same way: no unit layer runs that kernel.
  * An app that asks for a priority fee through Nulo's sponsor proves the node admits a send whose cap
- * makes room for it: no installed package holds the node's admission code.
+ * makes room for it: no installed package holds the node's admission code. Its transaction page names
+ * the sponsor as the app's choice, matched against the address the wallet derives for the deployed
+ * sponsor and the call the build actually recorded.
  */
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { Fr } from "@aztec-labs/aztec.js/fields"
@@ -23,7 +25,8 @@ import {
 	test,
 	waitForHash,
 } from "../fixtures/extension"
-import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
+import { pinnedFeeTexts, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
+import { fillSendForm, navigateByHash, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
@@ -33,7 +36,9 @@ import {
 	snapshotResultSeq,
 	waitForPgResult,
 } from "../fixtures/playground"
+import { pollUntil } from "../fixtures/poll"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { readSealedRows } from "../fixtures/sealed-rows"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
 
@@ -69,6 +74,20 @@ async function watchShortNotice(page: Page): Promise<() => Promise<boolean>> {
 		look()
 	})
 	return () => page.evaluate(() => (window as unknown as { sawSponsorShort?: boolean }).sawSponsorShort === true)
+}
+
+function readSentenceLayout(page: Page) {
+	return page.$eval('[data-testid="execute-op-app-fee"]', (el) => {
+		const style = getComputedStyle(el)
+		const own = el.getBoundingClientRect()
+		const block = (el.closest('[data-testid="execute-op-fee-set-badge"]') as HTMLElement).getBoundingClientRect()
+		return {
+			leading: Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize),
+			lines: Math.round(own.height / Number.parseFloat(style.lineHeight)),
+			inside: own.left >= block.left && own.right <= block.right + 0.5,
+			overflow: el.scrollWidth - el.clientWidth,
+		}
+	})
 }
 
 const triggerText = (page: Page) =>
@@ -109,20 +128,14 @@ async function addUnfundedSponsor(ctx: ExtensionContext, address: string, instan
 		timeout: 10_000,
 	})
 	await clickByTestId(page, "new-fpc-submit")
-	const id = await page.waitForFunction(
-		async (addr: string) => {
-			const rows = (await chrome.storage.local.get(null)) as Record<string, unknown>
-			for (const [key, raw] of Object.entries(rows)) {
-				if (!key.startsWith("nulo:core:fpcs@")) continue
-				const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as { id?: string; address?: string }
-				if (row?.address?.toLowerCase() === addr.toLowerCase()) return row.id
-			}
-			return false
-		},
-		{ timeout: 60_000, polling: 500 },
-		address,
-	)
-	const fpcId = (await id.jsonValue()) as string
+	const fpcId = (await pollUntil(
+		async () =>
+			(
+				await readSealedRows<{ id?: string; address?: string }>(page, "fpcs")
+			).find(({ row }) => row.address?.toLowerCase() === address.toLowerCase())?.row.id,
+		(id) => typeof id === "string",
+		{ label: `the FPC row at ${address}`, timeoutMs: 60_000, intervalMs: 500 },
+	)) as string
 	await page.close()
 	return fpcId
 }
@@ -240,36 +253,95 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ tokenReadyExtension }) => {
 		const config = aztecConfig as AztecTestConfig
+		const prices = await refusePrices(tokenReadyExtension)
 		const pg = await playgroundFor(tokenReadyExtension)
-		await setPgInput(pg, "tokenAddress", config.tokenAddress)
-		await setPgInput(pg, "recipient", config.minterAddress)
-		await setPgInput(pg, "amount", "1")
-		await setPgInput(pg, "sponsorSalt", "0")
-		await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
 		try {
+			await setPgInput(pg, "tokenAddress", config.tokenAddress)
+			await setPgInput(pg, "recipient", config.minterAddress)
+			await setPgInput(pg, "amount", "1")
+			await setPgInput(pg, "sponsorSalt", "0")
+			await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
+			await seedFeeJuiceQuote(tokenReadyExtension, prices)
 			const seq = await snapshotResultSeq(pg)
 			const execute = waitForPopup(tokenReadyExtension, "execute", { timeout: 60_000 })
 			await clickPgButton(pg, "sendTx-appSponsored")
 			const popup = await execute
 			await waitForExecuteContent(popup)
 			await popup.waitForSelector('[data-testid="execute-op-app-fee"]', { visible: true, timeout: 120_000 })
-			// `innerText`: the dotted term's definition sits in the row, hidden, for its `aria-describedby`.
-			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) =>
-				(el as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+			// `innerText`: the dotted term's definition sits in the line, hidden, for its `aria-describedby`.
+			const read = (testid: string) =>
+				popup.$eval(`[data-testid="${testid}"]`, (el) => (el as HTMLElement).innerText.replace(/\s+/g, " ").trim())
+			expect(await popup.$('[data-testid="execute-op-app-legend"]'), "the sentence names the app; no legend over it").toBeNull()
+			// The line renders when the estimate lands, and adds each figure's dollars once its quote answers.
+			// Read as `read` does: the hidden definition's block box breaks the line's `innerText`.
+			await popup
+				.waitForFunction(
+					() =>
+						/\(.+\); payment method set by .+\. Includes a .+ \(.+\) priority/.test(
+							((document.querySelector('[data-testid="execute-op-app-fee"]') as HTMLElement | null)?.innerText ?? "").replace(
+								/\s+/g,
+								" ",
+							),
+						),
+					{ timeout: 15_000, polling: 100 },
+				)
+				.catch(() => undefined)
+			const line = await read("execute-op-app-fee")
+			const sentence =
+				/^About ~([\d.]+) FJ \(.+\); payment method set by (\S.*)\. Includes a ~([\d.]+) FJ \(.+\) priority fee the app asked for\.$/.exec(
+					line,
+				)
+			expect(sentence, `the fee line reads "${line}"`).not.toBeNull()
+			const [figure, app, priority] = [sentence?.[1] ?? "", sentence?.[2] ?? "", sentence?.[3] ?? ""]
+			expect(Number(priority)).toBeGreaterThan(0)
+			expect(Number(priority)).toBeLessThan(Number(figure))
+			const lines = [...pinnedFeeTexts(figure)].flatMap((f) =>
+				[...pinnedFeeTexts(priority)].map(
+					(p) => `About ${f}; payment method set by ${app}. Includes a ${p} priority fee the app asked for.`,
+				),
 			)
-			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row)
-			expect(sentence, `the row reads "${row}"`).not.toBeNull()
-			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
-			expect(priority).toBeGreaterThan(0)
-			expect(priority).toBeLessThan(figure)
+			expect(lines, "the line prints both figures at the pinned quote").toContain(line)
+			const layout = await readSentenceLayout(popup)
+			console.log(`[fee-sponsor-funding] the sentence's layout ${JSON.stringify(layout)}`)
+			expect(layout.leading).toBeCloseTo(1.5, 2)
+			expect(layout.lines).toBeGreaterThan(1)
+			expect({ inside: layout.inside, overflow: layout.overflow }).toEqual({ inside: true, overflow: 0 })
+			expect(await prices.refused.failures(), "price interception failures").toEqual([])
 			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
+			// `safeWire` leaves a dApp's name at 64 characters and an ellipsis, none of them a break.
+			await popup.$eval('[data-testid="execute-op-app-name"]', (el) => {
+				el.textContent = `${"W".repeat(64)}…`
+			})
+			const unbroken = await readSentenceLayout(popup)
+			console.log(`[fee-sponsor-funding] an unbroken capped name ${JSON.stringify(unbroken)}`)
+			expect({ inside: unbroken.inside, overflow: unbroken.overflow }).toEqual({ inside: true, overflow: 0 })
 
 			await approveExecute(popup)
 			// `NO_WAIT` resolves with the hash only once the node has admitted the transaction.
 			const result = await waitForPgResult(pg, "sendTx", seq, 240_000)
 			await assertPgOk(pg, result, "fee-sponsor-funding:priority")
-			expect(typeof (result.resultJson as { txHash?: unknown }).txHash).toBe("string")
+			const txHash = (result.resultJson as { txHash?: unknown }).txHash
+			expect(typeof txHash).toBe("string")
+
+			// The row names the app as the window's fee line does: both read the session's dApp name.
+			const expected = `Sponsored, set by ${app}`
+			const wallet = await openPopup(tokenReadyExtension)
+			await waitForHash(wallet, "#/popup/general")
+			await navigateByHash(wallet, `#/popup/tx/${txHash as string}`)
+			await wallet
+				.waitForFunction(
+					(want: string) => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() === want,
+					{ timeout: 15_000, polling: 200 },
+					expected,
+				)
+				.catch(() => undefined)
+			const feeMethod = await wallet.evaluate(
+				() => document.querySelector('[data-testid="tx-detail-fee-method"]')?.textContent?.trim() ?? null,
+			)
+			expect(feeMethod, "the transaction page's Fee method row").toBe(expected)
+			await wallet.close()
 		} finally {
+			await prices.refused.stop()
 			await setPgInput(pg, "maxPriorityFeesPerGas", "")
 		}
 	},

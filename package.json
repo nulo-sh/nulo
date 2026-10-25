@@ -19,7 +19,7 @@
     "test:e2e:all": "bun run --cwd apps/extension vitest run --config vitest.e2e.all.config.ts",
     "e2e:agent": "bash apps/extension/scripts/e2e/agent.sh",
     "e2e:reap": "bun apps/extension/tests/e2e/reap.ts",
-    "lint": "biome check && bun scripts/complexity-baseline/check.ts",
+    "lint": "biome check && biome lint --only=suspicious/noImportCycles --error-on-warnings apps/extension/tests/e2e && bun scripts/complexity-baseline/check.ts",
     "lint:fix": "biome check --fix",
     "lint:actions": "actionlint",
     "format": "biome format --write",
@@ -32,6 +32,7 @@
     "test:ci-gating": "bun test scripts/ci-cd/",
     "baseline:complexity": "bun scripts/complexity-baseline/generate.ts",
     "baseline:rescore": "bun scripts/complexity-baseline/rescore.ts",
+    "baseline:storage": "bun run --cwd apps/extension baseline:storage",
     "audit:dup": "bun scripts/dup-trend/report.ts",
     "check:imports": "biome check apps/ packages/",
     "check:plans": "bun scripts/ci-cd/plans/check.ts",
@@ -43,17 +44,19 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@types/bun": "1.4.2",
+    "jscpd": "5.0.16",
     "typescript": "^6.0.3"
   },
   "packageManager": "bun@1.4.2",
   "version": "0.31.0",
   "license": "Apache-2.0",
   "overrides": {
-    "vite": "^8.0.0"
+    "vite": "^8.2.4",
+    "zod": "4.6.7"
   },
   "patchedDependencies": {
-    "@aztec-foundation/noir-acvm_js@6.0.0-rc.6": "patches/@aztec-foundation%2Fnoir-acvm_js@6.0.0-rc.6.patch",
-    "@aztec-foundation/noir-noirc_abi@6.0.0-rc.6": "patches/@aztec-foundation%2Fnoir-noirc_abi@6.0.0-rc.6.patch",
-    "@aztec-labs/pxe@6.0.0-rc.3": "patches/@aztec-labs%2Fpxe@6.0.0-rc.3.patch"
+    "@aztec-foundation/noir-acvm_js@6.0.0": "patches/@aztec-foundation%2Fnoir-acvm_js@6.0.0.patch",
+    "@aztec-foundation/noir-noirc_abi@6.0.0": "patches/@aztec-foundation%2Fnoir-noirc_abi@6.0.0.patch",
+    "@aztec-labs/pxe@6.0.0": "patches/@aztec-labs%2Fpxe@6.0.0.patch"
   }
 }

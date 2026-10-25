@@ -205,6 +205,41 @@ export class ScopeViolationError extends WalletError {
 	}
 }
 
+const AUTH_REGISTRY_REFUSAL_MESSAGES = [
+	"Scope violation: sendTx call targets an authorization registry grant function",
+	"Scope violation: createAuthWit intent targets the authorization registry",
+	"Scope violation: a transaction's authorization request targets the authorization registry",
+] as const
+
+export type AuthRegistryRefusalMessage = (typeof AUTH_REGISTRY_REFUSAL_MESSAGES)[number]
+
+/**
+ * A scope refusal that keeps the authorization registry's grant functions to the wallet's own
+ * authorization action, with its own dApp text and History row. It shares the scope refusal's code,
+ * so `walletErrorFromPayload` rebuilds it from its exact message.
+ */
+export class AuthRegistryRefusalError extends ScopeViolationError {
+	public constructor(message: AuthRegistryRefusalMessage) {
+		super(message)
+		this.name = "AuthRegistryRefusalError"
+	}
+}
+
+function isAuthRegistryRefusalMessage(message: unknown): message is AuthRegistryRefusalMessage {
+	return (AUTH_REGISTRY_REFUSAL_MESSAGES as readonly unknown[]).includes(message)
+}
+
+const OWN_ACCOUNT_INTENT_VIOLATION_MESSAGE = "Scope violation: createAuthWit inner hash names the signing account as its consumer"
+
+/** A scope refusal with its own dApp text. It shares `SCOPE_VIOLATION`, so its constant message
+ *  is what rebuilds it across RPC. */
+export class OwnAccountIntentRefusalError extends ScopeViolationError {
+	public constructor() {
+		super(OWN_ACCOUNT_INTENT_VIOLATION_MESSAGE)
+		this.name = "OwnAccountIntentRefusalError"
+	}
+}
+
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
@@ -321,6 +356,20 @@ export class ContractNotRegisteredError extends WalletError {
 
 	public constructor(message: string, details?: unknown) {
 		super(ContractNotRegisteredError.CODE, message, details, "ContractNotRegisteredError")
+	}
+}
+
+/**
+ * The node and the wallet hold no contract instance at an address the user or a dApp gave as a
+ * token: the lookup answered, and it was empty. A node that could not answer throws its own error
+ * instead. Constant message and no details, so the address never rides the error.
+ */
+export class ContractNotFoundError extends WalletError {
+	public static readonly CODE = "CONTRACT_NOT_FOUND"
+	public static readonly MESSAGE = "contract instance not found"
+
+	public constructor() {
+		super(ContractNotFoundError.CODE, ContractNotFoundError.MESSAGE, undefined, "ContractNotFoundError")
 	}
 }
 
@@ -514,6 +563,19 @@ export class DuplicateWalletError extends WalletError {
 }
 
 /**
+ * A live, readable passkey profile on this device already holds the credential being imported or
+ * restored: a hard refusal, never a warned duplicate. `details.existingProfileName` names that
+ * profile for the notice; the error NEVER carries key material, the credential id or the user handle.
+ */
+export class PasskeyProfileExistsError extends WalletError {
+	public static readonly CODE = "PASSKEY_PROFILE_EXISTS"
+
+	public constructor(message = "Passkey profile already exists", details?: { existingProfileName?: string }) {
+		super(PasskeyProfileExistsError.CODE, message, details, "PasskeyProfileExistsError")
+	}
+}
+
+/**
  * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
  * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
  * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
@@ -527,6 +589,20 @@ export class RecoveryModeError extends WalletError {
 
 	public constructor(message: string = RecoveryModeError.MESSAGE, details?: unknown) {
 		super(RecoveryModeError.CODE, message, details, "RecoveryModeError")
+	}
+}
+
+/**
+ * A node the wallet needs for an identity check did not answer within its budget, or its URL is
+ * refused by the transport rule. Distinct from an identity mismatch, which stays a plain error and
+ * keeps refusing, so a caller can tolerate only an absent node.
+ */
+export class NodeUnreachableError extends WalletError {
+	public static readonly CODE = "NODE_UNREACHABLE"
+	public static readonly MESSAGE = "Failed to fetch node info"
+
+	public constructor(message: string = NodeUnreachableError.MESSAGE, details?: unknown) {
+		super(NodeUnreachableError.CODE, message, details, "NodeUnreachableError")
 	}
 }
 
@@ -549,11 +625,13 @@ const REBUILT_AS = [
 	RecoveryModeError,
 	ProfileIdConflictError,
 	DuplicateWalletError,
+	PasskeyProfileExistsError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
 	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
 	ContractNotRegisteredError,
+	ContractNotFoundError,
 	ChainNotSupportedError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,
@@ -561,6 +639,7 @@ const REBUILT_AS = [
 	TermsAcceptanceRequiredError,
 	OperationNotRecordedError,
 	ImportedAccountUnusableError,
+	NodeUnreachableError,
 ] as const
 
 /** A `Map`, not an object, so a code such as `"constructor"` resolves to nothing. */
@@ -577,6 +656,8 @@ export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError
 	const ctor = BY_CODE.get(payload.code)
 	if (ctor === undefined) return new WalletError(payload.code, payload.message, payload.details)
 	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
+	if (ctor === ScopeViolationError && isAuthRegistryRefusalMessage(payload.message)) return new AuthRegistryRefusalError(payload.message)
+	if (ctor === ScopeViolationError && payload.message === OWN_ACCOUNT_INTENT_VIOLATION_MESSAGE) return new OwnAccountIntentRefusalError()
 	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
 	// `ScopeViolationError` ignores the details.
 	return new ctor(payload.message, payload.details as never)

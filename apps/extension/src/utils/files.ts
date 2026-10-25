@@ -26,6 +26,13 @@ function resolveMime(filename: string, mime?: string): string {
 	return mimeByExtension[ext] || "text/plain;charset=utf-8"
 }
 
+/** A user-typed profile name as one file-name segment. Each run of anything but letters, digits, `_`
+ *  and `-` becomes one `_`, so no name reaches a path separator, a `..` segment or a character
+ *  `chrome.downloads.download` refuses; only the empty name becomes `profile`. */
+export function profileFileNameSegment(name: string | undefined): string {
+	return (name ?? "").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"
+}
+
 export async function downloadFile({
 	data,
 	filename,

@@ -48,7 +48,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
 | Passkey credential id and sealed key material | Extension local storage | Only when the user exports a backup file | The file the user saves (`downloads`) |
 | Passkey label (profile name + short handle) | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:47-57` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
-| Account addresses | Extension local storage | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
+| Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
 | Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
@@ -66,8 +66,9 @@ One heading per manifest entry (`manifest/manifest.config.ts`; Firefox drops `of
 
 #### `storage`
 
-Keeps profiles, accounts, contacts, settings, granted app permissions and encrypted key material on
-the device. The wallet has no server; this is its only persistent store.
+Keeps profiles, accounts, contacts, settings and granted app permissions on the device, encrypted
+under each profile's key except profile names, settings and a few display preferences. The wallet
+has no server; this is its only persistent store.
 
 #### `unlimitedStorage`
 
@@ -214,18 +215,19 @@ handling as well and so ticks more boxes; the two differ by design.
 The block between the two markers is sent as `approval_notes` with every version.
 
 <!-- reviewer-notes:start -->
-Testing without funds: install, choose "Create profile", set a password. The wallet opens on the
-Aztec testnet, its only public network, with a zero balance. Every screen is reachable without a
-transaction.
+Testing without funds: install, choose "Create profile", set a password. The wallet opens on Aztec
+Mainnet with a zero balance. Mainnet's v6 upgrade is executable on L1 from 2026-10-26; until it runs,
+the wallet shows Mainnet as unavailable. To try a send with sponsored fees, switch to the Aztec
+testnet under Networks. Every screen is reachable without a transaction.
 
 Build: the add-on is bundled (Vite). Source is attached to this version as a `git archive` of the
 tagged commit. `apps/extension/store/SOURCE-BUILD.md` inside it names the exact Bun version and the
 one script to run; the output must match `dist/firefox` byte for byte.
 
 Modifications to third-party code, stated exactly:
-- `patches/`: in `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` (6.0.0-rc.6)
+- `patches/`: in `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` (6.0.0)
   the `package.json` `module` entry is replaced with an `exports` map so bundlers pick the web build
-  (no JavaScript or WASM changes); in `@aztec-labs/pxe` (6.0.0-rc.3), one `return` in `dest/pxe.js`
+  (no JavaScript or WASM changes); in `@aztec-labs/pxe` (6.0.0), one `return` in `dest/pxe.js`
   `registerAccount` becomes a comment.
 - `detect-node` is aliased to a module that exports `false` (`apps/extension/vite.config.ts:56-60`)
   so `@aztec-labs/foundation`'s logger uses its browser transport.
@@ -240,9 +242,7 @@ Modifications to third-party code, stated exactly:
   and `file_map` blanked (`vite.config.ts:94`, `scripts/strip-artifact-debug-info.ts`); this removes
   the embedded Noir sources and changes no bytecode.
 
-Linter warnings and their origin: `innerHTML` is assigned by Vue's
-runtime (`insertStaticContent`) and by the `@alejoamiras/presto-banners` banner element, which renders its
-own template (its link is normalized to an http(s) URL; variant and state come from fixed lists).
+Linter warnings and their origin: `innerHTML` is assigned by Vue's runtime (`insertStaticContent`).
 `Function` and `eval` appear in zod's eval-capability probe, msgpackr's record decoder and
 get-intrinsic's constructor probe, each inside try/catch with a non-evaluating fallback, and in
 get-intrinsic's intrinsics table, which references `eval` without calling it; the extension CSP forbids

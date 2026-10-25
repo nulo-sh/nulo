@@ -2,55 +2,33 @@
 <script setup lang="ts">
 import { computed, type CSSProperties, type PropType } from "vue"
 
-import iconsJson from "../internal/icons.json"
 import type { TextColorName } from "../color-names"
-
-type IconPath = { path: string; opacity?: number; color?: string }
-const icons = iconsJson as Record<string, string | IconPath[]>
+import { type Glyph, type GlyphName, glyphs } from "./glyphs"
 
 const props = defineProps({
-	name: { type: String, required: true, default: "warning" },
-	size: { type: [String, Number], default: "16" },
+	name: { type: String as PropType<GlyphName>, required: true },
+	size: { type: [String, Number], default: 16 },
 	color: { type: String as PropType<TextColorName>, default: null },
 	hoverColor: { type: String as PropType<TextColorName>, required: false },
 	rotate: { type: [String, Number], default: 0 },
-	fill: { type: Boolean, default: false },
-	scale: { type: [String, Number], default: 1 },
 	loading: { type: Boolean, default: false },
 })
 
-const styles = computed<CSSProperties>(() => {
-	const s: CSSProperties = {
-		minWidth: `${props.size}px`,
-		minHeight: `${props.size}px`,
-		transformBox: "view-box",
-		transformOrigin: "center center",
-		transform: "",
-	}
+// A glyph paints only through `color`: the root sets stroke and fill to currentColor.
+const glyph = computed<Glyph>(() => (Object.hasOwn(glyphs, props.name) ? glyphs[props.name] : {}))
+// One element strokes every path: an element's stroke is painted once, so where two of a glyph's
+// strokes cross, a translucent colour is not laid down twice. Each path opens with an absolute M.
+const strokes = computed(() => glyph.value.s?.join(" "))
 
-	const ops: string[] = []
-	if (props.rotate) ops.push(`rotate(${props.rotate}deg)`)
-	if (props.scale !== 1) ops.push(`scale(${props.scale})`)
-	if (ops.length) s.transform = ops.join(" ")
-
-	// When no `color` prop is set, default fill to currentColor so the icon inherits the parent's
-	// text color. Callers needing a brand color pass color="primary" etc. → the .fill--* class (base.css).
-	if (!props.color) s.fill = "currentColor"
-
-	return s
-})
-
-const classes = computed(() => {
-	const iconClasses: string[] = []
-	if (props.color) iconClasses.push(`fill--${props.color}`)
-	return iconClasses
-})
-
-const hoverColorVar = computed(() => `var(--txt-${props.hoverColor})`)
-
-const iconData = computed(() => icons[props.name.charAt(0).toLowerCase() + props.name.slice(1)])
-const singlePath = computed(() => (typeof iconData.value === "string" ? iconData.value : ""))
-const multiPath = computed(() => (Array.isArray(iconData.value) ? iconData.value : []))
+const styles = computed<CSSProperties>(() => ({
+	minWidth: `${props.size}px`,
+	minHeight: `${props.size}px`,
+	transformBox: "view-box",
+	transformOrigin: "center center",
+	transform: props.rotate ? `rotate(${props.rotate}deg)` : "",
+	// Inline, never a CSS `v-bind`, which costs every icon a document-wide query on each render.
+	...(props.hoverColor ? { "--icon-hover": `var(--txt-${props.hoverColor})` } : {}),
+}))
 </script>
 
 <template>
@@ -59,18 +37,16 @@ const multiPath = computed(() => (Array.isArray(iconData.value) ? iconData.value
 		:width="size"
 		:height="size"
 		:style="styles"
-		:class="[...classes, props.hoverColor && $style.hovered, loading && $style.loading]"
+		:class="[color && `color--${color}`, hoverColor && $style.hovered, loading && $style.loading]"
 		role="img"
+		fill="currentColor"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
 	>
-		<path v-if="!Array.isArray(iconData)" :d="singlePath" />
-		<template v-else>
-			<path
-				v-for="(icon, i) in multiPath"
-				:key="i"
-				:d="icon.path"
-				:style="{ opacity: fill ? 1 : icon.opacity, fill: icon.color && icon.color }"
-			/>
-		</template>
+		<path v-if="strokes" :d="strokes" fill="none" />
+		<path v-for="d in glyph.f" :key="`f${d}`" :d="d" stroke="none" />
 	</svg>
 </template>
 
@@ -79,7 +55,7 @@ const multiPath = computed(() => (Array.isArray(iconData.value) ? iconData.value
 	transition: all 0.3s var(--bezier);
 
 	&:hover {
-		fill: v-bind(hoverColorVar);
+		color: var(--icon-hover);
 	}
 }
 

@@ -3,14 +3,17 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { sentenceName } from "@/utils/string"
 import { NOOP_RESTORE_GATE, type RestoreGate } from "@/e2e/restore-gate"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
 import { ACCOUNT_INTEGRITY_COORDINATOR_NAME, type AccountIntegrityCoordinator } from "@/wallet/services/account-integrity/coordinator"
 import { type Account, AccountService, AccountType } from "@/wallet/services/account/service"
+import { DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/spec"
 import { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { seedForKind, type DefaultSeed } from "@/wallet/services/network/seeds"
+import { IDENTITY_PROBE_MS } from "@/wallet/services/network/spec"
 import { findPrimaryEndpoint, isSeedEndpointUrl, type Network, NetworkService } from "@/wallet/services/network/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -38,7 +41,6 @@ import {
 	NetworkResetMethodSchemas,
 	type PendingReset,
 	RESET_INGRESS_WAIT_MS,
-	RESET_NODE_PROBE_MS,
 	type ResetConfirmation,
 	type ResetRunGate,
 	type StaleNetworkChanged,
@@ -82,6 +84,7 @@ function validateJournal(journal: ResetJournal, row: Network | undefined): asser
 	const seed = seedForKind(row.kind)
 	if (journal.toChainId !== (seed?.chainId ?? journal.fromChainId)) throw notResettable("the target is not this build's")
 	if (journal.l1ChainId !== (seed?.l1ChainId ?? row.l1ChainId)) throw notResettable("the L1 is not this network's")
+	if (journal.toChainId === 0 && journal.l1ChainId !== LOCAL_L1_CHAIN_ID) throw notResettable("chain 0 is the local development L1's")
 }
 
 /** An imported key that does not open is unmovable (a blocked network opens none); one that
@@ -117,6 +120,21 @@ function journalAccounts(rows: Account[], resealed: ReadonlyMap<string, { newAdd
 		} else throw notResettable("an account of an unknown type is on the chain")
 	}
 	return { accounts, unmovable }
+}
+
+/** The imported accounts deleting a paused network deletes: the journal's, moved or not, and every
+ *  live imported row on the network's chain that the journal does not name. */
+function importedNames(journal: ResetJournal, live: Account[]): string[] {
+	const fromJournal = journal.accounts.filter((a) => a.type === AccountType.Imported)
+	const named = new Set(fromJournal.flatMap((a) => (a.newAddress ? [a.oldAddress, a.newAddress] : [a.oldAddress])))
+	const unnamed = live.filter((a) => a.type === AccountType.Imported && !named.has(a.address))
+	return [...fromJournal, ...unnamed].map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME))
+}
+
+function heldImported(journal: ResetJournal): Array<{ name: string; address: string }> {
+	return journal.accounts.flatMap((a) =>
+		a.type === AccountType.Imported && a.newAddress && a.encryptedSigningKey ? [{ name: a.name, address: a.newAddress }] : [],
+	)
 }
 
 function conflictsOf(row: Network, networks: Network[], target: number, journal: ResetJournal | undefined) {
@@ -321,14 +339,17 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		if (!row) return null
 		const { record, journal } = await this.staleNetworks.readQuarantineState(profileId)
 		const running = this.flight?.profileId === profileId && this.flight.networkId === networkId
-		if (journal?.networkId === networkId) return this.journalView(row, journal, running)
+		if (journal?.networkId === networkId) {
+			const onChain = (await this.accounts.getAccountsRaw(profileId)).filter((a) => a.chainId === row.chainId)
+			return this.journalView(row, journal, running, onChain)
+		}
 		const view = await this.freshView(profileId, row, networks, record, journal)
-		if (view && running) view.reset = { running: true, purged: false, doneCount: 0 }
+		if (view && running) view.reset = { running: true, purged: false, doneCount: 0, imported: [] }
 		return view
 	}
 
 	/** A journal's view: what the run captured, never re-derived, so a paused reset keeps its list. */
-	private journalView(row: Network, journal: ResetJournal, running: boolean): StaleNetworkView {
+	private journalView(row: Network, journal: ResetJournal, running: boolean, onChain: Account[]): StaleNetworkView {
 		return {
 			networkId: row.id,
 			name: row.name,
@@ -338,7 +359,13 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 			unmovable: journal.unmovable ?? [],
 			switchToSeedNode: journal.switchToSeedNode,
 			probedEndpoint: journal.probedEndpoint,
-			reset: { running, purged: journal.purged, doneCount: journal.accounts.filter((a) => a.done).length },
+			reset: {
+				running,
+				purged: journal.purged,
+				doneCount: journal.accounts.filter((a) => a.done).length,
+				imported: importedNames(journal, onChain),
+				heldImported: heldImported(journal),
+			},
 		}
 	}
 
@@ -391,7 +418,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		const key = JSON.stringify([row.id, primary.id, primary.rpcUrl, seed.chainId])
 		let switchToSeedNode = this.probeCache.get(key)
 		if (switchToSeedNode === undefined) {
-			switchToSeedNode = await this.networks.probeIdentityOnce(primary.rpcUrl, row.kind, RESET_NODE_PROBE_MS).then(
+			switchToSeedNode = await this.networks.probeIdentityOnce(primary.rpcUrl, row.kind, IDENTITY_PROBE_MS).then(
 				(probed) => probed.chainId !== seed.chainId || probed.l1ChainId !== seed.l1ChainId,
 				() => true,
 			)

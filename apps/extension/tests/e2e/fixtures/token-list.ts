@@ -4,16 +4,26 @@
  * write saw no acceptance. A launch that needs the list's entries (a priced token, the defaults)
  * holds one from its first boot instead: `launchExtension({ tokenList: "held" })`.
  *
- * A source run holds and serves a fixed two-token list, signed with a per-process key that the
- * armed build reads from `nulo:e2e:token-list`, so no spec depends on what the owner lists. An
- * artifact run holds the published envelope, the only list a release build's pinned keys accept.
+ * A source run holds and serves a fixed two-token list that also flags one pair, signed with a
+ * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
+ * the owner lists. An artifact run holds the published envelope, the only list a release build's
+ * pinned keys accept.
  */
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http"
 import path from "node:path"
 import type { Page } from "puppeteer"
 import { type TestContext, inject } from "vitest"
-import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, selectEntries, parsePayload, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
+import {
+	BUNDLED_TOKEN_CLASS_IDS,
+	readTokenList,
+	selectEntries,
+	parsePayload,
+	type PinnedKey,
+	type TokenListEntry,
+	type TokenListPair,
+} from "@nulo/token-list"
 import { decodeBase64Url, importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { signList } from "@nulo/token-list/sign"
 import { E2E_TOKEN_LIST_KEY_ID, TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
@@ -22,6 +32,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TOKEN_LIST_REFRESH_ALARM_NAME } from "@/wallet/services/token-list/spec"
 import { REPO_ROOT } from "../lockfile"
 import { listenClaimed } from "./egress-guard"
+import { pollUntil } from "./poll"
 
 const LIST_PATH = "/v1/list.json"
 const PUBLISHED_PATH = path.join(REPO_ROOT, "infra/token-list/public/v1/list.json")
@@ -42,6 +53,9 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
+/** The pair the source run's list flags as a scam: a row shows the warning only where a spec seeds it. */
+export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` }]
+
 type Signer = { seedHex: string; pinned: PinnedKey }
 let signer: Promise<Signer> | undefined
 
@@ -55,10 +69,13 @@ export function e2eSigner(): Promise<Signer> {
 	return signer
 }
 
-/** `E2E_LIST_TOKENS` (or `tokens` in their place) signed with the run's key, at `nowMs`'s sequence. */
-export async function signTestList(opts: { tokens?: readonly unknown[]; nowMs?: number } = {}): Promise<string> {
+/** `E2E_LIST_TOKENS` and `E2E_LIST_FLAGGED` (or `tokens` and `flagged` in their place), signed with the
+ *  run's key at `nowMs`'s sequence. */
+export async function signTestList(
+	opts: { tokens?: readonly unknown[]; flagged?: readonly TokenListPair[]; nowMs?: number } = {},
+): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS })
+	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS, flagged: opts.flagged ?? E2E_LIST_FLAGGED })
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }
@@ -72,7 +89,7 @@ export async function signForgedList(): Promise<string> {
 	return (await signList({ sourceText, seedHex, keyId: forger.keyId, nowMs: Date.now(), keys: [forger] })).envelopeText
 }
 
-export type ListRequest = { cookie?: string; referer?: string; origin?: string }
+export type ListRequest = { cookie?: string; referer?: string; origin?: string; ifNoneMatch?: string }
 
 export interface ListHost {
 	/** What the armed build's source names: `http://localhost`, never a granted host. */
@@ -102,8 +119,14 @@ export async function serveTokenList(): Promise<ListHost> {
 		req.resume()
 		if (req.url === "/cookie") return res.writeHead(200, { "Set-Cookie": "nulo-e2e=1; Path=/" }).end("ok")
 		if (req.url !== LIST_PATH) return res.writeHead(404).end()
-		seen.push({ cookie: req.headers.cookie, referer: req.headers.referer, origin: req.headers.origin })
-		res.writeHead(200, headers).end(envelope)
+		seen.push({
+			cookie: req.headers.cookie,
+			referer: req.headers.referer,
+			origin: req.headers.origin,
+			ifNoneMatch: req.headers["if-none-match"],
+		})
+		// A content ETag, as the production host sends, gives a browser that kept the response a validator to send back.
+		res.writeHead(200, { ...headers, ETag: `"${createHash("sha256").update(envelope).digest("hex")}"` }).end(envelope)
 	}
 	const { server, port, release } = await listenClaimed<Server>(() => createServer(handle), "token-list-host")
 	let stopping: Promise<void> | undefined
@@ -149,17 +172,17 @@ export async function waitForStoredList(
 	done: (state: StoredListState) => boolean,
 	timeoutMs = 15_000,
 ): Promise<StoredListState> {
-	const deadline = Date.now() + timeoutMs
-	let state: StoredListState = { failures: 0 }
-	while (Date.now() < deadline) {
-		state = await page.evaluate(async (key: string) => {
+	const read = () =>
+		page.evaluate(async (key: string) => {
 			const raw = (await chrome.storage.local.get(key))[key]
 			return typeof raw === "string" ? (JSON.parse(raw) as StoredListState) : { failures: 0 }
 		}, STORAGE_KEY)
-		if (done(state)) return state
-		await new Promise((resolve) => setTimeout(resolve, 250))
-	}
-	throw new Error(`the stored token list never reached the expected state within ${timeoutMs / 1000}s: failures ${state.failures}`)
+	return pollUntil(read, done, {
+		label: "the stored token list in the expected state",
+		timeoutMs,
+		intervalMs: 250,
+		show: (state) => `failures ${state.failures}`,
+	})
 }
 
 const isArtifactRun = (): boolean => inject("liveLeg") === true

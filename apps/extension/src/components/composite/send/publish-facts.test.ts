@@ -15,6 +15,7 @@ import {
 	rowSentence,
 	UNVOUCHED_FEE_SENTENCE,
 	stripAriaLabel,
+	TOKEN_CAVEAT,
 	type TransferSide,
 } from "./publish-facts"
 
@@ -89,10 +90,10 @@ describe("payerKindOf", () => {
 })
 
 describe("publishGlyph", () => {
-	test("the padlock only for hidden, the globe for anything public, nothing when Nulo can't tell", () => {
-		expect(publishGlyph("hidden")).toBe("lock")
-		expect(publishGlyph("public")).toBe("globe")
-		expect(publishGlyph("exposed")).toBe("globe")
+	test("the private mark only for hidden, the public mark for anything public, nothing when Nulo can't tell", () => {
+		expect(publishGlyph("hidden")).toBe("private")
+		expect(publishGlyph("public")).toBe("public")
+		expect(publishGlyph("exposed")).toBe("public")
 		expect(publishGlyph("unknown")).toBeNull()
 	})
 })
@@ -116,6 +117,7 @@ describe("copy", () => {
 			sponsor: "paid by the sponsor",
 		})
 		expect(UNVOUCHED_FEE_SENTENCE).toBe("Nulo can't tell what this fee contract charges you.")
+		expect(TOKEN_CAVEAT).toBe("Nulo can't check this token's contract. What a send publishes depends on its code.")
 	})
 
 	test("each cell's word is the one for its visibility", () => {

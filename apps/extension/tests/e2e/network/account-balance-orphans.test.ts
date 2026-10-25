@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import {
@@ -41,6 +41,7 @@ import { navigateByHash, reopenAndRecoverAfterImport } from "../fixtures/helpers
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "../helpers/account-io"
 import { downloadEncryptedBackup, openEncryptedBackup } from "../helpers/backup-export"
 import { TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
+import { readSealedRows, SEALED_READ_MESSAGE } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -50,42 +51,46 @@ const ACCOUNT_ROOT = "nulo:core:accounts"
 
 type BalanceRowView = { account: string; profileId: string; updatedAt: number }
 
-/** All readable balance rows for one on-chain address, parsed from raw storage. */
+/** The balance rows for one on-chain address, as the wallet reads them; fails when a stored balance
+ *  row is one the wallet cannot read, which no assertion below could then see. */
 async function balanceRowsFor(page: import("puppeteer").Page, address: string): Promise<BalanceRowView[]> {
-	return await page.evaluate(
-		async (root: string, addr: string) => {
-			const all = await chrome.storage.local.get(null)
-			return Object.entries(all)
-				.filter(([k]) => k.startsWith(`${root}@`))
-				.map(([, v]) => {
-					try {
-						return JSON.parse(v as string) as { account?: string; profileId?: string; updatedAt?: number }
-					} catch {
-						return {}
-					}
-				})
-				.filter((r) => r.account === addr)
-				.map((r) => ({
-					account: r.account as string,
-					profileId: (r.profileId as string) ?? "",
-					updatedAt: (r.updatedAt as number) ?? -1,
-				}))
-		},
+	const rows = await readSealedRows<Partial<BalanceRowView>>(page, "tokenBalances")
+	const stored = await page.evaluate(
+		async (root: string) => Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith(`${root}@`)).length,
 		BALANCE_ROOT,
+	)
+	expect(stored).toBe(rows.length)
+	return rows
+		.map(({ row }) => row)
+		.filter((r) => r.account === address)
+		.map((r) => ({ account: r.account as string, profileId: r.profileId ?? "", updatedAt: r.updatedAt ?? -1 }))
+}
+
+/** Waits until the wallet reads a balance row for `address`. */
+async function waitForBalanceRow(page: import("puppeteer").Page, address: string): Promise<void> {
+	await page.waitForFunction(
+		async (message: string, addr: string) => {
+			const rows = ((await chrome.runtime.sendMessage({ type: message, root: "tokenBalances" })) ?? []) as {
+				row: { account?: string }
+			}[]
+			return rows.some(({ row }) => row.account === addr)
+		},
+		{ timeout: 60_000, polling: 500 },
+		SEALED_READ_MESSAGE,
 		address,
 	)
 }
 
+/** How many account rows the wallet reads at `address`; fails when a stored account row is one the
+ *  wallet cannot read, which the count could then not see. */
 async function accountRowCountFor(page: import("puppeteer").Page, address: string): Promise<number> {
-	return await page.evaluate(
-		async (root: string, addr: string) => {
-			const all = await chrome.storage.local.get(null)
-			return Object.entries(all).filter(([k, v]) => k.startsWith(`${root}@`) && typeof v === "string" && (v as string).includes(addr))
-				.length
-		},
+	const rows = await readSealedRows<{ address?: string }>(page, "accounts")
+	const stored = await page.evaluate(
+		async (root: string) => Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith(`${root}@`)).length,
 		ACCOUNT_ROOT,
-		address,
 	)
+	expect(stored).toBe(rows.length)
+	return rows.filter(({ row }) => row.address === address).length
 }
 
 test("agent-runner contract: a live sandbox must be configured (no false skip)", () => {
@@ -119,17 +124,7 @@ test.skipIf(!hasConfig)(
 		expect(importedAddress).toBeTruthy()
 		await confirmImport(page)
 		// The pair backfill (`onAccountAdded` → ensure) is async — wait for the row.
-		await page.waitForFunction(
-			async (root: string, addr: string) => {
-				const all = await chrome.storage.local.get(null)
-				return Object.entries(all).some(
-					([k, v]) => k.startsWith(`${root}@`) && typeof v === "string" && (v as string).includes(addr),
-				)
-			},
-			{ timeout: 60_000, polling: 500 },
-			BALANCE_ROOT,
-			importedAddress,
-		)
+		await waitForBalanceRow(page, importedAddress)
 
 		// ── Stage 2: export a REAL full backup ──
 		await navigateByHash(page, "#/popup/settings/security/export/full")
@@ -204,17 +199,7 @@ test.skipIf(!hasConfig)(
 			const reviewed = await previewImport(page2, foreignBody)
 			expect(reviewed).toBe(importedAddress)
 			await confirmImport(page2)
-			await page2.waitForFunction(
-				async (root: string, addr: string) => {
-					const all = await chrome.storage.local.get(null)
-					return Object.entries(all).some(
-						([k, v]) => k.startsWith(`${root}@`) && typeof v === "string" && (v as string).includes(addr),
-					)
-				},
-				{ timeout: 60_000, polling: 500 },
-				BALANCE_ROOT,
-				importedAddress,
-			)
+			await waitForBalanceRow(page2, importedAddress)
 			const fresh = await balanceRowsFor(page2, importedAddress)
 			expect(fresh.length).toBeGreaterThan(0)
 			for (const row of fresh) {
@@ -228,9 +213,6 @@ test.skipIf(!hasConfig)(
 				await ctx2.close()
 			} finally {
 				rmSync(profileDir, { recursive: true, force: true })
-				// The doctored file embeds the wallet's REAL (local-chain test) master key —
-				// never leave it in the temp dir.
-				rmSync(dirname(filePath), { recursive: true, force: true })
 			}
 		}
 	},

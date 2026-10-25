@@ -8,6 +8,7 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 
 /** Store */
@@ -45,6 +46,7 @@ const totalBalance = computed(() =>
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatLabel = computed(() => (isMalformed.value ? undefined : prices.tokenFiatLabel(token.value, privateRaw.value + publicRaw.value)))
+const isFlagged = computed(() => prices.isFlagged(token.value))
 onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
@@ -74,10 +76,11 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 		<a :href data-testid="tokens-card" :class="[$style.row, $style.link]" @click="navigate" @keydown.space="navigate">
 			<Flex direction="column" gap="2">
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
-					{{ token.symbol }}
+					{{ dashIfBlank(token.symbol) }}
 				</span>
-				<span v-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
-				<span v-else data-testid="token-name" :class="$style.fiat">{{ token?.name || "unknown" }}</span>
+				<span v-if="isFlagged" data-testid="token-flagged" :class="$style.flagged">Flagged as a scam</span>
+				<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
+				<span v-else data-testid="token-name" :class="$style.fiat">{{ dashIfBlank(token?.name) }}</span>
 			</Flex>
 
 			<Flex
@@ -85,21 +88,21 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				direction="column"
 				align="end"
 				justify="center"
-				gap="5"
+				gap="2"
 				data-testid="token-balance-loading"
 				aria-busy="true"
 				:class="$style.loading_block"
 			>
 				<Skeleton :width="64" :height="13" />
-				<Skeleton :width="92" :height="9" />
+				<Skeleton :width="92" :height="11" />
 			</Flex>
 			<Flex v-else direction="column" align="end" gap="2">
 				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
 				<span v-if="!isMalformed" :class="$style.detail">
-					<span :class="$style.icon_private"><Icon name="lock" size="9" /></span>
+					<span :class="$style.icon_private"><Icon name="private" size="12" /></span>
 					{{ privateFormatted }}
 					<span :class="$style.pub_group">
-						<span :class="$style.icon_public"><Icon name="globe" size="9" /></span>
+						<span :class="$style.icon_public"><Icon name="public" size="12" /></span>
 						{{ publicFormatted }}
 					</span>
 				</span>
@@ -130,6 +133,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .link {
+	user-select: none;
 	cursor: pointer;
 	transition: background 0.2s var(--bezier);
 
@@ -174,7 +178,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .fiat {
 	composes: type--fiat from global;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--nulo-secondary);
 
 	max-width: 160px;
@@ -183,10 +187,18 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	text-overflow: ellipsis;
 }
 
-/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. */
+/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. Its cap is
+ * wider than a name's, and `anywhere` keeps that cap from raising the column's minimum width. */
 .fiat_figure {
+	max-width: 190px;
 	white-space: normal;
-	overflow-wrap: break-word;
+	overflow-wrap: anywhere;
+}
+
+/* --txt-danger passes AA in both themes; --red does not on the light one. */
+.flagged {
+	composes: type--caption from global;
+	color: var(--txt-danger);
 }
 
 .detail {
@@ -198,8 +210,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	gap: 3px;
 }
 
-/* Same private/public vocabulary as BalanceView's breakdown: bone lock = private,
-   grey globe = public. Icons inherit via currentColor. */
+/* Keep in step with BalanceView's breakdown; the glyph paints in the span's colour. */
 .icon_private {
 	display: inline-flex;
 	color: var(--nulo-accent);
@@ -218,7 +229,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 }
 
 .loading_block {
-	min-height: 32px;
+	composes: loading_block from "./token-row.module.css";
 }
 
 /* Last projection failed: keep the last-known amount visible, dimmed (the
@@ -229,6 +240,6 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 .failed_text {
 	composes: type--caption from global;
-	color: var(--red);
+	color: var(--txt-danger);
 }
 </style>

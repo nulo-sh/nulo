@@ -1,0 +1,39 @@
+# aztec-6-0-0: recon
+
+Two read-only explorers (Sonnet) and the planner's own Phase 0 trial install, 2026-10-23, against `origin/dev` at `95da7744`. Paths: `X/` is `apps/extension/src/`, `S/` is `X/wallet/services/`, `R/` is `packages/aztec-runtime/src/`.
+
+## Reuse map
+
+| Capability | Existing code | Verdict |
+|---|---|---|
+| The bump procedure | `.claude/skills/aztec-update/SKILL.md`; the shipped record `implementations-plan/archive/aztec-rc3/plan.md` (same shape: reset + in-place re-pin) | reuse-as-is |
+| Network-reset probe | the skill's Phase 0 `node_getNodeInfo`; `apps/extension/scripts/seed-preflight.ts` (silent client, identity check against the pins) | reuse-as-is |
+| Chain identity | `X/utils/chain-ids.ts` (`TESTNET_ROLLUP_VERSION`); `CHAIN_IDS`, `DEFAULT_SEEDS` (`S/network/seeds.ts:43-47`) and the classifier (`S/stale-network/classify.ts:23-26`) all derive from it | reuse-as-is: one literal |
+| Client-side reset | `NetworkResetService` (`S/network-reset/`), the takeover, `registerChainPurgeSubscriber` | reuse-as-is; no code change |
+| Stale-network e2e | `tests/e2e/helpers/stale-network.ts:32` derives the old id as `CHAIN_IDS.TESTNET ^ 1`; `network/stale-network-reset.test.ts` uses the Local Network only | reuse-as-is: the tests follow the constant |
+| Regime rotation | `R/account/address-freeze.ts` (append-only `REGIMES`, rotation rule already allows in place off Mainnet), `frozen-artifact.ts`, `artifacts/PROVENANCE.md`, `reference/nulo-v6.1/` (generator) | adapt: append `nulo-v6.2`, copy the generator |
+| Drift detectors | `S/fpc/protocol-fpcs.test.ts`, `S/token/default-tokens.test.ts`, `S/token-list/token-list-pins.test.ts`, `R/pxe/opfs-store.test.ts`, `R/pxe/register-account-heal.test.ts`, `scripts/aztec-hold-residue-check.ts` | reuse-as-is; values re-pinned from their sources |
+| Oracle-major detector | none: the KAT and freeze tests read addresses and class ids, never execution. Searched `oracle`, `ORACLE_VERSION`, `assertCompatibleOracleVersion` in `R/`, `X/`, `scripts/`; only the e2e canaries see it | build new (D4), on the `opfs-store.test.ts` pattern of reading the installed PXE source |
+| Lockfile review | `scripts/lockfile-exception-diff.ts`; provenance via a scratch `npm install --ignore-scripts` then `npm audit signatures` (skill) | reuse-as-is |
+| Token list | `infra/token-list/` (`list.source.json`, `scripts/check.ts`, `scripts/live-check.ts`), `packages/token-list/src/class-ids.ts` | reuse-as-is; the publish is the owner's |
+
+## Findings that shape the plan
+
+1. **Oracle major 32 → 33.** `@aztec-labs/pxe@6.0.0` `dest/oracle_version.js:13-14` (rc.3: 32.2). `utility_execution_oracle.js:104-107` throws on any other major; `PrivateExecutionOracle` extends it. An ACVM run of the vendored `SchnorrAccount.json` `entrypoint` stops at its first foreign call, `aztec_misc_assertCompatibleOracleVersion(0x20, 0x2)`; the 6.0.0 accounts artifact calls it with `(0x21, 0x0)`. The KAT and every freeze test stay green: they cannot see this.
+2. **The pxe patch misapplies.** `dest/pxe.js` moved: `registerAccount`'s early return is at line 499, not 364. Bun 1.4.2 applied the old hunk at line 364 without checking its context, replacing `if (!skipTxValidation) {` inside `simulateTx`. `register-account-heal.test.ts` and `scope-registration.test.ts` fail at import (parse error), so the gates catch it. `bun patch` re-creates it at 499; upstream still returns early, so the patch stays. The two noir patches apply at their lines; a diff against the `npm pack` tarballs shows only the intended `exports` change.
+3. **Upstream `aztec-node` v6.0.0-rc.3…v6.0.0**: 110 commits, three `!:` (archiver trace-capable L1, CLI withdrawal recipient, deployment-framework dependencies), none on our surface. #304 replaces the `@aztec/viem` fork with `viem` 2.57.1 exact; #444 moves `Buffer` to an explicit `buffer` import and drops most `util`/`assert` imports. `aztec-packages` v6.0.0-rc.6…v6.0.0: 80 commits, no `!:`, bb and kernel hardening.
+4. **`@aztec/viem` sites**: `apps/extension/package.json:91` (devDependency 2.38.3), `tests/e2e/fixtures/l1-signer.ts:2` (type), `fixtures/aztec-private-fpc-bridge.ts:25` (`getContract` over an upstream-built client), `scripts/vendor-chunks.ts:9-10`, `scripts/aztec-hold-residue-check.ts:6,35` (carve-out), `scripts/publish/stage.ts:55` (comment), `scripts/ci-cd/audit-acks.json:4` (reason), the skill's line 42. After the bump the line pulls plain `viem`; the fixture would hand a 2.57.1 client to a 2.38.3 `getContract`.
+5. **Lockfile (trial)**: 45 Aztec-scope entries to `6.0.0`, no new Aztec name. Third-party: `undici` 5.29.0 → 6.29.1, `viem` 2.38.3 → 2.57.1, viem's `ws` 8.18.3 → 8.21.0; added `@iarna/toml` 2.2.5, `abitype` 1.2.3, `ox` 0.14.45; removed `@fastify/busboy`. Every third-party version is older than 7 days.
+6. **Moved pins** (trial `test:all`, 15 reds, all in this list): PrivateFPC `0x2e189d0c…6db4` → `0x0516ebb4…6915` (the package's `canonical-deployment.json` agrees; artifact digest moved); SponsoredFPC `0x2adfb70e…2130` → `0x2d8fff82…69d3`; Standards Token class `0x163b2b24…1d8a` → `0x2ff09399…ea9f`; AuthRegistry `0x2ba87146…3a9c` → `0x120bf1fe…5e83`; the `expectVersion` literals in `layout-identity.test.ts` and `resolve-asset/src/index.test.ts`. `PXE_DATA_SCHEMA_VERSION` stays 16.
+7. **Live Testnet, block 731**: SponsoredFPC exists at the 6.0.0 address with class `0x23339131…3335`, equal to the installed artifact's. AuthRegistry is not published (#430). The PrivateFPC answers not found, its normal state.
+8. **unleashed** has not regenerated: `apps/tools/public/testnet-bridge.json` was last changed 2026-10-15, `walletChainId` 3415328944, `privateFpc.address` `0x2e189d0c…`.
+9. **Token-list order.** `infra/token-list/scripts/check.ts:79` parses the published envelope in strict mode, which refuses any class outside `BUNDLED_TOKEN_CLASS_IDS`. Moving the class reds `test/tree.test.ts` against today's envelope; an envelope with new-class entries would red today's tree. Only an empty list passes both (skill line 44; rc.3 shipped it as #429).
+10. **Old literals.** Must move: `chain-ids.ts:23,27,30`, `chain-ids.test.ts:7,9`, `session-established.test.ts:567-570`, `aztec-node-factory-adapter.probe.test.ts:18`, `infra/token-list/test/live-check.test.ts:9-11,108`, `list.source.json`. Historical, never edited: `stored-shapes/{snapshot.json,goldens.json,backups/passkey.json}`, `tests/e2e/fixtures/update/v0.31.0.storage.json`, `reference/**`, `CHANGELOG.md`, `BEFORE-LAUNCH.md:159,163`, `PROVENANCE.md`'s history lines.
+11. **Version readers**: `.github/actions/setup-aztec/action.yml:24`, `scripts/e2e/docker-ci-like.sh:95`, `tests/e2e/global-setup.ts:75`, `vite.shared.ts:30-34` (`__AZTEC_VERSION__`), `:44-48` (`__BB_VERSION__`); `seed-preflight-node.ts:10` demands `nodeVersion` equal the pxe pin. All key on names, none on versions.
+12. **Notices** (`packages/third-party-notices/src/policy.ts:81-84,91-160,207`): `AZTEC_NODE_TAG` rc.3, `AZTEC_PACKAGES_TAG` rc.6, `NOIR_COMMIT 5a7ee9bf…`, `SQLITE3MC_TAG` v2.3.5; eight overrides and one `VENDORED` trigger bound to a `reviewedVersion`. The 6.0.0 accounts artifact still names noir `1.0.0-rc.3+5a7ee9bf…`.
+13. **CI toolchain**: `installer-pins.sha256` pins `6.0.0-rc.3/{install,versions}`, noir `1.0.0-rc.3`, Foundry 1.4.1; `setup-aztec-pins.test.ts:44-83` checks the CLI lock and pin shapes. presto-server 1.1.3 (`_extension-network-e2e.yml:187-213`) fetches the bb the SDK names; no server release is needed.
+
+## Collisions and open work
+
+- #864 (open): this bump is its first agent line. #430, #427, #471, #469, #744 (closed `known-limit`): reset limits that still hold. #80 (Mainnet, `blocked:external`).
+- deps-audit-1 holds an unmerged vitest/storybook bump on its own branch: this plan edits no vitest or storybook pin.

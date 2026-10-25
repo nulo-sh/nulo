@@ -2,8 +2,8 @@ import { isRecord } from "@nulo/wallet-core/utils"
 
 /**
  * A profile's saved fee-method picks, one pair of per-profile keys (`feePicksKey`, `sendFeePicksKey`).
- * The profile service is their one writer; readers re-parse every value, since extension storage is
- * writable by anything that reaches the profile dir.
+ * The ui preference service is their one writer; readers re-parse every value, since extension
+ * storage is writable by anything that reaches the profile dir.
  */
 
 export type FeePickType = "fj" | "private_fpc" | "fpc"
@@ -80,7 +80,7 @@ function slotsOf(value: unknown): SendSlots {
 }
 
 /** Send's whole map, re-parsed: a write never carries a malformed neighbour forward. */
-function readSendPicks(raw: unknown): Record<string, SendSlots> {
+export function readSendPicks(raw: unknown): Record<string, SendSlots> {
 	const out: Record<string, SendSlots> = {}
 	for (const [address, value] of Object.entries(asObject(raw) ?? {})) {
 		const slots = slotsOf(value)

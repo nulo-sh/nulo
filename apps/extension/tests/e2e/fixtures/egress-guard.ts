@@ -1,5 +1,5 @@
 /**
- * The smoke suite's egress guard: every HTTP, HTTPS and WebSocket request a guarded browser makes
+ * The e2e suites' egress guard: every HTTP, HTTPS and WebSocket request a guarded browser makes
  * for a host outside the machine reaches this loopback proxy, which refuses it and records the
  * host. A per-launch canary, reachable only on a direct path, proves the routing held.
  *
@@ -8,8 +8,9 @@
  */
 import { randomBytes } from "node:crypto"
 import { type Server, type Socket, createServer } from "node:net"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { TOKEN_LIST_URL } from "@/wallet/services/token-list/spec"
+import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
 import { REPO_ROOT } from "../lockfile"
 import { PortClaimConflict, claimPorts, registeredPorts, releasePorts } from "../port-registry"
@@ -18,6 +19,8 @@ export interface EgressAttempt {
 	host: string
 	port: number
 	count: number
+	/** Of `count`, the attempts at a watched host that arrived while its watch held; absent until one does. */
+	held?: number
 }
 
 export interface EgressGuard {
@@ -26,6 +29,9 @@ export interface EgressGuard {
 	attempts(): readonly EgressAttempt[]
 	/** More distinct `host:port` pairs arrived than the record keeps. */
 	overflowed(): boolean
+	/** From now on, also counts in `held` each attempt at `host`, on any port, that arrives while
+	 *  `holding()` is true. Replaces an earlier watch on the host. */
+	watch(host: string, holding: () => boolean): void
 	/** Idempotent. Classifies any unfinished request, then ends every socket within 2 s. */
 	stop(): Promise<void>
 }
@@ -38,9 +44,14 @@ export interface EgressCanary {
 
 /** What answers for an outside node in the launch's place, held from settle to close. */
 export interface HeldNode {
+	/** The node's host, as the guard records it. */
+	host: string
+	/** The launch interception's `holding()`. */
+	holding(): boolean
 	requests(): number
 	/** Every arm or reply the interception failed, and a spec's interception left unstopped; read
-	 *  while the browser is open. A request it never saw reaches the guard and is refused unflagged. */
+	 *  while the browser is open. A request it never saw reaches the guard, and fails the close when it
+	 *  arrives while `holding()` and before the close begins. */
 	failures(): Promise<string[]>
 	/** Safe once the browser is closed. */
 	stop(): Promise<void>
@@ -54,24 +65,36 @@ export const EGRESS_LINK_LOCAL_HOST = "169.254.0.1"
 /** Recorded for a request that does not parse; no list accepts it. */
 export const MALFORMED = "<malformed>"
 /**
- * The one outside host a live launch sends direct: the whole name, on every scheme and port, as
- * dRPC's shared load balancer serves it. The exception is URL routing, not a network boundary.
+ * The Testnet node's host, which a live launch sends direct beside the list's: the whole name, on
+ * every scheme and port, as dRPC's shared load balancer serves it. The exception is URL routing, not
+ * a network boundary.
  */
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
+/** The default Mainnet node's host, which no launch sends direct. */
+export const MAINNET_NODE_HOST = new URL(MAINNET_RPC_URL).hostname
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
 
-/** Wallet and spec hosts the smoke build tries and the guard refuses, each with why it is tried. */
+/**
+ * bb.js's CRS hosts, which every guarded launch sends direct: an in-browser proof downloads its
+ * points from the first, or from the second when that fails, and a launch's fresh profile holds
+ * none, so a refused download fails the proof. The guard recording either fails the close.
+ */
+export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.aztec-labs.com"]
+
+/** Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
-		"lb.drpc.live",
-		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; what reaches the guard is a request from before that, from a spec's interception swap, or one the interception could not see",
+		LIVE_NODE_HOST,
+		"the seeded Testnet node: the background reads the active network's status at popup start, the offscreen PXE on Home, and a full backup or contacts export reads every network's. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
 	],
+	[MAINNET_NODE_HOST, "the seeded Mainnet node, the default: read as the Testnet node is, and held by its own stand-in the same way"],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[
 		LIVE_LIST_HOST,
 		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its daily alarm",
 	],
+	[new URL(HOW_AZTEC_WORKS_URL).hostname, "Home's How Aztec works row, which a spec opens in a tab"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
 	[EGRESS_PROBE_HOST, "the control spec's background probe"],
 	[EGRESS_LINK_LOCAL_HOST, "the control spec's link-local probe"],
@@ -119,7 +142,7 @@ export function undeclared(attempts: readonly EgressAttempt[], browserOwnHosts: 
 		.sort()
 }
 
-/** Whether the run's global setup armed the guard. Only the smoke setup provides `true`. */
+/** Whether the run's global setup armed the guard; both e2e setups provide `true`. */
 export const guardArmed = (provided: unknown): boolean => provided === true
 
 export const canaryUrl = (port: number, scheme = "https"): string => `${scheme}://${EGRESS_CANARY_HOST}:${port}/`
@@ -191,15 +214,19 @@ async function shutDown(server: Server, sockets: Map<Socket, () => void>): Promi
 
 export async function startEgressGuard(): Promise<EgressGuard> {
 	const record = new Map<string, EgressAttempt>()
+	const watched = new Map<string, () => boolean>()
 	let overflow = false
 	/** Each open socket and the call that classifies it if the guard stops first. */
 	const sockets = new Map<Socket, () => void>()
 
 	const note = (host: string, port: number) => {
+		const held = watched.get(host)?.() === true
 		const entry = record.get(`${host}:${port}`)
-		if (entry) entry.count++
-		else if (record.size >= MAX_DISTINCT) overflow = true
-		else record.set(`${host}:${port}`, { host, port, count: 1 })
+		if (entry) {
+			entry.count++
+			if (held) entry.held = (entry.held ?? 0) + 1
+		} else if (record.size >= MAX_DISTINCT) overflow = true
+		else record.set(`${host}:${port}`, { host, port, count: 1, ...(held ? { held: 1 } : {}) })
 	}
 
 	const handle = (socket: Socket) => {
@@ -249,6 +276,9 @@ export async function startEgressGuard(): Promise<EgressGuard> {
 		port,
 		attempts: () => [...record.values()].map((entry) => ({ ...entry })),
 		overflowed: () => overflow,
+		watch: (host, holding) => {
+			watched.set(host, holding)
+		},
 		stop: () => {
 			stopping ??= shutDown(server, sockets).finally(release)
 			return stopping
@@ -294,13 +324,23 @@ export function egressFailure(
 	// Every live-host request of a live launch goes direct; one at the guard means the route held only in part.
 	const leaked = attempts.find(({ host }) => liveHosts.includes(host))
 	if (leaked) return `${traffic.browser} sent ${leaked.host} to the guard: this launch's direct route to it did not hold`
+	const missed = attempts
+		.filter(({ held }) => (held ?? 0) > 0)
+		.map(
+			({ host, port, held }) =>
+				`${traffic.browser} sent ${host}:${port} to the guard ${held} time(s) while the launch's stand-in held its origin: a target its interception does not cover dialed it. Find that target (tests/e2e/README.md, Egress guard); declaring the host cannot fix this.`,
+		)
 	const hosts = undeclared(attempts, traffic.ownHosts)
-	if (hosts.length === 0) return undefined
-	return [
-		`${traffic.browser} tried ${hosts.length} host(s) outside the machine that no list declares: ${hosts.join(", ")}.`,
-		"A host the wallet or a spec now tries: add it to DECLARED_REFUSALS with why (tests/e2e/fixtures/egress-guard.ts).",
-		`A host the browser reaches on its own: add the exact name to its driver's ownHosts with why (tests/e2e/fixtures/browser/${traffic.browser}.ts).`,
-	].join("\n")
+	const unlisted =
+		hosts.length === 0
+			? []
+			: [
+					`${traffic.browser} tried ${hosts.length} host(s) outside the machine that no list declares: ${hosts.join(", ")}.`,
+					"A host the wallet or a spec now tries: add it to DECLARED_REFUSALS with why (tests/e2e/fixtures/egress-guard.ts).",
+					`A host the browser reaches on its own: add the exact name to its driver's ownHosts with why (tests/e2e/fixtures/browser/${traffic.browser}.ts).`,
+				]
+	const lines = [...missed, ...unlisted]
+	return lines.length === 0 ? undefined : lines.join("\n")
 }
 
 /**
@@ -313,27 +353,31 @@ export async function closeAfterEgressCheck(
 	{
 		guard,
 		canary,
-		node,
+		nodes = [],
 		label,
 		traffic,
 		liveHosts,
 	}: {
 		guard: EgressGuard
 		canary: EgressCanary
-		node?: HeldNode
+		nodes?: readonly HeldNode[]
 		label: string
 		traffic: Parameters<typeof egressFailure>[1]
 		liveHosts?: readonly string[]
 	},
 ): Promise<void> {
-	const nodeFailures = node ? await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`]) : []
+	const nodeFailures: string[] = []
+	for (const node of nodes) {
+		const failures = await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`])
+		nodeFailures.push(...failures.map((failure) => `${node.host}: ${failure}`))
+	}
 	let closeError: unknown
 	try {
 		await close()
 	} catch (err) {
 		closeError = err
 	} finally {
-		await Promise.all([guard.stop(), canary.stop(), node?.stop()])
+		await Promise.all([guard.stop(), canary.stop(), ...nodes.map((node) => node.stop())])
 	}
 	const failure = [
 		egressFailure(
@@ -341,7 +385,7 @@ export async function closeAfterEgressCheck(
 			traffic,
 			liveHosts,
 		),
-		nodeFailures.length ? `the stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
+		nodeFailures.length ? `a stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
 	]
 		.filter(Boolean)
 		.join("\n")
@@ -364,8 +408,9 @@ export interface GuardedLaunchDeps<B, S, L extends { close(): Promise<void> }> {
 	probeCanary(value: B, settled: S, url: string, recorded: () => boolean, budgetMs: number): Promise<void>
 	/** Wraps the browser close in the launch's other close-time checks; the egress check runs after them. */
 	wrapClose(closeBrowser: () => Promise<void>, value: B, settled: S): L
-	/** Arms what answers for an outside node, once the canary has proven the routing. */
-	holdNode?(value: B, settled: S): Promise<HeldNode>
+	/** Arms what answers for each outside node, once the canary has proven the routing; a failed arm
+	 *  stops the ones already armed before it throws. */
+	holdNodes?(value: B, settled: S): Promise<HeldNode[]>
 	startGuard?: () => Promise<EgressGuard>
 	startCanary?: () => Promise<EgressCanary>
 }
@@ -376,7 +421,7 @@ export interface GuardedLaunch<B, S, L> {
 	wrapped: L
 	guard: EgressGuard
 	canary: EgressCanary
-	node: HeldNode | undefined
+	nodes: readonly HeldNode[]
 	/** The first call closes and checks; a later one is the wrapped close alone. */
 	close(): Promise<void>
 }
@@ -391,7 +436,7 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 ): Promise<GuardedLaunch<B, S, L>> {
 	const guard = await (deps.startGuard ?? startEgressGuard)()
 	let canary: EgressCanary | undefined
-	let node: HeldNode | undefined
+	let nodes: HeldNode[] = []
 	let launched: { value: B; close(): Promise<void> } | undefined
 	try {
 		canary = await (deps.startCanary ?? startEgressCanary)()
@@ -405,19 +450,25 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 			const why = canary.connections() > 0 ? "went direct" : `never reached the guard within ${CANARY_PROBE_BUDGET_MS / 1000}s`
 			throw new Error(`egress guard: ${deps.label}: the canary request ${why}, so this launch's routing is not proven`)
 		}
-		node = await deps.holdNode?.(launched.value, settled)
-		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
-		const checked = { guard, canary, node, label: deps.label, traffic: deps.traffic, liveHosts: deps.liveHosts }
+		nodes = (await deps.holdNodes?.(launched.value, settled)) ?? []
 		let closed = false
+		// Judged until the close begins: a browser's shutdown can end the interception before the
+		// extension stops. The guard watches by host, so nodes sharing one are held while any holds.
+		for (const host of new Set(nodes.map((node) => node.host))) {
+			const same = nodes.filter((node) => node.host === host)
+			guard.watch(host, () => !closed && same.some((node) => node.holding()))
+		}
+		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
+		const checked = { guard, canary, nodes, label: deps.label, traffic: deps.traffic, liveHosts: deps.liveHosts }
 		const close = () => {
 			if (closed) return wrapped.close()
 			closed = true
 			return closeAfterEgressCheck(() => wrapped.close(), checked)
 		}
-		return { value: launched.value, settled, wrapped, guard, canary, node, close }
+		return { value: launched.value, settled, wrapped, guard, canary, nodes, close }
 	} catch (err) {
 		await launched?.close().catch(() => {})
-		await Promise.all([guard.stop(), canary?.stop(), node?.stop()])
+		await Promise.all([guard.stop(), canary?.stop(), ...nodes.map((node) => node.stop())])
 		throw err
 	}
 }

@@ -52,7 +52,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 			</template>
 			<template v-if="seedPhrase?.split(' ').length === 24" #bottom>
 				<Flex align="center" gap="4" :class="$style.hint_row">
-					<Icon name="check-circle" size="12" color="green" />
+					<Icon name="square-check" size="12" color="green" />
 					<Text variant="body" color="primary">Correct</Text>
 				</Flex>
 			</template>
@@ -80,7 +80,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 				</template>
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
-						<MaterialIcon name="lock" :size="12" color="tertiary" />
+						<Icon name="lock" :size="12" color="tertiary" />
 						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>
@@ -139,8 +139,8 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 }
 
 .error_tag {
-	composes: type--tag from global;
-	color: var(--red);
+	composes: type--label-section from global;
+	color: var(--txt-danger);
 	border: 1px solid var(--red);
 	padding: 2px 6px;
 	flex-shrink: 0;

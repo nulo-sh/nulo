@@ -3,7 +3,10 @@
  * named it; `n` counts the accounts the reset re-creates.
  */
 
+import { joinNames } from "@/components/composite/import/restore-warning"
+
 const upper = (name: string) => name.toUpperCase()
+const quoted = (names: readonly string[]) => joinNames(names.map((n) => `“${n}”`))
 
 /** The account line: what happens to the accounts, in the mockups' singular and plural forms. */
 export function accountLine(name: string, n: number, addressesMoved: boolean): string {
@@ -56,12 +59,27 @@ export const mainnetBlocked = (name: string) => ({
 export const paused = (name: string) => ({
 	eyebrow: "RESET PAUSED",
 	title: `${name} reset did not finish`,
-	body: "Something stopped the reset part-way. Nulo saved your accounts before it removed anything, so nothing is lost.",
+	body: "Something stopped the reset part-way. Nulo saved your accounts before it removed anything.",
 	label: "TRYING AGAIN WILL",
 	pickUp: "Pick up where the reset stopped.",
 	note: "Nulo also tries again each time you open it.",
 	primary: "TRY AGAIN",
 })
+
+export const pausedImported = (name: string, imported: readonly string[], exportable: boolean) =>
+	imported.length === 1
+		? `${quoted(imported)} is an imported account. Deleting ${name} deletes it.${exportable ? " Export it first." : ""}`
+		: `${quoted(imported)} are imported accounts. Deleting ${name} deletes them.${exportable ? " Export them first." : ""}`
+
+export const EXPORT_IMPORTED = "EXPORT IMPORTED ACCOUNTS"
+
+export const endpointsHeld = (name: string) => `${name}’s reset is paused. Endpoints can be edited once it finishes.`
+
+/** Appended to Delete chain's confirmation while a paused reset holds the network. */
+export const deleteChainImported = (imported: readonly string[], exportable: boolean) =>
+	imported.length === 1
+		? `It also deletes the imported account ${quoted(imported)}.${exportable ? " Export it first." : ""}`
+		: `It also deletes the imported accounts ${quoted(imported)}.${exportable ? " Export them first." : ""}`
 
 export const alreadyAdded = (name: string, holder: string) => ({
 	eyebrow: "NETWORK RESET",

@@ -8,6 +8,7 @@
  * section.
  */
 import { DateTime } from "luxon"
+import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
 
 defineProps({
@@ -26,20 +27,21 @@ const formatTimestamp = (timestamp) => {
 
 <template>
 	<Flex wide direction="column" gap="10">
-		<button type="button" @click="expanded = !expanded" :class="$style.debug_toggle">
+		<button type="button" @click="expanded = !expanded" :class="$style.debug_toggle" data-testid="tx-debug-toggle">
 			<SectionLabel label="Debug details" />
 			<Icon
 				name="chevron"
 				size="12"
 				color="tertiary"
-				:style="{ transform: `rotate(${expanded ? '180' : '0'}deg)`, transition: 'transform 0.2s ease' }"
+				:rotate="expanded ? 270 : 90"
+				:class="$style.chevron"
 			/>
 		</button>
 
 		<Flex v-if="expanded" wide direction="column" gap="12" :class="$style.details_box">
 			<Flex wide justify="between" align="center">
 				<span :class="$style.detail_key">Tx hash</span>
-				<Flex @click="emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
+				<Flex @click="endsSelection($event) || emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
 					<span data-testid="tx-debug-hash" :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
 					<Icon name="copy" size="10" color="tertiary" />
 				</Flex>
@@ -81,7 +83,7 @@ const formatTimestamp = (timestamp) => {
 						<span
 							v-if="c.chunkNonce"
 							data-testid="tx-debug-chunk-nonce"
-							@click="emit('copy', c.chunkNonce)"
+							@click="endsSelection($event) || emit('copy', c.chunkNonce)"
 							:class="[$style.raw_call_aux, 'copyable']"
 						>
 							chunk: {{ trimAddress(c.chunkNonce, 6, 4) }}
@@ -110,18 +112,18 @@ const formatTimestamp = (timestamp) => {
 }
 
 .detail_key {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
 .detail_value_aux {
 	composes: type--meta from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .raw_call_item {
@@ -130,7 +132,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .raw_call_method {
-	composes: type--data from global;
+	composes: type--meta from global;
 	color: var(--txt-primary);
 }
 
@@ -140,8 +142,8 @@ const formatTimestamp = (timestamp) => {
 }
 
 .error_key {
-	composes: type--label from global;
-	color: var(--red);
+	composes: type--label-section from global;
+	color: var(--txt-danger);
 }
 
 .error_text {
@@ -150,7 +152,11 @@ const formatTimestamp = (timestamp) => {
 	border: 1px solid rgba(255, 0, 0, 0.3);
 	background: transparent;
 
-	color: var(--red);
+	color: var(--txt-danger);
 	word-break: break-word;
+}
+
+.chevron {
+	transition: transform 0.2s ease;
 }
 </style>

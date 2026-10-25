@@ -31,13 +31,13 @@ describe("settings/glossary", () => {
 				"glossary-entry-sponsored",
 				"glossary-entry-priority-fee",
 			],
-			["glossary-entry-authorization", "glossary-entry-name-for-this-app"],
+			["glossary-entry-authorization", "glossary-entry-name-for-this-app", "glossary-entry-interface"],
 			["glossary-entry-proving"],
 		])
 	})
 
 	test.each([
-		["private-balance", "Private balance", "Only you can see it. Marked with a padlock.", "Home · tokens · send"],
+		["private-balance", "Private balance", "Only you can see it. Marked with a shield.", "Home · tokens · send"],
 		["public-balance", "Public balance", "Anyone can see it, like a balance on Ethereum. Marked with a globe.", "Home · tokens · send"],
 		["fee-juice", "Fee Juice", "The token that pays network fees on Aztec. Shown as FJ.", "Home · fee card"],
 		["public-fee-juice", "Public Fee Juice", "Paying a fee with it shows your address.", "Home · fee menu"],
@@ -51,6 +51,12 @@ describe("settings/glossary", () => {
 		],
 		["authorization", "Authorization", "Lets a contract do one specific thing for you, once.", "Permission window · Connected apps"],
 		["name-for-this-app", "Name for this app", "A private name for this account visible only to this app.", "Permission window"],
+		[
+			"interface",
+			"Interface",
+			"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
+			"Approval window",
+		],
 		[
 			"proving",
 			"Proving",

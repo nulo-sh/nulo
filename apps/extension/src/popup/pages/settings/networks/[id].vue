@@ -8,12 +8,18 @@
 
 <script setup>
 /** Utils */
-import { managers } from "@/utils/core"
+import { managers, requireAccount } from "@/utils/core"
+import { sentenceName } from "@/utils/string"
+import * as staleCopy from "@/components/stale-network/copy"
+import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
+import { exportsHeld } from "@/composables/useStaleNetwork"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 const { activate: activateNetwork } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
@@ -36,6 +42,57 @@ const networkId = computed(() => route.params.id)
 const network = computed(() => appStore.networks.find((n) => n.id === networkId.value))
 const isActive = computed(() => appStore.network?.id === networkId.value)
 const canDelete = computed(() => !isActive.value && appStore.networks.length > 1)
+
+/** The hold a reset puts on network `id`, with the imported accounts deleting it would delete. A
+ *  running reset's takeover covers this page, so only a paused one's view is read. */
+async function readHeldReset(id) {
+	const pending = await managers.networkReset.getPendingReset()
+	if (pending?.networkId !== id) return null
+	const view = pending.running ? null : await managers.networkReset.getStaleNetwork(id)
+	return { imported: view?.reset?.imported ?? [], exportable: exportsHeld(view, appStore.profile?.type) }
+}
+
+/** The imported accounts deleting network `network` deletes, and whether they can be exported first:
+ *  a paused reset's list, which already names the chain's live imports, else the chain's live ones.
+ *  Full backup exports those unless a reset is pending; then only account export can, from a password
+ *  profile once the chain is active, which a stale chain never is. */
+async function readDeletedImports(network) {
+	const held = await readHeldReset(network.id)
+	if (held) return held
+	// `getAccounts` answers while locked, so a read the lock or a page change overtook stops before it.
+	if (disposed || !appStore.isLogined || networkId.value !== network.id) throw new Error("read overtaken")
+	const [rows, pending] = await Promise.all([
+		requireAccount().getAccounts(appStore.profile?.id, network.chainId, true),
+		managers.networkReset.getPendingReset(),
+	])
+	const imported = rows.filter((a) => a.type === AccountType.Imported)
+	const exportable =
+		!pending || (appStore.profile?.type === "password" && (await managers.networkReset.getStaleNetwork(network.id)) === null)
+	return { imported: imported.map((a) => sentenceName(a.name, DEFAULT_IMPORTED_ACCOUNT_NAME)), exportable }
+}
+
+/** What the confirmation says deleting `network` removes; null when it cannot be known. */
+async function deleteDescription(network) {
+	const held = await readDeletedImports(network).catch(() => null)
+	if (!held) return null
+	return [
+		"This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone.",
+		held.imported.length ? staleCopy.deleteChainImported(held.imported, held.exportable) : "",
+	]
+		.filter(Boolean)
+		.join(" ")
+}
+
+const heldReset = ref(null)
+let resetReads = 0
+let disposed = false
+const syncHeldReset = async () => {
+	const read = ++resetReads
+	const held = await readHeldReset(networkId.value)
+	if (read === resetReads) heldReset.value = held
+}
+managers.networkReset.onStaleNetworkChanged.add(syncHeldReset)
+void syncHeldReset()
 
 async function refreshNetworks() {
 	appStore.networks = await managers.network.getNetworks()
@@ -96,57 +153,91 @@ const handleDeleteEndpoint = (endpoint) => {
 	if (network.value.primaryEndpointId === endpoint.id) return
 	if (network.value.endpoints.length === 1) return
 
-	cacheStore.confirm.confirm_text = "Yes, delete endpoint"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.title = "Delete this endpoint?"
-	cacheStore.confirm.description = `This RPC URL will be removed from ${network.value.name}. The chain itself stays.`
-	cacheStore.confirm.callback = async () => {
-		try {
-			await managers.network.deleteEndpoint(network.value.id, endpoint.id)
-			await refreshNetworks()
-			openToast({ kind: "success", label: "Endpoint deleted" })
-		} catch (err) {
-			const msg = errorMessageFromUnknown(err)
-			if (msg.includes("PRIMARY_ENDPOINT")) {
-				openToast({ kind: "error", label: "Make another endpoint primary first." })
-			} else if (msg.includes("LAST_ENDPOINT")) {
-				openToast({ kind: "error", label: "Last endpoint. Delete the chain instead." })
-			} else {
-				openToast({ kind: "error", label: "Failed to delete endpoint" })
+	requestConfirm({
+		confirm_text: "Yes, delete endpoint",
+		confirm_color: "red",
+		title: "Delete this endpoint?",
+		description: `This RPC URL will be removed from ${network.value.name}. The chain itself stays.`,
+		callback: async () => {
+			try {
+				await managers.network.deleteEndpoint(network.value.id, endpoint.id)
+				await refreshNetworks()
+				openToast({ kind: "success", label: "Endpoint deleted" })
+			} catch (err) {
+				const msg = errorMessageFromUnknown(err)
+				if (msg.includes("PRIMARY_ENDPOINT")) {
+					openToast({ kind: "error", label: "Make another endpoint primary first." })
+				} else if (msg.includes("LAST_ENDPOINT")) {
+					openToast({ kind: "error", label: "Last endpoint. Delete the chain instead." })
+				} else {
+					openToast({ kind: "error", label: "Failed to delete endpoint" })
+				}
 			}
-		}
-	}
-	popupStore.open("confirm")
+		},
+	})
 }
 
-const handleDeleteNetwork = () => {
+/** Each press and each Confirm; one a later one or the lock overtook while it read acts no further. */
+let deleteAttempts = 0
+const overtaken = (id, attempt) => disposed || !appStore.isLogined || networkId.value !== id || attempt !== deleteAttempts
+
+/** The delete goes only on what its confirmation said: Confirm reads the chain again, and an import
+ *  made since, in another window, reopens the confirmation naming it instead of deleting. */
+const confirmDeleteNetwork = (id, name, description) =>
+	requestConfirm({
+		confirm_text: "Yes, delete chain",
+		confirm_color: "red",
+		title: `Delete ${name}?`,
+		description,
+		callback: async () => {
+			const attempt = ++deleteAttempts
+			const target = network.value
+			const now = target?.id === id ? await deleteDescription(target) : null
+			if (overtaken(id, attempt)) return
+			if (now === null) return openToast({ kind: "error", label: "Failed to delete chain" })
+			if (now !== description) return confirmDeleteNetwork(id, name, now)
+			try {
+				await appStore.removeNetwork(target)
+				openToast({ kind: "success", label: "Chain deleted" })
+				router.replace("/popup/settings/networks")
+			} catch (err) {
+				const msg = errorMessageFromUnknown(err)
+				if (msg.startsWith("ACTIVE_NETWORK")) {
+					openToast({ kind: "error", label: "Switch to another chain before deleting this one." })
+				} else {
+					openToast({ kind: "error", label: "Failed to delete chain" })
+				}
+			}
+		},
+	})
+
+const handleDeleteNetwork = async () => {
 	if (!network.value) return
 	if (!canDelete.value) return
-	cacheStore.confirm.confirm_text = "Yes, delete chain"
-	cacheStore.confirm.confirm_color = "red"
-	cacheStore.confirm.title = `Delete ${network.value.name}?`
-	cacheStore.confirm.description = "This wipes accounts, balances, tokens, and PXE state on this chain. This cannot be undone."
-	cacheStore.confirm.callback = async () => {
-		const target = network.value
-		try {
-			await appStore.removeNetwork(target)
-			openToast({ kind: "success", label: "Chain deleted" })
-			router.replace("/popup/settings/networks")
-		} catch (err) {
-			const msg = errorMessageFromUnknown(err)
-			if (msg.startsWith("ACTIVE_NETWORK")) {
-				openToast({ kind: "error", label: "Switch to another chain before deleting this one." })
-			} else {
-				openToast({ kind: "error", label: "Failed to delete chain" })
-			}
-		}
-	}
-	popupStore.open("confirm")
+	const { id, name } = network.value
+	const attempt = ++deleteAttempts
+	// Read at the click: a confirmation opened before the page's own read landed must still name them.
+	const description = await deleteDescription(network.value)
+	if (overtaken(id, attempt)) return
+	// An unknown hold is not an empty one: the confirmation never omits what the delete removes.
+	if (description === null) return openToast({ kind: "error", label: "Failed to delete chain" })
+	confirmDeleteNetwork(id, name, description)
 }
 
 // If the network row disappears (deleted from elsewhere), redirect back to the list.
 watch(network, (n) => {
 	if (!n) router.replace("/popup/settings/networks")
+})
+
+// The router reuses this page across network ids; a hold read for one must never show on another.
+watch(networkId, () => {
+	heldReset.value = null
+	void syncHeldReset()
+})
+
+onBeforeUnmount(() => {
+	disposed = true
+	managers.networkReset.onStaleNetworkChanged.remove(syncHeldReset)
 })
 </script>
 
@@ -160,7 +251,7 @@ watch(network, (n) => {
 					size="small"
 					:title="isActive ? 'Active network' : 'Set as active network'"
 					:description="isActive ? 'Currently in use' : 'Switch the wallet to this chain'"
-					:icon="isActive ? 'check-circle' : 'circle'"
+					:icon="isActive ? 'square-check' : 'square'"
 					:iconFillColor="isActive ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
 					:disabled="isActive"
@@ -171,9 +262,7 @@ watch(network, (n) => {
 					size="small"
 					title="Name"
 					:description="network.name"
-					icon="edit"
-					iconFillColor="tertiary"
-					iconBgColor="transparent"
+					trailingIcon="edit"
 					@click="handleEditNetworkName"
 					data-testid="network-detail-rename"
 				/>
@@ -181,10 +270,7 @@ watch(network, (n) => {
 					size="small"
 					title="Chain ID"
 					:description="String(network.chainId)"
-					descriptionVariant="data"
-					icon="info"
-					iconFillColor="tertiary"
-					iconBgColor="transparent"
+					descriptionVariant="meta"
 					raw
 					data-testid="network-detail-chain-id"
 				/>
@@ -194,20 +280,25 @@ watch(network, (n) => {
 		<!-- Endpoints -->
 		<Flex direction="column" gap="12">
 			<SectionLabel label="Endpoints" :count="network.endpoints.length" />
+			<Flex v-if="heldReset" align="start" gap="6" data-testid="endpoint-reset-held">
+				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.reason_icon" />
+				<Text variant="body" color="secondary" height="140">{{ staleCopy.endpointsHeld(network.name) }}</Text>
+			</Flex>
 			<ItemsContainer>
+				<!-- A bound onClick, not @click: SettingItem renders a row inert only with no click listener. -->
 				<SettingItem
 					v-for="endpoint in network.endpoints"
 					:key="endpoint.id"
 					:title="endpoint.label || endpoint.rpcUrl"
 					:description="endpoint.label ? endpoint.rpcUrl : undefined"
-					:icon="network.primaryEndpointId === endpoint.id ? 'check-circle' : 'circle'"
+					:icon="network.primaryEndpointId === endpoint.id ? 'square-check' : 'square'"
 					:iconFillColor="network.primaryEndpointId === endpoint.id ? 'primary' : 'tertiary'"
 					iconBgColor="transparent"
-					@click="handleSetPrimary(endpoint)"
+					:onClick="heldReset ? undefined : () => handleSetPrimary(endpoint)"
 					data-testid="endpoint-row"
 					:data-endpoint-id="endpoint.id"
 				>
-					<template #right>
+					<template v-if="!heldReset" #right>
 						<Flex align="center" gap="8">
 							<Tooltip position="end" delay="350">
 								<RowAction label="Edit endpoint" data-testid="endpoint-edit-btn" @click="handleEditEndpoint(endpoint)">
@@ -221,7 +312,7 @@ watch(network, (n) => {
 								v-if="network.primaryEndpointId !== endpoint.id && network.endpoints.length > 1"
 							>
 								<RowAction label="Delete endpoint" data-testid="endpoint-delete-btn" @click="handleDeleteEndpoint(endpoint)">
-									<Icon name="close-circle" size="14" color="tertiary" />
+									<Icon name="close" size="14" color="tertiary" />
 								</RowAction>
 								<template #content>Delete endpoint</template>
 							</Tooltip>
@@ -235,6 +326,7 @@ watch(network, (n) => {
 				wide
 				variant="primary_outline"
 				size="medium"
+				:disabled="!!heldReset"
 				data-testid="endpoint-add-btn"
 			>
 				Add endpoint
@@ -259,3 +351,10 @@ watch(network, (n) => {
 		</Flex>
 	</SettingsPageShell>
 </template>
+
+<style module>
+.reason_icon {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+</style>

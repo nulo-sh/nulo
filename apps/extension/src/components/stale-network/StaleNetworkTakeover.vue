@@ -1,17 +1,21 @@
-<script setup>
+<script setup lang="ts">
+/** Vendor */
+import type { PropType } from "vue"
+
 /** Components */
-import StaleIcon from "./StaleIcon.vue"
+import TakeoverLayout from "@/components/composite/TakeoverLayout.vue"
 import StaleNetworkConfirm from "./StaleNetworkConfirm.vue"
 
 /** Composables */
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
+import { exportsHeld, neverOpened, STALE_NETWORK_KEY } from "@/composables/useStaleNetwork"
 
 /** Utils */
 import { managers } from "@/utils/core"
-import { takeoverScreen } from "@/popup/stale-takeover"
+import type { TakeoverAction as Action, TakeoverContent as Content, TakeoverLine as BoxLine } from "@/components/composite/takeover"
+import { type TakeoverScreen, takeoverScreen } from "@/popup/stale-takeover"
+import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import * as copy from "./copy"
 
 /** Store */
@@ -20,7 +24,7 @@ import { usePopupStore } from "@/stores/popup.store"
 
 const props = defineProps({
 	/** The view to render: the active network's, or the one whose reset runs. */
-	view: { type: Object, required: true },
+	view: { type: Object as PropType<StaleNetworkView>, required: true },
 })
 
 const appStore = useAppStore()
@@ -28,10 +32,10 @@ const popupStore = usePopupStore()
 
 const { lock, dispose: disposeLock } = useLockWallet(managers.profile)
 const { activate } = useNetworkActivation({
-	persist: (id) => managers.network.setActiveNetwork(id),
-	read: () => managers.network.getActiveNetwork(),
+	persist: (id) => managers.network!.setActiveNetwork(id),
+	read: () => managers.network!.getActiveNetwork(),
 })
-const stale = inject(STALE_NETWORK_KEY)
+const stale = inject(STALE_NETWORK_KEY)!
 
 const router = useRouter()
 
@@ -40,26 +44,25 @@ const screen = computed(() =>
 	takeoverScreen(props.view, stale.running.value?.networkId === props.view.networkId, stale.nodeDown.value === props.view.networkId),
 )
 
-const MARK_COLORS = { check: "--txt-primary", cross: "--orange", swap: "--txt-warning" }
-
 const openNetworks = () => router.push("/popup/settings/networks")
+const openExport = () => router.push("/popup/settings/security/export/account")
 const start = () => stale.start(props.view)
 const goToPending = async () => {
 	const target = appStore.networks.find((n) => n.id === props.view.otherPending?.networkId)
 	if (target) await activate(target)
 }
 
-const SWITCH = { text: copy.SWITCH_NETWORK, testid: "stale-network-switch", action: openNetworks }
+const SWITCH: Action = { text: copy.SWITCH_NETWORK, testid: "stale-network-switch", action: openNetworks }
 
-const accountLine = (view) =>
+const accountLine = (view: StaleNetworkView): BoxLine[] =>
 	view.accounts.length > 0 ? [{ mark: "check", text: copy.accountLine(view.name, view.accounts.length, view.cause.addressesMoved) }] : []
 
-const causeEyebrow = (view) => ({
-	icon: "reset",
+const causeEyebrow = (view: StaleNetworkView): Content["eyebrow"] => ({
+	icon: "refresh",
 	text: (view.cause.networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)).eyebrow,
 })
 
-const SCREENS = {
+const SCREENS: Partial<Record<TakeoverScreen, (view: StaleNetworkView) => Content>> = {
 	"network-reset": (view) => cause(view),
 	"new-addresses": (view) => cause(view),
 	blocked: (view) => {
@@ -75,23 +78,27 @@ const SCREENS = {
 	},
 	paused: (view) => {
 		const c = copy.paused(view.name)
+		const imported = view.reset?.imported ?? []
+		const exportable = exportsHeld(view, appStore.profile?.type)
+		const retry: Action = { text: c.primary, testid: "stale-network-retry", action: start, guarded: true }
+		const exportHeld: Action = { text: copy.EXPORT_IMPORTED, testid: "stale-network-export", action: openExport }
 		return {
 			eyebrow: { icon: "pause", text: c.eyebrow },
 			title: c.title,
 			body: c.body,
+			notice: imported.length > 0 ? copy.pausedImported(view.name, imported, exportable) : undefined,
 			box: {
 				label: c.label,
 				lines: [{ mark: "check", text: c.pickUp }, ...accountLine(view), { mark: "check", text: copy.KEEP_LINE }],
 			},
 			note: c.note,
-			primary: { text: c.primary, testid: "stale-network-retry", action: start },
-			secondary: SWITCH,
+			...(exportable ? { primary: exportHeld, secondary: retry, tertiary: SWITCH } : { primary: retry, secondary: SWITCH }),
 		}
 	},
 	"already-added": (view) => {
-		const c = copy.alreadyAdded(view.name, view.heldBy.name)
+		const c = copy.alreadyAdded(view.name, view.heldBy!.name)
 		return {
-			eyebrow: { icon: "reset", text: c.eyebrow },
+			eyebrow: { icon: "refresh", text: c.eyebrow },
 			title: c.title,
 			body: c.body,
 			box: { label: c.label, lines: c.steps.map((text, i) => ({ number: i + 1, text })) },
@@ -100,7 +107,7 @@ const SCREENS = {
 		}
 	},
 	"one-at-a-time": (view) => {
-		const c = copy.oneAtATime(view.name, view.otherPending.name)
+		const c = copy.oneAtATime(view.name, view.otherPending!.name)
 		return {
 			eyebrow: causeEyebrow(view),
 			title: c.title,
@@ -125,10 +132,12 @@ const SCREENS = {
 
 /** A1, A2, or both causes: A1 with the address line and no notice. A network the profile never
  *  opened lists only what changes: its node, since it holds no account, token or history. */
-function cause(view) {
+function cause(view: StaleNetworkView): Content {
 	const { networkReset } = view.cause
-	const c = networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)
-	const node = view.switchToSeedNode ? [{ mark: "swap", text: copy.nodeLine(view.name), testid: "stale-network-node-line" }] : []
+	const c: { title: string; body: string; notice?: string } = networkReset ? copy.networkReset(view.name) : copy.newAddresses(view.name)
+	const node: BoxLine[] = view.switchToSeedNode
+		? [{ mark: "swap", text: copy.nodeLine(view.name), testid: "stale-network-node-line" }]
+		: []
 	return {
 		eyebrow: causeEyebrow(view),
 		title: c.title,
@@ -140,7 +149,7 @@ function cause(view) {
 				...accountLine(view),
 				...node,
 				{ mark: "check", text: copy.KEEP_LINE },
-				...(neverOpened(view) ? [] : [{ mark: "cross", text: copy.removeLine(view.name) }]),
+				...(neverOpened(view) ? [] : [{ mark: "cross", text: copy.removeLine(view.name) } satisfies BoxLine]),
 			],
 		},
 		note: networkReset ? copy.NO_PHRASE_NOTE : undefined,
@@ -161,7 +170,7 @@ const steps = computed(() => {
 	const { reset, accounts, cause, name } = props.view
 	const purged = reset?.purged ?? false
 	const progress = copy.progress(name)
-	const out = [{ text: purged ? progress.removed : progress.removing, done: purged }]
+	const out: { text: string; done: boolean }[] = [{ text: purged ? progress.removed : progress.removing, done: purged }]
 	if (!purged) return out
 	const doneCount = reset?.doneCount ?? 0
 	accounts.forEach((account, i) => {
@@ -208,7 +217,7 @@ onBeforeUnmount(() => {
 		</Flex>
 		<div role="list" :class="$style.steps">
 			<div v-for="step in steps" :key="step.text" role="listitem" :class="$style.step" data-testid="stale-progress-step">
-				<StaleIcon v-if="step.done" name="check" :size="16" color="--txt-success" />
+				<Icon v-if="step.done" name="check" :size="16" color="txt-success" aria-hidden="true" />
 				<Spinner v-else size="16" color="--txt-primary" />
 				<span :class="step.done ? $style.step_text : $style.step_text_current">{{ step.text }}</span>
 			</div>
@@ -216,135 +225,26 @@ onBeforeUnmount(() => {
 		<span :class="$style.note">{{ copy.progress(view.name).footer }}</span>
 	</Flex>
 
-	<Flex v-else direction="column" :class="$style.screen" data-testid="stale-network-takeover" :data-screen="screen">
-		<div :class="$style.top_bar">
-			<button type="button" :class="$style.chip" data-testid="stale-network-chip" @click="openNetworks">
-				{{ copy.chipLabel(view.name) }}<span :class="$style.chip_square" />
-			</button>
-			<button type="button" :class="$style.chip" data-testid="stale-network-lock" aria-label="Lock wallet" @click="lock">
-				<StaleIcon name="lock" :size="12" />LOCK
-			</button>
-		</div>
-
-		<div :class="[$style.content, density && $style[density]]">
-			<div :class="$style.eyebrow">
-				<StaleIcon :name="content.eyebrow.icon" :size="16" color="--txt-warning" />
-				<span :class="$style.eyebrow_text">{{ content.eyebrow.text }}</span>
-			</div>
-			<h1 :class="$style.title" data-testid="stale-network-title">{{ content.title }}</h1>
-			<p :class="$style.body">{{ content.body }}</p>
-			<div v-if="content.notice" :class="$style.notice" data-testid="stale-network-notice">{{ content.notice }}</div>
-			<div v-if="content.box" :class="$style.box" data-testid="stale-network-box">
-				<span v-if="content.box.label" :class="$style.box_label">{{ content.box.label }}</span>
-				<div v-for="line in content.box.lines" :key="line.text" :class="$style.line" :data-testid="line.testid">
-					<span v-if="line.number" :class="$style.number">{{ line.number }}</span>
-					<StaleIcon v-else :name="line.mark" :size="14" :color="MARK_COLORS[line.mark]" :class="$style.mark" />
-					<span>{{ line.text }}</span>
-				</div>
-			</div>
-			<span v-if="content.note" :class="$style.note" data-testid="stale-network-note">{{ content.note }}</span>
-		</div>
-
-		<div :class="[$style.actions, density === 'dense_notice' && $style.actions_notice]">
-			<button
-				type="button"
-				:class="$style.primary"
-				:data-testid="content.primary.testid"
-				:disabled="stale.starting.value"
-				@keydown="refuseRepeatEnter"
-				@click="content.primary.action"
-			>
-				{{ content.primary.text }}
-			</button>
-			<button v-if="content.secondary" type="button" :class="$style.secondary" :data-testid="content.secondary.testid" @click="content.secondary.action">
-				{{ content.secondary.text }}
-			</button>
-		</div>
-
+	<TakeoverLayout
+		v-else-if="content"
+		:content="content"
+		:chip="copy.chipLabel(view.name)"
+		flagged
+		:busy="stale.starting.value"
+		:density="density"
+		testid-prefix="stale-network"
+		:data-screen="screen"
+		@chip="openNetworks"
+		@lock="lock"
+	>
 		<StaleNetworkConfirm :show="confirming" :view="view" @onClose="confirming = false" @confirm="confirmReset" />
-	</Flex>
+	</TakeoverLayout>
 </template>
 
 <style module>
-.screen {
-	flex: 1;
-	min-height: 0;
-	background: var(--app-bg);
-}
-
-.top_bar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 14px 16px;
-	border-bottom: 1px solid var(--hairline-strong);
-}
-
-.chip {
-	composes: type--tag from global;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	max-width: 60%;
-	padding: 7px 10px;
-	color: var(--txt-primary);
-	background: transparent;
-	border: 1px solid var(--nulo-outline);
-	cursor: pointer;
-}
-
-.chip:focus-visible,
-.primary:focus-visible,
-.secondary:focus-visible {
-	outline: 2px solid var(--nulo-accent);
-	outline-offset: 2px;
-}
-
-.chip_square {
-	flex: none;
-	width: 7px;
-	height: 7px;
-	background: var(--yellow);
-}
-
-.content {
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-	padding: 22px 20px 0;
-	overflow-y: auto;
-}
-
-.content.dense_notice {
-	gap: 13px;
-	padding-top: 20px;
-}
-
-.content.dense_tight {
-	gap: 11px;
-	padding-top: 18px;
-}
-
-.eyebrow {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
 .eyebrow_text {
 	composes: type--meta from global;
 	color: var(--txt-secondary);
-}
-
-.title {
-	composes: type--row-title from global;
-	margin: 0;
-	font-size: 26px;
-	line-height: 1.15;
-	color: var(--txt-primary);
-	overflow-wrap: anywhere;
 }
 
 .title_progress {
@@ -362,92 +262,9 @@ onBeforeUnmount(() => {
 	color: var(--txt-body);
 }
 
-.notice {
-	composes: type--body from global;
-	padding: 10px 12px;
-	line-height: 1.45;
-	color: var(--txt-warning);
-	background: color-mix(in srgb, var(--yellow) 7%, transparent);
-	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
-}
-
-.box {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 14px;
-	background: var(--card-bg);
-	border: 1px solid var(--border);
-}
-
-.dense_tight .box {
-	gap: 8px;
-	padding: 12px 14px;
-}
-
-.box_label {
-	composes: type--meta from global;
-	color: var(--txt-secondary);
-}
-
-.line {
-	composes: type--body from global;
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	line-height: 1.45;
-	color: var(--txt-primary);
-}
-
-.mark {
-	margin-top: 2px;
-}
-
-.number {
-	composes: type--data from global;
-	flex: none;
-	width: 14px;
-	text-align: center;
-	color: var(--txt-warning);
-}
-
 .note {
 	composes: type--body from global;
 	color: var(--txt-secondary);
-}
-
-.actions {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 16px 20px 20px;
-}
-
-.actions_notice {
-	padding-top: 14px;
-}
-
-.primary {
-	composes: type--button from global;
-	height: 48px;
-	cursor: pointer;
-	color: var(--txt-inverse);
-	background: var(--nulo-accent);
-	border: 0;
-}
-
-.primary:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
-
-.secondary {
-	composes: type--button from global;
-	height: 48px;
-	cursor: pointer;
-	color: var(--txt-primary);
-	background: transparent;
-	border: 1px solid var(--nulo-outline);
 }
 
 .progress {

@@ -1,7 +1,6 @@
+// Loaded during collection, so each case's re-import only re-evaluates it.
+import "./config"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-
-// Each case pays a fresh module import, which has outlasted the 5 s default under a full parallel run.
-const FRESH_IMPORT = { timeout: 30_000 }
 
 /**
  * Pins the LOAD-BEARING proverless guard (layer 1, see config.ts): proverless
@@ -13,7 +12,7 @@ const FRESH_IMPORT = { timeout: 30_000 }
  * The guard runs at module-evaluation time (top-level `if (...) throw`), so each
  * case stubs `import.meta.env` then re-imports a fresh module instance.
  */
-describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
+describe("e2e-proverless config (layer-1 fail-closed guard)", () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})
@@ -57,7 +56,7 @@ describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () =
  * token list, so a stray single flag would not be inert — it would
  * ship a wallet that silently stops seeding default tokens.
  */
-describe("e2e-token-seeds config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {
+describe("e2e-token-seeds config (layer-1 fail-closed guard)", () => {
 	beforeEach(() => {
 		vi.resetModules()
 	})
@@ -92,5 +91,40 @@ describe("e2e-token-seeds config (layer-1 fail-closed guard)", FRESH_IMPORT, () 
 		vi.stubEnv("VITE_NULO_E2E_TOKEN_SEEDS", "")
 		vi.stubEnv("VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM", "1")
 		await expect(import("./config")).rejects.toThrow(/both are required|double opt-in/i)
+	})
+})
+
+/**
+ * The wallet clocks: a build without the flag gets no e2e values and no stamp, so its services keep
+ * their production defaults and the release grep has nothing to find.
+ */
+describe("e2e-wallet-clocks config", () => {
+	beforeEach(() => {
+		vi.resetModules()
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+		vi.resetModules()
+	})
+
+	test("unset → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("0, as the prover-ON build passes it → no e2e values, no build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "0")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toBeNull()
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBeNull()
+	})
+
+	test("1 → the e2e values and the build stamp", async () => {
+		vi.stubEnv("VITE_NULO_E2E_WALLET_CLOCKS", "1")
+		const mod = await import("./config")
+		expect(mod.E2E_WALLET_CLOCKS).toEqual({ incomingPollMs: 10_000, finalityReadMs: 10_000 })
+		expect(mod.E2E_WALLET_CLOCKS_BUILD_STAMP).toBe("NULO_E2E_WALLET_CLOCKS_BUILD_STAMP")
 	})
 })

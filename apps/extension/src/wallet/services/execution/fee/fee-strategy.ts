@@ -32,7 +32,7 @@
  * ## Priority multiplier
  *
  * `feeSettings.priorityLevel` ("normal" / "fast" / "urgent") maps to
- * a numeric multiplier via `PRIORITY_MULTIPLIERS` in `@nulo/wallet-bridge`.
+ * a numeric multiplier via `FEE_MULTIPLIERS` (`feeMultiplierFor`).
  * All strategies get the pre-computed `feeMultiplier` in the context.
  * FJ / FJWC pass it to `finalizeGasLimits`; Embedded commits its capped
  * fee instead, so no multiplier applies there. A sponsor row applies it to
@@ -59,21 +59,30 @@ import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { DiscoveryProbe } from "../discovery-aware-estimator"
+import { throwIfAborted } from "../rpc-cancel"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
 import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
+import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
 import { feeCapFor } from "./fee-cap"
 
-/** Default multiplier for `maxFeesPerGas`. Production default is `2`.
- *  Overridable at build time via `VITE_NULO_FEE_MULTIPLIER` so e2e CI can
- *  widen the envelope when devnet base-fees drift on loaded GHA runners
- *  (a real cross-branch flake class — confirmed reproducible against
- *  `transfers.test.ts` and `concurrent-sendtx-confirm.test.ts` on a
- *  non-PR commit). Parsed once at module load; invalid / unset → 2. */
 const VITE_FEE_MULTIPLIER_RAW = (import.meta.env?.VITE_NULO_FEE_MULTIPLIER ?? "") as string
 const VITE_FEE_MULTIPLIER_PARSED = Number.parseFloat(VITE_FEE_MULTIPLIER_RAW)
-export const DEFAULT_FEE_MULTIPLIER: number =
-	Number.isFinite(VITE_FEE_MULTIPLIER_PARSED) && VITE_FEE_MULTIPLIER_PARSED >= 1 ? VITE_FEE_MULTIPLIER_PARSED : 2
+const FEE_LADDER_SCALE =
+	Number.isFinite(VITE_FEE_MULTIPLIER_PARSED) && VITE_FEE_MULTIPLIER_PARSED >= 1
+		? VITE_FEE_MULTIPLIER_PARSED / PRIORITY_MULTIPLIERS.normal
+		: 1
+/** The `maxFeesPerGas` multiplier per speed: `PRIORITY_MULTIPLIERS` in production. A build may set
+ *  Normal's with `VITE_NULO_FEE_MULTIPLIER`, so e2e CI can widen the envelope when devnet base fees
+ *  drift on loaded runners; Fast and Urgent scale with it, so the ladder keeps its order. Parsed once
+ *  at module load; unset, invalid or below 1 leaves the ladder as it is. */
+export const FEE_MULTIPLIERS: Record<PriorityLevel, number> = {
+	normal: PRIORITY_MULTIPLIERS.normal * FEE_LADDER_SCALE,
+	fast: PRIORITY_MULTIPLIERS.fast * FEE_LADDER_SCALE,
+	urgent: PRIORITY_MULTIPLIERS.urgent * FEE_LADDER_SCALE,
+}
+/** The multiplier when no speed is named, which is how the Send page asks for Normal. */
+export const DEFAULT_FEE_MULTIPLIER: number = FEE_MULTIPLIERS.normal
 
 /** Result returned by every strategy: the built tx plus the payment
  *  method the strategy resolved. Field names — not positions — are the
@@ -112,6 +121,10 @@ export type SimulateTxFn = (
 	parentTask?: WrappedTask,
 ) => Promise<TxSimulationResult>
 
+/** Receives a build's calls before that build is simulated, so a send whose simulation then fails
+ *  still names its call. */
+export type OnBuilt = (txCalls: BuiltStandardTx["txCalls"]) => Promise<void>
+
 /** Everything a strategy needs to do its job. Packed as a struct for
  *  forward-compat — new fields land without re-signing every impl. */
 export type FeeStrategyContext = {
@@ -144,6 +157,9 @@ export type FeeStrategyContext = {
 	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
 	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
 	fpc?: Fpc
+	/** Called after every build. Set only by a dApp send's own pass, never by an estimate: the
+	 *  strategies serve the window's estimates too, and those name no record. */
+	onBuilt?: OnBuilt
 }
 
 /** Dependencies injected once at construction. */
@@ -205,6 +221,21 @@ export function isInitWrapped(built: { txRequest: TxExecutionRequest; account: {
  *  build's placeholder until a strategy sets it (`feeCapFor`). */
 export function appPriorityOf(fee?: FeeOptions): PartialGasSettingsRPC | undefined {
 	return fee?.maxPriorityFeesPerGas ? { maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas } : undefined
+}
+
+/** Every strategy's build: under the context's fence, with the app's priority fee, handed to
+ *  `ctx.onBuilt` before anything simulates it. */
+export async function buildFor(
+	txBuilder: TxRequestBuilder,
+	ctx: FeeStrategyContext,
+	method: AccountFeePaymentMethodOptions,
+	task: WrappedTask,
+): Promise<BuiltStandardTx> {
+	const built = await txBuilder.buildStandard(ctx.op, ctx.fence, method, task, appPriorityOf(ctx.op.fee))
+	await ctx.onBuilt?.(built.txCalls)
+	// A cancel that landed while this build ran must not start its simulation.
+	throwIfAborted(ctx.signal)
+	return built
 }
 
 /** Override gas limits on a pre-built tx request from a pending FeeOptions
@@ -269,6 +300,15 @@ export function assertCustomGasLimitsWithinCap(fee: FeeOptions | undefined, txsL
 	}
 }
 
+export type FinalizeGasOptions = {
+	readonly gasPadding: number
+	/** A cap already committed; absent, the call derives one or keeps an embedded payment's. */
+	readonly maxFeesPerGas?: GasFees
+	readonly customLimits?: FeeOptions
+	readonly feeMultiplier?: number
+	readonly txsLimits?: Gas
+}
+
 /** Final gas-limit + maxFee calculation after a simulation. FJ / FJWC /
  *  Embedded call this; FPC has a custom post-simulation path.
  *
@@ -290,12 +330,10 @@ export async function finalizeGasLimits(
 	node: AztecNode,
 	txRequest: TxExecutionRequest,
 	simulatedTx: TxSimulationResult,
-	gasPadding: number,
-	maxFeesPerGas?: GasFees,
-	customLimits?: FeeOptions,
-	feeMultiplier?: number,
-	txsLimits?: Gas,
+	opts: FinalizeGasOptions,
 ): Promise<void> {
+	const { gasPadding, customLimits, feeMultiplier, txsLimits } = opts
+	let maxFeesPerGas = opts.maxFeesPerGas
 	const multiplier = feeMultiplier ?? DEFAULT_FEE_MULTIPLIER
 	if (!maxFeesPerGas) {
 		// An embedded payment's own cap was set before the simulation, and an app's fee contract may

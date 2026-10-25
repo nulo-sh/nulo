@@ -24,7 +24,6 @@ function mountCard(props: Record<string, unknown>) {
 			stubs: {
 				Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 				Icon: { template: "<i />" },
-				MaterialIcon: { template: "<i />" },
 			},
 		},
 	})
@@ -39,6 +38,17 @@ afterEach(() => {
 })
 
 describe("send/SelectTokenCard", () => {
+	test("a blank symbol and name read as the empty-value dash in the initial, the symbol and the name", () => {
+		const read = (token: Record<string, unknown>) => {
+			const { w } = mountCard({ token })
+			return [w.get("[class*='token_initial']"), w.get('[data-testid="send-token-symbol"]'), w.get("[class*='token_name']")].map(
+				(el) => el.text(),
+			)
+		}
+		expect(read({ ...TOKEN, symbol: "   ", name: "" })).toEqual(["—", "—", "—"])
+		expect(read(TOKEN)).toEqual(["T", "TST", "TestToken"])
+	})
+
 	test("loading: a tap, Enter and Space open nothing, and the row is busy and out of the Tab path", async () => {
 		const { w, popupStore } = mountCard({ loading: true })
 		for (const act of ["click", "keydown.enter", "keydown.space"]) await trigger(w).trigger(act)

@@ -1,12 +1,13 @@
 /**
  * `handleDiscovery` through the origin's admission gate, driven end to end through the SDK
- * handler's callbacks with a fake clock: a remembered origin's reload loop is served three at
- * once and then one per refill, an untrusted one also waits for verify-window capacity, a fresh
- * connection reserves its window after the popup and gives it back on a rolled-back approval,
- * and the number of handshakes parked behind one popup is bounded.
+ * handler's callbacks with a fake clock: a remembered origin's reload loop spends a reconnect token
+ * and a verify-window slot per handshake, a fresh connection reserves its window after the popup
+ * and gives it back on a rolled-back approval, and the number of handshakes parked behind one
+ * popup is bounded.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
+import { type Deferred, deferred } from "@nulo/wallet-core/utils"
 import { LogLevel } from "@/wallet/logger"
 
 type Callbacks = {
@@ -19,6 +20,8 @@ const handlerCalls: string[] = []
 /** The SDK's active sessions by id, each the object it handed to establishment. */
 const live = new Map<string, { sessionId: string }>()
 let approveReturns = true
+/** Per request id, armed by the test and resolved when the handler is asked to approve it. */
+const approvals = new Map<string, Deferred<void>>()
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 	BackgroundConnectionHandler: class {
@@ -36,6 +39,7 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 		}
 		approveDiscovery(id: string) {
 			handlerCalls.push(`approve:${id}`)
+			approvals.get(id)?.resolve()
 			return approveReturns
 		}
 		rejectDiscovery(id: string) {
@@ -52,26 +56,24 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
+vi.mock("./discovery-flow", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./discovery-flow")>()
+	return { ...actual, handleDiscovery: vi.fn(actual.handleDiscovery) }
+})
 
 import { initWalletSdkHandler } from "./background"
+import { handleDiscovery } from "./discovery-flow"
+import { discoveryRun } from "./discovery-run.harness"
 import { RECONNECT_REFILL_MS } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, fakeSdkServices } from "./test-services"
 
 const noopLogger = { log: () => {} } as never
 
-function deferred<T>() {
-	let resolve!: (v: T) => void
-	const promise = new Promise<T>((r) => {
-		resolve = r
-	})
-	return { promise, resolve }
-}
-
-/** Boot the handler over a remembered session (`trusted` decides whether a verify window opens). */
+/** Boot the handler, over a remembered session when `remembered` is set. */
 function boot(
 	opts: {
-		remembered?: { trusted: boolean }
+		remembered?: boolean
 		popup?: () => Promise<{ approved: boolean }>
 		legal?: () => Promise<void>
 		logger?: { log: (...args: unknown[]) => void }
@@ -92,9 +94,21 @@ function boot(
 		setTimeout: (fn, ms) => setTimeout(fn, ms),
 		clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 	}
-	const { services, rows } = fakeSdkServices(opts)
+	const asking = new Map<string, Deferred<void>>()
+	const popup = opts.popup
+	const { services, rows } = fakeSdkServices({
+		...opts,
+		popup:
+			popup &&
+			((_params: unknown, requestId: string) => {
+				const answer = popup()
+				asking.get(requestId)?.resolve()
+				return answer
+			}),
+	})
 	initWalletSdkHandler(services, (opts.logger ?? noopLogger) as never, ports)
-	const discover = (requestId: string, over: Record<string, unknown> = {}) =>
+	const discover = (requestId: string, over: Record<string, unknown> = {}) => {
+		asking.set(requestId, deferred<void>())
 		captured?.onPendingDiscovery({
 			requestId,
 			origin: ORIGIN,
@@ -105,6 +119,9 @@ function boot(
 			tabId: 7,
 			...over,
 		})
+	}
+	/** Resolves once `requestId`'s latest discovery has asked for its connect window. */
+	const prompted = (requestId: string) => asking.get(requestId)!.promise
 	/** The SDK finished key exchange for an approved request: establish it (opens the verify window if due). */
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
 		const session = {
@@ -120,12 +137,19 @@ function boot(
 	const closeWindow = (id: number) => {
 		for (const l of onRemoved) l(id)
 	}
-	return { discover, establish, closeWindow, windowsCreated: () => created, rows }
+	return { discover, prompted, establish, closeWindow, windowsCreated: () => created, rows }
 }
 
-/** Settle the handler's pending microtasks without moving the clock. */
+/** Turns before a "not yet", "never" or exact-list read: a park point no fake observes, or a decision
+ *  whose run settles with it, so an effect a regression defers past it gets these turns to surface. */
 const flush = async () => {
 	for (let i = 0; i < 20; i++) await Promise.resolve()
+}
+/** Resolves when the handler is asked to approve `requestId`; armed before the step that approves it. */
+const approval = (requestId: string) => {
+	const asked = deferred<void>()
+	approvals.set(requestId, asked)
+	return asked.promise
 }
 const approved = () => handlerCalls.filter((c) => c.startsWith("approve:")).map((c) => c.slice(8))
 const rejected = () => handlerCalls.filter((c) => c.startsWith("reject:")).map((c) => c.slice(7))
@@ -135,7 +159,9 @@ beforeEach(() => {
 	handlerCalls.length = 0
 	live.clear()
 	approveReturns = true
+	approvals.clear()
 	captured = undefined
+	vi.mocked(handleDiscovery).mockClear()
 	// biome-ignore lint/suspicious/noExplicitAny: chrome stub
 	;(globalThis as any).chrome = {
 		runtime: { getURL: (p: string) => p },
@@ -147,31 +173,11 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-describe("handleDiscovery — remembered origin, trusted (token budget only)", () => {
-	test("12 back-to-back handshakes: 3 now, then one per refill until the deadline, 5 rejected outright", async () => {
-		const { discover } = boot({ remembered: { trusted: true } })
-		for (let i = 1; i <= 12; i++) discover(`r${i}`)
-		await flush()
-		expect(approved()).toEqual(["r1", "r2", "r3"])
-		expect(rejected()).toEqual(["r8", "r9", "r10", "r11", "r12"])
-
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4"])
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4", "r5"])
-		// The third refill lands past the 55 s discovery deadline: the rest are rejected, not approved.
-		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS)
-		expect(approved()).toEqual(["r1", "r2", "r3", "r4", "r5"])
-		expect(rejected()).toEqual(expect.arrayContaining(["r6", "r7"]))
-		expect(handlerCalls).toHaveLength(12)
-	})
-})
-
-describe("handleDiscovery — remembered origin, untrusted (token + verify-window budget)", () => {
+describe("handleDiscovery — remembered origin (token + verify-window budget)", () => {
 	test("2 approved, 4 queued, 6 rejected; a refill admits nothing while both windows stay open", async () => {
-		const { discover, establish } = boot({ remembered: { trusted: false } })
+		const { discover, establish } = boot({ remembered: true })
 		for (let i = 1; i <= 12; i++) discover(`r${i}`)
-		await flush()
+		await Promise.all(Array.from({ length: 12 }, (_, i) => discoveryRun(`r${i + 1}`)))
 		expect(approved()).toEqual(["r1", "r2"])
 		expect(rejected()).toEqual(["r7", "r8", "r9", "r10", "r11", "r12"])
 		await establish("r1")
@@ -181,15 +187,16 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("closing both windows serves the 3rd at once; the 4th waits for the token refill", async () => {
-		const { discover, establish, closeWindow } = boot({ remembered: { trusted: false } })
+		const { discover, establish, closeWindow } = boot({ remembered: true })
 		for (let i = 1; i <= 4; i++) discover(`r${i}`)
-		await flush()
+		await Promise.all(["r1", "r2", "r3", "r4"].map(discoveryRun))
 		await establish("r1")
 		await establish("r2")
 		await vi.advanceTimersByTimeAsync(5_000)
+		const r3Approved = approval("r3")
 		closeWindow(1)
 		closeWindow(2)
-		await flush()
+		await r3Approved
 		expect(approved()).toEqual(["r1", "r2", "r3"])
 		await vi.advanceTimersByTimeAsync(RECONNECT_REFILL_MS - 5_000 - 1)
 		expect(approved()).toEqual(["r1", "r2", "r3"])
@@ -198,14 +205,15 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("a returning approval that does not land releases the reserved slot", async () => {
-		const { discover } = boot({ remembered: { trusted: false } })
+		const { discover } = boot({ remembered: true })
 		approveReturns = false
 		discover("r1")
-		await flush()
+		await discoveryRun("r1")
 		// The reservation was acquired, then approveDiscovery returned false: the slot must come back.
 		approveReturns = true
 		discover("r2")
 		discover("r3")
+		await Promise.all([discoveryRun("r2"), discoveryRun("r3")])
 		await flush()
 		// r1's approve was called and returned false, releasing its slot. Both windows are free, so
 		// r2 AND r3 each open one; a leaked r1 slot would leave only one free and queue r3.
@@ -213,17 +221,19 @@ describe("handleDiscovery — remembered origin, untrusted (token + verify-windo
 	})
 
 	test("a terminated transport keeps its open window's slot: the reconnect waits until the window closes", async () => {
-		const { discover, establish, closeWindow } = boot({ remembered: { trusted: false } })
+		const { discover, establish, closeWindow } = boot({ remembered: true })
 		discover("r1")
 		discover("r2")
-		await flush()
+		await Promise.all([discoveryRun("r1"), discoveryRun("r2")])
 		await establish("r1")
 		await establish("r2")
 		captured?.onSessionTerminated("r1")
 		discover("r3")
 		await flush()
 		expect(approved()).toEqual(["r1", "r2"])
+		const r3Approved = approval("r3")
 		closeWindow(1)
+		await r3Approved
 		await flush()
 		expect(approved()).toEqual(["r1", "r2", "r3"])
 	})
@@ -235,7 +245,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 	test("the fresh branch reserves after its popup, keeps its duplicate pending through creation, and a waiter with occupied capacity queues", async () => {
 		const popups = new Map<number, ReturnType<typeof deferred<{ approved: boolean }>>>()
 		let opened = 0
-		const { discover, establish, closeWindow } = boot({
+		const { discover, prompted, establish, closeWindow } = boot({
 			popup: () => {
 				const d = deferred<{ approved: boolean }>()
 				popups.set(++opened, d)
@@ -244,17 +254,17 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		})
 		discover("f1", chain(1))
 		discover("f2", chain(2))
-		await flush()
+		await Promise.all([prompted("f1"), prompted("f2")])
 		popups.get(1)!.resolve({ approved: true })
 		popups.get(2)!.resolve({ approved: true })
-		await flush()
+		await Promise.all([discoveryRun("f1"), discoveryRun("f2")])
 		expect(approved()).toEqual(["f1", "f2"])
 		await establish("f1", chain(1))
 		await establish("f2", chain(2))
 
 		// A third fresh handshake and its duplicate: the popup approves, but both window slots are held.
 		discover("f3", chain(3))
-		await flush()
+		await prompted("f3")
 		discover("f3dup", chain(3))
 		await flush()
 		popups.get(3)!.resolve({ approved: true })
@@ -268,17 +278,19 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		expect(rejected()).toEqual([])
 		await establish("f3", chain(3))
 		closeWindow(2)
+		await discoveryRun("f3dup")
 		await flush()
 		expect(approved()).toEqual(["f1", "f2", "f3", "f3dup"])
 	})
 
 	test("a fresh approval that does not land after acquisition releases the reservation", async () => {
 		const popup = deferred<{ approved: boolean }>()
-		const { discover, windowsCreated } = boot({ popup: () => popup.promise })
+		const { discover, prompted, windowsCreated } = boot({ popup: () => popup.promise })
 		approveReturns = false
 		discover("f1", chain(1))
-		await flush()
+		await prompted("f1")
 		popup.resolve({ approved: true })
+		await discoveryRun("f1")
 		await flush()
 		// The popup approved and the session was written, but approveDiscovery returned false — the
 		// reserved slot must come back, not linger until the worker dies.
@@ -286,6 +298,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		approveReturns = true
 		discover("f2", chain(5))
 		discover("f3", chain(6))
+		await Promise.all([discoveryRun("f2"), discoveryRun("f3")])
 		await flush()
 		// f1's approve was called and returned false, releasing its slot. Both verify-window slots
 		// are free, so f2 AND f3 each acquire one; a leaked f1 slot would leave only one free and
@@ -295,17 +308,19 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 
 	test("a rolled-back approval releases the reservation", async () => {
 		const popup = deferred<{ approved: boolean }>()
-		const { discover, windowsCreated } = boot({ popup: () => popup.promise })
+		const { discover, prompted, windowsCreated } = boot({ popup: () => popup.promise })
 		discover("f1", { timestamp: Date.now() - DISCOVERY_STALE_MS + 1_000 })
-		await flush()
+		await prompted("f1")
 		await vi.advanceTimersByTimeAsync(2_000)
 		popup.resolve({ approved: true })
+		await discoveryRun("f1")
 		await flush()
 		expect(rejected()).toEqual(["f1"])
 		expect(windowsCreated()).toBe(0)
 		// The slot came back: two more window-needing handshakes are admitted at once.
 		discover("f2", chain(5))
 		discover("f3", chain(6))
+		await Promise.all([discoveryRun("f2"), discoveryRun("f3")])
 		await flush()
 		expect(approved()).toEqual(["f2", "f3"])
 	})
@@ -318,7 +333,7 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		expect(rejected()).toEqual(["d9"])
 		expect(handlerCalls).toHaveLength(1)
 		popup.resolve({ approved: true })
-		await flush()
+		await discoveryRun("d0")
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + 20_000)
 		const settled = new Set(handlerCalls.map((c) => c.split(":")[1]))
 		for (let i = 0; i <= 9; i++) expect(settled.has(`d${i}`)).toBe(true)
@@ -332,6 +347,7 @@ describe("discovery with a chainInfo that does not decode", () => {
 		const { discover } = boot({ popup, logger: { log } })
 
 		discover("bad-chain-1", { chainInfo: { chainId: "", version: "0x1" } })
+		await discoveryRun("bad-chain-1")
 		await flush()
 
 		expect(rejected()).toEqual(["bad-chain-1"])
@@ -348,6 +364,7 @@ describe("discovery with a chainInfo that does not decode", () => {
 		const { discover } = boot({ popup, logger: { log } })
 
 		discover("closed-1")
+		await discoveryRun("closed-1")
 		await flush()
 
 		expect(rejected()).toEqual(["closed-1"])
@@ -366,6 +383,7 @@ describe("discovery without a current Terms acceptance", () => {
 		const { discover, establish, rows, windowsCreated } = boot({ popup, legal: refuse })
 
 		discover("fresh-1")
+		await discoveryRun("fresh-1")
 		await flush()
 
 		expect(rejected()).toEqual(["fresh-1"])
@@ -381,9 +399,10 @@ describe("discovery without a current Terms acceptance", () => {
 	})
 
 	test("a remembered origin still reconnects: its requests are what get refused, not its channel", async () => {
-		const { discover } = boot({ remembered: { trusted: true }, legal: refuse })
+		const { discover } = boot({ remembered: true, legal: refuse })
 
 		discover("again-1")
+		await discoveryRun("again-1")
 		await flush()
 
 		expect(approved()).toEqual(["again-1"])

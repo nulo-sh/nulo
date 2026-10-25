@@ -10,68 +10,46 @@
 <script setup>
 /** Components */
 import { Dropdown } from "@/components/ui/Dropdown"
+import SettingControlRow from "@/components/ui/Settings/SettingControlRow.vue"
 
 /** Utils */
+import { hasSidePanelSurface, isFirefoxSidebar, sidebarAction } from "@/utils/browser-surface"
+import { settingsRow } from "@/utils/settings-search"
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfigRead } from "@/composables/useConfigRead"
+import { SETTING_UPDATE_FAILED, useSettingUpdate } from "@/composables/useSettingUpdate"
+import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
+const { vSettingsRow } = useSettingsRowHighlight()
 
 const configService = new ConfigServiceClient()
-configService.onUpdate.add(onSettingUpdate)
-const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
 const theme = ref(defaultConfig.theme)
 const isSidePanelEnabled = ref(defaultConfig.sidePanel)
 const isShowNodeNameEnabled = ref(defaultConfig.showNode)
-const isShowPopupFullscreen = ref(defaultConfig.showPopupFullscreen)
 const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
 const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
 const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
+const TOGGLE_TESTIDS = { sidePanel: "side-panel-toggle", disableAnimations: "animations-toggle", showNode: "show-network-name-toggle" }
 const settings = {
-	theme: {
-		title: "",
-		description: "",
-		model: theme,
-	},
-	// Chrome-only: Firefox has no side panel, so the row is not offered there.
-	...(chrome.sidePanel
+	theme: { ...settingsRow("display-theme"), model: theme },
+	...(hasSidePanelSurface()
 		? {
-				sidePanel: {
-					title: "Open as Side Panel",
-					description: "Open as side panel instead of popup",
-					model: isSidePanelEnabled,
-				},
+				sidePanel: { ...settingsRow("display-side-panel"), model: isSidePanelEnabled },
 			}
 		: {}),
-	showNode: {
-		title: "Show network name",
-		description: "Always show network name in the header",
-		model: isShowNodeNameEnabled,
-	},
-	showPopupFullscreen: {
-		title: "Full-height popups",
-		description: "Open popups to the full height",
-		model: isShowPopupFullscreen,
-	},
-	disableAnimations: {
-		title: "Disable animations",
-		description: "Minimize the use of animations",
-		model: isAnimationsDisabled,
-	},
-	incomingTransfersVisible: {
-		title: "Show incoming transfers",
-		description:
-			"Hide if you run the same recovery phrase on multiple devices and don't want one device's outgoing to appear as incoming here",
-		model: isIncomingTransfersVisible,
-	},
+	showNode: { ...settingsRow("display-network-name"), model: isShowNodeNameEnabled },
+	disableAnimations: { ...settingsRow("display-animations"), model: isAnimationsDisabled },
+	incomingTransfersVisible: { ...settingsRow("display-incoming-transfers"), model: isIncomingTransfersVisible },
 }
+const dustRow = settingsRow("display-dust")
 
 async function updateDustThreshold(event) {
 	const el = event.target
@@ -92,28 +70,20 @@ async function updateDustThreshold(event) {
 		// A failed write stores nothing, but the field still holds the typed text, which an unchanged
 		// ref never re-renders: put the stored value back, unless the field already holds a newer edit.
 		if (el.value.trim() === raw) el.value = dustThreshold.value
-		openToast({ kind: "error", label: "Failed to update setting" })
+		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 	}
 }
 
-async function updateSetting(key, value) {
-	if (!settings[key]) return
-	if (settings[key].model.value === value) return
-
-	try {
-		await configService.setValue(key, value)
-		applySetting(key, value)
-	} catch (err) {
-		openToast({ kind: "error", label: "Failed to update setting" })
-	}
-}
+const { updateSetting, onSettingUpdate, landSettings } = useSettingUpdate(configService, settings, applySetting)
+configService.onUpdate.add(onDisplayUpdate)
+const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
 
 async function applySetting(key, value) {
 	settings[key].model.value = value
 
 	switch (key) {
 		case "sidePanel":
-			if (value) {
+			if (value && chrome.sidePanel) {
 				const currentWindow = await chrome.windows.getCurrent()
 				chrome.sidePanel.open({
 					windowId: currentWindow.id,
@@ -128,31 +98,30 @@ async function applySetting(key, value) {
 	}
 }
 
-function onSettingUpdate(setting) {
-	if (setting.key === "incomingDustUsdThreshold") {
-		dustThreshold.value = String(setting.value)
-		return
+function toggleSetting(key, value) {
+	const written = updateSetting(key, value)
+	// Firefox opens or closes its sidebar only inside the click that asks, so neither can wait for the
+	// write. A connected client has already posted it, so a document the change closes has sent it;
+	// a client still reconnecting has not, and the page stays to finish it.
+	if (key === "sidePanel" && configService.isConnected) {
+		let change
+		if (value) change = sidebarAction()?.open()
+		else if (isFirefoxSidebar()) change = sidebarAction()?.close()
+		change?.catch(() => console.debug("[display] Firefox did not open or close the sidebar"))
 	}
-	if (settings[setting.key]) {
-		if (settings[setting.key].model.value !== setting.value) {
-			applySetting(setting.key, setting.value)
-		}
-	}
+	return written
 }
 
-// Copies the values only: `applySetting` would open the side panel and close the window on a reread.
-function landDisplayConfig(_settings, updatedSince) {
-	_settings.forEach((s) => {
-		if (updatedSince(s.key)) return
-		if (s.key === "incomingDustUsdThreshold") {
-			dustThreshold.value = String(s.value)
-			return
-		}
-		if (settings[s.key]) {
-			settings[s.key].model.value = s.value
-		}
-	})
+function onDisplayUpdate(setting) {
+	if (setting.key === "incomingDustUsdThreshold") dustThreshold.value = String(setting.value)
+	else onSettingUpdate(setting)
+}
 
+function landDisplayConfig(stored, updatedSince) {
+	for (const s of stored) {
+		if (s.key === "incomingDustUsdThreshold" && !updatedSince(s.key)) dustThreshold.value = String(s.value)
+	}
+	landSettings(stored, updatedSince)
 	isLoading.value = false
 }
 
@@ -171,12 +140,12 @@ onBeforeUnmount(() => {
 		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
 
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
-			<Flex justify="between">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> Theme </Text>
-					<Text variant="caption" color="tertiary"> Application theme </Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.theme.title"
+				:description="settings.theme.description"
+				:data-testid="settings.theme.testid"
+				v-settings-row="settings.theme.id"
+			>
 				<Dropdown>
 					<template #trigger>
 						<DropdownTrigger data-testid="theme-trigger">
@@ -198,62 +167,66 @@ onBeforeUnmount(() => {
 					<template #popup>
 						<DropdownItem @click="updateSetting('theme', 'dark')" data-testid="theme-dark-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'dark' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'dark' && $style.unselected" />
 								Dark
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('theme', 'light')" data-testid="theme-light-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'light' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'light' && $style.unselected" />
 								Light
 							</Flex>
 						</DropdownItem>
 						<DropdownItem @click="updateSetting('theme', 'system')" data-testid="theme-system-btn">
 							<Flex align="center" gap="8">
-								<Icon :name="theme === 'system' ? 'check' : ''" size="14" color="primary" />
+								<Icon name="check" size="14" color="primary" :class="theme !== 'system' && $style.unselected" />
 								System
 							</Flex>
 						</DropdownItem>
 					</template>
 				</Dropdown>
-			</Flex>
+			</SettingControlRow>
 
-			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
-					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
-				</Flex>
-
+			<SettingControlRow
+				v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')"
+				:title="settings[sk].title"
+				:description="settings[sk].description"
+				:data-testid="settings[sk].testid"
+				v-settings-row="settings[sk].id"
+			>
 				<Toggle
-					@update:modelValue="updateSetting(sk, $event)"
+					@update:modelValue="toggleSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
-					:data-testid="(sk === 'disableAnimations' && 'animations-toggle') || null"
+					:data-testid="TOGGLE_TESTIDS[sk] || null"
 				/>
-			</Flex>
+			</SettingControlRow>
 
 			<SectionLabel label="Lists" />
 
-			<Flex justify="between">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
-					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
-				</Flex>
-
+			<SettingControlRow
+				:title="settings.incomingTransfersVisible.title"
+				:description="settings.incomingTransfersVisible.description"
+				:data-testid="settings.incomingTransfersVisible.testid"
+				v-settings-row="settings.incomingTransfersVisible.id"
+			>
 				<Toggle
 					@update:modelValue="updateSetting('incomingTransfersVisible', $event)"
 					:modelValue="settings.incomingTransfersVisible.model.value"
 				/>
-			</Flex>
+			</SettingControlRow>
 
 			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
-			<Flex justify="between" align="center" gap="12">
-				<Flex direction="column" gap="6">
-					<Text variant="row-title" :class="$style.title_size" color="primary"> Hide dust </Text>
-					<Text variant="caption" color="tertiary">Hide receipts and holdings below this value. 0 turns it off.</Text>
-				</Flex>
+			<SettingControlRow
+				:title="dustRow.title"
+				:description="dustRow.description"
+				align="center"
+				gap="12"
+				:data-testid="dustRow.testid"
+				v-settings-row="dustRow.id"
+			>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
-				     lives in the wrapper and updateDustThreshold parseFloat-normalizes any input on change. -->
+				     lives in the wrapper. -->
 				<label :class="$style.dust_field">
 					<span :class="$style.dust_prefix">$</span>
 					<input
@@ -265,7 +238,7 @@ onBeforeUnmount(() => {
 						@change="updateDustThreshold($event)"
 					/>
 				</label>
-			</Flex>
+			</SettingControlRow>
 		</Flex>
 
 	</Flex>
@@ -278,34 +251,6 @@ onBeforeUnmount(() => {
 
 .content {
 	composes: content from "../../../components/composite/settings-page.module.css";
-}
-
-.item {
-	border-radius: 0;
-	border: 1px solid var(--nulo-border);
-	cursor: pointer;
-
-	padding: 12px;
-
-	transition: all 0.2s var(--bezier);
-
-	&:hover {
-		background: var(--nulo-surface-low);
-
-		& .item_icon {
-			transform: rotate(-90deg) translateY(3px);
-		}
-	}
-
-	&:active {
-		background: var(--nulo-surface-high);
-	}
-}
-
-.item_icon {
-	transform: rotate(-90deg);
-
-	transition: transform 0.2s var(--bezier);
 }
 
 .dust_field {
@@ -348,7 +293,7 @@ onBeforeUnmount(() => {
 	}
 }
 
-.title_size {
-	font-size: 13px;
+.unselected {
+	visibility: hidden;
 }
 </style>

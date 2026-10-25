@@ -6,7 +6,7 @@ import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 import MigrationBarrier from "./MigrationBarrier.vue"
 import BarrierOverlay from "./composite/BarrierOverlay.vue"
 
-const stubs = { Spinner: true, MaterialIcon: true, Teleport: true }
+const stubs = { Spinner: true, Teleport: true }
 const mountBarrier = () => mount(MigrationBarrier, { global: { stubs, components: { BarrierOverlay } } })
 
 describe("MigrationBarrier", () => {
@@ -37,7 +37,9 @@ describe("MigrationBarrier", () => {
 		await flushPromises()
 		expect(w.find("[data-testid='migration-blocked']").exists()).toBe(true)
 		expect(w.text()).toContain("UPDATE FAILED")
-		expect(w.text()).toContain("funds are safe")
+		expect(w.text()).toContain(
+			"Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Keep the extension installed. A later update may be able to repair this.",
+		)
 		expect(w.find("[data-testid='migration-blocked-detail']").text()).toContain("kaboom at v2")
 	})
 

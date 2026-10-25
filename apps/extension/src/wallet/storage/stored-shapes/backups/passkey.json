@@ -1,0 +1,99 @@
+{
+  "wallet-version": "0.31.0-update.1",
+  "aztec-version": "6.0.0-rc.3",
+  "compat-epoch": 5,
+  "backup-schema-version": 1,
+  "master-key": "X//xdW+vS4xoca1IuxhVn04fUh77rtn0KhGA6vnt41A=",
+  "imported-keys-dek-sealed": "AW8rxOq5UW42HbCUWqdzJL/VZMQYF/kDh52XdrCrClgW6O0QiRFWLG8nJeTSzX9gVC6zmwfAyTMtsiHUCQ==",
+  "active-chain-id": 3415328944,
+  "data": {
+    "profile": {
+      "id": "1978085f",
+      "name": "Main",
+      "type": "passkey"
+    },
+    "account": [
+      {
+        "profileId": "1978085f",
+        "chainId": 3415328944,
+        "address": "0x305bb8cc9878cd315b613d19ed707edbd9d3ae2ea37f0dedef47104f30cc8934",
+        "index": 0,
+        "type": 0,
+        "l1ChainId": 11155111,
+        "name": "Account 1",
+        "visible": true
+      }
+    ],
+    "imported-account-keys": [],
+    "transaction": [],
+    "token": [],
+    "token-balance": [],
+    "account-state": [],
+    "auth-registry": [],
+    "contact": [],
+    "config": [
+      {
+        "key": "theme",
+        "value": "system"
+      },
+      {
+        "key": "sidePanel",
+        "value": false
+      },
+      {
+        "key": "showNode",
+        "value": true
+      },
+      {
+        "key": "disableAnimations",
+        "value": false
+      },
+      {
+        "key": "sessionTtl",
+        "value": 1800000
+      },
+      {
+        "key": "strictSecurityMode",
+        "value": true
+      },
+      {
+        "key": "defaultExplorer",
+        "value": "aztecscan"
+      },
+      {
+        "key": "showFiatValues",
+        "value": true
+      },
+      {
+        "key": "privacyMode",
+        "value": false
+      },
+      {
+        "key": "incomingTransfersVisible",
+        "value": true
+      },
+      {
+        "key": "incomingDustUsdThreshold",
+        "value": 0
+      },
+      {
+        "key": "prestoReached",
+        "value": false
+      },
+      {
+        "key": "developerMode",
+        "value": false
+      },
+      {
+        "key": "debugMode",
+        "value": false
+      },
+      {
+        "key": "indicateFailures",
+        "value": false
+      }
+    ]
+  },
+  "checksum": "e4ee8795620e792a7614d6f5d2b237c8182aea6618df7bb65bd83d0b6a1bcfe5",
+  "backup-mac": "TxjvZLHTSSXP9aLK5PAc04eAsibaJ4nqJgjYElO5oU8="
+}

@@ -1,14 +1,15 @@
 /**
  * The Send picker over chain-scoped balance rows: the shared order, the search box past Home's
  * budget, the filter, selection writing the TOKEN id, the scope fence on a slow fetch, a fetch
- * rejected by the hide, the reconnect resnapshot, and the teardown on hide / unmount.
+ * rejected by the hide, the retry and the reconnect re-read, and the teardown on hide / unmount.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
 import { createAppStoreHarness } from "../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
-import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 const H = vi.hoisted(() => {
 	const makeEvent = () => {
@@ -40,6 +41,10 @@ const H = vi.hoisted(() => {
 	}
 })
 
+vi.mock("@/utils/core", async (importOriginal) => {
+	const { chromeUiPreferences } = await import("../../../../tests/helpers/ui-preference-fake")
+	return { ...(await importOriginal<typeof import("@/utils/core")>()), managers: { uiPreference: chromeUiPreferences() } }
+})
 vi.mock("@/wallet/services/token-balance/client", () => ({
 	TokenBalanceServiceClient: vi.fn(function () {
 		return {
@@ -58,8 +63,12 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: H.priceDisconnect,
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
-			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: H.quotes.current, pricedTokens: TEST_PRICED_TOKENS })),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({
+				quotes: H.quotes.current,
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: flaggedKeysOf([TEST_FLAGGED]),
+			})),
 		}
 	}),
 }))
@@ -79,6 +88,8 @@ vi.mock("vue-router", async (importOriginal) => {
 })
 
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { captureWindowDocument } from "@/utils/window-document"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import SelectTokenPopup from "./SelectTokenPopup.vue"
 
 const STUBS = {
@@ -86,8 +97,12 @@ const STUBS = {
 	PopupCard: { template: "<div><slot /></div>" },
 	PopupHeader: { template: "<div><slot name='title' /></div>" },
 	ItemsContainer: { template: "<div><slot /></div>" },
-	SettingItem: { props: ["title"], template: "<div :data-title='title' />" },
-	MaterialIcon: { template: "<i />" },
+	// Draws the description only when a slot is passed, as `SettingItem` does.
+	SettingItem: {
+		props: ["title"],
+		template:
+			"<div :data-title='title'><div v-if='$slots.description' data-testid='setting-description'><slot name='description' /></div></div>",
+	},
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
 }
@@ -156,6 +171,71 @@ describe("SelectTokenPopup", () => {
 		])
 		expect(rowSymbols(wrapper)).toEqual(["PRICED", "ALPHA", "ZED", "EMPTY"])
 		expect(H.getTokenBalances).toHaveBeenCalledWith(undefined, ACCOUNT)
+	})
+
+	// The shell mounts the picker, hidden, in every unlocked document, a dApp window's included.
+	test("in a window document the hidden picker reads the cache and never asks for a refresh, whatever the route is by then; in the popup it refreshes", async () => {
+		const asked = () => {
+			type Calls = { mock: { calls: unknown[] } }
+			const client = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as unknown as {
+				getQuotes: Calls
+				refreshIfStale: Calls
+			}
+			return [client.getQuotes.mock.calls.length, client.refreshIfStale.mock.calls.length]
+		}
+		H.getTokenBalances.mockResolvedValue([row(2, "ALPHA"), row(1, "PRICED", { contract: TEST_USDC })])
+		captureWindowDocument("#/windows/execute?requestId=r1")
+		window.location.hash = "#/popup/auth"
+		try {
+			const hidden = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+			await flushPromises()
+			expect(asked()).toEqual([1, 0])
+			H.priceConnected.emit()
+			await flushPromises()
+			expect(asked()).toEqual([2, 0])
+			const quote = { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null }
+			H.quotesUpdated.emit({ quotes: { "usd-coin": quote }, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: [] })
+			await hidden.setProps({ show: true })
+			await flushPromises()
+			expect(rowSymbols(hidden)).toEqual(["PRICED", "ALPHA"])
+			hidden.unmount()
+		} finally {
+			captureWindowDocument("")
+			window.location.hash = ""
+		}
+
+		const popup = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await flushPromises()
+		expect(asked()).toEqual([1, 1])
+		H.priceConnected.emit()
+		await flushPromises()
+		expect(asked()).toEqual([2, 2])
+		popup.unmount()
+	})
+
+	test("a row the signed list flags carries 'Flagged as a scam' as its second line; the others carry none", async () => {
+		// Wire-shaped, in the upper case a restored row may keep.
+		const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
+		const wrapper = await mountOpen([row(1, "SCAM", { contract }), row(2, "ALPHA")])
+		const lines = wrapper.findAll('[data-testid="select-token-row"]').map((el) => {
+			const line = el.find('[data-testid="setting-description"]')
+			return [el.attributes("data-symbol"), line.exists() ? line.get('[data-testid="select-token-flagged"]').text() : null]
+		})
+		expect(lines).toEqual([
+			["ALPHA", null],
+			["SCAM", "Flagged as a scam"],
+		])
+	})
+
+	test("a row whose symbol is blank is titled with the empty-value dash; data-symbol keeps the stored symbol", async () => {
+		const wrapper = await mountOpen([row(1, "   ", { contract: "0xblank" }), row(2, "ALPHA")])
+		const titles = wrapper
+			.findAll('[data-testid="select-token-row"]')
+			.map((el) => [el.attributes("data-symbol"), el.attributes("data-title")])
+		expect(titles).toEqual([
+			["   ", "—"],
+			["ALPHA", "ALPHA"],
+		])
 	})
 
 	test("a row on another chain is not listed", async () => {
@@ -246,15 +326,23 @@ describe("SelectTokenPopup", () => {
 		await flushPromises()
 		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
 		expect(rowSymbols(wrapper)).toEqual([])
+		wrapper.unmount()
 	})
 
-	test("the connect a load opens is not a reconnect; a port drop mid-load reloads with no error shown", async () => {
+	test("the connect a load opens is not a reconnect; a port drop mid-load keeps the error line until the reconnect's re-read lands", async () => {
 		let rejectFirst: ((e: Error) => void) | undefined
+		let releaseSecond: (rows: ReturnType<typeof row>[]) => void = () => {}
 		H.getTokenBalances
 			.mockImplementationOnce(
 				() =>
 					new Promise((_resolve, rej) => {
 						rejectFirst = rej
+					}),
+			)
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						releaseSecond = resolve
 					}),
 			)
 			.mockResolvedValue([row(1, "A"), row(2, "B")])
@@ -266,11 +354,16 @@ describe("SelectTokenPopup", () => {
 		await flushPromises()
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
 
-		// The client rejects the pending request and reconnects synchronously, before the rejection settles.
+		// The client rejects the pending request as the port drops, and reports the next Ready in a later task.
 		rejectFirst?.(new Error("port closed"))
+		await flushPromises()
+		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
 		H.balanceConnected.emit()
 		await flushPromises()
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
+		releaseSecond([row(1, "A"), row(2, "B")])
+		await flushPromises()
 		expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
 		expect(rowSymbols(wrapper)).toEqual(["A", "B"])
 
@@ -280,6 +373,119 @@ describe("SelectTokenPopup", () => {
 		await flushPromises()
 		H.balanceConnected.emit()
 		await flushPromises()
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("an incomplete scope while open reads nothing and drops the read still out; a later port drop still reloads", async () => {
+		const reads: Array<(rows: ReturnType<typeof row>[]) => void> = []
+		H.getTokenBalances.mockImplementation(() => new Promise((resolve) => reads.push(resolve)))
+		const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await wrapper.setProps({ show: true })
+		H.balanceConnected.emit()
+		H.store.current.network = null
+		await flushPromises()
+		reads[0]?.([row(1, "OLD")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual([])
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
+
+		H.store.current.network = { id: "net-main", chainId: CHAIN }
+		await flushPromises()
+		reads[1]?.([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A"])
+		H.balanceConnected.emit()
+		await flushPromises()
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
+	})
+
+	test("a reconnect's read begun without a whole scope lands nothing: refused, it shows no error and arms no retry", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const wrapper = await mountOpen([row(1, "A")])
+			H.balanceConnected.emit()
+			H.store.current.network = null
+			await flushPromises()
+			expect(rowSymbols(wrapper)).toEqual([])
+
+			H.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+			H.balanceConnected.emit()
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			await flushPromises()
+			expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
+
+			H.store.current.network = { id: "net-main", chainId: CHAIN }
+			await flushPromises()
+			expect(rowSymbols(wrapper)).toEqual(["A"])
+			wrapper.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a port drop re-reads in place: the list stays while the read is out", async () => {
+		const wrapper = await mountOpen([row(1, "A"), row(2, "B")])
+		H.balanceConnected.emit()
+		let release: (rows: ReturnType<typeof row>[]) => void = () => {}
+		H.getTokenBalances.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		)
+		H.balanceConnected.emit()
+		await flushPromises()
+		expect(H.getTokenBalances).toHaveBeenCalledTimes(2)
+		expect(rowSymbols(wrapper)).toEqual(["A", "B"])
+		release([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A"])
+	})
+
+	test("a refused read shows the error line until its retry 2 s later lands the list", async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			H.getTokenBalances.mockRejectedValueOnce(new Error("service failed")).mockResolvedValue([row(1, "A")])
+			const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+			await wrapper.setProps({ show: true })
+			await flushPromises()
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
+			await vi.advanceTimersByTimeAsync(1_999)
+			await flushPromises()
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(true)
+			expect(H.getTokenBalances).toHaveBeenCalledTimes(1)
+			await vi.advanceTimersByTimeAsync(1)
+			await flushPromises()
+			expect(wrapper.find('[data-testid="select-token-error"]').exists()).toBe(false)
+			expect(rowSymbols(wrapper)).toEqual(["A"])
+			wrapper.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a read in flight reads again over an add that came meanwhile, which stays", async () => {
+		const wrapper = await mountOpen([row(1, "A")])
+		let release: (rows: ReturnType<typeof row>[]) => void = () => {}
+		H.getTokenBalances
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						release = resolve
+					}),
+			)
+			.mockResolvedValue([row(1, "A"), row(2, "MINE")])
+		await wrapper.setProps({ show: false })
+		await wrapper.setProps({ show: true })
+		await flushPromises()
+		H.balanceAdded.emit(row(2, "MINE"))
+		await nextTick()
+		expect(rowSymbols(wrapper)).toEqual(["MINE"])
+		release([row(1, "A")])
+		await flushPromises()
+		expect(rowSymbols(wrapper)).toEqual(["A", "MINE"])
 		expect(H.getTokenBalances).toHaveBeenCalledTimes(3)
 	})
 

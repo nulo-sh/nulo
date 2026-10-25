@@ -25,17 +25,23 @@ export const BLOCK_EXPLORERS: BlockExplorer[] = [
 	},
 ]
 
+/** The explorer's name for a link's label: "explorer" when the id names none, None included. */
+export function explorerDisplayName(explorerId: BlockExplorerType | null | undefined): string {
+	return BLOCK_EXPLORERS.find((e) => e.id === explorerId)?.name ?? "explorer"
+}
+
 /**
  * Base URLs for each explorer by chain ID.
  * To add a new explorer: add its ID to BlockExplorerType,
  * add to BLOCK_EXPLORERS array, and add URLs here.
  *
- * testnet.aztecscan.xyz may lag a Testnet reset, in which case its links 404 until it indexes the
- * current rollup.
+ * Either aztecscan host may lag a rollup move (a Testnet reset, a Mainnet upgrade), in which case its
+ * links 404 until it indexes the current rollup.
  */
 const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
 	aztecscan: {
 		[CHAIN_IDS.TESTNET]: "https://testnet.aztecscan.xyz",
+		[CHAIN_IDS.MAINNET]: "https://aztecscan.xyz",
 	},
 }
 

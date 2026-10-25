@@ -40,7 +40,7 @@ import { CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wallet/services/co
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { Network } from "@/wallet/services/network/spec"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
 import type { TokenBalanceRaw } from "@/wallet/services/token-balance/spec"
 import { TOKEN_BALANCE_SERVICE_NAME, TOKEN_BALANCE_STORAGE_ROOT } from "@/wallet/services/token-balance/spec"
 import type { Token } from "@/wallet/services/token/spec"
@@ -48,7 +48,7 @@ import { TOKEN_SERVICE_NAME, TOKEN_STORAGE_ROOT } from "@/wallet/services/token/
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { TRANSACTION_SERVICE_NAME, TRANSACTION_STORAGE_ROOT } from "@/wallet/services/transaction/spec"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
-import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import { BASELINE_VERSION } from "@/wallet/storage/migrations"
 
 // ── Version metadata (export + import share this single source) ─────────────
@@ -66,10 +66,11 @@ export const BACKUP_SCHEMA_VERSION_FIELD = "backup-schema-version"
 /** The account-contract generation this build produces and accepts.
  *  Epoch 5 = the V6 account regimes: the same KDF and the same blob shape as epoch 4 (the
  *  "epoch-4 shape" elsewhere), but the V6 account artifact moved every derived address, so an
- *  epoch-4 backup carries V5 addresses this build cannot reproduce. `nulo-v6.1` re-pinned the
- *  artifact in place within this epoch: a `nulo-v6` backup's rows on a chain whose id did not move
- *  restore, then the integrity check quarantines that chain (derived rows) or use refuses the account
- *  (imported rows); none is used under an address this build does not derive.
+ *  epoch-4 backup carries V5 addresses this build cannot reproduce. `nulo-v6.1` and `nulo-v6.2`
+ *  re-pinned the artifact in place within this epoch: an earlier V6 regime's backup rows on a chain
+ *  whose id did not move restore, then the integrity check quarantines that chain (derived rows)
+ *  or use refuses the account (imported rows); none is used under an address this build does not
+ *  derive.
  *  Epoch 4 = NULO-ACCOUNT-KDF v2 (the recovery-phrase-centric key model): real BIP-39 PBKDF2
  *  mnemonic→master, l1ChainId-keyed account seeds under dedicated Nulo domain separators, and
  *  the store-both (entropy + master) profile row — every derived address changed AND password
@@ -98,8 +99,9 @@ export const BACKUP_SCHEMA_BASELINE = BASELINE_VERSION
 export type SliceRowIdOf = (row: Record<string, unknown>) => string | undefined
 
 export type SliceDescriptor =
-	/** The slice element IS the stored row value, keyed `${root}@${idOf(el)}`. */
-	| { kind: "root"; root: string; idOf: SliceRowIdOf; optional?: boolean }
+	/** The slice element IS the stored row value, keyed `${root}@${idOf(el)}`. A slice longer than
+	 *  `maxRows` is refused before any row is read. */
+	| { kind: "root"; root: string; idOf: SliceRowIdOf; optional?: boolean; maxRows?: number }
 	/** ValueStorage-backed, LOSSY: the slice is a projection of the stored
 	 *  value. `toStored`/`fromStored` preserve absence (never fabricate
 	 *  current-class defaults for keys the slice doesn't carry). */
@@ -109,7 +111,7 @@ export type SliceDescriptor =
 			toStored: (slice: readonly unknown[]) => { ok: true; stored: Record<string, unknown> } | { ok: false; reason: string }
 			fromStored: (stored: unknown) => { ok: true; slice: unknown[] } | { ok: false; reason: string }
 	  }
-	/** Not `chrome.storage.local`-backed (PXE/IndexedDB) — carried through the
+	/** Not `chrome.storage.local`-backed (the PXE's OPFS stores) — carried through the
 	 *  migration untouched. Its wire shape drifts with `aztec-version`, not the
 	 *  storage schema. */
 	| { kind: "non-storage"; optional?: boolean }
@@ -204,8 +206,10 @@ export const BACKUP_SLICE_REGISTRY: Readonly<Record<string, SliceDescriptor>> = 
 	// Imported accounts' encrypted signing keys — own root, own owner. Optional: a backup with no
 	// imported accounts carries no slice, and that must not be a required-slice rejection.
 	[IMPORTED_KEYS_SERVICE_NAME]: { kind: "root", root: IMPORTED_KEYS_STORAGE_ROOT, idOf: accountAnchor, optional: true },
-	[TOKEN_SERVICE_NAME]: { kind: "root", root: TOKEN_STORAGE_ROOT, idOf: numberAnchor("id") },
-	[TOKEN_BALANCE_SERVICE_NAME]: { kind: "root", root: TOKEN_BALANCE_STORAGE_ROOT, idOf: numberAnchor("id") },
+	// These caps bound the restore work done while an allocation lock is held; no profile seen holds a
+	// tenth of either.
+	[TOKEN_SERVICE_NAME]: { kind: "root", root: TOKEN_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 1024 },
+	[TOKEN_BALANCE_SERVICE_NAME]: { kind: "root", root: TOKEN_BALANCE_STORAGE_ROOT, idOf: numberAnchor("id"), maxRows: 16384 },
 	[CONTACT_SERVICE_NAME]: { kind: "root", root: CONTACT_STORAGE_ROOT, idOf: stringAnchor("id") },
 	[TRANSACTION_SERVICE_NAME]: { kind: "root", root: TRANSACTION_STORAGE_ROOT, idOf: stringAnchor("hash"), optional: true },
 	// Per-row the authwit slice IS the stored row; the service-level lossiness
@@ -327,6 +331,9 @@ function normalizeRootSlice(
 	entries: Record<string, string>,
 ): string | undefined {
 	if (!Array.isArray(slice)) return `slice "${name}" is not an array`
+	if (desc.maxRows !== undefined && slice.length > desc.maxRows) {
+		return `slice "${name}" has ${slice.length} rows, over its limit of ${desc.maxRows}`
+	}
 	for (let i = 0; i < slice.length; i++) {
 		const row = slice[i]
 		if (typeof row !== "object" || row === null || Array.isArray(row)) {

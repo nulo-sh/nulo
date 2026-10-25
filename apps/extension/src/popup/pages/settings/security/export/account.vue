@@ -17,10 +17,11 @@ import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { downloadFile } from "@/utils"
+import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 
 /** Composables */
+import { createRunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
 const { openToast } = useToast()
 
@@ -38,10 +39,30 @@ if (appStore.profile?.type === "passkey") {
 	router.replace("/popup/settings/security/export")
 }
 
-/** The picker (and the preselect validation) only ever offers CURRENT-chain rows: during a
- *  network switch `appStore.accounts` can transiently hold the previous chain's rows, and an
- *  export must never bind an address to the wrong chainId. */
-const accounts = computed(() => (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId))
+/** The imported accounts a paused network reset holds in its journal, on whichever network: no
+ *  picker lists their rows while the chain is quarantined or after the purge. */
+const heldAccounts = ref([])
+const readHeldAccounts = async () => {
+	const pending = await managers.networkReset.getPendingReset()
+	if (!pending || pending.running) return []
+	const view = await managers.networkReset.getStaleNetwork(pending.networkId)
+	return (view?.reset?.heldImported ?? []).map((a) => ({ ...a, type: AccountType.Imported, held: true }))
+}
+/** Another profile's held rows never show: a switch drops them at once, and a read it outlived is dropped. */
+const loadHeldAccounts = async () => {
+	heldAccounts.value = []
+	const profileId = appStore.profile?.id
+	const held = await readHeldAccounts().catch(() => [])
+	if (appStore.profile?.id === profileId) heldAccounts.value = held
+}
+
+/** Live rows (and the preselect validation) are only ever CURRENT-chain rows: during a network
+ *  switch `appStore.accounts` can transiently hold the previous chain's rows, and an export must
+ *  never bind an address to the wrong chainId. A held row has no chain: the journal is read by address. */
+const accounts = computed(() => {
+	const live = (appStore.accounts ?? []).filter((a) => a.chainId === appStore.network?.chainId)
+	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
+})
 
 const selectedAddress = ref("")
 const isAgreed = ref(false)
@@ -54,12 +75,13 @@ const isDownloading = ref(false)
 const fileStatus = ref("")
 const payload = ref("")
 
-/** Async-result fence: bumped by every flow reset and by unmount, so an export RPC that resolves
- *  late can neither write a payload back after the scrub nor land in a different account's flow. */
-let generation = 0
+/** Async-result fence: invalidated by every flow reset and by unmount (runs only snapshot it), so an
+ *  export RPC that resolves late can neither write a payload back after the scrub nor land in a
+ *  different account's flow. */
+const runs = createRunFence()
 
 const resetFlow = () => {
-	generation++
+	runs.invalidate()
 	selectedAddress.value = ""
 	isAgreed.value = false
 	password.value = null
@@ -70,8 +92,8 @@ const resetFlow = () => {
 	payload.value = ""
 }
 
-/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when the
- *  address belongs to this profile's CURRENT chain. Watched, not read once: a query-only
+/** Preselect via the Manage Accounts deep-link (`?address=`); the picker is skipped when it
+ *  lists the address. Watched, not read once: a query-only
  *  navigation reuses this component instance, so entering with a different (or no) address must
  *  scrub the previous flow's stage and payload rather than inherit them. */
 const applyQueryPreselect = () => {
@@ -98,6 +120,15 @@ watch(accounts, () => {
 	if (selectedAddress.value) return
 	applyQueryPreselect()
 })
+// A profile switched from another window leaves this page mounted: its flow, payload included,
+// belongs to the previous profile.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		resetFlow()
+		loadHeldAccounts()
+	},
+)
 
 const selectedAccount = computed(() => accounts.value.find((a) => a.address === selectedAddress.value))
 
@@ -114,23 +145,22 @@ const handleAgree = () => {
 	isAgreed.value = true
 }
 
+const exportSelected = (encrypt) =>
+	selectedAccount.value?.held
+		? managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, password.value, encrypt)
+		: managers.account.exportAccount(appStore.profile.id, appStore.network.chainId, selectedAddress.value, password.value, encrypt)
+
 const handleCreate = async () => {
 	if (!password.value || isBusy.value) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			false,
-		)
-		if (gen !== generation) return
+		const body = await exportSelected(false)
+		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "ready"
 	} catch (error) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		// Only an authentication failure belongs on the password field; anything else (a deleted
 		// account, a disconnect) shaking the input as "Wrong password" would send the user
 		// retyping a password that was never the problem.
@@ -141,40 +171,31 @@ const handleCreate = async () => {
 			openToast({ kind: "error", label: "Failed to create the file" })
 		}
 	} finally {
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
 const handleProtect = async () => {
 	if (isBusy.value || isDownloading.value) return
 	isBusy.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
-		const body = await managers.account.exportAccount(
-			appStore.profile.id,
-			appStore.network.chainId,
-			selectedAddress.value,
-			password.value,
-			true,
-		)
-		if (gen !== generation) return
+		const body = await exportSelected(true)
+		if (!isCurrent()) return
 		payload.value = body
 		fileStatus.value = "protected"
 		// The password's job is done once the protected payload exists.
 		password.value = null
 	} catch (error) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		openToast({ kind: "error", label: "Failed to protect the file" })
 	} finally {
-		if (gen === generation) isBusy.value = false
+		if (isCurrent()) isBusy.value = false
 	}
 }
 
 const fileName = computed(() => {
-	// The profile name is user-typed: strip path separators and anything else
-	// `chrome.downloads.download` can reject or misroute (a "foo/bar" name would create a
-	// subdirectory; "../" is refused outright).
-	const profile = (appStore.profile?.name ?? "profile").replace(/[^\p{L}\p{N}_-]+/gu, "_") || "profile"
+	const profile = profileFileNameSegment(appStore.profile?.name)
 	const addr = selectedAddress.value.slice(0, 10)
 	return `NuloEncryptedAccount_${profile}_${addr}.txt`
 })
@@ -185,17 +206,17 @@ const canDownload = computed(() => fileStatus.value === "protected")
 const handleDownload = async () => {
 	if (!canDownload.value || isDownloading.value || isBusy.value) return
 	isDownloading.value = true
-	const gen = generation
+	const isCurrent = runs.snapshot()
 	try {
 		await downloadFile({ data: payload.value, filename: fileName.value })
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
-		if (gen !== generation) return
+		if (!isCurrent()) return
 		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download the file" })
 	} finally {
-		if (gen === generation) isDownloading.value = false
+		if (isCurrent()) isDownloading.value = false
 	}
 }
 
@@ -207,13 +228,16 @@ const onKeydown = (e) => {
 	if (!isAgreed.value) handleAgree()
 	else handleCreate()
 }
-onMounted(() => document.addEventListener("keydown", onKeydown))
+onMounted(() => {
+	document.addEventListener("keydown", onKeydown)
+	loadHeldAccounts()
+})
 
 onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)
 	// The plain payload is spendable material; drop both secrets with the page and fence out any
 	// export RPC still in flight.
-	generation++
+	runs.invalidate()
 	payload.value = ""
 	password.value = null
 })
@@ -234,8 +258,7 @@ onBeforeUnmount(() => {
 						:title="account.name"
 						titleVariant="name"
 						:description="trimAddress(account.address, 6, 4, '...')"
-						descriptionVariant="data"
-						icon="user"
+						descriptionVariant="meta"
 						chevron
 						data-testid="export-account-row"
 						:data-account-address="account.address"

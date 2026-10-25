@@ -1,6 +1,8 @@
 export * from "./alarm-dispatcher"
+// `chain-id` is its own entry point, `@nulo/wallet-core/chain-id`, never re-exported here: the
+// bundler places it with its few importers while this barrel's initializer calls its own, and that
+// call from the shared chunk closes a static import cycle.
 export * from "./arrays"
-export * from "./chain-id"
 export * from "./deferred"
 export * from "./encoding"
 export * from "./errors"
@@ -11,6 +13,7 @@ export * from "./lock"
 export * from "./mnemonic"
 export * from "./queue"
 export * from "./random"
+export * from "./read-capped"
 export * from "./rpc-url"
 export * from "./rw-guard"
 export * from "./serial"

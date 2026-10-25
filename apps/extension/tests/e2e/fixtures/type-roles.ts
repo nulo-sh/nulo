@@ -47,6 +47,11 @@ export type TypeReading = {
 	textOverflow: string
 	/** `visible` cannot clip: an inline box or one whose overflow shows past it. */
 	overflowX: string
+	/**
+	 * How far, in px, its text reaches past the box it lays out in: its own box, or an inline
+	 * element's containing block. 0 for a field, a box that scrolls and a box that draws an ellipsis.
+	 */
+	pastBox: number
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
@@ -61,10 +66,11 @@ export type TypeReading = {
 }
 
 /**
- * Which elements a read collects: the role-bearing ones, the visible ones with text of their own, or
- * those at a selector, each read as itself or, with `native`, as the native field at or under it.
+ * Which elements a read collects: the role-bearing ones, the visible ones with text of their own,
+ * both (`laid-out`, what the layout gate judges), or those at a selector, each read as itself or,
+ * with `native`, as the native field at or under it.
  */
-export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "at"; selector: string; native?: boolean }
+export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "laid-out" } | { kind: "at"; selector: string; native?: boolean }
 
 /** One read of a document: the three face variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
@@ -95,25 +101,83 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			.split(/\s+/)
 			.filter((name) => name.startsWith("type--"))
 			.map((name) => name.slice("type--".length))
+	// Insets that meet, the screen-reader idiom: the box paints nothing. A value read as other than a
+	// percentage keeps the box visible.
+	const clipsToNothing = (style: CSSStyleDeclaration): boolean => {
+		const insets = /^inset\(([^)]*?)(?:\s+round\b[^)]*)?\)$/.exec(style.clipPath)?.[1].trim().split(/\s+/)
+		if (!insets) return false
+		const [top, right = top, bottom = top, left = right] = insets.map((v) => (v.endsWith("%") ? Number.parseFloat(v) : Number.NaN))
+		return top + bottom >= 100 || left + right >= 100
+	}
 	const isVisible = (el: Element): boolean => {
 		const box = el.getBoundingClientRect()
-		return box.width > 0 && box.height > 0 && win.getComputedStyle(el).visibility !== "hidden"
+		const style = win.getComputedStyle(el)
+		return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && !clipsToNothing(style)
 	}
 	const hasOwnText = (el: Element): boolean =>
 		Array.from(el.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "")
 	const FIELD = "input, textarea"
 	const field = (el: Element): Element => (el.matches(FIELD) ? el : (el.querySelector(FIELD) ?? el))
+	const shownText = (el: Element): boolean => hasOwnText(el) && isVisible(el)
 	const collect = (): Element[] => {
 		if (scope.kind === "at") return Array.from(doc.querySelectorAll(scope.selector)).map((el) => (scope.native ? field(el) : el))
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
-		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
+		const all = Array.from(doc.body.querySelectorAll("*"))
+		return scope.kind === "own-text" ? all.filter(shownText) : all.filter((el) => el.matches(ROLE) || shownText(el))
 	}
 	type Span = { left: number; right: number }
-	const paintedSpan = (el: Element): Span => {
+	const join = (span: Span | null, more: Span): Span =>
+		span ? { left: Math.min(span.left, more.left), right: Math.max(span.right, more.right) } : { left: more.left, right: more.right }
+	/** Lays its text out apart from its parent's: a field, a box out of flow, or one that clips or scrolls. */
+	const apart = (el: Element, style: CSSStyleDeclaration): boolean =>
+		el.matches(FIELD) || /^(absolute|fixed)$/.test(style.position) || style.overflowX !== "visible"
+	const textNodeSpan = (node: Node): Span | null => {
+		if ((node.textContent ?? "").trim() === "") return null
+		const range = doc.createRange()
+		range.selectNodeContents(node)
+		return Array.from(range.getClientRects())
+			.filter((rect) => rect.width > 0)
+			.reduce<Span | null>(join, null)
+	}
+	const childSpan = (child: Element): Span | null => {
+		const style = win.getComputedStyle(child)
+		if (style.display === "contents") return textSpan(child)
+		if (!isVisible(child) || child.matches(FIELD) || /^(absolute|fixed)$/.test(style.position)) return null
+		if (!apart(child, style)) return textSpan(child)
+		// A box that clips lays its text out apart, yet paints it inside this one.
+		const own = textSpan(child)
+		return own ? paintedSpan(child, own) : null
+	}
+	const spans = new Map<Element, Span | null>()
+	/** Where an element's text reaches sideways: its own and its in-flow descendants', a clipping one's as painted, a field's not at all. */
+	const textSpan = (el: Element): Span | null => {
+		const known = spans.get(el)
+		if (known !== undefined) return known
+		const parts = Array.from(el.childNodes).map((node) =>
+			node.nodeType === 3 ? textNodeSpan(node) : node.nodeType === 1 ? childSpan(node as Element) : null,
+		)
+		const span = parts.reduce<Span | null>((sum, part) => (part ? join(sum, part) : sum), null)
+		spans.set(el, span)
+		return span
+	}
+	/** `text-overflow` acts on a block container's own lines: a flex or grid container draws no ellipsis. */
+	const drawsEllipsis = (style: CSSStyleDeclaration): boolean =>
+		style.textOverflow === "ellipsis" && style.overflowX !== "visible" && !/flex|grid/.test(style.display)
+	const pastBox = (el: Element, span: Span | null): number => {
+		let box = el
+		while (box.parentElement && /^(inline|contents)$/.test(win.getComputedStyle(box).display)) box = box.parentElement
+		const style = win.getComputedStyle(box)
+		if (!span || box.matches(FIELD) || /^(auto|scroll)$/.test(style.overflowX) || drawsEllipsis(style)) return 0
+		const left = box.getBoundingClientRect().left + box.clientLeft
+		return Math.max(0, left - span.left, span.right - (left + box.clientWidth))
+	}
+	const paintedSpan = (el: Element, span: Span | null): Span => {
 		const box = el.getBoundingClientRect()
+		if (!span || el.matches(FIELD)) return { left: box.left, right: box.right }
 		// Text an element clips itself paints no further than its own box.
-		if (win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
-		return { left: box.left, right: Math.max(box.right, box.left + el.scrollWidth) }
+		if (win.getComputedStyle(el).overflowX !== "visible")
+			return { left: Math.max(span.left, box.left), right: Math.min(span.right, box.right) }
+		return { ...span }
 	}
 	const clippingAncestors = (el: Element): Element[] => {
 		const found: Element[] = []
@@ -125,15 +189,24 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		}
 		return found
 	}
+	/** The block whose lines hold the element: itself, or the nearest ancestor it sits inline in. */
+	const lineOf = (el: Element): Element => {
+		let box = el
+		while (box.parentElement && /^(inline|contents)/.test(win.getComputedStyle(box).display)) box = box.parentElement
+		return box
+	}
 	const crosses = (span: Span, edge: DOMRect): boolean => span.left < edge.left - 0.5 || span.right > edge.right + 0.5
 	const nameOf = (el: Element): string => el.getAttribute("data-testid") ?? el.tagName
-	const cutBy = (el: Element): Pick<TypeReading, "clippedBy" | "ellipsizedBy"> => {
-		const span = paintedSpan(el)
+	const cutBy = (el: Element, text: Span | null): Pick<TypeReading, "clippedBy" | "ellipsizedBy"> => {
+		const span = paintedSpan(el, text)
+		const lines = lineOf(el)
 		let ellipsizedBy: string | null = null
 		for (const up of clippingAncestors(el)) {
 			const edge = up.getBoundingClientRect()
 			const crossed = crosses(span, edge)
-			if (crossed && win.getComputedStyle(up).textOverflow !== "ellipsis") return { clippedBy: nameOf(up), ellipsizedBy }
+			// An ellipsis shortens the lines of the box that draws it, never a block inside that box.
+			const ellipsis = up === lines && drawsEllipsis(win.getComputedStyle(up))
+			if (crossed && !ellipsis) return { clippedBy: nameOf(up), ellipsizedBy }
 			if (crossed) ellipsizedBy ??= nameOf(up)
 			span.left = Math.max(span.left, edge.left)
 			span.right = Math.min(span.right, edge.right)
@@ -142,6 +215,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	}
 	const read = (el: Element): TypeReading => {
 		const style = win.getComputedStyle(el)
+		const span = textSpan(el)
 		return {
 			testid: el.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
 			text: (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60),
@@ -154,10 +228,11 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			fontVariantNumeric: style.fontVariantNumeric,
 			textOverflow: style.textOverflow,
 			overflowX: style.overflowX,
+			pastBox: pastBox(el, span),
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),
-			...cutBy(el),
+			...cutBy(el, span),
 			addressShows: el.getAttribute("data-address-shows"),
 			scopes: scopes.filter((selector) => el.matches(selector)),
 		}
@@ -168,7 +243,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	return { vars, readings: collect().map(read) }
 }
 
-/** The hex text no mono role holds: a visible text node with `0x` and two hex digits, CodeMirror aside. Shipped like `readTypography`. */
+/** The hex text no mono role holds: a visible text node with `0x` and two hex digits. Shipped like `readTypography`. */
 function readHexText(win: Window, monoRoles: readonly string[]): { testid: string | null; text: string }[] {
 	const doc = win.document
 	const ROLE = '[class^="type--"], [class*=" type--"]'
@@ -188,7 +263,7 @@ function readHexText(win: Window, monoRoles: readonly string[]): { testid: strin
 	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
 		const holder = node.parentElement
 		if (!holder || !/0x[0-9a-f]{2}/i.test(node.textContent ?? "")) continue
-		if (holder.closest(".cm-editor") || hidden(holder) || inMonoRole(holder)) continue
+		if (hidden(holder) || inMonoRole(holder)) continue
 		found.push({
 			testid: holder.closest("[data-testid]")?.getAttribute("data-testid") ?? null,
 			text: (node.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60),
@@ -432,6 +507,275 @@ export function expectSweepClean(result: SweepResult, label = "type-role sweep")
 	expect(result.failures, `${label}: role values`).toEqual([])
 }
 
+// ── The layout gate ─────────────────────────────────────────────────────
+
+export type Overflow = Pick<TypeReading, "testid" | "text" | "roles" | "pastBox" | "clippedBy">
+
+/**
+ * Text cut by an ancestor with no ellipsis drawn, or reaching more than 1 px past the box it lays
+ * out in with none drawn there. A field or a box that scrolls answers only for an ancestor's cut.
+ */
+export const overflowingText = (readings: readonly TypeReading[]): Overflow[] =>
+	readings
+		.filter((reading) => reading.visible && (reading.clippedBy !== null || reading.pastBox > 1))
+		.map(({ testid, text, roles, pastBox, clippedBy }) => ({ testid, text, roles, pastBox: Math.round(pastBox * 10) / 10, clippedBy }))
+
+/**
+ * The layout gate over the page as it stands: every role-bearing element and every element with text
+ * of its own, but text under a testid `accepted` names.
+ */
+export async function expectLaidOut(page: Page, label: string, accepted: ReadonlySet<string> = new Set()): Promise<void> {
+	const { readings } = await readPageTypography(page, { kind: "laid-out" })
+	const cut = overflowingText(readings).filter(({ testid }) => testid === null || !accepted.has(testid))
+	expect(cut, `${label}: text past its box`).toEqual([])
+}
+
+export type PastView = { testid: string | null; tag: string; left: number; right: number }
+export type Sideways = { testid: string | null; holds: string | null; tag: string; scrollWidth: number; clientWidth: number }
+export type InsideView = { view: number; scroll: number; past: PastView[]; sideways: Sideways[] }
+
+/**
+ * Boxes past the view's sides, boxes that scroll sideways, and how wide the page scrolls. A box past
+ * the view counts whatever holds it: an ancestor that clips cuts it, and one that scrolls must not
+ * scroll sideways, which `sideways` reports. A page scroller's `overflow-x` computes to `auto` from
+ * its `overflow-y`, so style cannot tell it from a sideways one. A box inside one already reported
+ * is not reported again; a field scrolls its own text. A scroller is named by its own or the nearest
+ * testid above it and by the first one it holds, as a shared wrapper rarely carries one. `expectLaidOut`
+ * reads text only, so a box with none, or one placed past the view, needs this.
+ */
+export async function readInsideView(page: Page): Promise<InsideView> {
+	return page.evaluate(() => {
+		const view = document.documentElement.clientWidth
+		const shownBox = (el: Element): DOMRect | null => {
+			const style = getComputedStyle(el)
+			if (style.display === "none" || style.visibility === "hidden") return null
+			const box = el.getBoundingClientRect()
+			return box.width < 2 || box.height < 2 ? null : box
+		}
+		const scrollsSideways = (el: Element) =>
+			/^(auto|scroll)$/.test(getComputedStyle(el).overflowX) && !el.matches("input, textarea") && el.scrollWidth > el.clientWidth
+		const past: PastView[] = []
+		const sideways: Sideways[] = []
+		const reported: Element[] = []
+		for (const el of document.body.querySelectorAll("*")) {
+			const box = shownBox(el)
+			if (!box) continue
+			const testid = el.closest("[data-testid]")?.getAttribute("data-testid") ?? null
+			const tag = el.tagName.toLowerCase()
+			if (scrollsSideways(el)) {
+				const holds = el.querySelector("[data-testid]")?.getAttribute("data-testid") ?? null
+				sideways.push({ testid, holds, tag, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth })
+			}
+			if ((box.left >= -0.5 && box.right <= view + 0.5) || reported.some((outer) => outer.contains(el))) continue
+			reported.push(el)
+			past.push({ testid, tag, left: Math.round(box.left), right: Math.round(box.right) })
+		}
+		return { view, scroll: document.documentElement.scrollWidth, past, sideways }
+	})
+}
+
+/** Nothing past the view's sides, and nothing in the page, the page included, scrolls sideways. */
+export async function expectInsideView(page: Page, label: string): Promise<void> {
+	const { view, scroll, past, sideways } = await readInsideView(page)
+	expect({ past, sideways }, `${label}: boxes past the ${view} px view, and boxes that scroll sideways`).toEqual({
+		past: [],
+		sideways: [],
+	})
+	expect(scroll, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(view)
+}
+
+/**
+ * Text the narrow width is allowed to drop or cut, by the testid it sits under. No scroller in the
+ * page is meant to scroll sideways, so none is accepted for it: the logs and JSON viewers' editors
+ * scroll sideways inside shadow roots these readers never enter (`viewers-csp.test.ts` reads the
+ * log's box in its root), and the capabilities Details table narrows its columns instead.
+ */
+export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
+	{ testid: "header-lock", why: "below 359 px the Lock chip keeps its icon; the button's name stays Lock wallet" },
+	{ testid: "network-name", why: "the network chip keeps the ellipsis it has, down to its status dot; the button names the network" },
+	{
+		testid: "activity-title-sep",
+		why: "a row's chips wrapped under its title leave their separator left of the row's clip, as wrapTrailing rows do",
+	},
+	{ testid: "tx-incoming-kind-sep", why: "a receipt's kind chip wrapped under its title leaves its separator left of the row's clip" },
+	{ testid: "identity-sep", why: "a dApp window's network goes under its account below 359 px, with no separator between them" },
+]
+
+export type TextFate = { fate: "cut" | "gone" | "split"; testid: string | null; text: string }
+
+/**
+ * At the page's own width (`record`), notes for each element whether its text is painted, whether
+ * a box cuts it with an ellipsis or a line clamp, and whether a shortened identifier in its own text
+ * (`0x1234..abcd`) runs across two lines; at another width, returns each noted element whose text
+ * that width hides, newly cuts or newly splits. Elements are told apart by identity, so repeated rows never
+ * stand in for one another; one the page replaced is judged by its replacement, the element under the
+ * same testid with the same text, and is gone when there is none. `expectLaidOut` cannot see either:
+ * a drawn ellipsis is not a cut to it, and text squeezed to no width or clipped away is not shown.
+ */
+export async function textFates(page: Page, mode: "record" | "compare"): Promise<TextFate[]> {
+	return page.evaluate((recording: boolean) => {
+		type Noted = { el: Element; shown: boolean; cut: boolean; split: boolean; testid: string | null; text: string; own: boolean }
+		const store = window as unknown as { __nuloTextFates?: Noted[] }
+		const hasText = (el: Element) =>
+			Array.from(el.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "")
+		const textOf = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60)
+		const testidOf = (el: Element) => el.closest("[data-testid]")?.getAttribute("data-testid") ?? null
+		const clips = (overflow: string) => overflow === "hidden" || overflow === "clip"
+		const scrolls = (overflow: string) => overflow === "auto" || overflow === "scroll"
+		type Edge = { lo: number; hi: number; overflow: string; box: boolean }
+		// The edges, per axis, of the ancestors that can clip a box: none past a fixed one, which no
+		// ancestor above it holds.
+		const holders = (el: Element) => {
+			const chain: { x: Edge[]; y: Edge[] } = { x: [], y: [] }
+			for (let up = getComputedStyle(el).position === "fixed" ? null : el.parentElement; up; up = up.parentElement) {
+				const style = getComputedStyle(up)
+				const box = up.getBoundingClientRect()
+				const boxed = style.display !== "contents"
+				chain.x.push({ lo: box.left, hi: box.right, overflow: style.overflowX, box: boxed })
+				chain.y.push({ lo: box.top, hi: box.bottom, overflow: style.overflowY, box: boxed })
+				if (style.position === "fixed") break
+			}
+			return chain
+		}
+		// The length of a span that no hidden or clipped overflow cuts away. Past an ancestor that
+		// scrolls on that axis the span is reachable, so nothing above it cuts it; but where nothing may
+		// scroll sideways (`sidewaysCuts`, the compare), a scroller with a box cuts sideways like a clip.
+		const span = (from: number, to: number, edges: Edge[], sidewaysCuts: boolean) => {
+			let [lo, hi] = [from, to]
+			for (const edge of edges) {
+				const cuts = clips(edge.overflow) || (sidewaysCuts && edge.box && scrolls(edge.overflow))
+				if (cuts) [lo, hi] = [Math.max(lo, edge.lo), Math.min(hi, edge.hi)]
+				else if (scrolls(edge.overflow)) break
+			}
+			return hi - lo
+		}
+		const painted = (el: Element) => {
+			const box = el.getBoundingClientRect()
+			const chain = holders(el)
+			return span(box.left, box.right, chain.x, !recording) >= 1 && span(box.top, box.bottom, chain.y, false) >= 1
+		}
+		const cut = (el: Element, style: CSSStyleDeclaration) => {
+			const clamp = style.getPropertyValue("-webkit-line-clamp")
+			const ellipsis = style.textOverflow === "ellipsis" && style.overflowX !== "visible" && el.scrollWidth > el.clientWidth + 0.5
+			const clamped = clamp !== "" && clamp !== "none" && el.scrollHeight > el.clientHeight + 0.5
+			return (ellipsis || clamped) && (el.textContent ?? "").trim() !== ""
+		}
+		// A shortened identifier reads as one token: drawn over two lines it reads as two. Lines are told
+		// apart by their tops: at `line-height: 1` a glyph box is taller than its line, so lines overlap.
+		const split = (el: Element) =>
+			Array.from(el.childNodes).some((node) => {
+				if (node.nodeType !== 3) return false
+				return Array.from((node.textContent ?? "").matchAll(/0x[0-9a-f]+(?:\.{2,3}|…)[0-9a-f]+/gi)).some((match) => {
+					const range = document.createRange()
+					range.setStart(node, match.index)
+					range.setEnd(node, match.index + match[0].length)
+					const tops = Array.from(range.getClientRects(), (rect) => (rect.width > 0 ? Math.round(rect.top) : null))
+					return new Set(tops.filter((top) => top !== null)).size > 1
+				})
+			})
+		const read = (el: Element) => {
+			const style = getComputedStyle(el)
+			return { shown: hasText(el) && style.visibility !== "hidden" && painted(el), cut: cut(el, style), split: split(el) }
+		}
+		const all = Array.from(document.body.querySelectorAll("*"))
+		if (recording) {
+			store.__nuloTextFates = all.map((el) => ({ el, ...read(el), testid: testidOf(el), text: textOf(el), own: hasText(el) }))
+			return []
+		}
+		const noted = store.__nuloTextFates
+		if (!noted) throw new Error("textFates: nothing recorded at the page's own width")
+		const known = new Set(noted.map(({ el }) => el))
+		const key = (testid: string | null, own: boolean, text: string) => `${testid}\u0000${own}\u0000${text}`
+		// Each replacement stands in for one record, in document order, so none answers for two.
+		const fresh = new Map<string, Element[]>()
+		for (const el of all.filter((one) => !known.has(one))) {
+			const k = key(testidOf(el), hasText(el), textOf(el))
+			fresh.set(k, [...(fresh.get(k) ?? []), el])
+		}
+		const now = (before: Noted) => {
+			const el = before.el.isConnected ? before.el : fresh.get(key(before.testid, before.own, before.text))?.shift()
+			return el ? read(el) : { shown: false, cut: false, split: false }
+		}
+		const fateOf = (before: Noted): TextFate["fate"] | null => {
+			const after = now(before)
+			if (before.shown && !after.shown) return "gone"
+			if (!before.cut && after.cut) return "cut"
+			return before.shown && !before.split && after.split ? "split" : null
+		}
+		return noted.flatMap((before) => {
+			const fate = fateOf(before)
+			return fate ? [{ fate, testid: before.testid, text: before.text }] : []
+		})
+	}, mode === "record")
+}
+
+/** The narrowest width a page is laid out for: Firefox's sidebar opens at 240 px. */
+export const NARROW_WIDTH = 240
+
+/**
+ * Two frames, then whatever transitions the change started (a button animates its padding), then two
+ * more: a Vue transition removes its leaving element on the `transitionend` after `finished`.
+ */
+async function settleLayout(page: Page): Promise<void> {
+	await page.evaluate(async () => {
+		const frames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+		await frames()
+		const ends = document.getAnimations().flatMap((a) => (a instanceof CSSTransition ? [a.finished.catch(() => undefined)] : []))
+		await Promise.race([Promise.all(ends), new Promise((done) => setTimeout(done, 1_500))])
+		await frames()
+	})
+}
+
+/** Runs `check` with the page's viewport `width` wide, then gives the page back its own. */
+export async function atWidth(page: Page, width: number, check: () => Promise<void>): Promise<void> {
+	const own = page.viewport()
+	await page.setViewport({ width, height: own?.height ?? 600 })
+	try {
+		await settleLayout(page)
+		await check()
+	} finally {
+		await page.setViewport(own)
+		await settleLayout(page)
+	}
+}
+
+const narrowAccepted: ReadonlySet<string> = new Set(NARROW_ACCEPTED.map(({ testid }) => testid))
+
+/** At the narrow width: the layout gate but under what `NARROW_ACCEPTED` names, nothing past the view, and nothing scrolling sideways. */
+export async function expectFits(page: Page, label: string): Promise<void> {
+	await expectLaidOut(page, label, narrowAccepted)
+	await expectInsideView(page, label)
+}
+
+/**
+ * `expectFits` with the page at its narrowest width, and no text that its own width shows whole
+ * hidden, newly cut or with a shortened identifier newly split there; text under a testid
+ * `NARROW_ACCEPTED` names is exempt from all of it.
+ */
+export async function expectFitsNarrow(page: Page, label: string): Promise<void> {
+	// A menu a press closed is still in the DOM for its leave.
+	await settleLayout(page)
+	// A success snack closes itself within seconds, unless a pointer or focus holds it; one leaving
+	// mid-check would read as text the width hid.
+	const held = await page.evaluate(() => {
+		const snack = document.querySelector('[data-testid="snackbar"][data-kind="success"]')
+		if (snack?.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur()
+		return snack?.matches(":hover") ?? false
+	})
+	if (held) await page.mouse.move(0, 0)
+	await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"][data-kind="success"]'), {
+		timeout: 10_000,
+		polling: 100,
+	})
+	await textFates(page, "record")
+	await atWidth(page, NARROW_WIDTH, async () => {
+		const at = `${label} at ${NARROW_WIDTH} px`
+		await expectFits(page, at)
+		const fates = (await textFates(page, "compare")).filter(({ testid }) => testid === null || !narrowAccepted.has(testid))
+		expect(fates, `${at}: text its own width shows whole, hidden, cut or split here`).toEqual([])
+	})
+}
+
 export type TypeRecord = Pick<
 	TypeReading,
 	"testid" | "text" | "roles" | "fontFamily" | "fontSize" | "fontWeight" | "letterSpacing" | "textTransform" | "fontVariantNumeric"
@@ -462,7 +806,7 @@ export type SiteEntry = {
 	expression: string
 	branch: string
 	ordinal: number
-	role: "data" | "data-lead" | "input-data" | "meta" | "name" | "none"
+	role: "data-lead" | "input-data" | "meta" | "name" | "none"
 	selector: string
 	surface: string
 	state: string
@@ -504,6 +848,11 @@ export function identifierSites(): readonly SiteEntry[] {
 	return loadedSites
 }
 
+/** The suite that observes a site: the network spec for a state the expected file marks `(network)`, the smoke spec for any other. */
+export function siteSuite(site: Pick<SiteEntry, "state">): "smoke" | "network" {
+	return site.state.endsWith("(network)") ? "network" : "smoke"
+}
+
 /** An occurrence's identity: file, expression, branch and ordinal; the line is only a hint. */
 export const siteKey = (site: Pick<SiteEntry, "file" | "expression" | "branch" | "ordinal">): string =>
 	`${site.file}|${site.expression}|${site.branch}|${site.ordinal}`
@@ -518,14 +867,16 @@ function judgeSite(reading: TypeReading, site: SiteEntry, vars: Vars): SweepFail
 	return [...carried, ...judgeAs(reading, role, vars)]
 }
 
+/** A hidden match is another branch's or a closed panel's, so it neither passes nor observes the site. */
 async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation> {
 	const key = siteKey(site)
 	if (site.unreachable) return { key, site, mode: "unreachable", readings: [], failures: [] }
-	const { vars, readings } = await readPageTypography(page, {
+	const { vars, readings: matched } = await readPageTypography(page, {
 		kind: "at",
 		selector: selectorOf(site.selector),
 		native: site.role === "input-data",
 	})
+	const readings = matched.filter((reading) => reading.visible)
 	const failures =
 		readings.length === 0
 			? [
@@ -534,8 +885,8 @@ async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation
 						text: "",
 						role: site.role,
 						property: "selector",
-						expected: `an element at ${site.selector}`,
-						actual: "none",
+						expected: `a visible element at ${site.selector}`,
+						actual: matched.length === 0 ? "none" : `${matched.length} hidden`,
 					},
 				]
 			: readings.flatMap((reading) => judgeSite(reading, site, vars))
@@ -543,9 +894,10 @@ async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation
 }
 
 /**
- * The identifier sites of one surface in one seeded state: every element at each matching site's selector,
- * and at least one, carries the site's role and computes to it (an `AddressDisplay` showing a name
- * expects `name`; an `input-data` site is read at its native field), then the hex text scan.
+ * The identifier sites of one surface in one seeded state: every visible element at each matching
+ * site's selector, and at least one, carries the site's role and computes to it (an `AddressDisplay`
+ * showing a name expects `name`; an `input-data` site is read at its native field), then the hex text
+ * scan.
  */
 export async function observeIdentifierSites(
 	page: Page,

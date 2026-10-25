@@ -24,11 +24,11 @@ withDefaults(
 
 <template>
 	<Flex align="center" justify="between" gap="12" :class="$style.identity_strip">
-		<Flex align="center" gap="8">
+		<Flex align="center" gap="8" :class="$style.identity_main">
 			<span :class="[$style.status_dot, $style[`status_${status}`]]" />
 			<span data-testid="identity-account" :class="$style.identity_account">{{ accountLabel }}</span>
 			<template v-if="networkLabel !== undefined">
-				<span :class="$style.identity_sep">·</span>
+				<span :class="$style.identity_sep" data-testid="identity-sep">·</span>
 				<span
 					data-testid="identity-network"
 					:data-warn="warn || undefined"
@@ -67,7 +67,7 @@ withDefaults(
 }
 
 .identity_account {
-	composes: type--name-tag from global;
+	composes: type--label-section from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -80,7 +80,7 @@ withDefaults(
 .identity_sep {
 	composes: type--meta from global;
 	line-height: 14px;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
 }
 
 .identity_network {
@@ -90,7 +90,7 @@ withDefaults(
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 96px;
+	max-width: 102px;
 }
 
 .identity_warn {
@@ -103,6 +103,35 @@ withDefaults(
 
 .identity_brand {
 	composes: type--brand from global;
-	color: var(--nulo-outline);
+	color: var(--nulo-secondary);
+}
+
+/* Below the popup's width the network goes under the account, without its separator, and the mark
+ * goes under both, at the right, when they do not fit beside it. Two classes outrank the global
+ * `flex` and `gap--N`. */
+@media (width < 359px) {
+	.identity_strip.identity_strip {
+		flex-wrap: wrap;
+		row-gap: 4px;
+	}
+
+	.identity_strip > .identity_main {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		gap: 2px 8px;
+		min-width: 0;
+	}
+
+	.identity_main > .identity_sep {
+		display: none;
+	}
+
+	.identity_main > .identity_network {
+		grid-column: 2;
+	}
+
+	.identity_strip > .identity_brand {
+		margin-left: auto;
+	}
 }
 </style>

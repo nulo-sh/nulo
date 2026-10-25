@@ -80,11 +80,12 @@ const handleSwitchReceiverType = () => {
 }
 
 .sub_label {
-	composes: type--label from global;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
 .toggle_pair {
+	user-select: none;
 	display: flex;
 	cursor: pointer;
 	border: 1px solid var(--nulo-border);

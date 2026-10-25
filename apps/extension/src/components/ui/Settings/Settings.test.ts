@@ -15,8 +15,10 @@ import SettingField from "./SettingField.vue"
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: '<span :class="$attrs.class" v-bind="$attrs"><slot /></span>', inheritAttrs: false },
-	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
-	MaterialIcon: { template: '<span data-testid="stub-mat-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: {
+		template: '<span data-testid="stub-icon" :data-name="name" :data-size="size" :data-color="color" />',
+		props: ["name", "size", "color"],
+	},
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
 	RouterLink: { template: '<a :href="to"><slot /></a>', props: ["to"] },
 }
@@ -224,11 +226,33 @@ describe("ui/Settings — SettingItem", () => {
 		w.unmount()
 	})
 
+	test("trailingIcon draws its glyph where the chevron sits, after the title, 18 px secondary, and no chevron", async () => {
+		const { w } = await mountItem({ title: "Name", trailingIcon: "edit" }, { onClick: vi.fn() })
+		const icons = w.findAll('[data-testid="stub-icon"]')
+		expect(icons.map((icon) => [icon.attributes("data-name"), icon.attributes("data-size"), icon.attributes("data-color")])).toEqual([
+			["edit", "18", "secondary"],
+		])
+		const title = w.get('[data-testid="setting-title"]')
+		expect(title.element.compareDocumentPosition(icons[0].element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		w.unmount()
+	})
+
+	test.each([
+		["a link", { to: "/popup/settings/lock" }, ["chevron"]],
+		["an explicit chevron", { chevron: true }, ["chevron"]],
+		["an external link", { to: "https://example.com", external: true }, ["open"]],
+		["a plain row", {}, []],
+	])("without trailingIcon, %s keeps its trailing glyph", async (_case, props, names) => {
+		const { w } = await mountItem({ title: "X", ...props })
+		expect(w.findAll('[data-testid="stub-icon"]').map((icon) => icon.attributes("data-name"))).toEqual(names)
+		w.unmount()
+	})
+
 	test("value renders in setting-value, before the default chevron", async () => {
 		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", value: "1 h 30 min" })
 		const value = w.get('[data-testid="setting-value"]')
 		expect(value.text()).toBe("1 h 30 min")
-		const chevron = w.get('[data-name="chevron_right"]')
+		const chevron = w.get('[data-name="chevron"]')
 		expect(value.element.compareDocumentPosition(chevron.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 		w.unmount()
 	})
@@ -239,14 +263,14 @@ describe("ui/Settings — SettingItem", () => {
 	])("value %s: no setting-value element, and the row renders as before", async (_name, props) => {
 		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", ...props })
 		expect(w.find('[data-testid="setting-value"]').exists()).toBe(false)
-		expect(w.find('[data-name="chevron_right"]').exists()).toBe(true)
+		expect(w.find('[data-name="chevron"]').exists()).toBe(true)
 		w.unmount()
 	})
 
 	test.each([
 		["default", {}, "row-title", true],
 		["name", { titleVariant: "name" }, "name", true],
-		["data", { titleVariant: "data" }, "data", false],
+		["meta", { titleVariant: "meta" }, "meta", false],
 	])("titleVariant %s: the title carries its role, and the row's 14px only with a site-sized one", async (_name, props, role, sized) => {
 		const { w } = await mountItem({ title: "Alice", ...props })
 		const title = w.get('[data-testid="setting-title"]')
@@ -258,7 +282,7 @@ describe("ui/Settings — SettingItem", () => {
 
 	test.each([
 		["default", {}, "caption"],
-		["data", { descriptionVariant: "data" }, "data"],
+		["meta", { descriptionVariant: "meta" }, "meta"],
 	])("descriptionVariant %s: the description carries its role", async (_name, props, role) => {
 		const { w } = await mountItem({ title: "Alice", description: "0x12...cdef", ...props })
 		expect(w.get('[data-testid="setting-description"]').attributes("variant")).toBe(role)
@@ -273,19 +297,19 @@ describe("ui/Settings — SettingItem", () => {
 
 	test("the variant validators accept only their roles", () => {
 		const { titleVariant, descriptionVariant } = SettingItem.props as Record<string, { validator: (value: string) => boolean }>
-		expect(["row-title", "name", "data"].every(titleVariant.validator)).toBe(true)
-		expect(titleVariant.validator("caption")).toBe(false)
-		expect(["caption", "data"].every(descriptionVariant.validator)).toBe(true)
-		expect(descriptionVariant.validator("name")).toBe(false)
+		expect(["row-title", "name", "meta"].every(titleVariant.validator)).toBe(true)
+		expect(["caption", "data"].some(titleVariant.validator)).toBe(false)
+		expect(["caption", "meta"].every(descriptionVariant.validator)).toBe(true)
+		expect(["name", "data"].some(descriptionVariant.validator)).toBe(false)
 	})
 
 	test("icon box: a prop or #dot icon keeps the fixed 20x20 box; only a filled #icon gets the relaxed one", async () => {
 		const iconBoxOf = (w: Awaited<ReturnType<typeof mountItem>>["w"], selector: string) =>
 			(w.get(selector).element.parentElement as HTMLElement).className
 
-		const prop = await mountItem({ title: "Display", materialIcon: "palette" })
-		expect(iconBoxOf(prop.w, '[data-name="palette"]')).toMatch(/icon_wrapper/)
-		expect(iconBoxOf(prop.w, '[data-name="palette"]')).not.toMatch(/icon_slotted/)
+		const prop = await mountItem({ title: "Display", icon: "user" })
+		expect(iconBoxOf(prop.w, '[data-name="user"]')).toMatch(/icon_wrapper/)
+		expect(iconBoxOf(prop.w, '[data-name="user"]')).not.toMatch(/icon_slotted/)
 		prop.w.unmount()
 
 		const dot = await mountItem({ title: "Alpha" }, {}, { dot: () => h("i", { "data-testid": "dot" }) })
@@ -333,13 +357,13 @@ describe("ui/Settings — SettingField", () => {
 		expect(w.html()).toMatch(/disabled/)
 	})
 
-	test("the key carries label and the value name, sized by its own class", () => {
+	test("the key carries label-section and the value name, sized by its own class", () => {
 		const w = mount(SettingField, {
 			props: { label: "Name", value: "Alice" },
 			global: { stubs: STUBS },
 		})
 		const [key, value] = w.findAll("span")
-		expect(key.attributes("variant")).toBe("label")
+		expect(key.attributes("variant")).toBe("label-section")
 		expect(value.attributes("variant")).toBe("name")
 		expect(value.classes().some((name) => /value_size/.test(name))).toBe(true)
 	})

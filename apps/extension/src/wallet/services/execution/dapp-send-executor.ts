@@ -35,18 +35,20 @@
 import { type InteractionWaitOptions, type SendReturn, extractOffchainOutput } from "@aztec-labs/aztec.js/contracts"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { FunctionCall } from "@aztec-labs/stdlib/abi"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { collectOffchainEffects, type TxProvingResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
-import { type JobError, type JobProgress, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
-import { formatFeeJuice } from "@/utils/fee-estimation"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { feeDisplay } from "@/utils/fee-estimation"
+import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { type FeeChoice, OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
@@ -56,21 +58,24 @@ import { builtCapOf } from "./estimate-reuse-shared"
 import type { ChainTipGate } from "./chain-tip-gate"
 import type { OriginTurn } from "./execution-lane"
 import type { ExecutionMutexRelease } from "./execution-mutex"
-import type { OperationEstimateReuse } from "./operation-estimate-reuse"
+import type { OperationEstimateReuse, OperationEstimateReuseEntry } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
-import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
+import { askFeeAgain, feeRiseAsks, personalPayerOf } from "./fee-reask"
+import type { QueuedFeeAnswers } from "./queued-fee-cap"
+import { MAX_WAIT_MS, type SendSequencer, type SequenceScope, type SequenceTicket } from "./send-sequencer"
 import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
-import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
+import { type FeeEstimate, finalizeGasLimits, type OnBuilt, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
 import type {
 	Action,
 	AztecSendTxOperation,
 	DiscoveredAuthwit,
 	FeeOptions,
+	FeeQuestion,
 	FeeSettings,
 	Operation,
 	OperationApprovalEnvelope,
@@ -83,19 +88,20 @@ import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
+import { type FeeChooser, feeChoiceOf, feeChooserOf } from "./fee-choice"
 
-/** Project an `Action[]` (a discriminated union with non-call variants like
- *  `AddCapsuleAction`) into the carrier shape `pickPrimaryMethod` expects.
- *  Inlined here rather than in `primary-method.ts` because that helper is
- *  layer-agnostic — importing `Action` from the execution spec would invert
+/** The primary call of an `Action[]` (a discriminated union with non-call variants like
+ *  `AddCapsuleAction`), as the journal records it. Inlined here rather than in `primary-method.ts`
+ *  because that helper is layer-agnostic — importing `Action` from the execution spec would invert
  *  the dependency direction. */
-function pickActionMethod(actions: readonly Action[] | undefined): string | undefined {
-	const carriers: Array<{ method?: string; name?: string }> = []
-	for (const action of actions ?? []) {
-		if (action.kind === "call") carriers.push({ method: action.method })
-		else if (action.kind === "encoded_call") carriers.push({ name: action.name ?? action.selector })
-	}
-	return pickPrimaryMethod(carriers)
+function primaryActionCalls(actions: readonly Action[] | undefined): JournalCallCarrier[] | undefined {
+	const calls = (actions ?? []).filter((a) => a.kind === "call" || a.kind === "encoded_call")
+	const index = pickPrimaryIndex(calls.map((a) => ({ method: a.kind === "call" ? a.method : (a.name ?? a.selector) })))
+	const primary = index === undefined ? undefined : calls[index]
+	if (primary?.kind === "call") return [{ method: primary.method, call: journalCallOf(primary.contract, primary.args) }]
+	if (primary?.kind === "encoded_call")
+		return [{ method: primary.name ?? primary.selector, call: journalCallOf(primary.to, primary.args) }]
+	return undefined
 }
 
 /** Execution-lane subset the dApp-send flows depend on: the FIFO slot,
@@ -114,7 +120,7 @@ export interface DappSendExecutorLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls: { method?: string }[] | undefined,
+		calls: JournalCallCarrier[] | undefined,
 		hooks: ExecutionHooks | undefined,
 		reuseController: AbortController | undefined,
 		fence: ExecutionFence,
@@ -123,10 +129,11 @@ export interface DappSendExecutorLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls?: { method?: string }[],
+		calls?: JournalCallCarrier[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
+	recordBuiltCall(journalId: string | undefined, txCalls: Tx["calls"]): Promise<void>
+	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
 	parkSlot(
 		release: ExecutionMutexRelease,
@@ -139,6 +146,10 @@ export interface DappSendExecutorLane {
 	): Promise<ExecutionMutexRelease>
 	joinOriginLine(fence: ExecutionFence, chainId: number, originKey: string | undefined): OriginTurn
 	failUnclaimed(journalId: string | undefined, error: unknown): Promise<void>
+	/** `queued → pending` after a park; a row still `pending` stays, any other stage ends the send. */
+	reclaimParked(journalId: string): Promise<void>
+	beginQueuedWait(journalId: string): void
+	endQueuedWait(journalId: string): void
 }
 
 /** Where a granted dApp send stands until it starts: its origin's line, and a waiter in the line of
@@ -161,6 +172,7 @@ interface SentTx {
 	fence: ExecutionFence
 	networkId: AddTransactionInput["networkId"]
 	pendingPublicAuthwits: Parameters<DappSendExecutorDeps["recordPendingAuthwits"]>[1]
+	feeChosenBy: FeeChooser
 }
 
 export interface DappSendExecutorDeps {
@@ -198,10 +210,14 @@ export interface DappSendExecutorDeps {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		onBuilt?: OnBuilt,
 	): Promise<FeeEstimate>
 	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
 	 *  seam in sync with the source signature. */
 	addTransaction: TransactionService["addTransaction"]
+	/** The canonical SponsoredFPC's address on `chainId`, derived by the wallet, never read from a
+	 *  row; `undefined` when there is none to compare against. */
+	protocolSponsorAddress(chainId: number): Promise<string | undefined>
 	/** Mirrors `AuthRegistryService.recordPendingAuthwits` — records the build's
 	 *  public authwits at the post-send tail as pending, tx-linked rows. */
 	recordPendingAuthwits: AuthRegistryService["recordPendingAuthwits"]
@@ -210,8 +226,74 @@ export interface DappSendExecutorDeps {
 	noteSent(chainId: number, account: string, txHash: string, calls: Tx["calls"]): void
 	sequencer: Pick<SendSequencer, "enterWaiter">
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
+	/** The person's answers to held sends whose fee came out above the approved figure. */
+	answers: QueuedFeeAnswers
+	/** Opens the window that asks `question`; its answer reaches `answers`, a refusal cancels the send. */
+	askInWindow(question: FeeQuestion): void
 	logDebug(msg: string, ...rest: unknown[]): void
 }
+
+/** The scaffold's hold on a granted send, as its body uses it. */
+interface SlotRun {
+	journalId: string | undefined
+	controller: AbortController | undefined
+	checkCancelled: () => void
+	markJournal: (patch: JobProgress) => Promise<void>
+	/** Names the record by the build's primary call; called after every build. */
+	recordCall: (txCalls: Tx["calls"]) => Promise<void>
+	commitSubmitting: ProveAndSendContext["commitSubmitting"]
+	/** Gives the slot back while `wait` runs, then takes it again behind the account's earlier sends,
+	 *  the record claimed back to `pending`. */
+	park: (wait: () => Promise<void>) => Promise<void>
+	/** Leaves the origin's line: the send keeps the slot from here to its submission, so the origin's
+	 *  later sends can no longer overtake it. */
+	leaveLine: () => void
+}
+
+/** A build above the approved figure, as its question needs it: never the build itself. `shown` is
+ *  the authorization rows the approval window listed, which the question shows again. */
+type OverCeiling = { reask: QueuedFeeReask; stashId?: string; shown?: readonly DiscoveredAuthwit[] }
+
+/** A standard build, whichever arm made it, with what a stash of it is bound to. */
+type StandardBuild = Pick<
+	FeeEstimate,
+	| "txRequest"
+	| "node"
+	| "pxe"
+	| "account"
+	| "txCalls"
+	| "feePaymentMethod"
+	| "pendingPublicAuthwits"
+	| "chainIdentity"
+	| "fpcIdentity"
+	| "initializesAccount"
+	| "appPayer"
+> & {
+	network: Network
+	nonce: { toString(): string }
+	/** Message hashes of the private authwits this build signs. */
+	discoveredHashes: readonly string[]
+	/** The entry a reuse hit consumed. */
+	reused?: OperationEstimateReuseEntry
+}
+
+/** What every build of one standard dApp send answers to. */
+type StandardRun = {
+	op: AztecSendTxOperation
+	identity: OperationFingerprintInput
+	fence: ExecutionFence
+	parentTask: WrappedTask | undefined
+	checkCancelled: () => void
+	recordCall: SlotRun["recordCall"]
+	preview: PreviewLookup | undefined
+	approval: OperationApprovalEnvelope | undefined
+}
+
+/** What a build's reuse entry is bound to, read before the build. */
+type ReuseSnapshot = { sequenceEpoch: number; pendingHashes: readonly string[]; lagging: boolean }
+
+/** A popup approval of a send the person pays carries the figure its window showed. */
+const MISSING_FEE_FIGURE = "The approval carries no fee figure for a fee the account pays"
 
 export class DappSendExecutor {
 	public constructor(private readonly deps: DappSendExecutorDeps) {}
@@ -254,16 +336,11 @@ export class DappSendExecutor {
 			// AFTER `acquireSlot` — computing it earlier would delay our FIFO
 			// enqueue (letting a later request overtake) and move any throw out
 			// of the acquire-protected try. Evaluated below, inside the try.
-			getCalls: () => { method?: string }[] | undefined
+			getCalls: () => JournalCallCarrier[] | undefined
 			/** The dApp's `additionalScopes`, a thunk for the same reason as `getCalls`. */
 			getAdditionalScopes: () => unknown
 		},
-		run: (ctx: {
-			journalId: string | undefined
-			checkCancelled: () => void
-			markJournal: (patch: JobProgress) => Promise<void>
-			commitSubmitting: ProveAndSendContext["commitSubmitting"]
-		}) => Promise<T>,
+		run: (ctx: SlotRun) => Promise<T>,
 	): Promise<T> {
 		const { release, preController } = await this.deps.lane.acquireSlot(
 			params.networkId,
@@ -278,8 +355,7 @@ export class DappSendExecutor {
 		try {
 			// A wallet send (Settings) has no record before its claim, so a wait would show nothing.
 			line = params.origin.type === OriginType.DAPP ? await this.joinLines(params) : undefined
-			if (line) await this.waitForEarlierSends(params, preController, line, slot)
-			line?.turn.leave()
+			if (line) await this.waitForEarlierSends(params, params.hooks?.queuedJournalId, preController, line, slot)
 			const claimed = await this.deps.lane.claimOrCreateJournal(
 				params.networkId,
 				params.accountAddress,
@@ -299,9 +375,29 @@ export class DappSendExecutor {
 
 			return await run({
 				journalId,
+				controller,
 				checkCancelled,
 				markJournal: (patch) => this.deps.lane.markJournal(journalId, patch),
+				recordCall: (txCalls) => this.deps.lane.recordBuiltCall(journalId, txCalls),
 				commitSubmitting: (patch) => this.deps.lane.commitJournal(journalId, { stage: "submitting", ...patch }),
+				park: async (wait) => {
+					const own = journalId
+					if (!own) throw new Error("A send with no record cannot wait")
+					slot.release = await this.deps.lane.parkSlot(
+						slot.release,
+						params.networkId,
+						own,
+						params.fence,
+						controller,
+						params.hooks?.originKey,
+						wait,
+					)
+					// Under the slot again, as at the first grant: a send of the account may have reached the
+					// node while this one was parked, and the rebuild must not spend what it spends.
+					if (line) await this.waitForEarlierSends(params, own, controller, line, slot)
+					await this.deps.lane.reclaimParked(own)
+				},
+				leaveLine: () => line?.turn.leave(),
 			})
 		} catch (error) {
 			await markFailedUnlessCancelled(error, journalId, this.deps.lane)
@@ -347,13 +443,13 @@ export class DappSendExecutor {
 	 */
 	private async waitForEarlierSends(
 		params: { networkId: string; hooks: ExecutionHooks | undefined; fence: ExecutionFence },
+		journalId: string | undefined,
 		preController: AbortController | undefined,
 		line: DappSendLine,
 		slot: { release: ExecutionMutexRelease },
 	): Promise<void> {
 		// A send with no record has no cancel to answer while it waits.
 		const signal = preController?.signal ?? new AbortController().signal
-		const journalId = params.hooks?.queuedJournalId
 		let unordered = false
 		const held = () =>
 			!unordered &&
@@ -429,13 +525,7 @@ export class DappSendExecutor {
 		// Reuse fingerprints bind the POST-PLANNER, PRE-DISCOVERY action set —
 		// the consume side re-derives the same normalization point.
 		const preDiscoveryActions = [...actions]
-		// Read before the build: a send that reaches the node, or settles, during it may hold this build's notes.
-		const { chainId } = await this.deps.getNetwork(operation.networkId)
-		const sequenceEpoch = this.deps.sequenceEpoch(chainId, operation.accountAddress)
-		const pendingHashes = this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash)
-		// A settled predecessor's block the node lacks: neither the epoch nor the pending set changes
-		// once it lands, so a build simulated without it must not be reused.
-		const lagging = this.deps.chainTip.unconfirmed({ chainId, account: operation.accountAddress }, undefined, operation.networkId)
+		const { sequenceEpoch, pendingHashes, lagging } = await this.reuseSnapshot(operation.networkId, operation.accountAddress)
 
 		// Discover-then-estimate via the decorator (the single owner of that
 		// choreography for dApp sends; stage-boundary cancellation preserved
@@ -459,15 +549,15 @@ export class DappSendExecutor {
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"
 		const previewId =
-			bound && preview ? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId) : undefined
+			bound && preview
+				? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId, discovered)
+				: undefined
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
 		const priorityFee = priorityFeeOf(txRequest)
-		const priorityFeeFormatted = formatFeeJuice(priorityFee)
 		return {
 			maxFee: maxFeeRaw.toString(),
-			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
-			...(priorityFeeFormatted !== "0" ? { priorityFee: priorityFee.toString(), priorityFeeFormatted } : {}),
+			...(feeDisplay(priorityFee, undefined).amount !== "0" ? { priorityFee: priorityFee.toString() } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,
@@ -475,6 +565,18 @@ export class DappSendExecutor {
 			...(sponsorFunding ? { sponsorFunding } : {}),
 			...(appPayerFunding ? { appPayerFunding } : {}),
 			...(feeJuiceShortfall ? { feeJuiceShortfall } : {}),
+		}
+	}
+
+	/** Read before a build: a send that reaches the node, or settles, during it may hold this build's
+	 *  notes. A settled predecessor's block the node lacks changes neither the epoch nor the pending
+	 *  set once it lands, so a build simulated while it `lagging` must not be reused. */
+	private async reuseSnapshot(networkId: string, account: string): Promise<ReuseSnapshot> {
+		const { chainId } = await this.deps.getNetwork(networkId)
+		return {
+			sequenceEpoch: this.deps.sequenceEpoch(chainId, account),
+			pendingHashes: this.deps.getPendingForAccount(account).map((tx) => tx.hash),
+			lagging: this.deps.chainTip.unconfirmed({ chainId, account }, undefined, networkId),
 		}
 	}
 
@@ -527,9 +629,10 @@ export class DappSendExecutor {
 		fingerprint: string | null,
 		discoveredHashes: readonly string[],
 		estimateId: string | undefined,
+		discoveredAuthwits?: readonly DiscoveredAuthwit[],
 	): string {
 		const previewId = estimateId ?? crypto.randomUUID()
-		this.deps.previewSnapshots.stash(previewId, { ...preview, fingerprint, discoveredHashes })
+		this.deps.previewSnapshots.stash(previewId, { ...preview, fingerprint, discoveredHashes, discoveredAuthwits })
 		return previewId
 	}
 
@@ -585,9 +688,21 @@ export class DappSendExecutor {
 		operation: Operation,
 		identity: OperationFingerprintInput,
 		detectedFee: FeeOptions | undefined,
-		built: FeeEstimate,
+		built: Pick<
+			FeeEstimate,
+			| "network"
+			| "txRequest"
+			| "chainIdentity"
+			| "fpcIdentity"
+			| "initializesAccount"
+			| "feePaymentMethod"
+			| "txCalls"
+			| "pendingPublicAuthwits"
+		> & { nonce: { toString(): string } },
 		discoveredHashes: readonly string[],
 		before: { sequenceEpoch: number; pendingHashes: readonly string[] },
+		/** The profile the build answered to; the active one when absent. */
+		profileId?: string,
 	): Promise<string | undefined> {
 		const { feeSettings } = identity
 		const kind = feeSettings.paymentMethod.kind
@@ -607,8 +722,8 @@ export class DappSendExecutor {
 			if (fingerprint === null) return undefined
 			const primary = findPrimaryEndpoint(built.network)
 			if (!primary) return undefined
-			const profile = await this.deps.getActiveProfile()
-			if (!profile) return undefined
+			const owner = profileId ?? (await this.deps.getActiveProfile())?.id
+			if (!owner) return undefined
 			const builtCap = builtCapOf(built.txRequest)
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
@@ -616,7 +731,7 @@ export class DappSendExecutor {
 				accountAddress: operation.accountAddress,
 				networkId: operation.networkId,
 				feeSettings,
-				profileId: profile.id,
+				profileId: owner,
 				// The BUILDER's asserted pair, never a refetch — a refetch after
 				// an endpoint flip would snapshot a chain this request was not
 				// signed under (consume would then compare live-vs-live).
@@ -624,7 +739,8 @@ export class DappSendExecutor {
 				builtCap,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
-				...before,
+				sequenceEpoch: before.sequenceEpoch,
+				pendingHashes: before.pendingHashes,
 				fpcIdentity: built.fpcIdentity,
 				txRequest: built.txRequest,
 				initializesAccount: built.initializesAccount,
@@ -647,6 +763,7 @@ export class DappSendExecutor {
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
+		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
 			const account = sent.account.address.toString()
 			await this.deps.addTransaction({
@@ -662,6 +779,7 @@ export class DappSendExecutor {
 				gasDetails: getGasDetails(sent.txRequest),
 				fence: sent.fence,
 				networkId: sent.networkId,
+				feeChoice: await feeChoice,
 			})
 			if (sent.pendingPublicAuthwits.length > 0) {
 				// Scoped to the SENDING tx's (profileId, chainId, account); the profile is the fence's.
@@ -674,12 +792,26 @@ export class DappSendExecutor {
 		}
 	}
 
+	/** Started before the prove to overlap the derivation. Never rejects: an address the wallet cannot
+	 *  derive leaves the app's plain pick, which is never wrong. */
+	private async feeChoiceFor(by: FeeChooser, chainId: number, calls: SentTx["txCalls"]): Promise<FeeChoice> {
+		if (by === "wallet") return "wallet"
+		let sponsor: string | undefined
+		try {
+			sponsor = await this.deps.protocolSponsorAddress(chainId)
+		} catch (error) {
+			this.deps.logDebug("fee chooser: the protocol sponsor's address is unavailable", { error })
+		}
+		return feeChoiceOf(by, calls, sponsor)
+	}
+
 	public async executeSendTransaction(
 		op: SendTransactionOperation,
 		origin: LocalTxOrigin,
 		parentTask: WrappedTask | undefined,
 		fence: ExecutionFence,
 		hooks?: ExecutionHooks,
+		approval?: OperationApprovalEnvelope,
 	): Promise<string> {
 		// The SW materializes every operation it executes, so a missing
 		// feeSettings here is a materializer or fee-delta bug — fail before the
@@ -697,7 +829,6 @@ export class DappSendExecutor {
 		// created inside claimOrCreateJournal (identical shape to the prior
 		// beginJournal); the primary-method calls are a thunk so they read after
 		// acquireSlot. hooks (esp. originKey) bucket the slot per-origin.
-		const primaryMethod = pickActionMethod(op.actions)
 		return this.runInSlot(
 			{
 				networkId: op.networkId,
@@ -705,62 +836,125 @@ export class DappSendExecutor {
 				origin,
 				hooks,
 				fence,
-				getCalls: () => (primaryMethod ? [{ method: primaryMethod }] : undefined),
+				getCalls: () => primaryActionCalls(op.actions),
 				getAdditionalScopes: () => undefined,
 			},
-			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
+			async (ctx) => {
 				// Enter `simulating` BEFORE the build/estimate work — fee
 				// strategies inside the build run real simulateTx calls (can be
 				// several seconds), and leaving the journal at `pending` would
 				// hide that from the popup.
-				await markJournal({ stage: "simulating" })
-				checkCancelled()
+				await ctx.markJournal({ stage: "simulating" })
+				ctx.checkCancelled()
 
-				const {
-					txRequest,
-					node,
-					pxe,
-					account,
-					network,
-					nonce,
-					txCalls,
-					feePaymentMethod,
-					pendingPublicAuthwits,
-					initializesAccount,
-				} = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask)
-
-				const { txHash } = await this.deps.coordinator.proveAndSend({
-					pxe,
-					node,
-					txRequest,
-					initializesAccount,
-					scopes: [account.address],
-					parentTask,
-					journalId,
-					checkCancelled,
-					...fenceChecks(this.deps, fence),
-					markJournal,
-					commitSubmitting,
-					submittedEndpointUrl: primaryEndpointUrl(network),
-					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
-					// grantPublicAuthwit routes here (kind: send_transaction), so this is where a granted
-					// authwit is recorded.
-					recordTransaction: this.sentTxRecorder({
-						origin,
-						network,
-						account,
-						txCalls,
-						nonce,
-						feePaymentMethod,
-						txRequest,
-						fence,
-						networkId: op.networkId,
-						pendingPublicAuthwits,
-					}),
-				})
-				return txHash.toString()
+				let ceiling = approval?.feeCeiling
+				for (;;) {
+					const pass = await this.sendTransactionPass(op, fence, parentTask, approval, ceiling, ctx)
+					if ("built" in pass) return this.proveSendTransaction(op, origin, parentTask, fence, ctx, pass.built)
+					ceiling = await this.askAboutFee(ctx, approval, pass.over)
+				}
 			},
 		)
+	}
+
+	/** One build; above the approved figure only the question leaves this frame. */
+	private async sendTransactionPass(
+		op: SendTransactionOperation,
+		fence: ExecutionFence,
+		parentTask: WrappedTask | undefined,
+		approval: OperationApprovalEnvelope | undefined,
+		ceiling: string | undefined,
+		ctx: SlotRun,
+	): Promise<{ built: FeeEstimate } | { over: OverCeiling }> {
+		const built = await this.deps.buildAndEstimateValidated(op, op.feeSettings, fence, parentTask, undefined, ctx.recordCall)
+		const reask = overCeiling(approval, ceiling, built)
+		return reask ? { over: { reask } } : { built }
+	}
+
+	private async proveSendTransaction(
+		op: SendTransactionOperation,
+		origin: LocalTxOrigin,
+		parentTask: WrappedTask | undefined,
+		fence: ExecutionFence,
+		ctx: SlotRun,
+		built: FeeEstimate,
+	): Promise<string> {
+		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
+			built
+		ctx.leaveLine()
+		const { txHash } = await this.deps.coordinator.proveAndSend({
+			pxe,
+			node,
+			txRequest,
+			initializesAccount,
+			scopes: [account.address],
+			parentTask,
+			journalId: ctx.journalId,
+			checkCancelled: ctx.checkCancelled,
+			...fenceChecks(this.deps, fence),
+			markJournal: ctx.markJournal,
+			commitSubmitting: ctx.commitSubmitting,
+			submittedEndpointUrl: primaryEndpointUrl(network),
+			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
+			// grantPublicAuthwit routes here (kind: send_transaction), so this is where a granted
+			// authwit is recorded.
+			recordTransaction: this.sentTxRecorder({
+				origin,
+				network,
+				account,
+				txCalls,
+				nonce,
+				feePaymentMethod,
+				txRequest,
+				fence,
+				networkId: op.networkId,
+				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
+			}),
+		})
+		return txHash.toString()
+	}
+
+	/**
+	 * Holds a send whose build came out above the approved figure outside the slot until the person
+	 * answers, and returns the figure they accepted, the next build's ceiling. The question stays open
+	 * for {@link MAX_WAIT_MS}; the window that asks it closes at the same moment.
+	 */
+	private async askAboutFee(ctx: SlotRun, approval: OperationApprovalEnvelope | undefined, over: OverCeiling): Promise<string> {
+		const { journalId, controller } = ctx
+		if (!approval || !journalId || !controller) throw new Error("A send with no record cannot be asked about its fee")
+		const { reask, shown } = over
+		const deadline = Date.now() + MAX_WAIT_MS
+		const { interactionId, index } = approval
+		await ctx.park(() =>
+			askFeeAgain(
+				{
+					answers: this.deps.answers,
+					transitionJournal: (id, progress) => this.deps.lane.commitJournal(id, progress),
+					beginQueuedWait: (id) => this.deps.lane.beginQueuedWait(id),
+					endQueuedWait: (id) => this.deps.lane.endQueuedWait(id),
+					logDebug: (msg) => this.deps.logDebug(msg),
+				},
+				{
+					journalId,
+					controller,
+					reask,
+					ms: deadline - Date.now(),
+					onAsked: () =>
+						this.deps.askInWindow({
+							interactionId,
+							index,
+							journalId,
+							reask,
+							deadline,
+							...(shown && { discoveredAuthwits: shown }),
+						}),
+				},
+			),
+		)
+		await ctx.markJournal({ stage: "simulating" })
+		ctx.checkCancelled()
+		return reask.fee
 	}
 
 	/** `approval` is present only for popup-approved executions; it carries the
@@ -803,7 +997,7 @@ export class DappSendExecutor {
 				getCalls: () => primaryMethodCalls(op),
 				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
-			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
+			async (ctx) => {
 				if (op.accountAddress !== op.opts?.from?.toString()) {
 					throw new Error("Invalid `opts.from`")
 				}
@@ -815,68 +1009,125 @@ export class DappSendExecutor {
 				// window during a potentially-slow discovery + build. Marked HERE (not
 				// in runInSlot) so it stays AFTER the opts.from guard + payload parse —
 				// those failures must remain `pending → failed`, not go via simulating.
-				await markJournal({ stage: "simulating" })
-				checkCancelled()
+				await ctx.markJournal({ stage: "simulating" })
+				ctx.checkCancelled()
 
 				// Refuse a forged estimateId/previewId pairing before the reuse cache is touched.
 				this.assertEstimateBinding(approval)
 				const identity = fingerprintInputFor(op, op.feeSettings, fee, actions)
-				// Pop the snapshot before any reuse, and keep that one lookup to reconcile the build after.
+				// Pop the snapshot before any reuse, and keep that one lookup to reconcile every build after.
 				const preview = approval ? this.takeStandardPreview(approval, fingerprintOperation(identity)) : undefined
-				const reuseId = preview?.kind === "found" ? approval?.estimateId : undefined
-				const {
-					txRequest,
-					node,
-					pxe,
-					account,
-					network,
-					nonce,
-					txCalls,
-					feePaymentMethod,
-					pendingPublicAuthwits,
-					initializesAccount,
-					discoveredHashes,
-				} = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled)
-				if (preview) assertWithinPreview(preview, discoveredHashes)
-				checkCancelled()
-
-				const sendAdditionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
-				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
-					pxe,
-					node,
-					txRequest,
-					initializesAccount,
-					scopes: [account.address, ...sendAdditionalScopes],
+				const run: StandardRun = {
+					op,
+					identity,
+					fence,
 					parentTask,
-					journalId,
-					checkCancelled,
-					...fenceChecks(this.deps, fence),
-					markJournal,
-					commitSubmitting,
-					submittedEndpointUrl: primaryEndpointUrl(network),
-					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
-					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: this.sentTxRecorder({
-						origin,
-						network,
-						account,
-						txCalls,
-						nonce,
-						feePaymentMethod,
-						txRequest,
-						fence,
-						networkId: op.networkId,
-						pendingPublicAuthwits,
-					}),
-				})
-
-				if (op.opts.wait === "NO_WAIT") {
-					return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+					checkCancelled: ctx.checkCancelled,
+					recordCall: ctx.recordCall,
+					preview,
+					approval,
 				}
-				const receipt = await node.getTxReceipt(txHash)
-				return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+				let reuseId = preview?.kind === "found" ? approval?.estimateId : undefined
+				let ceiling = approval?.feeCeiling
+				let stashId: string | undefined
+				try {
+					for (;;) {
+						const pass = await this.standardPass(run, reuseId, ceiling)
+						if ("built" in pass) return await this.proveStandardSend(op, origin, parentTask, fence, ctx, pass.built)
+						stashId = pass.over.stashId
+						reuseId = stashId
+						ceiling = await this.askAboutFee(ctx, approval, pass.over)
+					}
+				} finally {
+					if (stashId) this.deps.operationEstimateReuse.evict(stashId)
+				}
 			},
 		)
+	}
+
+	/** One build held to the preview and the approved figure; above the figure the build is stashed
+	 *  for the accept and only the question leaves this frame. */
+	private async standardPass(
+		run: StandardRun,
+		reuseId: string | undefined,
+		ceiling: string | undefined,
+	): Promise<{ built: StandardBuild } | { over: OverCeiling }> {
+		const { op, identity, fence, parentTask, checkCancelled, preview, approval } = run
+		const before = await this.reuseSnapshot(op.networkId, op.accountAddress)
+		const built = await this.resolveStandardBuild(op, identity, reuseId, fence, parentTask, checkCancelled, run.recordCall)
+		if (preview) assertWithinPreview(preview, built.discoveredHashes)
+		checkCancelled()
+		const reask = overCeiling(approval, ceiling, built)
+		if (!reask) return { built }
+		const shown = preview?.kind === "found" ? preview.snapshot.discoveredAuthwits : undefined
+		return { over: { reask, stashId: await this.restash(op, identity, built, before, fence.profileId), shown } }
+	}
+
+	/** A consumed entry goes back as it was, so its `builtAt` still bounds how long the signed request
+	 *  stays in memory; a fresh build is stashed as an estimate's would be. */
+	private async restash(
+		op: AztecSendTxOperation,
+		identity: OperationFingerprintInput,
+		built: StandardBuild,
+		before: ReuseSnapshot,
+		profileId: string,
+	): Promise<string | undefined> {
+		if (built.reused) {
+			const stashId = crypto.randomUUID()
+			this.deps.operationEstimateReuse.stash(stashId, built.reused)
+			return stashId
+		}
+		if (before.lagging) return undefined
+		return this.stashOperationEstimate(op, identity, identity.fee, built, built.discoveredHashes, before, profileId)
+	}
+
+	private async proveStandardSend(
+		op: AztecSendTxOperation,
+		origin: LocalTxOrigin,
+		parentTask: WrappedTask | undefined,
+		fence: ExecutionFence,
+		ctx: SlotRun,
+		built: StandardBuild,
+	): Promise<SendReturn<InteractionWaitOptions>> {
+		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
+			built
+		const sendAdditionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
+		ctx.leaveLine()
+		const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
+			pxe,
+			node,
+			txRequest,
+			initializesAccount,
+			scopes: [account.address, ...sendAdditionalScopes],
+			parentTask,
+			journalId: ctx.journalId,
+			checkCancelled: ctx.checkCancelled,
+			...fenceChecks(this.deps, fence),
+			markJournal: ctx.markJournal,
+			commitSubmitting: ctx.commitSubmitting,
+			submittedEndpointUrl: primaryEndpointUrl(network),
+			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
+			wantOffchainOutput: offchainOutputOf,
+			recordTransaction: this.sentTxRecorder({
+				origin,
+				network,
+				account,
+				txCalls,
+				nonce,
+				feePaymentMethod,
+				txRequest,
+				fence,
+				networkId: op.networkId,
+				pendingPublicAuthwits,
+				feeChosenBy: feeChooserOf(op.feeSettings),
+			}),
+		})
+
+		if (op.opts.wait === "NO_WAIT") {
+			return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+		}
+		const receipt = await node.getTxReceipt(txHash)
+		return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
 	}
 
 	/**
@@ -895,20 +1146,8 @@ export class DappSendExecutor {
 		fence: ExecutionFence,
 		parentTask: WrappedTask | undefined,
 		checkCancelled: () => void,
-	): Promise<{
-		txRequest: FeeEstimate["txRequest"]
-		node: FeeEstimate["node"]
-		pxe: FeeEstimate["pxe"]
-		account: FeeEstimate["account"]
-		network: Network
-		nonce: { toString(): string }
-		txCalls: FeeEstimate["txCalls"]
-		feePaymentMethod: FeeEstimate["feePaymentMethod"]
-		pendingPublicAuthwits: FeeEstimate["pendingPublicAuthwits"]
-		initializesAccount: boolean | undefined
-		/** Message hashes of the private authwits this build signs. */
-		discoveredHashes: readonly string[]
-	}> {
+		onBuilt: OnBuilt,
+	): Promise<StandardBuild> {
 		const { actions, fee } = identity
 		const reused = estimateId ? await this.deps.operationEstimateReuse.tryConsume(estimateId, identity, fence) : undefined
 
@@ -922,6 +1161,8 @@ export class DappSendExecutor {
 			const account = await this.deps.getAccountContract(fence.profileId, network.chainId, op.accountAddress)
 			// The lookup reads whichever session is live: re-check the fence before its keys are used.
 			fenceChecks(this.deps, fence).assertLive()
+			// The estimate's build ran outside this send, so its calls name the record only now.
+			await onBuilt(reused.txCalls)
 			return {
 				txRequest: reused.txRequest,
 				node,
@@ -935,6 +1176,9 @@ export class DappSendExecutor {
 				feePaymentMethod: reused.feePaymentMethod,
 				pendingPublicAuthwits: [...reused.pendingPublicAuthwits],
 				discoveredHashes: reused.discoveredHashes,
+				chainIdentity: reused.chainIdentity,
+				fpcIdentity: reused.fpcIdentity,
+				reused,
 			}
 		}
 		if (fee?.embeddedFeePayment) {
@@ -946,10 +1190,21 @@ export class DappSendExecutor {
 				op.feeSettings,
 				fence,
 				parentTask,
+				undefined,
+				onBuilt,
 			)
 			return { ...built, discoveredHashes: [] }
 		}
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(op, actions, fee, op.feeSettings, fence, parentTask)
+		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
+			op,
+			actions,
+			fee,
+			op.feeSettings,
+			fence,
+			parentTask,
+			undefined,
+			onBuilt,
+		)
 		if (discovered.length) {
 			this.deps.logDebug(`[executeAztecSendTx] Discovered ${discovered.length} auth witness(es) via offchain effects`)
 		}
@@ -993,11 +1248,12 @@ export class DappSendExecutor {
 				getCalls: () => primaryMethodCalls(op),
 				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
-			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
+			async ({ checkCancelled, markJournal, recordCall, commitSubmitting, journalId, leaveLine }) => {
 				await markJournal({ stage: "simulating" })
 
 				const prepared = await this.prepareNoFrom(op, fence, parentTask)
 				const { txRequest, node, pxe, account, network, txCalls, txsLimits, feeOpts, scopesWithAccount } = prepared
+				await recordCall(txCalls)
 
 				await this.addDiscoveredNoFromAuthwits(prepared, approval, noFromFingerprint(op))
 
@@ -1009,8 +1265,11 @@ export class DappSendExecutor {
 					{ simulatePublic: true, skipFeeEnforcement: true, scopes: scopesWithAccount },
 					parentTask,
 				)
-				await finalizeGasLimits(node, txRequest, simulatedTx, 1, undefined, feeOpts, 1, txsLimits)
+				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
 				const submittedEndpointUrl = primaryEndpointUrl(network)
+				// The request carries its own fee payment, so the choice is always the app's.
+				const feeChoice = this.feeChoiceFor("app", network.chainId, txCalls)
+				leaveLine()
 
 				// Prove with account in scope
 				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
@@ -1027,7 +1286,7 @@ export class DappSendExecutor {
 					submittedEndpointUrl,
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: (hash) =>
+					recordTransaction: async (hash) =>
 						this.deps.addTransaction({
 							origin,
 							chainId: network.chainId,
@@ -1041,6 +1300,7 @@ export class DappSendExecutor {
 							gasDetails: getGasDetails(txRequest),
 							fence,
 							networkId: op.networkId,
+							feeChoice: await feeChoice,
 						}),
 				})
 
@@ -1154,9 +1414,11 @@ function spendAccounts(account: string, additionalScopes: unknown): string[] {
 
 /** The shared picker, not the raw first call: it skips a leading self-pay fee payload, so the proving
  *  title and the settled record's agree. */
-function primaryMethodCalls(op: AztecSendTxOperation): { method: string }[] | undefined {
-	const primaryMethod = Array.isArray(op.exec?.calls) ? pickPrimaryMethod(op.exec.calls) : undefined
-	return primaryMethod ? [{ method: primaryMethod }] : undefined
+function primaryMethodCalls(op: AztecSendTxOperation): JournalCallCarrier[] | undefined {
+	const primary = pickPrimaryWireCall(op.exec?.calls)
+	if (!primary) return undefined
+	const { to, args } = primary.call as Partial<Pick<FunctionCall, "to" | "args">>
+	return [{ method: primary.name, call: journalCallOf(to?.toString(), args) }]
 }
 
 function offchainOutputOf(provedTx: TxProvingResult) {
@@ -1176,6 +1438,24 @@ interface PreparedNoFrom {
 	feeOpts: FeeOptions
 	additionalScopes: AztecAddress[]
 	scopesWithAccount: AztecAddress[]
+}
+
+/**
+ * The question a popup-approved build asks when the person pays its fee and it rose past the approved
+ * figure by more than the tolerance; `undefined` lets it prove. A silent or wallet send carries no
+ * approval and is never held. A person-paid approval without a figure is refused, never sent unbound.
+ */
+function overCeiling(
+	approval: OperationApprovalEnvelope | undefined,
+	ceiling: string | undefined,
+	built: Pick<FeeEstimate, "txRequest" | "feePaymentMethod" | "fpcIdentity" | "appPayer">,
+): QueuedFeeReask | undefined {
+	if (!approval) return undefined
+	const payer = personalPayerOf(built)
+	if (!payer) return undefined
+	if (ceiling === undefined) throw new Error(MISSING_FEE_FIGURE)
+	const fee = getEstimatedFee(built.txRequest)
+	return feeRiseAsks(fee, ceiling) ? { fee, cap: ceiling, payer } : undefined
 }
 
 /** The reuse-fingerprint identity of a standard-mode dApp send: post-planner,

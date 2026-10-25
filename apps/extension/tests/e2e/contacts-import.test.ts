@@ -2,11 +2,11 @@
  * Importing contacts through the real UI: the Contacts menu, the file chooser, the grouped popup,
  * choosing rows by pointer and by keyboard, an edit through the edit popup, Cancel and Escape, and
  * what lands in the book and the list. Every test runs in a fresh wallet, so each book starts empty
- * and every assertion on it is exact. No run depends on the public endpoint: the launch's stand-in
- * answers the Testnet RPC until the Contacts page arms its refusal.
+ * and every assertion on it is exact. No run depends on the public endpoint: the launch's stand-ins
+ * answer the seeded nodes, and the Contacts page arms a refusal of the Testnet RPC.
  *
- * No confirmed sender row here: smoke's active network is the seeded Testnet, so registering one
- * would need a node. The sender line is checked on screen; registration through an import is
+ * No confirmed sender row here: a new profile's active network is the seeded Mainnet, so registering
+ * one would need a node. The sender line is checked on screen; registration through an import is
  * `network/senders-advanced.test.ts`.
  */
 import type { Page } from "puppeteer"
@@ -32,12 +32,15 @@ import {
 	exportContactsFile,
 	importRow,
 	listedAddress,
+	LONG_IMPORT_ROWS,
+	longImportContacts,
 	pickContactsFile,
 	pressRow,
 	refuseTestnet,
 	sectionCounts,
 	senderLine,
 	shownRows,
+	rawContactRows,
 	storedContacts,
 	tabWalk,
 	toastAfter,
@@ -49,11 +52,10 @@ import {
 	waitForStoredCount,
 	shownToast,
 } from "./helpers/contacts"
-import { pressEscape } from "./helpers/pointer-probes"
+import { shotSend } from "./fixtures/send-page"
+import { pressEscape, SPACE } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
-/** Puppeteer's BiDi keyboard (Firefox) knows the space bar only by its key value. */
-const SPACE = " "
 
 // Wire-shaped: 0x + 64 hex, each the x coordinate of a Grumpkin point.
 const ADDR = {
@@ -74,31 +76,28 @@ const files = contactsFiles()
 afterAll(files.cleanup)
 const contactsFile = (contacts: unknown[]) => files.write({ version: 2, contacts })
 
-/** `count` distinct on-curve addresses from a fixed seed, so every run imports the same file. */
-function onCurveAddresses(count: number): string[] {
-	let state = 0x9e3779b9
-	const next = () => {
-		state ^= state << 13
-		state ^= state >>> 17
-		state ^= state << 5
-		return state >>> 0
-	}
-	const found = new Set<string>()
-	while (found.size < count) {
-		// A leading zero byte keeps the value below the field modulus.
-		const address = `0x00${Array.from({ length: 8 }, () => next().toString(16).padStart(8, "0"))
-			.join("")
-			.slice(2)}`
-		if (isValidAztecAddress(address)) found.add(address)
-	}
-	return [...found]
-}
-
-/** Enough rows that an import is still writing seconds after its first row is stored. */
-const LONG_IMPORT_ROWS = 500
-const longImportFile = () =>
-	contactsFile(onCurveAddresses(LONG_IMPORT_ROWS).map((address, i) => ({ name: `Contact ${String(i + 1).padStart(3, "0")}`, address })))
+const longImportFile = () => files.write(longImportContacts())
 const lockChipDisabled = (page: Page) => page.$eval(sel("header-lock"), (button) => (button as HTMLButtonElement).disabled)
+
+/** How a review taller than the frame fits it: the list scrolls inside the card, the card does not,
+ *  and both answers stay on screen. Nested flex sizing only resolves in a real engine. */
+const reviewFit = (page: Page) =>
+	page.evaluate(() => {
+		const inView = (id: string) => {
+			const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+			return box !== undefined && box.top >= 0 && box.bottom <= window.innerHeight
+		}
+		const card = document
+			.querySelector('[data-testid="import-contacts-submit"]')
+			?.closest('[data-testid="popup-card-body"]')?.parentElement
+		let list = document.querySelector('[data-testid="import-contacts-section"]')?.parentElement ?? null
+		while (list && !/auto|scroll/.test(getComputedStyle(list).overflowY)) list = list.parentElement
+		return {
+			answersInView: inView("import-contacts-cancel") && inView("import-contacts-submit"),
+			cardScrolls: card ? card.scrollHeight > card.clientHeight : null,
+			listScrolls: list ? list.scrollHeight > list.clientHeight : null,
+		}
+	})
 
 /** The count on the progress snack, once a settled card reads more than `above`; the card is marked
  *  the first time, and a later read requires the marked card, so a re-keyed card (a replayed
@@ -163,7 +162,7 @@ test("new contacts: Cancel and Escape change nothing, Import selected saves what
 		await pickContactsFile(page, file)
 		expect(await shownRows(page)).toEqual(allNew)
 		expect(await sectionCounts(page)).toEqual({ new: "4" })
-		expect(await senderLine(page)).toBe("1 sender will be registered on Testnet.")
+		expect(await senderLine(page)).toBe("1 sender will be registered on Mainnet.")
 		await toastAfter(page, () => closeImportWith(page, "import-contacts-cancel"), "Contact import canceled")
 		expect(await storedContacts(page)).toEqual([])
 
@@ -416,16 +415,19 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 	}
 }, 300_000)
 
-// Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
-// written), if the real chip or the menu's Import item does not follow the running import, or if
-// the import's progress snack does not reach the shell's region on every page as one card
-// relabelled in place. Component tests mount stubs, fake clients and a mocked toast, so only the
-// built popup's real page unmount, Header, menu and snack region can show these.
+// Fails if a 500-row review clips its answers or scrolls the card instead of its list, if leaving
+// Contacts cuts off a running import (the page's clients rejected the row being written), if the
+// real chip or the menu's Import item does not follow the running import, or if the import's
+// progress snack does not reach the shell's region on every page as one card relabelled in place.
+// Component tests mount stubs, fake clients and a mocked toast, so only the built popup's real
+// layout, page unmount, Header, menu and snack region can show these.
 test("an import holds Lock until it ends, counts on one snack on every page, and leaving Contacts does not disturb it", async ({
 	registeredExtensionPerTest: ctx,
 }) => {
 	await onContacts(ctx, async (page) => {
 		await pickContactsFile(page, longImportFile())
+		expect(await reviewFit(page)).toEqual({ answersInView: true, cardScrolls: false, listScrolls: true })
+		await shotSend(page, "sheet-import-contacts", "import-contacts-submit")
 		await toastAfter(
 			page,
 			async () => {
@@ -468,7 +470,8 @@ test("auto-lock mid-import locks the wallet and stops the import", async ({ regi
 		// Strictly inside, so a stop that missed the import fails loudly instead of passing.
 		expect(written).toBeGreaterThan(0)
 		expect(written).toBeLessThan(LONG_IMPORT_ROWS)
-		// A write whose reply the stop cut off is stored but not counted.
-		expect([written, written + 1]).toContain((await storedContacts(page)).length)
+		// A write whose reply the stop cut off is stored but not counted. Counted at rest: the wallet
+		// is locked, so its contact service reads nothing.
+		expect([written, written + 1]).toContain((await rawContactRows(page)).length)
 	})
 }, 180_000)

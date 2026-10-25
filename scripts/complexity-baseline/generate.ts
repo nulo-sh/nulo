@@ -16,6 +16,7 @@
  */
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import { markerFor, parseObserved } from "./messages"
 import {
 	type BaselineManifest,
@@ -33,6 +34,8 @@ import {
 } from "./scan"
 
 const CATEGORY_PREFIX = "lint/complexity/"
+/** This checkout's installed launcher, run on Bun; never one found through the working directory, `PATH` or a runner. */
+const BIOME = join(import.meta.dir, "..", "..", "node_modules", ".bin", "biome")
 const MANIFEST_PATH = "scripts/complexity-baseline/manifest.json"
 
 interface Finding {
@@ -42,7 +45,7 @@ interface Finding {
 }
 
 function lint(): { path: string; category: string; message: string; line: number }[] {
-	const res = spawnSync("bunx", ["biome", "lint", "--reporter=json", "--max-diagnostics=none", "."], {
+	const res = spawnSync(process.execPath, ["--no-install", BIOME, "lint", "--reporter=json", "--max-diagnostics=none", "."], {
 		encoding: "utf8",
 		maxBuffer: 256 * 1024 * 1024,
 	})

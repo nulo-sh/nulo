@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto"
 import { type Server, createServer } from "node:http"
 import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
-import { evaluateInBackground, newPage, openScratchPage } from "./fixtures/browser"
+import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { evaluateInBackground, isFirefox, newPage, openScratchPage } from "./fixtures/browser"
 import {
 	EGRESS_CANARY_HOST,
 	EGRESS_LINK_LOCAL_HOST,
@@ -118,6 +118,34 @@ function pageRequests(page: Page, requests: Record<string, string>): Promise<Rec
 	)
 }
 
+/** Posts `node_getNodeInfo` to the Testnet node from an extension page: `status N`, or `rejected: <error name>`. */
+async function pageNodeCall(ctx: ExtensionContext): Promise<string> {
+	const page = await openScratchPage(ctx.browser, ctx.extensionId)
+	try {
+		return await page.evaluate(
+			async (url: string, budgetMs: number) => {
+				const call = { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] }
+				try {
+					const response = await fetch(url, {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify(call),
+						cache: "no-store",
+						signal: AbortSignal.timeout(budgetMs),
+					})
+					return `status ${response.status}`
+				} catch (err) {
+					return `rejected: ${(err as Error).name}`
+				}
+			},
+			TESTNET_RPC_URL,
+			PROBE_BUDGET_MS,
+		)
+	} finally {
+		await page.close().catch(() => {})
+	}
+}
+
 const countFor = (guard: EgressGuard, host: string, port: number): number =>
 	guard.attempts().find((attempt) => attempt.host === host && attempt.port === port)?.count ?? 0
 
@@ -134,7 +162,7 @@ async function settledCount(guard: EgressGuard, canaryPort: number): Promise<num
 	throw new Error("requests for the canary kept arriving at the guard for 10s")
 }
 
-describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress guard", () => {
+describe("the launch's egress guard", () => {
 	let ctx: ExtensionContext
 	let site: Site
 	let page: Page
@@ -142,9 +170,11 @@ describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress g
 	let canary: EgressCanary
 
 	beforeAll(async () => {
+		if (!guardArmed(inject("egressGuard")))
+			throw new Error("this run's global setup did not arm the egress guard, as every e2e setup must")
 		site = await startSite()
 		ctx = await launchExtension()
-		if (!ctx.egress) throw new Error("the smoke setup armed the guard, but the launch carries none")
+		if (!ctx.egress) throw new Error("the setup armed the guard, but the launch carries none")
 		;({ guard, canary } = ctx.egress)
 		page = await newPage(ctx.browser)
 		await page.goto(`http://127.0.0.1:${site.port}/page`, { waitUntil: "domcontentloaded" })
@@ -187,16 +217,20 @@ describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress g
 		expect(site.hits).toContain("/page-ipv6")
 	})
 
-	test("the background's call to the Testnet node gets the stand-in's terminal 400 and never reaches the guard", async () => {
-		const node = ctx.egress?.node
-		if (!node) throw new Error("the guarded launch holds no stand-in node")
-		const guardBefore = countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)
+	test.each([
+		["Testnet", TESTNET_RPC_URL],
+		["Mainnet", MAINNET_RPC_URL],
+	])("the background's call to the %s node gets its stand-in's terminal 400 and never reaches the guard", async (_name, url) => {
+		const host = new URL(url).hostname
+		const node = ctx.egress?.nodes.find((held) => held.host === host)
+		if (!node) throw new Error(`the guarded launch holds no stand-in for ${host}`)
+		const guardBefore = countFor(guard, host, 443)
 		const stubBefore = node.requests()
 		const call = { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] }
 		const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call) }
-		expect(await backgroundFetch(ctx, TESTNET_RPC_URL, init)).toBe("status 400")
+		expect(await backgroundFetch(ctx, url, init)).toBe("status 400")
 		expect(node.requests()).toBeGreaterThan(stubBefore)
-		expect(countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)).toBe(guardBefore)
+		expect(countFor(guard, host, 443)).toBe(guardBefore)
 	})
 
 	test("a link-local address is sent to the guard, not to the network", async () => {
@@ -213,5 +247,25 @@ describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress g
 			wss: "failed",
 		})
 		expect(canary.connections()).toBe(0)
+	})
+})
+
+// Its own launch: the close is what it checks, and the launch above stops its guard.
+describe("a node request the stand-in's interception does not see", () => {
+	test("fails the launch's close; Chrome never attaches a page, Firefox's observer covers it", async () => {
+		const leaky = await launchExtension()
+		let closing: Promise<void> | undefined
+		try {
+			// Awaited before the close: the guard has counted the attempt by the time the fetch settles.
+			expect(await pageNodeCall(leaky)).toBe(isFirefox ? "status 400" : "rejected: TypeError")
+			closing = leaky.close()
+			if (isFirefox) await closing
+			else
+				await expect(closing).rejects.toThrow(
+					/^egress guard: egress-guard\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard \d+ time\(s\) while the launch's stand-in held its origin: [^\n]*cannot fix this\.$/,
+				)
+		} finally {
+			if (!closing) await leaky.close().catch(() => {})
+		}
 	})
 })

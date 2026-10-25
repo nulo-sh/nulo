@@ -1,28 +1,27 @@
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType } from "@/wallet/services/transaction/spec"
 import type { TxOrigin } from "@/wallet/services/transaction/spec"
 import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
-import { transferLabel } from "./token-transfer-vocabulary"
+import { TRANSFER_LABELS, type TransferKind, transferLabel } from "./token-transfer-vocabulary"
+import { type ListedToken, type SettledCall, settledReading } from "./tx-amount"
 
 export { FEE_METHODS, pickPrimaryMethod }
 
-type TxCall = {
-	contract: string
-	method: string
-	args?: unknown[]
-}
+/** Keyed by a dApp-chosen function name, so a `Map`: a plain object answers `constructor`. */
+const MINT_LABELS: ReadonlyMap<string, string> = new Map([
+	["mint_to_public", "Mint (public)"],
+	["mint_to_private", "Mint (private)"],
+])
 
-/** Labels for the non-transfer names; transfer labels come from the descriptor-derived vocabulary. */
-const METHOD_LABELS: Record<string, string> = {
-	mint_to_public: "Mint (public)",
-	mint_to_private: "Mint (private)",
-	shield: "Shield",
-	unshield: "Unshield",
-	redeem_shield: "Redeem shield",
-	claim_and_end_setup: "Claim Fee Juice",
-	claim: "Claim Fee Juice",
-}
+/** The other curated labels; transfer labels come from the descriptor-derived vocabulary. */
+const METHOD_LABELS: ReadonlyMap<string, string> = new Map([
+	["shield", "Shield"],
+	["unshield", "Unshield"],
+	["redeem_shield", "Redeem shield"],
+	["claim_and_end_setup", "Claim Fee Juice"],
+	["claim", "Claim Fee Juice"],
+])
 
 /** The L2 Fee Juice contract (a protocol constant). Labels below are meaningful ONLY on it. */
 const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString().toLowerCase()
@@ -32,7 +31,10 @@ const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).to
  *  trust surface (it would misdescribe what the user is authorizing). */
 const FEE_JUICE_ONLY_LABELS = new Set(["claim", "claim_and_end_setup"])
 
-const curatedLabel = (method: string): string | null => transferLabel(method) ?? METHOD_LABELS[method] ?? null
+/** The wallet's label for a name that claims a token transfer or mint, the six a reading must earn. */
+export const tokenMovementLabel = (method: string): string | null => transferLabel(method) ?? MINT_LABELS.get(method) ?? null
+
+const curatedLabel = (method: string): string | null => tokenMovementLabel(method) ?? METHOD_LABELS.get(method) ?? null
 
 /**
  * Look up the wallet-curated friendly label for `method`. Returns `null` for anything not in the allowlist —
@@ -59,17 +61,21 @@ export function getMethodLabel(method: string, contract?: string): string | null
  * - Generic snake_case gets title-cased
  */
 export function humanizeMethodName(method: string, contract?: string): string {
+	return getMethodLabel(method, contract) ?? plainMethodName(method)
+}
+
+/** A call's title in the wallet's words: a transfer or mint label only on a call the wallet read as
+ *  that movement; a name that claims one otherwise reads as its contract spells it. */
+export function callTitle(method: string, contract: string | undefined, read: boolean): string {
+	return !read && tokenMovementLabel(method) !== null ? plainMethodName(method) : humanizeMethodName(method, contract)
+}
+
+/** A name as its contract spells it, with no wallet label: a hex selector truncated, snake_case title-cased. */
+export function plainMethodName(method: string): string {
 	if (!method) return "Unknown"
-
-	const label = getMethodLabel(method, contract)
-	if (label) return label
-
-	// Hex selector — truncate
 	if (/^0x[0-9a-fA-F]+$/.test(method)) {
 		return method.length > 10 ? `${method.slice(0, 10)}...` : method
 	}
-
-	// Generic snake_case → title case
 	return method.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
@@ -95,53 +101,59 @@ export function getPrimaryCall<T extends { method: string }>(calls: T[]): T | un
 	return idx === undefined ? calls[0] : calls[idx]
 }
 
-/**
- * Categorizes a transaction by its calls.
- */
-export function getTxCategory(calls: TxCall[]): "transfer" | "mint" | "tx" {
+/** A transaction's category: how the wallet reads its primary call against the listed `tokens`. */
+export function getTxCategory(calls: SettledCall[], tokens: readonly ListedToken[]): "transfer" | "mint" | "tx" {
 	const call = getPrimaryCall(calls)
-	if (call?.method?.startsWith("transfer")) return "transfer"
-	if (call?.method?.startsWith("mint_to_")) return "mint"
-	return "tx"
+	return call === undefined ? "tx" : (settledReading(call, tokens) ?? "tx")
 }
 
-/**
- * Returns a display title for a transaction.
- * - Transfer/mint get existing labels
- * - Generic txs get humanized primary method name
- */
-export function getTxTitle(calls: TxCall[]): string {
-	const category = getTxCategory(calls)
-	if (category === "transfer") return "Transfer"
-	if (category === "mint") return "Mint"
+/** Each of the wallet's own transfer types: the token function it runs and its direction, by the
+ *  enum's number and by its name, since a stored row may carry either; `0` and `"0"` share an own
+ *  key, which a `Map` would split. */
+const TRANSFER_TYPES: Readonly<Record<number | string, { kind: TransferKind; direction: string }>> = Object.fromEntries(
+	(
+		[
+			[TransferType.Private, "transferPrivate", "Private → Private"],
+			[TransferType.PrivateToPublic, "transferPrivateToPublic", "Private → Public"],
+			[TransferType.Public, "transferPublic", "Public → Public"],
+			[TransferType.PublicToPrivate, "transferPublicToPrivate", "Public → Private"],
+		] as const
+	).flatMap(([type, kind, direction]) => [
+		[type, { kind, direction }],
+		[TransferType[type], { kind, direction }],
+	]),
+)
 
+/** A settled call's title: a transfer the wallet sent itself by its recorded type, whatever its
+ *  function is named; any other call by `callTitle` with the wallet's reading of it. */
+export function settledCallTitle(call: SettledCall, tokens: readonly ListedToken[]): string {
+	const type: unknown = call.transfers?.[0]?.type
+	if ((typeof type === "number" || typeof type === "string") && Object.hasOwn(TRANSFER_TYPES, type)) {
+		return TRANSFER_LABELS[TRANSFER_TYPES[type].kind]
+	}
+	return callTitle(call.method, call.contract, settledReading(call, tokens) !== null)
+}
+
+/** A transaction's title: its primary call's. */
+export function getTxTitle(calls: SettledCall[], tokens: readonly ListedToken[]): string {
 	const primary = getPrimaryCall(calls)
-	return primary ? humanizeMethodName(primary.method) : "Transaction"
+	return primary ? settledCallTitle(primary, tokens) : "Transaction"
 }
+
+/** The label of a dApp that names itself nothing. */
+export const DAPP_LABEL = "dApp"
 
 /**
  * Returns dApp name for DAPP origin, null for UI/other.
  */
 export function getOriginLabel(origin?: TxOrigin): string | null {
 	if (!origin || origin.type !== OriginType.DAPP) return null
-	return origin.name || "dApp"
-}
-
-// TransferType enum values: Private=0, PrivateToPublic=1, Public=2, PublicToPrivate=3
-const TRANSFER_TYPE_LABELS: Record<number | string, string> = {
-	0: "Private → Private",
-	1: "Private → Public",
-	2: "Public → Public",
-	3: "Public → Private",
-	Private: "Private → Private",
-	PrivateToPublic: "Private → Public",
-	Public: "Public → Public",
-	PublicToPrivate: "Public → Private",
+	return origin.name || DAPP_LABEL
 }
 
 /**
  * Returns a human-readable transfer type label.
  */
 export function formatTransferType(type: number | string): string {
-	return TRANSFER_TYPE_LABELS[type] ?? String(type)
+	return Object.hasOwn(TRANSFER_TYPES, type) ? TRANSFER_TYPES[type].direction : String(type)
 }

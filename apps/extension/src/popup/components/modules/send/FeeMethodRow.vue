@@ -15,6 +15,7 @@
 defineProps({
 	method: { type: Object, default: null },
 	isLoading: { type: Boolean, default: false },
+	pending: { type: Boolean, default: false },
 	/** Null = balance unknown (read failed/timed out) — rendered as an em
 	 *  dash, never as a fabricated zero. */
 	feeJuiceBalanceFormatted: { type: String, default: null },
@@ -24,9 +25,9 @@ defineProps({
 
 <template>
 	<!-- Fee Juice details -->
-	<Flex v-if="method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
-		<Text variant="label" color="secondary">Available</Text>
-		<Skeleton v-if="isLoading" />
+	<Flex v-if="pending || method?.type === 'fj'" align="center" justify="between" :class="$style.detail_row">
+		<Text variant="label-section" color="secondary">Available</Text>
+		<Skeleton v-if="pending || isLoading" />
 		<Text v-else variant="value" color="primary">
 			{{ feeJuiceBalanceFormatted ?? '—' }} FJ
 		</Text>
@@ -34,7 +35,7 @@ defineProps({
 
 	<!-- Private Fee Juice (PrivateFPC) details -->
 	<Flex v-else-if="method?.type === 'private_fpc'" align="center" justify="between" :class="$style.detail_row">
-		<Text variant="label" color="secondary">Available</Text>
+		<Text variant="label-section" color="secondary">Available</Text>
 		<Skeleton v-if="isLoading" />
 		<template v-else-if="method.fpc">
 			<Text variant="value" color="primary">

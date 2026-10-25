@@ -17,20 +17,24 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 /** Local utilities */
 import { uniqueSignerAccounts, uniqueSignerNetworks } from "./signers"
 import { resolveOperationScope, scopeBannerCopy, scopeBannerState } from "./scope-mismatch"
-import { createScopeFollow } from "./scope-follow"
-import { requireNetwork } from "@/utils/core"
-import { storageLocalSet } from "@/utils/storage"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { createScopeFollow, selectionWriter } from "./scope-follow"
+import { managers, requireNetwork } from "@/utils/core"
+import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
-import { authwitDisplayCall, displayCallsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
+import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
+import { grantRefusalRow, readableGrants } from "./call-surface"
+import { decodeOperationArguments, followKnownTokens, resolveOperations } from "./operation-display"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { type Network, NetworkServiceClient } from "@/wallet/services/network/client"
+import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
 import {
 	type DecodedCall,
+	type DecodedGrant,
 	type DiscoveredAuthwit,
 	ExecutionServiceClient,
 	type FeeSettings,
@@ -38,21 +42,21 @@ import {
 	type TransferFeeEstimate,
 } from "@/wallet/services/execution/client"
 import { type TokenInfo, TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
-	type CaipAccount,
-	type CaipChain,
 	DappInteractionServiceClient,
 	type ExecutionPayload,
 	type OperationApprovalDelta,
+	type ShownTokenMetadata,
+	type WindowEnd,
 } from "@/wallet/services/dapp-interaction/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
-import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
 const { openToast } = useToast()
@@ -76,6 +80,8 @@ const router = useRouter()
 
 const session = ref()
 const operations = ref<UIOperation[]>([])
+/** Per operation, the paying method its fee card reports. */
+const feePayers = ref<Record<number, FeePayerPick | null>>({})
 const accounts = ref<Account[]>([])
 
 const isLoading = ref(false)
@@ -97,15 +103,42 @@ const interactionService = new DappInteractionServiceClient()
 const tokenService = new TokenServiceClient()
 
 /**
- * Pre-fetched metadata for `register_token` operations, keyed by contract
- * address. Resolved by parseTokenInterface + fetchTokenMetadata in init() so
- * the OperationCard renders name + symbol + decimals alongside the address
- * BEFORE the user clicks Allow. The pre-fetch is the only anti-phishing
- * surface the user has — the popup must not be approvable while it's loading.
+ * Per contract address, the details a `register_token` card shows and the class they were read
+ * from. The approval names them and the SW stores only a read equal to them, so the window is not
+ * approvable while they load or once their read failed.
  */
-const tokenMetadata = ref<Map<string, { name: string; symbol: string; decimals: number }>>(new Map())
+const tokenMetadata = ref<Map<string, ShownTokenMetadata>>(new Map())
 const tokenMetadataLoading = ref(false)
 const tokenMetadataError = ref<Map<string, string>>(new Map())
+const tokenMetadataUnread = computed(() =>
+	operations.value.some((op) => op.kind === "register_token" && !tokenMetadata.value.has(op.address)),
+)
+
+/** The signed list's flags, from the snapshot the token page reads, with no price fetch. */
+const priceService = new PriceServiceClient()
+const tokenFlags = useTokenFlags(priceService)
+
+const isFlaggedAdd = (op: UIOperation): boolean =>
+	op.kind === "register_token" && tokenFlags.isFlagged({ chainId: op.network?.chainId, contract: op.address })
+
+/** The flagged token adds the person ticked, by operation index: empty at every mount, never stored. */
+const flagAcknowledged = ref(new Set<number>())
+const acknowledgeTokenFlag = (index: number, on: boolean) => {
+	const next = new Set(flagAcknowledged.value)
+	if (on) next.add(index)
+	else next.delete(index)
+	flagAcknowledged.value = next
+}
+
+/** A token add waits for the list's first answer, and a flagged one for its tick; a list that flags
+ *  the token while the window is open holds Confirm again. */
+const tokenFlagHold = computed(() =>
+	operations.value.some(
+		(op, i) =>
+			op.kind === "register_token" &&
+			(!tokenFlags.mapped.value || (isFlaggedAdd(op as UIOperation) && !flagAcknowledged.value.has(i))),
+	),
+)
 
 /**
  * Display-only decodings the card renders: per operation index for its calls,
@@ -118,6 +151,17 @@ const decodedAuthwits = ref<Map<string, DecodedCall>>(new Map())
 const authwitDecodesInFlight = new Set<string>()
 /** The wallet's registered tokens on the operations' chains, so amounts render in token units. */
 const knownTokens = ref<TokenInfo[]>([])
+const tokenFollow = followKnownTokens(tokenService, knownTokens)
+
+/** Per operation index, the decodings of its public grants; absent while the wallet is decoding.
+ *  Unlike a call's decode, a grant's gates Confirm: what the card shows is what the wallet signs. */
+const decodedGrants = ref<Map<number, readonly DecodedGrant[]>>(new Map())
+const grantsPending = computed(() =>
+	operations.value.some((op, i) => grantContentsOf(op as unknown as UIOperation).length > 0 && !decodedGrants.value.has(i)),
+)
+/** The footer's error row for a grant the wallet cannot read. Its own state, so the `clearError()` of
+ *  a fee change never lifts it. */
+const grantRefusal = computed(() => grantRefusalRow([...decodedGrants.value.values()].flat()))
 
 const {
 	requestId,
@@ -132,8 +176,6 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
@@ -141,38 +183,39 @@ const {
 	handoffAll: handoffFeeEstimates,
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
+	dispose: disposeFeeEstimates,
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
 	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
 		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
+		if (holdRefusal(err)) return
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
-		// An app-paid operation's estimate only checks the app's fee contract; a failed check is unknown, never a refusal.
-		if (!isAppPaid(operations.value[key] as unknown as UIOperation))
-			openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
+		// unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry.
+		const op = operations.value[key] as unknown as UIOperation
+		if (!isAppPaid(op) || personPaysAppPayment(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
 
-/** A send whose fee the app pays through its own payload. */
-const isAppPaid = (op: UIOperation | undefined): boolean =>
-	(op?.kind === "aztec_sendTx" || op?.kind === "send_transaction") && isEmbeddedFeePayment(op)
-
-/** A send whose app set its own cap or priority fee, either of which may raise the charge. A
- *  default-entrypoint operation is never estimated, so there is no figure to wait for. */
-const setsOwnFee = (op: UIOperation): boolean => {
-	if (op.kind === "send_transaction") return Boolean(op.fee?.maxFeesPerGas || op.fee?.maxPriorityFeesPerGas)
-	if (op.kind !== "aztec_sendTx" || op.executionMode === "default_entrypoint") return false
-	const gas = op.opts?.fee?.gasSettings
-	return Boolean(gas?.maxFeesPerGas || gas?.maxPriorityFeesPerGas)
+/** The wallet's refusal of the request, met by an estimate, a preview or an approval. The worker keeps
+ *  it too, so it never clears: Reject is the one way on, and it answers the dApp with the refusal. */
+const refusal = ref<RefusalKind | undefined>()
+const holdRefusal = (error: unknown): boolean => {
+	const kind = refusalKind(error)
+	if (kind) refusal.value ??= kind
+	return kind !== undefined
 }
-/** The figure such a send commits is on screen before Confirm; a failed estimate keeps Confirm off. */
-const awaitsAppFeeFigure = computed(() =>
-	operations.value.some((op, i) => setsOwnFee(op as unknown as UIOperation) && !feeEstimates.value[i]),
+
+/** A send whose fee the app pays through its own payload. */
+const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(op) && isEmbeddedFeePayment(op)
+
+/** The figure an approval carries is on screen before Confirm; a failed estimate keeps Confirm off. */
+const awaitsFeeFigure = computed(() =>
+	operations.value.some((op, i) => waitsForFeeFigure(op as unknown as UIOperation, feePayers.value[i]) && !feeEstimates.value[i]),
 )
 
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
@@ -199,14 +242,14 @@ const {
 	handoffAll: handoffAuthwitPreviews,
 	rearm: rearmAuthwitPreviews,
 	cancelAll: cancelAllAuthwitPreviews,
+	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
 	estimate: ({ index }, estimateToken, flowKey) =>
 		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
+	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
+		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
@@ -218,6 +261,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -231,15 +275,20 @@ const {
 		profileService.connect()
 		interactionService.connect()
 		tokenService.connect()
+		priceService.connect()
 	},
 	disconnectServices: () => {
 		profileService.disconnect()
 		interactionService.disconnect()
 		executionService.disconnect()
 		tokenService.disconnect()
+		priceService.disconnect()
+		tokenFlags.dispose()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	// A request of another profile than the active one was ended by that lock or switch, not by the
+	// person, whatever then closes its window.
+	reject: (end) => reject(isWrongProfile.value && end === "close" ? (profile.value ? "switch" : "lock") : end),
 })
 
 const init = async () => {
@@ -262,12 +311,7 @@ const init = async () => {
 
 		accountService = new AccountServiceClient()
 		networkService = new NetworkServiceClient()
-		const resolved = await buildOperationsFromPayload(
-			payload.value.params.operations,
-			accountService,
-			networkService,
-			profile.value!.id,
-		)
+		const resolved = await resolveOperations(payload.value.params.operations, accountService, networkService, profile.value!.id)
 		session.value = payload.value.session
 		operations.value = resolved.operations
 		accounts.value = resolved.accounts
@@ -280,10 +324,11 @@ const init = async () => {
 			// No fee card asks for these: the estimate runs once, to check the app's own fee contract.
 			else if (isAppPaid(op)) scheduleFeeEstimate(index, { index, feeSettings: { paymentMethod: { kind: "embedded" } } })
 		}
-		// Neither is awaited by the approve gate: a slow decode leaves the card on its vocabulary
-		// reading or "Reading arguments…", and a failed one falls back to the raw fields.
-		void decodeOperationArguments(resolved.operations)
-		void loadKnownTokens(resolved.operations, profile.value!.id)
+		// None is awaited here. A call's decode never gates Confirm: a slow one leaves the card on its
+		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
+		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
+		void decodeOperationGrants(resolved.operations)
+		void tokenFollow.start(resolved.operations, profile.value!.id)
 
 		// Pre-fetch token metadata for any `register_token` ops so the
 		// OperationCard renders name/symbol/decimals before Allow. The Allow
@@ -307,96 +352,6 @@ const init = async () => {
 	}
 }
 
-/** Resolve every requested operation SEQUENTIALLY (op N+1's lookups start only
- *  after op N resolved) against the transient clients `init` owns and
- *  disconnects; returns the draft operations plus the unique signer accounts. */
-async function buildOperationsFromPayload(
-	requested: NonNullable<typeof payload.value>["params"]["operations"],
-	accountService: AccountServiceClient,
-	networkService: NetworkServiceClient,
-	profileId: string,
-): Promise<{ operations: UIOperation[]; accounts: Account[] }> {
-	const getNetwork = async (caipChain: CaipChain): Promise<Network> => {
-		const { chainId } = parseCaipChain(caipChain)
-		return resolveNetworkByChainId(networkService, chainId)
-	}
-
-	const getNetworkAndAccount = async (caipAccount: CaipAccount): Promise<[Network, Account]> => {
-		const { chainId, address } = parseCaipAccount(caipAccount)
-		const network = await resolveNetworkByChainId(networkService, chainId)
-		const account = await accountService.getAccount(profileId, network.chainId, address)
-		if (!account) throw new Error("Account no longer exists")
-		return [network, account]
-	}
-
-	const accounts: Account[] = []
-	const operations: UIOperation[] = []
-	for (const op of requested) {
-		switch (op.kind) {
-			case "register_contract":
-			case "register_sender":
-			case "aztec_getContractClassMetadata":
-			case "aztec_getContractMetadata":
-			case "aztec_getChainInfo":
-			case "aztec_registerSender":
-			case "aztec_getAddressBook":
-			case "aztec_registerContract":
-			case "aztec_getPrivateEvents": {
-				const network = await getNetwork(op.chain)
-				operations.push({ ...op, network, networkId: network.id })
-				break
-			}
-			case "register_token":
-			case "simulate_transaction":
-			case "simulate_utility":
-			case "aztec_simulateTx":
-			case "aztec_executeUtility":
-			case "aztec_profileTx":
-			case "aztec_createAuthWit": {
-				const [network, account] = await getNetworkAndAccount(op.account)
-				operations.push({
-					...op,
-					network,
-					networkId: network.id,
-					account,
-					accountAddress: account.address,
-				})
-				pushUniqueAccount(accounts, account)
-				break
-			}
-			case "aztec_sendTx":
-			case "send_transaction": {
-				const [network, account] = await getNetworkAndAccount(op.account)
-				// A dApp-supplied fee path pre-fills embedded so the FeeSettingsCard is suppressed. A
-				// requested self-pay (the account named as payer with no fee call) renders the card locked
-				// to Fee Juice and derives the settings once a verified balance can pay — nothing is
-				// pre-filled, so Confirm stays off over an empty or unread balance. Otherwise leave
-				// feeSettings undefined for the user; `requiresFeeSelection` at approve() gates undefined.
-				operations.push({
-					...op,
-					network,
-					networkId: network.id,
-					account,
-					accountAddress: account.address,
-					feeSettings: isEmbeddedFeePayment(op) ? { paymentMethod: { kind: "embedded" } } : undefined,
-				})
-				pushUniqueAccount(accounts, account)
-				break
-			}
-			default:
-				throw new Error("Invalid operation kind")
-		}
-	}
-	return { operations, accounts }
-}
-
-/** The signer list is unique by (address, chainId), first occurrence wins. */
-function pushUniqueAccount(accounts: Account[], account: Account): void {
-	if (!accounts.find((x) => x.address === account.address && x.chainId === account.chainId)) {
-		accounts.push(account)
-	}
-}
-
 /** Best-effort per-op metadata prefetch; a failed preview records its error
  *  and never blocks the others, and the loading flag clears in `finally`. */
 async function prefetchTokenMetadata(
@@ -414,7 +369,12 @@ async function prefetchTokenMetadata(
 			registerOps.map(async (op) => {
 				try {
 					const meta = await tokenClient.previewTokenMetadata(op.networkId, op.accountAddress, op.address)
-					refs.metadata.value.set(op.address, { name: meta.name, symbol: meta.symbol, decimals: meta.decimals })
+					refs.metadata.value.set(op.address, {
+						name: meta.name,
+						symbol: meta.symbol,
+						decimals: meta.decimals,
+						classId: meta.interface.classId,
+					})
 				} catch (err) {
 					const msg = getErrorMessage(err)
 					refs.errors.value.set(op.address, msg)
@@ -427,34 +387,22 @@ async function prefetchTokenMetadata(
 	}
 }
 
-/** Per operation, one batch decode of its calls; a failed batch reads as unavailable so the card
- *  falls back to raw fields instead of waiting forever. */
-async function decodeOperationArguments(ops: UIOperation[]): Promise<void> {
+/** Per operation, one decode of its stored grants; a failed one reads as unavailable, which refuses
+ *  the request rather than leaving it pending. */
+async function decodeOperationGrants(ops: UIOperation[]): Promise<void> {
 	await Promise.all(
 		ops.map(async (op, index) => {
-			let calls: ReturnType<typeof displayCallsOf> = []
+			const count = grantContentsOf(op).length
+			if (!count) return
+			let decoded: readonly DecodedGrant[] = []
 			try {
-				calls = displayCallsOf(op)
-				if (!calls.length) return
-				decodedCalls.value.set(index, await executionService.decodeCallsForDisplay(op.networkId, calls))
+				decoded = await executionService.decodeGrantsForDisplay(requestId.value!, index)
 			} catch (error) {
-				console.warn("[Execute] Argument decode failed", { index, error })
-				decodedCalls.value.set(index, undecodedAll(calls.length))
+				console.warn("[Execute] Grant decode failed", { index, error })
 			}
+			decodedGrants.value.set(index, readableGrants(decoded, count))
 		}),
 	)
-}
-
-/** A failed read leaves the card without the vocabulary: transfers on the wallet's own tokens read as
- *  decoded parameters, amounts in base units. */
-async function loadKnownTokens(ops: UIOperation[], profileId: string): Promise<void> {
-	const chainIds = [...new Set(ops.map((op) => op.network.chainId))]
-	try {
-		const lists = await Promise.all(chainIds.map((chainId) => tokenService.getTokens(profileId, chainId)))
-		knownTokens.value = lists.flat()
-	} catch (error) {
-		console.warn("[Execute] Token list unavailable", { error })
-	}
 }
 
 /** Every discovered authorization an estimate or preview lists gets one decode on its consumer. */
@@ -485,12 +433,9 @@ async function decodeAuthwitBatch(networkId: string, fresh: DiscoveredAuthwit[])
 
 const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	const op = operations.value[index]
-	// `feeSettings` only exists on send-like draft kinds. Discriminant guard
-	// + targeted cast for the assignment: TS's union narrowing here is
-	// confused by a pre-existing AztecAddress/Fr structural mismatch
-	// between popup-resolved Operation and wallet-bridge's, so we cast to
-	// the draft shape explicitly. Runtime safety is in the kind check.
-	if (op.kind !== "send_transaction" && op.kind !== "aztec_sendTx") return
+	// The cast works around an AztecAddress/Fr mismatch between the popup's resolved operation and
+	// wallet-bridge's; the trait check is what keeps `feeSettings` off the other kinds.
+	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()
 	if (value) scheduleFeeEstimate(index, { index, feeSettings: value })
@@ -502,9 +447,7 @@ const approve = async () => {
 	// exists. Without this guard, a fast click before payload materialization
 	// would approve an empty operations list.
 	if (!initComplete.value || operations.value.length === 0) return
-	// Also block while the popup is pre-fetching token metadata for any
-	// `register_token` op — D7 enforcement.
-	if (tokenMetadataLoading.value) return
+	if (tokenMetadataUnread.value) return
 	// UX gate: any send-like op still missing user-picked fee?
 	// Cast to DraftOperation works around a pre-existing AztecAddress/Fr
 	// structural mismatch between popup-resolved Operation and wallet-bridge's
@@ -513,60 +456,74 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsAppFeeFigure.value) return
+	if (payerShort.value || awaitsFeeFigure.value || tokenFlagHold.value) return
+	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
-		// Ownership handoff: approval transfers the estimates and previews to the
-		// execution path — the window's unmount cleanup must NOT remote-cancel
-		// them, or the eviction would race the fire-and-forget execution out of
-		// its reuse hits and its preview snapshots.
+		// Ownership handoff: approval transfers the completed estimates and previews to
+		// the execution path, so the disposal below must NOT remote-cancel them, or the
+		// eviction would race the execution out of its reuse hits and preview snapshots.
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
 		// The SW executes the dApp's stored request; per operation the popup
-		// contributes only its fee choice and the ids the SW minted for it.
+		// contributes only its fee choice, the ids the SW minted for it, and the
+		// token details its card showed.
 		const deltas: OperationApprovalDelta[] = operations.value.map((op, index) => {
 			const estimate = feeEstimates.value[index] ?? undefined
-			const feeSettings = op.kind === "aztec_sendTx" || op.kind === "send_transaction" ? op.feeSettings : undefined
+			const feeSettings = carriesFeeSettings(op) ? op.feeSettings : undefined
 			return {
 				feeSettings,
 				estimateId: estimate?.estimateId,
 				previewId: estimate?.previewId ?? authwitPreviews.value[index]?.previewId,
+				feeCeiling: estimate?.maxFee,
+				tokenMetadata: op.kind === "register_token" ? tokenMetadata.value.get(op.address) : undefined,
 			}
 		})
 		const stillOurs = scopeFollow.capture()
 		await interactionService.approveInteraction(requestId.value!, deltas)
+		// A removed window runs no unmount, so the approval itself ends every estimate it did not
+		// hand over, and the window closes once the worker has taken those cancels.
+		const estimatesEnded = Promise.all([disposeFeeEstimates(), disposeAuthwitPreviews()])
 		// Never throws, so a failed follow cannot turn the approval into an error below.
 		await scopeFollow.follow(scopeView.value, followDeclined.value, stillOurs)
-		closeWindow(true)
+		await endAndClose(() => estimatesEnded)
 	} catch (error) {
 		// The execution path never took ownership — re-arm so a later
 		// reject/unmount can still cancel + evict the handed-off estimates.
 		rearmFeeEstimates()
 		rearmAuthwitPreviews()
-		if (error instanceof JobCancelledError) {
-			// A raced approve refused service-side (the dApp cancelled first):
-			// the refusal IS the cancelled state — render the overlay, never an
-			// error banner. Covers the case where the cancel broadcast itself
-			// was lost to this popup.
-			isInteractionCancelled.value = true
-		} else {
-			setError("Processing error.", getErrorMessage(error))
-		}
+		showApprovalFailure(error)
 	} finally {
 		isLoading.value = false
 	}
 }
 
-const reject = async () => {
+const showApprovalFailure = (error: unknown) => {
+	if (error instanceof JobCancelledError) {
+		// A raced approve refused service-side (the dApp cancelled first):
+		// the refusal IS the cancelled state — render the overlay, never an
+		// error banner. Covers the case where the cancel broadcast itself
+		// was lost to this popup.
+		isInteractionCancelled.value = true
+	} else if (!holdRefusal(error)) {
+		setError("Processing error.", getErrorMessage(error))
+	}
+}
+
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
 	// Reject-time eviction: abort in-flight estimates and drop any stashed
 	// signed requests NOW — window teardown alone isn't guaranteed to run
 	// dispose before the window dies.
 	cancelAllFeeEstimates()
 	cancelAllAuthwitPreviews()
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
+
+// The notice's OK ends another profile's request as the lock or switch that made it, with the same
+// wait as Reject, so the window's close cannot reach the request first.
+const dismissWrongProfile = () =>
+	requestId.value && !isInteractionCancelled.value ? reject(profile.value ? "switch" : "lock") : closeWindow()
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
@@ -593,7 +550,10 @@ const scopeFollow = createScopeFollow({
 	hasInFlightSend: () => appStore.hasInFlightSend,
 	getActiveNetworkId: async () => (await requireNetwork().getActiveNetwork())?.id,
 	setActiveNetwork: (networkId) => requireNetwork().setActiveNetwork(networkId),
-	writeActiveAccount: (address, unless) => storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
+	writeActiveAccount: selectionWriter(
+		() => profile.value?.id,
+		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
+	),
 })
 // Mirrors the `requiresFeeSelection` early-return inside approve(): a send-like op
 // with no chosen fee can't execute yet. Gating the Confirm button's disabled state
@@ -641,6 +601,7 @@ onMounted(startWindow)
 
 onUnmounted(() => {
 	scopeFollow.invalidate()
+	tokenFollow.dispose()
 	disposeWindow()
 })
 </script>
@@ -652,8 +613,6 @@ onUnmounted(() => {
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp ?? undefined"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="execute-hostname"
 				actionLabel="wants to execute the following"
 			/>
@@ -698,42 +657,70 @@ onUnmounted(() => {
 						:isPreviewing="!!previewingOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
+						:decodedGrants="decodedGrants.get(i)"
 						:tokens="knownTokens"
 						:tokenMetadata="op.kind === 'register_token' ? tokenMetadata.get((op as { address: string }).address) : undefined"
 						:tokenMetadataError="op.kind === 'register_token' ? tokenMetadataError.get((op as { address: string }).address) : undefined"
 						:tokenMetadataLoading="op.kind === 'register_token' && tokenMetadataLoading"
+						:tokenFlagged="isFlaggedAdd(op as UIOperation)"
+						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
+						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
-					/>
+						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
+						@acknowledgeTokenFlag="acknowledgeTokenFlag"
+					>
+						<template v-if="refusal" #fee>
+							<Flex
+								data-testid="execute-op-refusal"
+								:data-kind="refusal"
+								role="alert"
+								direction="column"
+								gap="4"
+								wide
+								:class="$style.refusal"
+							>
+								<Flex align="center" gap="4">
+									<Icon name="warning" size="12" color="orange" />
+									<Text data-testid="execute-op-refusal-title" variant="body" color="orange">{{ REFUSAL_TITLE }}</Text>
+								</Flex>
+								<Text data-testid="execute-op-refusal-reason" variant="body" color="secondary">{{ REFUSAL_REASON[refusal] }}</Text>
+							</Flex>
+						</template>
+					</OperationCard>
 				</Flex>
 			</Flex>
 		</Flex>
 
 		<DappApprovalFooter
-			:processing-error="processingError"
+			:processing-error="grantRefusal ?? processingError"
 			reject-testid="execute-reject-btn"
 			reject-label="Reject"
 			:reject-disabled="isLoading || !requestId"
 			confirm-testid="execute-confirm-btn"
+			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
 			:confirm-loading="isLoading"
 			:confirm-disabled="
 				processingError?.type === 'error' ||
-				tokenMetadataLoading ||
+				tokenMetadataUnread ||
 				!initComplete ||
 				operations.length === 0 ||
 				needsFeeSelection ||
 				payerShort ||
-				awaitsAppFeeFigure ||
+				awaitsFeeFigure ||
+				tokenFlagHold ||
+				grantsPending ||
+				grantRefusal !== undefined ||
 				isInteractionCancelled
 			"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 
 		<DappCancelledOverlay
 			v-if="isWrongProfile"
 			message="You are signed in to a different profile. Please switch profiles and resend your request."
-			@dismiss="closeWindow()"
+			@dismiss="dismissWrongProfile"
 		/>
 		<DappCancelledOverlay
 			v-else-if="isInteractionCancelled"
@@ -754,6 +741,11 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+.refusal {
+	padding: 12px;
+	background: var(--nulo-surface-low);
 }
 
 .fullscreen_icon {

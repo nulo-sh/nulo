@@ -31,6 +31,8 @@ export function getChainName(chainId: number): string {
 	switch (chainId) {
 		case CHAIN_IDS.TESTNET:
 			return "Testnet"
+		case CHAIN_IDS.MAINNET:
+			return "Mainnet"
 		case CHAIN_IDS.SANDBOX:
 			return "Sandbox"
 		default:

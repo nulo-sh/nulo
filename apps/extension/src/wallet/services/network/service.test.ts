@@ -19,6 +19,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
+import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
@@ -27,12 +29,26 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
-import { ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
+import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
+import {
+	ERR_ENDPOINT_CHAIN_MISMATCH,
+	ERR_RPC_URL_IPV6_LOOPBACK,
+	ERR_UNATTENDED_LIVE_CHECK,
+	findPrimaryEndpoint,
+	IDENTITY_PROBE_MS,
+	NodeStatus,
+} from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
-import { seedForKind } from "./seeds"
+import { classifyChains } from "@/wallet/services/stale-network/classify"
+import { seedOffersKey } from "./seed-offers"
+import { DEFAULT_SEEDS, seedForKind } from "./seeds"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 type NodeInfo = {
 	l1ChainId: number
@@ -71,6 +87,7 @@ function harness(seeded: Record<string, NodeInfo | Error>): {
 	const fakeProfile = { id: "p1", name: "p1", type: "password" } as const
 	const deletionState = new ProfileDeletionState()
 	const fakeProfileService = {
+		...ROW_KEY_FAKE,
 		getActiveProfile: async () => fakeProfile,
 		onActiveProfileChanged: { add: vi.fn(), remove: vi.fn() },
 		onProfileDeleted: { add: vi.fn(), remove: vi.fn() },
@@ -171,7 +188,7 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 	test("seeds every default for the target profile and writes ITS active pointer, never touching the active profile's node cache", async () => {
 		const h = withProfiles(harness({}), ["p1", "p2"])
 		const p1 = await h.service.getOrInitNetworks()
-		const p1Primary = p1.find((n) => n.chainId === CHAIN_IDS.TESTNET)!
+		const p1Primary = p1.find((n) => n.chainId === CHAIN_IDS.MAINNET)!
 		const p1NodeBefore = await h.service.getNode(p1Primary.chainId)
 		const nodesBefore = new Map((h.service as unknown as { nodes: Map<number, unknown> }).nodes)
 
@@ -188,7 +205,7 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 		expect(await h.service.getNode(p1Primary.chainId)).toBe(p1NodeBefore)
 		// p2's pointer names p2's primary seed; p1's pointer is untouched.
 		const raw = (await h.browserApi.storage.local.get(null)) as Record<string, unknown>
-		const p2Primary = seeded.find((n) => n.chainId === CHAIN_IDS.TESTNET)!
+		const p2Primary = seeded.find((n) => n.chainId === CHAIN_IDS.MAINNET)!
 		expect(Object.entries(raw).some(([k, v]) => k.includes("p2") && v === p2Primary.id)).toBe(true)
 		expect(Object.entries(raw).some(([k, v]) => k.includes("p1") && v === p1Primary.id)).toBe(true)
 	})
@@ -342,8 +359,8 @@ describe("NetworkService NodeFactory seam", () => {
 
 	test("each getChainId call creates a fresh node — no global cache between URLs", async () => {
 		const { service, factory } = harness({
-			"https://rpc.example/a": { l1ChainId: 1, rollupVersion: 1 },
-			"https://rpc.example/b": { l1ChainId: 2, rollupVersion: 2 },
+			"https://rpc.example/a": { l1ChainId: 1, rollupVersion: 2 },
+			"https://rpc.example/b": { l1ChainId: 2, rollupVersion: 3 },
 		})
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 		await (service as any)._getChainId("https://rpc.example/a")
@@ -558,6 +575,7 @@ function setupServiceWithStorage(seeded: Record<string, NodeInfo | Error>): {
 	const deletionState = new ProfileDeletionState()
 	// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 	;(service as any).profileService = {
+		...ROW_KEY_FAKE,
 		getActiveProfile: async () => fakeProfile,
 		onActiveProfileChanged: { add: vi.fn(), remove: vi.fn() },
 		onProfileDeleted: { add: vi.fn(), remove: vi.fn() },
@@ -704,12 +722,98 @@ describe("NetworkService public API", () => {
 			expect(network.chainId).toBe(31337)
 		})
 
-		test("accepts http://[::1]:8888 (IPv6 loopback, WHATWG-URL form)", async () => {
+		test("refuses http://[::1]:8888 with its own line", async () => {
 			const { service } = setupServiceWithStorage({
 				"http://[::1]:8888": nodeInfoForChain(31337),
 			})
-			const network = await service.addNetwork("Local-v6", "http://[::1]:8888")
-			expect(network.chainId).toBe(31337)
+			await expect(service.addNetwork("Local-v6", "http://[::1]:8888")).rejects.toThrow(ERR_RPC_URL_IPV6_LOOPBACK)
+		})
+	})
+
+	// A URL saved before the transport rule refused it must fail where an unreachable node fails, so
+	// popup start (which awaits `setActiveNetwork`) still reaches Settings, where the person fixes it.
+	describe("a saved http://[::1] endpoint", () => {
+		const SAVED_V6 = "http://[::1]:8080"
+
+		/** The production adapter's refusal on the fake, so an unguarded `createNode` throws as it would. */
+		function refuseAsTheAdapterDoes(factory: FakeNodeFactory) {
+			const create = factory.createNode.bind(factory)
+			vi.spyOn(factory, "createNode").mockImplementation((url) => {
+				if (!isAllowedRpcUrl(url).ok) throw new Error("AztecNodeFactoryAdapter refused to construct node client")
+				return create(url)
+			})
+		}
+
+		test("activating it resolves, emits, evicts the chain's cached node and reads inactive", async () => {
+			const { service, factory, local } = setupServiceWithStorage({ "https://old.example": nodeInfoForChain(42) })
+			refuseAsTheAdapterDoes(factory)
+			const row = storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: "https://old.example" }] })
+			await service.setActiveNetwork(row.id)
+
+			storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: SAVED_V6 }] })
+			const changed: Network[] = []
+			service.onActiveNetworkChanged.add(async (n) => {
+				changed.push(n)
+			})
+			await expect(service.setActiveNetwork(row.id)).resolves.toMatchObject({ id: row.id })
+
+			expect(changed.map((n) => n.id)).toEqual([row.id])
+			expect(factory.created.map((c) => c.rpcUrl)).not.toContain(SAVED_V6)
+			// A cache miss: the node primed for the old URL is gone.
+			await expect(service.getNode(42)).rejects.toThrow(/refused/)
+			expect(await service.getNodeStatus(row.id)).toBe(NodeStatus.Inactive)
+		})
+
+		test("an unexpected factory error on an allowed URL still rejects the switch", async () => {
+			const { service, factory, local } = setupServiceWithStorage({})
+			vi.spyOn(factory, "createNode").mockImplementation(() => {
+				throw new Error("factory exploded")
+			})
+			const row = storeRow(local, { id: "ok", chainId: 42, endpoints: [{ id: "e1", rpcUrl: "https://rpc.example" }] })
+			await expect(service.setActiveNetwork(row.id)).rejects.toThrow("factory exploded")
+		})
+
+		test("the person replaces it: add a localhost endpoint, make it primary, delete the [::1] one", async () => {
+			const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: nodeInfoForChain(42) })
+			refuseAsTheAdapterDoes(factory)
+			const row = storeRow(local, { id: "v6", chainId: 42, endpoints: [{ id: "e1", rpcUrl: SAVED_V6 }] })
+			await service.setActiveNetwork(row.id)
+
+			const added = await service.addEndpoint(row.id, undefined, NON_SEED_LOCAL_URL)
+			await service.setPrimaryEndpoint(row.id, added.id)
+			await service.deleteEndpoint(row.id, "e1")
+
+			expect((await service.getNetwork(row.id)).endpoints.map((e) => e.rpcUrl)).toEqual([NON_SEED_LOCAL_URL])
+			expect(await service.getNodeStatus(row.id)).toBe(NodeStatus.Active)
+		})
+	})
+
+	// A trailing non-breaking space survives `URL`'s own trim and would be stored as `%C2%A0`.
+	describe("a URL with a trailing non-breaking space is stored as the schema trimmed it", () => {
+		const nodes = { "https://rpc.test/1": nodeInfoForChain(50), "https://rpc.test/2": nodeInfoForChain(50) }
+
+		test("addNetwork", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1\u00A0")
+			expect((await service.getNetwork(network.id)).endpoints[0]!.rpcUrl).toBe("https://rpc.test/1")
+		})
+
+		test("addEndpoint", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1")
+			const ep = await service.addEndpoint(network.id, undefined, "https://rpc.test/2\u00A0")
+			expect(ep.rpcUrl).toBe("https://rpc.test/2")
+			expect((await service.getNetwork(network.id)).endpoints.map((e) => e.rpcUrl)).toEqual([
+				"https://rpc.test/1",
+				"https://rpc.test/2",
+			])
+		})
+
+		test("updateEndpoint", async () => {
+			const { service } = setupServiceWithStorage(nodes)
+			const network = await service.addNetwork("Chain50", "https://rpc.test/1")
+			await service.updateEndpoint(network.id, network.primaryEndpointId, undefined, "https://rpc.test/2\u00A0")
+			expect((await service.getNetwork(network.id)).endpoints[0]!.rpcUrl).toBe("https://rpc.test/2")
 		})
 	})
 
@@ -853,16 +957,15 @@ describe("NetworkService public API", () => {
 			// kindHint we'd reject with ENDPOINT_CHAIN_MISMATCH because the
 			// fake node reports chainId XOR != 0.
 			const { service, local } = setupServiceWithStorage({
-				"http://localhost:18080": nodeInfoForChain(42),
+				"http://localhost:18080": { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 },
 			})
 			const localNet = {
 				id: "local-1",
 				profileId: "p1",
 				chainId: 0,
-				// Matches the fake probe's l1ChainId (nodeInfoForChain reports l1=0) so the
-				// endpoint mutation's exact-L1 equality check passes alongside the composite
-				// short-circuit under test.
-				l1ChainId: 0,
+				// Matches the fake probe's l1ChainId so the endpoint mutation's exact-L1 equality
+				// check passes alongside the composite short-circuit under test.
+				l1ChainId: LOCAL_L1_CHAIN_ID,
 				name: "Local Network",
 				kind: "local" as const,
 				primaryEndpointId: "ep-1",
@@ -1157,15 +1260,17 @@ describe("NetworkService public API", () => {
 			const { service } = setupServiceWithStorage({
 				"https://rpc.test/other": nodeInfoForChain(999_999),
 				"https://rpc.test/testnet": nodeInfoForChain(CHAIN_IDS.TESTNET),
+				"https://rpc.test/mainnet": nodeInfoForChain(CHAIN_IDS.MAINNET),
 			})
 			await service.addNetwork("Other", "https://rpc.test/other")
-			const testnet = await service.addNetwork("Testnet", "https://rpc.test/testnet")
+			await service.addNetwork("Testnet", "https://rpc.test/testnet")
+			const mainnet = await service.addNetwork("Mainnet", "https://rpc.test/mainnet")
 			const primary = await service.getPrimaryNetwork()
-			expect(primary?.id).toBe(testnet.id)
-			expect(primary?.chainId).toBe(CHAIN_IDS.TESTNET)
+			expect(primary?.id).toBe(mainnet.id)
+			expect(primary?.chainId).toBe(CHAIN_IDS.MAINNET)
 		})
 
-		test("returns null when the primary network is absent (e.g. the user deleted the Testnet)", async () => {
+		test("returns null when the primary network is absent (e.g. the user deleted Mainnet)", async () => {
 			const { service } = setupServiceWithStorage({
 				"https://rpc.test/other": nodeInfoForChain(999_999),
 			})
@@ -1283,18 +1388,445 @@ describe("NetworkService liveness reads overlapped by a reservation", () => {
 		expect(await live).toBe(false)
 		expect(await read(service, network)).toBe(true)
 	})
+
+	test("a liveness mark answers false after a reservation begun since it, and none is taken while one is open", async () => {
+		const { service, network } = await deletableNetwork()
+		const before = await service.captureLiveness(network.id)
+		expect(before).toBeDefined()
+		await expect(service.deleteNetwork(network.id)).rejects.toThrow(/cascade down/)
+		expect(await service.isNetworkLive(network.id)).toBe(true)
+		expect(await service.isNetworkLive(network.id, before)).toBe(false)
+		const after = await service.captureLiveness(network.id)
+		expect(await service.isNetworkLive(network.id, after)).toBe(true)
+
+		let release!: () => void
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let entered!: () => void
+		const purging = new Promise<void>((resolve) => {
+			entered = resolve
+		})
+		service.registerChainPurgeSubscriber(async () => {
+			entered()
+			await held
+		})
+		const deleting = service.deleteNetwork(network.id)
+		try {
+			await purging
+			expect(await service.captureLiveness(network.id)).toBeUndefined()
+		} finally {
+			release()
+		}
+		await expect(deleting).rejects.toThrow(/cascade down/)
+	})
 })
 
+const MAINNET = seedForKind("mainnet")!
+
+/** Runs `open` as a build that predates the Mainnet seed: the defaults every released build seeded. */
+async function asEarlierBuild<T>(open: () => Promise<T>): Promise<T> {
+	const at = DEFAULT_SEEDS.indexOf(MAINNET)
+	DEFAULT_SEEDS.splice(at, 1)
+	try {
+		return await open()
+	} finally {
+		DEFAULT_SEEDS.splice(at, 0, MAINNET)
+	}
+}
+
 describe("NetworkService default seeding", () => {
-	test("seeds Testnet and Local Network only; the dRPC endpoint carries the 'dRPC' label", async () => {
+	test("seeds Testnet, Local Network and Mainnet; each dRPC endpoint carries the 'dRPC' label", async () => {
 		// Settings renders `endpoint.label || endpoint.rpcUrl` as the row title — the label is what
 		// keeps the raw provider URL out of the UI. Local Network is not dRPC-backed, so no label.
 		const { service } = setupServiceWithStorage({})
 		const networks = await service.getOrInitNetworks()
 		const byName = new Map(networks.map((n) => [n.name, n]))
-		expect([...byName.keys()].sort()).toEqual(["Local Network", "Testnet"])
+		expect([...byName.keys()].sort()).toEqual(["Local Network", "Mainnet", "Testnet"])
 		expect(byName.get("Testnet")?.endpoints[0]?.label).toBe("dRPC")
+		expect(byName.get("Mainnet")?.endpoints[0]?.label).toBe("dRPC")
 		expect(byName.get("Local Network")?.endpoints[0]?.label).toBeUndefined()
+	})
+})
+
+describe("NetworkService — Mainnet, the default this build adds", () => {
+	const OFFERS_KEY = seedOffersKey("p1")
+	type Harness = ReturnType<typeof setupServiceWithStorage>
+
+	/** A profile an earlier build seeded (Testnet and Local Network, no offer record), now opened by
+	 *  this build. */
+	async function seededByEarlierBuild(h: Harness): Promise<Network[]> {
+		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())
+		h.local.store.delete(OFFERS_KEY)
+		return rows
+	}
+	const extraRows = async (h: Harness) => (await h.service.getNetworksRaw("p1")).filter((n) => n.kind === "mainnet")
+	const offered = (h: Harness) => (JSON.parse(h.local.store.get(OFFERS_KEY) as string) as { offered: string[] }).offered
+
+	test("an existing profile gets the new default on open and nothing else moves; a second open writes nothing", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const before = new Map(h.local.store)
+
+		await h.service.getOrInitNetworks()
+
+		const [extra, ...twins] = await extraRows(h)
+		expect(twins).toEqual([])
+		expect(extra).toMatchObject({ chainId: MAINNET.chainId, l1ChainId: MAINNET.l1ChainId, name: MAINNET.name, kind: "mainnet" })
+		expect(findPrimaryEndpoint(extra!)?.rpcUrl).toBe(MAINNET.rpcUrl)
+		for (const [key, value] of before) expect(h.local.store.get(key), key).toBe(value)
+		expect(offered(h)).toEqual(["local", "mainnet", "testnet"])
+
+		const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], "nulo:")
+		await h.service.getOrInitNetworks()
+		writes.restore()
+		expect(writes.log).toEqual([])
+	})
+
+	test("the new default deleted stays deleted; renamed, it keeps its name and gets no twin", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		await h.service.getOrInitNetworks()
+		const [extra] = await extraRows(h)
+
+		await h.service.renameNetwork(extra!.id, "My Mainnet")
+		await h.service.getOrInitNetworks()
+		expect((await extraRows(h)).map((n) => n.name)).toEqual(["My Mainnet"])
+
+		await h.service.deleteNetwork(extra!.id)
+		await h.service.getOrInitNetworks()
+		expect(await extraRows(h)).toEqual([])
+	})
+
+	test("two opens at once add one row of each default, on an existing profile and on a new one", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		await Promise.all([h.service.getOrInitNetworks(), h.service.getOrInitNetworks()])
+		expect(await extraRows(h)).toHaveLength(1)
+
+		const fresh = setupServiceWithStorage({})
+		await Promise.all([fresh.service.getOrInitNetworks(), fresh.service.getOrInitNetworks()])
+		expect((await fresh.service.getNetworksRaw("p1")).map((n) => n.kind).sort()).toEqual(["local", "mainnet", "testnet"])
+	})
+
+	test("a deletion landing while the offer is recorded rejects the open and restores the record it replaced", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const overtaken = () =>
+			recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS_KEY, () => {
+				h.deletionState.beginDeletion("p1")
+				h.deletionState.release("p1")
+			})
+
+		const first = overtaken()
+		await expect(h.service.getOrInitNetworks()).rejects.toThrow(/^profile p1 deleted$/)
+		first.restore()
+		expect(first.log).toEqual([`set:${OFFERS_KEY}`, `remove:${OFFERS_KEY}`])
+		expect(h.local.store.has(OFFERS_KEY)).toBe(false)
+
+		const prior = JSON.stringify({ offered: ["local", "testnet"] })
+		h.local.store.set(OFFERS_KEY, prior)
+		const second = overtaken()
+		await expect(h.service.getOrInitNetworks()).rejects.toThrow(/^profile p1 deleted$/)
+		second.restore()
+		expect(h.local.store.get(OFFERS_KEY)).toBe(prior)
+	})
+
+	test("a restore into a profile with rows adds the new default and keeps its active network", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const activeBefore = h.local.store.get("nulo:core:active-network@p1")
+		const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
+		internals.profileService.getProfiles = async () => [{ id: "p1", name: "p1", type: "password" }]
+
+		const rows = await h.service.seedDefaultsForProfile("p1")
+
+		expect(rows.filter((n) => n.kind === "mainnet")).toHaveLength(1)
+		expect(h.local.store.get("nulo:core:active-network@p1")).toBe(activeBefore)
+	})
+
+	test("a default whose chain a reset names waits, unrecorded, and is added once the reset is gone", async () => {
+		const h = setupServiceWithStorage({})
+		const [testnet] = await seededByEarlierBuild(h)
+		const staleKey = "nulo:core:stale-networks@p1"
+		const entry = { networkId: testnet!.id, chainId: MAINNET.chainId, networkReset: true, addressesMoved: false }
+		h.local.store.set(staleKey, JSON.stringify({ profileId: "p1", accountSetDigest: "d", entries: [entry] }))
+
+		await h.service.getOrInitNetworks()
+		expect(await extraRows(h)).toEqual([])
+		expect(offered(h)).toEqual(["local", "testnet"])
+
+		h.local.store.delete(staleKey)
+		await h.service.getOrInitNetworks()
+		expect(await extraRows(h)).toHaveLength(1)
+	})
+
+	test("a default whose row write fails stays unrecorded and is added at the next open", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		let failed = false
+		const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], "nulo:core:networks@", undefined, () => {
+			if (failed) return
+			failed = true
+			return Promise.reject(new Error("quota"))
+		})
+
+		await h.service.getOrInitNetworks()
+		writes.restore()
+		expect(await extraRows(h)).toEqual([])
+		expect(offered(h)).toEqual(["local", "testnet"])
+
+		await h.service.getOrInitNetworks()
+		expect(await extraRows(h)).toHaveLength(1)
+	})
+
+	test("a corrupt record keeps its bytes and adds nothing; a storage read that fails fails the open", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		h.local.store.set(OFFERS_KEY, "{not json")
+
+		await h.service.getOrInitNetworks()
+		expect(await extraRows(h)).toEqual([])
+		expect(h.local.store.get(OFFERS_KEY)).toBe("{not json")
+
+		h.local.store.delete(OFFERS_KEY)
+		const get = h.local.get.bind(h.local)
+		h.local.get = async (keys) => (keys === OFFERS_KEY ? Promise.reject(new Error("storage read failed")) : get(keys))
+		await expect(h.service.getOrInitNetworks()).rejects.toThrow("storage read failed")
+	})
+
+	test("profile deletion removes the record; a restore records every default it seeds", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		await h.service.getOrInitNetworks()
+		expect(h.local.store.has(OFFERS_KEY)).toBe(true)
+
+		await h.service.purgeForProfile("p1")
+		expect(h.local.store.has(OFFERS_KEY)).toBe(false)
+
+		const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
+		internals.profileService.getProfiles = async () => [{ id: "p2", name: "p2", type: "password" }]
+		await h.service.seedDefaultsForProfile("p2")
+		expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+	})
+
+	test("a dApp is served the new default's chain before the open, and refused it once offered and deleted", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		expect(await h.service.servesChain("p1", MAINNET.chainId)).toBe(true)
+
+		await h.service.getOrInitNetworks()
+		const [extra] = await extraRows(h)
+		await h.service.deleteNetwork(extra!.id)
+
+		expect(await h.service.servesChain("p1", MAINNET.chainId)).toBe(false)
+	})
+
+	test("a dApp check parked between its reads while a whole open commits is still served", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const get = h.local.get.bind(h.local)
+		let parked: (() => void) | undefined
+		let armed = true
+		h.local.get = async (keys) => {
+			const result = await get(keys)
+			if (armed) {
+				armed = false
+				await new Promise<void>((resolve) => {
+					parked = resolve
+				})
+			}
+			return result
+		}
+
+		const serves = h.service.servesChain("p1", MAINNET.chainId)
+		await vi.waitFor(() => expect(parked).toBeDefined())
+		await h.service.getOrInitNetworks()
+		expect(offered(h)).toContain("mainnet")
+		parked!()
+
+		expect(await serves).toBe(true)
+	})
+
+	test("adding the new default leaves every chain's classification as it was", async () => {
+		const h = setupServiceWithStorage({})
+		const [testnet] = await seededByEarlierBuild(h)
+		h.local.store.set(`nulo:core:networks@${testnet!.id}`, JSON.stringify({ ...testnet, chainId: 1816023401 }))
+		const accounts = [{ chainId: 0, l1ChainId: LOCAL_L1_CHAIN_ID, index: 0, address: "0x0a", derivedAddress: "0x0b" }]
+		const before = classifyChains(await h.service.getNetworksRaw("p1"), accounts)
+
+		await h.service.getOrInitNetworks()
+
+		expect(await extraRows(h)).toHaveLength(1)
+		expect(before.entries).toHaveLength(2)
+		expect(classifyChains(await h.service.getNetworksRaw("p1"), accounts)).toEqual(before)
+	})
+
+	test("a custom network on the new default's chain keeps that chain classifiable: no second row on it", async () => {
+		const h = setupServiceWithStorage({})
+		await seededByEarlierBuild(h)
+		const custom = {
+			id: "cm",
+			profileId: "p1",
+			chainId: MAINNET.chainId,
+			l1ChainId: 7,
+			name: "Mine",
+			kind: "custom",
+			primaryEndpointId: "cm-ep0",
+			endpoints: [{ id: "cm-ep0", rpcUrl: "https://rpc.mine.example/" }],
+		}
+		h.local.store.set("nulo:core:networks@cm", JSON.stringify(custom))
+		const accounts = [{ chainId: MAINNET.chainId, l1ChainId: 7, index: 0, address: "0x0a", derivedAddress: "0x0b" }]
+		const before = classifyChains(await h.service.getNetworksRaw("p1"), accounts)
+		expect(before.entries).toEqual([{ networkId: "cm", chainId: MAINNET.chainId, networkReset: false, addressesMoved: true }])
+
+		await h.service.getOrInitNetworks()
+
+		expect(await extraRows(h)).toEqual([])
+		expect(classifyChains(await h.service.getNetworksRaw("p1"), accounts)).toEqual(before)
+	})
+
+	describe("the arrival of the new default", () => {
+		const record = (h: Harness) => JSON.parse(h.local.store.get(OFFERS_KEY) as string) as { offered: string[]; announce?: string[] }
+		const kindRow = (id: string, kind: "mainnet" | "custom") => ({
+			id,
+			profileId: "p1",
+			chainId: MAINNET.chainId,
+			l1ChainId: MAINNET.l1ChainId,
+			name: id,
+			kind,
+			primaryEndpointId: `${id}-ep0`,
+			endpoints: [{ id: `${id}-ep0`, rpcUrl: "https://rpc.row.example/" }],
+		})
+
+		test("is announced when the open adds the default to a profile that had networks, and shows until answered", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			expect(record(h).announce).toEqual(["mainnet"])
+			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
+			await h.service.getOrInitNetworks()
+			expect((await h.service.getNetworkArrival())?.id).toBe(extra!.id)
+		})
+
+		test("a new profile and a restored one announce nothing", async () => {
+			const h = setupServiceWithStorage({})
+			await h.service.getOrInitNetworks()
+			expect(await extraRows(h)).toHaveLength(1)
+			expect(await h.service.getNetworkArrival()).toBeNull()
+
+			const internals = h.service as unknown as { profileService: { getProfiles: () => Promise<unknown[]> } }
+			internals.profileService.getProfiles = async () => [{ id: "p2", name: "p2", type: "password" }]
+			await h.service.seedDefaultsForProfile("p2")
+			expect(JSON.parse(h.local.store.get(seedOffersKey("p2")) as string)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		})
+
+		test("a row of the default an interrupted open left is announced", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			h.local.store.set("nulo:core:networks@left", JSON.stringify(kindRow("left", "mainnet")))
+			await h.service.getOrInitNetworks()
+			expect((await extraRows(h)).map((n) => n.id)).toEqual(["left"])
+			expect((await h.service.getNetworkArrival())?.id).toBe("left")
+		})
+
+		test("a custom network on the default's chain is the person's own: offered, never announced", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			h.local.store.set("nulo:core:networks@cm", JSON.stringify(kindRow("cm", "custom")))
+			await h.service.getOrInitNetworks()
+			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+			expect(await h.service.getNetworkArrival()).toBeNull()
+		})
+
+		test("staying answers it for good: the record is the offer alone, and a second answer writes nothing", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			await h.service.answerNetworkArrival(extra!.id)
+
+			expect(h.local.store.get(OFFERS_KEY)).toBe(JSON.stringify({ offered: ["local", "mainnet", "testnet"] }))
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			await h.service.getOrInitNetworks()
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], "nulo:")
+			await h.service.answerNetworkArrival(extra!.id)
+			writes.restore()
+			expect(writes.log).toEqual([])
+		})
+
+		test("a switch to it from another network answers it; re-asserting it, or reaching it from a missing pointer, does not", async () => {
+			const activeKey = "nulo:core:active-network@p1"
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+
+			h.local.store.set(activeKey, extra!.id)
+			await h.service.setActiveNetwork(extra!.id)
+			h.local.store.set(activeKey, "gone")
+			await h.service.setActiveNetwork(extra!.id)
+			h.local.store.delete(activeKey)
+			await h.service.setActiveNetwork(extra!.id)
+			expect(record(h).announce).toEqual(["mainnet"])
+
+			const testnet = (await h.service.getNetworksRaw("p1")).find((n) => n.kind === "testnet")!
+			await h.service.setActiveNetwork(testnet.id)
+			expect(record(h).announce).toEqual(["mainnet"])
+			await h.service.setActiveNetwork(extra!.id)
+			expect(record(h)).toEqual({ offered: ["local", "mainnet", "testnet"] })
+		})
+
+		test("a corrupt record shows no arrival, and answering it leaves its bytes", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+			h.local.store.set(OFFERS_KEY, "{not json")
+
+			expect(await h.service.getNetworkArrival()).toBeNull()
+			await h.service.answerNetworkArrival(extra!.id)
+			expect(h.local.store.get(OFFERS_KEY)).toBe("{not json")
+		})
+
+		test("a deletion landing while the answer is written rejects it and restores the announcement", async () => {
+			const h = setupServiceWithStorage({})
+			await seededByEarlierBuild(h)
+			await h.service.getOrInitNetworks()
+			const [extra] = await extraRows(h)
+			const announced = h.local.store.get(OFFERS_KEY)
+			const writes = recordWrites(h.local as unknown as BrowserApi["storage"]["local"], OFFERS_KEY, () => {
+				h.deletionState.beginDeletion("p1")
+				h.deletionState.release("p1")
+			})
+
+			await expect(h.service.answerNetworkArrival(extra!.id)).rejects.toThrow(/^profile p1 deleted$/)
+			writes.restore()
+			expect(h.local.store.get(OFFERS_KEY)).toBe(announced)
+		})
+	})
+})
+
+describe("NetworkService — this build's defaults on an existing profile", () => {
+	test("a profile that deleted Local Network gets nothing back and serves no chain 0", async () => {
+		const h = setupServiceWithStorage({})
+		const rows = await asEarlierBuild(() => h.service.getOrInitNetworks())
+		h.local.store.delete(seedOffersKey("p1"))
+		await h.service.deleteNetwork(rows.find((n) => n.kind === "local")!.id)
+
+		const after = await h.service.getOrInitNetworks()
+
+		// A build that adds a default edits this test, never `KINDS_SEEDED_BEFORE_RECORD`.
+		expect(after.map((n) => n.kind)).toEqual(["testnet", "mainnet"])
+		expect(await h.service.servesChain("p1", 0)).toBe(false)
+		expect(JSON.parse(h.local.store.get(seedOffersKey("p1")) as string)).toEqual({
+			offered: ["local", "mainnet", "testnet"],
+			announce: ["mainnet"],
+		})
 	})
 })
 
@@ -1305,6 +1837,7 @@ describe("NetworkService.servesChain (a dApp asking to connect)", () => {
 		const { service } = setupServiceWithStorage({})
 
 		expect(await service.servesChain("p1", CHAIN_IDS.TESTNET)).toBe(true)
+		expect(await service.servesChain("p1", CHAIN_IDS.MAINNET)).toBe(true)
 		expect(await service.servesChain("p1", 0)).toBe(true)
 		expect(await service.servesChain("p1", V5_TESTNET_CHAIN)).toBe(false)
 	})
@@ -1314,7 +1847,8 @@ describe("NetworkService.servesChain (a dApp asking to connect)", () => {
 		const set = local.set.bind(local)
 		let releaseWrite: (() => void) | undefined
 		local.set = async (items) => {
-			if (!releaseWrite && JSON.stringify(items).includes("Local Network")) {
+			const texts = await Promise.all(Object.entries(items).map(([key, value]) => storedText(key, value, ROW_KEY_FAKE.rowKeys)))
+			if (!releaseWrite && texts.some((text) => text?.includes("Local Network"))) {
 				await new Promise<void>((resolve) => {
 					releaseWrite = resolve
 				})
@@ -1364,7 +1898,7 @@ describe("NetworkService.onProfileDeleted cascade", () => {
 		// This test locks the cascade ContactService.onProfileDeleted's docstring
 		// references: when a profile is deleted, every network of that profile
 		// gets purgeChain → pxeServiceClient.clearChainState, which wipes the
-		// PXE IndexedDB (`pxe/${profileId}/${chainId}`) including its sender list.
+		// PXE's OPFS store (`pxe/${profileId}/${chainId}`) including its sender list.
 		// So senders for deleted profiles are cleaned up here, not in
 		// ContactService. If this contract ever changes, the orphan-senders
 		// bug returns and ContactService needs its own cleanup path.
@@ -1451,6 +1985,28 @@ describe("NetworkService.probeNodeStatus (bounded probe)", () => {
 	})
 })
 
+describe("NetworkService.readChainTip", () => {
+	test("reads the network's primary endpoint through the one-attempt node, once per read; a refusal rejects", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		for (const url of ["https://a.example", "https://a2.example"]) {
+			factory.setOverrides(url, {
+				getNodeInfo: vi.fn().mockResolvedValue(nodeInfoForChain(7)) as unknown as AztecNode["getNodeInfo"],
+			})
+		}
+		const a = await service.addNetwork("A", "https://a.example")
+		const second = await service.addEndpoint(a.id, "Two", "https://a2.example")
+		await service.setPrimaryEndpoint(a.id, second.id)
+		const getBlockNumber = vi.fn().mockResolvedValueOnce(48_190).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+		const single = vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getBlockNumber } as unknown as AztecNode)
+
+		expect(await service.readChainTip(a.id)).toBe(48_190)
+		await expect(service.readChainTip(a.id)).rejects.toThrow("Failed to fetch")
+
+		expect(single.mock.calls.map(([url]) => url)).toEqual(["https://a2.example"])
+		expect(getBlockNumber).toHaveBeenCalledTimes(2)
+	})
+})
+
 describe("NetworkService.readPublicStorageOnce", () => {
 	test("reads at the passed row's primary endpoint, never another network's or the active profile's row for that chain", async () => {
 		const { service, factory } = setupServiceWithStorage({})
@@ -1509,7 +2065,7 @@ describe("NetworkService lock configuration", () => {
 	})
 })
 
-describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
+describe("NetworkService — resolveVerifiedL1ChainId's live check", () => {
 	function makeService(getNodeInfo: ReturnType<typeof vi.fn>) {
 		const factory = new FakeNodeFactory()
 		factory.setOverrides("https://rpc-a.example/", { getNodeInfo: getNodeInfo as unknown as AztecNode["getNodeInfo"] })
@@ -1518,7 +2074,7 @@ describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
 		const service = new NetworkService(new LoggerStore(new ConfigStore()), browserApi, factory)
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in (no full lifecycle needed)
 		;(service as any).initialized = true
-		return { service, browserApi }
+		return { service, browserApi, factory }
 	}
 	const row = (kind: string, l1ChainId: number) => ({
 		id: "n1",
@@ -1545,6 +2101,40 @@ describe("NetworkService — resolveVerifiedL1ChainId unattended", () => {
 		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("local", LOCAL_L1_CHAIN_ID)) })
 		await expect(service.resolveVerifiedL1ChainId("p1", 123, { unattended: true })).resolves.toBe(LOCAL_L1_CHAIN_ID)
 		expect(getNodeInfo).not.toHaveBeenCalled()
+	})
+
+	test("a node that does not answer fails with NodeUnreachableError after one bounded, never-retried read", async () => {
+		const { service, browserApi, factory } = makeService(vi.fn().mockRejectedValue(new Error("fetch failed")))
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		const probe = vi.spyOn(service, "probeIdentityOnce")
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).rejects.toBeInstanceOf(NodeUnreachableError)
+		expect(probe.mock.calls).toEqual([["https://rpc-a.example/", "custom", IDENTITY_PROBE_MS]])
+		expect(factory.singleAttempt).toEqual(["https://rpc-a.example/"])
+	})
+
+	test("a URL the transport rule refuses at construction fails the same way", async () => {
+		const { service, browserApi, factory } = makeService(vi.fn())
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		vi.spyOn(factory, "createSingleAttemptNode").mockImplementation(() => {
+			throw new Error("AztecNodeFactoryAdapter refused to construct node client")
+		})
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).rejects.toBeInstanceOf(NodeUnreachableError)
+	})
+
+	test("a node that answers resolves on its matching L1 and refuses another one with a plain error", async () => {
+		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: 5, rollupVersion: 1 })
+		const { service, browserApi } = makeService(getNodeInfo)
+		await browserApi.storage.local.set({ "nulo:core:networks@n1": JSON.stringify(row("custom", 5)) })
+		await expect(service.resolveVerifiedL1ChainId("p1", 123)).resolves.toBe(5)
+		getNodeInfo.mockResolvedValue({ l1ChainId: 6, rollupVersion: 1 })
+		const mismatch = await service.resolveVerifiedL1ChainId("p1", 123).catch((error: unknown) => error)
+		expect(mismatch).toBeInstanceOf(Error)
+		expect(mismatch).not.toBeInstanceOf(NodeUnreachableError)
+		expect((mismatch as Error).message).toMatch(/L1 identity mismatch/)
+		getNodeInfo.mockResolvedValue({ l1ChainId: 5, rollupVersion: 5 })
+		const chainZero = await service.resolveVerifiedL1ChainId("p1", 123).catch((error: unknown) => error)
+		expect(chainZero).not.toBeInstanceOf(NodeUnreachableError)
+		expect((chainZero as Error).message).toMatch(new RegExp(`^${ERR_ENDPOINT_CHAIN_MISMATCH}`))
 	})
 })
 
@@ -1606,15 +2196,17 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 	})
 
 	test("a local-kind network on a non-seed URL whose node answers is Active on both", async () => {
-		const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: nodeInfoForChain(42) })
-		storeRow(local, { id: "loc", kind: "local" })
+		const { service, factory, local } = setupServiceWithStorage({
+			[NON_SEED_LOCAL_URL]: { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 },
+		})
+		storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID })
 		const r = await bothStatuses(service, factory, "loc")
 		expect([r.get, r.probed]).toEqual([NodeStatus.Active, NodeStatus.Active])
 	})
 
 	test("a local-kind network whose node is down is Inactive on both: the carve-out never runs before the probe", async () => {
 		const { service, factory, local } = setupServiceWithStorage({ [NON_SEED_LOCAL_URL]: new Error("ECONNREFUSED") })
-		storeRow(local, { id: "loc", kind: "local" })
+		storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID })
 		const r = await bothStatuses(service, factory, "loc")
 		expect([r.get, r.probed]).toEqual([NodeStatus.Inactive, NodeStatus.Inactive])
 	})
@@ -1653,11 +2245,11 @@ describe("NetworkService node status: getNodeStatus and probeNodeStatus", () => 
 describe("NetworkService endpoint identity guard (add and update)", () => {
 	const COMPOSITE = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 99, but this network is chain 50."
 	const L1 = "ENDPOINT_CHAIN_MISMATCH: This RPC reports L1 chain 2, but this network is L1 chain 0."
-	const BOTH = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 0, but this network is chain 50."
+	const BOTH = "ENDPOINT_CHAIN_MISMATCH: This RPC reports chainId 7, but this network is chain 50."
 	const ROWS: [string, NodeInfo, string][] = [
 		["a different composite", nodeInfoForChain(99), COMPOSITE],
 		["the same composite from another L1", { l1ChainId: 2, rollupVersion: 48 }, L1],
-		["both different: the composite is checked first", { l1ChainId: 3, rollupVersion: 3 }, BOTH],
+		["both different: the composite is checked first", { l1ChainId: 3, rollupVersion: 4 }, BOTH],
 	]
 
 	test.each(ROWS)("addEndpoint refuses %s", async (_name, info, message) => {
@@ -1672,6 +2264,136 @@ describe("NetworkService endpoint identity guard (add and update)", () => {
 		await expect(service.updateEndpoint(network.id, network.primaryEndpointId, "X", "https://rpc.other")).rejects.toThrow(
 			new Error(message),
 		)
+	})
+})
+
+describe("NetworkService chain 0: the local L1 on a loopback node", () => {
+	const REMOTE = "https://node.remote.example/"
+	const LOCAL_ANSWER: NodeInfo = { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 42 }
+	const TESTNET_SELF_PAIR: NodeInfo = { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_L1_CHAIN_ID }
+
+	function localRow(local: FakeStorageArea, over: Partial<Network> = {}): Network {
+		return storeRow(local, { id: "loc", kind: "local", l1ChainId: LOCAL_L1_CHAIN_ID, ...over })
+	}
+
+	const LOCAL_ANSWERS: [string, NodeInfo][] = [
+		["a rollup of its own", LOCAL_ANSWER],
+		["a rollup equal to its L1", { l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: LOCAL_L1_CHAIN_ID }],
+	]
+
+	test.each(LOCAL_ANSWERS)("a local row refuses a remote node on the local L1 with %s, on add and on update", async (_label, info) => {
+		const { service, local } = setupServiceWithStorage({ [REMOTE]: info })
+		localRow(local)
+		await expect(service.addEndpoint("loc", "X", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		await expect(service.updateEndpoint("loc", "e1", "X", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect((await service.getNetwork("loc")).endpoints).toEqual([{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL }])
+	})
+
+	test.each(LOCAL_ANSWERS)("a local row takes a loopback node on the local L1 with %s, on add and on update", async (_label, info) => {
+		const { service, local } = setupServiceWithStorage({ "https://localhost:8443/": info, "http://127.0.0.1:18081": info })
+		localRow(local)
+		const added = await service.addEndpoint("loc", "X", "https://localhost:8443/")
+		await expect(service.updateEndpoint("loc", added.id, "X", "http://127.0.0.1:18081")).resolves.toMatchObject({
+			rpcUrl: "http://127.0.0.1:18081",
+		})
+	})
+
+	test("addNetwork refuses a node whose answer computes to 0, storing and announcing nothing", async () => {
+		const { service, local } = setupServiceWithStorage({ [REMOTE]: TESTNET_SELF_PAIR })
+		const added = vi.fn(async () => {})
+		service.onNetworkAdded.add(added)
+		await expect(service.addNetwork("Zero", REMOTE)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect([...local.store.keys()].filter((k) => k.startsWith("nulo:core:networks@"))).toEqual([])
+		expect(added).not.toHaveBeenCalled()
+	})
+
+	test("addNetwork stores a node whose answer computes to a non-zero chain", async () => {
+		const { service } = setupServiceWithStorage({ [REMOTE]: { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 7 } })
+		await expect(service.addNetwork("Seven", REMOTE)).resolves.toMatchObject({
+			chainId: (TESTNET_L1_CHAIN_ID ^ 7) >>> 0,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			kind: "custom",
+		})
+	})
+
+	test("addNetwork at the Local Network's URL refuses a node on another L1 and stores one on the local L1", async () => {
+		const { service, factory } = setupServiceWithStorage({
+			[LOCAL_NETWORK_RPC_URL]: { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 9 },
+		})
+		await expect(service.addNetwork("Local", LOCAL_NETWORK_RPC_URL)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		factory.setOverrides(LOCAL_NETWORK_RPC_URL, {
+			getNodeInfo: vi.fn().mockResolvedValue(LOCAL_ANSWER) as unknown as AztecNode["getNodeInfo"],
+		})
+		await expect(service.addNetwork("Local", LOCAL_NETWORK_RPC_URL)).resolves.toMatchObject({
+			chainId: 0,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			kind: "custom",
+		})
+	})
+
+	test.each<[string, string, number, boolean]>([
+		["a remote URL", REMOTE, LOCAL_L1_CHAIN_ID, false],
+		["another L1", NON_SEED_LOCAL_URL, TESTNET_L1_CHAIN_ID, false],
+		["the local L1 on localhost", NON_SEED_LOCAL_URL, LOCAL_L1_CHAIN_ID, true],
+		["the local L1 on 127.0.0.1", "http://127.0.0.1:8080", LOCAL_L1_CHAIN_ID, true],
+	])("the row constructor on chain 0 with %s (%s, L1 %i) builds: %s", async (_label, rpcUrl, l1ChainId, builds) => {
+		const { service } = setupServiceWithStorage({})
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
+		const build = (service as any)._buildNetwork("p1", "Zero", rpcUrl, 0, l1ChainId, "custom") as Promise<Network>
+		if (builds) await expect(build).resolves.toMatchObject({ chainId: 0, l1ChainId })
+		else await expect(build).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+	})
+
+	test("both L1 getters refuse a chain-0 row on another L1", async () => {
+		const { service, factory, local } = setupServiceWithStorage({ [LOCAL_NETWORK_RPC_URL]: TESTNET_SELF_PAIR })
+		storeRow(local, { id: "zero", l1ChainId: TESTNET_L1_CHAIN_ID, endpoints: [{ id: "e1", rpcUrl: LOCAL_NETWORK_RPC_URL }] })
+		await expect(service.getL1ChainIdStored("p1", 0)).rejects.toThrow(/^Chain 0 is the local development chain/)
+		await expect(service.resolveVerifiedL1ChainId("p1", 0)).rejects.toThrow(/^Chain 0 is the local development chain/)
+		expect(factory.created).toHaveLength(0)
+	})
+
+	test("both L1 getters return the local L1 of a chain-0 row", async () => {
+		const { service, local } = setupServiceWithStorage({ [LOCAL_NETWORK_RPC_URL]: LOCAL_ANSWER })
+		storeRow(local, { id: "zero", l1ChainId: LOCAL_L1_CHAIN_ID, endpoints: [{ id: "e1", rpcUrl: LOCAL_NETWORK_RPC_URL }] })
+		await expect(service.getL1ChainIdStored("p1", 0)).resolves.toBe(LOCAL_L1_CHAIN_ID)
+		await expect(service.resolveVerifiedL1ChainId("p1", 0)).resolves.toBe(LOCAL_L1_CHAIN_ID)
+	})
+
+	test.each<[string, string]>([
+		["promoting it", "e1"],
+		["confirming it already primary", "e2"],
+	])("a local row refuses a remote endpoint as its primary: %s", async (_label, primaryEndpointId) => {
+		const { service, local } = setupServiceWithStorage({})
+		localRow(local, {
+			primaryEndpointId,
+			endpoints: [
+				{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL },
+				{ id: "e2", rpcUrl: REMOTE },
+			],
+		})
+		const changed = vi.fn(async () => {})
+		service.onPrimaryEndpointChanged.add(changed)
+		await expect(service.setPrimaryEndpoint("loc", "e2")).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
+		expect((await service.getNetwork("loc")).primaryEndpointId).toBe(primaryEndpointId)
+		expect(changed).not.toHaveBeenCalled()
+	})
+
+	test("a local row promotes a loopback endpoint", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		localRow(local, {
+			endpoints: [
+				{ id: "e1", rpcUrl: NON_SEED_LOCAL_URL },
+				{ id: "e2", rpcUrl: "http://127.0.0.1:18081" },
+			],
+		})
+		await expect(service.setPrimaryEndpoint("loc", "e2")).resolves.toMatchObject({ primaryEndpointId: "e2" })
+	})
+
+	test("a local row whose primary is a remote node is InvalidChain on both status methods", async () => {
+		const { service, factory, local } = setupServiceWithStorage({ [REMOTE]: LOCAL_ANSWER })
+		localRow(local, { endpoints: [{ id: "e1", rpcUrl: REMOTE }] })
+		const r = await bothStatuses(service, factory, "loc")
+		expect([r.get, r.probed]).toEqual([NodeStatus.InvalidChain, NodeStatus.InvalidChain])
 	})
 })
 
@@ -1827,7 +2549,8 @@ describe("NetworkService in-place reset", () => {
 			],
 			...over,
 		})
-	const stored = (local: FakeStorageArea, id: string): Network => JSON.parse(local.store.get(`nulo:core:networks@${id}`) as string)
+	const stored = async (local: FakeStorageArea, id: string): Promise<Network> =>
+		(await sealedEntityStorage("networks", local, ROW_KEY_FAKE.rowKeys).get(id)) as Network
 	const journalFor = (networkId: string) =>
 		JSON.stringify({
 			profileId: "p1",
@@ -1886,7 +2609,7 @@ describe("NetworkService in-place reset", () => {
 			}),
 		)
 		expect(pxeStub).toHaveBeenCalledWith("p1", OLD)
-		const row = stored(local, "tn")
+		const row = await stored(local, "tn")
 		expect(row).toMatchObject({ id: "tn", name: "Testnet", chainId: CHAIN_IDS.TESTNET, l1ChainId: TESTNET_L1_CHAIN_ID })
 		expect(row.endpoints.map((e) => e.rpcUrl)).toEqual([MY_NODE, "https://other.example", TESTNET_RPC_URL])
 		expect(findPrimaryEndpoint(row)?.rpcUrl).toBe(TESTNET_RPC_URL)
@@ -1914,7 +2637,7 @@ describe("NetworkService in-place reset", () => {
 		const { service, local } = setupServiceWithStorage({})
 		staleTestnet(local, row)
 		await service.resetChainInPlace(request(req), hooks())
-		const after = stored(local, "tn")
+		const after = await stored(local, "tn")
 		expect(findPrimaryEndpoint(after)?.rpcUrl).toBe(primaryUrl)
 		expect(after.endpoints.filter((e) => e.rpcUrl === TESTNET_RPC_URL).length).toBeLessThanOrEqual(1)
 	})
@@ -1925,7 +2648,7 @@ describe("NetworkService in-place reset", () => {
 		pxeStub.mockRejectedValueOnce(new Error("offscreen down"))
 		const onPurged = vi.fn(async () => {})
 		await expect(service.resetChainInPlace(request(), hooks({ onPurged }))).rejects.toThrow(/offscreen down/)
-		expect(stored(local, "tn")).toMatchObject({ chainId: OLD, primaryEndpointId: "u1" })
+		expect(await stored(local, "tn")).toMatchObject({ chainId: OLD, primaryEndpointId: "u1" })
 		expect(onPurged).not.toHaveBeenCalled()
 		expect(await service.isNetworkLive("tn")).toBe(true)
 	})
@@ -1935,13 +2658,13 @@ describe("NetworkService in-place reset", () => {
 		staleTestnet(local, { chainId: CHAIN_IDS.TESTNET })
 		await service.resetChainInPlace(request({ fromChainId: CHAIN_IDS.TESTNET }), hooks())
 		expect(pxeStub).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
-		expect(stored(local, "tn")).toMatchObject({ chainId: CHAIN_IDS.TESTNET, primaryEndpointId: "u1" })
+		expect(await stored(local, "tn")).toMatchObject({ chainId: CHAIN_IDS.TESTNET, primaryEndpointId: "u1" })
 
 		const second = setupServiceWithStorage({})
 		staleTestnet(second.local)
 		await second.service.resetChainInPlace(request({ purged: true }), hooks())
 		expect(second.pxeStub).not.toHaveBeenCalled()
-		expect(stored(second.local, "tn").chainId).toBe(CHAIN_IDS.TESTNET)
+		expect((await stored(second.local, "tn")).chainId).toBe(CHAIN_IDS.TESTNET)
 	})
 
 	test("refuses, purging nothing, a row not on the chain it names; the rewrite refuses a target another row holds", async () => {
@@ -1951,7 +2674,7 @@ describe("NetworkService in-place reset", () => {
 		expect(pxeStub).not.toHaveBeenCalled()
 		storeRow(local, { id: "mine", chainId: CHAIN_IDS.TESTNET })
 		await expect(service.resetChainInPlace(request({ purged: true }), hooks())).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
-		expect(stored(local, "tn").chainId).toBe(OLD)
+		expect((await stored(local, "tn")).chainId).toBe(OLD)
 	})
 
 	test("deleteNetwork refuses while the network's reset runs; idle, it takes the journal and the verdict with the row", async () => {
@@ -2045,12 +2768,65 @@ describe("NetworkService in-place reset", () => {
 	test("commitResetCapture writes nothing while another row holds the target chain", async () => {
 		const { service, local } = setupServiceWithStorage({})
 		staleTestnet(local)
-		local.store.set("nulo:core:networks@held", JSON.stringify({ ...stored(local, "tn"), id: "held", chainId: CHAIN_IDS.TESTNET }))
+		local.store.set(
+			"nulo:core:networks@held",
+			JSON.stringify({ ...(await stored(local, "tn")), id: "held", chainId: CHAIN_IDS.TESTNET }),
+		)
 		const write = vi.fn(async () => {})
 		await expect(
 			service.commitResetCapture("p1", "tn", { chainId: OLD, toChainId: CHAIN_IDS.TESTNET, primary: null }, write),
 		).rejects.toThrow(/^ERR_NOT_RESETTABLE: another network holds the new chain/)
 		expect(write).not.toHaveBeenCalled()
+	})
+
+	const ADDED = "https://added.example"
+	/** A node at `ADDED` serving the stale Testnet row's own chain, so an edit passes the identity check. */
+	const servesOld = { l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: (OLD ^ TESTNET_L1_CHAIN_ID) >>> 0 } as NodeInfo
+	const endpointEdits: Array<[string, (service: NetworkService) => Promise<unknown>]> = [
+		["addEndpoint", (service) => service.addEndpoint("tn", undefined, ADDED)],
+		["updateEndpoint", (service) => service.updateEndpoint("tn", "u2", "Other", ADDED)],
+		["deleteEndpoint", (service) => service.deleteEndpoint("tn", "u2")],
+		["setPrimaryEndpoint", (service) => service.setPrimaryEndpoint("tn", "u2")],
+	]
+
+	test.each(endpointEdits)("%s refuses while a reset journal names the network, and leaves the row as it was", async (_m, edit) => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		const before = local.store.get("nulo:core:networks@tn")
+		await expect(edit(service)).rejects.toThrow(/^ERR_RESET_PENDING: /)
+		expect(local.store.get("nulo:core:networks@tn")).toBe(before)
+	})
+
+	test("endpoint edits go through while the journal names another network", async () => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		local.store.set("nulo:core:network-reset@p1", journalFor("zz"))
+		const added = await service.addEndpoint("tn", "Added", ADDED)
+		await service.updateEndpoint("tn", added.id, "Renamed", ADDED)
+		await service.setPrimaryEndpoint("tn", "u2")
+		await service.deleteEndpoint("tn", added.id)
+		expect(await stored(local, "tn")).toMatchObject({
+			primaryEndpointId: "u2",
+			endpoints: [
+				{ id: "u1", rpcUrl: MY_NODE },
+				{ id: "u2", rpcUrl: "https://other.example", label: "Other" },
+			],
+		})
+	})
+
+	test("while edits refuse, the reset's rewrite and deleteNetwork still run", async () => {
+		const { service, local } = setupServiceWithStorage({ [ADDED]: servesOld })
+		staleTestnet(local)
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		local.store.set("nulo:core:active-network@p1", "ln")
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		await service.resetChainInPlace(request({ purged: true }), hooks())
+		expect((await stored(local, "tn")).chainId).toBe(CHAIN_IDS.TESTNET)
+		await expect(service.setPrimaryEndpoint("tn", "u2")).rejects.toThrow(/^ERR_RESET_PENDING: /)
+		await service.deleteNetwork("tn")
+		expect(local.store.has("nulo:core:networks@tn")).toBe(false)
+		expect(local.store.has("nulo:core:network-reset@p1")).toBe(false)
 	})
 
 	test("probeIdentityOnce makes one single-attempt read within its budget", async () => {
@@ -2063,5 +2839,12 @@ describe("NetworkService in-place reset", () => {
 		})
 		expect(single).toHaveBeenCalledWith(MY_NODE, 5000)
 		expect(getNodeInfo).toHaveBeenCalledTimes(1)
+	})
+
+	test("probeIdentityOnce refuses a node whose answer computes to 0", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: TESTNET_L1_CHAIN_ID })
+		vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getNodeInfo } as unknown as AztecNode)
+		await expect(service.probeIdentityOnce(MY_NODE, "testnet", 5000)).rejects.toThrow(/^ENDPOINT_CHAIN_MISMATCH: /)
 	})
 })

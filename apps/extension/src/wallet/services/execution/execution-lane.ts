@@ -28,9 +28,11 @@
 import { JobCancelledSentinel, type JobError, type JobProgress, normalizeError } from "@nulo/wallet-core/jobs"
 import { deferred } from "@nulo/wallet-core/utils"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
-import { pickPrimaryMethod } from "@/utils/primary-method"
+import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
+import type { TxCall } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
@@ -156,7 +158,7 @@ export class ExecutionLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls?: { method?: string }[],
+		calls?: JournalCallCarrier[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined> {
 		try {
@@ -167,7 +169,8 @@ export class ExecutionLane {
 			// stale operation into the wrong incarnation.
 			const profileId = fence?.profileId ?? (await this.deps.getActiveProfile())?.id
 			if (!profileId) return undefined
-			const primaryMethod = pickPrimaryMethod(calls)
+			const index = pickPrimaryIndex(calls)
+			const primary = index === undefined ? undefined : calls?.[index]
 			const op = await this.deps.operationJournal.createOperation({
 				kind: "dapp_execute",
 				origin: "dapp",
@@ -175,8 +178,9 @@ export class ExecutionLane {
 				profileEpoch: fence?.epoch ?? this.deps.captureProfileEpoch?.(profileId),
 				accountAddress,
 				networkId,
-				title: primaryMethod ?? "Transaction",
+				title: primary?.method ?? "Transaction",
 				subtitle: origin.name,
+				call: primary?.call,
 			})
 			return op.id
 		} catch (error) {
@@ -352,7 +356,8 @@ export class ExecutionLane {
 	 * Hands a granted dApp send's slot on while `wait` runs, then re-enters at the tail in the
 	 * origin's bucket with the place it was admitted under, so no re-entry is refused for capacity.
 	 * The record stays vouched for and keeps the controller `acquireSlot` registered; a silent-path
-	 * record reads `queued` while it waits. Errors map as `acquireSlot`'s.
+	 * record's `queued` write settles before `wait` runs, possibly after the slot is handed on. Errors
+	 * map as `acquireSlot`'s.
 	 */
 	public async parkSlot(
 		release: ExecutionMutexRelease,
@@ -415,8 +420,9 @@ export class ExecutionLane {
 		}
 	}
 
-	/** A silent-path record reads `pending` before it runs; it reads `queued` while it waits, and
-	 *  the claim takes it back. A `queued` or ended record is left as it is. */
+	/** A silent-path record reads `pending` before it runs; this best-effort write makes it read
+	 *  `queued` while it waits, and the claim takes it back. A `queued` or ended record is left
+	 *  as it is. */
 	private async requeue(journalId: string): Promise<void> {
 		try {
 			await this.deps.operationJournal.transitionIfStage(journalId, ["pending"], { stage: "queued" })
@@ -425,13 +431,30 @@ export class ExecutionLane {
 		}
 	}
 
+	/** `queued → pending` for a granted send a park moved back to `queued`; a send still `pending` stays.
+	 *  Any other stage ends it: a cancel that landed first, or a record that is gone. */
+	public async reclaimParked(journalId: string): Promise<void> {
+		const result = await this.deps.operationJournal.transitionIfStage(journalId, ["queued"], { stage: "pending" })
+		if (result.outcome === "transitioned" || (result.outcome === "stage" && result.stage === "pending")) return
+		if (result.outcome === "stage" && result.stage === "cancelled") throw new JobCancelledSentinel(journalId)
+		throw new Error("A waiting dApp send lost its record")
+	}
+
+	/** Cancels a send while it still asks `fee`, so an answer to a question it no longer asks cancels
+	 *  nothing: `cancelJob`'s journal-first order, with the question as its precondition. */
+	public async cancelQuestion(journalId: string, fee: string): Promise<void> {
+		const record = await this.deps.operationJournal.getOperation(journalId)
+		if (record?.progress.stage !== "queued" || record.progress.reask?.fee !== fee) return
+		await this.cancelJob(journalId)
+	}
+
 	/** Any exit from a slot wait but the grant. Always throws. */
 	private async refuseSlot(err: unknown, queuedJournalId: string | undefined): Promise<never> {
 		if (queuedJournalId) this.activeControllers.delete(queuedJournalId)
 		if (err instanceof ExecutionMutexCapacityError) {
 			// No claim follows, and the reaper's safety net never fails the silent path's `pending`
 			// record, so the refusal fails it here. The dApp sees -32005.
-			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "dapp_execute"))
+			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "too_many_pending"))
 			throw new TooManyPendingError()
 		}
 		if (err instanceof SessionEndedError) {
@@ -595,7 +618,7 @@ export class ExecutionLane {
 		networkId: string,
 		accountAddress: string,
 		origin: LocalTxOrigin,
-		calls: { method?: string }[] | undefined,
+		calls: JournalCallCarrier[] | undefined,
 		hooks: ExecutionHooks | undefined,
 		reuseController: AbortController | undefined,
 		fence: ExecutionFence,
@@ -632,14 +655,32 @@ export class ExecutionLane {
 		journalId: string | undefined,
 		progress: JobProgress,
 		error?: JobError | null,
-		failedTitle?: string,
+		retitle?: JournalRetitle,
 	): Promise<void> {
 		if (!journalId) return
 		try {
-			await this.deps.operationJournal.transitionOperation(journalId, progress, error, failedTitle)
+			await this.deps.operationJournal.transitionOperation(journalId, progress, error, retitle)
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}
+	}
+
+	/**
+	 * Names the record by the primary call a build made, the one its settled row will title: the title
+	 * and the call, class included, in one write, so the two never describe different calls. Nothing
+	 * depends on it: a refused write leaves the record as it was.
+	 */
+	public async recordBuiltCall(journalId: string | undefined, txCalls: readonly TxCall[]): Promise<void> {
+		if (!journalId || txCalls.length === 0) return
+		const primary = txCalls[pickPrimaryIndex(txCalls) ?? 0]
+		const call = journalCallOf(primary.contract, primary.args, primary.classId)
+		const written =
+			call !== undefined &&
+			(await this.deps.operationJournal.setOperationMeta(journalId, { title: primary.method, call }).then(
+				() => true,
+				() => false,
+			))
+		if (!written) this.deps.logDebug("journal call not recorded")
 	}
 
 	/** {@link markJournal} for a write the caller depends on: a refused write or a missing id rejects. */

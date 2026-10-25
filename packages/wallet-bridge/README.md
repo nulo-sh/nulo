@@ -160,12 +160,58 @@ The message is a constant and the envelope names no field and no value. A
 dApp reads the contracts, calls, classes and flags it holds from its own
 `requestCapabilities` answer, which is the stored grant, and asks again with a
 wider manifest. The answer lists the session's accounts only when the grant
-sets `canGet`.
+sets `canGet`, and `getAccounts` needs it too. `canGet` controls listing, not
+which account a session acts as: a call's `from` must name a session account,
+and a session with a simulation grant learns the account it ran as from any
+simulation's results.
 
 The same envelope answers a call whose selector does not run the function its
-name claims. That check runs at execution, so this refusal can come after the
-approval window, and no wider manifest fixes it: the call itself must name the
-function its selector runs.
+name claims. That check runs when the approval window estimates the fee or
+previews the authorizations, and again at execution, so this refusal comes
+after the window opens: the window then offers only Reject, and Reject or
+closing the window answers this envelope. No wider manifest fixes it: the call
+itself must name the function its selector runs.
+
+`registerSender`, and `registerContract` with a secret key, add a sender or an
+account to the chain's PXE. Each app may make 32 of them on a profile's chain,
+and all apps together 128; every admitted call counts, a repeat included. Once
+either count is used up, every such call answers this envelope, whatever the
+address, and writes nothing, neither the account nor its contract. No wider
+manifest fixes it. A keyless `registerContract` and the person's own
+registrations are not counted and never refused for this.
+
+The authorization registry's grant functions (`set_authorized`, `set_reject_all`,
+`set_authorized_private`) answer only the wallet's own authorization action, so
+a public authorization a dApp obtains by naming the registry is one the wallet
+indexes and can revoke. No grant, a wildcard included, admits a `sendTx` call to them (matched
+by selector, never by name) or a `createAuthWit` intent whose call or consumer
+is the registry; both are refused before any window. A transaction whose own
+contracts ask the account to authorize the registry is refused before the
+wallet signs that authorization, while the window estimates or previews it,
+and Reject or closing the window answers its envelope. These refusals keep the scope refusal's code with their own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "Apps cannot set public authorizations directly. Ask the wallet with grantPublicAuthwit.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
+Simulating a registry call, its views included, is unaffected.
+
+A `createAuthWit` inner hash whose consumer is the signing account itself is
+refused before any window, whatever the grant, with the same code and its own
+text:
+
+```jsonc
+{
+  "code": 4100,
+  "message": "An authorization's consumer cannot be the account that signs it. Name the contract that consumes it.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
 
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
@@ -311,7 +357,10 @@ once added). The popup pre-fetches the token's `name` / `symbol` / `decimals`
 via `parseTokenInterface` and renders them BEFORE Allow/Deny so the user can
 recognise phishing tokens. The contract address is always shown alongside the
 metadata — the strings come straight from the on-chain contract and are
-attacker-controllable.
+attacker-controllable. Confirm stays disabled until the details are read, and
+the commit stores only a read, of the class the window read, equal to what the
+window showed; any other read fails the add with "Token details changed after
+you approved them." and stores nothing.
 
 ### Schema-patch contract
 
@@ -360,7 +409,7 @@ patch does NOT restore them):
 
 If a future Aztec.js version ships its own `registerToken`, the patch's
 signature-drift guard throws at SW init (`expected 2 params, found N`). Pin the
-`@aztec-labs/wallet-sdk` version exactly (`6.0.0-rc.3` today) so the patch's
+`@aztec-labs/wallet-sdk` version exactly (`6.0.0` today) so the patch's
 assumptions are stable across upgrades.
 
 ### Not in `batch`

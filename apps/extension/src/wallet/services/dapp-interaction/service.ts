@@ -12,6 +12,7 @@ import { TokenService } from "@/wallet/services/token/service"
 import { DappSessionService, AccessLevel, type DappSession } from "@/wallet/services/dapp-session/service"
 import {
 	ExecutionService,
+	type FeeQuestion,
 	type FeeSettings,
 	type InteractionOperationSource,
 	type Operation,
@@ -19,28 +20,43 @@ import {
 	type OperationKind,
 } from "@/wallet/services/execution/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import {
+	JobCancelledError,
+	type ScopeViolationError,
+	TermsAcceptanceRequiredError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 import { randomIdNotIn } from "@/wallet/services/id-allocators"
 import { Lock } from "@/wallet/utils"
-import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { WINDOW_CLOSED_BY_USER, type WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
+import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import {
+	type DraftOperation,
+	type FeeSettingsReaders,
+	isAccountScoped,
+	isNetworkScoped,
+	isSelfPay,
+	refuseUnknownPriorities,
+} from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
+import { isWindowEnd, WindowEndedError } from "./window-end"
 import { knownContracts } from "./known-contracts"
-import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
+import { applyFeeSelection, isShownTokenMetadata, type OperationApprovalDelta } from "./approval-delta"
 import {
 	DAPP_INTERACTION_SERVICE_NAME,
 	type ExecutionPayload,
 	type ExecutionResult,
+	type FeeQuestionPayload,
+	type FeeQuestionResult,
 	type CapabilityPayload,
 	type CapabilityParams,
 	type CapabilityResult,
 	type DiscoveryPayload,
 	type DiscoveryParams,
 	type DiscoveryResult,
-	type DiscoveryOutcome,
 	type InteractionPayload,
 	type NetworkUnavailableParams,
 	type NetworkUnavailablePayload,
@@ -73,6 +89,10 @@ function isExecutionPayload(payload: DappInteraction["payload"]): payload is Exe
 
 function isNoticePayload(payload: DappInteraction["payload"]): payload is NetworkUnavailablePayload {
 	return "notice" in payload
+}
+
+function isFeeQuestionPayload(payload: DappInteraction["payload"]): payload is FeeQuestionPayload {
+	return "feeQuestion" in payload
 }
 
 /** A discovery is the only answerable interaction without a session: it is what creates one. */
@@ -128,6 +148,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	public readonly onInteractionCancelled = new EventHandler<string>()
 
 	private readonly storage: Map<string, DappInteraction> = new Map()
+	/** Each approved request while it executes, by interaction id, with the fee choices it was approved
+	 *  with: what a held send's question shows. Never in `storage`, so it is never approvable again. */
+	private readonly approved = new Map<string, { payload: ExecutionPayload; deltas: OperationApprovalDelta[] }>()
 	private readonly lock = new Lock()
 
 	private profileService: ProfileService = null!
@@ -217,6 +240,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		) {
 			throw new Error("Invalid id")
 		}
+		// The figure binds the send to what the window showed; a malformed one binds nothing.
+		if (deltas.some((delta) => delta?.feeCeiling !== undefined && !isFeeAmount(delta.feeCeiling))) {
+			throw new Error("Invalid fee figure")
+		}
+		if (deltas.some((delta) => delta?.tokenMetadata !== undefined && !isShownTokenMetadata(delta.tokenMetadata))) {
+			throw new Error("Invalid token details")
+		}
 		// First service claim wins — service acceptance is the commit point, not
 		// the browser click. A cancel processed first leaves the record flagged;
 		// a later approve must refuse BEFORE claiming, so execution never
@@ -225,6 +255,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (interaction.cancelledAt !== undefined) {
 			throw new JobCancelledError(CANCELLED_BEFORE_APPROVAL)
 		}
+		// Unclaimed: the window shows the refusal, and its Reject ends the request as it.
+		if (interaction.refusal) throw interaction.refusal
 		this.storage.delete(id)
 		// Detach before handing off to executeAndResolve: the approval popup
 		// closes immediately after the user approves, and the onRemoved event
@@ -238,7 +270,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.executeAndResolve(interaction, interaction.payload, deltas)
 	}
 
-	public async resolveInteraction(id: string, result: ExecutionResult | CapabilityResult | DiscoveryResult): Promise<void> {
+	public async resolveInteraction(
+		id: string,
+		result: ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult,
+	): Promise<void> {
 		const interactionRequest = this.storage.get(id)
 		// A notice has nothing to approve: only a dismissal settles it, so no page answer can be read
 		// as an approved discovery. Non-disclosing, like an unknown id.
@@ -256,24 +291,29 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// with settle if it arrives first.
 		this.windowManager.detach(interactionRequest.handleId)
 		if (isDiscoveryPayload(interactionRequest.payload)) {
-			this.settleDiscovery(interactionRequest.handleId, id, result)
+			this.settleDiscovery(interactionRequest.handleId, result)
 			return
 		}
 		this.windowManager.settle(interactionRequest.handleId, result)
 	}
 
-	/** An approved connect window stays open to show the emoji check, and its id comes from the
-	 *  handle, never the page. Any other answer is a denial and closes the window. */
-	private settleDiscovery(handleId: string, id: string, result: unknown): void {
-		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			const expiredUrl = `${windowUrl("discover", id)}&expired=1`
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId, expiredUrl }))
-			return
-		}
-		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
+	/** Either answer closes the connect window, and only `approved` crosses from the page. */
+	private settleDiscovery(handleId: string, result: unknown): void {
+		const approved = (result as Partial<DiscoveryResult> | null | undefined)?.approved === true
+		this.windowManager.settle<DiscoveryResult>(handleId, { approved })
 	}
 
-	public async rejectInteraction(id: string, reason: string): Promise<void> {
+	/** Keeps the first refusal an estimate or preview of a still-pending request met. */
+	public recordRefusal(id: string, refusal: ScopeViolationError): void {
+		const interaction = this.storage.get(id)
+		if (interaction && !interaction.refusal) interaction.refusal = refusal
+	}
+
+	public refusalOf(id: string): ScopeViolationError | undefined {
+		return this.storage.get(id)?.refusal
+	}
+
+	public async rejectInteraction(id: string, reason: string, end?: unknown): Promise<void> {
 		const interactionRequest = this.storage.get(id)
 		if (!interactionRequest) {
 			return
@@ -281,8 +321,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.storage.delete(id)
 		// Typed so the dApp sees EIP-1193 4001 / USER_REJECTED. `reason` is
 		// popup-authored and forwarded verbatim to the dApp — never route a
-		// dApp-influenced string here.
-		this.windowManager.cancel(interactionRequest.handleId, new UserRejectedError(reason))
+		// dApp-influenced string here. The window closes only after this returns, so its close cannot
+		// reach the request first.
+		const rejection = isWindowEnd(end) ? new WindowEndedError(reason, end) : new UserRejectedError(reason)
+		this.windowManager.cancel(interactionRequest.handleId, rejection)
 	}
 
 	private async executeAndResolve(
@@ -295,6 +337,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// no longer supplies an origin of its own.
 		const origin: LocalTxOrigin = { type: OriginType.DAPP, name: payload.session.dappMetadata.name }
 		this.logInfo(`executeAndResolve: starting [${kinds}] for ${origin.name}`)
+		this.approved.set(interaction.id, { payload, deltas })
 		try {
 			// Re-validate the active profile still matches the session this popup
 			// was approved under. A popup is a separate window that can outlive a
@@ -342,7 +385,14 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			for (const [index, request] of payload.params.operations.entries()) {
 				const delta = deltas[index] ?? {}
 				operations.push(applyFeeSelection(await materializeRequest(request, deps), delta.feeSettings))
-				approvals.push({ interactionId: interaction.id, index, estimateId: delta.estimateId, previewId: delta.previewId })
+				approvals.push({
+					interactionId: interaction.id,
+					index,
+					estimateId: delta.estimateId,
+					previewId: delta.previewId,
+					feeCeiling: delta.feeCeiling,
+					tokenMetadata: delta.tokenMetadata,
+				})
 			}
 			await this.profileService.refreshSession()
 			// Forward hooks captured at interaction-creation time. Survives the
@@ -359,7 +409,34 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			this.windowManager.settle(interaction.handleId, result)
 		} catch (error) {
 			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error))
+		} finally {
+			this.approved.delete(interaction.id)
 		}
+	}
+
+	/**
+	 * Opens the window that asks a held send's question and answers whether the person accepted it.
+	 * Every other end is a refusal: the window rejected, closed, timed out or never opened, or the
+	 * request no longer executing. The window closes at the question's deadline.
+	 */
+	public async askFeeAgain(question: FeeQuestion): Promise<boolean> {
+		const approved = this.approved.get(question.interactionId)
+		const operation = approved?.payload.params.operations[question.index]
+		if (!approved || !operation) return false
+		const payload: FeeQuestionPayload = {
+			feeQuestion: {
+				fee: question.reask.fee,
+				approved: question.reask.cap,
+				payer: question.reask.payer,
+				feeSettings: approved.deltas[question.index]?.feeSettings,
+				discoveredAuthwits: question.discoveredAuthwits,
+			},
+			operation,
+			session: approved.payload.session,
+		}
+		const timeoutMs = Math.max(0, question.deadline - Date.now())
+		const result = await this.interaction("fee", payload, undefined, { queuedJournalId: question.journalId }, timeoutMs)
+		return (result as Partial<FeeQuestionResult> | undefined)?.accepted === true
 	}
 
 	/**
@@ -382,13 +459,29 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	 * against the requested fee path exactly as at approval.
 	 */
 	public async materializeStoredOperation(interactionId: string, index: number, feeSettings?: FeeSettings): Promise<Operation> {
+		return applyFeeSelection(await this.materializeStoredDraft(interactionId, index), feeSettings)
+	}
+
+	/** The same stored request before any fee choice, for a display that reads it while the person
+	 *  is still choosing: a send-like that needs a choice comes back without one. */
+	public async materializeStoredDraft(interactionId: string, index: number): Promise<DraftOperation> {
 		const interaction = this.storage.get(interactionId)
 		if (!interaction || !isExecutionPayload(interaction.payload)) throw new Error("Invalid id")
 		const request = interaction.payload.params.operations[index]
 		if (!request) throw new Error("Invalid id")
 		const profile = await this.profileService.getActiveProfile()
 		if (profile?.id !== interaction.payload.session.profileId) throw new Error("Wallet locked")
-		return applyFeeSelection(await materializeRequest(request, this.materializeDepsFor(profile.id)), feeSettings)
+		return materializeRequest(request, this.materializeDepsFor(profile.id))
+	}
+
+	/** The stored request a fee question shows, for the window's display reads only; estimates,
+	 *  previews and approval read execution requests alone. */
+	public async materializeQuestionDraft(interactionId: string): Promise<DraftOperation> {
+		const interaction = this.storage.get(interactionId)
+		if (!interaction || !isFeeQuestionPayload(interaction.payload)) throw new Error("Invalid id")
+		const profile = await this.profileService.getActiveProfile()
+		if (profile?.id !== interaction.payload.session.profileId) throw new Error("Wallet locked")
+		return materializeRequest(interaction.payload.operation, this.materializeDepsFor(profile.id))
 	}
 
 	/** CAIP → row resolution against `profileId` for the shared materializer. */
@@ -479,9 +572,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}
 
-	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryOutcome> {
+	public async discover(params: DiscoveryParams, cancellationToken?: string): Promise<DiscoveryResult> {
 		const payload: DiscoveryPayload = { params }
-		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryOutcome
+		return (await this.interaction("discover", payload, cancellationToken)) as DiscoveryResult
 	}
 
 	/** Show the notice for a discovery whose chain the profile has no network for. Settles, never
@@ -499,23 +592,24 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		payload: InteractionPayload,
 		cancellationToken?: string,
 		hooks?: ExecutionHooks,
-	): Promise<ExecutionResult | CapabilityResult | DiscoveryResult> {
+		timeoutMs = INTERACTION_TIMEOUT_MS,
+	): Promise<ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult> {
 		// Assign-out shape: the closure CREATES the interaction promise (with its
 		// cleanup chain) and returns void — returning it from the closure would
 		// make withLock await the popup's settlement, holding the lock through
 		// the whole user interaction. The lock guards only id-mint + window-open
 		// + registration, exactly as before; the caller adopts the pending
 		// promise after release.
-		let pending!: Promise<ExecutionResult | CapabilityResult | DiscoveryResult>
+		let pending!: Promise<ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult>
 		await this.lock.withLock(async () => {
 			// 128-bit: the id names the request in a popup URL.
 			const id = randomIdNotIn((candidate) => this.storage.has(candidate), 16)
 
-			const handle = this.windowManager.openAndAwait<ExecutionResult | CapabilityResult | DiscoveryResult>({
+			const handle = this.windowManager.openAndAwait<ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult>({
 				url: windowUrl(type, id),
 				width: 400,
 				height: 800,
-				timeoutMs: INTERACTION_TIMEOUT_MS,
+				timeoutMs,
 				kind: type,
 				placement: "top-right",
 			})
@@ -533,9 +627,16 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 			this.storage.set(id, interaction)
 
-			pending = handle.promise.finally(() => {
-				this.storage.delete(id)
-			})
+			pending = handle.promise
+				.catch((error: unknown) => {
+					// The window's close can reach the worker before its Reject does; both end a refused request
+					// as its refusal. A cancel and the timeout keep their own end.
+					const endedByWindow = error instanceof UserRejectedError || error === WINDOW_CLOSED_BY_USER
+					throw endedByWindow && interaction.refusal ? interaction.refusal : error
+				})
+				.finally(() => {
+					this.storage.delete(id)
+				})
 		})
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
 		return pending
@@ -636,7 +737,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				["pending"],
 				{ stage: "failed" },
 				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
-				{ failedTitle: "Transaction" },
+				{ retitle: { title: "Transaction" } },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}
@@ -648,43 +749,22 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		}
 		// validate permissions
 		for (const operation of operations) {
-			switch (operation.kind) {
-				case "register_contract":
-				case "register_sender":
-				case "aztec_getContractClassMetadata":
-				case "aztec_getContractMetadata":
-				case "aztec_getChainInfo":
-				case "aztec_registerSender":
-				case "aztec_getAddressBook":
-				case "aztec_registerContract": {
-					this.checkMethodPermission(session, operation.kind, operation.chain)
-					break
+			if (isNetworkScoped(operation)) {
+				this.checkMethodPermission(session, operation.kind, operation.chain)
+				if (operation.kind === "aztec_getPrivateEvents") this.checkScopesPermissions(session, operation.eventFilter.scopes)
+			} else if (isAccountScoped(operation)) {
+				const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
+				this.checkAccountPermission(session, operation.account)
+				this.checkMethodPermission(session, operation.kind, chain)
+				if (operation.kind === "send_transaction" || operation.kind === "simulate_transaction") {
+					operation.actions.forEach((x) => {
+						this.checkMethodPermission(session, x.kind, chain)
+					})
 				}
-				case "aztec_getPrivateEvents": {
-					this.checkMethodPermission(session, operation.kind, operation.chain)
-					this.checkScopesPermissions(session, operation.eventFilter.scopes)
-					break
-				}
-				case "register_token":
-				case "simulate_utility":
-				case "aztec_simulateTx":
-				case "aztec_executeUtility":
-				case "aztec_profileTx":
-				case "aztec_sendTx":
-				case "aztec_createAuthWit": {
-					const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
-					this.checkAccountPermission(session, operation.account)
-					this.checkMethodPermission(session, operation.kind, chain)
-					break
-				}
-				case "send_transaction":
-				case "simulate_transaction": {
-					const chain = operation.account.substring(0, operation.account.lastIndexOf(":"))
-					this.checkAccountPermission(session, operation.account)
-					this.checkMethodPermission(session, operation.kind, chain)
-					operation.actions.forEach((x) => this.checkMethodPermission(session, x.kind, chain))
-					break
-				}
+			} else {
+				// A kind the trait table does not name would otherwise skip every permission check.
+				const _unhandled: never = operation
+				throw new Error("Unsupported operation kind")
 			}
 		}
 		return session

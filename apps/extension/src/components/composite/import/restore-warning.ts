@@ -1,8 +1,49 @@
-export function restoreWarningText(networkNames: readonly string[], hasOtherErrors: boolean): string {
-	if (networkNames.length === 0) return "Profile import completed with some errors. You can review the details or continue."
-	const pronoun = networkNames.length === 1 ? "it" : "them"
+/** An imported account a restore kept for a network the new profile lacks, its name cleaned. */
+export type HeldAccount = { name: string; chainId: number }
+
+export function restoreWarningText(networkNames: readonly string[], hasOtherErrors: boolean, held: readonly HeldAccount[] = []): string {
+	const heldPart = held.length ? ` ${heldAccountsText(held)}` : ""
+	if (networkNames.length === 0) {
+		return `Profile import completed with some errors.${heldPart} You can review the details or continue.`
+	}
 	const choices = hasOtherErrors ? "You can retry, review the details, or continue." : "You can retry or continue."
-	return `${joinNames(networkNames)} didn't answer in time, so what was saved for ${pronoun} may not be restored. ${choices}`
+	return `${joinNames(networkNames)} didn't answer in time, so what was saved for ${pronoun(networkNames)} may not be restored.${heldPart} ${choices}`
+}
+
+/** A restore can hold any number of accounts, and a crafted backup thousands: a list names this many. */
+const MAX_LISTED = 3
+
+function listed(items: readonly string[], more: (count: number) => string): string {
+	if (items.length <= MAX_LISTED) return joinNames(items)
+	return joinNames([...items.slice(0, MAX_LISTED), more(items.length - MAX_LISTED)])
+}
+
+function heldSubject(names: readonly string[]): string {
+	if (names.length === 1) return `The imported account ${names[0]}`
+	if (names.length <= MAX_LISTED) return `The imported accounts ${joinNames(names)}`
+	return listed(names, (count) => `${count} more imported account${count === 1 ? "" : "s"}`)
+}
+
+function heldAccountsText(held: readonly HeldAccount[]): string {
+	const subject = heldSubject(held.map((account) => `“${account.name}”`))
+	const chains = [...new Set(held.map((account) => account.chainId))].map(String)
+	const network =
+		chains.length === 1
+			? `the network with chain ID ${chains[0]}`
+			: `the networks with chain IDs ${listed(chains, (count) => `${count} more`)}`
+	const one = held.length === 1
+	const it = one ? "it" : "them"
+	const file = one ? "its account file" : "their account files"
+	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${it}, or import ${it} again from ${file}. Turn on Developer Mode in Settings to add a network.`
+}
+
+/** Home's reminder of the networks a restore left behind. */
+export function restoreReminderText(networkNames: readonly string[]): string {
+	return `${joinNames(networkNames)} didn't finish restoring. Restore the backup again to bring ${pronoun(networkNames)} back.`
+}
+
+function pronoun(networkNames: readonly string[]): "it" | "them" {
+	return networkNames.length === 1 ? "it" : "them"
 }
 
 /** The line above Retry once a Retry left networks unrestored. */
@@ -57,7 +98,7 @@ function namedRow(row: unknown, namesById: ReadonlyMap<string, string>): unknown
 	return named
 }
 
-/** Network names as every restore surface lists them: "A and B", "A, B, and C". */
+/** Names as every list in a sentence joins them: "A and B", "A, B, and C". */
 export function joinNames(names: readonly string[]): string {
 	if (names.length <= 2) return names.join(" and ")
 	return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`

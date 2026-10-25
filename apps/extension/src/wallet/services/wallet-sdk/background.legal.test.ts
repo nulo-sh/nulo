@@ -24,17 +24,21 @@ function harness(assertCurrent: () => Promise<void>) {
 	const legal = { assertCurrent: vi.fn(assertCurrent) }
 	const run = (type: string, args: unknown[] = [], queuedJournalId?: string) =>
 		handleWalletMessage(
-			SESSION,
-			{ messageId: "m1", type, args } as never,
-			bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
-			{ dispatch } as never,
-			{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
-			{ transitionIfStage } as never,
-			new Map([["s1", "p1"]]),
-			{ current: () => 0 } as never,
-			{ log } as never,
-			legal,
-			queuedJournalId ? { queuedJournalId } : undefined,
+			{
+				session: SESSION,
+				message: { messageId: "m1", type, args } as never,
+				live: bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
+				hooks: queuedJournalId ? { queuedJournalId } : undefined,
+			},
+			{
+				dispatcher: { dispatch } as never,
+				profileService: { captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
+				operationJournal: { transitionIfStage } as never,
+				sessionProfiles: new Map([["s1", "p1"]]),
+				switchEpoch: { current: () => 0 } as never,
+				logger: { log } as never,
+				legal,
+			},
 		)
 	return { run, dispatch, sendResponse, transitionIfStage, log, legal }
 }
@@ -73,7 +77,7 @@ describe("handleWalletMessage — Terms admission", () => {
 			["queued"],
 			{ stage: "failed" },
 			{ kind: "terms_refused", message: "Open Nulo and accept the Terms to continue.", normalizedRaw: null },
-			{ failedTitle: "Transaction" },
+			{ retitle: { title: "Transaction" } },
 		)
 	})
 

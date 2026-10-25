@@ -17,11 +17,19 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
-import { TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { TEST_FLAGGED, TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
-import { PRICE_REFRESH_ALARM_NAME, PriceService, QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "./service"
+import {
+	PRICE_REFRESH_ALARM_NAME,
+	PRICE_REFRESH_PERIOD_MINUTES,
+	PriceService,
+	QUOTE_TTL_MS,
+	type PriceSnapshot,
+	type PriceState,
+} from "./service"
 
-type FetchResponse = { ok: boolean; status: number; json(): Promise<unknown> }
+const reply = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 
 const PROFILE: ProfileInfo = { id: "p1", name: "Test" } as ProfileInfo
 
@@ -43,8 +51,8 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		profile: "profile" in (opts ?? {}) ? opts?.profile : PROFILE,
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
-		fetchImpl: undefined as undefined | (() => Promise<FetchResponse>),
-		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES } as TokenListSnapshot | undefined,
+		fetchImpl: undefined as undefined | (() => Promise<Response>),
+		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED] } as TokenListSnapshot | undefined,
 	}
 
 	const fakeConfig = {
@@ -58,6 +66,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		start: async () => {},
 		onActiveProfileChanged: new EventHandler<ProfileInfo | undefined>(),
 		getActiveProfile: async () => state.profile,
+		peekLiveSerial: () => (state.profile ? 1 : undefined),
 	}
 
 	const fakeTokenList = {
@@ -67,10 +76,10 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		getSnapshot: () => state.list,
 	}
 
-	const fetchFn = vi.fn(async (url: string): Promise<FetchResponse> => {
+	const fetchFn = vi.fn(async (url: string): Promise<Response> => {
 		state.fetchCalls.push(url)
 		if (state.fetchImpl) return state.fetchImpl()
-		return { ok: true, status: 200, json: async () => state.body }
+		return reply(state.body)
 	})
 
 	const service = new PriceService(logger, browserApi, { fetchFn, now: () => state.nowMs })
@@ -111,6 +120,21 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes["usd-coin"]?.usd).toBe(0.9998)
 	})
 
+	test("requests prices with no credentials, referrer or HTTP cache", async () => {
+		const { service, fetchFn } = await harness()
+		const { quotes } = await service.refreshIfStale()
+		expect(fetchFn).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				cache: "no-store",
+				credentials: "omit",
+				referrerPolicy: "no-referrer",
+				signal: expect.any(AbortSignal),
+			}),
+		)
+		expect(quotes.aztec?.usd).toBe(0.0147)
+	})
+
 	test("emits onQuotesUpdated after a successful refresh", async () => {
 		const { service } = await harness()
 		const seen: PriceState[] = []
@@ -120,17 +144,20 @@ describe("PriceService — refresh pipeline", () => {
 		expect(Object.keys(seen[0]).sort()).toEqual(["aztec", "usd-coin"])
 	})
 
-	test("quotes carry the list's mapping, and a new list re-emits them with its own, fetching nothing", async () => {
+	test("quotes carry the list's mapping and flags, and a new list re-emits them with its own, fetching nothing", async () => {
 		const { service, state, fakeTokenList } = await harness()
-		expect((await service.refreshIfStale()).pricedTokens).toEqual(TEST_PRICED_TOKENS)
+		const first = await service.refreshIfStale()
+		expect(first.pricedTokens).toEqual(TEST_PRICED_TOKENS)
+		expect(first.flaggedTokens).toEqual(flaggedKeysOf([TEST_FLAGGED]))
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))
 
-		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC") }
+		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC"), flagged: [] }
 		fakeTokenList.onListChanged.invoke(state.list)
 		await vi.waitFor(() => expect(seen).toHaveLength(1))
 
 		expect(Object.values(seen[0].pricedTokens).sort()).toEqual(["euro-coin", "tether"])
+		expect(seen[0].flaggedTokens).toEqual([])
 		expect(Object.keys(seen[0].quotes).sort()).toEqual(["aztec", "usd-coin"])
 		expect(state.fetchCalls).toHaveLength(1)
 	})
@@ -192,9 +219,27 @@ describe("PriceService — refresh pipeline", () => {
 		expect(quotes["usd-coin"]).toBeUndefined()
 	})
 
+	test("a reply over the byte budget merges nothing and keeps the stored prices; the same quotes in a normal reply merge", async () => {
+		const { service, state } = await harness()
+		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.0147)
+		const newer = { aztec: { usd: 0.02, last_updated_at: 1_000_100 } }
+
+		state.nowMs += PRICE_REFRESH_PERIOD_MINUTES * 60_000
+		state.fetchImpl = async () => reply({ ...newer, padding: "x".repeat(16 * 1024) })
+		const refused = await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(2)
+		expect(refused.quotes.aztec?.usd).toBe(0.0147)
+
+		state.nowMs += 60_000
+		state.fetchImpl = async () => reply(newer)
+		const merged = await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(3)
+		expect(merged.quotes.aztec?.usd).toBe(0.02)
+	})
+
 	test("HTTP failure backs off, then retries after the window", async () => {
 		const { service, state } = await harness()
-		state.fetchImpl = async () => ({ ok: false, status: 429, json: async () => ({}) })
+		state.fetchImpl = async () => reply({}, 429)
 		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(1)
 
@@ -208,6 +253,17 @@ describe("PriceService — refresh pipeline", () => {
 		const { quotes } = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(2)
 		expect(quotes.aztec).toBeDefined()
+	})
+
+	test("a failed scheduled refresh still broadcasts the usable snapshot", async () => {
+		const { service, state } = await harness()
+		const seen: PriceSnapshot[] = []
+		service.onQuotesUpdated.add((s) => seen.push(s))
+		state.fetchImpl = async () => {
+			throw new Error("offline")
+		}
+		await service.onAlarmTick()
+		expect(seen).toEqual([{ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) }])
 	})
 
 	test("a newer stored quote is never overwritten by an older response (monotonic)", async () => {
@@ -252,9 +308,11 @@ describe("PriceService — staleness", () => {
 })
 
 describe("PriceService — kill switch (showFiatValues)", () => {
-	test("disabled: getQuotes is empty and nothing is fetched", async () => {
+	test("disabled: getQuotes is empty and nothing is fetched, while the list's flags still arrive", async () => {
 		const { service, state } = await harness({ enabled: false })
-		expect((await service.getQuotes()).quotes).toEqual({})
+		const read = await service.getQuotes()
+		expect(read.quotes).toEqual({})
+		expect(read.flaggedTokens).toEqual(flaggedKeysOf([TEST_FLAGGED]))
 		expect((await service.refreshIfStale()).quotes).toEqual({})
 		expect(state.fetchCalls).toHaveLength(0)
 	})
@@ -280,7 +338,7 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		let release: (() => void) | undefined
 		state.fetchImpl = () =>
 			new Promise((resolve) => {
-				release = () => resolve({ ok: true, status: 200, json: async () => goodBody(1_000_000) })
+				release = () => resolve(reply(goodBody(1_000_000)))
 			})
 
 		const pending = service.refreshIfStale()
@@ -353,7 +411,7 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 			onActiveProfileChanged: new EventHandler<ProfileInfo | undefined>(),
 			getActiveProfile: async () => undefined,
 		}
-		const service = new PriceService(logger, browserApi, { fetchFn: async () => ({ ok: true, status: 200, json: async () => ({}) }) })
+		const service = new PriceService(logger, browserApi, { fetchFn: async () => reply({}) })
 		const services = new ServiceCollection()
 		// biome-ignore lint/suspicious/noExplicitAny: minimal IService fakes at the collection seam
 		services.add(fakeConfig as any)
@@ -378,6 +436,66 @@ describe("PriceService — unlock-gated alarm lifecycle", () => {
 			expect(await alarmExists()).toBe(true)
 			expect(fetchFn).toHaveBeenCalled()
 		})
+	})
+
+	test("locked: refreshIfStale fetches nothing and answers from the cache, empty or partial", async () => {
+		const { service, state, browserApi } = await harness({ profile: undefined })
+		expect((await service.refreshIfStale()).quotes).toEqual({})
+
+		const partial = { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: state.nowMs, providerUpdatedAt: null } }
+		await browserApi.storage.local.set({ "nulo:core:token-prices": JSON.stringify(partial) })
+		expect((await service.refreshIfStale()).quotes).toEqual(partial)
+		expect(state.fetchCalls).toHaveLength(0)
+	})
+
+	test("a lock that lands before the unlock handler's refresh stops the fetch", async () => {
+		const { state, fakeProfile, fetchFn } = await harness()
+		const sessionRead = vi.fn(async () => state.profile)
+		fakeProfile.getActiveProfile = sessionRead
+		state.profile = undefined
+		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
+		await vi.waitFor(() => expect(sessionRead).toHaveBeenCalled())
+		await new Promise((r) => setTimeout(r, 0))
+		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("a lock queued behind the session read stops the fetch", async () => {
+		const { service, state, fakeProfile, fetchFn } = await harness()
+		fakeProfile.getActiveProfile = async () => {
+			const open = state.profile
+			state.profile = undefined
+			return open
+		}
+		expect((await service.refreshIfStale()).quotes).toEqual({})
+		expect(fetchFn).not.toHaveBeenCalled()
+	})
+
+	test("an unlock while a locked refresh reads the cache gets its own fetch", async () => {
+		const { service, state, fakeProfile, browserApi, fetchFn } = await harness({ profile: undefined })
+		const local = browserApi.storage.local
+		const read = local.get.bind(local)
+		let holdNextRead = false
+		let release: (() => void) | undefined
+		fakeProfile.getActiveProfile = async () => {
+			holdNextRead = !state.profile
+			return state.profile
+		}
+		vi.spyOn(local, "get").mockImplementation(async (keys) => {
+			if (holdNextRead) {
+				holdNextRead = false
+				await new Promise<void>((r) => {
+					release = r
+				})
+			}
+			return read(keys)
+		})
+		const locked = service.refreshIfStale()
+		await vi.waitFor(() => expect(release).toBeDefined())
+		state.profile = PROFILE
+		fakeProfile.onActiveProfileChanged.invoke(PROFILE)
+		await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+		release?.()
+		await locked
 	})
 
 	test("onAlarmTick while locked reconciles (clears) instead of fetching", async () => {
@@ -435,12 +553,24 @@ describe("PriceService — race pins", () => {
 		expect(fetchFn).not.toHaveBeenCalled()
 	})
 
+	test("turning fiat display off while a locked refresh reads its session answers nothing", async () => {
+		const { service, state, fakeConfig, fakeProfile, browserApi } = await harness({ profile: undefined })
+		const partial = { aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: state.nowMs, providerUpdatedAt: null } }
+		await browserApi.storage.local.set({ "nulo:core:token-prices": JSON.stringify(partial) })
+		fakeProfile.getActiveProfile = async () => {
+			state.enabled = false
+			fakeConfig.onUpdate.invoke({ key: "showFiatValues", value: false })
+			return undefined
+		}
+		expect((await service.refreshIfStale()).quotes).toEqual({})
+	})
+
 	test("(KILL-SWITCH PIN) a stale refresh settling after a kill-switch restart does not clear the newer run's in-flight", async () => {
 		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const { service, state, fakeConfig } = await harness()
 		// A queue of fetch gates so refresh A and refresh B stall independently.
-		const gates: ((v: FetchResponse) => void)[] = []
-		state.fetchImpl = () => new Promise<FetchResponse>((r) => gates.push(r))
+		const gates: ((v: Response) => void)[] = []
+		state.fetchImpl = () => new Promise<Response>((r) => gates.push(r))
 
 		// Refresh A starts and parks on its fetch.
 		const aPromise = service.refreshIfStale()
@@ -460,7 +590,7 @@ describe("PriceService — race pins", () => {
 		// Resolve A's now-stale fetch; A bails on the generation check and runs its
 		// finally. It must NOT clear B's inflight/controller (a shared, unconditional
 		// clear would strand B and let a third caller start a duplicate fetch).
-		gates[0]?.({ ok: true, status: 200, json: async () => state.body })
+		gates[0]?.(reply(state.body))
 		await aPromise
 		await flush()
 
@@ -501,7 +631,7 @@ describe("PriceService — race pins", () => {
 		const flush = () => new Promise((r) => setTimeout(r, 0))
 		const { service, state, fakeConfig } = await harness()
 		// Refresh A stalls in-flight (deferred fetch).
-		state.fetchImpl = () => new Promise<FetchResponse>(() => {})
+		state.fetchImpl = () => new Promise<Response>(() => {})
 		void service.refreshIfStale()
 		await flush()
 		expect(state.fetchCalls).toHaveLength(1)

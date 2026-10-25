@@ -17,7 +17,9 @@ import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
  * verification is scheduled, and the discovery is rejected — so an
  * approved-but-unreachable, or unverified-yet-live, session is not handed to a
  * dApp that has stopped listening. An attempt abandoned during the writes (its
- * connect window closed) is rolled back the same way.
+ * window slot given back) is rolled back the same way. One the SDK no longer
+ * waits for loses its row too, unless another discovery of the app waits on
+ * this window to connect on it.
  *
  * @returns `true` iff the discovery was approved; `false` on rollback or when
  *   the SDK reports the approval did not land (the request was already gone).
@@ -30,6 +32,8 @@ export async function approveOrRollbackDiscoverySession(args: {
 	approverProfileId: string
 	/** `false` once the attempt was abandoned; rechecked with no await before the marker is set. */
 	attemptOpen: () => boolean
+	/** `true` while another discovery of the same app waits on this window. */
+	rowAwaited: () => boolean
 	approveDiscovery: (requestId: string) => boolean
 	rejectDiscovery: (requestId: string) => void
 	deleteSession: (sessionId: string) => Promise<unknown>
@@ -40,13 +44,7 @@ export async function approveOrRollbackDiscoverySession(args: {
 
 	const refusal = isDiscoveryExpired(discovery) ? "expired" : args.attemptOpen() ? undefined : "abandoned"
 	if (refusal) {
-		try {
-			await deleteSession(sessionId)
-		} catch {
-			// A concurrent disconnect may have already removed the row — the
-			// rejection below still stands, so swallow and log.
-			logger.log("wallet-sdk", LogLevel.Warn, `Failed to roll back ${refusal} discovery session ${describeExternalId(sessionId)}`)
-		}
+		await rollBackDiscoverySession(deleteSession, sessionId, refusal, logger)
 		rejectDiscovery(discovery.requestId)
 		logger.log(
 			"wallet-sdk",
@@ -65,6 +63,7 @@ export async function approveOrRollbackDiscoverySession(args: {
 	pendingVerification.set(discovery.requestId, { at: Date.now(), profileId: approverProfileId, tabId: discovery.tabId })
 	if (!approveDiscovery(discovery.requestId)) {
 		pendingVerification.delete(discovery.requestId)
+		if (!args.rowAwaited()) await rollBackDiscoverySession(deleteSession, sessionId, "unlanded", logger)
 		logger.log(
 			"wallet-sdk",
 			LogLevel.Warn,
@@ -73,4 +72,19 @@ export async function approveOrRollbackDiscoverySession(args: {
 		return false
 	}
 	return true
+}
+
+/** Best effort: a concurrent disconnect may have removed the row already, and the refusal around
+ *  this call stands either way. */
+export async function rollBackDiscoverySession(
+	deleteSession: (sessionId: string) => Promise<unknown>,
+	sessionId: string,
+	why: string,
+	logger: ILogger,
+): Promise<void> {
+	try {
+		await deleteSession(sessionId)
+	} catch {
+		logger.log("wallet-sdk", LogLevel.Warn, `Failed to roll back ${why} discovery session ${describeExternalId(sessionId)}`)
+	}
 }

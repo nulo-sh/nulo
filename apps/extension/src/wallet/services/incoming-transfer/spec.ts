@@ -5,20 +5,28 @@
  * activity feed, which previously only showed outgoing tx records.
  *
  * Scope guarantees:
- *   - Records are keyed by `siloedNullifier` — cryptographically unique per
- *     note, so duplicate inserts are idempotent.
- *   - Dedupe runs against three sources: prior records (siloedNullifier
- *     equality), the user's own outgoing tx hashes (TransactionService),
+ *   - Note records are keyed by the note's unique note hash — one per note,
+ *     so duplicate inserts are idempotent.
+ *   - Dedupe runs against three sources: prior records (key equality), the
+ *     user's own outgoing tx hashes (TransactionService),
  *     and in-flight journal records with a `progress.txHash` (OperationJournal).
  *   - Pollution defense via the `IncomingTrustState` state machine:
  *     `unknown` → first note arrival → `pending` (record hidden, popup
  *     prompts user) → `trusted` (record visible + future receives auto-
- *     display) OR `blocked` (records stay hidden forever).
+ *     display) OR `blocked` (neither arm scans the contract again and its
+ *     hidden records are deleted; only a token delete or a wipe leaves it).
  *   - Scope is locked to fungible-token receives for tokens the user has
  *     explicitly added. NFTs + unknown-contract notes are out.
  */
 
 export const INCOMING_TRANSFER_SERVICE_NAME = "incoming-transfer"
+
+/** EntityStorage roots of the incoming-transfer tables. Frozen: renaming one detaches its rows. */
+export const INCOMING_RECORDS_STORAGE_ROOT = "nulo:core:incoming-transfers"
+export const INCOMING_TRUST_STORAGE_ROOT = "nulo:core:incoming-trust"
+export const INCOMING_CURSORS_STORAGE_ROOT = "nulo:core:incoming-public-cursors"
+export const INCOMING_OUTBOX_STORAGE_ROOT = "nulo:core:incoming-balance-outbox"
+export const INCOMING_ARRIVALS_STORAGE_ROOT = "nulo:core:incoming-arrivals"
 
 /** Trust-state per `(profileId, networkId, contract)`. Replaces the v1
  *  split-state shape (Token boolean + blocked Set + hidden flag) that left
@@ -72,7 +80,7 @@ type IncomingTransferRecordCommon = {
 	 * arbitrary; the block+txIndex prefix keeps cross-tx ordering correct.
 	 */
 	indexInTx: number
-	/** When `true`, suppressed from rendering (contract `pending` or `blocked`). */
+	/** When `true`, suppressed from rendering (contract `pending`). */
 	hidden: boolean
 	/** Local Date.now() at first discovery. Fallback ordering tiebreak. */
 	discoveredAt: number
@@ -87,8 +95,6 @@ type IncomingTransferRecordCommon = {
 /** A privately-delivered note receipt (the pre-existing arm). */
 export type IncomingNoteRecord = IncomingTransferRecordCommon & {
 	kind: "note"
-	/** Cryptographically-unique nullifier (`Fr` string) — the note's identity. */
-	siloedNullifier: string
 	/** Note's commitment hash (additional identity field). */
 	noteHash: string
 	/** Note's owner (the user's account at note-encoded time). */
@@ -113,9 +119,10 @@ export type IncomingPublicEventRecord = IncomingTransferRecordCommon & {
 /** Persisted shape per discovered incoming receipt (discriminated on `kind`). */
 export type IncomingTransferRecord = IncomingNoteRecord | IncomingPublicEventRecord
 
-/** Build the profile+network-scoped PK for a note record. */
-export function noteRecordId(profileId: string, networkId: string, siloedNullifier: string): string {
-	return `note:${profileId}|${networkId}|${siloedNullifier}`
+/** Build the profile+network-scoped PK for a note record. A note row never holds the note's
+ *  nullifier, in its key or its fields: that stays in the PXE's encrypted store. */
+export function noteRecordId(profileId: string, networkId: string, uniqueNoteHash: string): string {
+	return `note:${profileId}|${networkId}|${uniqueNoteHash}`
 }
 
 /** Build the profile+network-scoped PK for a public-event record. */
@@ -145,7 +152,6 @@ export const IncomingTransferRecordSchema: z.ZodType<IncomingTransferRecord> = z
 	z.object({
 		kind: z.literal("note"),
 		...incomingTransferRecordCommonShape,
-		siloedNullifier: z.string(),
 		noteHash: z.string(),
 		owner: z.string(),
 		settled: z.literal(true).optional(),
@@ -328,7 +334,7 @@ export type Events = {
 export type Methods = {
 	/**
 	 * Returns the visible incoming-transfer records for an account on a
-	 * network. Records flagged `hidden: true` (pending / blocked) are
+	 * network. Records flagged `hidden: true` (pending) are
 	 * filtered out by default.
 	 */
 	getIncomingTransfers(profileId: string, networkId: string, accountAddress: string, tokenId?: number): IncomingTransferRecord[]
@@ -362,17 +368,14 @@ export type Methods = {
 	 *  contract to visible in the same storage write, and emits `onIncomingTransferAdded` for each when
 	 *  visibility is on and the lock ticket is still current. Returns `false`, writing nothing, when the
 	 *  token's registration cannot be verified (deleted between the prompt and the click, or the
-	 *  lookup failed), the trust row is missing or `unknown` (a wipe or token delete reset it), a row
-	 *  delete is still running, or a lock, a profile switch, the profile's deletion or a lock handoff
-	 *  overtook the write — caller should suppress the success toast in that case. */
+	 *  lookup failed), the trust row is missing, `unknown` (a wipe or token delete reset it) or
+	 *  `blocked`, a row delete is still running, or a lock, a profile switch, the profile's deletion
+	 *  or a lock handoff overtook the write — caller should suppress the success toast in that case. */
 	setTrustAllow(profileId: string, networkId: string, contract: string): boolean
-	/** User rejected the first-receive prompt: `pending → blocked`. Same
-	 *  `false`-on-stale-token contract as `setTrustAllow`. */
+	/** User rejected the first-receive prompt: `pending → blocked`. Neither arm scans the contract
+	 *  again and its hidden records are deleted, in the same locked section; its outbox rows stay.
+	 *  Same `false`-on-stale-token contract as `setTrustAllow`. */
 	setTrustReject(profileId: string, networkId: string, contract: string): boolean
-	/** A full-backup import, before the profile opens: trusts each of its tokens that has no trust
-	 *  row, since every token in a backup was added by the person and adding a token trusts it. The
-	 *  backup carries no trust rows, so without this each restored token's first note asks again. */
-	trustRestoredTokens(profileId: string): void
 	/** Clear all records + trust state for a profile. Called from the
 	 *  profile-delete fanout. */
 	clearProfile(profileId: string): void

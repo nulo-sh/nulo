@@ -8,7 +8,7 @@ import type { TypeRole } from "@nulo/design/tokens"
  */
 
 /** The guard's rules, in the order a declaration, prop, key or string is judged. */
-export type RuleId = "face" | "tracking" | "case" | "size" | "text-prop" | "tie" | "faceless" | "site-size" | "identifier"
+export type RuleId = "face" | "tracking" | "case" | "size" | "text-prop" | "tie" | "faceless" | "site-size" | "identifier" | "role"
 
 /** A pick that cannot be a role, kept for good. `selector` narrows a CSS pick to one rule. */
 export type CarveOut = { file: string; rule: RuleId; text: string; selector?: string; why: string }
@@ -28,28 +28,21 @@ export type Override = {
 	why: string
 }
 
-const PRESTO = "apps/extension/src/onboarding/pages/presto.vue"
 const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
 const BUTTON = "packages/design/src/ui/Button.vue"
+const TX_CARD = "apps/extension/src/popup/components/modules/activity/TransactionCard.vue"
+const TWO_CHIPS = ".chips > .chip, .app_slot > .app_chip"
+const TWO_CHIP_SCOPE =
+	'[data-testid="activity-direction-chip"]:has(+ span > [data-testid="activity-app-chip"]), [data-testid="activity-direction-chip"] + span > [data-testid="activity-app-chip"]'
+const PUBLISH_STRIP = "apps/extension/src/components/composite/send/PublishStrip.vue"
+const PUBLISH_FACTS = '[data-testid="send-publish-strip"] [data-cell]'
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
 const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
 const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"
 
 export const CARVE_OUTS: CarveOut[] = [
-	{
-		file: PRESTO,
-		rule: "face",
-		text: "--pb-font-body: var(--font-body)",
-		why: "themes the third-party <presto-banner> shadow root, which no class reaches",
-	},
-	{
-		file: PRESTO,
-		rule: "face",
-		text: "--pb-font-display: var(--font-headline)",
-		why: "themes the third-party <presto-banner> shadow root, which no class reaches",
-	},
 	{ file: APP, rule: "face", text: "font-family: sans-serif", why: "the anti-scam banner's title, styled DevTools console output" },
 	{ file: APP, rule: "face", text: "font-family: sans-serif", why: "the anti-scam banner's text, styled DevTools console output" },
 	{
@@ -91,9 +84,9 @@ export const CARVE_OUTS: CarveOut[] = [
 	{
 		file: "apps/extension/src/components/composite/send/AmountCard.vue",
 		rule: "faceless",
-		text: "font-size: calc(11px * var(--hero-scale, 1))",
+		text: "font-size: calc(13px * var(--hero-scale, 1))",
 		selector: ".derived_type",
-		why: "the derived token line at its meta line's 11px, which the fit shrinks to keep it on one line",
+		why: "the derived token line at its meta line's 13px, which the fit shrinks to keep it on one line",
 	},
 	{
 		file: BALANCE,
@@ -115,12 +108,6 @@ export const CARVE_OUTS: CarveOut[] = [
 		text: "font-size: 48px",
 		selector: ".hero_title",
 		why: "title-hero's size on Activity and the Settings hub",
-	},
-	{
-		file: "packages/design/src/core/MaterialIcon.vue",
-		rule: "faceless",
-		text: "fontSize: `${props.size}px`",
-		why: "sizes an icon glyph, not text",
 	},
 	{
 		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
@@ -203,5 +190,59 @@ export const OVERRIDES: Override[] = [
 		value: "700",
 		role: "meta",
 		why: "a warned network keeps its bold over meta's 400",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "font-size",
+		value: "10px",
+		role: "label-section",
+		why: "a publish fact keeps its 10px beside the 10px names",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "font-weight",
+		value: "600",
+		role: "label-section",
+		why: "a publish fact keeps its semibold, a step under the bold names",
+	},
+	{
+		file: PUBLISH_STRIP,
+		selector: ".strip .cell",
+		scope: PUBLISH_FACTS,
+		property: "letter-spacing",
+		value: "0.08em",
+		role: "label-section",
+		why: "a publish fact keeps the names' tracking",
+	},
+	{
+		file: TX_CARD,
+		selector: TWO_CHIPS,
+		scope: TWO_CHIP_SCOPE,
+		property: "font-size",
+		value: "10px",
+		role: "label-section",
+		why: "a dApp transfer's two chips fit its row only at 10px",
+	},
+	{
+		file: TX_CARD,
+		selector: TWO_CHIPS,
+		scope: TWO_CHIP_SCOPE,
+		property: "font-weight",
+		value: "600",
+		role: "label-section",
+		why: "a dApp transfer's two chips pair semibold with their 10px",
+	},
+	{
+		file: TX_CARD,
+		selector: TWO_CHIPS,
+		scope: TWO_CHIP_SCOPE,
+		property: "letter-spacing",
+		value: "0.08em",
+		role: "label-section",
+		why: "a dApp transfer's two chips pair 0.08em with their 10px",
 	},
 ]

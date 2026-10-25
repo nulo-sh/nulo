@@ -7,7 +7,6 @@ import DappStatusStrip from "@/components/composite/DappStatusStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
-import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Utils */
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
@@ -15,7 +14,7 @@ import { resolveDappChain } from "../capabilities/chain-mismatch"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { type DiscoveryPayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type DiscoveryPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -23,12 +22,9 @@ const appStore = useAppStore()
 
 /** Composables */
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
-
-const EXPIRED_CLOSE_MS = 30_000
 
 const profile = ref<ProfileInfo>()
 const isLoading = ref(false)
@@ -37,11 +33,6 @@ const isLoading = ref(false)
 // so no one approves a session whose hostname, logo and name they have not seen. Deny needs only the
 // request id: an early reject is harmless.
 const isReady = ref(false)
-const isApproved = ref(false)
-// The worker sends this window to its own page marked expired when the connection never
-// established: the request is gone, so there is nothing left to load or answer.
-const isExpired = computed(() => router.currentRoute.value.query.expired === "1")
-let expiredClose: ReturnType<typeof setTimeout> | undefined
 
 const interactionService = new DappInteractionServiceClient()
 
@@ -58,14 +49,12 @@ const {
 	dappOf: (p) => p.params.dappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 // The app's chain, not the wallet's: the strip above names the wallet's network, and an approval
 // connects the app on the chain it asked for, whatever the wallet shows.
 const chainName = computed(() =>
 	payload.value ? resolveDappChain(payload.value.params.chainId, appStore.networks, appStore.network?.chainId).name : "this network",
 )
-const actionLabel = computed(() => (isApproved.value ? `Connecting on ${chainName.value}` : `wants to connect on ${chainName.value}`))
+const actionLabel = computed(() => `wants to connect on ${chainName.value}`)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -73,7 +62,7 @@ const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
-	completeInteraction,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -91,7 +80,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -116,11 +105,7 @@ const approve = async () => {
 	try {
 		isLoading.value = true
 		await interactionService.resolveInteraction(requestId.value, { approved: true })
-		isApproved.value = true
-		// The window waits here for this connection's emoji check, still loading. Its id comes only
-		// from the service's handle, and nothing this page does on unmount touches the reservation
-		// that now holds it.
-		completeInteraction()
+		closeWindow(true)
 	} catch (error) {
 		isLoading.value = false
 		if (error instanceof JobCancelledError) {
@@ -134,45 +119,17 @@ const approve = async () => {
 	}
 }
 
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value || !requestId.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const profileService = new ProfileServiceClient()
 profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
-// The window holds a verification slot until it closes, so leaving the expired page (a lock routes
-// the window to the auth screen) ends the window, not just its timer.
-const leaveExpired = () => {
-	if (expiredClose === undefined) return
-	clearTimeout(expiredClose)
-	expiredClose = undefined
-	closeWindow()
-}
+onMounted(startWindow)
 
-// Immediate, not on mount alone: the flag usually arrives by a hash change on a mounted page.
-watch(
-	isExpired,
-	(expired) => {
-		if (!expired) return leaveExpired()
-		clearTimeout(expiredClose)
-		expiredClose = setTimeout(() => closeWindow(), EXPIRED_CLOSE_MS)
-	},
-	{ immediate: true },
-)
-
-// A page loaded already expired has no request left to load, and starting it would send a locked
-// wallet's window to the auth screen instead of the overlay.
-onMounted(() => {
-	if (!isExpired.value) void startWindow()
-})
-
-onUnmounted(() => {
-	disposeWindow()
-	leaveExpired()
-})
+onUnmounted(disposeWindow)
 </script>
 
 <template>
@@ -182,13 +139,10 @@ onUnmounted(() => {
 			:networkName="appStore.network?.name"
 			:status="stripStatus"
 		/>
-		<ConnectStepBar :step="1" />
 
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				:actionLabel="actionLabel"
 				hostnameTestId="discover-hostname"
 				nameTestId="discover-dapp-name"
@@ -212,13 +166,12 @@ onUnmounted(() => {
 			confirm-label="Allow"
 			:confirm-loading="isLoading"
 			:confirm-disabled="processingError?.type === 'error' || !isReady || isLoading"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 
-		<DappCancelledOverlay v-if="isInteractionCancelled && !isExpired" @dismiss="closeWindow()" />
+		<DappCancelledOverlay v-if="isInteractionCancelled" @dismiss="closeWindow()" />
 	</Flex>
-	<DappCancelledOverlay v-if="isExpired" message="Connection request expired" @dismiss="closeWindow()" />
 </template>
 
 <style module>

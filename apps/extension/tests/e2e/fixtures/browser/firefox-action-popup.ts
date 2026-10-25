@@ -1,6 +1,6 @@
-import type { Browser } from "puppeteer"
+import type { Browser, Page } from "puppeteer"
 import { actionPopupContext, inPageRealm } from "./firefox"
-import { evaluateViaFrameScript } from "./firefox-frame-script"
+import { clickWithPointer, evaluateViaFrameScript } from "./firefox-frame-script"
 
 /**
  * The toolbar popup is a *panel*: not a tab, not a window, and no WebDriver or BiDi command reaches
@@ -8,6 +8,18 @@ import { evaluateViaFrameScript } from "./firefox-frame-script"
  * a layout that only breaks inside a panel went unseen. These reach it the way Firefox's own tests
  * do: from the browser's privileged scope, and into the panel with a frame script.
  */
+
+/** Resolves once a panel is open in any window, read from another extension page, which moves no
+ *  focus as reading inside the panel would. Firefox loads the popup's document before the panel
+ *  opens, and only the open panel gives it focus. */
+export const waitForOpenPanel = (control: Page) =>
+	control.waitForFunction(
+		() => {
+			const views = chrome.extension.getViews({ type: "popup" })
+			return views.length === 1 && views[0].document.hasFocus()
+		},
+		{ timeout: 10_000, polling: 100 },
+	)
 
 /**
  * Privileged source, run with `addonId`, that returns this add-on's panel browser while its panel is
@@ -61,6 +73,38 @@ export async function evaluateInActionPopup<T>(browser: Browser, body: string): 
 	}
 }
 
+/** Clicks `testid` in the open panel with a real pointer (`clickWithPointer`). */
+export async function clickInActionPopup(browser: Browser, testid: string): Promise<void> {
+	const { session, addonId } = actionPopupContext(browser)
+	try {
+		await clickWithPointer(session, { addonId, locate: LOCATE_LIVE_PANEL, missing: "the action popup is not open" }, testid)
+	} catch (err) {
+		throw new Error(`clickInActionPopup: ${err instanceof Error ? err.message : String(err)}`)
+	}
+}
+
+/** Whether the panel is open with the add-on's page in it. */
+export async function actionPopupShows(browser: Browser): Promise<boolean> {
+	const { session, addonId } = actionPopupContext(browser)
+	return session.chromeScript<boolean>(`const [addonId, done] = arguments; done(!!(function () { ${LOCATE_LIVE_PANEL} })());`, [addonId])
+}
+
+/**
+ * Does what a click on the toolbar button does, from the button's own handler on: opens the popup
+ * that is set, or, with none, fires `action.onClicked` as a user's input. In the window
+ * `chromeScript` runs in, which the switch has just focused.
+ */
+export async function triggerToolbarAction(browser: Browser): Promise<void> {
+	const { session, addonId } = actionPopupContext(browser)
+	await session.chromeScript<null>(
+		`const [addonId, done] = arguments;
+		const { extension } = WebExtensionPolicy.getByID(addonId);
+		extension.apiManager.global.browserActionFor(extension).triggerAction(window);
+		done(null);`,
+		[addonId],
+	)
+}
+
 /** Closes the panel, as a click outside it would. */
 export async function closeActionPopup(browser: Browser): Promise<void> {
 	const { session, addonId } = actionPopupContext(browser)
@@ -79,7 +123,8 @@ export async function closeActionPopup(browser: Browser): Promise<void> {
 
 /** What a panel armed by `armPanelDeath` saw. */
 export interface PanelDeathRecord {
-	/** `get` or `create`, for each WebAuthn call the panel's page made, in order. */
+	/** In order, `get` or `create` for each WebAuthn call the panel's page made, and `file` for each
+	 *  file picker it opened. */
 	calls: string[]
 	/** When a window opened after arming became the active one, which is when the panel was hidden. */
 	windowActiveAt?: number
@@ -97,15 +142,16 @@ export interface PanelDeath {
 
 /** Where the armed state is kept between privileged scripts: the browser window they all run in. */
 const SLOT = "__nuloE2ePanelDeath"
-const CALL_CHANNEL = "nulo-e2e:panel-webauthn"
-const CALL_EVENT = "nulo-e2e:panel-webauthn"
+const CALL_CHANNEL = "nulo-e2e:panel-focus-taker"
+const CALL_EVENT = "nulo-e2e:panel-focus-taker"
 
 /**
- * In the page's own realm, where the wallet's code sees it: each WebAuthn call reports itself through
- * a DOM event that the frame script, listening for untrusted events, turns into a synchronous
- * message, so the record reaches the parent process before the call goes any further.
+ * In the page's own realm, where the wallet's code sees it: each WebAuthn call and each file picker
+ * opened reports itself through a DOM event that the frame script, listening for untrusted events,
+ * turns into a synchronous message, so the record reaches the parent process before the call goes
+ * any further.
  */
-const RECORD_WEBAUTHN = `
+const RECORD_FOCUS_TAKERS = `
 	content.addEventListener(${JSON.stringify(CALL_EVENT)}, (event) => sendSyncMessage(${JSON.stringify(CALL_CHANNEL)}, { kind: String(event.detail) }), true, true);
 	${inPageRealm(`
 		const credentials = navigator.credentials;
@@ -116,13 +162,22 @@ const RECORD_WEBAUTHN = `
 				return call.call(credentials, options);
 			};
 		}
+		const input = HTMLInputElement.prototype;
+		for (const method of ["click", "showPicker"]) {
+			const call = input[method];
+			input[method] = function () {
+				if (this.type === "file") window.dispatchEvent(new CustomEvent(${JSON.stringify(CALL_EVENT)}, { detail: "file" }));
+				return call.call(this);
+			};
+		}
 		return "recording";`)}`
 
 /**
  * Makes the open panel die as it does on a Mac, where it closes as soon as anything else takes focus.
- * A WebAuthn call in the panel is recorded and then closes it, as the OS prompt would. A window that
- * opens after arming hides the panel once it is the active window, as the focus it takes would, and
- * is kept focused until it closes: nothing in the panel may survive into the step it hands over.
+ * A WebAuthn call or a file picker in the panel is recorded and then closes it, as the OS prompt or
+ * the picker would. A window that opens after arming hides the panel once it is the active window,
+ * as the focus it takes would, and is kept focused until it closes: nothing in the panel may survive
+ * into the step it hands over.
  *
  * Arm it after the test has opened its own windows, since it reacts to any window, and move no focus
  * until the outcome is read: read it passively, through BiDi or from a page opened beforehand.
@@ -188,7 +243,7 @@ export async function armPanelDeath(browser: Browser): Promise<PanelDeath> {
 		await session.chromeScript<null>(`const [slot, done] = arguments; window[slot]?.stop(); delete window[slot]; done(null);`, [SLOT])
 	}
 	try {
-		const recording = await evaluateInActionPopup<string>(browser, RECORD_WEBAUTHN)
+		const recording = await evaluateInActionPopup<string>(browser, RECORD_FOCUS_TAKERS)
 		if (recording !== "recording") throw new Error(`the recorder answered ${JSON.stringify(recording)}`)
 	} catch (err) {
 		await disarm()

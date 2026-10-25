@@ -3,12 +3,11 @@
  * Lock (jsdom has none). The window-level cases — when it fires, that it never fails an approval —
  * live in `scope-follow.test.ts`.
  */
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { Account } from "@/wallet/services/account/client"
 import type { Network } from "@/wallet/services/network/client"
-import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
-import { storageLocalSet } from "@/utils/storage"
-import { createScopeFollow, SCOPE_FOLLOW_LOCK, type ScopeFollowDeps } from "./scope-follow"
+import { createScopeFollow, SCOPE_FOLLOW_LOCK, type ScopeFollowDeps, selectionWriter } from "./scope-follow"
 import type { ScopeView } from "./scope-mismatch"
 
 const LOCAL = { id: "net-local", name: "Local Network", chainId: 1 } as unknown as Network
@@ -45,16 +44,6 @@ const installFakeLocks = (log: string[]) => {
 	})
 	Object.defineProperty(navigator, "locks", { value: { request }, configurable: true })
 	return request
-}
-
-const deferred = <T>() => {
-	let resolve!: (value: T) => void
-	let reject!: (error: unknown) => void
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res
-		reject = rej
-	})
-	return { promise, resolve, reject }
 }
 
 const TESTNET = { id: "net-testnet", name: "Testnet", chainId: 2 } as unknown as Network
@@ -248,50 +237,25 @@ describe("createScopeFollow — the lifecycle fence", () => {
 		expect(deps.writeActiveAccount).not.toHaveBeenCalled()
 	})
 
-	test("a change landing while the write is suspended inside the storage facade writes nothing", async () => {
-		const storage = installChromeStorage({})
-		deps.writeActiveAccount = vi.fn((address: string, unless: () => boolean) =>
-			storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
-		)
-		activeNetworkId = LOCAL.id
-		const follow = createScopeFollow(deps)
-		const gate = storage.deferNextGet() // the facade's migration barrier, suspended
-		const pending = follow.follow(view({ networkMismatch: false, accountMismatch: true }), false, follow.capture())
-		await vi.waitFor(() => expect(storage.get).toHaveBeenCalled())
-		follow.invalidate()
-		gate.release()
-		await pending
-		expect(storage.set).not.toHaveBeenCalled()
-	})
-
-	test("a wallet send that begins while the write is suspended inside the facade writes nothing", async () => {
-		const storage = installChromeStorage({})
-		let sending = false
-		deps.hasInFlightSend = () => sending
-		deps.writeActiveAccount = vi.fn((address: string, unless: () => boolean) =>
-			storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
-		)
-		activeNetworkId = LOCAL.id
-		const follow = createScopeFollow(deps)
-		const gate = storage.deferNextGet()
-		const pending = follow.follow(view({ networkMismatch: false, accountMismatch: true }), false, follow.capture())
-		await vi.waitFor(() => expect(storage.get).toHaveBeenCalled())
-		sending = true // a send races into the guard while the barrier holds the write
-		gate.release()
-		await pending
-		expect(storage.set).not.toHaveBeenCalled()
-	})
-
-	test("the same write lands when nothing changed during the barrier", async () => {
-		const storage = installChromeStorage({})
-		deps.writeActiveAccount = vi.fn((address: string, unless: () => boolean) =>
-			storageLocalSet({ "nulo:ui:activeAccount": address }, { unless }),
-		)
+	test("the account write lands through the worker for the window's profile when nothing changed", async () => {
+		const save = vi.fn(async () => true)
+		deps.writeActiveAccount = vi.fn(selectionWriter(() => "p1", save))
 		activeNetworkId = LOCAL.id
 		const follow = createScopeFollow(deps)
 		await follow.follow(view({ networkMismatch: false, accountMismatch: true }), false, follow.capture())
 		expect(deps.setActiveNetwork).not.toHaveBeenCalled()
-		expect(storage.data["nulo:ui:activeAccount"]).toBe("0xmain")
+		expect(save.mock.calls).toEqual([["p1", "0xmain"]])
+	})
+})
+
+describe("selectionWriter", () => {
+	test("makes no call once `unless` holds at the call, or with no profile; one call otherwise", async () => {
+		const save = vi.fn(async () => true)
+		await selectionWriter(() => "p1", save)("0xmain", () => true)
+		await selectionWriter(() => undefined, save)("0xmain", () => false)
+		expect(save).not.toHaveBeenCalled()
+		await selectionWriter(() => "p1", save)("0xmain", () => false)
+		expect(save.mock.calls).toEqual([["p1", "0xmain"]])
 	})
 })
 

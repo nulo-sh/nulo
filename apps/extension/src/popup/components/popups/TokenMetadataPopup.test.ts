@@ -14,6 +14,7 @@ const TOKEN = vi.hoisted(() => ({
 	hasPublicTransfers: true,
 	hasPublicToPrivateTransfers: false,
 }))
+const SHOWN = vi.hoisted(() => ({ over: {} as Record<string, unknown> }))
 vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "tok-1" } }) }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => ({ activeTokenIdx: null }) }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ len: 1, popups: { token_metadata: { order: 1 } } }) }))
@@ -21,7 +22,7 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ network: { id: "net
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: class {
-		getToken = vi.fn().mockResolvedValue(TOKEN)
+		getToken = vi.fn(async () => ({ ...TOKEN, ...SHOWN.over }))
 		disconnect = vi.fn()
 		onTokenAdded = { add: vi.fn(), remove: vi.fn() }
 		onTokenDeleted = { add: vi.fn(), remove: vi.fn() }
@@ -40,6 +41,28 @@ const stubs = {
 }
 
 describe("popups/TokenMetadataPopup", () => {
+	test("a blank name and symbol read as the empty-value dash", async () => {
+		const values = async (over: Record<string, unknown>) => {
+			SHOWN.over = over
+			const w = mount(TokenMetadataPopup, { props: { show: false }, global: { stubs } })
+			await w.setProps({ show: true })
+			await flushPromises()
+			const value = (label: string) =>
+				w
+					.findAll('span[variant="label-section"]')
+					.find((l) => l.text() === label)
+					?.element.parentElement?.querySelector('span[variant="value"]')
+					?.textContent?.trim()
+			return [value("Name"), value("Symbol")]
+		}
+		try {
+			expect(await values({ name: "", symbol: "   " })).toEqual(["—", "—"])
+			expect(await values({})).toEqual(["Token", "TOK"])
+		} finally {
+			SHOWN.over = {}
+		}
+	})
+
 	test("renders the six capability rows in order with their labels, property names and icons", async () => {
 		const renderErrors = vi.fn()
 		const w = mount(TokenMetadataPopup, { props: { show: false }, global: { stubs, config: { errorHandler: renderErrors } } })
@@ -66,8 +89,8 @@ describe("popups/TokenMetadataPopup", () => {
 		const icons = w
 			.findAll("[data-testid='cap-icon']")
 			.map((i) => [i.attributes("data-name"), i.attributes("data-color")])
-			.filter(([name]) => name === "check-circle" || name === "close-circle")
-		expect(icons).toEqual(keys.map((k) => (TOKEN[k as keyof typeof TOKEN] ? ["check-circle", "green"] : ["close-circle", "red"])))
+			.filter(([name]) => name === "square-check" || name === "square-cross")
+		expect(icons).toEqual(keys.map((k) => (TOKEN[k as keyof typeof TOKEN] ? ["square-check", "green"] : ["square-cross", "red"])))
 		expect(text).toContain("Balances")
 		expect(text).toContain("Transfers")
 		expect(text).toContain("Private to public")

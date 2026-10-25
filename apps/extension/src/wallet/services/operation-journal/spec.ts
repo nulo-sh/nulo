@@ -19,11 +19,16 @@
  */
 
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
+import { isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
 import { isFeeAmount } from "@nulo/wallet-core/jobs"
+import { boundedString } from "@/utils/bounded-string"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
+
+/** EntityStorage root for operation records. Frozen: renaming detaches every journal row. */
+export const OPERATION_JOURNAL_STORAGE_ROOT = "nulo:journal"
 
 /** Coarse operation category.
  *
@@ -58,32 +63,8 @@ export type OperationOrigin = "popup" | "dapp" | "seed"
  */
 export type OperationContext = { origin: "popup" } | { origin: "dapp"; dappOrigin: string } | { origin: "seed" }
 
-export interface OperationRecord {
-	/** Random 16-hex id assigned at `createOperation`. */
-	id: string
-	kind: OperationKind
-	/** Where the operation came from — tagged at create-time. */
-	origin: OperationOrigin
-	/** Profile id — tagged at create-time for per-profile fairness. */
-	profileId: string
-	/**
-	 * Session id for `dapp_execute` records originating from a wallet-sdk
-	 * message. Populated by `tryCreateQueuedJournal` from
-	 * `ActiveSession.sessionId`. Used by the per-session queued-record
-	 * cap. Undefined for `popup`-origin records (UI-initiated transfers,
-	 * token imports).
-	 */
-	sessionId?: string
-	/** Extensible per-stage progress payload (from `@nulo/wallet-core/jobs`). */
-	progress: JobProgress
-	/** Present iff `progress.stage === "failed"`; raw category preserved. */
-	error: JobError | null
-	/** Set when the record enters a terminal stage; `null` otherwise. */
-	terminalAt: number | null
-	/** Attempt counter for the retry policy; starts at 0. */
-	attempts: number
-	createdAt: number
-	updatedAt: number
+/** The optional fields a record carries verbatim from its creation input. */
+export interface JournalMetadata {
 	/** Scope metadata — preserved for activity UI + chain purge consumers. */
 	accountAddress?: string
 	networkId?: string
@@ -122,6 +103,66 @@ export interface OperationRecord {
 	 * Private → Private chip).
 	 */
 	transferType?: TransferType
+	/** A `dapp_execute` record's primary call, as the settled history will read it. */
+	call?: JournalCall
+}
+
+/**
+ * What the settled rule reads of a call: its contract and argument count from the dApp's request,
+ * and the class only the wallet's own build records. One schema at every writer and the reader, so
+ * a value a writer stores never makes the row unreadable.
+ */
+export const JournalCallSchema = z.object({
+	contract: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus"),
+	argCount: z.number().int().nonnegative().max(65_535),
+	classId: z.string().refine(isFieldAddress).describe("0x-hex below the field modulus").optional(),
+})
+
+export type JournalCall = z.infer<typeof JournalCallSchema>
+
+/** The stored call for a contract and argument list, or none when the reader would refuse it, so a
+ *  dApp's hostile value never blocks the write that carries it. */
+export function journalCallOf(contract: unknown, args: unknown, classId?: unknown): JournalCall | undefined {
+	const argCount = Array.isArray(args) ? args.length : undefined
+	const parsed = JournalCallSchema.safeParse({ contract, argCount, ...(classId !== undefined && { classId }) })
+	return parsed.success ? parsed.data : undefined
+}
+
+/** A call as a journal creator names it: the method that titles the record and the call it reads by. */
+export type JournalCallCarrier = { method?: string; call?: JournalCall }
+
+/** What a failure renames its record to. Its call replaces the record's, absent or not, so the title
+ *  and the call never describe two calls. */
+export const JournalRetitleSchema = z.object({ title: z.string(), call: JournalCallSchema.optional() })
+
+export type JournalRetitle = z.infer<typeof JournalRetitleSchema>
+
+export interface OperationRecord extends JournalMetadata {
+	/** Random 16-hex id assigned at `createOperation`. */
+	id: string
+	kind: OperationKind
+	/** Where the operation came from — tagged at create-time. */
+	origin: OperationOrigin
+	/** Profile id — tagged at create-time for per-profile fairness. */
+	profileId: string
+	/**
+	 * Session id for `dapp_execute` records originating from a wallet-sdk
+	 * message. Populated by `tryCreateQueuedJournal` from
+	 * `ActiveSession.sessionId`. Used by the per-session queued-record
+	 * cap. Undefined for `popup`-origin records (UI-initiated transfers,
+	 * token imports).
+	 */
+	sessionId?: string
+	/** Extensible per-stage progress payload (from `@nulo/wallet-core/jobs`). */
+	progress: JobProgress
+	/** Present iff `progress.stage === "failed"`; raw category preserved. */
+	error: JobError | null
+	/** Set when the record enters a terminal stage; `null` otherwise. */
+	terminalAt: number | null
+	/** Attempt counter for the retry policy; starts at 0. */
+	attempts: number
+	createdAt: number
+	updatedAt: number
 }
 
 /**
@@ -150,15 +191,6 @@ export type NewOperationInput = {
 	 * bare existence check and write into the successor incarnation.
 	 */
 	profileEpoch?: number
-	accountAddress?: string
-	networkId?: string
-	tokenId?: number
-	title?: string
-	subtitle?: string
-	amountRaw?: string
-	recipientAddress?: string
-	contractAddress?: string
-	transferType?: TransferType
 	/**
 	 * Optional initial-stage override. Defaults to `{ stage: "pending" }`.
 	 * Restricted to non-terminal pre-execution stages so callers can't
@@ -169,7 +201,7 @@ export type NewOperationInput = {
 	 * an earlier send.
 	 */
 	initialStage?: { stage: "queued" } | { stage: "pending" }
-}
+} & JournalMetadata
 
 // ── Zod schemas ──────────────────────────────────────────────────────
 
@@ -178,7 +210,7 @@ export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
 
 const SendExpirySchema = z.object({ timestamp: z.number(), nullifier: z.string() })
 
-const FeeAmountSchema = z.string().refine(isFeeAmount)
+const FeeAmountSchema = z.string().refine(isFeeAmount).describe("a positive decimal integer of at most 39 digits")
 
 const QueuedFeeReaskSchema = z.object({
 	fee: FeeAmountSchema,
@@ -208,7 +240,7 @@ export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("s
 		txHash: z.string().optional(),
 		submittedEndpointUrl: z.string().optional(),
 		expiry: SendExpirySchema.optional(),
-		check: z.enum(["sent", "reverted", "unconfirmed", "expired"]).optional(),
+		check: z.enum(["sent", "reverted", "unconfirmed", "expired", "refused"]).optional(),
 		inclusion: z.object({ block: z.number(), hash: z.string() }).optional(),
 		checkSince: z.number().optional(),
 	}),
@@ -222,19 +254,38 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
 
 /**
  * The answers the send check may record over what a row holds:
- * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
- * - `unconfirmed`: `expired`, on a row with a recorded expiry;
+ * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`; or
+ *   `refused` alone, only on a row never answered before (no `checkSince`): a row once mined
+ *   proves its refusal answered a send that had landed;
+ * - `refused`: `sent` or `reverted` (with the block, unless already final), or, on a row with a
+ *   recorded expiry, `expired`;
+ * - `unconfirmed`, on a row with a recorded expiry: `expired`, or `sent` (with the block, unless
+ *   already final) once its expiry nullifier is spent and its own receipt is a mined success;
  * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
  *   another block, or pruned (no answer, its window restarted at `checkSince`).
  * Nothing replaces `expired`, or a `sent` or `reverted` that holds no block.
  */
 export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
 	const mined = to.check === "sent" || to.check === "reverted"
-	if (from.check === undefined) return mined || (to.check === "unconfirmed" && to.inclusion === undefined)
-	if (from.check === "unconfirmed") return to.check === "expired" && from.expiry !== undefined && to.inclusion === undefined
-	if (from.inclusion === undefined || from.check === "expired") return false
-	if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
-	return mined && to.inclusion?.hash !== from.inclusion.hash
+	switch (from.check) {
+		case undefined:
+			return mined || (to.inclusion === undefined && isFirstVerdict(from, to))
+		case "refused":
+			return mined || (from.expiry !== undefined && to.check === "expired" && to.inclusion === undefined)
+		case "unconfirmed":
+			return from.expiry !== undefined && (to.check === "sent" || (to.check === "expired" && to.inclusion === undefined))
+		case "expired":
+			return false
+		default:
+			if (from.inclusion === undefined) return false
+			if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
+			return mined && to.inclusion?.hash !== from.inclusion.hash
+	}
+}
+
+function isFirstVerdict(from: FailedProgress, to: SendCheckState): boolean {
+	if (to.check === "unconfirmed") return true
+	return to.check === "refused" && to.checkSince === undefined && from.checkSince === undefined
 }
 
 /** May have reached the node: it failed at `submitting` with a hash, and not at the send line's
@@ -266,8 +317,21 @@ const InitialStageSchema = z.discriminatedUnion("stage", [
 export const JobErrorSchema: z.ZodType<JobError> = z.object({
 	kind: z.string().min(1),
 	message: z.string(),
-	normalizedRaw: z.string().max(NORMALIZED_RAW_MAX_CHARS).nullable(),
+	normalizedRaw: boundedString(NORMALIZED_RAW_MAX_CHARS).nullable(),
 })
+
+const journalMetadataShape = {
+	accountAddress: z.string().optional(),
+	networkId: z.string().optional(),
+	tokenId: z.number().optional(),
+	title: z.string().optional(),
+	subtitle: z.string().optional(),
+	amountRaw: z.string().optional(),
+	recipientAddress: z.string().optional(),
+	contractAddress: z.string().optional(),
+	transferType: z.enum(TransferType).optional(),
+	call: JournalCallSchema.optional(),
+} as const satisfies Record<keyof JournalMetadata, z.ZodType>
 
 export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	id: z.string(),
@@ -281,15 +345,7 @@ export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	attempts: z.number().int().nonnegative(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
-	accountAddress: z.string().optional(),
-	networkId: z.string().optional(),
-	tokenId: z.number().optional(),
-	title: z.string().optional(),
-	subtitle: z.string().optional(),
-	amountRaw: z.string().optional(),
-	recipientAddress: z.string().optional(),
-	contractAddress: z.string().optional(),
-	transferType: z.enum(TransferType).optional(),
+	...journalMetadataShape,
 })
 
 /**
@@ -305,15 +361,7 @@ export const NewOperationInputSchema: z.ZodType<NewOperationInput> = z
 		profileId: z.string().min(1),
 		sessionId: z.string().optional(),
 		profileEpoch: z.number().int().nonnegative().optional(),
-		accountAddress: z.string().optional(),
-		networkId: z.string().optional(),
-		tokenId: z.number().optional(),
-		title: z.string().optional(),
-		subtitle: z.string().optional(),
-		amountRaw: z.string().optional(),
-		recipientAddress: z.string().optional(),
-		contractAddress: z.string().optional(),
-		transferType: z.enum(TransferType).optional(),
+		...journalMetadataShape,
 		initialStage: InitialStageSchema.optional(),
 	})
 	.refine(
@@ -376,11 +424,11 @@ export const OperationJournalMethodSchemas = {
 	 * other stages it MUST be `null` (or omitted). The service throws on mismatch.
 	 */
 	transitionOperation: {
-		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), z.string().optional()]),
+		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), JournalRetitleSchema.optional()]),
 		result: OperationRecordSchema,
 	},
 	/**
-	 * Update non-FSM metadata on an existing record (title / subtitle). Unlike
+	 * Update non-FSM metadata on an existing record (title / subtitle / call). Unlike
 	 * `transitionOperation`, this never moves the stage and is safe to call on
 	 * terminal records. Used by `tokenService.addToken` to backfill the
 	 * resolved symbol as the title once metadata fetch returns — the journal
@@ -393,6 +441,7 @@ export const OperationJournalMethodSchemas = {
 			z.object({
 				title: z.string().optional(),
 				subtitle: z.string().optional(),
+				call: JournalCallSchema.optional(),
 			}),
 		]),
 		result: OperationRecordSchema,

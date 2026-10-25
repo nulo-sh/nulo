@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
 		</div>
 
@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
 					</template>
 					<template #bottom>
 						<Flex align="center" gap="6" :class="$style.hint_row">
-							<MaterialIcon name="lock" :size="12" color="tertiary" />
+							<Icon name="lock" :size="12" color="tertiary" />
 							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 						</Flex>
 					</template>
@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
 				<Text
 					variant="body"
 					height="120"
-					color="red"
+					color="txt-danger"
 					data-testid="error-text-unexpected"
 				>
 					{{ unexpectedErrorMessage }}
@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
 
 .error_text {
 	composes: type--body from global;
-	color: var(--red);
+	color: var(--txt-danger);
 	margin-top: 4px;
 	display: block;
 }

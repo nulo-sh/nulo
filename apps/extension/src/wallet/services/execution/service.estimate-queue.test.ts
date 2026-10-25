@@ -14,7 +14,8 @@ import { SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
 const SCOPE = { chainId: 7, account: "0xme" }
-const KEYS = new Set(["seq:0xtoken:0xme"])
+const TOKEN_CONTRACT = `0x${"1a".repeat(32)}`
+const KEYS = new Set([`seq:${TOKEN_CONTRACT}:0xme`])
 
 /** A Send-page private send of the token by `p1` on chain 7, paid from public Fee Juice at
  *  `priorityLevel`, whose recorded fee is `estimatedFee`. */
@@ -30,7 +31,7 @@ const sent = (estimatedFee: string, createdAt = 1, priorityLevel = "urgent"): Tx
 		origin: { type: OriginType.UI },
 		calls: [
 			{
-				contract: "0xtoken",
+				contract: TOKEN_CONTRACT,
 				method: "transfer_private_to_private",
 				args: [],
 				transfers: [{ type: TransferType.Private, from: "0xme", to: "0xyou" }],
@@ -53,7 +54,7 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		logDebug: () => {},
 	})
 	const admit = vi.fn(async () => new AbortController().signal)
-	const estimateFee = vi.fn(async () => ({ maxFee: "1", maxFeeFormatted: "1", gasDetails: {} }))
+	const estimateFee = vi.fn(async () => ({ maxFee: "1", gasDetails: {} }))
 	const lane = { isSlotBusy: vi.fn(() => false) }
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
@@ -63,11 +64,10 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
-		tokenService: { getTokenRaw: async () => ({ contract: "0xtoken" }) },
-		transactionService: { getTransactions: vi.fn(async () => rows) },
+		transactionService: { transactionsOf: vi.fn(async () => rows) },
 	}) as ExecutionService
 	const estimateWith = (feeSettings: FeeSettings) =>
-		facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
+		facade.estimateTransferFee("net-1", "0xme", 1, TOKEN_CONTRACT, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
 	const estimate = () => estimateWith(URGENT_FJ)
 	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate, estimateWith }
 }
@@ -123,7 +123,7 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 			account: "0xme",
 			networkId: "net-1",
 			block: { number: 7, hash: "0xb" },
-			calls: [{ contract: "0xtoken", method: "swap", args: [] }],
+			calls: [{ contract: TOKEN_CONTRACT, method: "swap", args: [] }],
 		})
 		await new Promise((r) => setTimeout(r, 0))
 		expect(await lagging.estimate()).toMatchObject({ queued: true, cap: { cap: "4472280000000000000" } })
@@ -132,7 +132,7 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 	test("a predecessor's block the PXE's node lacks answers queued and reads the tip; once read, it estimates", async () => {
 		const { chainTipGate, node, admit, estimateFee, estimate } = makeFacade()
 		node.tip = 6
-		const swap = { contract: "0xtoken", method: "swap", args: [] }
+		const swap = { contract: TOKEN_CONTRACT, method: "swap", args: [] }
 		chainTipGate.observe({
 			hash: "0xtx",
 			chainId: 7,
@@ -162,13 +162,8 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 	})
 })
 
-describe("ExecutionService.executeTransfer's fee cap", () => {
-	test.each([
-		["a number", 1000],
-		["a decimal point", "1000.5"],
-		["a leading zero", "01000"],
-		["40 digits", "1".repeat(40)],
-	])("refuses %s before the Terms check, so no proof starts", async (_name, feeCap) => {
+describe("ExecutionService.executeTransfer's fee figure", () => {
+	function makeFacade() {
 		const assertCurrent = vi.fn(async () => {})
 		const execute = vi.fn(async () => "0xhash")
 		const facade = Object.assign(Object.create(ExecutionService.prototype), {
@@ -177,12 +172,96 @@ describe("ExecutionService.executeTransfer's fee cap", () => {
 			captureFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
 			transferExecutor: { execute },
 		}) as ExecutionService
-		const send = (cap: unknown) =>
-			facade.executeTransfer("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, {} as never, undefined, cap as string)
-		await expect(send(feeCap)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		const send = (feeCap: unknown, shownFee: unknown) =>
+			facade.executeTransfer(
+				"net-1",
+				"0xme",
+				1,
+				TOKEN_CONTRACT,
+				TransferType.Private,
+				"0xyou",
+				5n,
+				{} as never,
+				undefined,
+				feeCap as string,
+				shownFee as string,
+			)
+		return { send, assertCurrent, execute }
+	}
+
+	test.each([
+		["a number", 1000],
+		["a decimal point", "1000.5"],
+		["a leading zero", "01000"],
+		["40 digits", "1".repeat(40)],
+	])("refuses %s as either figure before the Terms check, so no proof starts", async (_name, fee) => {
+		const { send, assertCurrent, execute } = makeFacade()
+		await expect(send(fee, undefined)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		await expect(send(undefined, fee)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
 		expect(assertCurrent).not.toHaveBeenCalled()
-		await send("1000")
-		expect(execute).toHaveBeenCalledWith(expect.anything(), undefined, expect.anything(), "1000")
+		expect(execute).not.toHaveBeenCalled()
+	})
+
+	test("refuses a cap and a shown fee together: a send is held to one figure", async () => {
+		const { send, assertCurrent, execute } = makeFacade()
+		await expect(send("1000", "1000")).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(assertCurrent).not.toHaveBeenCalled()
+		expect(execute).not.toHaveBeenCalled()
+	})
+
+	test("holds a cap to the cap rule and a shown fee to the estimate rule", async () => {
+		const { send, execute } = makeFacade()
+		await send("1000", undefined)
+		await send(undefined, "1000")
+		await send(undefined, undefined)
+		expect(execute.mock.calls.map((c) => (c as unknown[])[3])).toEqual([
+			{ fee: "1000", rule: "cap" },
+			{ fee: "1000", rule: "estimate" },
+			undefined,
+		])
+	})
+})
+
+describe("ExecutionService transfer entry points: the token contract", () => {
+	function makeEntry() {
+		const assertCurrent = vi.fn(async () => {})
+		const execute = vi.fn(async () => "0xhash")
+		const sequence = vi.fn(async () => ({ scope: SCOPE, keys: KEYS }))
+		const facade = Object.assign(Object.create(ExecutionService.prototype), {
+			ensureInitialized: async () => {},
+			legal: { assertCurrent },
+			captureFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
+			transferExecutor: { execute, sequence },
+		}) as ExecutionService
+		const send = (contract: unknown) =>
+			facade.executeTransfer("net-1", "0xme", 1, contract as string, TransferType.Private, "0xyou", 5n, URGENT_FJ)
+		const estimate = (contract: unknown) =>
+			facade.estimateTransferFee("net-1", "0xme", 1, contract as string, TransferType.Private, "0xyou", 5n, URGENT_FJ)
+		return { send, estimate, assertCurrent, execute, sequence }
+	}
+
+	test.each([
+		["a short hex string", "0xtoken"],
+		["a value at the field modulus or above", `0x${"f".repeat(64)}`],
+		["a number", 7],
+	])("both refuse %s before anything runs", async (_name, contract) => {
+		const { send, estimate, assertCurrent, execute, sequence } = makeEntry()
+		await expect(send(contract)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		await expect(estimate(contract)).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(assertCurrent).not.toHaveBeenCalled()
+		expect(execute).not.toHaveBeenCalled()
+		expect(sequence).not.toHaveBeenCalled()
+	})
+
+	test("control: a field address in upper case reaches the executor in its lower-case spelling", async () => {
+		const { send, execute } = makeEntry()
+		await send(TOKEN_CONTRACT.toUpperCase().replace("0X", "0x"))
+		expect(execute).toHaveBeenCalledWith(
+			expect.objectContaining({ tokenContract: TOKEN_CONTRACT }),
+			undefined,
+			expect.anything(),
+			undefined,
+		)
 	})
 })
 

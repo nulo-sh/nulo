@@ -16,6 +16,10 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+
+/** One key for every profile, as the profile fakes hold it. */
+const ROW_KEY_FAKE = await rowKeysForEveryProfile()
 
 async function build(opts: { failBlockWrite?: boolean; closeError?: Error } = {}) {
 	const api = new FakeBrowserApi()
@@ -36,6 +40,7 @@ async function build(opts: { failBlockWrite?: boolean; closeError?: Error } = {}
 	const services = new ServiceCollection()
 	services.add(
 		svc(ProfileService.name, {
+			...ROW_KEY_FAKE,
 			lockProfileIfActive: async (id: string) => {
 				locked.push(id)
 				if (opts.closeError) throw opts.closeError
@@ -70,7 +75,7 @@ describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
 		expect(record?.derivedAddress).toBe("0xderived")
 		expect(record?.chainId).toBe(3)
 		expect(record?.accountIndex).toBe(2)
-		expect(record?.regimeId).toBe("nulo-v6.1")
+		expect(record?.regimeId).toBe("nulo-v6.2")
 		// Closed exactly the mismatching profile.
 		expect(locked).toEqual(["p1"])
 	})

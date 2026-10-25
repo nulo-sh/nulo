@@ -1,7 +1,7 @@
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test } from "vitest"
-import { OriginType } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType, type TxCall, type TxTransfer } from "@/wallet/services/transaction/spec"
 import {
 	FEE_METHODS,
 	formatTransferType,
@@ -11,7 +11,10 @@ import {
 	getTxCategory,
 	getTxTitle,
 	humanizeMethodName,
+	plainMethodName,
+	tokenMovementLabel,
 } from "./tx-enrichment"
+import { TRANSFER_SIGNATURES } from "./token-transfer-vocabulary"
 
 describe("FEE_METHODS — re-exported from primary-method", () => {
 	test("re-exports the same set instance", () => {
@@ -72,6 +75,48 @@ describe("humanizeMethodName — fallback when no label exists", () => {
 	})
 })
 
+describe("tokenMovementLabel and plainMethodName", () => {
+	test("the six transfer and mint labels, and only they, claim a token movement", () => {
+		const names = [...TRANSFER_SIGNATURES.keys(), "mint_to_private", "mint_to_public"]
+		expect(new Set(names.map(tokenMovementLabel))).toEqual(
+			new Set([
+				"Transfer (private)",
+				"Transfer (public)",
+				"Transfer to public",
+				"Transfer to private",
+				"Mint (private)",
+				"Mint (public)",
+			]),
+		)
+		for (const name of ["shield", "unshield", "redeem_shield", "claim", "claim_and_end_setup", "burn_private"]) {
+			expect(tokenMovementLabel(name)).toBeNull()
+		}
+	})
+
+	test("a name with a wallet label reads as its contract spells it", () => {
+		expect(plainMethodName("transfer_public_to_public")).toBe("Transfer Public To Public")
+		expect(plainMethodName("mint_to_private")).toBe("Mint To Private")
+		expect(plainMethodName("0x1234567890abcdef")).toBe("0x12345678...")
+	})
+})
+
+describe("a dApp's function named like an Object.prototype member gets no wallet label", () => {
+	const PROTOTYPE_NAMES = ["constructor", "toString", "__proto__", "hasOwnProperty"]
+
+	test.each(PROTOTYPE_NAMES)("%s reads as its contract spells it", (name) => {
+		expect(getMethodLabel(name)).toBeNull()
+		expect(tokenMovementLabel(name)).toBeNull()
+		expect(humanizeMethodName(name)).toBe(plainMethodName(name))
+		expect(formatTransferType(name)).toBe(name)
+	})
+
+	test("constructor is title-cased; a curated name keeps its label", () => {
+		expect(humanizeMethodName("constructor")).toBe("Constructor")
+		expect(humanizeMethodName("shield")).toBe("Shield")
+		expect(humanizeMethodName("mint_to_public")).toBe("Mint (public)")
+	})
+})
+
 describe("getPrimaryCall — TxCall wrapper around pickPrimaryMethod", () => {
 	test("duplicate-name primary returns the APP call's object, not the fee claim's (index-based)", () => {
 		const calls = [
@@ -109,44 +154,116 @@ describe("getPrimaryCall — TxCall wrapper around pickPrimaryMethod", () => {
 	})
 })
 
-describe("getTxCategory — branch on primary call's method prefix", () => {
-	test("transfer family → 'transfer'", () => {
-		expect(getTxCategory([{ contract: "0x1", method: "transfer_in_private" }])).toBe("transfer")
-		expect(getTxCategory([{ contract: "0x1", method: "transfer_to_public" }])).toBe("transfer")
+describe("getTxCategory and getTxTitle: the wallet's reading of the primary call", () => {
+	const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
+	const TOKEN = `0x${"0a".repeat(32)}`
+	const DAPP = `0x${"0b".repeat(32)}`
+	const ACCOUNT = `0x${"0c".repeat(32)}`
+	const FEE_JUICE = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+	const CLASS = field(0xc1a55n)
+	const tokens = [{ contract: TOKEN, classId: CLASS }]
+	const call = (method: string, args: unknown[], over: Partial<TxCall> = {}): TxCall => ({
+		contract: TOKEN,
+		method,
+		args,
+		classId: CLASS,
+		...over,
 	})
-	test("mint_to family → 'mint'", () => {
-		expect(getTxCategory([{ contract: "0x1", method: "mint_to_private" }])).toBe("mint")
-		expect(getTxCategory([{ contract: "0x1", method: "mint_to_public" }])).toBe("mint")
-	})
-	test("anything else → 'tx'", () => {
-		expect(getTxCategory([{ contract: "0x1", method: "drip_to_private" }])).toBe("tx")
-		expect(getTxCategory([{ contract: "0x1", method: "shield" }])).toBe("tx")
-	})
-	test("empty → 'tx' (no primary call)", () => {
-		expect(getTxCategory([])).toBe("tx")
-	})
-})
+	const transfer4 = [ACCOUNT, DAPP, field(5n), field(0n)]
+	const sent: TxTransfer = {
+		token: { name: "Test", symbol: "TST", decimals: 18 },
+		type: TransferType.Private,
+		from: ACCOUNT,
+		to: DAPP,
+		amount: "5",
+	}
 
-describe("getTxTitle — display title by category", () => {
-	test("transfer → 'Transfer'", () => {
-		expect(getTxTitle([{ contract: "0x1", method: "transfer" }])).toBe("Transfer")
+	test.each<[string, TxCall[], "transfer" | "mint" | "tx", string]>([
+		["the wallet's own send", [call("transfer", [DAPP, field(5n)], { transfers: [sent] })], "transfer", "Transfer (private)"],
+		[
+			"the wallet's own send through a function it was told to call by another name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: TransferType.Public }] })],
+			"transfer",
+			"Transfer (public)",
+		],
+		[
+			"the wallet's own send whose stored type is the enum's name",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: "PublicToPrivate" as never }] })],
+			"transfer",
+			"Transfer to private",
+		],
+		[
+			"the wallet's own send with a type it does not know reads by its function",
+			[call("send_tokens", [DAPP, field(5n)], { transfers: [{ ...sent, type: 9 as never }] })],
+			"transfer",
+			"Send Tokens",
+		],
+		[
+			"a vocabulary transfer on a listed token with its class",
+			[call("transfer_in_private", transfer4)],
+			"transfer",
+			"Transfer (private)",
+		],
+		[
+			"the same call recorded with no class",
+			[call("transfer_in_private", transfer4, { classId: undefined })],
+			"tx",
+			"Transfer In Private",
+		],
+		[
+			"the same call with another class",
+			[call("transfer_in_private", transfer4, { classId: field(0xc1a56n) })],
+			"tx",
+			"Transfer In Private",
+		],
+		[
+			"the same call on a contract not listed",
+			[call("transfer_in_private", transfer4, { contract: DAPP })],
+			"tx",
+			"Transfer In Private",
+		],
+		["the same name with an arity the vocabulary lacks", [call("transfer_in_private", [DAPP])], "tx", "Transfer In Private"],
+		[
+			"an empty transfer list proves nothing",
+			[call("transfer", [DAPP, field(5n)], { contract: DAPP, transfers: [] })],
+			"tx",
+			"Transfer",
+		],
+		["a non-token call on a listed token", [call("transfer_ownership", [DAPP])], "tx", "Transfer Ownership"],
+		["a private mint on a listed token", [call("mint_to_private", [ACCOUNT, field(5n)])], "mint", "Mint (private)"],
+		["a public mint on a listed token", [call("mint_to_public", [ACCOUNT, field(5n)])], "mint", "Mint (public)"],
+		["a mint with an arity the vocabulary lacks", [call("mint_to_public", [ACCOUNT, field(5n), field(1n)])], "tx", "Mint To Public"],
+		[
+			"a mint with another class",
+			[call("mint_to_private", [ACCOUNT, field(5n)], { classId: field(0xc1a56n) })],
+			"tx",
+			"Mint To Private",
+		],
+		["a mint to a commitment on a listed token", [call("mint_to_commitment", [field(9n), field(5n)])], "mint", "Mint To Commitment"],
+		["a claim off the Fee Juice contract", [call("claim", [ACCOUNT], { contract: DAPP })], "tx", "Claim"],
+		["a claim on the Fee Juice contract", [call("claim", [ACCOUNT], { contract: FEE_JUICE })], "tx", "Claim Fee Juice"],
+		[
+			"a fee call before the user's call",
+			[call("sponsor_unconditionally", []), call("drip_to_private", [], { contract: DAPP })],
+			"tx",
+			"Drip To Private",
+		],
+		["no calls", [], "tx", "Transaction"],
+	])("%s", (_, calls, category, title) => {
+		expect(getTxCategory(calls, tokens)).toBe(category)
+		expect(getTxTitle(calls, tokens)).toBe(title)
 	})
-	test("mint → 'Mint'", () => {
-		expect(getTxTitle([{ contract: "0x1", method: "mint_to_private" }])).toBe("Mint")
-	})
-	test("generic tx → humanized primary method", () => {
-		expect(getTxTitle([{ contract: "0x1", method: "drip_to_private" }])).toBe("Drip To Private")
-	})
-	test("empty calls → 'Transaction'", () => {
-		expect(getTxTitle([])).toBe("Transaction")
-	})
-	test("fee + user call → uses user call's humanized name", () => {
-		expect(
-			getTxTitle([
-				{ contract: "0x1", method: "sponsor_unconditionally" },
-				{ contract: "0x2", method: "drip_to_private" },
-			]),
-		).toBe("Drip To Private")
+
+	test("a listed token holding no class, as a restored row does before its refresh, reads its calls as plain calls", () => {
+		const unclassed = [{ contract: TOKEN }]
+		for (const [calls, title] of [
+			[[call("transfer_in_private", transfer4)], "Transfer In Private"],
+			[[call("mint_to_private", [ACCOUNT, field(5n)])], "Mint To Private"],
+		] as const) {
+			expect(getTxCategory([...calls], unclassed)).toBe("tx")
+			expect(getTxTitle([...calls], unclassed)).toBe(title)
+		}
+		expect(getTxTitle([call("transfer", [DAPP, field(5n)], { transfers: [sent] })], unclassed)).toBe("Transfer (private)")
 	})
 })
 

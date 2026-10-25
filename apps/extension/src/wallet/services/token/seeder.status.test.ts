@@ -8,8 +8,21 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import { LogLevel } from "@nulo/wallet-core/logger"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 import { PinMismatchError, SEED_ATTEMPT_CAP, type SeedPreview, deriveSeedStatus } from "./seeder"
-import { CHAIN_ID, CONTRACT, KEY, SEED, disposeSeeders, goodPreview, makeSeeder, readMarker, writeMarker } from "./seeder.harness"
+import {
+	advanceSeeders,
+	CHAIN_ID,
+	CONTRACT,
+	KEY,
+	SEED,
+	disposeSeeders,
+	goodPreview,
+	makeSeeder,
+	readMarker,
+	settleSeals,
+	writeMarker,
+} from "./seeder.harness"
 
 const VERSION = "1.0.0"
 const rpcDown = () =>
@@ -36,9 +49,10 @@ beforeEach(async () => {
 	await fakeBrowser.reset()
 })
 
-afterEach(() => {
+afterEach(async () => {
 	disposeSeeders()
 	vi.useRealTimers()
+	await settleSeals()
 })
 
 describe("seed status — derivation", () => {
@@ -89,7 +103,7 @@ describe("seed status — derivation", () => {
 		const { seeder, deps } = makeSeeder()
 		await writeMarker({ [KEY]: { attempts: 1, nextAttemptAt: Date.now() + 10 * 365 * 86_400_000 } })
 		await seeder.resume()
-		await vi.advanceTimersByTimeAsync(1_000)
+		await advanceSeeders(1_000)
 		await vi.waitFor(() => expect(deps.persist).toHaveBeenCalledTimes(1))
 	})
 
@@ -152,16 +166,16 @@ describe("continuation — a failed attempt retries by itself", () => {
 		expect(await statusOf(seeder)).toEqual(["pending"])
 		expect((await readMarker())[KEY].nextAttemptAt).toBe(Date.now() + 15_000)
 
-		await vi.advanceTimersByTimeAsync(14_000)
+		await advanceSeeders(14_000)
 		expect(deps.preview).toHaveBeenCalledTimes(1)
-		await vi.advanceTimersByTimeAsync(1_000)
+		await advanceSeeders(1_000)
 		expect(deps.preview).toHaveBeenCalledTimes(2)
-		await vi.advanceTimersByTimeAsync(60_000)
+		await advanceSeeders(60_000)
 		expect(deps.preview).toHaveBeenCalledTimes(SEED_ATTEMPT_CAP)
 		expect(await statusOf(seeder)).toEqual(["failed"])
 		expect((await readMarker())[KEY].nextAttemptAt).toBeUndefined()
 
-		await vi.advanceTimersByTimeAsync(600_000)
+		await advanceSeeders(600_000)
 		expect(deps.preview).toHaveBeenCalledTimes(SEED_ATTEMPT_CAP)
 	})
 
@@ -186,7 +200,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		// Boot fires the resume AND a session-restore trigger; together they must attempt once.
 		await Promise.all([fresh.seeder.resume(), fresh.seeder.run()])
 		expect(fresh.deps.preview).not.toHaveBeenCalled()
-		await vi.advanceTimersByTimeAsync(15_000)
+		await advanceSeeders(15_000)
 		expect(fresh.deps.preview).toHaveBeenCalledTimes(1)
 		expect((await readMarker())[KEY].attempts).toBe(2)
 	})
@@ -214,7 +228,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		profile = { id: "p1" }
 		await fresh.seeder.run()
 		expect(fresh.deps.preview).not.toHaveBeenCalled()
-		await vi.advanceTimersByTimeAsync(15_000)
+		await advanceSeeders(15_000)
 		expect(fresh.deps.preview).toHaveBeenCalledTimes(1)
 	})
 
@@ -232,10 +246,20 @@ describe("continuation — a failed attempt retries by itself", () => {
 		await seeder.run()
 		expect(logged).toHaveBeenCalledWith("token", LogLevel.Warn, "seed pass threw", { category: "unknown" })
 
-		await vi.advanceTimersByTimeAsync(59_000)
+		await advanceSeeders(59_000)
 		expect(isTokenPresent).toHaveBeenCalledTimes(1)
-		await vi.advanceTimersByTimeAsync(1_000)
+		await advanceSeeders(1_000)
 		expect(isTokenPresent).toHaveBeenCalledTimes(2)
+	})
+
+	test.each([
+		["a missing contract", () => new ContractNotFoundError(), "ContractNotFoundError"],
+		["a plain error", () => new Error("rpc down"), "Error"],
+	])("a preview refused by %s logs the category %s", async (_case, refusal, category) => {
+		const { seeder, logger } = makeSeeder({ preview: vi.fn(async (): Promise<SeedPreview> => Promise.reject(refusal())) })
+		const logged = vi.spyOn(logger, "log")
+		await seeder.run()
+		expect(logged).toHaveBeenCalledWith("token", LogLevel.Warn, "seed attempt failed", { seedKey: KEY, attempts: 1, category })
 	})
 
 	test("a zero-account pass arms nothing — and neither does a marker that is due with no account", async () => {
@@ -244,7 +268,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		await seeder.run()
 		await writeMarker({ [KEY]: { attempts: 1, nextAttemptAt: Date.now() - 1 } })
 		await seeder.resume()
-		await vi.advanceTimersByTimeAsync(600_000)
+		await advanceSeeders(600_000)
 		expect(deps.isTokenPresent).toHaveBeenCalledTimes(1)
 		expect(vi.getTimerCount()).toBe(0)
 	})
@@ -254,7 +278,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		const purged = makeSeeder({ preview: rpcDown() })
 		await purged.seeder.run()
 		await purged.seeder.purgeForProfile("p1")
-		await vi.advanceTimersByTimeAsync(600_000)
+		await advanceSeeders(600_000)
 		expect(purged.deps.preview).toHaveBeenCalledTimes(1)
 		expect(await readMarker()).toEqual({})
 
@@ -262,7 +286,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		const switched = makeSeeder({ preview: rpcDown(), getActiveProfile: vi.fn(async () => active) })
 		await switched.seeder.run()
 		active = { id: "p2" }
-		await vi.advanceTimersByTimeAsync(15_000)
+		await advanceSeeders(15_000)
 		// The timer's pass re-derives the scope: p2's first attempt, never p1's second.
 		expect((await readMarker())[KEY].attempts).toBe(1)
 		expect(switched.deps.preview).toHaveBeenLastCalledWith("net1", "0xacc1", CONTRACT, SEED.expectedClassId)
@@ -281,7 +305,7 @@ describe("rejection — a pin or bound failure is not retried under the same ver
 		await seeder.run()
 		expect(await statusOf(seeder)).toEqual(["rejected"])
 		expect((await readMarker())[KEY]).toMatchObject({ attempts: 1, rejectedAtVersion: VERSION })
-		await vi.advanceTimersByTimeAsync(600_000)
+		await advanceSeeders(600_000)
 		await seeder.run()
 		expect(preview).toHaveBeenCalledTimes(1)
 		expect(await seeder.retry(CHAIN_ID, CONTRACT)).toBe(false)

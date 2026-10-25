@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { openRow } from "@nulo/wallet-crypto"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -20,7 +21,9 @@ import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/pro
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { svc } from "../composition-harness"
 import { TaskService } from "@/wallet/services/task/service"
-import { TransactionService, TxConfirmationTimeoutError } from "./service"
+import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
+import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { type FeeChoice, TransactionService, TxConfirmationTimeoutError } from "./service"
 
 const ACCOUNT = "0xacc"
 
@@ -32,10 +35,18 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 	/** A service over `api`'s storage, as a worker (re)start builds it. */
 	async function start(): Promise<TransactionService> {
 		const services = new ServiceCollection()
-		services.add(svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => deletionState }))
+		services.add(
+			svc(PROFILE_SERVICE_NAME, {
+				getActiveProfile: async () => ({ id: "p1" }),
+				getDeletionState: () => deletionState,
+				...(await rowKeysForEveryProfile()),
+			}),
+		)
 		services.add(
 			svc(ACCOUNT_SERVICE_NAME, {
 				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
+				hasUnreadAccountsBesides: async () => false,
 				// The account exists ONLY for profile p1 (a purged/re-owned account
 				// resolves to undefined here).
 				getAccount: async (profileId: string, _chainId: number, address: string) =>
@@ -70,7 +81,14 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string, priorityLevel?: "urgent") =>
+	const add = (
+		hash: string,
+		fence: ExecutionFence,
+		networkId?: string,
+		feeSpender?: string,
+		priorityLevel?: "urgent",
+		feeChoice?: FeeChoice,
+	) =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -84,6 +102,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			gasDetails: undefined,
 			feeSpender,
 			priorityLevel,
+			feeChoice,
 			fence,
 			networkId,
 		})
@@ -96,13 +115,14 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 
 		await service.purgeForAccounts([ACCOUNT], "p1")
 
-		const remaining = (await service.getTransactions(ACCOUNT)).map((t) => t.hash)
-		expect(remaining).toEqual(["0xp2-tx"])
+		expect(await service.transactionsOf(ACCOUNT, "p1")).toEqual([])
+		expect((await service.transactionsOf(ACCOUNT, "p2")).map((t) => t.hash)).toEqual(["0xp2-tx"])
 	})
 
 	test("an account deleted on one chain keeps the same address's history on another chain", async () => {
 		await add("0xchain1", { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }, "net-1")
 		const row = await service.getTransaction("0xchain1")
+		// A row written before rows were sealed: still read, and purged as one.
 		await api.storage.local.set({ "nulo:core:txs@0xchain2": JSON.stringify({ ...row, hash: "0xchain2", chainId: 2 }) })
 		const onAccountDeleted = Reflect.get(service, "onAccountDeleted") as (a: object) => Promise<void>
 
@@ -138,22 +158,19 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		expect((await api.storage.local.get(null))["nulo:core:txs@badsolo"]).toBeUndefined()
 	})
 
-	test("a row marked unattributable is not re-armed for polling after a restart", async () => {
+	test("a row marked unattributable is not re-armed for polling after a restart; an unmarked one is", async () => {
 		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
-		await add("0xmarked", fence, "net-1")
-		const row = await service.getTransaction("0xmarked")
-		await api.storage.local.set({ "nulo:core:txs@0xmarked": JSON.stringify({ ...row, ambiguous: true }) })
+		const row = await add("0xpending", fence, "net-1")
+		const { profileId: _, ...unscoped } = row
+		await api.storage.local.set({
+			"nulo:core:txs@0xmarked": JSON.stringify({ ...unscoped, hash: "0xmarked", ambiguous: true }),
+			"nulo:core:txs@0xunmarked": JSON.stringify({ ...unscoped, hash: "0xunmarked" }),
+		})
 
-		// The live service already holds it; what matters is that a RESTART does
-		// not re-arm it, so assert on the reload filter the way init does.
-		const reloaded = (await api.storage.local.get(null)) as Record<string, string>
-		const marked = Object.entries(reloaded)
-			.filter(([k]) => k.startsWith("nulo:core:txs@"))
-			.map(([, v]) => JSON.parse(v) as { hash: string; ambiguous?: boolean })
-			.filter((tx) => !tx.ambiguous)
-		// It must not be among the rows a restart would put back into the poller,
-		// which would run against whichever profile is active now.
-		expect(marked.map((tx) => tx.hash)).not.toContain("0xmarked")
+		// A restart polls against whichever profile is active then, so a marked row stays out.
+		const pending = (await start()).getPendingForAccount(ACCOUNT).map((tx) => tx.hash)
+		expect(pending).toEqual(expect.arrayContaining(["0xpending", "0xunmarked"]))
+		expect(pending).not.toContain("0xmarked")
 	})
 
 	test("the fee spender and the speed are stored and re-armed with their pending row after a restart; a row without them carries none", async () => {
@@ -167,18 +184,19 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("priorityLevel")
 	})
 
+	test("the fee chooser is stored with its row; a row written without one carries none", async () => {
+		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
+		await add("0xchosen", fence, "net-1", undefined, undefined, "app_protocol_sponsor")
+		await add("0xplain", fence, "net-1")
+		expect((await service.getTransaction("0xchosen")).feeChoice).toBe("app_protocol_sponsor")
+		expect(await service.getTransaction("0xplain")).not.toHaveProperty("feeChoice")
+	})
+
 	test("stamps the owning profile and network so history can be scoped", async () => {
 		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
 		const tx = await add("0xscoped", fence, "net-1")
 
 		expect(tx).toMatchObject({ profileId: "p1", networkId: "net-1", chainId: 1, account: ACCOUNT })
-	})
-
-	test("a row written without a fence simply carries no scope (legacy-shaped, still valid)", async () => {
-		const tx = await add("0xunscoped")
-
-		expect(tx.profileId).toBeUndefined()
-		expect(tx.networkId).toBeUndefined()
 	})
 
 	test("writes when the captured epoch is still current AND the owning account exists", async () => {
@@ -193,7 +211,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 
 		await expect(add("0xh2", fence)).rejects.toThrow(/being deleted/)
 		// nothing persisted
-		expect(await service.getTransactions(ACCOUNT)).toHaveLength(0)
+		expect(await service.transactionsOf(ACCOUNT, "p1")).toHaveLength(0)
 	})
 
 	test("REJECTS when the owning account no longer exists / was re-owned (bound to captured profileId)", async () => {
@@ -202,12 +220,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		const fence = { profileId: "pGONE", epoch: deletionState.capture("pGONE"), session: 1 }
 
 		await expect(add("0xh3", fence)).rejects.toThrow(/stale execution owner/)
-		expect(await service.getTransactions(ACCOUNT)).toHaveLength(0)
-	})
-
-	test("no fence → no fencing (non-execution callers unaffected)", async () => {
-		const tx = await add("0xh4", undefined)
-		expect(tx.hash).toBe("0xh4")
+		expect(await service.transactionsOf(ACCOUNT, "pGONE")).toHaveLength(0)
 	})
 
 	/** Every field set, each to a distinct value. */
@@ -234,12 +247,19 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			networkId: "net-9",
 		})
 
-	test("the persisted row's raw bytes, in the literal's key order", async () => {
+	test("the persisted row's bytes, sealed, in the literal's key order, under a key that names no hash", async () => {
 		vi.setSystemTime(1_700_000_000_000)
 		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
 		await addFull(fence)
-		const raw = (await api.storage.local.get("nulo:core:txs@0xfull"))["nulo:core:txs@0xfull"]
-		expect(raw).toBe(
+		const [[storageKey, stored]] = Object.entries(await api.storage.local.get(null)).filter(([k]) => k.startsWith("nulo:core:txs@"))
+		expect(storageKey).not.toContain("0xfull")
+		const envelope = parseEnvelope(JSON.parse(stored as string))
+		if (!envelope) throw new Error("the row is not sealed")
+		const keys = (await rowKeysForEveryProfile()).rowKeys("p1")
+		if (!keys) throw new Error("no row keys")
+		const opened = JSON.parse(await openRow(keys, envelope.sealed, { root: "nulo:core:txs", storageKey, profileId: "p1" }))
+		expect(opened.k).toBe("0xfull")
+		expect(opened.r).toBe(
 			'{"origin":{"type":1,"name":"dapp"},"chainId":3,"profileId":"p1","networkId":"net-9","account":"0xacc",' +
 				'"calls":[{"contract":"0xc","method":"m","args":["1"]}],"nonce":"0x07","feePaymentMethod":2,"hash":"0xfull",' +
 				'"createdAt":1700000000000,"updatedAt":1700000000000,"status":0,"estimatedFee":"880",' +
@@ -248,10 +268,10 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		)
 	})
 
-	test("inside the lock: epoch, owner, duplicate lookup, write, event, pending, in that order; a duplicate writes nothing", async () => {
+	test("inside the lock: epoch, owner, duplicate lookup, seal, epoch again, write, event, pending, in that order; a duplicate writes nothing", async () => {
 		const trace: string[] = []
 		const internals = service as unknown as {
-			txs: { get: (k: string) => Promise<unknown>; set: (k: string, v: unknown) => Promise<void> }
+			txs: { get: (k: string) => Promise<unknown>; prepare: (k: string, v: unknown) => Promise<{ commit(): Promise<void> }> }
 			pending: Map<string, unknown>
 			accountService: { getAccount: (...a: unknown[]) => Promise<unknown> }
 			emit: (...a: unknown[]) => void
@@ -266,13 +286,23 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		wrap(deletionState as never, "assertCurrent", "assertCurrent")
 		wrap(internals.accountService as never, "getAccount", "getAccount")
 		wrap(internals.txs as never, "get", "txs.get")
-		wrap(internals.txs as never, "set", "txs.set")
+		const prepare = internals.txs.prepare.bind(internals.txs)
+		internals.txs.prepare = async (k, v) => {
+			trace.push("txs.prepare")
+			const write = await prepare(k, v)
+			return {
+				commit: () => {
+					trace.push("commit")
+					return write.commit()
+				},
+			}
+		}
 		wrap(internals as never, "emit", "emit")
 		wrap(internals.pending as never, "set", "pending.set")
 		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
 
 		await addFull(fence)
-		expect(trace).toEqual(["assertCurrent", "getAccount", "txs.get", "txs.set", "emit", "pending.set"])
+		expect(trace).toEqual(["assertCurrent", "getAccount", "txs.get", "txs.prepare", "assertCurrent", "commit", "emit", "pending.set"])
 
 		trace.length = 0
 		await expect(addFull(fence)).rejects.toThrow("duplicated hash")
@@ -290,8 +320,22 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 		api.reset()
 		deletionState = new ProfileDeletionState()
 		const services = new ServiceCollection()
-		services.add(svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => deletionState }))
-		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler() }))
+		services.add(
+			svc(PROFILE_SERVICE_NAME, {
+				getActiveProfile: async () => ({ id: "p1" }),
+				getDeletionState: () => deletionState,
+				...(await rowKeysForEveryProfile()),
+			}),
+		)
+		services.add(
+			svc(ACCOUNT_SERVICE_NAME, {
+				onAccountDeleted: new EventHandler(),
+				registerAccountPurgeSubscriber: () => {},
+				// p1 holds 0xa on chain 1 only; p2 holds 0xb.
+				getAccountsRaw: async (profileId: string) =>
+					profileId === "p1" ? [{ profileId, chainId: 1, address: "0xa" }] : [{ profileId, chainId: 1, address: "0xb" }],
+			}),
+		)
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
 		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
@@ -335,9 +379,46 @@ describe("TransactionService.restore — deletion fence (threaded profileId)", (
 		await expect(service.getTransaction("0xh1")).rejects.toThrow()
 	})
 
+	test("a restored row keeps its fee chooser; an older row carries none, and a bogus one is dropped with the row kept", async () => {
+		const restored = await service.restore(
+			[
+				Object.assign(mkTx("0xchosen"), { feeChoice: "app_protocol_sponsor" }),
+				mkTx("0xolder"),
+				Object.assign(mkTx("0xbogus"), { feeChoice: "sponsored" }),
+			],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined, undefined])
+		expect((await service.getTransaction("0xchosen")).feeChoice).toBe("app_protocol_sponsor")
+		expect(await service.getTransaction("0xolder")).not.toHaveProperty("feeChoice")
+		expect(await service.getTransaction("0xbogus")).not.toHaveProperty("feeChoice")
+	})
+
 	test("positive control: no deletion → both rows land", async () => {
 		const restored = await service.restore([mkTx("0xh1"), mkTx("0xh2")], "p1")
 		expect(restored.every((r) => r.restoreError === undefined)).toBe(true)
+	})
+
+	test("every restored row is stored under the restored profile, whatever profile id the backup row names", async () => {
+		const restored = await service.restore([mkTx("0xnone"), Object.assign(mkTx("0xother"), { profileId: "p2", ambiguous: true })], "p1")
+		expect(restored.map((r) => r.restoreError)).toEqual([undefined, undefined])
+		expect((await service.getTransaction("0xnone")).profileId).toBe("p1")
+		expect(await service.getTransaction("0xother")).toMatchObject({ profileId: "p1", ambiguous: true })
+	})
+
+	test("a row naming no account of the restored profile is refused and not stored; an owned row beside it is", async () => {
+		const restored = await service.restore(
+			[Object.assign(mkTx("0xforeign"), { account: "0xb" }), Object.assign(mkTx("0xotherchain"), { chainId: 2 }), mkTx("0xowned")],
+			"p1",
+		)
+		expect(restored.map((r) => r.restoreError)).toEqual([
+			"transaction names no account of the restored profile",
+			"transaction names no account of the restored profile",
+			undefined,
+		])
+		await expect(service.getTransaction("0xforeign")).rejects.toThrow()
+		await expect(service.getTransaction("0xotherchain")).rejects.toThrow()
+		expect((await service.getTransaction("0xowned")).account).toBe("0xa")
 	})
 })
 
@@ -351,9 +432,13 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		api.reset()
 		const services = new ServiceCollection()
 		services.add(
-			svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => undefined, getDeletionState: () => new ProfileDeletionState() }),
+			svc(PROFILE_SERVICE_NAME, {
+				getActiveProfile: async () => undefined,
+				getDeletionState: () => new ProfileDeletionState(),
+				...(await rowKeysForEveryProfile()),
+			}),
 		)
-		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler() }))
+		services.add(svc(ACCOUNT_SERVICE_NAME, { onAccountDeleted: new EventHandler(), registerAccountPurgeSubscriber: () => {} }))
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
 		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
@@ -365,17 +450,18 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		vi.useRealTimers()
 	})
 
+	const pendingMap = () => (service as unknown as { pending: Map<string, unknown> }).pending
 	const seedPending = (hash: string) => {
 		// The in-memory pending map is what waitForTx polls; the locked-wallet
 		// stall is simulated simply by never draining it.
-		;(service as unknown as { pending: Map<string, unknown> }).pending.set(hash, { hash })
+		pendingMap().set(`p1|${hash}`, { hash, profileId: "p1" })
 	}
 
 	test("timeout: typed throw + subtask failed EXACTLY once + parent still completable (real TaskService)", async () => {
 		seedPending("0xhang")
 		const parent = taskService.startNewTask({ kind: 0 } as never)
 		const failSpy = vi.spyOn(taskService, "failTask")
-		const run = service.waitForTx("0xhang", parent, 500)
+		const run = service.waitForTx("0xhang", "p1", parent, 500)
 		const outcome = expect(run).rejects.toThrow(/not confirmed within 1s|not confirmed within 0s/)
 		await vi.advanceTimersByTimeAsync(700)
 		await outcome
@@ -388,9 +474,9 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		seedPending("0xok")
 		const parent = taskService.startNewTask({ kind: 0 } as never)
 		const completeSpy = vi.spyOn(taskService, "completeTask")
-		const run = service.waitForTx("0xok", parent, 5_000)
+		const run = service.waitForTx("0xok", "p1", parent, 5_000)
 		await vi.advanceTimersByTimeAsync(300)
-		;(service as unknown as { pending: Map<string, unknown> }).pending.delete("0xok")
+		pendingMap().delete("p1|0xok")
 		await vi.advanceTimersByTimeAsync(200)
 		await run
 		expect(completeSpy).toHaveBeenCalledTimes(1)
@@ -401,10 +487,10 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 	test("mid-wait registry clear (profile switch): no throw, one swallowed settle", async () => {
 		seedPending("0xswitch")
 		const parent = taskService.startNewTask({ kind: 0 } as never)
-		const run = service.waitForTx("0xswitch", parent, 5_000)
+		const run = service.waitForTx("0xswitch", "p1", parent, 5_000)
 		await vi.advanceTimersByTimeAsync(200)
 		;(taskService as unknown as { tasks: Map<string, unknown> }).tasks.clear() // profile switch
-		;(service as unknown as { pending: Map<string, unknown> }).pending.delete("0xswitch")
+		pendingMap().delete("p1|0xswitch")
 		await vi.advanceTimersByTimeAsync(200)
 		await run // resolves — the cleared registry must not replace the outcome
 	})
@@ -415,9 +501,9 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 		;(taskService as unknown as { tasks: Map<string, unknown> }).tasks.clear() // parent gone BEFORE the wait
 		const completeSpy = vi.spyOn(taskService, "completeTask")
 		const failSpy = vi.spyOn(taskService, "failTask")
-		const run = service.waitForTx("0xstale", parent, 5_000)
+		const run = service.waitForTx("0xstale", "p1", parent, 5_000)
 		await vi.advanceTimersByTimeAsync(100)
-		;(service as unknown as { pending: Map<string, unknown> }).pending.delete("0xstale")
+		pendingMap().delete("p1|0xstale")
 		await vi.advanceTimersByTimeAsync(200)
 		await run
 		expect(completeSpy).not.toHaveBeenCalled()
@@ -426,7 +512,7 @@ describe("TransactionService.waitForTx — bounded wait", () => {
 
 	test("no parent task: the bare wait times out with the typed error", async () => {
 		seedPending("0xbare")
-		const run = service.waitForTx("0xbare", undefined, 500)
+		const run = service.waitForTx("0xbare", "p1", undefined, 500)
 		const outcome = expect(run).rejects.toBeInstanceOf(TxConfirmationTimeoutError)
 		await vi.advanceTimersByTimeAsync(700)
 		await outcome

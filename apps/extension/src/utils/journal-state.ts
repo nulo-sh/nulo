@@ -5,10 +5,14 @@
  * transactions render through `TransactionCard` instead. Each visual state is an owner decision.
  */
 
+// The glyph module, not the barrel: the e2e typecheck reaches this file and resolves no `.vue`.
+import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { dashIfBlank } from "@/utils/string"
 import { knownDecimals } from "@/utils/token-amount"
-import { formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
+import type { ListedToken } from "@/utils/tx-amount"
+import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
 /**
@@ -34,7 +38,7 @@ export type JournalTerminalVisualState = "cancelled" | "interrupted" | "failed" 
 export interface JournalTerminalDisplay {
 	state: JournalTerminalVisualState
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: "gray" | "amber" | "red" | "green"
 }
 
@@ -44,25 +48,15 @@ export type SendOutcome = "nothing_sent" | "checking" | SendCheckOutcome
 
 type CheckedOutcome = Exclude<SendOutcome, "nothing_sent">
 
-/**
- * Canonical icon names per visual state. Centralized to prevent
- * invented-name regressions: the original implementation
- * shipped `circle-minus` and `refresh-cw` (Material-Icons-style names)
- * which don't exist in the `@nulo/design` icon set — the
- * `Icon` component silently renders empty SVG paths for missing names
- * (no console error), so the bug only surfaced during user QA.
- *
- * Every entry MUST be a key of `@nulo/design`'s `internal/icons.json`. If a
- * future state needs a new icon, grep that file first.
- */
+/** The status glyph per visual state. `Icon` draws an unknown name blank, so each is a `GlyphName`. */
 const ICONS = {
-	cancelled: "cancel",
-	interrupted: "refresh-circle",
-	failed: "close-circle",
-	checking: "clock-circle",
-	sent: "check-circle",
+	cancelled: "square-cross",
+	interrupted: "refresh",
+	failed: "square-cross",
+	checking: "square-half",
+	sent: "square-check",
 	unconfirmed: "help",
-} as const
+} as const satisfies Record<JournalTerminalVisualState, GlyphName>
 
 const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	checking: { state: "checking", subtitle: "Not confirmed yet", icon: ICONS.checking, color: "gray" },
@@ -70,6 +64,7 @@ const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	reverted: { state: "failed", subtitle: "Reverted", icon: ICONS.failed, color: "red" },
 	unconfirmed: { state: "unconfirmed", subtitle: "Unconfirmed", icon: ICONS.unconfirmed, color: "amber" },
 	expired: { state: "failed", subtitle: "Won't go through", icon: ICONS.failed, color: "red" },
+	refused: { state: "failed", subtitle: "Refused by the network", icon: ICONS.failed, color: "red" },
 }
 
 /**
@@ -130,7 +125,6 @@ export function journalTerminalDisplay(op: OperationRecord): JournalTerminalDisp
  * glance. Returns null on null/undefined/empty input.
  *
  * Pure helper to keep the regression pin testable without mounting Vue.
- * Consumed by `journal/[id].vue`.
  */
 export function sanitizeJournalSubtitle(raw: string | undefined | null): string | null {
 	if (!raw) return null
@@ -171,6 +165,7 @@ export function humanizeErrorKind(kind: JobErrorKind): string {
 		case "popup_bound":
 			return "Popup closed"
 		case "dapp_execute":
+		case "too_many_pending":
 			return "App"
 		case "transfer":
 			return "Transfer"
@@ -221,6 +216,10 @@ const CHECKED_LABELS: Record<CheckedOutcome, CategoricalFailureLabel> = {
 		label: "Won't go through",
 		context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
 	},
+	refused: {
+		label: "Refused by the network",
+		context: "The network refused this transaction, so it won't go through. Check the details before sending it again.",
+	},
 }
 
 export function categoricalLabel(op: OperationRecord): CategoricalFailureLabel {
@@ -257,6 +256,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Popup closed early", context: "The popup closed before this transaction could finish." }
 		case "scope_refused":
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
+		case "registry_refused":
+			return { label: "Not allowed", context: "Apps cannot change your public authorizations. Nothing was sent." }
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "terms_refused":
@@ -266,6 +267,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 				label: "Refused before sending",
 				context: "The wallet refused this request before anything was signed. Nothing was sent.",
 			}
+		case "too_many_pending":
+			return { label: "Refused before sending", context: "Too many sends were already waiting. Nothing was sent." }
 		case "session_ended":
 			// Never "Nothing was sent": a lock that lands during execution files this kind too.
 			return { label: "Stopped when the wallet locked", context: "The wallet locked while this was in progress." }
@@ -314,12 +317,14 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 		case "session_ended":
 			return "Stopped when the wallet locked"
 		case "scope_refused":
+		case "registry_refused":
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
 		case "terms_refused":
 			return "Terms not accepted"
 		case "wallet_refused":
+		case "too_many_pending":
 			return "Refused before sending"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved
@@ -339,12 +344,14 @@ export interface TokenForCardProps {
 
 export interface JournalTerminalCardCtx {
 	tokenById: (id: number) => TokenForCardProps | undefined
+	/** The listed tokens a dApp call's movement label is read against. */
+	tokens: readonly ListedToken[]
 }
 
 /** Props shape a terminal `TransactionTerminalCard` consumes, on Home and in History alike. */
 export interface JournalTerminalCardProps {
 	title: string
-	activityIcon: string
+	activityIcon: GlyphName
 	originLabel: string | null
 	/** Privacy-direction chip ("Private → Public" etc.) for transfer ops.
 	 *  Mutually exclusive with originLabel — the terminal card renders
@@ -354,9 +361,11 @@ export interface JournalTerminalCardProps {
 	transferTypeLabel: string | null
 	amount: string | null
 	amountSymbol: string | null
+	/** The title names the function a dApp called, whether or not the dApp's name survived. */
+	oneLineTitle: boolean
 	state: JournalTerminalVisualState
 	subtitle: string
-	icon: string
+	icon: GlyphName
 	color: JournalTerminalDisplay["color"]
 }
 
@@ -379,13 +388,13 @@ export function buildJournalTerminalCardProps(op: OperationRecord, ctx: JournalT
 	const display = journalTerminalDisplay(op)
 	if (!display) return null
 
-	const fields = op.kind === "transfer" ? transferCardFields(op, ctx) : dappCardFields(op)
+	const fields = op.kind === "transfer" ? transferCardFields(op, ctx) : dappCardFields(op, ctx.tokens)
 	return { ...fields, ...display }
 }
 
 type JournalCardFields = Pick<
 	JournalTerminalCardProps,
-	"title" | "activityIcon" | "originLabel" | "transferTypeLabel" | "amount" | "amountSymbol"
+	"title" | "activityIcon" | "originLabel" | "transferTypeLabel" | "amount" | "amountSymbol" | "oneLineTitle"
 >
 
 /** One token lookup, and the amount formatted before the title and the transfer type are read. */
@@ -403,22 +412,24 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 
 	return {
 		title: transferTitle(token),
-		activityIcon: "arrow-narrow-up-right",
+		activityIcon: "send",
 		originLabel: null,
 		transferTypeLabel: transferTypeLabel(op),
 		amount,
 		amountSymbol,
+		oneLineTitle: false,
 	}
 }
 
-function dappCardFields(op: OperationRecord): JournalCardFields {
+function dappCardFields(op: OperationRecord, tokens: readonly ListedToken[]): JournalCardFields {
 	return {
-		title: dappTitle(op),
+		title: journalCallTitle(op, tokens),
 		activityIcon: "zap",
-		originLabel: sanitizeJournalSubtitle(op.subtitle),
+		originLabel: journalCardOriginLabel(op),
 		transferTypeLabel: null,
 		amount: null,
 		amountSymbol: null,
+		oneLineTitle: true,
 	}
 }
 
@@ -427,20 +438,20 @@ function dappCardFields(op: OperationRecord): JournalCardFields {
  * reads the same across its lifecycle. Each checks the kind before reading anything else.
  */
 
-export function journalCardTitle(op: OperationRecord, tokenById: JournalTerminalCardCtx["tokenById"]): string {
-	if (op.kind === "transfer") return transferTitle(op.tokenId !== undefined ? tokenById(op.tokenId) : undefined)
-	return dappTitle(op)
+export function journalCardTitle(op: OperationRecord, ctx: JournalTerminalCardCtx): string {
+	if (op.kind === "transfer") return transferTitle(op.tokenId !== undefined ? ctx.tokenById(op.tokenId) : undefined)
+	return journalCallTitle(op, ctx.tokens)
 }
 
-export function journalCardIcon(op: OperationRecord): string {
-	return op.kind === "transfer" ? "arrow-narrow-up-right" : "zap"
+export function journalCardIcon(op: OperationRecord): GlyphName {
+	return op.kind === "transfer" ? "send" : "zap"
 }
 
 /** `op.subtitle` is the dApp-controlled origin persisted at session-discover time; bracketed when
  *  schemeful so it never reads as a link. */
 export function journalCardOriginLabel(op: OperationRecord): string | null {
-	if (op.kind === "transfer") return null
-	return sanitizeJournalSubtitle(op.subtitle)
+	if (op.kind !== "dapp_execute") return null
+	return sanitizeJournalSubtitle(op.subtitle) ?? DAPP_LABEL
 }
 
 export function journalCardTransferTypeLabel(op: OperationRecord): string | null {
@@ -449,11 +460,19 @@ export function journalCardTransferTypeLabel(op: OperationRecord): string | null
 }
 
 function transferTitle(token: TokenForCardProps | undefined): string {
-	return token?.symbol || "Transfer"
+	return dashIfBlank(token?.symbol || "Transfer")
 }
 
-function dappTitle(op: OperationRecord): string {
-	return op.title ? humanizeMethodName(op.title) : "Transaction"
+/**
+ * A dApp call's title by the rule its settled row follows, from what its record holds: the call's
+ * contract and argument count from the request, its class once the wallet's build recorded one. A
+ * record with no call names no contract, so a movement name reads as its contract spells it.
+ */
+export function journalCallTitle(op: OperationRecord, tokens: readonly ListedToken[]): string {
+	if (!op.title) return "Transaction"
+	if (!op.call) return callTitle(op.title, undefined, false)
+	const { contract, argCount, classId } = op.call
+	return settledCallTitle({ contract, method: op.title, args: { length: argCount }, classId }, tokens)
 }
 
 function transferTypeLabel(op: OperationRecord): string | null {

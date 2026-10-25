@@ -5,6 +5,7 @@ import { TaskServiceClient } from "@/wallet/services/task/client"
 import { ContentKind } from "@/wallet/services/task/spec"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
+import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
 import { isValidHex } from "@/utils/string"
@@ -253,8 +254,10 @@ const handleAddToken = async () => {
 				break
 		}
 	} catch (err) {
-		// Nothing that lands here has copy of its own; its text is a developer's, for the log.
-		error.value = "Something went wrong. Try again."
+		// Only a lookup the node answered empty has copy of its own; any other refusal's text is a
+		// developer's, for the log.
+		error.value =
+			err instanceof ContractNotFoundError ? "There is no token at this address on this network." : "Something went wrong. Try again."
 		console.debug("[new-token] add refused", { reason: err })
 		balanceWait?.abort()
 	} finally {
@@ -317,7 +320,7 @@ usePopupEntity(
 			:disabled="isBusy"
 		>
 			<template #suffix>
-				<Icon v-if="isAvailableToCreateToken" name="check-circle" size="14" color="green" />
+				<Icon v-if="isAvailableToCreateToken" name="square-check" size="14" color="green" />
 			</template>
 			<template #right>
 				<Transition name="fade">
@@ -326,7 +329,7 @@ usePopupEntity(
 						<Text variant="body" color="primary"> Already exist </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
-						<Icon name="close-circle" size="12" color="red" />
+						<Icon name="square-cross" size="12" color="red" />
 						<Text variant="body" color="primary"> Invalid address </Text>
 					</Flex>
 				</Transition>

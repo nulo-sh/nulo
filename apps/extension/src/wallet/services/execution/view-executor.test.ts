@@ -8,17 +8,24 @@
  *     (real signing keys never enter PXE during dApp simulateTx)
  *   - the chain-identity rebind on getChainInfo
  *   - fast-path → standard fallback routing (split null / result null)
- *   - the PXE-local-vs-best-effort metadata ladder
+ *   - the metadata answers: session-bound instances, node-sourced publication
  */
 
 import { describe, expect, test, vi } from "vitest"
-import { ContractNotRegisteredError, InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import {
+	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
+	ScopeViolationError,
+	UnsupportedMethodError,
+} from "@nulo/extension-messaging/errors"
 import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
+import { toAppFacingSimulationResult } from "./app-facing-results"
+import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
-import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -60,18 +67,19 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 		endpoints: [{ id: "e1", rpcUrl: "http://primary" }],
 		primaryEndpointId: "e1",
 	} as never
-	const node = { getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })) }
+	const node = {
+		getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })),
+		getContract: vi.fn(async (_address: AztecAddress): Promise<unknown> => undefined),
+		getContractClass: vi.fn(async (_id: Fr): Promise<unknown> => undefined),
+	}
 	const account = {
 		address: addr("0xacct"),
 		ensureRegistered: vi.fn(async () => {}),
 		requiresInitialization: vi.fn(async () => false),
 	}
+	const simulated = simulationFixture({ tail: "public", publicOutput: true }).result
 	const pxe = {
-		simulateTx: vi.fn(async () => ({
-			gasUsed: { totalGas: 1n },
-			getPrivateReturnValues: () => "priv",
-			getPublicReturnValues: () => "pub",
-		})),
+		simulateTx: vi.fn(async () => simulated),
 		executeUtility: vi.fn(async () => ({ result: [] })),
 		getContracts: vi.fn(async () => []),
 		registerContract: vi.fn(async () => {}),
@@ -91,14 +99,18 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 			getActiveProfile: vi.fn(async () => ({ id: "p1" })),
 			captureExecutionFence: vi.fn(async () => FENCE),
 		} as never,
-		networkService: { getNetwork: vi.fn(async () => network), getNode: vi.fn(async () => node) } as never,
+		networkService: {
+			getNetwork: vi.fn(async () => network),
+			getNode: vi.fn(async () => node),
+			getNodeForUrl: vi.fn(async () => node),
+		} as never,
 		accountService: { getAccountContract: vi.fn(async () => account) } as never,
 		contactService: { getContacts: vi.fn(async () => []) } as never,
 		logDebug: vi.fn(),
 		logError: vi.fn(),
 		...overrides,
 	}
-	return { deps, network, node, account, pxe, executor: new ViewExecutor(deps) }
+	return { deps, network, node, account, pxe, simulated, executor: new ViewExecutor(deps) }
 }
 
 // The fast-path arm wraps accountAddress via the REAL AztecAddress.fromString.
@@ -117,7 +129,7 @@ function makeSimOp(overrides: Record<string, unknown> = {}) {
 
 describe("ViewExecutor.executeSimulateTransaction", () => {
 	test("scopes=[account.address], fee enforcement skipped, projected result shape", async () => {
-		const { executor, pxe, account } = makeHarness()
+		const { executor, pxe, account, simulated } = makeHarness()
 		const result = await executor.executeSimulateTransaction({
 			kind: "simulate_transaction",
 			networkId: "net-1",
@@ -127,7 +139,11 @@ describe("ViewExecutor.executeSimulateTransaction", () => {
 
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
 		expect(simArgs[1]).toEqual({ simulatePublic: false, skipFeeEnforcement: true, scopes: [account.address] })
-		expect(result).toEqual({ gasUsed: { totalGas: 1n }, privateReturn: "priv", publicReturn: "pub" })
+		expect(result).toEqual({
+			gasUsed: simulated.gasUsed,
+			privateReturn: simulated.getPrivateReturnValues(),
+			publicReturn: simulated.getPublicReturnValues(),
+		})
 	})
 })
 
@@ -138,11 +154,14 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		await expect(executor.executeAztecSimulateTx(op)).rejects.toThrow("Invalid `opts.from`")
 	})
 
-	test("split=null routes to the standard path: stub-account msgSender + scopes pin", async () => {
+	test("split=null routes to the standard path: stub-account msgSender + scopes pin, and the answer comes back reduced", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
 		const extra = addr("0xextra")
-		const { executor, pxe, account } = makeHarness()
-		await executor.executeAztecSimulateTx(makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [extra] } }))
+		const { executor, pxe, account, simulated } = makeHarness()
+		const result = await executor.executeAztecSimulateTx(makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [extra] } }))
+
+		expect(result).toEqual(toAppFacingSimulationResult(simulated))
+		expect(result).not.toEqual(simulated)
 
 		expect(fastPathMocks.runFastPath).not.toHaveBeenCalled()
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
@@ -172,22 +191,23 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		expect(planned.calls).toEqual(calls)
 	})
 
-	test("fast path result returned verbatim when non-null", async () => {
+	test("a non-null fast path result comes back reduced; the merge gets the standard arm in full", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue({ optimizableCalls: [{}], remainingRaw: [] })
-		const fastResult = { kind: "fast" }
+		const fastResult = simulationFixture({ tail: "public", publicOutput: true, appCallOffset: 1 }).result
 		fastPathMocks.runFastPath.mockResolvedValue(fastResult)
-		const { executor, pxe } = makeHarness()
+		const { executor, pxe, simulated } = makeHarness()
 		const result = await executor.executeAztecSimulateTx(makeSimOp())
 
-		expect(result).toBe(fastResult)
+		expect(result).toEqual(toAppFacingSimulationResult(fastResult))
+		expect(result).not.toEqual(fastResult)
 		expect(pxe.simulateTx).not.toHaveBeenCalled()
+		const { runStandardArm } = fastPathMocks.runFastPath.mock.calls[0][0] as { runStandardArm: (calls: unknown[]) => Promise<unknown> }
+		expect(await runStandardArm([])).toBe(simulated)
 	})
 })
 
 describe("ViewExecutor builds under a fence captured at entry", () => {
-	const PROFILE_ADDR = `0x${"11".repeat(32)}`
-
-	test("simulate_transaction, the standard aztec_simulateTx arm and profileTx each hand the builder their capture", async () => {
+	test("simulate_transaction and the standard aztec_simulateTx arm each hand the builder their capture", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
 		const { executor, deps } = makeHarness()
 		await executor.executeSimulateTransaction({
@@ -197,12 +217,9 @@ describe("ViewExecutor builds under a fence captured at entry", () => {
 			actions: [],
 		} as never)
 		await executor.executeAztecSimulateTx(makeSimOp())
-		await executor.executeAztecProfileTx(
-			makeSimOp({ kind: "aztec_profileTx", accountAddress: PROFILE_ADDR, opts: { from: addr(PROFILE_ADDR), additionalScopes: [] } }),
-		)
 		const builds = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
-		expect(builds.map((call) => call[1])).toEqual([FENCE, FENCE, FENCE])
-		expect(deps.profileService.captureExecutionFence).toHaveBeenCalledTimes(3)
+		expect(builds.map((call) => call[1])).toEqual([FENCE, FENCE])
+		expect(deps.profileService.captureExecutionFence).toHaveBeenCalledTimes(2)
 	})
 
 	test("a failed capture (locked) stops before any build", async () => {
@@ -253,44 +270,108 @@ describe("ViewExecutor.executeAztecGetChainInfo", () => {
 	})
 })
 
-describe("ViewExecutor.executeAztecGetContractMetadata", () => {
-	test("PXE-local instance + artifact → INITIALIZED with instance attached", async () => {
-		const instance = { currentContractClassId: addr("0xclass") }
-		const { executor } = makeHarness({
-			pxeService: {
-				getContractInstance: vi.fn(async () => instance),
-				getContractArtifact: vi.fn(async () => ({ kind: "artifact" })),
-			} as never,
-		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+describe("ViewExecutor.executeAztecGetContractClassMetadata", () => {
+	const CLASS_ID = Fr.random().toString()
+	const run = (executor: ViewExecutor) =>
+		executor.executeAztecGetContractClassMetadata({ kind: "aztec_getContractClassMetadata", networkId: "net-1", id: CLASS_ID } as never)
 
-		expect(meta.instance).toBe(instance)
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
-		expect(meta.isContractPublished).toBe(true)
+	test("publication is the node's answer; the artifact flag is the wallet's own", async () => {
+		const { executor, deps, node } = makeHarness()
+		node.getContractClass.mockResolvedValueOnce({ id: CLASS_ID })
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: true, isArtifactRegistered: false })
+		expect(String(node.getContractClass.mock.calls[0]?.[0])).toBe(CLASS_ID)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
 	})
 
-	test("not local: best-effort node lookup drives isContractPublished, instance stays undefined", async () => {
-		const getContractInstance = vi
-			.fn()
-			.mockResolvedValueOnce(undefined) // pxeOnly probe
-			.mockResolvedValueOnce({ found: true }) // nodeBestEffort probe
+	test("a class the wallet holds but the node does not know is not published", async () => {
 		const { executor } = makeHarness({
-			pxeService: { getContractInstance, getContractArtifact: vi.fn(async () => undefined) } as never,
+			pxeService: { getContractArtifact: vi.fn(async () => ({ kind: "artifact" })) } as never,
 		})
-		const meta = await executor.executeAztecGetContractMetadata({
-			kind: "aztec_getContractMetadata",
-			networkId: "net-1",
-			address: "0xcontract",
-		} as never)
+		expect(await run(executor)).toEqual({ isContractClassPubliclyRegistered: false, isArtifactRegistered: true })
+	})
 
-		expect(meta.instance).toBeUndefined()
-		expect(meta.initializationStatus).toBe(ContractInitializationStatus.UNKNOWN)
-		expect(meta.isContractPublished).toBe(true)
-		expect((getContractInstance.mock.calls[1] as unknown[])[2]).toEqual({ nodeBestEffort: true })
+	test("a node failure fails the call", async () => {
+		const { executor, node } = makeHarness()
+		node.getContractClass.mockRejectedValueOnce(new Error("node down"))
+		await expect(run(executor)).rejects.toThrow("node down")
+	})
+})
+
+describe("ViewExecutor.executeAztecGetContractMetadata", () => {
+	const SESSION = `0x${"0a".repeat(32)}`
+	const HIDDEN = `0x${"0b".repeat(32)}`
+	const FRESH = `0x${"0c".repeat(32)}`
+	const CONTRACT = `0x${"0d".repeat(32)}`
+	const ids = (original: Fr, current: Fr = original) => ({ originalContractClassId: original, currentContractClassId: current })
+	const stored = (address: string) => ({ address, ...ids(new Fr(1n)) })
+
+	/** The store holds SESSION, HIDDEN (a hidden account row) and CONTRACT; FRESH is unknown. */
+	function metadataHarness(nodeHas: Record<string, unknown> = {}) {
+		const h = makeHarness({
+			pxeService: {
+				getContractInstance: vi.fn(async (_network: unknown, address: string) =>
+					[SESSION, HIDDEN, CONTRACT].includes(address) ? stored(address) : undefined,
+				),
+				getContractArtifact: vi.fn(async () => ({ kind: "artifact" })),
+			} as never,
+			accountService: {
+				getAccounts: vi.fn(async (_profileId: string, _chainId: number, all?: boolean) =>
+					all ? [{ address: SESSION }, { address: HIDDEN }] : [{ address: SESSION }],
+				),
+			} as never,
+		})
+		h.node.getContract.mockImplementation(async (address: AztecAddress) => nodeHas[address.toString()])
+		const read = (address: string, sessionAccounts: string[] = [SESSION]) =>
+			h.executor.executeAztecGetContractMetadata({
+				kind: "aztec_getContractMetadata",
+				networkId: "net-1",
+				address,
+				sessionAccounts,
+			} as never)
+		return { ...h, read }
+	}
+
+	test("a profile account outside the session answers as an address the wallet never registered", async () => {
+		const { read, deps, node } = metadataHarness()
+		expect(await read(HIDDEN)).toEqual(await read(FRESH))
+		expect(node.getContract.mock.calls.map(([address]) => address.toString())).toEqual([HIDDEN, FRESH])
+		expect(deps.pxeService.getContractArtifact).not.toHaveBeenCalled()
+		expect(deps.accountService.getAccounts).toHaveBeenCalledWith("p1", 7, true)
+		expect(deps.networkService.getNodeForUrl).toHaveBeenCalledWith("http://primary")
+		expect(deps.networkService.getNode).not.toHaveBeenCalled()
+	})
+
+	test("a session account returns its stored instance; publication is the node's answer", async () => {
+		const { read } = metadataHarness()
+		const meta = await read(SESSION)
+		expect(meta.instance).toEqual(stored(SESSION))
+		expect(meta.initializationStatus).toBe(ContractInitializationStatus.INITIALIZED)
+		expect(meta.isContractPublished).toBe(false)
+	})
+
+	test("a stored contract the node reports upgraded is published and updated", async () => {
+		const current = new Fr(2n)
+		const { read } = metadataHarness({ [CONTRACT]: ids(new Fr(1n), current) })
+		expect(await read(CONTRACT)).toEqual({
+			instance: stored(CONTRACT),
+			initializationStatus: ContractInitializationStatus.INITIALIZED,
+			isContractPublished: true,
+			isContractUpdated: true,
+			updatedContractClassId: current,
+		})
+	})
+
+	test("a node failure answers unpublished alike and logs no address", async () => {
+		const { read, deps, node } = metadataHarness()
+		node.getContract.mockImplementation(async (address: AztecAddress) => {
+			throw new Error(`lookup failed for ${address.toString()}`)
+		})
+		const fresh = await read(FRESH)
+		expect(await read(HIDDEN)).toEqual(fresh)
+		expect(fresh.isContractPublished).toBe(false)
+		expect(JSON.stringify(vi.mocked(deps.logDebug).mock.calls)).not.toMatch(/0b0b|0c0c/)
+		expect(deps.logDebug).toHaveBeenCalled()
 	})
 })
 
@@ -407,30 +488,26 @@ describe("ViewExecutor.executeSimulateUtility / executeAztecExecuteUtility", () 
 })
 
 describe("ViewExecutor.executeAztecProfileTx", () => {
-	test("opts.from mismatch rejected; happy path scopes = [accountAddress, ...additionalScopes]", async () => {
-		const { executor } = makeHarness()
-		await expect(
-			executor.executeAztecProfileTx(makeSimOp({ kind: "aztec_profileTx", opts: { from: addr("0xother") } })),
-		).rejects.toThrow("Invalid `opts.from`")
+	test("every mode is refused as an unsupported method before the fence, a build or PXE; a simulate in the same harness builds", async () => {
+		const { executor, deps, pxe } = makeHarness()
+		for (const profileMode of ["gates", "execution-steps", "full"]) {
+			const op = makeSimOp({ kind: "aztec_profileTx", opts: { from: addr(VALID_ADDR), additionalScopes: [], profileMode } })
+			await expect(executor.executeAztecProfileTx(op)).rejects.toMatchObject({
+				code: UnsupportedMethodError.CODE,
+				message: "Unsupported wallet method: profileTx",
+			})
+		}
+		expect(deps.profileService.captureExecutionFence).not.toHaveBeenCalled()
+		expect(deps.txBuilder.buildStandard).not.toHaveBeenCalled()
+		expect(pxe.profileTx).not.toHaveBeenCalled()
 
-		// profileTx wraps accountAddress via the REAL AztecAddress.fromString,
-		// so this fixture needs a full-length address.
-		const validAddr = `0x${"11".repeat(32)}`
-		const happy = makeHarness()
-		await happy.executor.executeAztecProfileTx(
-			makeSimOp({
-				kind: "aztec_profileTx",
-				accountAddress: validAddr,
-				opts: { from: addr(validAddr), additionalScopes: [], profileMode: "gates" },
-			}),
-		)
-		const profArgs = happy.pxe.profileTx.mock.calls[0] as unknown[]
-		const scopes = (profArgs[1] as { scopes: Array<{ toString(): string }> }).scopes
-		expect(scopes.map((s) => s.toString())).toEqual([validAddr])
+		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
+		await executor.executeAztecSimulateTx(makeSimOp())
+		expect(deps.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
 	})
 })
 
-describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with the call as the dispatcher parses it", () => {
+describe("ViewExecutor.executeAztecExecuteUtility — the selector binding and the answer, with the call as the dispatcher parses it", () => {
 	const TO = AztecAddress.fromBigIntUnsafe(0x70c3n)
 	const SYMBOL = { name: "symbol", functionType: FunctionType.UTILITY, isStatic: true }
 
@@ -501,6 +578,28 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
 	})
 
+	test("the dApp's answer keeps the call's result and drops the stats", async () => {
+		const { executor, pxe } = harness()
+		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
+		const full = new UtilityExecutionResult(
+			[new Fr(7)],
+			[{ data: [new Fr(8)], contractAddress: TO }],
+			9n,
+			UtilityExecutionResult.random().stats,
+		)
+		pxe.executeUtility.mockResolvedValueOnce(full as never)
+
+		const answer = await executor.executeAztecExecuteUtility(op("symbol"))
+
+		expect(full.stats).toBeDefined()
+		expect(answer.stats).toBeUndefined()
+		expect([answer.result, answer.offchainEffects, answer.anchorBlockTimestamp]).toEqual([
+			full.result,
+			full.offchainEffects,
+			full.anchorBlockTimestamp,
+		])
+	})
+
 	test("an absent name (a direct call; the wire schema requires one) runs the selector's function", async () => {
 		const { executor, pxe } = harness()
 		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
@@ -548,26 +647,5 @@ describe("ViewExecutor.executeAztecExecuteUtility — the target's registration"
 		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce({ name: "lookup_validity", functionType: FunctionType.UTILITY })
 		await executor.executeAztecExecuteUtility(lookupValidity)
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
-	})
-})
-
-describe("ViewExecutor.executeAztecProfileTx: the gas settings a send would commit", () => {
-	test("the build carries the app's priority fee and the embedded cap gets its cap and priority, as the embedded send's do", async () => {
-		const fee = {
-			embeddedFeePayment: "fpc",
-			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
-			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
-			gasPadding: 1,
-		}
-		const validAddr = `0x${"11".repeat(32)}`
-		const { executor, deps, node } = makeHarness({
-			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: 0, feeOptions: fee })) } as never,
-		})
-		await executor.executeAztecProfileTx(
-			makeSimOp({ kind: "aztec_profileTx", accountAddress: validAddr, opts: { from: addr(validAddr), additionalScopes: [] } }),
-		)
-		const buildArgs = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
-		expect(buildArgs[4]).toEqual({ maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas })
-		expect(vi.mocked(applyEmbeddedFpcGasCap)).toHaveBeenLastCalledWith({ kind: "txr" }, fee, node)
 	})
 })

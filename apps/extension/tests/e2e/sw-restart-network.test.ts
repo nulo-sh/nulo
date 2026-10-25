@@ -2,7 +2,8 @@ import { describe, expect } from "vitest"
 import { stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtures/helpers"
+import { ensureUnlocked, lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtures/helpers"
+import { readNetworkRows } from "./helpers/identity-rows"
 
 // The active chain (`Network.id`) and the chain's primary endpoint
 // (`Network.primaryEndpointId`) live in `chrome.storage.local`. SW
@@ -12,10 +13,11 @@ import { lockWallet, readLivenessBaseline, waitForWorkerLiveness } from "./fixtu
 describe("background restart — network state", () => {
 	test("SW restart preserves active network + primary endpoint", async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)
+		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 
 		// Read pre-restart state from chrome.storage.local: NetworkService's
-		// EntityStorage writes per-row keys `nulo:core:networks@<id>`, and the
+		// sealed store writes per-row keys `nulo:core:networks@<id>`, and the
 		// UI-level active-network pointer is `nulo:ui:activeNetwork`. Both
 		// are durable across SW recycle.
 		const before = await page.evaluate(async () => {
@@ -57,13 +59,12 @@ describe("background restart — network state", () => {
 		expect(after.networkRows).toEqual(before.networkRows)
 		expect(after.activeNetwork).toEqual(before.activeNetwork)
 
-		// Each Network row must carry a `primaryEndpointId` and at least one
-		// endpoint after the restart. EntityStorage serializes values via
-		// JSON.stringify, so chrome.storage returns the raw JSON string.
-		// Catches a subtle regression where the storage shape persists but
-		// `primaryEndpointId` gets stripped on read.
-		for (const raw of Object.values(after.networkRows) as unknown[]) {
-			const row = JSON.parse(raw as string) as { primaryEndpointId?: string; endpoints?: unknown[] }
+		// Each Network row the service reads must carry a `primaryEndpointId` and at least one
+		// endpoint after the restart, and every stored row must be one it reads: catches a
+		// regression where the storage shape persists but `primaryEndpointId` is stripped on read.
+		const read = await readNetworkRows(page2)
+		expect(read.length).toBe(Object.keys(after.networkRows).length)
+		for (const row of read as Array<{ primaryEndpointId?: string; endpoints?: unknown[] }>) {
 			expect(typeof row.primaryEndpointId).toBe("string")
 			expect((row.primaryEndpointId ?? "").length).toBeGreaterThan(0)
 			expect(Array.isArray(row.endpoints)).toBe(true)

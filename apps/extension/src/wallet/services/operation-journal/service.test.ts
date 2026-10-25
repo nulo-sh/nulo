@@ -7,6 +7,8 @@
  * itself is covered in `@nulo/wallet-core/jobs/fsm.test.ts`).
  */
 
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { ValidationError } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, type JobProgress, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -14,8 +16,17 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { openStoredText, rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
-import { type NewOperationInput, type OperationRecord, type SendCheckState, isSendCheckable, wasNeverSent } from "./spec"
+import {
+	type JournalMetadata,
+	type NewOperationInput,
+	type OperationRecord,
+	type SendCheckState,
+	isSendCheckable,
+	wasNeverSent,
+} from "./spec"
 
 const VALID_INPUT: NewOperationInput = {
 	kind: "transfer",
@@ -29,6 +40,7 @@ async function started(): Promise<{ api: FakeBrowserApi; service: OperationJourn
 	const logger = new LoggerStore(new ConfigStore())
 	const service = new OperationJournalService(logger, api)
 	const services = new ServiceCollection()
+	services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 	services.add(service)
 	await services.start()
 	return { api, service }
@@ -77,23 +89,30 @@ describe("OperationJournalService", () => {
 		expect(seen).toHaveBeenCalledWith(rec)
 	})
 
-	test("createOperation: persists amountRaw + recipientAddress + transferType for transfer ops", async () => {
-		const rec = await service.createOperation({
-			...VALID_INPUT,
+	test("createOperation: every metadata field survives storage, and the input-only fields are never stored", async () => {
+		const metadata = {
 			accountAddress: "0xabc",
 			networkId: "net1",
 			tokenId: 42,
+			title: "Send 5 USDC",
+			subtitle: "to 0xdef",
 			amountRaw: "5000000",
 			recipientAddress: "0xdef",
+			contractAddress: "0x123",
 			// TransferType.Private === 0 — pin the falsy enum value so a
 			// truthy gate regresses the persistence layer loudly instead of
 			// silently dropping the field on Private→Private records.
 			transferType: 0,
-		})
+			call: { contract: `0x${"0a".repeat(32)}`, argCount: 4, classId: `0x${"0b".repeat(32)}` },
+		} satisfies Required<JournalMetadata>
+		const rec = await service.createOperation({ ...VALID_INPUT, ...metadata, profileEpoch: 3, initialStage: { stage: "pending" } })
 
-		expect(rec.amountRaw).toBe("5000000")
-		expect(rec.recipientAddress).toBe("0xdef")
-		expect(rec.transferType).toBe(0)
+		const key = `nulo:journal@${rec.id}`
+		const stored = JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys))
+		expect(await service.getOperation(rec.id)).toMatchObject(metadata)
+		expect(stored).toMatchObject(metadata)
+		expect(stored).not.toHaveProperty("profileEpoch")
+		expect(stored).not.toHaveProperty("initialStage")
 	})
 
 	test("createOperation: rejects malformed input (missing origin) with ValidationError", async () => {
@@ -127,6 +146,7 @@ describe("OperationJournalService", () => {
 		// A fresh instance re-parses the stored row: a schema that dropped the field would lose it here.
 		const reread = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(reread)
 		await services.start()
 		expect((await reread.getOperation(op.id))?.progress).toEqual({ stage: "proving", enteredProveAt: 5, backend: "presto" })
@@ -395,6 +415,7 @@ describe("OperationJournalService", () => {
 		const logger = new LoggerStore(new ConfigStore())
 		const fresh = new OperationJournalService(logger, api)
 		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		services.add(fresh)
 		await services.start()
 
@@ -453,6 +474,7 @@ describe("OperationJournalService", () => {
 			name: "profile",
 			dependencies: [],
 			getProfiles: async () => profiles,
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -480,6 +502,7 @@ describe("OperationJournalService", () => {
 			dependencies: [],
 			getProfiles: async () => [{ id: "profile-a" }],
 			getDeletionState: () => ({ isCurrent: (_id: string, captured: number) => captured === epoch }),
+			...(await rowKeysForEveryProfile()),
 			async start() {},
 		}
 		const collection = new ServiceCollection()
@@ -510,6 +533,7 @@ describe("OperationJournalService", () => {
 		const svc = new OperationJournalService(new LoggerStore(new ConfigStore()), api)
 		collection.add(svc)
 		collection.add(networkStub as never)
+		collection.add(await profileKeysStub("p", "p-a", "p-b", "p1", "profile-a", "profile-b"))
 		await collection.start()
 
 		await svc.createOperation({ ...VALID_INPUT, networkId: "net-live" })
@@ -840,25 +864,26 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(id))?.progress).toMatchObject({ stage: "failed", check: "sent" })
 	})
 
-	test("unconfirmed becomes expired only on a row with a recorded expiry, never mined, and nothing leaves expired", async () => {
+	test("unconfirmed becomes expired, or sent once found on chain, only on a row with a recorded expiry; never reverted, and nothing leaves expired", async () => {
 		const withExpiry = await failedFromSubmitting(EXPIRY)
 		const without = await failedFromSubmitting()
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
 		expect(await service.setSendCheck(withExpiry, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
-		for (const check of ["sent", "reverted"] as const) {
-			expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check }, live)).toBe(false)
-			expect(
-				await service.setSendCheck(
-					withExpiry,
-					HASH,
-					{ check: "unconfirmed" },
-					{ check, inclusion: { block: 5, hash: `0x${"01".repeat(32)}` } },
-					live,
-				),
-			).toBe(false)
-		}
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "reverted" }, live)).toBe(false)
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "reverted", inclusion: block }, live)).toBe(
+			false,
+		)
 		expect(await service.setSendCheck(without, HASH, {}, { check: "expired" }, live)).toBe(false)
 		expect(await service.setSendCheck(without, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
 		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "sent" }, live)).toBe(false)
+		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "sent", inclusion: block }, live)).toBe(false)
+		for (const found of [{ check: "sent" }, { check: "sent", inclusion: block }] as const) {
+			const id = await failedFromSubmitting(EXPIRY)
+			expect(await service.setSendCheck(id, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
+			expect(await service.setSendCheck(id, HASH, { check: "unconfirmed" }, found, live)).toBe(true)
+			expect((await service.getOperation(id))?.progress).toMatchObject(found)
+		}
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(true)
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, { check: "unconfirmed" }, live)).toBe(false)
 		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, {}, live)).toBe(false)
@@ -871,6 +896,53 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 			check: "expired",
 		})
 		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
+	})
+
+	test("refused is recorded bare, only on a row never answered, and gives way to a mined answer, or to expired with an expiry", async () => {
+		const id = await failedFromSubmitting(EXPIRY)
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "refused", inclusion: block })).toBe(false)
+		expect(await set({}, { check: "refused", checkSince: 1 })).toBe(false)
+		expect(await set({}, { check: "refused" })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			expiry: EXPIRY,
+			check: "refused",
+		})
+		const moves = [
+			{ check: "unconfirmed" },
+			{ check: "expired", inclusion: block },
+			{ check: "refused" },
+			{ checkSince: 1 },
+			{},
+		] as const
+		for (const next of moves) expect(await set({ check: "refused" }, next)).toBe(false)
+		expect(await set({ check: "refused" }, { check: "sent", inclusion: block })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toMatchObject({ check: "sent", inclusion: block })
+
+		const reverted = await failedFromSubmitting()
+		expect(await service.setSendCheck(reverted, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(reverted, HASH, { check: "refused" }, { check: "reverted" }, live)).toBe(true)
+
+		const expired = await failedFromSubmitting(EXPIRY)
+		expect(await service.setSendCheck(expired, HASH, {}, { check: "refused" }, live)).toBe(true)
+		expect(await service.setSendCheck(expired, HASH, { check: "refused" }, { check: "expired" }, live)).toBe(true)
+		expect((await service.getOperation(expired))?.progress).toMatchObject({ expiry: EXPIRY, check: "expired" })
+	})
+
+	test("a row whose mined answer was pruned is never refused; its window still ends unconfirmed", async () => {
+		const id = await failedFromSubmitting()
+		const block = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "sent", inclusion: block })).toBe(true)
+		expect(await set({ check: "sent", inclusion: block }, { checkSince: 1_234 })).toBe(true)
+		expect(await set({}, { check: "refused" })).toBe(false)
+		expect(await set({}, { check: "unconfirmed" })).toBe(true)
 	})
 
 	test("a mined answer's block moves only to final, another block or pruned, each over the block the caller read", async () => {
@@ -978,30 +1050,102 @@ describe("a refusal's title rides the write that fails the record", () => {
 
 	test("a failing transition writes the title with the stage", async () => {
 		const id = await claimedSend()
-		await service.transitionOperation(id, { stage: "failed" }, REFUSED, "transfer_public_to_public")
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "failed", title: "transfer_public_to_public" })
 	})
 
+	test("a retitle replaces the call with its own, so the title and the call describe one call", async () => {
+		const feeJuice = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+		const other = `0x${"0c".repeat(32)}`
+		const built = { contract: feeJuice, argCount: 1, classId: `0x${"0e".repeat(32)}` }
+		const created = () =>
+			service.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: "profile-a",
+				title: "balance_of_public",
+				call: built,
+			})
+		const { id } = await created()
+		await service.transitionOperation(id, { stage: "failed" }, REFUSED, { title: "claim", call: { contract: other, argCount: 2 } })
+		expect((await service.getOperation(id))?.call).toEqual({ contract: other, argCount: 2 })
+
+		const unnamed = (await created()).id
+		expect((await service.getOperation(unnamed))?.call).toEqual(built)
+		await service.transitionOperation(unnamed, { stage: "failed" }, REFUSED, { title: "Transaction" })
+		expect((await service.getOperation(unnamed))?.call).toBeUndefined()
+	})
+
 	test("a title on any other transition is refused and writes nothing", async () => {
 		const id = await claimedSend()
-		await expect(service.transitionOperation(id, { stage: "simulating" }, null, "transfer_public_to_public")).rejects.toBeInstanceOf(
-			ValidationError,
-		)
+		await expect(
+			service.transitionOperation(id, { stage: "simulating" }, null, { title: "transfer_public_to_public" }),
+		).rejects.toBeInstanceOf(ValidationError)
 		const rec = await service.getOperation(id)
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "balance_of_public" })
 	})
 
 	test("a conditional transition that does not land writes no title (never-happens), one that lands does (control)", async () => {
 		const failedId = await claimedSend()
-		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, "transfer_public_to_public")
-		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		await service.transitionOperation(failedId, { stage: "failed" }, REFUSED, { title: "transfer_public_to_public" })
+		const noop = await service.transitionIfStage(failedId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(noop.outcome).toBe("stage")
 		expect((await service.getOperation(failedId))?.title).toBe("transfer_public_to_public")
 
 		const liveId = await claimedSend()
-		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, { failedTitle: "Transaction" })
+		const landed = await service.transitionIfStage(liveId, ["pending"], { stage: "failed" }, REFUSED, {
+			retitle: { title: "Transaction" },
+		})
 		expect(landed.outcome).toBe("transitioned")
 		expect((await service.getOperation(liveId))?.title).toBe("Transaction")
+	})
+})
+
+describe("a dApp record's call: one schema at every writer and the reader", () => {
+	const TOKEN = `0x${"0d".repeat(32)}`
+	const CLASS = `0x${"0e".repeat(32)}`
+	let api: FakeBrowserApi
+	let service: OperationJournalService
+
+	beforeEach(async () => {
+		;({ api, service } = await started())
+	})
+
+	const queued = (call?: unknown) =>
+		service.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "profile-a",
+			title: "transfer_in_public",
+			...(call !== undefined && { call: call as never }),
+		})
+
+	test("the build's call survives a reread from storage; a refused one leaves the record as it was", async () => {
+		const { id } = await queued({ contract: TOKEN, argCount: 4 })
+		await expect(service.setOperationMeta(id, { title: "other", call: { contract: "0xc", argCount: 4 } })).rejects.toBeInstanceOf(
+			ValidationError,
+		)
+		expect(await service.getOperation(id)).toMatchObject({ title: "transfer_in_public", call: { contract: TOKEN, argCount: 4 } })
+
+		await service.setOperationMeta(id, { title: "transfer_in_public", call: { contract: TOKEN, argCount: 4, classId: CLASS } })
+		const key = `nulo:journal@${id}`
+		expect(JSON.parse(await openStoredText(api.storage.local, key, (await rowKeysForEveryProfile()).rowKeys)).call).toEqual({
+			contract: TOKEN,
+			argCount: 4,
+			classId: CLASS,
+		})
+		expect((await service.getOperation(id))?.call).toEqual({ contract: TOKEN, argCount: 4, classId: CLASS })
+	})
+
+	test.each([
+		["a contract that is no field", { contract: "0xc", argCount: 4 }],
+		["a count past the bound", { contract: TOKEN, argCount: 65_536 }],
+		["a class that is no field", { contract: TOKEN, argCount: 4, classId: "class" }],
+	])("a creation carrying %s is refused, never stored unreadable", async (_label, call) => {
+		await expect(queued(call)).rejects.toBeInstanceOf(ValidationError)
+		expect(await service.getOperations()).toEqual([])
 	})
 })

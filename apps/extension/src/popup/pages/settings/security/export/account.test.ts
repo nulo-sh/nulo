@@ -5,6 +5,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 
 const ADDRESS = `0x${"0a".repeat(32)}`
 const exportAccount = vi.hoisted(() =>
@@ -12,7 +13,15 @@ const exportAccount = vi.hoisted(() =>
 		encrypt ? "sealed-body" : "plain-body",
 	),
 )
-vi.mock("@/utils/core", () => ({ managers: { account: { exportAccount } } }))
+const HELD = `0x${"0b".repeat(32)}`
+const exportResetHeldAccount = vi.hoisted(() =>
+	vi.fn(async (_profileId: string, _address: string, _password: string, encrypt: boolean) => (encrypt ? "sealed-held" : "plain-held")),
+)
+const networkReset = vi.hoisted(() => ({
+	getPendingReset: vi.fn(async (): Promise<{ networkId: string; running: boolean } | null> => null),
+	getStaleNetwork: vi.fn(async (_networkId: string): Promise<unknown> => null),
+}))
+vi.mock("@/utils/core", () => ({ managers: { account: { exportAccount, exportResetHeldAccount }, networkReset } }))
 const downloadFile = vi.hoisted(() => vi.fn(async (_opts: { data: string; filename: string }) => undefined))
 vi.mock("@/utils", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils")>()),
@@ -20,13 +29,15 @@ vi.mock("@/utils", async (importOriginal) => ({
 }))
 vi.mock("@/wallet/services/account/client", () => ({ AccountType: { Nulo_v1: 0, Imported: 1 } }))
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }))
+const route = vi.hoisted(() => ({ query: {} as Record<string, string> }))
 vi.mock("vue-router", () => ({
 	useRouter: () => router,
-	useRoute: () => ({ path: "/popup/settings/security/export/account", query: { address: ADDRESS }, meta: {} }),
+	useRoute: () => ({ path: "/popup/settings/security/export/account", query: route.query, meta: {} }),
 }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
-import { MaterialIcon } from "@nulo/design"
+import { Icon } from "@nulo/design"
+import { useAppStore } from "@/stores/app.store"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
 
@@ -48,7 +59,7 @@ function mountPage(profileType = "password") {
 					},
 				}),
 			],
-			components: { MaterialIcon, SubPageHeader },
+			components: { SubPageHeader, Icon },
 			stubs: {
 				SecretUnlockSection: {
 					props: ["modelValue", "error"],
@@ -82,11 +93,8 @@ const download = (w: VueWrapper) => w.get('[data-testid="account-download-btn"]'
 
 beforeEach(() => {
 	vi.clearAllMocks()
-	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
-	if (c) {
-		c.storage.local = { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
-		c.storage.onChanged = { addListener: vi.fn(), removeListener: vi.fn() }
-	}
+	route.query = { address: ADDRESS }
+	installChromeStorage({}, { persist: false })
 })
 
 afterEach(() => {
@@ -123,6 +131,48 @@ describe("account file export", () => {
 			data: "sealed-body",
 			filename: `NuloEncryptedAccount_Main_${ADDRESS.slice(0, 10)}.txt`,
 		})
+	})
+
+	test("a paused reset's held account is listed, exported from the journal at Create and Protect, and warned as imported", async () => {
+		route.query = {}
+		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
+		networkReset.getStaleNetwork.mockResolvedValueOnce({ reset: { heldImported: [{ name: "Savings", address: HELD }] } })
+		const w = mountPage()
+		await flushPromises()
+		const rows = w.findAll('[data-testid="export-account-row"]')
+		expect(rows.map((r) => r.attributes("data-account-name"))).toEqual(["Account 1", "Savings"])
+		await rows[1]!.trigger("click")
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="unlock-password-input"]').setValue("password123")
+		await w.get('[data-testid="unlock-submit-btn"]').trigger("click")
+		await flushPromises()
+		expect(w.text()).toContain("This file is its only backup.")
+		await w.get('[data-testid="account-protect-btn"]').trigger("click")
+		await flushPromises()
+		expect(exportResetHeldAccount.mock.calls).toEqual([
+			["p1", HELD, "password123", false],
+			["p1", HELD, "password123", true],
+		])
+		expect(exportAccount).not.toHaveBeenCalled()
+		expect(networkReset.getStaleNetwork).toHaveBeenCalledWith("tn")
+	})
+
+	test("a profile switch drops the previous profile's held rows and its flow, and reads the new profile's", async () => {
+		route.query = {}
+		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
+		networkReset.getStaleNetwork.mockResolvedValueOnce({ reset: { heldImported: [{ name: "Savings", address: HELD }] } })
+		const w = mountPage()
+		await flushPromises()
+		await w.findAll('[data-testid="export-account-row"]')[1]!.trigger("click")
+		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(true)
+
+		const app = useAppStore()
+		app.profile = { id: "p2", name: "Other", type: "password" } as never
+		app.accounts = []
+		await flushPromises()
+		expect(w.findAll('[data-testid="export-account-row"]')).toHaveLength(0)
+		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(false)
+		expect(networkReset.getPendingReset).toHaveBeenCalledTimes(2)
 	})
 
 	test("a passkey profile is sent back to the export choices", async () => {

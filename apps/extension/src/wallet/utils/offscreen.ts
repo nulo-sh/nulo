@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { RpcTimeoutError } from "@nulo/extension-messaging/errors"
 import { isSenderAtUrl, isTrustedInternalSender } from "@nulo/extension-messaging/offscreen"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 
@@ -10,7 +11,7 @@ export const OFFSCREEN_KEEPALIVE = "OFFSCREEN_KEEPALIVE"
 let offscreenTimeout: NodeJS.Timeout
 let offscreenPromise: Promise<void> | null = null
 let resolveOffscreenPromise: () => void
-let rejectOffscreenPromise: (reason: string) => void
+let rejectOffscreenPromise: (reason: RpcTimeoutError) => void
 
 const HEALTH_CHECK_TIMEOUT_MS = 3_000
 const READY_TIMEOUT_MS = 10_000
@@ -89,8 +90,30 @@ export function shouldRespondPong(message: unknown, servicesReady: boolean, send
 	return message === OFFSCREEN_PING && servicesReady && isTrustedInternalSender(sender)
 }
 
+/**
+ * Issued, never reused, each time this worker hears the current document answer (the READY ending
+ * a create pass, or a PONG); cleared by every close and create attempt. While a token is current a
+ * request skips the health ping: a busy document answers late, and replacing it fails every call
+ * it runs. A request carries the token current at its send, so one that went unanswered under an
+ * earlier token (another document, or before the last answer) is no evidence against this one.
+ */
+let answerSeq = 0
+let currentAnswer: number | undefined
+
+/** The token a request sent now carries; undefined while no document is trusted. */
+export function offscreenAnswer(): number | undefined {
+	return currentAnswer
+}
+
+/** A request sent under `answer` went unanswered: if that token is still current, the next request
+ *  pings the document again. */
+export function markOffscreenUnanswered(answer: number | undefined): void {
+	if (answer !== undefined && answer === currentAnswer) currentAnswer = undefined
+}
+
 const onOffscreenReady = (message: unknown, sender: chrome.runtime.MessageSender | undefined) => {
 	if (message === OFFSCREEN_READY_MESSAGE && isLiveOffscreenSender(sender)) {
+		currentAnswer = ++answerSeq
 		chrome.runtime.onMessage.removeListener(onOffscreenReady)
 		clearTimeout(offscreenTimeout)
 		resolveOffscreenPromise()
@@ -113,7 +136,7 @@ const onOffscreenTimeout = () => {
 	// joining it, a late-landing `closeDocument()` here tears down the
 	// successor's freshly-created document.
 	void trackedClose()
-	rejectOffscreenPromise("Offscreen is not responding")
+	rejectOffscreenPromise(new RpcTimeoutError("Offscreen is not responding"))
 	offscreenPromise = null
 }
 
@@ -187,6 +210,7 @@ async function isOffscreenHealthy(): Promise<boolean> {
 
 		const onPong = (message: unknown, sender: chrome.runtime.MessageSender | undefined) => {
 			if (message === OFFSCREEN_PONG && isLiveOffscreenSender(sender)) {
+				currentAnswer = ++answerSeq
 				chrome.runtime.onMessage.removeListener(onPong)
 				clearTimeout(timer)
 				resolve(true)
@@ -212,6 +236,7 @@ async function isOffscreenHealthy(): Promise<boolean> {
  * Firefox: remove the frame; a removed frame's document is destroyed with it.
  */
 async function closeOffscreen() {
+	currentAnswer = undefined
 	if (hasOffscreenApi()) {
 		try {
 			await chrome.offscreen.closeDocument()
@@ -253,6 +278,7 @@ async function createOffscreenChromium(passId: number) {
 	// Chromium allows one offscreen document, so a create that succeeds proves the earlier ones gone.
 	// Each attempt starts its own epoch first, so work sent on a READY that beats it is not retired.
 	const createRetiringEarlier = async () => {
+		currentAnswer = undefined
 		const previous = documentEpoch
 		documentEpoch += 1
 		await create()
@@ -293,6 +319,7 @@ async function createOffscreenChromium(passId: number) {
  *  the URL is what `isLiveOffscreenSender` matches READY and PONG against. The background page
  *  may run this before `body` exists. */
 function createOffscreenFirefox(): void {
+	currentAnswer = undefined
 	const generation = crypto.randomUUID()
 	const element = document.createElement("iframe")
 	element.src = `${offscreenUrl()}?instance=${generation}`
@@ -345,8 +372,8 @@ async function doEnsureOffscreenRunning() {
 	if (pendingClose) await pendingClose
 
 	if (await isOffscreenAlreadyRunning()) {
-		// Offscreen exists — verify it's actually responsive
-		if (await isOffscreenHealthy()) {
+		// A document this worker heard answer stays trusted; one it has not must PONG.
+		if (currentAnswer !== undefined || (await isOffscreenHealthy())) {
 			return
 		}
 		// Zombie offscreen — kill it and recreate below. Through the serialized

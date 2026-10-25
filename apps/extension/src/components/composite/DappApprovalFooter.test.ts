@@ -65,6 +65,19 @@ describe("composite/DappApprovalFooter", () => {
 		expect(w.emitted("approve")).toHaveLength(1)
 	})
 
+	test("a confirm detail is the label's second line, read with it as one name", () => {
+		const w = factory({ confirmLabel: "Send for ~0.021 FJ", confirmDetail: "($0.042)" })
+		const confirm = w.get('[data-testid="x-confirm-btn"]')
+		expect(confirm.get('[data-testid="dapp-approval-confirm-detail"]').text()).toBe("($0.042)")
+		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ ($0.042)")
+	})
+
+	test("without a detail the label is one line", () => {
+		const confirm = factory({ confirmLabel: "Send for ~0.021 FJ" }).get('[data-testid="x-confirm-btn"]')
+		expect(confirm.find('[data-testid="dapp-approval-confirm-detail"]').exists()).toBe(false)
+		expect(confirm.element.textContent).toBe("Send for ~0.021 FJ")
+	})
+
 	test("rejectDisabled disables the reject button", () => {
 		const w = factory({ rejectDisabled: true })
 		expect((w.find('[data-testid="x-reject-btn"]').element as HTMLButtonElement).disabled).toBe(true)
@@ -73,6 +86,12 @@ describe("composite/DappApprovalFooter", () => {
 	test("confirmDisabled disables the confirm button", () => {
 		const w = factory({ confirmDisabled: true })
 		expect((w.find('[data-testid="x-confirm-btn"]').element as HTMLButtonElement).disabled).toBe(true)
+	})
+
+	test("confirmHidden leaves Reject alone; Confirm renders by default", () => {
+		expect(factory({ confirmHidden: true }).find('[data-testid="x-confirm-btn"]').exists()).toBe(false)
+		expect(factory({ confirmHidden: true }).find('[data-testid="x-reject-btn"]').exists()).toBe(true)
+		expect(factory({ confirmHidden: false }).find('[data-testid="x-confirm-btn"]').exists()).toBe(true)
 	})
 
 	test("confirmLoading is forwarded to the confirm button's loading state", () => {

@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { MaterialIcon, RowAction, Toggle } from "@nulo/design"
+import { Icon, RowAction, Toggle } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 
@@ -47,9 +47,6 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 		load: vi.fn(async () => {}),
 		reject: vi.fn(),
 	}),
-}))
-vi.mock("@/composables/useDappHostname", () => ({
-	useDappHostname: () => ({ hostname: ref("dapp.example"), isSuspicious: ref(false) }),
 }))
 // The approval-window composable is mocked thin: `start` runs the real init
 // thunk (so initComplete flips through the REAL code path), the rest are
@@ -128,7 +125,7 @@ describe("capabilities window — approve latch", () => {
 		resolveInteractionMock.mockImplementationOnce(() => new Promise((r) => (resolveGrant = r)))
 		const w = mount(CapabilitiesWindow, {
 			global: {
-				components: { MaterialIcon, RowAction, Toggle },
+				components: { RowAction, Toggle, Icon },
 				stubs: {
 					...STUBS,
 					PermissionRow: false,

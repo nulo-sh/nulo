@@ -15,7 +15,7 @@ vi.mock("vue-router", async (importOriginal) => {
 	return { ...mod, useRoute: () => mockRoute }
 })
 
-const stubs = { MaterialIcon: true, Teleport: true }
+const stubs = { Teleport: true }
 const KEY = `${ACCOUNT_INTEGRITY_BLOCKED_ROOT}@p1`
 
 function record(profileId: string): string {

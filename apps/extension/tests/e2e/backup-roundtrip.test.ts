@@ -18,7 +18,7 @@ import { join } from "node:path"
 import { expect } from "vitest"
 import { clickByTestId, launchExtension, openPopup, replaceInputValue, test, waitForHash, pickFileByTestId } from "./fixtures/extension"
 import { ensureUnlocked, navigateByHash, reopenAndRecoverAfterImport } from "./fixtures/helpers"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
+import { armDownloadCapture, readCapturedDownload } from "./helpers/download-capture"
 import { gotoPopupImport, readActiveAccount, TEST_PASSWORD, waitForActiveAccount } from "./helpers/import-drivers"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
@@ -61,9 +61,9 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 		{ timeout: 60_000, polling: 250 },
 	)
 
-	await armBackupDownloadCapture(page)
+	await armDownloadCapture(page, { gzip: true })
 	await clickByTestId(page, "download-backup-btn")
-	const ciphertext = await readCapturedBackupDownload(page)
+	const ciphertext = await readCapturedDownload(page)
 	await page.close()
 
 	// The capture is the DECOMPRESSED file content: the purpose tag, then the
@@ -178,7 +178,7 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 						hash: window.location.hash,
 						navTrace: (window as unknown as { __nuloImportNavTrace?: Array<{ t: number; hash: string }> }).__nuloImportNavTrace,
 						profileRows: keys.filter((k) => k.startsWith("nulo:core:profiles@")).length,
-						activeAccountPointer: !!all["nulo:ui:activeAccount"],
+						selectedAccountRow: "nulo:ui:selectedAccount@device" in all,
 						bodySnippet: (document.body.innerText ?? "").slice(0, 120),
 					}
 				})

@@ -73,10 +73,6 @@ export function formatSingleLog(log: LogEntry): string {
 	return `[${time}] [${log.source}] ${getLogLevelName(log.level)}: ${formatLogData(log.data)}`
 }
 
-export function formatLogs(logs: LogEntry[]): string {
-	return logs.map(formatSingleLog).join("\n")
-}
-
 /** The editor document: every line ends with a newline, so a live line appended at the document's
  *  end starts a line of its own, and an empty list is an empty document, not one blank line. */
 export function logsDocument(logs: LogEntry[]): string {

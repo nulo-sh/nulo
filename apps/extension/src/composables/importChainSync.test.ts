@@ -27,10 +27,12 @@ function makeDeps(overrides: {
 	createdNetworkIds?: string[]
 	probeStatus?: NodeStatus | ((id: string) => NodeStatus | Promise<NodeStatus>)
 	restoreImpl?: (items: unknown[], deadlineMs: number) => Promise<unknown>
+	deadlineAt?: number
 }) {
 	const harness: Harness = { records: [], kinds: [], restoreCalls: [], probeCalls: [] }
 	const deps = {
 		slice: overrides.slice,
+		deadlineAt: overrides.deadlineAt ?? Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 		createdNetworkIds: overrides.createdNetworkIds ?? ["n1"],
 		restore: (items: unknown[], deadlineMs: number) => {
 			harness.restoreCalls.push({ items, deadlineMs, at: Date.now() })
@@ -200,9 +202,10 @@ describe("runImportChainSync", () => {
 		})
 		await run(runImportChainSync(deps))
 		expect(harness.records).toEqual([[{ networkId: "n1", senders: [], contracts: [], restoreError: ACCOUNT_STATE_SKIP_DEADLINE }]])
-		// The abandoned SW-side call resolving late must not re-append.
+		// The abandoned SW-side call resolving late must not re-append. `runAllTimersAsync` yields a
+		// real task, so every reaction to the late answer, however deeply chained, has run.
 		resolveLate([{ networkId: "n1", senders: [], contracts: [] }])
-		for (let i = 0; i < 5; i++) await Promise.resolve()
+		await vi.runAllTimersAsync()
 		expect(harness.records).toHaveLength(1)
 	})
 
@@ -319,8 +322,26 @@ describe("runImportChainSync", () => {
 		expect(settledAt - startedAt).toBeLessThanOrEqual(IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS)
 		expect(harness.records).toEqual([[skippedNetworkRecord("n1", ACCOUNT_STATE_SKIP_DEADLINE)]])
 		resolveLate([{ networkId: "n1", senders: [], contracts: [] }])
-		for (let i = 0; i < 5; i++) await Promise.resolve()
+		await vi.runAllTimersAsync()
 		expect(harness.records).toHaveLength(1)
+	})
+
+	test("a deadline the caller passes bounds the registration, which the caller's later stages share", async () => {
+		const startedAt = Date.now()
+		const { deps, harness } = makeDeps({
+			slice: [{ networkId: "n1", senders: [sender()], contracts: [] }],
+			restoreImpl: hangs,
+			deadlineAt: startedAt + 5_000,
+		})
+		let settledAt = Number.POSITIVE_INFINITY
+		await run(
+			runImportChainSync(deps).then(() => {
+				settledAt = Date.now()
+			}),
+		)
+		expect(callFor(harness, "n1")?.deadlineMs).toBeLessThanOrEqual(5_000)
+		expect(settledAt - startedAt).toBe(5_000)
+		expect(harness.records).toEqual([[skippedNetworkRecord("n1", ACCOUNT_STATE_SKIP_DEADLINE)]])
 	})
 
 	test("the retry set: a deadline, a rejection and an unreachable verdict; never wrong-network or an unknown id", async () => {

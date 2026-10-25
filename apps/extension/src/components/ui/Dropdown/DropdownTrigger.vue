@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
 		<Icon
 			v-if="clearable && value"
 			@click.stop="emit('onClear')"
-			name="close-circle"
+			name="close"
 			size="12"
 			color="secondary"
 			:class="$style.clear_icon"
@@ -87,13 +87,14 @@ onBeforeUnmount(() => {
 			name="chevron"
 			size="12"
 			color="secondary"
-			:style="{ transform: `rotate(${isOpen ? '180deg' : '0'})` }"
+			:rotate="isOpen ? 270 : 90"
 		/>
 	</Flex>
 </template>
 
 <style module>
 .wrapper {
+	user-select: none;
 	height: 40px;
 
 	border: 1px solid var(--nulo-border);
@@ -126,7 +127,7 @@ onBeforeUnmount(() => {
 	transition: all 0.2s ease;
 
 	&:hover {
-		fill: var(--txt-primary);
+		color: var(--txt-primary);
 	}
 }
 </style>

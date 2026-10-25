@@ -10,14 +10,19 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
-import { clickByTestId, clickSelector, patchPagePolling, recordPageErrors, waitForHash, type ExtensionContext } from "./extension"
-import { selectFeeMethod, type FeeMethodSubtitle } from "./helpers"
+import { clickByTestId, clickSelector, patchPagePolling, waitForHash } from "./dom"
+import { pollUntil } from "./poll"
+import type { ExtensionContext } from "./extension"
+import { selectFeeMethod, type FeeMethodSubtitle } from "./transfers"
+import { recordPageErrors } from "./wallet-pages"
 
 export type PopupKind =
 	| "discover"
 	| "verify"
 	| "capabilities"
 	| "execute"
+	/** A held dApp send's question: its fee came out above the approved figure. */
+	| "fee"
 	| "json"
 	| "network-unavailable"
 	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never
@@ -116,118 +121,113 @@ export async function waitForPopup(
 }
 
 export async function waitForMainFrame(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
+	const ready = async () => {
 		try {
 			page.mainFrame()
-			return
+			return true
 		} catch {
-			await new Promise((r) => setTimeout(r, 50))
+			return false
 		}
 	}
-	throw new Error(`waitForMainFrame: page main frame not ready after ${timeout}ms`)
+	await pollUntil(ready, (ok) => ok, { label: "waitForMainFrame: the page's main frame ready", timeoutMs: timeout, intervalMs: 50 })
 }
 
 export type CreatedWindow = { id?: number; type?: string }
+/** A window the browser created or removed, stamped with the extension page's `Date.now()`. */
+export type WindowChange = CreatedWindow & { change: "created" | "removed"; at: number }
+
+/** Every window the browser creates or removes from now on, as an extension page's listeners see it. */
+export async function recordWindowChanges(control: Page): Promise<() => Promise<WindowChange[]>> {
+	await control.evaluate(() => {
+		const w = window as unknown as { __windowChanges: WindowChange[] }
+		w.__windowChanges = []
+		chrome.windows.onCreated.addListener((win) =>
+			w.__windowChanges.push({ change: "created", id: win.id, type: win.type, at: Date.now() }),
+		)
+		chrome.windows.onRemoved.addListener((id) => w.__windowChanges.push({ change: "removed", id, at: Date.now() }))
+	})
+	return () => control.evaluate(() => (window as unknown as { __windowChanges: WindowChange[] }).__windowChanges)
+}
 
 /** Every window the browser creates from now on, as an extension page's listener sees it. */
 export async function recordCreatedWindows(control: Page): Promise<() => Promise<CreatedWindow[]>> {
-	await control.evaluate(() => {
-		const w = window as unknown as { __created: CreatedWindow[] }
-		w.__created = []
-		chrome.windows.onCreated.addListener((win) => w.__created.push({ id: win.id, type: win.type }))
-	})
-	return () => control.evaluate(() => (window as unknown as { __created: CreatedWindow[] }).__created)
+	const changes = await recordWindowChanges(control)
+	return async () => (await changes()).filter((c) => c.change === "created").map(({ id, type }) => ({ id, type }))
 }
 
 /** Wait for a popup page to be fully closed (target removed). Use before
  *  opening a second popup of the same kind so waitForTarget doesn't match
  *  the still-closing first popup. */
 export async function waitForPopupClosed(page: Page, timeout = 5_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeout) {
-		if (page.isClosed()) return
-		await new Promise((r) => setTimeout(r, 50))
-	}
-	throw new Error(`waitForPopupClosed: popup did not close within ${timeout}ms`)
+	await pollUntil(
+		async () => page.isClosed(),
+		(closed) => closed,
+		{
+			label: "waitForPopupClosed: the popup closed",
+			timeoutMs: timeout,
+			intervalMs: 50,
+		},
+	)
 }
 
 export async function approveDiscover(page: Page): Promise<void> {
 	await clickByTestId(page, "discover-allow-btn")
 }
 
-type ConnectWindowRead = { id: number | undefined; popups: number }
-
 /** Read inside the page: BiDi has no window handles, so Puppeteer cannot name a window on Firefox. */
-function readConnectWindow(page: Page): Promise<ConnectWindowRead> {
+function readPopupWindows(page: Page): Promise<{ id: number | undefined; popups: number[] }> {
 	return page.evaluate(async () => ({
 		id: (await chrome.windows.getCurrent()).id,
-		popups: (await chrome.windows.getAll({ windowTypes: ["popup"] })).filter((w) => w.type === "popup").length,
+		popups: (await chrome.windows.getAll({ windowTypes: ["popup"] }))
+			.filter((w) => w.type === "popup")
+			.map((w) => w.id as number)
+			.sort((a, b) => a - b),
 	}))
 }
 
 /**
- * Allow a new connection and wait for its emoji check in the same window, with no popup window
- * opened or closed on the way. Resolves with that page, now the check, for `approveVerify`.
- * `allow` is the click, `approveDiscover` unless the caller drives the real pointer.
+ * Allow a new connection and resolve with its emoji check's page once the connect window has closed:
+ * the popup windows after are those before, with the check in the connect window's place. A window
+ * that opens and closes in between escapes this. `allow` defaults to `approveDiscover`.
  */
 export async function approveConnect(
 	ctx: ExtensionContext,
 	discoverPage: Page,
 	allow: () => Promise<void> = () => approveDiscover(discoverPage),
 ): Promise<Page> {
-	const before = await readConnectWindow(discoverPage)
+	const before = await readPopupWindows(discoverPage)
+	// Armed before Allow: the wait ignores every check page already open when it starts.
+	const checkP = waitForPopup(ctx, "verify")
 	await allow()
-	await discoverPage
-		.waitForFunction(
-			() => location.hash.startsWith("#/windows/verify") && document.querySelector('[data-testid="verify-emoji-grid"]') !== null,
-			{ timeout: 30_000, polling: 200 },
-		)
-		.catch((err) => {
-			const where = discoverPage.isClosed() ? "the connect window closed" : "the connect window never showed the check"
-			throw new Error(`approveConnect: ${where} (verify windows open: ${countVerifyWindows(ctx)})`, { cause: err })
+	const check = await checkP.catch((err) => {
+		const where = discoverPage.isClosed() ? "the connect window closed" : "the connect window stayed open"
+		throw new Error(`approveConnect: no check window opened; ${where} (verify windows open: ${countVerifyWindows(ctx)})`, {
+			cause: err,
 		})
-	const after = await readConnectWindow(discoverPage)
-	if (after.id !== before.id || after.popups !== before.popups) {
-		throw new Error(`approveConnect: the check moved windows: ${JSON.stringify({ before, after })}`)
+	})
+	await check.waitForSelector('[data-testid="verify-emoji-grid"]', { visible: true, timeout: 30_000 })
+	await waitForPopupClosed(discoverPage, 10_000).catch((err) => {
+		throw new Error("approveConnect: the connect window stayed open beside the check", { cause: err })
+	})
+	const after = await readPopupWindows(check)
+	const expected = [...before.popups.filter((id) => id !== before.id), after.id].sort((a, b) => (a ?? 0) - (b ?? 0))
+	if (after.id === before.id || JSON.stringify(after.popups) !== JSON.stringify(expected)) {
+		throw new Error(`approveConnect: the check did not replace the connect window: ${JSON.stringify({ before, after })}`)
 	}
-	return discoverPage
+	return check
 }
 
 export async function denyDiscover(page: Page): Promise<void> {
 	await clickByTestId(page, "discover-deny-btn")
 }
 
-export async function approveVerify(page: Page, opts: { alwaysTrust?: boolean } = {}): Promise<void> {
-	if (opts.alwaysTrust) {
-		// Toggle the "Skip this check next time" switch + WAIT for the toggle to latch before
-		// we click confirm. Without this assertion, handleConfirm runs while
-		// alwaysTrust is still false, the trustedVerification setter is never
-		// called, and the next reconnect surprises us with a verify popup.
-		// Target the inner Toggle's clickable element (Toggle.vue:17 — div with
-		// @click="toggle"; not a button/role=switch). Read latch state via
-		// data-toggle-active (added on Toggle.vue alongside the testid).
-		const innerSelector = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
-		await page.waitForSelector(innerSelector, { visible: true, timeout: 5_000 })
-		await clickSelector(page, innerSelector)
-		await page.waitForFunction(
-			(sel: string) => document.querySelector(sel)?.getAttribute("data-toggle-active") === "true",
-			{ timeout: 5_000, polling: 100 },
-			innerSelector,
-		)
-	}
+export async function approveVerify(page: Page): Promise<void> {
 	await clickByTestId(page, "verify-confirm-btn")
-	// Wait for the verify popup window to actually close. `handleConfirm` awaits
-	// `setTrustedVerification` BEFORE calling `closeWindow`, so a closed window
-	// proves the trust flag was persisted to chrome.storage.local. Returning
-	// before close lets the next reconnect race a stale storage value.
-	//
-	// If the popup never closes within 10s, throw — silently proceeding would
-	// mask the very failure mode this wait exists to prevent.
+	// `handleConfirm` closes the window only after the worker answers the confirmation.
 	if (!page.isClosed()) {
 		await new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => {
-				reject(new Error("approveVerify: popup did not close within 10s — setTrustedVerification persistence may be racy"))
+				reject(new Error("approveVerify: popup did not close within 10s"))
 			}, 10_000)
 			page.once("close", () => {
 				clearTimeout(timer)
@@ -279,7 +279,7 @@ export async function approveCapabilities(
 	for (const [accountId, alias] of Object.entries(opts.aliases ?? {})) {
 		const row = `[data-testid="cap-account-item"][data-account-id="${accountId}"]`
 		const field = `${row} [data-testid="cap-account-alias-input"]`
-		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, 5_000)
+		if (!(await page.$(field))) await clickSelector(page, `${row} [data-testid="cap-account-rename-btn"]`, { timeout: 5_000 })
 		await page.waitForSelector(field, { visible: true, timeout: 5_000 })
 		await page.evaluate(
 			({ sel, alias }: { sel: string; alias: string }) => {
@@ -329,17 +329,21 @@ export async function readCapabilitySwitch(page: Page, rowKey: string): Promise<
 
 const APP_SWITCH = '[data-testid="connected-app-authorizations-toggle"]'
 
-/** Open Settings → Connected apps → the app served from `host`. A miss names the hosts listed. */
-async function openConnectedApp(page: Page, host: string): Promise<void> {
+/**
+ * Open Settings → Connected apps → the app served from `host`, ready once `ready` shows: the
+ * authorizations switch by default, which a grant with no call scope does not render. A miss names
+ * the hosts listed.
+ */
+export async function openConnectedApp(page: Page, host: string, ready = APP_SWITCH): Promise<void> {
 	await page.evaluate(() => {
 		window.location.hash = "#/popup/settings/connected-apps"
 	})
 	await waitForHash(page, "#/popup/settings/connected-apps")
-	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, 15_000).catch(async (err) => {
+	await clickSelector(page, `[data-testid="connected-app-row"][data-app-host="${host}"]`, { timeout: 15_000 }).catch(async (err) => {
 		const hosts = await page.$$eval('[data-testid="connected-app-row"]', (rows) => rows.map((r) => r.getAttribute("data-app-host")))
 		throw new Error(`no connected-app row for ${host}; rows: ${JSON.stringify(hosts)}`, { cause: err })
 	})
-	await page.waitForSelector(APP_SWITCH, { visible: true, timeout: 15_000 })
+	await page.waitForSelector(ready, { visible: true, timeout: 15_000 })
 }
 
 const switchIs = (page: Page, on: boolean) =>
@@ -504,6 +508,12 @@ export async function rejectExecute(page: Page): Promise<void> {
  */
 export async function waitForExecuteContent(page: Page, timeout = 30_000): Promise<void> {
 	await page.waitForSelector('[data-testid="execute-op-item"]', { visible: true, timeout })
+}
+
+/** Opens a send card's value rows under its summary ("Show all details"), closed at rest. */
+export async function openExecuteDetails(page: Page, timeout = 10_000): Promise<void> {
+	await clickByTestId(page, "execute-op-details-toggle")
+	await page.waitForSelector('[data-testid="execute-op-details"]', { visible: true, timeout })
 }
 
 /** Read the visible op cards: returns `{ id, kind }[]`. Waits for at least one

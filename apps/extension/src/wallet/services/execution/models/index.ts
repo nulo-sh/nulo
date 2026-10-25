@@ -1,3 +1,7 @@
+import type { QueuedFeeReask } from "@nulo/wallet-core/jobs"
+import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
+import type { ShownTokenMetadata } from "@/wallet/services/dapp-interaction/approval-delta"
+
 /** Operation type family lives in `@nulo/wallet-bridge`. This barrel
  *  re-exports the types so extension consumers can keep importing them
  *  from `@/wallet/services/execution/service`. */
@@ -34,6 +38,7 @@ export type {
 	DiscoveredAuthwit,
 	OperationAuthwitPreview,
 	DecodedCall,
+	DecodedGrant,
 	DecodedParam,
 	DecodedValue,
 	DisplayCallInput,
@@ -82,10 +87,24 @@ export type OperationApprovalEnvelope = {
 	readonly estimateId?: string
 	/** Preview-snapshot key: the discovered authorizations the card showed. */
 	readonly previewId?: string
+	/** The fee the window showed, in base units: a build the person pays above it is asked about again. */
+	readonly feeCeiling?: string
+	/** The token details the window showed: a `register_token` commit stores only a read of that class equal to them. */
+	readonly tokenMetadata?: ShownTokenMetadata
 }
 
 /** The `(interactionId, index)` a preview or estimate is written under. */
 export type PreviewContext = Pick<OperationApprovalEnvelope, "interactionId" | "index">
+
+/** A held dApp send's question, for the window that asks it: the approval it came from, its record,
+ *  the figures, and when it lapses (epoch ms). */
+export type FeeQuestion = PreviewContext & {
+	readonly journalId: string
+	readonly reask: QueuedFeeReask
+	readonly deadline: number
+	/** The authorizations the approval window listed for the operation. */
+	readonly discoveredAuthwits?: readonly DiscoveredAuthwit[]
+}
 import type { PrestoPhase } from "@alejoamiras/presto"
 import type { ProveBackend } from "@nulo/wallet-core/jobs"
 

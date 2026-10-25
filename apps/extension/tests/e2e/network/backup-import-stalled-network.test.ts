@@ -15,7 +15,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/chain-ids"
@@ -34,11 +34,13 @@ import {
 } from "../fixtures/extension"
 import { captureBalanceBaseline, navigateByHash, switchToLocalNetwork, waitForFreshBalanceRow } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
-import { accountChainId, exportBackupContent, keepChainAccountState, type PlainBackup, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState } from "../helpers/backup-export"
+import { type PlainBackup, sealPlainBackup } from "../helpers/backup-seal"
 import { readStage } from "../helpers/crash-truth"
 import { gotoPopupImport, POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 import { pressEscape } from "../helpers/pointer-probes"
 import { nodeInfoResult, startStub } from "../helpers/rpc-stub"
+import { readSealedRows } from "../fixtures/sealed-rows"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -63,15 +65,8 @@ function stalledTestnetBackup(backup: PlainBackup, funded: string, tokenAddress:
 }
 
 async function networkIdOfChain(page: Page, chainId: number): Promise<string> {
-	const id = await page.evaluate(async (chain: number) => {
-		const all = await chrome.storage.local.get(null)
-		for (const [key, value] of Object.entries(all)) {
-			if (!key.startsWith("nulo:core:networks@")) continue
-			const row = JSON.parse(value as string) as { id?: string; chainId?: number }
-			if (row.chainId === chain) return row.id ?? null
-		}
-		return null
-	}, chainId)
+	const id = (await readSealedRows<{ id?: string; chainId?: number }>(page, "networks")).find(({ row }) => row.chainId === chainId)?.row
+		.id
 	if (!id) throw new Error(`no seeded network serves chain ${chainId}`)
 	return id
 }
@@ -79,10 +74,11 @@ async function networkIdOfChain(page: Page, chainId: number): Promise<string> {
 /** Opens View Errors, reads the log from the text the data viewer renders, and closes it. */
 async function readViewedErrorLog(page: Page): Promise<Record<string, ErrorRow[]>> {
 	await clickByTestId(page, "import-full-backup-view-errors-btn")
-	// The viewer renders its document after it mounts; wait for text that parses.
+	// The viewer renders its document after it mounts, in its editor's shadow root; wait for text that parses.
 	const shown = await page.waitForFunction(
 		() => {
-			const text = (document.querySelector('[data-testid="data-viewer"]') as HTMLElement | null)?.innerText ?? ""
+			const content = document.querySelector('[data-testid="json-editor"]')?.shadowRoot?.querySelector(".cm-content")
+			const text = (content as HTMLElement | null)?.innerText ?? ""
 			const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
 			try {
 				JSON.parse(json)
@@ -189,6 +185,8 @@ test.skipIf(!hasConfig)(
 			await page.bringToFront()
 
 			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
+			// Refuse the first pass's held calls before it, or its identity probe can queue behind them.
+			stub.refuseUnanswered()
 			expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
 			expectOnlyStalledDeadline(await readViewedErrorLog(page), testnetId)
 
@@ -220,8 +218,6 @@ test.skipIf(!hasConfig)(
 			} finally {
 				await stub.close()
 				rmSync(profileDir, { recursive: true, force: true })
-				// The doctored file embeds the wallet's real (local-chain test) master key.
-				rmSync(dirname(filePath), { recursive: true, force: true })
 			}
 		}
 	},

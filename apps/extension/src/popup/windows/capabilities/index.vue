@@ -28,18 +28,17 @@ import { copyWithToast } from "@/utils/clipboard"
 import { buildCapabilityItems, buildGrant, type CapabilityWindowParams, currentLine, type WindowRow } from "./build-items"
 import { resolveDappChain } from "./chain-mismatch"
 import { buildDetailsTable } from "./details-table"
-import { accountAddressRow, GROUP_LABELS, GROUP_ORDER, type PermissionRowEntry } from "./permission-rows"
+import { GROUP_LABELS, GROUP_ORDER } from "./permission-rows"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { DappMetadata } from "@/wallet/services/dapp-session/client"
-import { type CapabilityPayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
+import { type CapabilityPayload, DappInteractionServiceClient, type WindowEnd } from "@/wallet/services/dapp-interaction/client"
 import { type Capability, effectiveGrants } from "@nulo/wallet-bridge"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
-import { useDappHostname } from "@/composables/useDappHostname"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
 
@@ -117,14 +116,13 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
-const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
-
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
 const {
 	start: startWindow,
 	dispose: disposeWindow,
 	closeWindow,
+	endAndClose,
 	onActiveProfileChanged,
 	stripStatus,
 	processingError,
@@ -143,7 +141,7 @@ const {
 		interactionService.disconnect()
 	},
 	init: () => init(),
-	reject: () => reject(),
+	reject: (end) => reject(end),
 })
 
 const init = async () => {
@@ -191,13 +189,9 @@ const windowParams = (params: CapabilityPayload["params"]): CapabilityWindowPara
 		accountsMembershipOnly: params.accountsMembershipOnly === true,
 		consent: params.authorizationsWithoutAsking,
 		networkName: chainName.value,
-		heldAccounts: params.heldAccounts ?? [],
+		knownContracts: params.knownContracts ?? [],
 	}
 }
-
-/** A new address row names the selection, not the session: it follows each click. */
-const shownEntry = (row: WindowRow): PermissionRowEntry =>
-	row.isNew && row.entry.key === "account-address" ? accountAddressRow(selectedAccounts.value) : row.entry
 
 const groupsOf = (list: WindowRow[]) =>
 	GROUP_ORDER.map((group) => ({
@@ -205,7 +199,7 @@ const groupsOf = (list: WindowRow[]) =>
 		rows: list
 			.filter((row) => row.entry.group === group)
 			.map((row) => ({
-				entry: shownEntry(row),
+				entry: row.entry,
 				capId: row.capId,
 				line: currentLine(row),
 				badge: row.reRequested ? "previously denied" : undefined,
@@ -227,12 +221,16 @@ const setSwitch = (key: string, on: boolean) => {
 }
 
 /** Names come only from the wallet's list in the snapshot; the request never names a contract.
- *  Grants that reach no contract show no Details: its table would list nothing. */
+ *  Grants that reach no contract or class show no Details: its table would list nothing. Details
+ *  reads the request over the held grants whatever the switches say, so a row switched Off still
+ *  shows what the app asked for. Allow keeps a held data field the request leaves alone, so the held
+ *  data joins the request's. */
 const detailsTable = computed(() => {
 	if (!payload.value) return undefined
 	const params = windowParams(payload.value.params)
-	const table = buildDetailsTable(effectiveGrants(params.heldGrants, params.delta), payload.value.params.knownContracts ?? [])
-	return table.known.length > 0 || table.unknown.length > 0 || table.anyContract ? table : undefined
+	const heldData = params.heldGrants.filter((cap) => cap.type === "data")
+	const table = buildDetailsTable([...effectiveGrants(params.heldGrants, params.delta), ...heldData], params.knownContracts)
+	return table.known.length > 0 || table.unknown.length > 0 || table.classes.length > 0 || table.anyContract ? table : undefined
 })
 
 const recognizesNoContract = computed(() => detailsTable.value?.known.length === 0 && detailsTable.value.unknown.length > 0)
@@ -340,10 +338,9 @@ const approve = async () => {
 // `reject` stays unconditional: the approval-window shell also fires it on `beforeunload` and on a
 // lock or profile change, and a lock landing mid-switch must still reject the pending request.
 // Only the footer's buttons are held while a switch runs.
-const reject = async () => {
+const reject = async (end: WindowEnd) => {
 	if (isInteractionCancelled.value) return
-	rejectViaInteractionService("User rejected")
-	closeWindow(true)
+	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
 
 const { activate: activateNetwork } = useNetworkActivation({
@@ -381,8 +378,6 @@ onUnmounted(disposeWindow)
 		<Flex direction="column" data-testid="cap-scroll-area" :class="$style.scroll_area">
 			<DappIdentityBlock
 				:dapp="dapp"
-				:hostname="dappHostname"
-				:hostnameSuspicious="hostnameHasNonAscii"
 				hostnameTestId="capabilities-hostname"
 				:actionLabel="asksForMore ? `wants more permissions on ${chainName}` : `wants to connect on ${chainName}`"
 			/>
@@ -468,7 +463,7 @@ onUnmounted(disposeWindow)
 			:confirm-label="confirmWord"
 			:confirm-loading="isLoading"
 			:confirm-disabled="isLoading || isSwitching || processingError?.type === 'error' || !initComplete"
-			@reject="reject"
+			@reject="reject('reject')"
 			@approve="approve"
 		/>
 

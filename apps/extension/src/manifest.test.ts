@@ -3,6 +3,7 @@ import { join, resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 import logoDataUri from "@/assets/logo.png?inline"
 import manifest from "../manifest/manifest.config"
+import chromeManifest from "../manifest/manifest.chrome.config"
 import firefoxManifest from "../manifest/manifest.firefox.config"
 import { RP_ID } from "@/wallet/services/passkey/spec"
 
@@ -18,6 +19,10 @@ const m = manifest as unknown as {
 
 type FirefoxManifest = {
 	permissions: string[]
+	sidebar_action?: { default_panel: string; default_icon: Record<string, string>; open_at_install: boolean }
+	host_permissions: string[]
+	optional_host_permissions?: unknown
+	optional_permissions?: unknown
 	content_security_policy: unknown
 	browser_specific_settings: {
 		gecko: { id: string; strict_min_version: string; data_collection_permissions: { required: string[] } }
@@ -25,6 +30,9 @@ type FirefoxManifest = {
 }
 const buildFirefox = () =>
 	(firefoxManifest as unknown as (env: { command: string; mode: string }) => FirefoxManifest)({ command: "build", mode: "production" })
+type ManifestEnv = { command: string; mode: string }
+const chromeFor = (env: ManifestEnv) =>
+	(chromeManifest as unknown as (env: ManifestEnv) => { content_security_policy: unknown; side_panel: { default_path: string } })(env)
 
 /** Chrome match-pattern semantics for the subset the manifest uses: `<scheme>://<host>/<path>`,
  *  where host is `*`, `*.domain` (domain and every subdomain) or an exact domain. */
@@ -121,12 +129,22 @@ describe("passkey relying party", () => {
 /** Every extension page, the background and the PXE host run under this one policy; Firefox
  *  inherits it. */
 const EXTENSION_PAGES_CSP =
-	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'"
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http://localhost:* http://127.0.0.1:*; style-src 'self'"
 
 describe("content security policy", () => {
 	test("the extension pages' policy is exactly the pinned one, on both browsers", () => {
 		expect(m.content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
 		expect(buildFirefox().content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+		for (const mode of ["production", "development"]) {
+			expect(chromeFor({ command: "build", mode }).content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+		}
+	})
+
+	test("only the dev server's policy admits inline styles, and it differs in nothing else", () => {
+		const served = chromeFor({ command: "serve", mode: "development" }).content_security_policy
+		expect(served).toEqual({
+			extension_pages: EXTENSION_PAGES_CSP.replace(/style-src [^;]*/, "style-src 'self' 'unsafe-inline'"),
+		})
 	})
 })
 
@@ -161,5 +179,26 @@ describe("firefox manifest", () => {
 		expect(permissions).not.toContain("sidePanel")
 		expect(permissions).not.toContain("offscreen")
 		expect(permissions).toContain("storage")
+	})
+
+	// The sidebar takes its page from the side panel's, so the two surfaces cannot drift apart; one
+	// opened at install would put the wallet beside every new Firefox user's first tab unasked.
+	test("declares a sidebar on the side panel's page, closed at install, on Firefox only", () => {
+		const chrome = chromeFor({ command: "build", mode: "production" })
+		expect(buildFirefox().sidebar_action).toEqual({
+			default_panel: chrome.side_panel.default_path,
+			default_icon: (manifest as unknown as { icons: Record<string, string> }).icons,
+			open_at_install: false,
+		})
+		expect(chrome).not.toHaveProperty("sidebar_action")
+	})
+
+	// A person withholds these in about:addons only by switching off all-sites access too.
+	// The Presto pages ask for exactly them again.
+	test("keeps the shared host permissions and lists only Presto's loopback as optional", () => {
+		const built = buildFirefox()
+		expect(built.host_permissions).toEqual(m.host_permissions)
+		expect(built.optional_host_permissions).toEqual(["https://127.0.0.1/*", "http://127.0.0.1/*"])
+		expect(built.optional_permissions).toBeUndefined()
 	})
 })

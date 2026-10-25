@@ -17,7 +17,7 @@
 import type { Account } from "@/wallet/services/account/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { DraftOperation, Operation } from "@nulo/wallet-bridge"
-import { isEmbeddedFeePayment } from "@nulo/wallet-bridge"
+import { carriesFeeSettings, isAccountScoped, isEmbeddedFeePayment, isNetworkScoped } from "@nulo/wallet-bridge"
 import type { OperationRequest } from "./spec"
 
 export type MaterializeDeps = {
@@ -26,7 +26,7 @@ export type MaterializeDeps = {
 }
 
 /**
- * Run the request→operation switch in one place. Returns the executable
+ * Run the request→operation mapping in one place. Returns the executable
  * shape (with CAIP `chain`/`account` resolved to `networkId`/`accountAddress`)
  * with feeSettings populated only for self-fee'd send-like dApp requests
  * (`aztec_sendTx` with `executionMode === "default_entrypoint"` or
@@ -39,58 +39,28 @@ export type MaterializeDeps = {
  * popup path: hold as draft until user picks).
  */
 export async function materializeRequest(request: OperationRequest, deps: MaterializeDeps): Promise<DraftOperation> {
-	switch (request.kind) {
-		case "register_contract":
-		case "register_sender":
-		case "aztec_getContractClassMetadata":
-		case "aztec_getContractMetadata":
-		case "aztec_getChainInfo":
-		case "aztec_registerSender":
-		case "aztec_getAddressBook":
-		case "aztec_registerContract":
-		case "aztec_getPrivateEvents": {
-			const network = await deps.resolveNetwork(request.chain)
-			return { ...request, networkId: network.id } as DraftOperation
-		}
-		case "register_token":
-		case "simulate_transaction":
-		case "simulate_utility":
-		case "aztec_simulateTx":
-		case "aztec_executeUtility":
-		case "aztec_profileTx":
-		case "aztec_createAuthWit": {
-			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
-			return {
-				...request,
-				networkId: network.id,
-				accountAddress: account.address,
-			} as DraftOperation
-		}
-		case "aztec_sendTx": {
-			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
-			// A requested self-pay (the account named as payer with no fee call) starts with NO
-			// settings: the fee card, locked to Fee Juice, derives them only once a verified balance
-			// can pay — a pre-filled method would leave Confirm live over an empty or unread balance.
-			return {
-				...request,
-				networkId: network.id,
-				accountAddress: account.address,
-				feeSettings: isEmbeddedFeePayment(request) ? { paymentMethod: { kind: "embedded" } } : undefined,
-			} as DraftOperation
-		}
-		case "send_transaction": {
-			const [network, account] = await deps.resolveNetworkAndAccount(request.account)
-			return {
-				...request,
-				networkId: network.id,
-				accountAddress: account.address,
-				feeSettings: isEmbeddedFeePayment(request) ? { paymentMethod: { kind: "embedded" } } : undefined,
-			} as DraftOperation
-		}
-		default: {
-			throw new Error(`materializeRequest: unknown operation kind: ${(request as { kind?: string }).kind}`)
-		}
+	if (isNetworkScoped(request)) {
+		const network = await deps.resolveNetwork(request.chain)
+		return { ...request, networkId: network.id } as DraftOperation
 	}
+	if (isAccountScoped(request)) {
+		const [network, account] = await deps.resolveNetworkAndAccount(request.account)
+		if (!carriesFeeSettings(request)) {
+			return { ...request, networkId: network.id, accountAddress: account.address } as DraftOperation
+		}
+		// On `aztec_sendTx`, a requested self-pay (the account named as payer with no fee call)
+		// starts with NO settings: the fee card, locked to Fee Juice, derives them only once a
+		// verified balance can pay — a pre-filled method would leave Confirm live over an empty
+		// or unread balance.
+		return {
+			...request,
+			networkId: network.id,
+			accountAddress: account.address,
+			feeSettings: isEmbeddedFeePayment(request) ? { paymentMethod: { kind: "embedded" } } : undefined,
+		} as DraftOperation
+	}
+	const unhandled: never = request
+	throw new Error(`materializeRequest: unknown operation kind: ${(unhandled as { kind?: string }).kind}`)
 }
 
 /**
@@ -101,7 +71,7 @@ export async function materializeRequest(request: OperationRequest, deps: Materi
  * specific drift alarm if the gate was ever bypassed.
  */
 export function assertSilentExecutable(materialized: DraftOperation): asserts materialized is Operation {
-	if ((materialized.kind === "aztec_sendTx" || materialized.kind === "send_transaction") && materialized.feeSettings === undefined) {
+	if (carriesFeeSettings(materialized) && materialized.feeSettings === undefined) {
 		throw new Error(
 			`silentInteraction: ${materialized.kind} reached the silent path with no feeSettings — ` +
 				"isConfirmationNeeded gate broken or bypassed",

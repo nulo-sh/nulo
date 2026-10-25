@@ -119,6 +119,22 @@ describe("the guard refuses and records", () => {
 		expect(attempts()).toEqual([{ host: MALFORMED, port: 0, count: 1 }])
 	})
 
+	test("an attempt at a watched host counts as held only while its watch holds, on any port; another host never does", async () => {
+		const { port, attempts, watch } = await guard()
+		let holding = false
+		watch("node.test", () => holding)
+		await exchange(port, "CONNECT node.test:443 HTTP/1.1\r\n\r\n")
+		holding = true
+		await exchange(port, "CONNECT node.test:443 HTTP/1.1\r\n\r\n")
+		await exchange(port, "CONNECT node.test:8443 HTTP/1.1\r\n\r\n")
+		await exchange(port, "CONNECT other.test:443 HTTP/1.1\r\n\r\n")
+		expect(attempts()).toEqual([
+			{ host: "node.test", port: 443, count: 2, held: 1 },
+			{ host: "node.test", port: 8443, count: 1, held: 1 },
+			{ host: "other.test", port: 443, count: 1 },
+		])
+	})
+
 	test("repeats of one host are one counted entry; the 257th distinct host overflows the record", async () => {
 		const { port, attempts, overflowed } = await guard()
 		for (let batch = 0; batch < 10; batch++) {
@@ -214,8 +230,18 @@ describe("a guarded launch", () => {
 	/** A guard and canary that record what the fake browser "sends", and the browser itself. */
 	function rig(opts: { probeSends?: string[]; canaryDirect?: boolean } = {}) {
 		const record: EgressAttempt[] = []
-		const send = (host: string) => record.push({ host, port: 443, count: 1 })
-		const fakeGuard: EgressGuard = { port: 1, attempts: () => record, overflowed: () => false, stop: vi.fn(async () => {}) }
+		let watched: { host: string; holding: () => boolean } | undefined
+		const send = (host: string) =>
+			record.push({ host, port: 443, count: 1, ...(watched?.host === host && watched.holding() ? { held: 1 } : {}) })
+		const fakeGuard: EgressGuard = {
+			port: 1,
+			attempts: () => record,
+			overflowed: () => false,
+			watch: (host, holding) => {
+				watched = { host, holding }
+			},
+			stop: vi.fn(async () => {}),
+		}
 		let direct = 0
 		const fakeCanary: EgressCanary = { port: 2, connections: () => direct, stop: vi.fn(async () => {}) }
 		const closeBrowser = vi.fn(async () => {})
@@ -334,15 +360,17 @@ describe("a guarded launch", () => {
 	})
 
 	/** A stand-in node whose failures and stop are logged beside the browser's close. */
-	function heldNode(failures: string[], order: string[]): HeldNode {
+	function heldNode(failures: string[], order: string[], holding = () => true, host = "lb.drpc.live"): HeldNode {
 		return {
+			host,
+			holding,
 			requests: () => 0,
 			failures: async () => {
-				order.push("node failures read")
+				order.push(`${host} failures read`)
 				return failures
 			},
 			stop: async () => {
-				order.push("node stopped")
+				order.push(`${host} stopped`)
 			},
 		}
 	}
@@ -353,32 +381,84 @@ describe("a guarded launch", () => {
 		closeBrowser.mockImplementation(async () => {
 			order.push("browser closed")
 		})
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode(["a target could not be armed"], order) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode(["a target could not be armed"], order)] })
 		send("unlisted.test")
 		await expect(launch.close()).rejects.toThrow(
-			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*the stand-in node's interception reported: a target could not be armed/,
+			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*a stand-in node's interception reported: lb\.drpc\.live: a target could not be armed/,
 		)
-		expect(order).toEqual(["node failures read", "browser closed", "node stopped"])
+		expect(order).toEqual(["lb.drpc.live failures read", "browser closed", "lb.drpc.live stopped"])
 	})
 
 	test("a stand-in node whose failures cannot be read fails the close", async () => {
 		const { deps } = rig()
-		const node: HeldNode = { requests: () => 0, failures: async () => Promise.reject(new Error("no session")), stop: async () => {} }
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => node })
+		const node: HeldNode = {
+			...heldNode([], []),
+			failures: async () => Promise.reject(new Error("no session")),
+		}
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [node] })
 		await expect(launch.close()).rejects.toThrow(/its interception could not be read: Error: no session/)
 	})
 
 	test("success control: a stand-in node that lost nothing closes cleanly", async () => {
 		const { deps } = rig()
 		const order: string[] = []
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode([], order) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], order)] })
 		await launch.close()
-		expect(order).toEqual(["node failures read", "node stopped"])
+		expect(order).toEqual(["lb.drpc.live failures read", "lb.drpc.live stopped"])
+	})
+
+	test("with two nodes held, each is watched and read by its own host, and both stop", async () => {
+		const { deps, send } = rig()
+		const order: string[] = []
+		const nodes = [heldNode([], order), heldNode(["a reply failed"], order, () => true, "aztec-mainnet.drpc.org")]
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => nodes })
+		send("aztec-mainnet.drpc.org")
+		await expect(launch.close()).rejects.toThrow(
+			/sent aztec-mainnet\.drpc\.org:443 to the guard 1 time\(s\)[\s\S]*interception reported: aztec-mainnet\.drpc\.org: a reply failed/,
+		)
+		expect(order.filter((step) => step.endsWith("stopped")).sort()).toEqual(["aztec-mainnet.drpc.org stopped", "lb.drpc.live stopped"])
+	})
+
+	test("a node request that reaches the guard while the stand-in holds its origin fails the close, naming it", async () => {
+		const { deps, send, closeBrowser } = rig()
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
+		send("lb.drpc.live")
+		await expect(launch.close()).rejects.toThrow(
+			/spec\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard 1 time\(s\) while the launch's stand-in held its origin/,
+		)
+		expect(closeBrowser).toHaveBeenCalled()
+	})
+
+	test("a held node request and an undeclared host in one launch are both named", async () => {
+		const { deps, send } = rig()
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
+		send("lb.drpc.live")
+		send("unlisted.test")
+		await expect(launch.close()).rejects.toThrow(/sent lb\.drpc\.live:443 to the guard[\s\S]*tried 1 host.*unlisted\.test:443/)
+	})
+
+	test("success control: node requests before the hold, while it is released, and from the browser's close pass", async () => {
+		const { deps, send, closeBrowser } = rig()
+		let holding = true
+		const launch = await ownGuardedLaunch({
+			...deps,
+			holdNodes: async () => {
+				send("lb.drpc.live")
+				return [heldNode([], [], () => holding)]
+			},
+		})
+		holding = false
+		send("lb.drpc.live")
+		holding = true
+		closeBrowser.mockImplementation(async () => {
+			send("lb.drpc.live")
+		})
+		await launch.close()
 	})
 
 	test("a stand-in node that cannot be held releases the launch", async () => {
 		const { deps, closeBrowser, stopped } = rig()
-		await expect(ownGuardedLaunch({ ...deps, holdNode: async () => Promise.reject(new Error("no worker target")) })).rejects.toThrow(
+		await expect(ownGuardedLaunch({ ...deps, holdNodes: async () => Promise.reject(new Error("no worker target")) })).rejects.toThrow(
 			"no worker target",
 		)
 		expect(closeBrowser).toHaveBeenCalled()

@@ -18,6 +18,7 @@
 
 /* A settings-list row with a stretched `RowTarget`; compose it together with `divider`. */
 .row {
+	user-select: none;
 	padding: 12px 16px;
 	cursor: pointer;
 	background: transparent;
@@ -61,6 +62,12 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* A settings page's control-row title. It owns the role class, so the `Text` drawing it takes no `variant`. */
+.control_title {
+	composes: type--row-title from global;
+	font-size: 13px;
 }
 
 /* No role: its consumers differ, so each composes its own. */

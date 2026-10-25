@@ -1,6 +1,8 @@
+import { Icon } from "@nulo/design"
 import type { VueWrapper } from "@vue/test-utils"
 import { flushPromises } from "@vue/test-utils"
 import { expect } from "vitest"
+import { sendEvent } from "./send-event"
 
 /** A password visibility toggle and the fields it masks, by testid. */
 export interface MaskToggleCase {
@@ -15,12 +17,17 @@ export interface MaskToggleCase {
 export const nativeInput = (w: VueWrapper, id: string) => w.get(`[data-testid="${id}"] input`).element as HTMLInputElement
 const types = (w: VueWrapper, ids: string[]) => ids.map((id) => nativeInput(w, id).type)
 
-/** The toggle's attributes, its masked default, its exact reach, two activations in one task, and focus. Needs the real `Input` and `MaterialIcon`, mounted attached. */
+/** The toggle's attributes, its masked default, its exact reach, two activations in one task, and focus. Needs the real `Input` and `Icon`, mounted attached. */
 export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promise<void> {
 	const subject = c.subject ?? "password"
 	const others = c.others ?? []
 	const btn = w.get(`[data-testid="${c.toggle}"]`).element as HTMLButtonElement
-	const icon = () => btn.querySelector("span")
+	const icon = () => btn.querySelector("svg")
+	const glyph = () =>
+		w
+			.findAllComponents(Icon)
+			.find((c) => btn.contains(c.element))
+			?.props("name")
 	expect(btn.tagName).toBe("BUTTON")
 	expect(btn.getAttribute("type")).toBe("button")
 	expect(btn.getAttribute("tabindex")).toBe("-1")
@@ -29,31 +36,31 @@ export async function expectMaskToggle(w: VueWrapper, c: MaskToggleCase): Promis
 	// The `#suffix` slot sits in the input's clickable row; `#bottom` is a direct child of the root.
 	expect(btn.parentElement).not.toBe(fieldRoot)
 	expect(btn.parentElement?.contains(nativeInput(w, c.field))).toBe(true)
-	expect(icon()?.className).toContain("color--secondary")
-	expect(icon()?.style.fontSize).toBe("18px")
+	expect(icon()?.getAttribute("class")).toContain("color--secondary")
+	expect(icon()?.getAttribute("width")).toBe("18")
 
 	const masked = () => {
 		expect(types(w, c.drives)).toEqual(c.drives.map(() => "password"))
 		expect(btn.getAttribute("aria-label")).toBe(`Show ${subject}`)
-		expect(icon()?.textContent).toBe("visibility")
+		expect(glyph()).toBe("eye")
 	}
 	masked()
 	const othersBefore = types(w, others)
 
-	btn.click()
-	btn.click()
+	sendEvent(btn, "click")
+	sendEvent(btn, "click")
 	await flushPromises()
 	masked()
 
-	btn.click()
+	sendEvent(btn, "click")
 	await flushPromises()
 	expect(types(w, c.drives)).toEqual(c.drives.map(() => "text"))
 	expect(types(w, others)).toEqual(othersBefore)
 	expect(btn.getAttribute("aria-label")).toBe(`Hide ${subject}`)
-	expect(icon()?.textContent).toBe("visibility_off")
+	expect(glyph()).toBe("eye-off")
 	expect(document.activeElement).toBe(nativeInput(w, c.field))
 
-	btn.click()
+	sendEvent(btn, "click")
 	await flushPromises()
 	masked()
 	expect(types(w, others)).toEqual(othersBefore)
@@ -76,16 +83,16 @@ export function pasteInto(input: HTMLInputElement, text: string): boolean {
 	return ev.defaultPrevented
 }
 
-/** Sets a native input's value and dispatches its `input` event, synchronously. */
+/** Sets a native input's value and sends its `input` event, synchronously. */
 export function typeNow(input: HTMLInputElement, value: string): void {
 	input.value = value
-	input.dispatchEvent(new Event("input", { bubbles: true }))
+	if (!sendEvent(input, "input")) throw new Error("input sent to a disabled field")
 }
 
 /** A keydown Enter on `el`, synchronously; `init` sets `repeat`, `isComposing` or `keyCode`. */
 export function enterOn(el: Element, init: KeyboardEventInit = {}): KeyboardEvent {
-	const ev = new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true, ...init })
-	el.dispatchEvent(ev)
+	const ev = sendEvent(el, "keydown", { key: "Enter", code: "Enter", keyCode: 13, ...init })
+	if (!(ev instanceof KeyboardEvent)) throw new Error("Enter sent to a disabled control")
 	return ev
 }
 

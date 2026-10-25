@@ -1,15 +1,18 @@
-import type { AlarmCreateOptions, AlarmEvent, AlarmsPort, BrowserApi, Unsubscribe } from "@nulo/wallet-core/ports"
+import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import type { ILogger } from "@/wallet/logger"
 import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { TokenListService } from "@/wallet/services/token-list/service"
-import { ValueStorage } from "@/wallet/storage"
-import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
+import type { ValueStorage } from "@/wallet/storage"
+import { valueStorage } from "@/wallet/storage/stores"
+import { flaggedKeysOf } from "@/utils/token-flag"
+import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
+	PRICE_FETCH_TIMEOUT_MS,
 	PRICE_SERVICE_NAME,
 	QUOTE_TTL_MS,
 	isQuoteFresh,
@@ -27,8 +30,6 @@ export const PRICE_REFRESH_ALARM_NAME = "nulo:price:refresh"
 /** Chrome's production floor is 1 min; 3 min keeps traffic minimal while unlocked. */
 export const PRICE_REFRESH_PERIOD_MINUTES = 3
 
-const CACHE_STORAGE_KEY = "nulo:core:token-prices"
-
 const API_BASE = "https://api.coingecko.com/api/v3"
 
 /** Exponential backoff after failed fetches: 30s base, ×2 per consecutive
@@ -37,14 +38,39 @@ const API_BASE = "https://api.coingecko.com/api/v3"
 const BACKOFF_BASE_MS = 30_000
 const BACKOFF_CAP_MS = QUOTE_TTL_MS
 
-type FetchLike = (
-	input: string,
-	init?: { signal?: AbortSignal; headers?: Record<string, string> },
-) => Promise<{
-	ok: boolean
-	status: number
-	json(): Promise<unknown>
-}>
+/** A real reply for the full id set is about 300 bytes; anything near this is not a price reply. */
+const MAX_PRICE_RESPONSE_BYTES = 16 * 1024
+
+type FetchLike = (input: string, init: RequestInit) => Promise<Response>
+
+export function isValidQuote(id: string, quote: unknown, now: number): quote is PriceQuote {
+	if (!quote || typeof quote !== "object") return false
+	const q = quote as Partial<PriceQuote>
+	if (q.coingeckoId !== id) return false
+	if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
+	if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
+	// Future-dated entries are rejected as INVALID (not merely stale):
+	// they would out-"fresh" every legitimate quote forever and win every
+	// monotonic merge, so an attacker-planted cache row could never be
+	// repaired by refreshes.
+	if (q.fetchedAt > now + MAX_CLOCK_SKEW_MS) return false
+	if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
+	const band = getSanityBand(id)
+	if (!band) return false
+	return q.usd >= band.min && q.usd <= band.max
+}
+
+/** The quotes of a stored cache that validate and are fresh at `now`; anything else reads as absent. */
+export function usableQuotes(stored: unknown, now: number): PriceState {
+	if (!stored || typeof stored !== "object") return {}
+	const usable: PriceState = {}
+	for (const [id, quote] of Object.entries(stored)) {
+		if (!isValidQuote(id, quote, now)) continue
+		if (!isQuoteFresh(quote, now)) continue
+		usable[id] = quote
+	}
+	return usable
+}
 
 /**
  * Background price feed. ONE batched CoinGecko request per refresh, always
@@ -53,9 +79,10 @@ type FetchLike = (
  * sanity bands), cached in `chrome.storage.local`, and treated as absent
  * after `QUOTE_TTL_MS`.
  *
- * Privacy posture: refreshes run only while a profile session is unlocked
- * (alarm created on unlock, cleared on lock), plus stale-on-connect via
- * `refreshIfStale`. Executors read `getUsableQuote` cache-or-nothing — no
+ * Privacy posture: a fetch starts only while a profile session is open
+ * (`doRefresh`, which every refresh path reaches, checks it last); the alarm
+ * is created on unlock and cleared on lock, and `refreshIfStale` refreshes a
+ * stale cache on connect. Executors read `getUsableQuote` cache-or-nothing — no
  * fetch is ever triggered by transaction activity. The `showFiatValues`
  * config toggle disables everything and clears the cache.
  *
@@ -105,12 +132,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		onError: (err) => this.logWarn("config-change handling failed", err),
 	})
 
-	public constructor(logger: ILogger, browserApi?: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
 		super(PRICE_SERVICE_NAME, logger)
-		this.cache = browserApi
-			? new ValueStorage<PriceState>(CACHE_STORAGE_KEY, browserApi.storage.local)
-			: new ValueStorage<PriceState>(CACHE_STORAGE_KEY, chrome.storage.local)
-		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi ? browserApi.alarms : new ChromeAlarmsFallback())
+		this.cache = valueStorage<PriceState>("tokenPrices", browserApi.storage.local)
+		this.dispatcher = new AlarmDispatcher(PRICE_REFRESH_ALARM_NAME, browserApi.alarms)
 		this.fetchFn = opts?.fetchFn ?? ((input, init) => fetch(input, init))
 		this.now = opts?.now ?? (() => Date.now())
 	}
@@ -141,12 +166,12 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	/** Usable quotes only: validated, fresh, and fiat display enabled. */
 	public async getQuotes(): Promise<PriceSnapshot> {
 		await this.ensureInitialized()
-		return this.withMapping(await this.usableIfEnabled())
+		return this.snapshotOf(await this.usableIfEnabled())
 	}
 
 	/** Refresh when the cache is stale (popup-connect path), then return usable quotes. */
 	public async refreshIfStale(): Promise<PriceSnapshot> {
-		return this.withMapping(await this.refreshIfStaleQuotes())
+		return this.snapshotOf(await this.refreshIfStaleQuotes())
 	}
 
 	private async refreshIfStaleQuotes(): Promise<PriceState> {
@@ -207,7 +232,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	/** A new list moves the mapping, not the quotes: the full id table is always requested. */
 	private readonly onListChanged = (): void => {
 		void this.usableIfEnabled()
-			.then((quotes) => this.emit("onQuotesUpdated", this.withMapping(quotes)))
+			.then((quotes) => this.emit("onQuotesUpdated", this.snapshotOf(quotes)))
 			.catch((err) => this.logWarn("list-change handling failed", err))
 	}
 
@@ -249,7 +274,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			if (!enable) {
 				await this.dispatcher.clear()
 				await this.cache.delete()
-				this.emit("onQuotesUpdated", this.withMapping({}))
+				this.emit("onQuotesUpdated", this.snapshotOf({}))
 			} else {
 				const profile = await this.profileService.getActiveProfile()
 				if (profile) {
@@ -270,8 +295,15 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		return (await this.isEnabled()) ? this.readUsable() : {}
 	}
 
-	private withMapping(quotes: PriceState): PriceSnapshot {
-		return { quotes, pricedTokens: pricedTokensOf(this.tokenList.getSnapshot()?.entries ?? []) }
+	/** Reads the list as each answer is built, after any price await, so a slow refresh never carries
+	 *  an older list's mapping or flags. */
+	private snapshotOf(quotes: PriceState): PriceSnapshot {
+		const list = this.tokenList.getSnapshot()
+		return {
+			quotes,
+			pricedTokens: pricedTokensOf(list?.entries ?? []),
+			flaggedTokens: flaggedKeysOf(list?.flagged ?? []),
+		}
 	}
 
 	private async ensureAlarm(): Promise<void> {
@@ -288,32 +320,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		} catch {
 			return {}
 		}
-		if (!stored || typeof stored !== "object") return {}
-		const now = this.now()
-		const usable: PriceState = {}
-		for (const [id, quote] of Object.entries(stored)) {
-			if (!this.isValidQuote(id, quote)) continue
-			if (!isQuoteFresh(quote, now)) continue
-			usable[id] = quote
-		}
-		return usable
+		return usableQuotes(stored, this.now())
 	}
 
 	private isValidQuote(id: string, quote: unknown): quote is PriceQuote {
-		if (!quote || typeof quote !== "object") return false
-		const q = quote as Partial<PriceQuote>
-		if (q.coingeckoId !== id) return false
-		if (typeof q.usd !== "number" || !Number.isFinite(q.usd) || q.usd <= 0) return false
-		if (typeof q.fetchedAt !== "number" || !Number.isFinite(q.fetchedAt)) return false
-		// Future-dated entries are rejected as INVALID (not merely stale):
-		// they would out-"fresh" every legitimate quote forever and win every
-		// monotonic merge, so an attacker-planted cache row could never be
-		// repaired by refreshes.
-		if (q.fetchedAt > this.now() + MAX_CLOCK_SKEW_MS) return false
-		if (q.providerUpdatedAt !== null && (typeof q.providerUpdatedAt !== "number" || !Number.isFinite(q.providerUpdatedAt))) return false
-		const band = getSanityBand(id)
-		if (!band) return false
-		return q.usd >= band.min && q.usd <= band.max
+		return isValidQuote(id, quote, this.now())
 	}
 
 	/** Serialized refresh: concurrent callers share one in-flight request.
@@ -338,6 +349,11 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			this.logDebug("refresh suppressed by backoff window")
 			return this.readUsable()
 		}
+		// The last await before the request leaves, so a lock that landed while a caller was awaiting
+		// stops it. The peek must stay in this continuation: it catches a lock queued behind the read.
+		if (!(await this.profileService.getActiveProfile()) || this.profileService.peekLiveSerial() === undefined) {
+			return this.answerLocked(gen)
+		}
 
 		const ids = allCoingeckoIds()
 		const url = `${API_BASE}/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_last_updated_at=true`
@@ -352,13 +368,20 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		// `finally`, to retract ourselves iff we're still the one published.
 		const controller = new AbortController()
 		this.abortController = controller
-		const timeout = setTimeout(() => controller.abort(), 10_000)
+		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, { signal: controller.signal, headers })
+			const response = await this.fetchFn(url, {
+				signal: controller.signal,
+				headers,
+				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
+				cache: "no-store",
+				credentials: "omit",
+				referrerPolicy: "no-referrer",
+			})
 			if (!response.ok) {
 				throw new Error(`price fetch failed: HTTP ${response.status}`)
 			}
-			const body = await response.json()
+			const body: unknown = JSON.parse(await readBodyCapped(response, MAX_PRICE_RESPONSE_BYTES))
 			if (gen !== this.generation) return {}
 
 			const fetchedAt = this.now()
@@ -383,21 +406,39 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 
 			const usable = await this.readUsable()
 			if (gen !== this.generation) return {}
-			this.emit("onQuotesUpdated", this.withMapping(usable))
+			this.emit("onQuotesUpdated", this.snapshotOf(usable))
 			return usable
 		} catch (error) {
-			if (gen !== this.generation) return {}
-			this.consecutiveFailures += 1
-			const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1), BACKOFF_CAP_MS)
-			const jitter = 0.75 + Math.random() * 0.5
-			this.nextAllowedFetchAt = this.now() + Math.round(backoff * jitter)
-			this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
-			return this.readUsable()
+			return await this.recordFailure(gen, error)
 		} finally {
 			clearTimeout(timeout)
 			// Retract only our own controller — a newer refresh may have published its own.
 			if (this.abortController === controller) this.abortController = undefined
 		}
+	}
+
+	/** Leaves the in-flight slot first, so a refresh an unlock starts meanwhile fetches instead of
+	 *  joining this cache read. While `gen` is current the slot is this run's: only a kill-switch
+	 *  flip, which bumps the generation, empties it early. */
+	private async answerLocked(gen: number): Promise<PriceState> {
+		if (gen === this.generation) this.inflight = undefined
+		const usable = await this.readUsable()
+		return gen === this.generation ? usable : {}
+	}
+
+	private async recordFailure(gen: number, error: unknown): Promise<PriceState> {
+		if (gen !== this.generation) return {}
+		this.consecutiveFailures += 1
+		const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1), BACKOFF_CAP_MS)
+		const jitter = 0.75 + Math.random() * 0.5
+		this.nextAllowedFetchAt = this.now() + Math.round(backoff * jitter)
+		this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
+		const usable = await this.readUsable()
+		if (gen !== this.generation) return {}
+		// Readers that re-filter on every broadcast, incoming dust among them, learn here that a quote
+		// expired behind the failed fetch.
+		this.emit("onQuotesUpdated", this.snapshotOf(usable))
+		return usable
 	}
 
 	/** Validate the provider response per-id; invalid entries are dropped, never stored. */
@@ -442,21 +483,5 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			merged[id] = quote
 		}
 		return merged
-	}
-}
-
-/** Direct-chrome fallback used when the composition root doesn't inject a
- *  BrowserApi (legacy path, mirrors ContactService's storage fallback). */
-class ChromeAlarmsFallback implements AlarmsPort {
-	public async create(name: string, options: AlarmCreateOptions): Promise<void> {
-		await chrome.alarms.create(name, options)
-	}
-	public async clear(name: string): Promise<boolean> {
-		return await chrome.alarms.clear(name)
-	}
-	public onAlarm(listener: (alarm: AlarmEvent) => void): Unsubscribe {
-		const wrapped = (alarm: chrome.alarms.Alarm) => listener({ name: alarm.name, scheduledTime: alarm.scheduledTime })
-		chrome.alarms.onAlarm.addListener(wrapped)
-		return () => chrome.alarms.onAlarm.removeListener(wrapped)
 	}
 }

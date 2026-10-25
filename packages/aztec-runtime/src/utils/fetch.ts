@@ -13,9 +13,15 @@
 
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
 import { NoRetryError, makeBackoff, retry } from "@aztec-labs/foundation/retry"
+import { ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
 
 /** Default timeout per individual HTTP request (ms). */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
+
+/** The most a node reply may carry before it is parsed: a budget, not a protocol maximum. One body
+ *  answers a batch of up to 100 calls, and the largest single replies (a contract class, tx effects,
+ *  tagged logs) stay under 1 MB. */
+export const MAX_NODE_RESPONSE_BYTES = 32 * 1024 * 1024
 
 /**
  * JSON-RPC fetch signature expected by `createAztecNodeClient`.
@@ -33,7 +39,7 @@ type JsonRpcFetch = (
  */
 function fetchOnce(timeoutMs: number): JsonRpcFetch {
 	// Both awaits and the timeout `finally` stay inline: the abort signal must
-	// remain live through a pending `resp.json()` (pinned), so no helper may
+	// remain live through a pending body read (pinned), so no helper may
 	// own either await. The classifiers below are synchronous.
 	return async (host, body, extraHeaders = {}, noRetry = false) => {
 		const controller = new AbortController()
@@ -54,10 +60,9 @@ function fetchOnce(timeoutMs: number): JsonRpcFetch {
 
 			let responseJson: { error?: { message?: string } } | undefined
 			try {
-				responseJson = await resp.json()
-			} catch {
-				if (!resp.ok) throw new Error(resp.statusText)
-				throw new Error(`Failed to parse body as JSON`)
+				responseJson = JSON.parse(await readBodyCapped(resp, MAX_NODE_RESPONSE_BYTES))
+			} catch (err: unknown) {
+				throw mapBodyFailure(err, resp)
 			}
 
 			if (!resp.ok) throw classifyRpcFailure(resp, host, responseJson, noRetry)
@@ -76,6 +81,14 @@ function mapFetchDispatchFailure(err: unknown, host: string, timeoutMs: number):
 		return new Error(`Request to ${host} timed out after ${timeoutMs}ms`)
 	}
 	return new Error(`Error fetching from host ${host}: ${err}`)
+}
+
+/** An oversize body is terminal on any status, since a retry would read the same reply; any other
+ *  read or parse failure keeps the SDK-compatible messages. */
+function mapBodyFailure(err: unknown, resp: Response): Error {
+	if (err instanceof ResponseTooLargeError) return new NoRetryError(err.message)
+	if (!resp.ok) return new Error(resp.statusText)
+	return new Error(`Failed to parse body as JSON`)
 }
 
 /** Status classification for a non-ok response: 4xx (or an explicit noRetry)
@@ -101,6 +114,13 @@ export function makeSingleAttemptFetch(timeoutMs: number): JsonRpcFetch {
 	return fetchOnce(timeoutMs)
 }
 
+/** Retry policy for `makeFetchWithTimeout`. */
+export interface RetryOptions {
+	/** Asked before each retry of a failed attempt; `false` ends the retries and the call rejects
+	 *  with that attempt's own error. The first attempt always runs. */
+	retryWhile?: () => boolean
+}
+
 /**
  * Create a JSON-RPC fetch function with per-request timeout AND retry logic.
  *
@@ -109,15 +129,37 @@ export function makeSingleAttemptFetch(timeoutMs: number): JsonRpcFetch {
  * - Stops immediately on 4xx (NoRetryError)
  * - Adds per-request timeout via AbortController (the SDK lacks this)
  */
-export function makeFetchWithTimeout(timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): JsonRpcFetch {
+export function makeFetchWithTimeout(
+	timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+	{ retryWhile = () => true }: RetryOptions = {},
+): JsonRpcFetch {
 	const once = fetchOnce(timeoutMs)
 	return async (host, body, extraHeaders = {}, noRetry) => {
+		let failed: { error: unknown } | undefined
 		return await retry(
-			() => once(host, body, extraHeaders, noRetry ?? false),
+			async () => {
+				// The SDK's `retry` sleeps, then calls again without asking the backoff, so a stop
+				// raised during the sleep is only seen here.
+				if (failed && !retryWhile()) throw failed.error
+				try {
+					return await once(host, body, extraHeaders, noRetry ?? false)
+				} catch (error) {
+					failed = { error }
+					throw error
+				}
+			},
 			`JsonRpcClient request to ${host}`,
-			makeBackoff([1, 2, 3]),
+			backoffWhile(makeBackoff([1, 2, 3]), retryWhile),
 			undefined,
 			false,
 		)
+	}
+}
+
+/** `backoff`, ended as soon as `retryWhile` answers false, so no sleep is scheduled after a stop. */
+function* backoffWhile(backoff: Generator<number, void>, retryWhile: () => boolean): Generator<number, void> {
+	for (const seconds of backoff) {
+		if (!retryWhile()) return
+		yield seconds
 	}
 }

@@ -35,6 +35,8 @@ definePassthroughsExhaustive<Methods>()(ExecutionServiceClient.prototype, [
 	"estimateOperationFee",
 	"previewOperationAuthwits",
 	"decodeCallsForDisplay",
+	"decodeGrantsForDisplay",
+	"decodeQuestionGrantsForDisplay",
 	"cancelJob",
 	"acceptQueuedFee",
 	"cancelEstimate",

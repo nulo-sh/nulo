@@ -4,34 +4,32 @@
  * Frozen invariants:
  * - Storage key `nulo:core:token-balances`.
  * - Injected `browserApi.storage.local` (the chrome.storage.local adapter in prod).
+ * - Rows are sealed under their profile's row keys; a plaintext row still reads until its
+ *   profile's next unlock seals it.
  * - IDs are numeric; `allocateId()` delegates to `nextNumericId`, which
  *   allocates max(allocatable ids) + 1 with hostile keys excluded (canonical
  *   round-trip + safe-integer bound; the candidate itself safe and free) —
  *   identical to the old `array_max(map(+)) + 1` on every legitimate store.
  */
 
-import { EntityStorage } from "@/wallet/storage"
-import { nextNumericId } from "@/wallet/services/id-allocators"
-import { purgeMalformedRows } from "@/wallet/services/purge-rows"
+import {
+	type ConversionLock,
+	type PreparedWrite,
+	parseEnvelope,
+	type RowKeysSource,
+	type SealedEntityStorage,
+} from "@/wallet/storage/sealed-entity-storage"
+import { sealedEntityStorage } from "@/wallet/storage/stores"
+import { type NumericIdBatch, nextNumericId, numericIdBatch } from "@/wallet/services/id-allocators"
+import { canonicalNumericStorageId, purgeMalformedRows } from "@/wallet/services/purge-rows"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { TOKEN_BALANCE_STORAGE_ROOT, TokenBalanceRawSchema, type TokenBalanceRaw } from "./spec"
+import type { TokenBalanceRaw } from "./spec"
 
 export class BalanceRepository {
-	private readonly storage: EntityStorage<TokenBalanceRaw>
+	private readonly storage: SealedEntityStorage<TokenBalanceRaw>
 
-	public constructor(browserApi: BrowserApi) {
-		this.storage = new EntityStorage<TokenBalanceRaw>(
-			TOKEN_BALANCE_STORAGE_ROOT,
-			browserApi.storage.local,
-			(raw) => TokenBalanceRawSchema.parse(raw),
-			// Balance ids are minted `max+1` over the key space and every identity
-			// decision downstream trusts the embedded `id`, so a row whose key and
-			// `id` disagree must not be served. `keyIdentityMode` is NOT optional
-			// here: the default "string" mode requires a string id, which would
-			// reject every (numeric) balance row while `getKeys()` still saw their
-			// physical keys — a blank assets view plus unbounded reallocation.
-			{ requireKeyIdentityMatch: true, keyIdentityMode: "numeric" },
-		)
+	public constructor(browserApi: BrowserApi, rowKeys: RowKeysSource) {
+		this.storage = sealedEntityStorage("tokenBalances", browserApi.storage.local, rowKeys)
 	}
 
 	public async get(id: number): Promise<TokenBalanceRaw | undefined> {
@@ -44,6 +42,20 @@ export class BalanceRepository {
 
 	public async set(balance: TokenBalanceRaw): Promise<void> {
 		await this.storage.set(`${balance.id}`, balance)
+	}
+
+	/** Seals the row now; the caller runs its fences and then commits with no await between. */
+	public prepare(balance: TokenBalanceRaw): Promise<PreparedWrite> {
+		return this.storage.prepare(`${balance.id}`, balance)
+	}
+
+	/** Seals the profile's plaintext rows, one `withLock` section per row; a row `skip` names at
+	 *  its commit is left as it is. */
+	public sealLegacy(profileId: string, withLock: ConversionLock, skip: (id: number) => boolean): Promise<number> {
+		return this.storage.sealLegacy(profileId, withLock, (storageId) => {
+			const id = canonicalNumericStorageId(storageId)
+			return id !== undefined && skip(id)
+		})
 	}
 
 	public async delete(id: number): Promise<void> {
@@ -66,18 +78,23 @@ export class BalanceRepository {
 	 *  keys lets the one allocator resolve occupancy, safety, and the fence
 	 *  together. */
 	public async allocateIdAvoiding(avoid: ReadonlySet<number>): Promise<number> {
-		return nextNumericId({
-			getKeys: async () => [...(await this.storage.getKeys()), ...[...avoid].map((n) => String(n))],
-		})
+		return (await this.idBatch()).next(avoid)
 	}
 
-	/** Raw second pass over the balance rows — the codec-hidden complement
-	 *  of `delete`, kept here so storage stays repository-private. */
+	/** One listing of the key space for many allocations; valid only while the caller holds the
+	 *  allocation lock for the whole batch, since another allocator's write is not in the listing. */
+	public async idBatch(): Promise<NumericIdBatch> {
+		return numericIdBatch(await this.storage.getKeys())
+	}
+
+	/** Raw second pass over the plaintext balance rows — the codec-hidden complement
+	 *  of `delete`, kept here so storage stays repository-private. A sealed row is never matched:
+	 *  its envelope names only its profile, and the profile's deletion removes it by that. */
 	public async purgeMalformed(
 		matchesRaw: (raw: Record<string, unknown>, storageId: string) => boolean,
 		onPurged?: (storageId: string) => void,
 		onMatch?: (storageId: string) => void,
 	): Promise<number> {
-		return purgeMalformedRows(this.storage, matchesRaw, onPurged, onMatch)
+		return purgeMalformedRows(this.storage, (raw, storageId) => !parseEnvelope(raw) && matchesRaw(raw, storageId), onPurged, onMatch)
 	}
 }

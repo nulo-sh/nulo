@@ -189,6 +189,7 @@ const CORPUS = [
 			estimatedFee: "6",
 			gasDetails: { l2GasLimit: 1, daGasLimit: 2, teardownL2GasLimit: 3, teardownDaGasLimit: 4 },
 			priorityLevel: "fast",
+			feeChoice: "app_protocol_sponsor",
 			error: "none",
 			submittedEndpointUrl: "http://h",
 			origin: { type: "ui" },
@@ -231,8 +232,7 @@ const CORPUS = [
 		parse: (raw: unknown) => IncomingTransferRecordSchema.parse(raw),
 		full: {
 			kind: "note",
-			id: "note:p1|n1|0xsn",
-			siloedNullifier: "0xsn",
+			id: "note:p1|n1|0xuh",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -252,8 +252,7 @@ const CORPUS = [
 		} satisfies IncomingTransferRecord,
 		minimal: {
 			kind: "note",
-			id: "note:p1|n1|0xsn2",
-			siloedNullifier: "0xsn2",
+			id: "note:p1|n1|0xuh2",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -270,8 +269,7 @@ const CORPUS = [
 		} satisfies IncomingTransferRecord,
 		drifted: {
 			kind: "note",
-			id: "note:p1|n1|0xsn3",
-			siloedNullifier: "0xsn3",
+			id: "note:p1|n1|0xuh3",
 			profileId: "p1",
 			networkId: "n1",
 			accountAddress: "0xa",
@@ -430,6 +428,17 @@ describe("durable-store codecs", () => {
 		const read = await storage.get("0xtx")
 		expect(read).toMatchObject({ hash: "0xtx", estimatedFee: "6" })
 		expect(read?.priorityLevel).toBeUndefined()
+	})
+
+	test("a transaction row naming an unknown fee chooser reads without one, and stays readable", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const full = CORPUS.find((c) => c.name === "transaction")?.full as Tx
+		await api.storage.local.set({ "nulo:core:txs@0xtx": JSON.stringify({ ...full, feeChoice: "sponsored" }) })
+		const storage = new EntityStorage<Tx>("nulo:core:txs", api.storage.local, (raw) => TxSchema.parse(raw))
+		const read = await storage.get("0xtx")
+		expect(read).toMatchObject({ hash: "0xtx", priorityLevel: "fast" })
+		expect(read?.feeChoice).toBeUndefined()
 	})
 
 	test("authwit enabled-flag store: booleans round-trip; a non-boolean is kept-but-unreadable", async () => {

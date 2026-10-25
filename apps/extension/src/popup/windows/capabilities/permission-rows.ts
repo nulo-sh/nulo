@@ -3,8 +3,16 @@
  * default. Pure, so the window and Settings read one table and the defaults match what the
  * dispatcher enforces.
  */
+import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { ContractsCapability, SimulationCapability, TransactionCapability } from "@nulo/wallet-bridge"
-import { authorizationsEffective, coversAnyContract, isAnyContractScope } from "@nulo/wallet-bridge"
+import {
+	authorizationsEffective,
+	coversAnyContract,
+	fieldAddressKey,
+	isAnyContractScope,
+	isFieldAddress,
+	sameFieldAddress,
+} from "@nulo/wallet-bridge"
 import { isObjectLike } from "@nulo/wallet-core/utils"
 
 export type RowKey =
@@ -50,7 +58,7 @@ export type SubSegment = { text: string } | { term: string }
 export type PermissionRowEntry = {
 	key: RowKey
 	group: RowGroup
-	icon: string
+	icon: GlyphName
 	title: string
 	/** The line under the title; a switch row reads it while on, and `subOff` while off. */
 	subOn?: SubSegment[]
@@ -62,6 +70,25 @@ export type PermissionRowEntry = {
 }
 
 export const ANY_CONTRACT = "Any contract"
+export const ANY_CLASS = "Any class"
+
+/** A contract the wallet names, its address lower-cased. */
+export type KnownName = { address: string; name: string }
+
+/** A listed contract keyed as the scope check compares it; any other string by its lower case,
+ *  which can only overstate reach. */
+export function contractKey(contract: string): string {
+	return fieldAddressKey(contract) ?? contract.toLowerCase()
+}
+
+/** One listed contract the wallet names reads as its name; anything else is counted, so a title
+ *  never grows with the request and two spellings of one address count once. */
+export function reachOf(contracts: readonly string[], names: readonly KnownName[]): string {
+	const keys = new Set(contracts.map(contractKey))
+	const [only] = keys
+	const name = keys.size === 1 ? names.find((entry) => entry.address === only)?.name : undefined
+	return name ?? `${keys.size} ${keys.size === 1 ? "contract" : "contracts"}`
+}
 
 const DATA_OFF: SubSegment[] = [{ text: "Not shared. The app may ask again later." }]
 const AUTH_ON: SubSegment[] = [{ text: "Nulo signs its " }, { term: "authorizations" }, { text: " without asking." }]
@@ -81,12 +108,19 @@ export function plainText(segments: readonly SubSegment[] | undefined): string {
 	return (segments ?? []).map((segment) => ("term" in segment ? segment.term : segment.text)).join("")
 }
 
-/** Names the one account the app sees by its wallet name. Several, none, or one the wallet no
- *  longer names read the sentence that needs no name. */
-export function accountAddressRow(accounts: readonly { name?: string }[]): PermissionRowEntry {
-	const only = accounts.length === 1 ? accounts[0].name : undefined
-	const title = only ? `See ${only}'s address` : "See the addresses of the accounts you share"
-	return { key: "account-address", group: "without-asking", icon: "visibility", title, flagged: false }
+const LISTING_SUB: SubSegment[] = [{ text: "It always knows the account you connect with." }]
+
+/** `canGet` controls listing only: a session with a simulation grant learns its account from any
+ *  simulation's results. */
+export function accountAddressRow(): PermissionRowEntry {
+	return {
+		key: "account-address",
+		group: "without-asking",
+		icon: "eye",
+		title: "Let this app list all your accounts",
+		subOn: LISTING_SUB,
+		flagged: false,
+	}
 }
 
 /** Either sub-scope reaching any contract makes the row "any contract"; only transactions can
@@ -97,7 +131,7 @@ export function simulationRow(cap: SimulationCapability): PermissionRowEntry {
 	return {
 		key: "simulation",
 		group: "without-asking",
-		icon: "play_circle",
+		icon: "play",
 		title: any ? "Run simulations on any contract" : "Run simulations and read the results",
 		subOn: PRIVATE_BALANCES,
 		flagged: any,
@@ -106,38 +140,47 @@ export function simulationRow(cap: SimulationCapability): PermissionRowEntry {
 }
 
 /** Registering implies reading metadata, so a request with both shows only the add row. */
-export function contractsRow(cap: ContractsCapability): PermissionRowEntry | undefined {
+export function contractsRow(cap: ContractsCapability, names: readonly KnownName[]): PermissionRowEntry | undefined {
 	if (cap.canRegister === true) {
 		const any = cap.contracts === "*"
 		return {
 			key: "contracts",
 			group: "without-asking",
-			icon: "add_circle",
+			icon: "add",
 			title: any ? "Add any contract to your wallet" : "Add contracts to your wallet",
 			flagged: any,
 			...(any ? { chip: ANY_CONTRACT } : {}),
 		}
 	}
 	if (cap.canGetMetadata === true) {
+		const listed = Array.isArray(cap.contracts) ? cap.contracts : undefined
 		return {
 			key: "contract-details",
 			group: "without-asking",
 			icon: "info",
-			title: "See details of contracts in your wallet",
-			flagged: false,
+			title: listed ? `See details of ${reachOf(listed, names)} in your wallet` : "See details of any contract in your wallet",
+			flagged: listed === undefined,
+			...(listed ? {} : { chip: ANY_CONTRACT }),
 		}
 	}
 	return undefined
 }
 
-export function contractClassesRow(networkName: string): PermissionRowEntry {
+/** Classes have no names, so a list is only counted. A lookup answers from two sources: the node, on
+ *  whether the class is published, and this wallet's own records, on whether it holds the artifact. */
+export function contractClassesRow(networkName: string, classes: "*" | readonly string[]): PermissionRowEntry {
+	const count = Array.isArray(classes) ? new Set(classes.map(contractKey)).size : undefined
 	return {
 		key: "contract-classes",
 		group: "without-asking",
-		icon: "code_blocks",
-		title: `Look up contract code on ${networkName}`,
-		subOn: [{ text: "Public information any node can give it." }],
-		flagged: false,
+		icon: "code",
+		title:
+			count === undefined
+				? `Look up contract code on ${networkName}`
+				: `Look up the code of ${count} contract ${count === 1 ? "class" : "classes"} on ${networkName}`,
+		subOn: [{ text: "Whether it is on chain, and if this wallet has its code." }],
+		flagged: count === undefined,
+		...(count === undefined ? { chip: ANY_CLASS } : {}),
 	}
 }
 
@@ -169,13 +212,14 @@ export function addressBookRow(state: { broadRequest: boolean }): PermissionRowE
 	}
 }
 
-export function privateEventsRow(contracts: "*" | readonly string[]): PermissionRowEntry {
-	const any = contracts === "*"
+export function privateEventsRow(contracts: "*" | readonly string[], names: readonly KnownName[]): PermissionRowEntry {
+	const listed = Array.isArray(contracts) ? contracts : undefined
+	const any = listed === undefined
 	return {
 		key: "private-events",
 		group: "if-you-allow",
-		icon: "mail_lock",
-		title: any ? "See private events from any contract" : "See private events from its contracts",
+		icon: "mail-lock",
+		title: listed ? `See private events from ${reachOf(listed, names)}` : "See private events from any contract",
 		subOn: EVENTS_ON,
 		subOff: DATA_OFF,
 		switchLabel: "Share private events",
@@ -197,13 +241,20 @@ export function unknownRow(count: number, state: { broadRequest: boolean }): Per
 	}
 }
 
-export function transactionRow(cap: TransactionCapability): PermissionRowEntry {
-	const any = isAnyContractScope(cap.scope)
+export function transactionRow(cap: TransactionCapability, names: readonly KnownName[]): PermissionRowEntry {
+	const scope = Array.isArray(cap.scope) && !isAnyContractScope(cap.scope) ? cap.scope : undefined
 	return {
 		key: "transaction",
 		group: "always-asks",
-		icon: "task_alt",
-		title: any ? "Every transaction, on any contract" : "Every transaction",
+		icon: "check",
+		title: `Every transaction, on ${
+			scope
+				? reachOf(
+						scope.map((pattern) => pattern.contract),
+						names,
+					)
+				: "any contract"
+		}`,
 		flagged: false,
 	}
 }
@@ -247,6 +298,32 @@ export function consentLostOnWidening(consent: unknown, held: readonly unknown[]
 	return holdsCanCreateAuthWit(held) && authorizationsEffective(consent, held) && !authorizationsEffective(consent, resulting)
 }
 
-export function privateEventsDefault(contracts: "*" | readonly string[]): boolean {
-	return contracts !== "*"
+/**
+ * The private-events switch's starting state: On only when every listed contract is inside a call
+ * scope of the grants after Allow, where the app already reaches it. A contract or scope the window
+ * cannot place counts as outside, so the default fails Off.
+ */
+export function privateEventsDefault(contracts: "*" | readonly string[], resulting: readonly unknown[]): boolean {
+	if (!Array.isArray(contracts)) return false
+	const scopes = callScopes(resulting)
+	return contracts.every((contract) => isFieldAddress(contract) && scopes.some((scope) => scopeReaches(scope, contract)))
+}
+
+/** The transaction and `simulation.transactions` scopes, as `holdsCallScope` counts them. */
+function callScopes(caps: readonly unknown[]): unknown[] {
+	return caps.flatMap((cap) => {
+		if (!isObjectLike(cap)) return []
+		if (cap.type === "transaction") return [cap.scope]
+		return cap.type === "simulation" && isObjectLike(cap.transactions) ? [cap.transactions.scope] : []
+	})
+}
+
+function scopeReaches(scope: unknown, contract: string): boolean {
+	if (scope === "*") return true
+	if (!Array.isArray(scope) || !scope.every(isPattern)) return false
+	return scope.some((pattern) => pattern.contract === "*" || sameFieldAddress(pattern.contract, contract))
+}
+
+function isPattern(value: unknown): value is { contract: string; function: string } {
+	return isObjectLike(value) && typeof value.contract === "string" && typeof value.function === "string"
 }

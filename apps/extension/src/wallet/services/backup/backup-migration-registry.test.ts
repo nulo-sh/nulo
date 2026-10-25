@@ -3,11 +3,11 @@ import { BASELINE_VERSION } from "@/wallet/storage/migrations"
 import { ACCOUNT_STORAGE_ROOT, accountRowId } from "@/wallet/services/account/spec"
 import { AUTH_REGISTRY_ENABLED_STORAGE_ROOT, AUTH_REGISTRY_STORAGE_ROOT } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
-import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/repository"
+import { PROFILE_STORAGE_ROOT } from "@/wallet/services/profile/spec"
 import { TOKEN_BALANCE_STORAGE_ROOT } from "@/wallet/services/token-balance/spec"
 import { TOKEN_STORAGE_ROOT } from "@/wallet/services/token/spec"
 import { TRANSACTION_STORAGE_ROOT } from "@/wallet/services/transaction/spec"
-import { CONFIG_STORAGE_KEY } from "@/wallet/config/store"
+import { CONFIG_STORAGE_KEY } from "@/wallet/config/config"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
 import {
 	BACKUP_BLOCKED_ROOTS,
@@ -157,6 +157,29 @@ describe("backup-migration-registry", () => {
 		["data not an object", "nope"],
 	])("hostile input rejects: %s", (_label, data) => {
 		expect(normalizeBackupData(data).ok).toBe(false)
+	})
+
+	describe.each([
+		["token", 1024],
+		["token-balance", 16384],
+	])("the %s slice's row limit", (slice, limit) => {
+		const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i + 1, token: 1, account: "0xaaa1" }))
+
+		test("a slice at the limit normalizes", () => {
+			expect(normalizeBackupData({ ...fixture(), [slice]: rows(limit) }).ok).toBe(true)
+		})
+
+		test("one row over the limit refuses with the slice, its length and the limit", () => {
+			expect(normalizeBackupData({ ...fixture(), [slice]: rows(limit + 1) })).toEqual({
+				ok: false,
+				reason: `slice "${slice}" has ${limit + 1} rows, over its limit of ${limit}`,
+			})
+		})
+
+		test("an unlimited slice of the same length normalizes (control)", () => {
+			const contacts = Array.from({ length: limit + 1 }, (_, i) => ({ id: `c${i}`, profileId: "p1", name: "A", address: "0xccc" }))
+			expect(normalizeBackupData({ ...fixture(), contact: contacts }).ok).toBe(true)
+		})
 	})
 
 	test("account-state is non-storage and profile is block-listed; blocked roots pinned", () => {

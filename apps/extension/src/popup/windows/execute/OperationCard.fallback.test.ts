@@ -12,6 +12,7 @@ import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import OperationCard from "./OperationCard.vue"
+import { shownText } from "../../../../tests/helpers/shown-text"
 
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
 // The real store's setup opens chrome.storage; the card only needs its account list.
@@ -67,6 +68,7 @@ const mountCard = async (op: unknown, props: Record<string, unknown> = {}) => {
 		props: { op: op as never, index: 0, tokens: [USDC], ...props },
 		global: { stubs, components: { AddressDisplay } },
 	})
+	await w.get('[data-testid="execute-op-details-toggle"]').trigger("click")
 	await flushPromises()
 	return w
 }
@@ -200,6 +202,39 @@ describe("OperationCard — the vocabulary reading", () => {
 	})
 })
 
+describe("OperationCard — the label mark on a registered token's call", () => {
+	const P2P = sel("transfer_private_to_private", 4)
+	const reversed = sendTx([{ name: "transfer_private_to_private", to: TOKEN, selector: P2P, args: [TO, OWNER, field(5n), field(0n)] }])
+	const decodes = {
+		decodedCalls: [
+			decoded("transfer_private_to_private", [
+				{ name: "to", value: { kind: "address", value: TO } },
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "amount", value: { kind: "integer", value: "5" } },
+				{ name: "_nonce", value: { kind: "field", value: field(0n) } },
+			]),
+		],
+	}
+
+	test("parameter names that do not fit the standard roles carry the mark, above the rows", async () => {
+		const w = await mountCard(reversed, decodes)
+		const block = one(w, "execute-op-decoded-args")
+		expect(one(w, "execute-op-labels-warning").text()).toBe("Labels from the contract")
+		expect(one(w, "execute-op-labels-reason").text()).toBe(
+			"These names come from the contract, not from Nulo. Check the addresses and amount before approving.",
+		)
+		const order = block.findAll("[data-testid]").map((el) => el.attributes("data-testid"))
+		expect(order.indexOf("execute-op-labels-warning")).toBeLessThan(order.indexOf("execute-op-decoded-param"))
+		expect(all(w, "execute-op-decoded-param").map((p) => p.attributes("data-param"))).toEqual(["to", "from", "amount", "_nonce"])
+	})
+
+	test("the same rows on a contract the wallet has not registered carry none (control)", async () => {
+		const w = await mountCard(reversed, { ...decodes, tokens: [] })
+		expect(all(w, "execute-op-decoded-param")).toHaveLength(4)
+		expect(one(w, "execute-op-labels-warning").exists()).toBe(false)
+	})
+})
+
 describe("OperationCard — the ABI decode and the raw fallback", () => {
 	const claimArgs = [TO, field(5_000_000n), field(7n), field(1n)]
 	const claim = { name: "claim_lie", to: TOKEN, selector: "0x11223344", args: claimArgs }
@@ -230,6 +265,7 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(params[2]!.find("[title]").attributes("title")).toBe(field(7n))
 		expect(params[3]!.text()).toContain("true")
 		expect(one(w, "execute-op-unverified-args").exists()).toBe(false)
+		expect(one(w, "execute-op-labels-warning").exists()).toBe(false)
 	})
 
 	test("while the wallet is still decoding, the card says so and shows no field", async () => {
@@ -245,13 +281,16 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		const block = one(w, "execute-op-unverified-args")
 		expect(block.attributes("data-reason")).toBe("unknown-contract")
 		expect(one(w, "execute-op-unverified-warning").text()).toContain("Can't read the arguments")
-		expect(block.text()).toContain("doesn't have this contract's interface")
+		expect(shownText(one(w, "execute-op-unverified-reason").element)).toBe("Nulo doesn't have this contract's interface.")
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
 		expect(w.text()).not.toContain(TO)
 		const toggle = one(w, "execute-op-raw-toggle")
 		expect(toggle.text()).toContain("Show 4 raw values")
+		expect(toggle.attributes("aria-controls")).toBeUndefined()
 		await toggle.trigger("click")
 		expect(toggle.text()).toContain("Hide raw values")
+		expect(one(w, "execute-op-raw-args").attributes("id")).toBeTruthy()
+		expect(toggle.attributes("aria-controls")).toBe(one(w, "execute-op-raw-args").attributes("id"))
 		const rows = all(w, "execute-op-arg")
 		expect(rows).toHaveLength(4)
 		expect(rows.every((r) => r.attributes("data-arg-kind") === "field")).toBe(true)
@@ -262,6 +301,7 @@ describe("OperationCard — the ABI decode and the raw fallback", () => {
 		expect(rows[0]!.text()).not.toContain("=")
 		await toggle.trigger("click")
 		expect(one(w, "execute-op-raw-args").exists()).toBe(false)
+		expect(toggle.attributes("aria-controls")).toBeUndefined()
 	})
 
 	test("a 40-field call renders 32 rows and points at the JSON view for the rest", async () => {

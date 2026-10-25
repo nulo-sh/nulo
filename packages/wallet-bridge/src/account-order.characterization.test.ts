@@ -66,11 +66,6 @@ function makeDispatcher(): { dispatcher: WalletSdkDispatcher; sent: () => string
 
 	const sessionWriter: IDappSessionWriter = {
 		tryGetDappSessionByOriginAndChain: async () => session,
-		getDappSession: async () => session,
-		updateDappSession: async () => session,
-		setAccountAliases: async () => session,
-		setCapabilityGrants: async () => session,
-		setCapabilityRejections: async () => session,
 		applyCapabilityDecision: async (_id, decision) => ({
 			...session,
 			accounts: decision.addAccounts.length > 0 ? [...new Set([...session.accounts, ...decision.addAccounts])] : session.accounts,

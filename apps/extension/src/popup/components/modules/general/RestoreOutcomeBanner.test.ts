@@ -108,7 +108,7 @@ afterEach(() => {
 
 describe("RestoreOutcomeBanner", () => {
 	test.each([
-		[["3f2a9c1e"], "Testnet didn't finish restoring. Restore the backup again to bring them back."],
+		[["3f2a9c1e"], "Testnet didn't finish restoring. Restore the backup again to bring it back."],
 		[["0badc0de", "3f2a9c1e"], "Testnet and Local Network didn't finish restoring. Restore the backup again to bring them back."],
 	])("names the record's networks %j by their current names", async (ids, sentence) => {
 		seed("p1", ids)

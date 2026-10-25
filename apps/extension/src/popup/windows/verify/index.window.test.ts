@@ -1,8 +1,9 @@
 /**
  * The trust-confirmation window's own lifecycle and anti-phishing display, over wire-shaped rows:
  * `dappMetadata` as the worker writes it (a sanitized dApp name, the tab's serialized origin), a
- * 64-hex verification hash and CAIP accounts. The identity block is the real one, so the hostname
- * and its warning are read as rendered.
+ * 64-hex verification hash and CAIP accounts. The identity block is the real one, so the origin
+ * and its warning are read as rendered. A new connection and a remembered app's reconnect show the
+ * same check with the same two answers.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
@@ -21,9 +22,6 @@ const getDappSession = vi.fn(async (id: string) => {
 	callLog.push(`getDappSession:${id}`)
 	if (sessionRow instanceof Error) throw sessionRow
 	return sessionRow
-})
-const setTrustedVerification = vi.fn(async (id: string, trusted: boolean) => {
-	callLog.push(`setTrustedVerification:${id}:${trusted}`)
 })
 let confirmation: () => Promise<void> = async () => undefined
 const confirmVerification = vi.fn(async (hash: string) => {
@@ -47,7 +45,7 @@ vi.mock("vue-router", async (importOriginal) => {
 vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: (hash: string) => `grid(${hash})` }))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
-		return { connect: () => {}, disconnect: () => {}, getDappSession, setTrustedVerification, confirmVerification, refuseVerification }
+		return { connect: () => {}, disconnect: () => {}, getDappSession, confirmVerification, refuseVerification }
 	}),
 }))
 vi.mock("@/wallet/services/account/client", () => ({
@@ -79,12 +77,7 @@ const STUBS = {
 	Icon: { template: "<i />" },
 	SectionLabel: { template: "<div />" },
 	IdentityStrip: { template: "<div />" },
-	EmojiGrid: { template: "<div />" },
-	Toggle: {
-		props: ["modelValue"],
-		emits: ["update:modelValue"],
-		template: `<button data-testid="toggle-stub" @click="$emit('update:modelValue', true)" />`,
-	},
+	EmojiGrid: { props: ["emojis"], template: "<div>{{ emojis }}</div>" },
 	Button: { props: ["disabled"], template: '<button :disabled="disabled"><slot /></button>' },
 }
 
@@ -146,25 +139,55 @@ afterEach(() => {
 	vi.clearAllMocks()
 })
 
-describe("windows/verify — the hostname the user is asked to trust", () => {
+describe("windows/verify — the origin the user is asked to trust", () => {
 	test.each([
-		["https://dapp.example:8443", "dapp.example", false],
-		["http://[::1]:5173", "[::1]", false],
-		["https://xn--exmple-cua.com", "xn--exmple-cua.com", true],
-		["https://dapp.example.evil.example", "dapp.example.evil.example", false],
+		["https://dapp.example:8443", "https://dapp.example:8443", false],
+		["http://[::1]:5173", "http://[::1]:5173", false],
+		["https://xn--exmple-cua.com", "https://xn--exmple-cua.com", true],
+		["https://dapp.example.evil.example", "https://dapp.example.evil.example", false],
 		["null", "null", false],
 		["unknown", "unknown", false],
-		["https://dapp.example@evil.example", "evil.example", false],
-	])("%s renders %s, warning %s", async (url, hostname, warned) => {
+		["https://dapp.example@evil.example", "https://evil.example", false],
+	])("%s renders %s, warning %s", async (url, origin, warned) => {
 		sessionRow = row(url)
 		const w = mountVerify()
 		await flushPromises()
 		const block = w.findComponent(DappIdentityBlock)
-		expect(block.props("hostname")).toBe(hostname)
-		expect(block.props("hostnameSuspicious")).toBe(warned)
-		expect(block.text()).toContain(hostname)
+		expect(block.text()).toContain(origin)
 		expect(block.find('[data-testid="dapp-hostname-warning"]').exists()).toBe(warned)
 		for (const part of ["‮", "​", "⁦"]) expect(block.text()).not.toContain(part)
+	})
+})
+
+describe.each(["false", "true"])("windows/verify — the check with isReconnect=%s", (isReconnect) => {
+	const open = () => mountVerify({ sessionId: "row-1", verificationHash: URL_HASH, isReconnect })
+	const press = async (w: ReturnType<typeof mountVerify>, testid: string) => {
+		await w.get(`[data-testid="${testid}"]`).trigger("click")
+		await flushPromises()
+	}
+
+	test("shows the URL's grid and both answers, and no switch to skip the check", async () => {
+		const w = open()
+		await flushPromises()
+		expect(w.get('[data-testid="verify-emoji-grid"]').text()).toBe(`grid(${URL_HASH})`)
+		expect(w.find('[data-testid="verify-mismatch-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="verify-confirm-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="verify-always-trust-toggle"]').exists()).toBe(false)
+	})
+
+	test("They match reports the URL's hash, not the row's, then closes the window", async () => {
+		const w = open()
+		await flushPromises()
+		await press(w, "verify-confirm-btn")
+		expect(callLog).toEqual(["getDappSession:row-1", `confirmVerification:${URL_HASH}`, "getCurrent", "remove:7"])
+	})
+
+	test("They don't match refuses the app the wallet's own row names, then closes the window", async () => {
+		const w = open()
+		await flushPromises()
+		await press(w, "verify-mismatch-btn")
+		expect(refuseVerification.mock.calls).toEqual([[{ origin: "https://dapp.example", chainId: "0", profileId: "p1" }]])
+		expect(callLog).toEqual(["getDappSession:row-1", "refuseVerification:https://dapp.example", "getCurrent", "remove:7"])
 	})
 })
 
@@ -201,21 +224,6 @@ describe("windows/verify — closing", () => {
 		expect(getCurrent).toHaveBeenCalledTimes(1)
 		expect(remove).not.toHaveBeenCalled()
 	})
-
-	test("They match with the skip switch on records the trust, then reports the check, then closes the window", async () => {
-		const w = mountVerify()
-		await flushPromises()
-		await w.get('[data-testid="toggle-stub"]').trigger("click")
-		await w.get('[data-testid="verify-confirm-btn"]').trigger("click")
-		await flushPromises()
-		expect(callLog).toEqual([
-			"getDappSession:row-1",
-			"setTrustedVerification:row-1:true",
-			`confirmVerification:${URL_HASH}`,
-			"getCurrent",
-			"remove:7",
-		])
-	})
 })
 
 describe("windows/verify — They match releases the app's calls", () => {
@@ -223,14 +231,6 @@ describe("windows/verify — They match releases the app's calls", () => {
 		await w.get(`[data-testid="${testid}"]`).trigger("click")
 		await flushPromises()
 	}
-
-	test("with the skip switch off it reports the URL's hash, not the row's, and records no trust", async () => {
-		const w = mountVerify()
-		await flushPromises()
-		await press(w, "verify-confirm-btn")
-		expect(callLog).toEqual(["getDappSession:row-1", `confirmVerification:${URL_HASH}`, "getCurrent", "remove:7"])
-		expect(setTrustedVerification).not.toHaveBeenCalled()
-	})
 
 	test("a window opened without a hash closes on They match without reporting the row's", async () => {
 		const w = mountVerify({ sessionId: "row-1", isReconnect: "false" })
@@ -277,16 +277,6 @@ describe("windows/verify — They don't match", () => {
 		await flushPromises()
 	}
 
-	test("refuses the app the wallet's own row names, then closes the window, and never records trust", async () => {
-		const w = mountVerify()
-		await flushPromises()
-		await w.get('[data-testid="toggle-stub"]').trigger("click")
-		await press(w, "verify-mismatch-btn")
-		expect(refuseVerification.mock.calls).toEqual([[{ origin: "https://dapp.example", chainId: "0", profileId: "p1" }]])
-		expect(callLog).toEqual(["getDappSession:row-1", "refuseVerification:https://dapp.example", "getCurrent", "remove:7"])
-		expect(setTrustedVerification).not.toHaveBeenCalled()
-	})
-
 	test("an app already gone closes the window", async () => {
 		refusal = async () => "absent"
 		const w = mountVerify()
@@ -327,7 +317,6 @@ describe("windows/verify — They don't match", () => {
 		refusal = () => new Promise((resolve) => (settle = resolve))
 		const w = mountVerify()
 		await flushPromises()
-		await w.get('[data-testid="toggle-stub"]').trigger("click")
 		// Emitted on the component, so what refuses is the handlers' latch, not the disabled attribute.
 		const emitClick = async (testid: string) => {
 			;(w.findComponent(`[data-testid="${testid}"]`) as VueWrapper).vm.$emit("click")
@@ -340,7 +329,6 @@ describe("windows/verify — They don't match", () => {
 		await flushPromises()
 		await emitClick("verify-confirm-btn")
 		expect(refuseVerification).toHaveBeenCalledTimes(1)
-		expect(setTrustedVerification).not.toHaveBeenCalled()
 		expect(remove.mock.calls).toEqual([[7]])
 	})
 })

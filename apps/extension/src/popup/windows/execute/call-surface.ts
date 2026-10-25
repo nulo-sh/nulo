@@ -6,12 +6,20 @@
  * default view.
  */
 
-import type { DecodedCall, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
+import type { DecodedCall, DecodedGrant, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
 import { trimAddress } from "@/utils/string"
-import { abiNameFitsRole, findMintSignature, findTransferSignature, vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import { humanizeMethodName } from "@/utils/tx-enrichment"
+import {
+	abiNameFitsRole,
+	findMintSignature,
+	findTransferSignature,
+	MINT_SIGNATURES,
+	TRANSFER_SIGNATURES,
+	VOCABULARY_SELECTORS,
+	vocabularySelector,
+} from "@/utils/token-transfer-vocabulary"
+import { callTitle } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
 
@@ -24,13 +32,16 @@ export type TransferSender = { kind: "explicit" | "account"; address: string } |
 
 /** One raw field row: trimmed for the eye, the full value on hover, and its decimal when it is small
  *  enough to be a count or an amount rather than a hash. */
-export type RawRow = { kind: "field"; short: string; full: string; decimal?: string } | { kind: "text"; value: string } | { kind: "opaque" }
+export type RawRow =
+	| { kind: "field"; short: string; full: string; decimal?: string }
+	| { kind: "text"; value: string; full: string }
+	| { kind: "opaque" }
 export type RawRows = { rows: RawRow[]; hidden: number }
 
 export type CallSurface =
 	| { kind: "transfer"; fn: string; to: string; amount: string; sender: TransferSender; nonce?: string }
 	| { kind: "mint"; fn: string; to: string; amount: string }
-	| { kind: "decoded"; fn: string; params: readonly DecodedParam[] }
+	| { kind: "decoded"; fn: string; params: readonly DecodedParam[]; labels?: "unchecked" }
 	| { kind: "pending" }
 	| ({ kind: "raw"; reason: UndecodedReason } & RawRows)
 
@@ -44,11 +55,13 @@ export const wire = (v: unknown, max: number): string => safeWire(v === undefine
 export const MAX_ARG_ROWS = 32
 /** Array items shown inline; the full list stays available as the row's title. */
 const MAX_INLINE_ITEMS = 8
+/** The most code points a whole value prints before it is cut. */
+const FULL_TEXT_MAX = 4096
 
 const rawRow = (arg: unknown): RawRow => {
 	const p = projectArgument(arg)
 	if (p.kind === "field") return { kind: "field", short: trimAddress(p.value, 10, 6), full: p.value, decimal: smallFieldDecimal(p.value) }
-	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64) }
+	if (p.kind === "text") return { kind: "text", value: safeWire(p.value, 64), full: safeWire(p.value, 4096) }
 	return { kind: "opaque" }
 }
 
@@ -108,6 +121,16 @@ const corroborates = (decoded: Extract<DecodedCall, { kind: "decoded" }>, select
 	)
 }
 
+const VOCABULARY_SELECTOR_SET: ReadonlySet<string> = new Set(VOCABULARY_SELECTORS.values())
+
+/** A call that claims a vocabulary signature, by its decoded name at any arity or by the selector it
+ *  runs. On a registered token one that fails `corroborates` shows the contract's parameter names,
+ *  which its class does not fix, so they are marked as the contract's. */
+const claimsVocabulary = (decoded: Extract<DecodedCall, { kind: "decoded" }>, selector: unknown): boolean =>
+	TRANSFER_SIGNATURES.has(decoded.fn) ||
+	MINT_SIGNATURES.has(decoded.fn) ||
+	(typeof selector === "string" && VOCABULARY_SELECTOR_SET.has(selector))
+
 /** `decoded` is `undefined` while the wallet is still decoding. The vocabulary applies only on a
  *  registered token (`tokenKnown`) whose call corroborates the signature; every other call reads
  *  as the contract's own parameters, or as raw fields (`maxRows` of them) with the reason. */
@@ -120,19 +143,36 @@ export const callSurface = (
 ): CallSurface => {
 	if (decoded === undefined) return { kind: "pending" }
 	if (decoded.kind === "decoded") {
-		const known = tokenKnown && corroborates(decoded, call.selector) ? vocabularySurface(ctx, decoded.fn, call) : undefined
-		return known ?? { kind: "decoded", fn: decoded.fn, params: decoded.params }
+		const corroborated = tokenKnown && corroborates(decoded, call.selector)
+		const known = corroborated ? vocabularySurface(ctx, decoded.fn, call) : undefined
+		const unchecked = tokenKnown && !corroborated && claimsVocabulary(decoded, call.selector)
+		return known ?? { kind: "decoded", fn: decoded.fn, params: decoded.params, ...(unchecked ? { labels: "unchecked" } : {}) }
 	}
 	return { kind: "raw", reason: decoded.reason, ...rawRows(call.args, maxRows) }
 }
 
-/** The header names the function by its decoded name, which a structured reading has checked against
- *  the selector, and by the dApp's label only when there is no decode. Both are untrusted strings,
- *  and a curated label applies only on the contract it belongs to. */
-export const callName = (call: WireCall, surface: CallSurface): string => {
-	const name = "fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
-	return humanizeMethodName(name, wire(call.to, 80))
-}
+const surfaceName = (call: WireCall, surface: CallSurface): string =>
+	"fn" in surface ? safeWire(surface.fn, 64) : wire(call.name ?? call.selector, 64)
+
+/** A call's title names the function by its decoded name, which a structured reading has checked
+ *  against the selector, and by the dApp's label only when there is no decode. Both are untrusted
+ *  strings; a movement label needs the wallet's reading, and a curated label applies only on the
+ *  contract it belongs to. */
+export const rowTitle = (call: WireCall, surface: CallSurface): string =>
+	callTitle(surfaceName(call, surface), wire(call.to, 80), surface.kind === "transfer" || surface.kind === "mint")
+
+/** A discovered authorization's function: its decoded name under the body's title rule, or the
+ *  selector it carries while it has no decode. */
+export const authwitTitle = (selector: unknown, consumer: unknown, surface: CallSurface): string =>
+	"fn" in surface ? rowTitle({ to: consumer }, surface) : wire(selector, 64)
+
+/** What the summary says an authorization lets its caller do: move tokens only when the wallet read
+ *  the call as a transfer from a named sender; any other call by its title alone. */
+export type AuthwitLine = { kind: "move"; amount: string; from: string; to: string } | { kind: "call"; fn: string }
+export const authwitLine = (surface: CallSurface, fn: string): AuthwitLine =>
+	surface.kind === "transfer" && surface.sender.kind === "explicit"
+		? { kind: "move", amount: surface.amount, from: surface.sender.address, to: surface.to }
+		: { kind: "call", fn }
 
 export type AmountLabel = { text: string; symbol?: string }
 
@@ -159,7 +199,7 @@ export const valueText = (v: DecodedValue, full = false): string => {
 		case "selector":
 			return v.value
 		case "string":
-			return safeWire(v.value, full ? 4096 : 64)
+			return safeWire(v.value, full ? FULL_TEXT_MAX : 64)
 		case "boolean":
 			return v.value ? "true" : "false"
 		case "field":
@@ -193,11 +233,58 @@ export const valueTitle = (v: DecodedValue): string | undefined => {
 	return full === valueText(v) ? undefined : full
 }
 
-export const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
+/** A sentence as the notice prints it: a `term` segment is the word the `interface` glossary entry defines. */
+export type NoticeSegment = { text: string } | { term: string }
+
+export const RAW_TITLE = "Can't read the arguments"
+
+export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]>> = {
+	"unknown-contract": [{ text: "Nulo doesn't have this contract's " }, { term: "interface" }, { text: "." }],
+	"unknown-function": [{ text: "This function isn't in the " }, { term: "interface" }, { text: " Nulo has." }],
+	arguments: [{ text: "The arguments don't fit the " }, { term: "interface" }, { text: "." }],
+	unavailable: [{ text: "Nulo couldn't read the arguments right now." }],
+}
+
+/** Said once per window, never on a request the wallet refuses; `OperationCard` picks its place. */
+export const RAW_ADVICE = "Check what the app says this does before approving."
+
+export const LABELS_TITLE = "Labels from the contract"
+export const LABELS_LINE: readonly NoticeSegment[] = [
+	{ text: "These names come from the contract, not from Nulo. Check the addresses and amount before approving." },
+]
+
+/** The footer's refusal of a grant it cannot read. A tooltip cannot hold the dotted term the short
+ *  line leans on, so each sentence says it whole; the advice is left out, as the window cannot be approved. */
+const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	"unknown-contract": "Nulo doesn't have this contract's interface, so it can't read the arguments.",
 	"unknown-function": "This function isn't in the interface Nulo has for the contract, so it can't read the arguments.",
 	arguments: "The arguments don't fit the contract's interface, so Nulo can't read them.",
 	unavailable: "Nulo couldn't read the arguments right now.",
+}
+
+/** Whether `valueText(v, true)` prints every character `v` carries: a string loses what the print
+ *  strips (control and direction characters), cuts, or cannot draw (a lone surrogate). */
+const printsWhole = (v: DecodedValue): boolean => {
+	if (v.kind === "string") return v.value.isWellFormed() && safeWire(v.value, FULL_TEXT_MAX) === v.value
+	if (v.kind === "array") return v.items.every(printsWhole)
+	if (v.kind === "struct") return v.fields.every((f) => printsWhole(f.value))
+	return true
+}
+
+/** Each of an operation's `count` grants as the card can read it: missing from the batch is
+ *  unavailable, and a decode the card cannot print whole is unreadable. */
+export const readableGrants = (decoded: readonly DecodedGrant[], count: number): DecodedGrant[] =>
+	Array.from({ length: count }, (_, k): DecodedGrant => {
+		const grant = decoded[k] ?? { kind: "undecoded", reason: "unavailable" }
+		return grant.kind === "decoded" && !grant.decoded.params.every((p) => printsWhole(p.value))
+			? { kind: "undecoded", reason: "arguments" }
+			: grant
+	})
+
+/** The footer's error row for the first grant the wallet cannot read: such a request is not approvable. */
+export function grantRefusalRow(grants: Iterable<DecodedGrant>): { title: string; tooltip: string; type: "error" } | undefined {
+	const unread = [...grants].find((grant) => grant.kind === "undecoded")
+	return unread?.kind === "undecoded" ? { title: RAW_TITLE, tooltip: RAW_NOTICE[unread.reason], type: "error" } : undefined
 }
 
 export const rawToggleLabel = (count: number, open: boolean): string =>
