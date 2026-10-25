@@ -15,8 +15,8 @@ issues: "#80"
 
 - **Date:** 2026-10-24. Planned and implemented the same day.
 - **Status:** ready on the owner's call (D17): #1117 against `dev`, marked ready without the live read, which follows on 2026-10-26 once the v6 upgrade executes; the timed export moves to after the flip. The orchestrator merges.
-- **Shipped:** the Mainnet seed (D1) and its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8); the owner's answers to OA-1 to OA-7 (D10-D16), applied on the branch; the PXE store gate (D18). Measured: 4 to 8 s per full backup export per browser.
-- **Dropped, rejected, superseded:** D9's skip of accountless chains (it would drop a dApp's registrations); a second stand-in node for Mainnet (D6); copy changes (D3, asked as OA-1).
+- **Shipped:** the Mainnet seed (D1) as the default network (D19), on the owner's call of 2026-10-24, with the e2e holding a stand-in per seeded node (D20), the fresh-profile check (D21) and the flip's copy (D22) for the owner's sign-off; its explorer entry; the e2e test Mainnet retired, the helpers and update scenarios on the real seed (D5); `check:seeds` plus the advisory nightly job, reusing `assertLiveChainIdentity` and printing no node words (D2, fix round 1); the declared refusal and the arrival's no-dial assertion (D6); captures on both browsers (D8); the owner's answers to OA-1 to OA-7 (D10-D16), applied on the branch; the PXE store gate (D18). Measured: 4 to 8 s per full backup export per browser.
+- **Dropped, rejected, superseded:** D9's skip of accountless chains (it would drop a dApp's registrations); D6's declared refusal for Mainnet, superseded by a stand-in per seeded node (D20); "Testnet stays active", superseded by D19; copy changes (D3, asked as OA-1).
 - **Known limits:** #1115 (an export dials a never-opened seeded network), #1116 (a custom network sharing a seeded chain id loses its imported account on restore), #1119 (a seeded Mainnet beside a custom network named Mainnet, OA-7); #808 closed again (OA-6). **Open items:** #80, open until #1117 merges. **Lessons:** none promoted (`lessons.md` is at its budget; the two arc gotchas are in [lessons/phase-1.md](lessons/phase-1.md) and the e2e README).
 - **Seeds retired:** the `/goal` and `/loop` seeds below are history, not instructions.
 
@@ -157,6 +157,10 @@ Steps 2-4 of `implementations-plan/README.md` § Post-implementation standard at
 - **Fix round 2, Codex** (resume): **approve**, no new material finding.
 - **Owner-answers batch, Codex** (gpt-6.1-sol, high, `01a16e40`): **approve**, no material finding: the new copy is true of the seed, 1.2.5 is correctly a patch (1.2.4 archived byte-identical), the `getChainName` case and its fallback use are right, and the ledger quotes match the asks.
 - **Store gate (D18), Codex** (gpt-6.1-sol, high, `01a17032`): **approve**, no material finding: the gate covers the one production `openChainStore` caller, on init and rebind alike; the Testnet reset purges without booting the old runtime; exports skip a mismatched network; both e2e stubs keyed on the RPC sequence stay compatible; the error carries numbers only.
+- **The flip (D19-D23), design consult, Codex** (gpt-6.1-sol, high, `01a17058`): design B, a stand-in per seeded remote node; risks ranked, all addressed in [lessons/phase-2.md](lessons/phase-2.md).
+- **The flip, fix round 1, Codex** (gpt-6.1-sol, high, `01a17094`): reject, 1 P1, 3 P2, 1 P3. Taken: two stale-network specs on Testnet, the fresh-profile check held before registration with a cold start and a post-upgrade case, About's "- Testnet" dropped. Not taken: the get-gas link (OA-2, D11).
+- **The flip, fix round 2, Codex** (resume): reject, 1 P1, taken: the chaos reset spec gives Testnet its accounts first.
+- **The flip, fix round 3, Codex** (resume): **approve**, no P0-P2 left.
 
 ## Seeds
 
