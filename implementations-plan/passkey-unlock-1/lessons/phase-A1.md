@@ -68,3 +68,15 @@ Each check A1 adds or touches was broken by a one-site scratch edit. The relevan
 | R5 | a missing transfer key defaults to a zero key | › refuses no transfer key |
 
 What the survivors had in common: the existing suites proved each refusal at one site, the first that hit it, and then reached every other site only through a check that ran earlier (the guard comparison behind authenticated decryption; the envelope MAC behind the pairing check). One test per property, driven through every site, closed all five pairing sites at once.
+
+## 2026-10-25 · Review round 1
+
+- Codex (gpt-6.1-sol, high, read-only, session kept for the resumed rounds): approve, high confidence, no material defect. Two nits, both verified and accepted: the slot opener's comment named a refusal message no caller gives; the success-control comments claimed a path they did not run (`4db4f077b`).
+- Opus (a fresh read beside it): approve, no bugs. Every point verified against the tree and accepted:
+  - the opener's test watched only the slot decryptor, so a DEK opened before the slots would pass; it now spies on `EncryptionKey.prototype.decrypt` and adds the restore finalize;
+  - no test covered the buffer wipes A1 gathered into one place, and the mutation table had no wipe edits;
+  - the wallet-crypto README's file map lacked the three new files and named the wrong home for `ENCRYPTION_GUARD`;
+  - the password class carried `type` beside its slots;
+  - two delegate comments and a stale tag in a comment A1 re-indented.
+  Committed as `43205d984` and `389b5cb5b`. Rejected: none.
+- Mutations added for these, run against the new tests: C11 (the class keeps `type`), O13 (`exportImportedKeysDek` opens the DEK before the slots), Z1–Z10 (each wipe in `openSlots`, `OpenedSlots.wipe`, `decodeRestoreMaterial` and `openProfileSlots`). Z5 and Z8 survived the first run: the refused inputs were zero bytes already, so a missed wipe looked the same as a wipe. With non-zero inputs, all 13 are caught.
