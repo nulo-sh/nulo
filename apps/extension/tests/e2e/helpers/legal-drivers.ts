@@ -1,4 +1,5 @@
 import type { Page } from "puppeteer"
+import { acceptanceStatus } from "@nulo/legal"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
@@ -174,6 +175,18 @@ export async function waitForSheet(page: Page, variant: "changed" | "review"): P
 
 export async function isSheetPresent(page: Page): Promise<boolean> {
 	return page.evaluate((s) => document.querySelector(s) !== null, sel("legal-sheet"))
+}
+
+/** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
+ *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
+export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
+	if (acceptanceStatus(entries[LEGAL_ACCEPTANCE_KEY]) === "current") {
+		if (await isSheetPresent(page)) throw new Error("the update raised the Terms sheet over a current acceptance")
+		return
+	}
+	await waitForSheet(page, "changed")
+	await pointerClick(page, "legal-consent-checkbox")
+	await pointerClick(page, "legal-continue")
 }
 
 /**

@@ -13,6 +13,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { type AztecTestConfig, mintPublicTokensForAccount, waitForTxMined } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { ensureUnlocked, lockWallet } from "../fixtures/helpers"
+import { switchToLocalNetwork, switchToNetwork } from "../fixtures/networks"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
@@ -79,6 +80,10 @@ describe("stale network beside a live one", () => {
 
 			const page = await openPopup(ctx)
 			await waitForHash(page, "#/popup/general", 30_000)
+			// A reset re-creates only the accounts its chain held, and a new profile starts on Mainnet.
+			await switchToNetwork(page, "Testnet")
+			expect(await readAccounts(page, CHAIN_IDS.TESTNET)).not.toEqual([])
+			await switchToLocalNetwork(page)
 			const local = await readNetwork(page, "local")
 			const localBefore = await snapshotChain(page, local.chainId, local.id)
 			const sessionsBefore = await sessionRows(page)

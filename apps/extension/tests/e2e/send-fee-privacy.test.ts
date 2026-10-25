@@ -11,15 +11,13 @@
  * `fee-privacy.test.ts` and the "by knowledge state" cases in `FeeSettingsCard.test.ts` — and the
  * funded shapes are covered against a real chain in `network/fee-methods.test.ts`.
  *
- * Every build seeds Testnet as the active network; its RPC origin is refused inside the browser, so
- * the run does not depend on the public endpoint being up or down.
+ * A new profile is on the default network; its node's origin is refused inside the browser, so the
+ * run does not depend on the public endpoint being up or down.
  */
 import { describe, expect } from "vitest"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
-
-const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
+import { DEFAULT_NODE_ORIGIN } from "./fixtures/networks"
 
 /** The card has settled once it either shows a method or explains why it shows none. Before that —
  *  a fresh profile has no saved pick to preview — neither is present, so no assertion below can pass
@@ -33,7 +31,7 @@ describe("send fee privacy (dead RPC)", () => {
 	test("with nothing readable the card pays with nothing and blames no empty balance", { timeout: 180_000, retry: 0 }, async ({
 		registeredExtensionPerTest: ctx,
 	}) => {
-		const interception = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "refuse" })
+		const interception = await interceptRpc(ctx.browser, ctx.extensionId, DEFAULT_NODE_ORIGIN, { kind: "refuse" })
 		try {
 			const page = await openPopup(ctx)
 			await waitForHash(page, "#/popup/general", 30_000)

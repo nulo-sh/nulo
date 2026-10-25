@@ -20,7 +20,8 @@ import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
-import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
+import { switchToNetwork } from "./fixtures/networks"
 import {
 	closeStuckPopup,
 	createAccount,
@@ -34,7 +35,6 @@ import {
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
 	addNetwork,
-	E2E_MAINNET_CHAIN_ID,
 	PREVIOUS_TESTNET_CHAIN_ID,
 	readAccounts,
 	readNetwork,
@@ -67,13 +67,20 @@ async function switchFromTakeover(page: Page, name: string): Promise<void> {
 	})
 }
 
+/** Home on Testnet, where a profile meets a Testnet reset: a new profile starts on Mainnet. */
+async function openOnTestnet(ctx: ExtensionContext): Promise<Page> {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToNetwork(page, "Testnet")
+	return page
+}
+
 describe("stale network", () => {
 	test("S1a network reset: A1, Switch network and back, one reset from a double click, A4, then A5 with the account loaded", {
 		timeout: 240_000,
 		retry: 0,
 	}, async ({ registeredExtensionPerTest: ctx }) => {
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
 		await createAccount(page, "Savings")
 		await closeStuckPopup(page)
 		// Smoke has no node to hold Fee Juice, so the flag Home writes on its first positive read is
@@ -142,15 +149,13 @@ describe("stale network", () => {
 		const donor = await launchExtension()
 		try {
 			await registerProfile(donor)
-			const donorPage = await openPopup(donor)
-			await waitForHash(donorPage, "#/popup/general", 30_000)
+			const donorPage = await openOnTestnet(donor)
 			foreignBody = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
 		} finally {
 			await donor.close()
 		}
 
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
 		await createAccount(page, "Savings")
 		const importedAddress = await previewImport(page, foreignBody)
 		expect(importedAddress).toBeTruthy()
@@ -187,7 +192,7 @@ describe("stale network", () => {
 		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		const { networkId } = await seedStaleMainnet(page, networks)
-		const mainnetBefore = await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)
+		const mainnetBefore = await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)
 		await ensureUnlocked(page)
 
 		expect(await takeoverScreen(page)).toBe("blocked")
@@ -197,15 +202,14 @@ describe("stale network", () => {
 		await switchFromTakeover(page, "Testnet")
 		await page.waitForSelector('[data-testid="account-address-copy"]', { visible: true, timeout: 60_000 })
 		expect(await page.$(TAKEOVER)).toBeNull()
-		expect(await snapshotChain(page, E2E_MAINNET_CHAIN_ID, networkId)).toEqual(mainnetBefore)
+		expect(await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)).toEqual(mainnetBefore)
 	})
 
 	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ registeredExtensionPerTest: ctx }) => {
-		const page = await openPopup(ctx)
-		await waitForHash(page, "#/popup/general", 30_000)
+		const page = await openOnTestnet(ctx)
 		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		await seedStaleNetwork(page, "network-reset", { networks })

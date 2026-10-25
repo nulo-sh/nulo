@@ -74,6 +74,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too."],
 		},
+		{
+			version: "1.2.5",
+			effective: "25 October 2026",
+			material: false,
+			changes: ["Only the default Testnet endpoint uses the Developer's provider account (§ 5.1)."],
+		},
 	],
 }
 

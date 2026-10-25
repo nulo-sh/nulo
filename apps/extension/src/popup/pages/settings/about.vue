@@ -69,7 +69,7 @@ onBeforeUnmount(() => legal.dispose())
 						class="copyable"
 						data-testid="about-wallet-version"
 					>
-						Wallet version - {{ version }} - Testnet
+						Wallet version - {{ version }}
 					</Text>
 					<Text
 						@click="endsSelection($event) || handleCopy(aztecVersion)"

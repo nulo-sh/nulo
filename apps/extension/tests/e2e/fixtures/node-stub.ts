@@ -71,3 +71,15 @@ export async function holdNodeStub(browser: Browser, extensionId: string, nodeUr
 		throw err
 	}
 }
+
+/** Holds a stub for each of `nodeUrls`; a failed hold stops the ones held before it, then throws. */
+export async function holdNodeStubs(browser: Browser, extensionId: string, nodeUrls: readonly string[]): Promise<HeldNode[]> {
+	const held: HeldNode[] = []
+	try {
+		for (const url of nodeUrls) held.push(await holdNodeStub(browser, extensionId, url))
+		return held
+	} catch (err) {
+		await Promise.all(held.map((node) => node.stop()))
+		throw err
+	}
+}

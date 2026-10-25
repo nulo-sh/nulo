@@ -263,6 +263,24 @@ jobs:
       - name: Probe tokens.nulo.sh
         run: bun run --cwd infra/token-list test:live
 
+  # Each remote default network's seed pins its node's chain identity, which a reset or an upgrade
+  # moves; read every one from outside every night, quiet days included, so a stale pin is recorded
+  # before a person's send is refused. ADVISORY, like rp-host-live: the fix is a pin in the tree.
+  seed-identity-live:
+    needs: resolve
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Read each remote seed's node identity
+        run: bun run --cwd apps/extension check:seeds
+
   # Builds gate on lint+unit only (not network) — same wall-time overlap as
   # release.yml; the publish job waits for everything.
 

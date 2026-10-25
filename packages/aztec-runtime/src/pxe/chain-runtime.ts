@@ -9,6 +9,7 @@ import type { ProveBackend } from "@nulo/wallet-core/jobs"
 import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import { AztecNodeFactoryAdapter } from "../adapters/aztec-node-factory-adapter"
 import type { NodeFactory } from "../ports/node-factory-port"
+import { assertNodeServesChain } from "../utils/chain-identity"
 import type { RetryOptions } from "../utils/fetch"
 import { chainDataDir, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { openChainStore } from "./opfs-store"
@@ -186,7 +187,8 @@ export class ProductionPxeFactory implements PxeFactory {
 
 		// The injected per-(profile, chain) ENCRYPTED store (see opfs-store.ts for why the
 		// upstream default path must never ship). The rollup address scopes the wipe-on-reset
-		// stamp to exactly this chain's store.
+		// stamp to exactly this chain's store. Chain 0 skips the identity read: nothing to compare.
+		if (network.chainId !== 0) assertNodeServesChain(network.chainId, await node.getNodeInfo())
 		const rollupAddress = (await node.getL1ContractAddresses()).rollupAddress?.toString()
 		const store = await openChainStore({
 			network,

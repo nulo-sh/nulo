@@ -1,33 +1,59 @@
 /**
- * A profile as the build that adds a default network leaves it after its first open: the new
- * network's row, and the offer record announcing it. This build seeds no Mainnet, so the planted row
- * is the arrival's only way in, as `seedStaleMainnet` is the takeover's.
+ * A profile as the build that added a default network leaves it after its first open: the seeded
+ * network's row, and the offer record announcing it.
  */
 import type { Page } from "puppeteer"
-import { MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { addNetwork, E2E_MAINNET_CHAIN_ID, readNetwork } from "./stale-network"
+import { arrival } from "@/components/network-arrival/copy"
+import { seedForKind } from "@/wallet/services/network/seeds"
+import { clickByTestId } from "../fixtures/extension"
+import { NETWORKS } from "./identity-rows"
+import { readNetwork, storeActiveNetwork } from "./stale-network"
 
 const OFFERS = "nulo:core:network-seeded@"
 
 export const ARRIVAL = '[data-testid="network-arrival-takeover"]'
 
-/** Plants a Mainnet row the person has never answered for, on the open profile. */
+/** Announces the seeded Mainnet on the open profile, as a profile made before it was seeded meets it:
+ *  on Testnet, the default then. */
 export async function seedNetworkArrival(page: Page): Promise<{ networkId: string; profileId: string }> {
-	const { networkId } = await addNetwork(page, {
-		name: "Mainnet",
-		kind: "mainnet",
-		chainId: E2E_MAINNET_CHAIN_ID,
-		l1ChainId: MAINNET_L1_CHAIN_ID,
-		movedAccount: false,
-		active: false,
-	})
-	const { profileId } = await readNetwork(page, "mainnet")
+	const { id: networkId, profileId } = await readNetwork(page, "mainnet")
+	await storeActiveNetwork(page, "testnet")
 	await page.evaluate(
 		(key: string, value: string) => chrome.storage.local.set({ [key]: value }),
 		`${OFFERS}${profileId}`,
 		JSON.stringify({ offered: ["local", "mainnet", "testnet"], announce: ["mainnet"] }),
 	)
 	return { networkId, profileId }
+}
+
+/** Whether a release's storage `entries` meet this build's Mainnet seed as an arrival: no offer
+ *  record offered it and no row holds its kind. A release that seals its networks also writes the
+ *  record, which then answers. */
+export function arrivalExpected(entries: Record<string, unknown>): boolean {
+	const parsed = (prefix: string) =>
+		Object.entries(entries).flatMap(([key, raw]) => (key.startsWith(prefix) && typeof raw === "string" ? [JSON.parse(raw)] : []))
+	const offered = parsed(OFFERS).some((record: { offered?: string[] }) => record.offered?.includes("mainnet"))
+	return !offered && !parsed(NETWORKS).some((row: { kind?: string }) => row.kind === "mainnet")
+}
+
+/** Waits for the arrival of the seeded Mainnet and keeps the current network. */
+export async function stayOnArrival(page: Page): Promise<void> {
+	await page.waitForSelector(ARRIVAL, { visible: true, timeout: 30_000 })
+	const seed = seedForKind("mainnet")
+	if (!seed) throw new Error("this build seeds no Mainnet")
+	const title = await page.$eval('[data-testid="network-arrival-title"]', (el) => el.textContent?.trim())
+	if (title !== arrival(seed.name, "").title) throw new Error(`the arrival reads "${title}"`)
+	await clickByTestId(page, "network-arrival-stay")
+	await page.waitForSelector(ARRIVAL, { hidden: true, timeout: 15_000 })
+}
+
+/** Answers an update's arrival with Stay when the release's storage `entries` lack Mainnet;
+ *  otherwise holds that the update announced nothing. */
+export async function answerArrival(page: Page, entries: Record<string, unknown>): Promise<void> {
+	if (arrivalExpected(entries)) return stayOnArrival(page)
+	const { profileId } = await readNetwork(page, "testnet")
+	const announced = (await readSeedOffers(page, profileId))?.announce ?? []
+	if (announced.length > 0) throw new Error(`the update announced ${announced.join(", ")}`)
 }
 
 /** The stored offer record of `profileId`, parsed. */

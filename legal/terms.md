@@ -10,8 +10,9 @@ install or use Nulo. If you do not agree, do not install or use it.
 > or custody your assets. Anyone who obtains usable credentials or an effective authorisation may be
 > able to access your assets. Recovery and transaction finality have the limitations described in
 > § 4. Nulo has not been audited by an independent security
-> firm, it connects to the Aztec testnet by default, and the network it connects to is early-stage. You
-> can lose everything you put into it. Warranty exclusions and liability limits appear in §§ 16–19
+> firm, it connects to Aztec Mainnet by default, where assets may carry real value, and the network
+> it connects to is early-stage. You can lose everything you put into it. Warranty exclusions and
+> liability limits appear in §§ 16–19
 > and are subject to rights that applicable law does not permit you to waive.
 >
 > *This box is a convenience summary. It is not part of the agreement — the numbered sections below
@@ -161,9 +162,10 @@ impersonating distributions; responsibility for them remains subject to applicab
 
 ## 5. Experimental software on an early-stage network
 
-**Nulo selects the Aztec testnet by default.** Testnet assets are for testing and are not meant to
-carry real value. Selecting another network, including one you add, changes the environment, and a
-mainnet network may involve assets with real value. A version number, a store listing or a network
+**Nulo selects Aztec Mainnet by default.** Mainnet assets may carry real value. Nulo also includes
+the Aztec testnet as a test network: testnet assets are for testing and are not meant to carry real
+value. Selecting another network, including one you add, changes the environment, and a mainnet
+network may involve assets with real value. A version number, a store listing or a network
 connection is not a security certification.
 
 **5.1 No independent security audit.** As at the effective date of these Terms, Nulo has **not** been

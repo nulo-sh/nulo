@@ -11,7 +11,8 @@
 import { randomBytes } from "node:crypto"
 import type { Page } from "puppeteer"
 import { readyToast } from "@/components/stale-network/copy"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { PRIMARY_SEED } from "@/wallet/services/network/seeds"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { revealSeedPhrase, waitForToast } from "../fixtures/helpers"
 import {
@@ -35,8 +36,6 @@ export { type NetworkRow, readNetworkRows } from "./identity-rows"
 
 /** A chainId no seed carries: the Testnet before its last reset, as a stored row remembers it. */
 export const PREVIOUS_TESTNET_CHAIN_ID = (CHAIN_IDS.TESTNET ^ 1) >>> 0
-/** A Mainnet chain under this build's Mainnet L1. */
-export const E2E_MAINNET_CHAIN_ID = 2070860441
 /** A closed loopback port: a node that never answers, and no host the egress guard records. */
 export const DEAD_NODE = "http://127.0.0.1:9"
 
@@ -178,8 +177,8 @@ export const PREVIOUS_LOCAL_CHAIN_ID = (LOCAL_L1_CHAIN_ID ^ 5) >>> 0
 
 /**
  * Local as a reset bump meets it, with both causes, on a profile that never opened Local: the row
- * on {@link PREVIOUS_LOCAL_CHAIN_ID}, the Testnet's derived accounts copied onto it at moved
- * addresses, and Local active. Refuses a profile that already holds Local accounts, whose PXE
+ * on {@link PREVIOUS_LOCAL_CHAIN_ID}, the derived accounts of the network a new profile starts on
+ * copied onto it at moved addresses, and Local active. Refuses a profile that already holds Local accounts, whose PXE
  * store for the seed chain would already exist. Run it locked.
  */
 export async function seedStaleLocalBothCauses(
@@ -188,10 +187,10 @@ export async function seedStaleLocalBothCauses(
 ): Promise<{ profileId: string; networkId: string; moved: string[] }> {
 	const rows = await networkRows(page, networks)
 	const local = rows.find((row) => row.kind === "local")
-	const testnet = rows.find((row) => row.kind === "testnet")
-	if (!local || !testnet) throw new Error("seedStaleLocalBothCauses: no Local or Testnet network the wallet reads")
+	const start = rows.find((row) => row.kind === PRIMARY_SEED?.kind)
+	if (!local || !start) throw new Error("seedStaleLocalBothCauses: no Local or default network the wallet reads")
 	if ((await accountRows(page, CHAIN_IDS.SANDBOX)).length > 0) throw new Error("the profile already opened Local")
-	const derived = (await accountRows(page, testnet.chainId, { complete: true })).filter((row) => row.type === 0)
+	const derived = (await accountRows(page, start.chainId, { complete: true })).filter((row) => row.type === 0)
 	const writes: Record<string, string> = {
 		[`${NETWORKS}${local.id}`]: JSON.stringify({ ...local, chainId: PREVIOUS_LOCAL_CHAIN_ID }),
 		[`nulo:core:active-network@${local.profileId}`]: local.id,
@@ -229,36 +228,49 @@ export async function addNetwork(page: Page, network: AddedNetwork, networks?: N
 			kind: network.kind,
 		}),
 	}
-	if (network.movedAccount) {
-		const account = (await accountRows(page, testnet.chainId)).find(
-			(row) => row.profileId === testnet.profileId && row.type === 0 && row.index === 0,
-		)
-		if (!account) throw new Error("addNetwork: the Testnet network has no first derived account to copy")
-		const moved = { ...account, chainId: network.chainId, l1ChainId: network.l1ChainId, address: `0x${"5a".repeat(32)}` }
-		writes[plaintextKey(ACCOUNTS, moved)] = JSON.stringify(moved)
-	}
+	if (network.movedAccount) Object.assign(writes, await movedFirstAccount(page, testnet, network))
 	if (network.active) writes[`nulo:core:active-network@${testnet.profileId}`] = networkId
 	await storeRows(page, writes)
 	return { networkId }
 }
 
+/** The Testnet's first derived account copied onto `chain` at a moved address, as a row write. */
+async function movedFirstAccount(
+	page: Page,
+	testnet: NetworkRow,
+	chain: { chainId: number; l1ChainId: number },
+): Promise<Record<string, string>> {
+	const account = (await accountRows(page, testnet.chainId)).find(
+		(row) => row.profileId === testnet.profileId && row.type === 0 && row.index === 0,
+	)
+	if (!account) throw new Error("the Testnet network has no first derived account to copy")
+	const moved = { ...account, chainId: chain.chainId, l1ChainId: chain.l1ChainId, address: `0x${"5a".repeat(32)}` }
+	return { [plaintextKey(ACCOUNTS, moved)]: JSON.stringify(moved) }
+}
+
 /**
- * Adds a Mainnet network whose one derived account sits at a moved address, and makes it the
- * active network. Run it locked.
+ * An address change on the seeded Mainnet: every endpoint at {@link DEAD_NODE}, every derived
+ * account on it at a moved address, and the active network. A new profile opens Mainnet first, so it
+ * holds the account this moves. Run it locked.
  */
 export async function seedStaleMainnet(page: Page, networks?: NetworkRow[]): Promise<{ networkId: string }> {
-	return addNetwork(
-		page,
-		{
-			name: "Mainnet",
-			kind: "mainnet",
-			chainId: E2E_MAINNET_CHAIN_ID,
-			l1ChainId: MAINNET_L1_CHAIN_ID,
-			movedAccount: true,
-			active: true,
-		},
-		networks,
-	)
+	const mainnet = (await networkRows(page, networks)).find((row) => row.kind === "mainnet")
+	if (!mainnet) throw new Error("seedStaleMainnet: no Mainnet network the wallet reads")
+	const derived = (await accountRows(page, CHAIN_IDS.MAINNET, { complete: true })).filter((row) => row.type === 0)
+	if (derived.length === 0) throw new Error("seedStaleMainnet: the profile holds no Mainnet account to move")
+	const stored = await storedEntries(page, ["nulo:core:"])
+	const endpoints = mainnet.endpoints.map((endpoint) => ({ ...endpoint, rpcUrl: DEAD_NODE }))
+	const writes: Record<string, string> = {
+		[`${NETWORKS}${mainnet.id}`]: JSON.stringify({ ...mainnet, endpoints }),
+		[`nulo:core:active-network@${mainnet.profileId}`]: mainnet.id,
+	}
+	derived.forEach((account, i) => {
+		const moved = { ...account, address: movedAddress(i + 1) }
+		writes[plaintextKey(ACCOUNTS, moved)] = JSON.stringify(moved)
+	})
+	const replaced = Object.keys(stored).filter((key) => key.startsWith(ACCOUNTS) && accountScope(key)?.chainId === CHAIN_IDS.MAINNET)
+	await storeRows(page, writes, replaced)
+	return { networkId: mainnet.id }
 }
 
 export const TAKEOVER = '[data-testid="stale-network-takeover"]'

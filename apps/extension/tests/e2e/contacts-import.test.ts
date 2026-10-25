@@ -2,11 +2,11 @@
  * Importing contacts through the real UI: the Contacts menu, the file chooser, the grouped popup,
  * choosing rows by pointer and by keyboard, an edit through the edit popup, Cancel and Escape, and
  * what lands in the book and the list. Every test runs in a fresh wallet, so each book starts empty
- * and every assertion on it is exact. No run depends on the public endpoint: the launch's stand-in
- * answers the Testnet RPC until the Contacts page arms its refusal.
+ * and every assertion on it is exact. No run depends on the public endpoint: the launch's stand-ins
+ * answer the seeded nodes, and the Contacts page arms a refusal of the Testnet RPC.
  *
- * No confirmed sender row here: smoke's active network is the seeded Testnet, so registering one
- * would need a node. The sender line is checked on screen; registration through an import is
+ * No confirmed sender row here: a new profile's active network is the seeded Mainnet, so registering
+ * one would need a node. The sender line is checked on screen; registration through an import is
  * `network/senders-advanced.test.ts`.
  */
 import type { Page } from "puppeteer"
@@ -162,7 +162,7 @@ test("new contacts: Cancel and Escape change nothing, Import selected saves what
 		await pickContactsFile(page, file)
 		expect(await shownRows(page)).toEqual(allNew)
 		expect(await sectionCounts(page)).toEqual({ new: "4" })
-		expect(await senderLine(page)).toBe("1 sender will be registered on Testnet.")
+		expect(await senderLine(page)).toBe("1 sender will be registered on Mainnet.")
 		await toastAfter(page, () => closeImportWith(page, "import-contacts-cancel"), "Contact import canceled")
 		expect(await storedContacts(page)).toEqual([])
 

@@ -1,9 +1,15 @@
 import type { Page } from "puppeteer"
 import { NETWORK_SERVICE_NAME, NETWORK_STORAGE_ROOT } from "@/wallet/services/network/spec"
+import { PRIMARY_SEED } from "@/wallet/services/network/seeds"
 import { selectedAccount, waitForSelectedAccount } from "./accounts"
 import { clickByTestId } from "./dom"
 import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
+
+if (!PRIMARY_SEED) throw new Error("this build marks no seed primary")
+/** The origin of the default network's node, the one a new profile reads: a spec that stages the
+ *  active node intercepts it. */
+export const DEFAULT_NODE_ORIGIN = new URL(PRIMARY_SEED.rpcUrl).origin
 
 /** A network row as the wallet stores it, with the fields the specs edit. */
 export type StoredNetwork = {

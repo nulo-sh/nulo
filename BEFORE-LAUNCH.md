@@ -176,6 +176,17 @@ promote publishes it. A promote that publishes both dates both, and the archived
       AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
       policy text)
 
+**Due at the release that publishes privacy 1.2.5:** § 5.1 names the Testnet endpoint as the one on
+the Developer's provider account. Its effective date, like 1.2.4's, is the day the promote publishes
+it. A promote that publishes both dates both, and the archived `legal/archive/privacy-1.2.4.md` with
+them:
+
+- [x] `legal/privacy.md` — the version line and the 1.2.5 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.5 (25 October 2026), same date
+- [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.5/` show no DRAFT banner, and
+      AMO's Privacy policy field carries the 1.2.5 text (`apps/extension/store/listing.md` § Privacy
+      policy text)
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 

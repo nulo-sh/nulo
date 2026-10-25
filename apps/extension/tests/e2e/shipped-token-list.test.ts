@@ -14,6 +14,7 @@ import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, type TokenListEntry } from "@nu
 import { openScratchPage } from "./fixtures/browser"
 import { type ExtensionContext, launchExtension, openPopup, waitForHash, withTimeoutMessage } from "./fixtures/extension"
 import { callService, captureSoleProfileId } from "./fixtures/helpers"
+import { switchToNetwork } from "./fixtures/networks"
 import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
 
 const PROBE_BUDGET_MS = 10_000
@@ -142,6 +143,8 @@ describe.skipIf(inject("liveLeg") !== true)("the shipped token list on the live 
 		await createProfileAcceptingTerms(ctx)
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
+		// A new profile starts on Mainnet; Home shows the defaults of the active chain only.
+		await switchToNetwork(page, "Testnet")
 		// A list with no Testnet entry is valid: then no token lands, and that is what is checked.
 		const entries = await verifiedTestnetEntries(page)
 		await waitForSeedsToStop(page, entries)

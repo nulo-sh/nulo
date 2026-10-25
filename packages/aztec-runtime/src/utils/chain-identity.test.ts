@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { assertLiveChainIdentity, chainInfoFrom } from "./chain-identity"
+import { assertLiveChainIdentity, assertNodeServesChain, chainInfoFrom } from "./chain-identity"
 
 const MAINNET_L1 = 1
 const MAINNET_ROLLUP = 4248422647
@@ -73,6 +73,25 @@ describe("assertLiveChainIdentity", () => {
 
 	test("the live composite it compares and reports is unsigned", () => {
 		expect(() => assertLiveChainIdentity(SEPOLIA, { l1ChainId: 11155111, rollupVersion: 4127419662 })).toThrow(/composite=4138294185 /)
+	})
+})
+
+describe("assertNodeServesChain", () => {
+	const V6_ROLLUP = 2070860440
+	const V6_CHAIN = (MAINNET_L1 ^ V6_ROLLUP) >>> 0
+
+	test.each([
+		["the chain's own rollup", V6_CHAIN, { l1ChainId: MAINNET_L1, rollupVersion: V6_ROLLUP }],
+		["chain 0, any rollup on any L1", 0, { l1ChainId: 11155111, rollupVersion: 42 }],
+	])("passes on %s", (_name, chainId, live) => {
+		expect(() => assertNodeServesChain(chainId, live)).not.toThrow()
+	})
+
+	test.each([
+		["another rollup on the same L1", { l1ChainId: MAINNET_L1, rollupVersion: MAINNET_ROLLUP }],
+		["the rollup-version alias above bit 32", { l1ChainId: MAINNET_L1, rollupVersion: V6_ROLLUP + 2 ** 32 }],
+	])("refuses %s", (_name, live) => {
+		expect(() => assertNodeServesChain(V6_CHAIN, live)).toThrow(/Refusing to open its PXE store/)
 	})
 })
 

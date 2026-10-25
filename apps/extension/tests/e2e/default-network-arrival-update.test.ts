@@ -1,10 +1,10 @@
 /**
- * A release install updated in place to a candidate that seeds one more default network meets that
- * network's arrival once: with no barrier raised, after the reset's takeover and the Terms sheet,
- * never beside one, and never again once answered. Opt-in, as the other update scenarios:
- * `NULO_E2E_UPDATE_FROM=<tag>` with `NULO_E2E_UPDATE_TO` the candidate
- * `build-update-candidate.sh <browser> --extra-seed` wrote. Run it by file: the other update
- * scenarios refuse that candidate, and this one refuses theirs.
+ * A release install updated in place to a candidate that seeds Mainnet, a default the release
+ * predates, meets its arrival once: with no barrier raised, after the reset's takeover and the Terms
+ * sheet, never beside one, and never again once answered. Opt-in, as the other update scenarios:
+ * `NULO_E2E_UPDATE_FROM=<tag>` with `NULO_E2E_UPDATE_TO` the candidate `build-update-candidate.sh`
+ * wrote. It proves the promote that first ships Mainnet: a release that seeds it fails `released()`,
+ * and with every seedable kind seeded no later default is left to arrive.
  *
  * Failure mode: rows the released code wrote, read by the candidate's real boot after the browser's
  * own update, give the wrong arrival: none, one beside or ahead of a more urgent surface, one that
@@ -23,9 +23,9 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { E2E_EXTRA_SEED } from "@/e2e/extra-seed"
 import { readyToast } from "@/components/stale-network/copy"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { type DefaultSeed, seedForKind } from "@/wallet/services/network/seeds"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { BROWSER, openScratchPage } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
@@ -48,15 +48,20 @@ const SURFACES: Surfaces = {
 	sheet: ["legal-sheet"],
 	arrival: ["network-arrival-takeover"],
 }
+const ARRIVING: DefaultSeed = (() => {
+	const seed = seedForKind("mainnet")
+	if (!seed) throw new Error("this build seeds no Mainnet")
+	return seed
+})()
 /** The record once the arrival is answered: every kind the release was offered, and the new one. */
-const OFFERED = { offered: ["local", E2E_EXTRA_SEED.kind, "testnet"].sort() }
-const ANNOUNCED = { ...OFFERED, announce: [E2E_EXTRA_SEED.kind] }
+const OFFERED = { offered: ["local", ARRIVING.kind, "testnet"].sort() }
+const ANNOUNCED = { ...OFFERED, announce: [ARRIVING.kind] }
 
 type Entries = Record<string, unknown>
 type Row = Record<string, unknown>
 
 function builds(): UpdateBuilds {
-	const pair = updateBuilds(BROWSER, { extraSeed: true })
+	const pair = updateBuilds(BROWSER)
 	if (!pair) throw new Error("unreachable: skipIf guards")
 	return pair
 }
@@ -129,8 +134,8 @@ const identity = ({ name, chainId, l1ChainId, kind }: Identity) => ({ name, chai
  *  holds none; a later one may hold one, but never offering the new default. */
 async function released(ctx: ExtensionContext): Promise<Entries> {
 	const before = await readLocalStorage(ctx)
-	expect(offerRecords(before).flatMap((record) => record.offered as string[])).not.toContain(E2E_EXTRA_SEED.kind)
-	expect(networks(before).map((row) => row.kind)).not.toContain(E2E_EXTRA_SEED.kind)
+	expect(offerRecords(before).flatMap((record) => record.offered as string[])).not.toContain(ARRIVING.kind)
+	expect(networks(before).map((row) => row.kind)).not.toContain(ARRIVING.kind)
 	return before
 }
 
@@ -160,7 +165,7 @@ async function acceptTerms(page: Page): Promise<void> {
 
 async function expectArrival(page: Page, current: string): Promise<void> {
 	await page.waitForSelector(ARRIVAL, { visible: true, timeout: 30_000 })
-	expect(await textOf(page, "network-arrival-title")).toBe(`${E2E_EXTRA_SEED.name} is in your wallet`)
+	expect(await textOf(page, "network-arrival-title")).toBe(`${ARRIVING.name} is in your wallet`)
 	expect(await textOf(page, "network-arrival-stay")).toBe(`STAY ON ${current.toUpperCase()}`)
 }
 
@@ -207,11 +212,11 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				const arrived = await readLocalStorage(ctx)
 				expect(offerRecords(arrived)).toEqual([ANNOUNCED])
 				const read = await readNetworks(page)
-				const added = read.filter((row) => row.kind === E2E_EXTRA_SEED.kind)
-				expect(added.map(identity)).toEqual([identity(E2E_EXTRA_SEED)])
+				const added = read.filter((row) => row.kind === ARRIVING.kind)
+				expect(added.map(identity)).toEqual([identity(ARRIVING)])
 				// The deleted default stays deleted, and the release's own row is left as it was, but for
 				// the chain the reset moves it to.
-				expect(read.filter((row) => row.kind !== E2E_EXTRA_SEED.kind)).toEqual(
+				expect(read.filter((row) => row.kind !== ARRIVING.kind)).toEqual(
 					networks(before).map((row) => ({ ...row, chainId: CHAIN_IDS.TESTNET })),
 				)
 
@@ -229,7 +234,7 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM)(
 				expect(await readAccountsByChain(page)).toEqual(carried.byChain)
 				expect(saidMoved).toBe(carried.moved)
 				await navigateByHash(page, "#/popup/settings/networks", 15_000)
-				for (const name of [E2E_EXTRA_SEED.name, "Testnet"]) {
+				for (const name of [ARRIVING.name, "Testnet"]) {
 					await page.waitForSelector(`[data-testid="network-row"][data-network-name="${name}"]`, {
 						visible: true,
 						timeout: 15_000,

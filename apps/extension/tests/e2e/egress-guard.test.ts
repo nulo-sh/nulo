@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { type Server, createServer } from "node:http"
 import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { MAINNET_RPC_URL, TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { evaluateInBackground, isFirefox, newPage, openScratchPage } from "./fixtures/browser"
 import {
 	EGRESS_CANARY_HOST,
@@ -217,16 +217,20 @@ describe("the launch's egress guard", () => {
 		expect(site.hits).toContain("/page-ipv6")
 	})
 
-	test("the background's call to the Testnet node gets the stand-in's terminal 400 and never reaches the guard", async () => {
-		const node = ctx.egress?.node
-		if (!node) throw new Error("the guarded launch holds no stand-in node")
-		const guardBefore = countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)
+	test.each([
+		["Testnet", TESTNET_RPC_URL],
+		["Mainnet", MAINNET_RPC_URL],
+	])("the background's call to the %s node gets its stand-in's terminal 400 and never reaches the guard", async (_name, url) => {
+		const host = new URL(url).hostname
+		const node = ctx.egress?.nodes.find((held) => held.host === host)
+		if (!node) throw new Error(`the guarded launch holds no stand-in for ${host}`)
+		const guardBefore = countFor(guard, host, 443)
 		const stubBefore = node.requests()
 		const call = { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] }
 		const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call) }
-		expect(await backgroundFetch(ctx, TESTNET_RPC_URL, init)).toBe("status 400")
+		expect(await backgroundFetch(ctx, url, init)).toBe("status 400")
 		expect(node.requests()).toBeGreaterThan(stubBefore)
-		expect(countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)).toBe(guardBefore)
+		expect(countFor(guard, host, 443)).toBe(guardBefore)
 	})
 
 	test("a link-local address is sent to the guard, not to the network", async () => {

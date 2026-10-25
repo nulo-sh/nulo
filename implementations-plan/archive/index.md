@@ -216,6 +216,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [lock-ownership](lock-ownership/plan.md) — completed — ticketed lock release and two post-await ownership fixes
 - [mac-identity-binding](mac-identity-binding/plan.md) — completed — the envelope MAC binds the row's storage id and the wallet fingerprint
 - [mainnet-arrival-1](mainnet-arrival-1/plan.md) — completed — a default network a later build adds reaches every existing profile once: the offer record, the owner's arrival, a real in-place update on both browsers
+- [mainnet-seed-1](mainnet-seed-1/plan.md) — draft, held for the live pair — the Mainnet default network, its live pin check and the e2e on the real seed, in draft #1117 until v6 Mainnet serves the pinned pair (#80)
 - [method-metadata-registry](method-metadata-registry/plan.md) — completed — one wallet method descriptor table replaces six hand-synchronized tables
 - [migration-lifecycle](migration-lifecycle/plan.md) — completed — a migration retry budget and kill-loop bound before the first real migration
 - [monorepo-restructure](monorepo-restructure/plan.md) — completed — the workspace reorganized into apps, packages and contracts directories

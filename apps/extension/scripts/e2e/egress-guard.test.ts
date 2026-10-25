@@ -360,17 +360,17 @@ describe("a guarded launch", () => {
 	})
 
 	/** A stand-in node whose failures and stop are logged beside the browser's close. */
-	function heldNode(failures: string[], order: string[], holding = () => true): HeldNode {
+	function heldNode(failures: string[], order: string[], holding = () => true, host = "lb.drpc.live"): HeldNode {
 		return {
-			host: "lb.drpc.live",
+			host,
 			holding,
 			requests: () => 0,
 			failures: async () => {
-				order.push("node failures read")
+				order.push(`${host} failures read`)
 				return failures
 			},
 			stop: async () => {
-				order.push("node stopped")
+				order.push(`${host} stopped`)
 			},
 		}
 	}
@@ -381,12 +381,12 @@ describe("a guarded launch", () => {
 		closeBrowser.mockImplementation(async () => {
 			order.push("browser closed")
 		})
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode(["a target could not be armed"], order) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode(["a target could not be armed"], order)] })
 		send("unlisted.test")
 		await expect(launch.close()).rejects.toThrow(
-			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*the stand-in node's interception reported: a target could not be armed/,
+			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*a stand-in node's interception reported: lb\.drpc\.live: a target could not be armed/,
 		)
-		expect(order).toEqual(["node failures read", "browser closed", "node stopped"])
+		expect(order).toEqual(["lb.drpc.live failures read", "browser closed", "lb.drpc.live stopped"])
 	})
 
 	test("a stand-in node whose failures cannot be read fails the close", async () => {
@@ -395,21 +395,33 @@ describe("a guarded launch", () => {
 			...heldNode([], []),
 			failures: async () => Promise.reject(new Error("no session")),
 		}
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => node })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [node] })
 		await expect(launch.close()).rejects.toThrow(/its interception could not be read: Error: no session/)
 	})
 
 	test("success control: a stand-in node that lost nothing closes cleanly", async () => {
 		const { deps } = rig()
 		const order: string[] = []
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode([], order) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], order)] })
 		await launch.close()
-		expect(order).toEqual(["node failures read", "node stopped"])
+		expect(order).toEqual(["lb.drpc.live failures read", "lb.drpc.live stopped"])
+	})
+
+	test("with two nodes held, each is watched and read by its own host, and both stop", async () => {
+		const { deps, send } = rig()
+		const order: string[] = []
+		const nodes = [heldNode([], order), heldNode(["a reply failed"], order, () => true, "aztec-mainnet.drpc.org")]
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => nodes })
+		send("aztec-mainnet.drpc.org")
+		await expect(launch.close()).rejects.toThrow(
+			/sent aztec-mainnet\.drpc\.org:443 to the guard 1 time\(s\)[\s\S]*interception reported: aztec-mainnet\.drpc\.org: a reply failed/,
+		)
+		expect(order.filter((step) => step.endsWith("stopped")).sort()).toEqual(["aztec-mainnet.drpc.org stopped", "lb.drpc.live stopped"])
 	})
 
 	test("a node request that reaches the guard while the stand-in holds its origin fails the close, naming it", async () => {
 		const { deps, send, closeBrowser } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode([], []) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
 		send("lb.drpc.live")
 		await expect(launch.close()).rejects.toThrow(
 			/spec\.test\.ts: chrome sent lb\.drpc\.live:443 to the guard 1 time\(s\) while the launch's stand-in held its origin/,
@@ -419,7 +431,7 @@ describe("a guarded launch", () => {
 
 	test("a held node request and an undeclared host in one launch are both named", async () => {
 		const { deps, send } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode([], []) })
+		const launch = await ownGuardedLaunch({ ...deps, holdNodes: async () => [heldNode([], [])] })
 		send("lb.drpc.live")
 		send("unlisted.test")
 		await expect(launch.close()).rejects.toThrow(/sent lb\.drpc\.live:443 to the guard[\s\S]*tried 1 host.*unlisted\.test:443/)
@@ -430,9 +442,9 @@ describe("a guarded launch", () => {
 		let holding = true
 		const launch = await ownGuardedLaunch({
 			...deps,
-			holdNode: async () => {
+			holdNodes: async () => {
 				send("lb.drpc.live")
-				return heldNode([], [], () => holding)
+				return [heldNode([], [], () => holding)]
 			},
 		})
 		holding = false
@@ -446,7 +458,7 @@ describe("a guarded launch", () => {
 
 	test("a stand-in node that cannot be held releases the launch", async () => {
 		const { deps, closeBrowser, stopped } = rig()
-		await expect(ownGuardedLaunch({ ...deps, holdNode: async () => Promise.reject(new Error("no worker target")) })).rejects.toThrow(
+		await expect(ownGuardedLaunch({ ...deps, holdNodes: async () => Promise.reject(new Error("no worker target")) })).rejects.toThrow(
 			"no worker target",
 		)
 		expect(closeBrowser).toHaveBeenCalled()

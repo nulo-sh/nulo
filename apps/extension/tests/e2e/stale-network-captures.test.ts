@@ -21,6 +21,7 @@ import {
 	waitForLockScreen,
 	waitForToast,
 } from "./fixtures/helpers"
+import { switchToNetwork } from "./fixtures/networks"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
 	addNetwork,
@@ -75,6 +76,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 			await registerProfile(donor)
 			const donorPage = await openPopup(donor)
 			await waitForHash(donorPage, "#/popup/general", 30_000)
+			await switchToNetwork(donorPage, "Testnet")
 			foreignBody = await exportAccountBody(donorPage, FIRST_ACCOUNT_NAME, false)
 		} finally {
 			await donor.close()
@@ -83,6 +85,8 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		const page = await openPopup(ctx)
 		await page.setViewport(CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
+		// A new profile starts on Mainnet; every takeover below is Testnet's.
+		await switchToNetwork(page, "Testnet")
 		await createAccount(page, "Account 2")
 		await closeStuckPopup(page)
 

@@ -9,7 +9,7 @@ const seed = (kind: ChainKind, chainId: number): DefaultSeed => ({
 	chainId,
 	l1ChainId: 1,
 	kind,
-	isPrimaryActive: kind === "testnet",
+	isPrimaryActive: kind === "mainnet",
 })
 const TESTNET = seed("testnet", 100)
 const LOCAL = seed("local", 0)
