@@ -3,7 +3,7 @@
 	"private": true,
 	"displayName": "Nulo V6",
 	"description": "A wallet for Aztec: your balance and payments stay private unless you decide otherwise. Your keys stay on your device.",
-	"version": "0.31.0",
+	"version": "1.0.0",
 	"license": "Apache-2.0",
 	"type": "module",
 	"scripts": {
