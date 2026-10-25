@@ -35,6 +35,8 @@ describe("decodeRestoreMaterial", () => {
 	test.each<[string, (s: Awaited<ReturnType<typeof body>>["secret"]) => object, string]>([
 		["a short master", (s) => ({ ...s, masterKey: b64(new Uint8Array(31)) }), "Invalid master key length"],
 		["a short entropy", (s) => ({ ...s, entropy: b64(new Uint8Array(31)) }), "Invalid entropy length"],
+		// Sixteen bytes make a valid 12-word phrase, so only the 32-byte check refuses them.
+		["a 12-word phrase's entropy", (s) => ({ ...s, entropy: b64(new Uint8Array(16).fill(0x31)) }), "Invalid entropy length"],
 		[
 			"entropy from another phrase",
 			(s) => ({ ...s, entropy: b64(new Uint8Array(32).fill(0x32)) }),

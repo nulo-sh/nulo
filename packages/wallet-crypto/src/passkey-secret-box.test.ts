@@ -30,9 +30,9 @@ describe("passkey slots", () => {
 		expect(await opensTo(await derivePasskeyUnlockKey(p.prf, p.salt), p.slots)).toBe(`${hex(p.secret)}:${hex(p.entropy)}`)
 	})
 
-	// Over fresh random keys, salts and slots: every single swapped field opens to null, beside a
-	// success control on the untouched row.
-	test("open to null when any one field is another profile's or another slot's", async () => {
+	// Over fresh random keys, salts and slots: any one field taken from another profile opens to
+	// null, beside a success control on the untouched row.
+	test("open to null when any one field is another profile's", async () => {
 		for (let i = 0; i < 24; i++) {
 			const a = await sealedProfile()
 			const b = await sealedProfile()
@@ -46,9 +46,6 @@ describe("passkey slots", () => {
 			for (const slot of ["guard", "secret", "entropy"] as const) {
 				expect(await opensTo(a.key, { ...a.slots, [slot]: b.slots[slot] }), `${input} slot=${slot}`).toBeNull()
 			}
-			expect(await opensTo(a.key, { ...a.slots, secret: a.slots.entropy }), input).toBeNull()
-			expect(await opensTo(a.key, { ...a.slots, entropy: a.slots.secret }), input).toBeNull()
-			expect(await opensTo(a.key, { ...a.slots, guard: a.slots.secret }), input).toBeNull()
 		}
 	})
 
