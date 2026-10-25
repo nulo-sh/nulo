@@ -107,6 +107,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		["serving the pinned chain reads active, with no token list or sponsor", MAINNET_ROLLUP_VERSION, "active"],
 	] as const)(
 		"a new profile starts on Mainnet with no arrival, also after a cold start; its node %s; Testnet is one switch away",
+		{ timeout: 180_000 },
 		async ([, rollupVersion, status], { freshExtensionPerTest: extension }) => {
 			await onMainnetRollup(extension, rollupVersion, async (methods) => {
 				await registerProfile(extension)
@@ -136,7 +137,6 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 				expect(methods).toContain("aztec_getNodeInfo")
 			})
 		},
-		180_000,
 	)
 })
 
