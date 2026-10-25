@@ -96,8 +96,8 @@ export const asMasterSecretBytes = (b: Uint8Array<ArrayBuffer>): MasterSecretByt
  *  profile creation, `unsealDekUnderWrapKey`, the backup restore carriage). */
 export const asImportedKeysDek = (b: Uint8Array<ArrayBuffer>): ImportedKeysDek => b as ImportedKeysDek
 
-/** Mint `Base64Ciphertext` — grep to audit ciphertext origins (`PasswordSecretBox.sealInternal`
- *  `toBase64`, the profile-record `guard`/`secret` lift at the unseal call sites). */
+/** Mint `Base64Ciphertext` — grep to audit ciphertext origins (`sealProfileSlots`, the
+ *  profile-record `guard`/`secret` lift at the unseal call sites). */
 export const asBase64Ciphertext = (s: string): Base64Ciphertext => s as Base64Ciphertext
 
 /** Mint `Base64MasterSecret` — grep to audit plain-master-secret origins (`exportPlain`'s

@@ -202,7 +202,7 @@ No file or log the wallet writes carries `prfSalt`: the profile slice of a backu
 
 Fast layers: `bun run lint`, `bun run typecheck:all`, `bun run test`. A gate passes at exit 0 with every named file green at retry 0. Smoke runs first build the armed dist (`apps/extension/tests/e2e/README.md`, the armed build command the smoke setup names).
 
-**A1.1** crypto: slot sealer, unlock key, passkey box. Gate: fast layers; `bun run test:all`; `git diff <A1 base> -- packages/wallet-crypto/src/password-secret-box.test.ts packages/wallet-crypto/src/public.ts` empty.
+**A1.1** ✓ crypto: slot sealer, unlock key, passkey box. Gate: fast layers; `bun run test:all`; `git diff <A1 base> -- packages/wallet-crypto/src/password-secret-box.test.ts packages/wallet-crypto/src/public.ts` empty.
 
 **A1.2** service seams: classifier, `openSlots`, `RestoreMaterial`. Gate: fast layers; `bun run test:all`; `bun run baseline:storage` "unchanged"; `P/service.integration.test.ts` green unedited.
 
