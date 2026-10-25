@@ -6,7 +6,7 @@
 import { InvalidPasswordError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { getMnemonic } from "@nulo/wallet-core/utils"
-import { asBase64MasterSecret, deriveMasterFromMnemonic, PasswordSecretBox } from "@nulo/wallet-crypto"
+import { asBase64MasterSecret, deriveMasterFromMnemonic, EncryptionKey, PasswordSecretBox } from "@nulo/wallet-crypto"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -17,6 +17,7 @@ import { ProfileService } from "./service"
 import { PROFILE_STORAGE_ROOT } from "./spec"
 
 const PASSWORD = "pass1234"
+const NEW_PASSWORD = "newpass99"
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -46,24 +47,54 @@ async function sibling(service: ProfileService) {
 	return id
 }
 
+/** Restores a password profile from the backup body of a phrase whose entropy is all `fill`. */
+async function restored(service: ProfileService, fill: number) {
+	const entropy = new Uint8Array(32).fill(fill)
+	const master = await deriveMasterFromMnemonic(await getMnemonic(entropy))
+	const body = {
+		type: "password" as const,
+		masterKey: asBase64MasterSecret(Buffer.from(master).toString("base64")),
+		entropy: Buffer.from(entropy).toString("base64"),
+		importedKeysDek: Buffer.from(new Uint8Array(32).fill(0x55)).toString("base64"),
+	}
+	const out = await service.restore({ id: "ignored", name: "R", type: "password" }, body, PASSWORD)
+	if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
+	return out.id
+}
+
+const settled = (call: Promise<unknown>) =>
+	call.then(
+		() => undefined,
+		(e: unknown) => e,
+	)
+// A passhash is a raw ArrayBuffer.
+const allZero = (bytes: Uint8Array | ArrayBuffer) => (bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).every((b) => b === 0)
+
+type Path = (s: ProfileService, id: string, password?: string) => Promise<unknown>
+
 /** Each password path, with the refusal it gives when the opener returns nothing. */
-const PATHS: [string, (s: ProfileService, id: string) => Promise<unknown>, (e: unknown) => void][] = [
-	["unlockProfile", (s, id) => s.unlockProfile(id, PASSWORD), (e) => expect(e).toBeInstanceOf(InvalidPasswordError)],
+const PATHS: [string, Path, (e: unknown) => void][] = [
+	["unlockProfile", (s, id, pw = PASSWORD) => s.unlockProfile(id, pw), (e) => expect(e).toBeInstanceOf(InvalidPasswordError)],
 	[
 		"exportPlain",
-		(s, id) => s.exportPlain(id, PASSWORD),
+		(s, id, pw = PASSWORD) => s.exportPlain(id, pw),
 		(e) => expect(e).toMatchObject({ message: InvalidPasswordError.LEGACY_MESSAGE }),
 	],
-	["openBackupTransfer", (s, id) => s.openBackupTransfer(id, PASSWORD), (e) => expect(e).toBeInstanceOf(InvalidPasswordError)],
-	["exportImportedKeysDek", (s, id) => s.exportImportedKeysDek(id, PASSWORD), (e) => expect(e).toBeInstanceOf(InvalidPasswordError)],
+	["openBackupTransfer", (s, id, pw = PASSWORD) => s.openBackupTransfer(id, pw), (e) => expect(e).toBeInstanceOf(InvalidPasswordError)],
 	[
-		"exportMnemonic",
-		(s, id) => s.exportMnemonic(id, PASSWORD),
-		(e) => expect(e).toMatchObject({ message: "Invalid profile old password" }),
+		"exportImportedKeysDek",
+		(s, id, pw = PASSWORD) => s.exportImportedKeysDek(id, pw),
+		(e) => expect(e).toBeInstanceOf(InvalidPasswordError),
 	],
 	[
+		"exportMnemonic",
+		(s, id, pw = PASSWORD) => s.exportMnemonic(id, pw),
+		(e) => expect(e).toMatchObject({ message: "Invalid profile old password" }),
+	],
+	// Last: its success moves the profile to the new password.
+	[
 		"changeProfilePassword",
-		(s, id) => s.changeProfilePassword(id, PASSWORD, "newpass99"),
+		(s, id, pw = PASSWORD) => s.changeProfilePassword(id, pw, NEW_PASSWORD),
 		(e) => expect(e).toMatchObject({ message: "Invalid profile old password" }),
 	],
 ]
@@ -74,7 +105,7 @@ const PAIRED_PATHS: [string, (s: ProfileService, id: string) => Promise<unknown>
 	["exportPlain", (s, id) => s.exportPlain(id, PASSWORD)],
 	["openBackupTransfer", (s, id) => s.openBackupTransfer(id, PASSWORD)],
 	["exportMnemonic", (s, id) => s.exportMnemonic(id, PASSWORD)],
-	["changeProfilePassword", (s, id) => s.changeProfilePassword(id, PASSWORD, "newpass99")],
+	["changeProfilePassword", (s, id) => s.changeProfilePassword(id, PASSWORD, NEW_PASSWORD)],
 ]
 
 describe("the password slot opener", () => {
@@ -85,23 +116,25 @@ describe("the password slot opener", () => {
 	])(
 		"%s reaches no decryptor on any password path",
 		async (_label, damage) => {
-			const { service, id, stored, write } = await lockedPasswordProfile()
+			const { service, id, stored, read, write, writeTo } = await lockedPasswordProfile()
+			const restoring = await restored(service, 0x31)
 			await write(damage(stored))
-			const unseal = vi.spyOn(PasswordSecretBox.prototype, "unsealWithPasshash")
+			await writeTo(restoring, damage(await read(restoring)))
+			// Every slot and DEK frame a password opens is an `EncryptionKey` frame.
+			const decrypt = vi.spyOn(EncryptionKey.prototype, "decrypt")
 			for (const [path, call, refused] of PATHS) {
-				const error = await call(service, id).then(
-					() => undefined,
-					(e: unknown) => e,
-				)
+				const error = await settled(call(service, id))
 				expect(error, path).toBeDefined()
 				refused(error)
 			}
-			expect(unseal).not.toHaveBeenCalled()
+			expect(await settled(service.finalizeRestore(restoring, PASSWORD)), "finalizeRestore").toBeInstanceOf(Error)
+			expect(decrypt).not.toHaveBeenCalled()
 
-			// Success control: the row as stored opens again; the integration suite opens every path.
+			// Success control: the row as stored opens its three slots again; the integration suite
+			// opens every path.
 			await write(stored)
 			await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
-			expect(unseal).toHaveBeenCalledOnce()
+			expect(decrypt).toHaveBeenCalledTimes(3)
 		},
 		60_000,
 	)
@@ -149,4 +182,35 @@ describe("the words-to-master pairing check", () => {
 		const untouched = await restore(0x32)
 		await expect(service.finalizeRestore(untouched, PASSWORD)).resolves.toMatchObject({ profile: { id: untouched } })
 	}, 60_000)
+})
+
+describe("the opener's buffers", () => {
+	test("the passhash, master and entropy it opens are zero once each path returns, refused or not", async () => {
+		const { service, id } = await lockedPasswordProfile()
+		const passhashOf = EncryptionKey.getPasshash.bind(EncryptionKey)
+		const unsealWith = PasswordSecretBox.prototype.unsealWithPasshash
+		const held: (Uint8Array | ArrayBuffer)[] = []
+		// A password change also derives the new password's passhash, which its seal owns.
+		vi.spyOn(EncryptionKey, "getPasshash").mockImplementation(async (password) => {
+			const passhash = await passhashOf(password)
+			if (password !== NEW_PASSWORD) held.push(passhash)
+			return passhash
+		})
+		vi.spyOn(PasswordSecretBox.prototype, "unsealWithPasshash").mockImplementation(async function (this: PasswordSecretBox, ...args) {
+			const opened = await unsealWith.apply(this, args)
+			if (opened) held.push(opened.secret, opened.entropy)
+			return opened
+		})
+		for (const [path, call] of PATHS) {
+			for (const password of ["wrong-pass1", PASSWORD]) {
+				held.length = 0
+				const error = await settled(call(service, id, password))
+				expect(error === undefined, `${path} ${password}`).toBe(password === PASSWORD)
+				await service.lockActiveProfile()
+				// The password change also opens what it resealed, under the new passhash.
+				expect(held.length, `${path} ${password}`).toBe(password !== PASSWORD ? 1 : path === "changeProfilePassword" ? 5 : 3)
+				expect(held.map(allZero), `${path} ${password}`).toStrictEqual(held.map(() => true))
+			}
+		}
+	}, 120_000)
 })

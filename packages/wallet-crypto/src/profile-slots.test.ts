@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import { sealFrame } from "./aes-gcm-frame"
 import { openPasskeySlots, sealPasskeySlots } from "./passkey-secret-box"
 import { derivePasskeyUnlockKey } from "./passkey-unlock-key"
-import { ENCRYPTION_GUARD, type EncryptedProfileSecret, PROFILE_AAD } from "./profile-slots"
+import { ENCRYPTION_GUARD, type EncryptedProfileSecret, openProfileSlots, PROFILE_AAD, type SlotCipher } from "./profile-slots"
 import { asBase64Ciphertext, asMasterSecretBytes } from "./secret-types"
 
 const random = (length: number) => globalThis.crypto.getRandomValues(new Uint8Array(length)) as Uint8Array<ArrayBuffer>
@@ -59,6 +59,28 @@ describe("profile slots", () => {
 		const generated = Array.from({ length: 24 }, (_, i) => random(i % 2 ? 8 : (i * 3) % 41))
 		for (const plaintext of [new Uint8Array(0), ...near, ...generated] as Uint8Array<ArrayBuffer>[]) {
 			expect(await opensTo(p.key, { ...p.slots, guard: await guardOf(plaintext) }), hex(plaintext)).toBeNull()
+		}
+	})
+
+	test("what it opened is wiped when a later slot fails, and the guard always", async () => {
+		const slots = { guard: "guard", secret: "secret", entropy: "entropy" } as unknown as EncryptedProfileSecret
+		const plaintext = { guard: ENCRYPTION_GUARD, secret: random(32), entropy: random(32) }
+		for (const failing of [undefined, "entropy"] as const) {
+			const opened: Uint8Array[] = []
+			const cipher: SlotCipher = {
+				seal: () => Promise.reject(new Error("unused")),
+				open: async (slot) => {
+					if (slot === failing) throw new Error("tag mismatch")
+					const bytes = new Uint8Array(plaintext[slot as keyof typeof plaintext]) as Uint8Array<ArrayBuffer>
+					opened.push(bytes)
+					return bytes
+				},
+			}
+			const result = await openProfileSlots(cipher, slots)
+			const zero = opened.map((bytes) => bytes.every((b) => b === 0))
+			// Handed back, the master and entropy are the caller's to wipe.
+			expect(zero, String(failing)).toStrictEqual(failing ? [true, true] : [true, false, false])
+			expect(result === null, String(failing)).toBe(failing !== undefined)
 		}
 	})
 })

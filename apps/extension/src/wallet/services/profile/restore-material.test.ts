@@ -1,7 +1,22 @@
 import { getMnemonic } from "@nulo/wallet-core/utils"
 import { asBase64MasterSecret, deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { decodeRestoreMaterial } from "./restore-material"
+
+/** Every buffer the decoder decodes, so a refusal can be checked to wipe them all; refused inputs
+ *  are non-zero so a missed wipe shows. */
+const decoded = vi.hoisted(() => [] as Uint8Array[])
+vi.mock("@/wallet/utils", async (importOriginal) => {
+	const utils = await importOriginal<typeof import("@/wallet/utils")>()
+	return {
+		...utils,
+		fromBase64Lenient: (value: string) => {
+			const bytes = utils.fromBase64Lenient(value)
+			decoded.push(bytes)
+			return bytes
+		},
+	}
+})
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64")
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex")
@@ -33,8 +48,8 @@ describe("decodeRestoreMaterial", () => {
 	})
 
 	test.each<[string, (s: Awaited<ReturnType<typeof body>>["secret"]) => object, string]>([
-		["a short master", (s) => ({ ...s, masterKey: b64(new Uint8Array(31)) }), "Invalid master key length"],
-		["a short entropy", (s) => ({ ...s, entropy: b64(new Uint8Array(31)) }), "Invalid entropy length"],
+		["a short master", (s) => ({ ...s, masterKey: b64(new Uint8Array(31).fill(7)) }), "Invalid master key length"],
+		["a short entropy", (s) => ({ ...s, entropy: b64(new Uint8Array(31).fill(7)) }), "Invalid entropy length"],
 		// Sixteen bytes make a valid 12-word phrase, so only the 32-byte check refuses them.
 		["a 12-word phrase's entropy", (s) => ({ ...s, entropy: b64(new Uint8Array(16).fill(0x31)) }), "Invalid entropy length"],
 		[
@@ -42,12 +57,15 @@ describe("decodeRestoreMaterial", () => {
 			(s) => ({ ...s, entropy: b64(new Uint8Array(32).fill(0x32)) }),
 			"Backup entropy does not derive the backup master key",
 		],
-		["a short transfer key", (s) => ({ ...s, importedKeysDek: b64(new Uint8Array(31)) }), "Invalid imported-keys dek length"],
+		["a short transfer key", (s) => ({ ...s, importedKeysDek: b64(new Uint8Array(31).fill(7)) }), "Invalid imported-keys dek length"],
 		["no transfer key", ({ importedKeysDek: _k, ...rest }) => rest, "Invalid imported-keys dek length"],
 		// The master is checked first: a body wrong in every field names the master.
 		["every field wrong", () => ({ type: "password", masterKey: "", entropy: "", importedKeysDek: "" }), "Invalid master key length"],
-	])("refuses %s", async (_label, edit, message) => {
+	])("refuses %s, wiping what it decoded", async (_label, edit, message) => {
 		const { secret } = await body()
+		decoded.length = 0
 		await expect(decodeRestoreMaterial(edit(secret) as typeof secret)).rejects.toThrow(message)
+		expect(decoded.length).toBeGreaterThan(0)
+		expect(decoded.map((bytes) => bytes.every((b) => b === 0))).toStrictEqual(decoded.map(() => true))
 	})
 })
