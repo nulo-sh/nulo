@@ -9,6 +9,7 @@ import { navigateByHash } from "../../fixtures/navigation"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
 import { pollUntil } from "../../fixtures/poll"
 import { callService } from "../../fixtures/session"
+import { ADVANCES_ON_OPEN } from "./checkers"
 import type { Driven } from "./state"
 
 /** A state a driver waits for: every given condition holds at once. */
@@ -220,6 +221,18 @@ export async function answerConfirm(page: Page, answer: "submit" | "cancel"): Pr
 /** Waits until the hash's route, its query aside, is `route`. */
 export async function waitForRoute(page: Page, route: string, timeout: number): Promise<void> {
 	await page.waitForFunction((want: string) => location.hash.split("?")[0] === want, { timeout, polling: 200 }, route)
+}
+
+/** Waits until the anchor has left the routes the popup leaves once a profile is active; a miss
+ *  is left to O1. */
+export async function anchorAdvanced(page: Page, timeout: number): Promise<void> {
+	await page
+		.waitForFunction(
+			(routes: readonly string[]) => !routes.includes(location.hash.slice(1).split("?")[0]),
+			{ timeout, polling: 200 },
+			ADVANCES_ON_OPEN,
+		)
+		.catch(() => {})
 }
 
 /** Waits until a fresh port to the background is answered: a successor still booting closes one

@@ -1,8 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, test } from "vitest"
+import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
 import { ProfileRowSchema, STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
+	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
 	allowedFor,
 	type Bindings,
@@ -28,6 +30,7 @@ import {
 	familyOfKey,
 	findNeedles,
 	ownerOf,
+	pageErrorText,
 	PROFILE_ROW_FIELDS,
 	type ProfileReading,
 	type SessionReading,
@@ -446,6 +449,11 @@ describe("O1, the session", () => {
 			{ row: row(), active: P1, pages: [...pages, { ...lockPages[0], label: "w2", anchor: false }] },
 		],
 		["a lock", locked, { pages: lockPages, protectedCallRefused: true }],
+		[
+			"the anchor left on an import page while open",
+			open,
+			{ row: row(), active: P1, pages: [{ ...pages[0], route: "/popup/import" }] },
+		],
 	] as const)("passes %s", (_label, w, r) => {
 		expect(checkSession(w, r as SessionReading, b)).toEqual([])
 	})
@@ -458,6 +466,7 @@ describe("O1, the session", () => {
 		["an active profile after a lock", locked, { active: P1, pages: lockPages, protectedCallRefused: true }],
 		["a locked reading that never probed", locked, { pages: lockPages }],
 		["the anchor on the lock screen while open", open, { row: row(), active: P1, pages: lockPages }],
+		["the anchor on Register while open", open, { row: row(), active: P1, pages: [{ ...pages[0], route: "/popup/register" }] }],
 		["a page still on Home after a lock", locked, { pages, protectedCallRefused: true }],
 		["a protected call served after a lock", locked, { pages: lockPages, protectedCallRefused: false }],
 		["the wrong profile open", open, { row: { ...row(), profile: P2 }, active: P2, pages }],
@@ -469,6 +478,10 @@ describe("O1, the session", () => {
 		],
 	] as const)("fails %s", (label, w, r) => {
 		expect(shown(`O1 ${label}`, checkSession(w, r as SessionReading, b)).length).toBeGreaterThan(0)
+	})
+
+	test("an open session fails on exactly the routes the popup advances from", () => {
+		expect(ADVANCES_ON_OPEN.map((r) => r.slice(1).replace("/", "-")).sort()).toEqual([...AUTH_ENTRY_ROUTES].sort())
 	})
 })
 
@@ -617,15 +630,21 @@ describe("O3, writes", () => {
 describe("O4, errors", () => {
 	const page = (text: string): ErrorEntry => ({ kind: "page-error", page: "anchor", text })
 
+	test("passes a disconnect rejection the popup prevents, at any step", () => {
+		const verdict = checkErrors([page("Error: Client disconnected")], [])
+		expect(verdict.violations).toEqual([])
+		expect(verdict.allowed).toEqual({ "code:apps/extension/src/wallet/logger/console-forwarding.ts:19": 1 })
+	})
+
 	test("passes a lock's disconnect cascade and counts warn lines without failing", () => {
 		const verdict = checkErrors(
-			[page("Client disconnected"), { kind: "log", level: "warn", source: "profile", text: "slow" }],
+			[page("Error: Client disconnected"), { kind: "log", level: "warn", source: "profile", text: "slow" }],
 			["session"],
 		)
 		expect(verdict).toEqual({
 			violations: [],
 			warns: { profile: 1 },
-			allowed: { "code:packages/extension-messaging/src/errors.ts:102": 1 },
+			allowed: { "code:apps/extension/src/wallet/logger/console-forwarding.ts:19": 1 },
 		})
 	})
 
@@ -658,13 +677,25 @@ describe("O4, errors", () => {
 	})
 
 	test.each([
-		["a disconnect in a step that ends nothing", [page("Client disconnected")], []],
 		["an uncaught error", [page("TypeError: x is undefined")], ["session"]],
 		["an error log line", [{ kind: "log", level: "error", source: "profile", text: "Failed to refresh profile session" }], []],
 		["a console error", [{ kind: "console-error", page: "anchor", text: "boom" }], []],
-		["a disconnect that only contains the phrase", [page("Client disconnected while x")], ["session"]],
+		["a disconnect that only contains the phrase", [page("Error: Client disconnected while x")], ["session"]],
+		["a disconnect the wallet logs at error", [{ kind: "log", level: "error", source: "profile", text: "Client disconnected" }], []],
+		["a disconnect thrown in a console error", [{ kind: "console-error", page: "anchor", text: "Error: Client disconnected" }], []],
 	] as const)("fails %s", (label, entries, ends) => {
 		expect(shown(`O4 ${label}`, checkErrors(entries as unknown as ErrorEntry[], ends).violations).length).toBeGreaterThan(0)
+	})
+
+	test("a page error reads as one text on both browsers", () => {
+		const named = (name: string, message: string) => Object.assign(new Error(message), { name })
+		expect(pageErrorText(named("Error", "Client disconnected"))).toBe("Error: Client disconnected")
+		expect(pageErrorText(new Error("Uncaught (in promise) Error: Client disconnected"))).toBe("Error: Client disconnected")
+		expect(pageErrorText(new Error("Error: Client disconnected"))).toBe("Error: Client disconnected")
+		expect(pageErrorText(named("TypeError", "x is undefined"))).toBe("TypeError: x is undefined")
+		expect(pageErrorText(new Error("TypeError: x is undefined"))).toBe("TypeError: x is undefined")
+		expect(pageErrorText(new Error("Wrapped: thing"))).toBe("Error: Wrapped: thing")
+		expect(pageErrorText("a thrown string")).toBe("a thrown string")
 	})
 
 	test("a violation's message names the error's class; its text stays in the detail", () => {
@@ -690,6 +721,17 @@ describe("O4, errors", () => {
 			text: `["Failed to get ${label} FeeJuice balance",{"message":"pxe op rejected: profile x has no current incarnation (deleted or tombstoned)"}]`,
 		})
 		expect(checkErrors([fenced("public"), fenced("private")], []).violations.map((v) => v.known)).toEqual([1131, 1131])
+		const afterLock = [
+			{
+				...fenced("private"),
+				text: '["Failed to get private FeeJuice balance",{"name":"WalletLockedError","message":"Wallet locked"}]',
+			},
+			{
+				...fenced("public"),
+				text: '["Failed to get public FeeJuice balance",{"message":"PXE_STORE_KEY_MISSING: no store key provisioned for profile x"}]',
+			},
+		]
+		expect(checkErrors(afterLock, []).violations.map((v) => v.known)).toEqual([1131, 1131])
 		const other = checkErrors([{ ...fenced("public"), text: '["Failed to get public FeeJuice balance",{"message":"boom"}]' }], [])
 		expect(shown("O4 an error line beside a filed one's text", other.violations)[0]?.known).toBeUndefined()
 		const disconnect = {
@@ -701,6 +743,18 @@ describe("O4, errors", () => {
 		expect(checkErrors([disconnect], []).violations[0]?.known).toBe(1132)
 		const elsewhere = checkErrors([{ ...disconnect, source: "profile" }], []).violations
 		expect(shown("O4 the disconnect line from another source", elsewhere)[0]?.known).toBeUndefined()
+		const refused = [
+			{
+				kind: "log" as const,
+				level: "error" as const,
+				source: "ui",
+				text: '["unhandled rejection",{"error":{"name":"Error","message":"Wallet locked"}}]',
+			},
+			{ kind: "page-error" as const, page: "anchor", text: "Error: Wallet locked" },
+		]
+		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133])
+		const otherRefusal = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked while x" }], []).violations
+		expect(shown("O4 a refusal beside a filed one's text", otherRefusal)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {

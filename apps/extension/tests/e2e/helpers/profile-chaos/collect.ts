@@ -15,6 +15,7 @@ import {
 	type FamilyEntry,
 	type LeakHit,
 	type Needle,
+	pageErrorText,
 	type ProfileReading,
 	type SessionReading,
 	type StoredEntry,
@@ -253,7 +254,7 @@ export class ErrorCollector {
 		this.watched.add(page)
 		const name = label ?? `page${++this.pageCount}`
 		page.on("pageerror", (error: unknown) => {
-			this.entries.push({ kind: "page-error", page: name, text: error instanceof Error ? error.message : String(error) })
+			this.entries.push({ kind: "page-error", page: name, text: pageErrorText(error) })
 		})
 		page.on("console", (message) => {
 			if (message.type() === "error" && !isPrestoProbeNoise(message))

@@ -61,3 +61,19 @@ Both are listed in `KNOWN_FINDINGS` (D26): a seed that meets one stays red and n
 - `profile-chaos-model.test.ts`: 137 tests, 30 consecutive runs at retry 0, 30/30 green, the model, checkers and test files' SHA-256 unchanged over the 30 runs.
 - A false green found reading the spec before commit: a seed that met no violation passed with a step it never ran, an unplanned restart or a log-id gap. The spec now fails on `evidenceGaps`, which forgives a planned restart's log window only, with a break fixture per gap; seed 1 replayed after the change still ran every step, its restart the only gap. The 30-run count is repeated on the final head.
 - Fast layers after it: `bun run lint`, `bun run typecheck:all` and `bun run test:all` green (extension 15,318 tests).
+
+## C1.3 Firefox smoke (2026-10-25)
+
+Every red read to its cause before the next run:
+
+1. Every first profile create red at step 0 with a `Client disconnected` page error (6 of 6 lone creates, password and passkey alike). The popup's network watcher fires twice on a first profile; the second run's `replaceAccountClient()` disconnects the account client the first run still awaits (`apps/extension/src/popup/app.vue:250`), and the superseded run's rejection is never awaited. The popup prevents every disconnect rejection and logs it at debug (`apps/extension/src/wallet/logger/console-forwarding.ts:16-21`), but a probe showed both browsers' captures report a rejection the page prevented. Firefox met the same rejection after a password change and an account add, so the allowance holds at any step for that exact text (D28).
+2. The disconnect allowance never matched on Firefox: Puppeteer's BiDi path builds the page error from Firefox's text, class included (`Error: Client disconnected`), while its CDP path moves the class into the name. Page errors are recorded as `<class>: <message>` on both (D29).
+3. After a refused import, a second window's unlock left the anchor on Import, and O1 read that as a lock screen shown while open. The popup leaves only `/popup/auth` and `/popup/register` for Home once a profile is active (`apps/extension/src/popup/should-advance-to-general.ts:3`), so O1's open rule is those two, pinned to the wallet's list, and the driver waits for the anchor to leave them (D30).
+
+Product findings:
+
+- #1133 (new, S4): a lock during a held passkey unlock leaves the bootstrap's `Wallet locked` refusal unhandled, logged at error. 3 of 3 on Firefox with a three-step list, 0 of 2 on Chrome. A temporary diagnostic build, reverted and rebuilt before any further run, named the refused call, `getOrInitNetworks`; the cause stated in the issue (`runActivation` awaits `getProfiles()` before it attaches to the core's promise) is inferred from the code.
+- #1131 widened by a comment: the same gas-balance retry logs `Wallet locked` and `PXE_STORE_KEY_MISSING` when a lock, not a delete, ends the session inside its window (Firefox seed 2, `verifyAll`).
+- Unreproduced, filed nowhere: `Failed to discover FPC … PxeStoreKeyMissingError` at seed 2's `verifyAll` (0 of 3 replays of its prefix); `Profile locked` unhandled in a second window that a lock met (seed 2 step 22; 0 of 3 with a two-step list, and the one prefix replay that reached step 22 passed it).
+
+Facts checked on Firefox: one run minted four passkeys with no refusal (D27's unbounded slots); I2 holds (a hold on a second page acknowledged after 100 ms with no session open); I4 holds (`verifyAll`'s attempts with another profile's credential refused, every Firefox seed).

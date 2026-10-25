@@ -55,6 +55,10 @@ export interface SessionReading {
 const LOCKED_ROUTES = ["/popup/auth", "/popup/register", "/popup/import", "/popup/legal", "/onboarding", "/setup"]
 const shownWhileLocked = (route: string): boolean => LOCKED_ROUTES.some((r) => route === r || route.startsWith(`${r}/`))
 
+/** The routes the popup leaves for Home once a profile is active; an import, legal or onboarding
+ *  page is left where it stands (`code:apps/extension/src/popup/should-advance-to-general.ts:3`). */
+export const ADVANCES_ON_OPEN = ["/popup/auth", "/popup/register"] as const
+
 function checkOpenSession(w: World & { session: { kind: "open" } }, r: SessionReading, b: Bindings): Violation[] {
 	const id = idOf(b, w.session.ref)
 	const out: Violation[] = []
@@ -70,7 +74,8 @@ function checkOpenSession(w: World & { session: { kind: "open" } }, r: SessionRe
 	if (r.row?.hasPasshash) out.push(violation("O1", "the session row holds a legacy passhash"))
 	if (r.active !== id) out.push(violation("O1", `the service's active profile is ${r.active ?? "none"}, not ${w.session.ref}`))
 	for (const page of r.pages)
-		if (page.anchor && shownWhileLocked(page.route)) out.push(violation("O1", `open, but ${page.label} shows ${page.route}`))
+		if (page.anchor && (ADVANCES_ON_OPEN as readonly string[]).includes(page.route))
+			out.push(violation("O1", `open, but ${page.label} shows ${page.route}`))
 	return out
 }
 
@@ -380,11 +385,11 @@ export interface AllowedError {
 /** The reviewed allowlist. */
 export const ALLOWED_ERRORS: readonly AllowedError[] = [
 	{
-		pattern: /^Client disconnected$/,
+		pattern: /^Error: Client disconnected$/,
 		kinds: ["page-error"],
-		during: ["session", "background"],
-		source: "code:packages/extension-messaging/src/errors.ts:102",
-		reason: "ending a session or the background closes the ports in-flight calls ride, and each such call rejects with this text",
+		during: "any step",
+		source: "code:apps/extension/src/wallet/logger/console-forwarding.ts:19",
+		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
 	},
 ]
 
@@ -413,15 +418,39 @@ export interface KnownFinding {
 }
 
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
-	{ issue: 1131, pattern: /Failed to get (public|private) FeeJuice balance.*has no current incarnation/, kinds: ["log"] },
+	{
+		issue: 1131,
+		pattern:
+			/Failed to get (public|private) FeeJuice balance.*(has no current incarnation|"message":"Wallet locked"|PXE_STORE_KEY_MISSING)/,
+		kinds: ["log"],
+	},
 	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
+	{
+		issue: 1133,
+		pattern: /^(?:\["unhandled rejection",\{"error":\{"name":"Error","message":"Wallet locked"\}\}\]|Error: Wallet locked)$/,
+		kinds: ["log", "page-error"],
+	},
 ]
 
 const isInstance = (k: KnownFinding, e: ErrorEntry): boolean =>
 	k.kinds.includes(e.kind) && (k.source === undefined || (e.kind === "log" && e.source === k.source)) && k.pattern.test(e.text)
 
-/** An error's class for a shareable message: its leading `SomethingError`, else `unclassified`. */
-const errorClass = (text: string): string => /^[A-Z][A-Za-z]*(Error|Exception)\b/.exec(text)?.[0] ?? "unclassified"
+const UNCAUGHT = /^Uncaught (?:\(in promise\) )?/
+const CLASSED = /^\w*(?:Error|Exception): /
+
+/** A page error as one text on both browsers, `<class>: <message>`: Chrome's driver reports the
+ *  class as the error's name, or keeps Chrome's `Uncaught (in promise) <class>: ` text when the
+ *  event carried no value; Firefox's relay puts the class in the message. */
+export function pageErrorText(error: unknown): string {
+	if (!(error instanceof Error)) return String(error)
+	const message = error.message.replace(UNCAUGHT, "")
+	if (error.name !== "Error") return `${error.name}: ${message}`
+	return CLASSED.test(message) ? message : `Error: ${message}`
+}
+
+/** An error's class for a shareable message: its leading `Error` or `SomethingError`, else
+ *  `unclassified`. */
+const errorClass = (text: string): string => /^(?:[A-Z][A-Za-z]*)?(?:Error|Exception)\b/.exec(text)?.[0] ?? "unclassified"
 
 export interface ErrorVerdict {
 	violations: Violation[]

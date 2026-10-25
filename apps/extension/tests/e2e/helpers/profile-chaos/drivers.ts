@@ -46,6 +46,7 @@ import {
 	toLockScreen,
 	typePasswordAndSubmit,
 	waitForRoute,
+	anchorAdvanced,
 } from "./ui"
 import { verifyAll } from "./verify"
 import { exportFullBackup, restoreFile } from "./backups"
@@ -432,6 +433,7 @@ const secondWindow: Drivers["secondWindow"] = async (s, p, _step, before) => {
 			await clickByTestId(page, "auth-submit")
 		}
 		await waitForRoute(page, "#/popup/general", UNLOCK_MS)
+		await anchorAdvanced(s.anchor, UNLOCK_MS)
 		return timed(t0, UNLOCK_MS, "committed")
 	} finally {
 		await page.close().catch(() => {})
