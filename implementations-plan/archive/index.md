@@ -209,6 +209,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [keyboard-guards](keyboard-guards/plan.md) — completed — each page's Enter shortcut answers only its own fields and refuses repeats
 - [landing-explainer-1](landing-explainer-1/plan.md) — completed — the How Aztec works page at nulo.sh/how-aztec-works: three cards, each a narrated clip over its text version
 - [landing-store-buttons](landing-store-buttons/plan.md) — completed — install buttons go to the browser's store; the landing stops reading GitHub releases
+- [launch-prep-1](launch-prep-1/plan.md) — completed — the 1.0.0 checklist boxes the stores meet, four known-limit dispositions, Terms 1.1 replacing the draft 1.0, and a 1.0 README banner
 - [layout-polish](layout-polish/plan.md) — completed — the popup built to the drawings, with the remaining differences decided from pictures
 - [legal-terms](legal-terms/plan.md) — completed — Terms and Privacy Policy, an on-device acceptance record, and third-party notices
 - [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet

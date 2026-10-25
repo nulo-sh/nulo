@@ -24,7 +24,7 @@ that cannot be read out of this repository.
 
 | Placeholder | What it needs |
 |---|---|
-| `effective date` | Terms 1.0: the date the 1.0 listing goes live. A patch of either document: the day it is published, since a patch takes effect on publication. |
+| `effective date` | Terms 1.1: the date the 1.0.0 listing goes live (1.0 never takes effect). A patch of either document: the day it is published, since a patch takes effect on publication. |
 
 What privacy §§ 5.1 and 5.5 say the Developer can see in the provider dashboards was read from those
 dashboards: re-check it if a plan, Worker logging or browser analytics setting changes.
@@ -42,8 +42,8 @@ These are **not** fixed by editing the documents.
    with an older or no record; the version and time are recorded on the device by
    `LegalAcceptanceService`. No "By continuing…" browsewrap footer stands in for it.
 3. ~~**Preserve export access on decline.**~~ — done, and proved end to end: nothing but
-   broadcasting and dApp requests is gated, and the sheet cannot cover an export page
-   (`apps/extension/tests/e2e/legal-acceptance.test.ts`, scenarios S5, S6, S8).
+   broadcasting, dApp requests and the token-list download is gated, and the sheet cannot cover
+   an export page (`apps/extension/tests/e2e/legal-acceptance.test.ts`, scenarios S5, S6, S8).
 
    Blockers 1–3 are recorded in `implementations-plan/archive/legal-terms/`.
 4. ~~**Verify the Presto MIT relicense reached the bundled artifacts.**~~ — done. The lockfile
@@ -73,10 +73,6 @@ Owned elsewhere, tracked here so nothing falls between worktrees:
   and balance queries leave for the configured node; the reasoning and the one contestable reading,
   the passkey label, are in `apps/extension/store/listing.md` § Data collection declaration). The
   minimum version is Firefox 153. Both are pinned by `apps/extension/src/manifest.test.ts`.
-- **The README banner** reads "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET", which needs
-  rewriting at the 1.0 cut. It must not promise a network the build does not seed: the build seeds
-  the Aztec Testnet, the default, beside Aztec Mainnet (and the developers' Local Network) (#80,
-  #875).
 
 ## Identity and jurisdiction — the decision, and what it costs
 

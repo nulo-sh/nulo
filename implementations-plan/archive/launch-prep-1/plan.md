@@ -13,9 +13,25 @@ issues: "#864 (A1 and A2 Refs; it closes at the release); #372 #385 #684 #775 (c
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-10-19.
+- **Status:** A1 merged as #888. A2 is the PR against `dev` carrying this close-out; the owner signed the sheet's line and the banner on decision page 69 (2026-10-20), and A2 merges right before the 1.0.0 promote, which closes the plan.
+- **Shipped:** A1: the `BEFORE-LAUNCH.md` boxes the re-fetched evidence meets, the owner's page-62 store calls, two checks made passable, `legal/README.md`'s Mainnet line. A2: Terms 1.1, material, with one `changes` line (P69-02 C, replacing P68-01 B); 1.0 archived byte-exact and listed as never in effect (P68-02 A); the README banner (P68-03 A plus the preview-build bullet, as drawn: P69-03 A); § 4's live-Testnet box moved to a § 3 step before the promote (P68-04 B); the legal README's decline line; the how-aztec-works footer.
+- **Review loop:** the plan took Codex reject, Opus conditional approve, Codex conditional approve, then Codex approve. A1 took Codex clean, Opus three P3 (fixed), Codex clean. A2 took Codex one P2 (half accepted), Opus four P3 (fixed), Codex one P3 (fixed), then Codex clean; after page 69, Codex clean again.
+- **Dates:** set by the orchestrator on the owner's delegation of the launch (2026-10-24): Terms 1.1 effective 26 October 2026, the day the 1.0 listing is planned to go live; privacy 1.2.2, 1.2.3 and 1.2.4 effective 25 October 2026, the day the promote publishes them, in `legal/privacy.md`, the manifest and the archived 1.2.2 and 1.2.3 copies.
+- **Gates at the head:** after merging `origin/dev` at `a7062ab68`: lint, `typecheck:all`, `test:all`, `test:ci-gating`, `check:plans` exit 0; with line C, the legal and landing tests and the legal-acceptance e2e (14/14 at retry 0) on the armed Chrome build.
+- **Deviations:** A2's commit type is `feat(legal)` (D9); no A3, both asks being signed together (D1); the how-aztec-works footer came from A2's review.
+- **Dispositions:** #372, #385, #684 and #775 stay closed known limits with corrected conditions (§ Dispositions), posted by the orchestrator; the owner accepted #385's window by name (P68-05 A).
+- **Dropped:** owner dispositions for #372, #684 and #775 (D2); trimming #385's row (A2 Codex r1).
+- **Known limits:** none filed.
+- **Open items:** `BEFORE-LAUNCH.md` § 3: the owner's send from the 1.0.0 candidate on the new Testnet; the post-deploy checks of `nulo.sh/terms` and the privacy permalinks; Chrome Public before the store dispatch; AMO's experimental flag; the Chrome `storage` justification re-pasted (§ 4). #864 closes at the release.
+- **Lessons:** none promoted; the checklist-wording lesson stays in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
+
 # launch-prep-1: the 1.0.0 checklist's agent items that do not wait for Aztec 6.0.0
 
-Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **A1** corrects `BEFORE-LAUNCH.md` (the boxes the evidence meets, the owner's two page-62 store calls, two checks that cannot pass as written) and `legal/README.md`'s Mainnet line, and records the four known-limit dispositions; it opens ready. **A2** prepares Terms 1.1 (P62-06 A) and the README banner, with the close-out; a draft until the owner signs OA-1 and OA-2, merged before the 1.0.0 promote. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Two arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1). **A1** corrects `BEFORE-LAUNCH.md` (the boxes the evidence meets, the owner's two page-62 store calls, two checks that cannot pass as written) and `legal/README.md`'s Mainnet line, and records the four known-limit dispositions; it opens ready. **A2** prepares Terms 1.1 (P62-06 A) and the README banner, with the close-out; the owner signed OA-1 to OA-4 on decision page 68 and the sheet's line and the banner on page 69; a draft, merged right before the 1.0.0 promote. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## The claims and what did not hold
 
@@ -33,7 +49,7 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 | Issue | Does 1.0.0 meet the condition? | What follows |
 |---|---|---|
 | #372 | **Narrowly.** Pre-#379 rows survive only on a clean chain-0 or custom chain; restore still writes `contract` verbatim (`token/service.ts:1015-1030`), so any backup can carry another spelling. | **Known limit, condition corrected.** Reopen on a report of a missing mint figure, or a new token-row writer that skips `parseTokenInterface`. Possible fix (sized, deferred): lower-case `contract` in token and balance restore together, one helper, two tests. The consequence fails closed on the importer's own history. |
-| #385 | **Yes:** production users exist and both stores review a release. | **Known limit, condition corrected, pending OA-4.** A leaked seed alone delivers nothing: wallets fetch only `tokens.nulo.sh`, deployed by Workers Builds from `dev`. Delivery also needs landing on `dev` (the owner's account, or the release App's key: `dev` needs no approving review), the Cloudflare account, or the user's TLS. A key leaked through the signer's own code path may come with `dev` access. A forged list seeds up to 16 tokens per chain per list, flags genuine ones, and its rows outlive the rotation (#387). Reopen on a suspected leak, a list gaining a power beyond seeding, naming, pricing and flagging, or a list served from a path the signing job can write. Possible fix: a recovery-signed revocation that outranks the sequence (format field, held-list rule, keyed run): a plan change, not built. |
+| #385 | **Yes:** production users exist and both stores review a release. | **Known limit, condition corrected; the owner accepted the window by name (P68-05 A).** A leaked seed alone delivers nothing: wallets fetch only `tokens.nulo.sh`, deployed by Workers Builds from `dev`. Delivery also needs landing on `dev` (the owner's account, or the release App's key: `dev` needs no approving review), the Cloudflare account, or the user's TLS. A key leaked through the signer's own code path may come with `dev` access. A forged list seeds up to 16 tokens per chain per list, flags genuine ones, and its rows outlive the rotation (#387). Reopen on a suspected leak, a list gaining a power beyond seeding, naming, pricing and flagging, or a list served from a path the signing job can write. Possible fix: a recovery-signed revocation that outranks the sequence (format field, held-list rule, keyed run): a plan change, not built. |
 | #684 | **In letter:** users exist. Moot: the fix's optional field is the additive change #865's guard accepts. | **Known limit, premise and condition corrected.** Production builds seed the Local Network; a store-installed developer meets the limit after a sandbox restart. A row saved by an earlier build may keep a non-loopback primary until it is edited (the issue's own caveat). Remedy: delete the network in Settings → Networks (purges chain 0), then add `localhost:8080` under Developer Mode (stored as `custom`). Reopen if chain 0 serves anything but a development L1 sandbox, the product promises isolation between sandbox deployments, or a developer reports the remedy fails. |
 | #775 | **In letter** (0.30.x reached AMO); **narrowly in substance**: surviving rows are an imported account's on a clean chain, or `ambiguous` shared rows. | **Known limit, condition corrected.** Reopen on a person's report, or on a 0.30.x row read outside those cases. tx-record-1's `feeChoice` (#821) leaves these rows as they read today. |
 
@@ -46,10 +62,11 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 ## UI impact
 
 - **A1:** none. Repository documents only.
-- **A2 · the re-acceptance sheet** (popup, an install that accepted 1.0): appears once, listing 1.1's `changes` (OA-1 a). P62-06 A, quoted from #864: "Ask once more at 1.0.0: they accepted a page marked not in effect." The words wait for OA-1.
+- **A2 · the re-acceptance sheet** (popup, an install that accepted 1.0): appears once, listing 1.1's `changes`. P62-06 A, quoted from #864: "Ask once more at 1.0.0: they accepted a page marked not in effect." The words: P68-01 = B, "The first line only.", so the one line "These Terms now take effect. The version you accepted was a draft." The owner's note, "Reads very weirdly.", may mean that line too: it and two rewordings were drawn. P69-02 = C, "You accepted a draft of these Terms. This version is the one in effect.", replaces B, so the sheet lists that one line ([light](screenshots/p69-terms-line-c-light.png), [dark](screenshots/p69-terms-line-c-dark.png)).
 - **A2 · "v1.0" reads "v1.1"** wherever the version shows: the sheet's label and consent line, the hint after ticking in onboarding and the sheet (`LegalConsent.vue:31-32`), the declined page's "Terms v1.1 not accepted" (`legal/declined.vue:36`), Settings → About. Implied by P62-06 A.
-- **A2 · `nulo.sh/terms`, `/terms/v1.0/`:** the history table gains 1.1; the 1.0 row and version-list entry read as OA-1 b says.
-- **A2 · `README.md`'s banner:** the copy the owner signs (OA-2).
+- **A2 · `nulo.sh/terms`, `/terms/v1.0/`:** P68-02 = A, "1.0 never takes effect: "Never in effect", a draft replaced by 1.1." The 1.0 row reads `Never in effect | A draft, replaced by 1.1 before it took effect.`, the version list "Version 1.0 never in effect", and the 1.1 row `«FILL» | First version in effect.`
+- **A2 · `nulo.sh/how-aztec-works`'s footer:** "preview build" → "early days", the footer `index.html` has carried since #791, on the owner's "it's not a PREVIEW" (#767).
+- **A2 · `README.md`'s banner:** P68-03 = A, the five-line banner, plus the bullet the owner's note asked for: people who used 0.31.x or an earlier preview build start fresh in 1.0, on a new recovery phrase or passkey, and move their funds (OA-2). P69-03 = A, "Ship it as drawn." Note: "FYI: Once we ship Mainnet though, Mainnet will be default. But until then, yeah, its read perfect."
 
 ## Architecture & Implementation
 
@@ -63,14 +80,15 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 
 | # | Question | Decision |
 |---|---|---|
-| D1 | Arcs | A1 = docs and dispositions, ready; A2 = Terms 1.1, banner, close-out, draft; if OA-2 is unsigned when OA-1 is, the banner moves to A3 so the Terms do not wait |
+| D1 | Arcs | A1 = docs and dispositions, ready (#888, merged); A2 = Terms 1.1, banner, close-out, a draft until the promote (both asks signed on page 68, the line and the banner on page 69, so no A3) |
 | D2 | #372, #684, #775 | known limits, conditions corrected; no owner ask: nothing a person sees changes and no product choice is open (Codex r1 asked for owner dispositions; rejected on the lane brief's rule) |
 | D3 | § 3's listing-URL box | open; today's fetches noted under it (Codex r1; reverses the draft's tick) |
-| D4 | rc.3 (b) | unticked; OA-3 |
-| D5 | #385 | known limit pending OA-4; the plan records a recommendation, not the owner's acceptance (Codex r1) |
+| D4 | rc.3 (b) | P68-04 = B: the box gives way to a § 3 step, the owner's send from the 1.0.0 candidate on the new Testnet, before the promote (A2) |
+| D5 | #385 | P68-05 = A, the window accepted by name; the corrected condition goes on #385 (the orchestrator posts it), and no launch document, `SECURITY.md`, README or release note repeats it (the owner: "Don't even mention it.") |
 | D6 | 1.0's history row and version-list entry | literal words (OA-1 b, with § 20's consequence); the archived page keeps both banners. Phases and gates implement OA-1 b's A; its B amends them first (OA-1) |
 | D7 | A2's tests | the unit, component and landing cases above; no new e2e |
 | D8 | Nightlies between A2 and the promote | accepted residue, stated in OA-1; A2 merges right before the promote; no runtime gate (Codex r2) |
+| D9 | A2's commit type | `feat(legal)`, not the planned `docs(legal)`: the bump shows existing installs a new sheet |
 
 ## Security & Adversarial Considerations
 
@@ -95,11 +113,11 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 
 ### Arc A2 (branch `launch-prep-1-a2`, off `dev` after A1 merges; merged before the 1.0.0 promote)
 
-**Phase 0 — OA-1's pictures (in the planning session, after the audit; scratch only).** ✓ 2026-10-19: both tests green, the sheet listed exactly 1.1's two lines, four shots (OA-1). Apply Phase 2's manifest and terms edits uncommitted with OA-1's recommended words; build the armed smoke build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`). Copy `~/.cache/nulo-backlog/launch-prep-1/lp1-terms-picture.test.ts` into `apps/extension/tests/e2e/` only while it runs (`NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_SHOT_DIR=<dir> bun run test:e2e -- tests/e2e/lp1-terms-picture.test.ts --retry=0`): a 1.0 acceptance's sheet at 400×600 and the onboarding gate, both themes. Revert. Gate: the shots exist; the sheet lists exactly 1.1's changes; `git status` is clean.
+**Phase 0 — OA-1's pictures (in the planning session, after the audit; scratch only).** ✓ 2026-10-19: both tests green, the sheet listed exactly 1.1's two lines, four shots (OA-1). Superseded for the last look by page 69's pictures: line B and two rewordings, and the final banner. Apply Phase 2's manifest and terms edits uncommitted with OA-1's recommended words; build the armed smoke build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`). Copy `~/.cache/nulo-backlog/launch-prep-1/lp1-terms-picture.test.ts` into `apps/extension/tests/e2e/` only while it runs (`NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_SHOT_DIR=<dir> bun run test:e2e -- tests/e2e/lp1-terms-picture.test.ts --retry=0`): a 1.0 acceptance's sheet at 400×600 and the onboarding gate, both themes. Revert. Gate: the shots exist; the sheet lists exactly 1.1's changes; `git status` is clean.
 
-**Phase 2 — Terms 1.1.** Files and tests as above. Gate: `bun run --cwd packages/legal test`, `bun run --cwd apps/landing test`, `bun run test` exit 0; `bun run --cwd apps/landing build`, then `dist/terms/v1.0/index.html` carries both banners and `dist/terms.html` reads 1.1; `git grep -n "«FILL" -- legal/terms.md` prints the version line and the 1.1 row only; the armed build, then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/legal-acceptance.test.ts --retry=0` green; lint, `typecheck:all` exit 0.
+**Phase 2 — Terms 1.1.** ✓ 2026-10-19: every command below green; legal-acceptance 14/14 at retry 0 (160 s); `launchBlanks("1.0.0")` lists only the two 1.1 lines, and none once a date fills them. Files and tests as above. Gate: `bun run --cwd packages/legal test`, `bun run --cwd apps/landing test`, `bun run test` exit 0; `bun run --cwd apps/landing build`, then `dist/terms/v1.0/index.html` carries both banners and `dist/terms.html` reads 1.1; `git grep -n "«FILL" -- legal/terms.md` prints the version line and the 1.1 row only; the armed build, then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/legal-acceptance.test.ts --retry=0` green; lint, `typecheck:all` exit 0.
 
-**Phase 3 — README banner and close-out.** `README.md` per OA-2; the close-out per Post-implementation. Gate: lint, `test:ci-gating`, `check:plans` after staging exit 0.
+**Phase 3 — README banner and close-out.** `README.md` per OA-2 (✓ 2026-10-19, P68-03 A plus the preview-build bullet); the close-out per Post-implementation. Gate: lint, `test:ci-gating`, `check:plans` after staging exit 0.
 
 ## Post-implementation
 
@@ -110,7 +128,7 @@ Outsider builds older than the two fixes are AMO 0.28.0, 0.30.0, 0.30.1 and 0.30
 | Arc | Phases | Base | PR title (≤ 93) | Issues |
 |---|---|---|---|---|
 | A1 | 1 | `origin/dev` + this plan's commit | `docs(launch): tick the launch boxes the stores meet; 1.0.0 seeds no mainnet` (75) | Refs #864 |
-| A2 | 0, 2, 3 + close-out | `origin/dev` after A1 merges | `docs(legal): terms 1.1 take effect at 1.0.0; a production readme banner` (73) | Refs #864 |
+| A2 | 0, 2, 3 + close-out | `origin/dev` after A1 merges | `feat(legal): terms 1.1 take effect at 1.0.0; a production readme banner` (73) | Refs #864 |
 
 No `Closes`: #864 closes at the release (lane brief); the four known limits stay closed. A1 opens ready, A2 as a draft, without labels (`packages/legal/src/**` trips the smoke filter). A2's body quotes P62-06 A, the signed OA-1 and OA-2 text, and the pictures. No e2e scenario is added. Parallelism: none.
 
@@ -125,6 +143,10 @@ No `Closes`: #864 closes at the release (lane brief); the four known limits stay
 - **A1 Codex r1** (gpt-6.1-sol, high, session `01a1560f`): **clean** (corrected #497's merge time to 21:02Z).
 - **A1 Opus review**: **findings**, three P3 (§ 2's AMO box read backwards once ticked; § 3's Chrome step unordered against a staged submission; the Mainnet line omitted the Local Network). All fixed.
 - **A1 Codex r2** (resumed `01a1560f`): **clean**.
+- **A2 Codex r1** (gpt-6.1-sol, high, session `01a15635`; also the cross-arc pass): **findings**, one P2: the #385 condition kept in the plan records, and D5's "no other file names it" false. Accepted the false sentence (D5 and the asks reworded). Rejected the removal: #385 is a public, closed known-limit issue, not an advisory, and its disposition is posted from the row.
+- **A2 Opus review**: **findings**, four P3: `legal/README.md`'s decline line omitted the token-list gate; `nulo.sh/how-aztec-works`'s footer still read "preview build"; the banner tick cited a signature the new bullet lacks; D5. All fixed.
+- **A2 Codex r2** (resumed `01a15635`): one P3, "is posted on #385" while unposted; fixed. **r3**: **clean**.
+- **A2 Codex r4** (resumed `01a15635`, over the page-69 line, the records and the `dev` merge): **clean**.
 
 ## Seeds
 

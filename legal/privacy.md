@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.5 — effective «FILL: effective date»**
+**Version 1.2.5 — effective 25 October 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -456,7 +456,7 @@ described in § 5.
 | 1.1.1 | 6 October 2026 | Updated the address for reporting security vulnerabilities. |
 | 1.2 | 13 October 2026 | The wallet downloads its list of default tokens from `tokens.nulo.sh` (§ 5.11). |
 | 1.2.1 | 15 October 2026 | The explorer is disabled in Settings → Privacy, not Settings → Advanced (§ 5.3). |
-| 1.2.2 | «FILL: effective date» | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |
-| 1.2.3 | «FILL: effective date» | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
-| 1.2.4 | «FILL: effective date» | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
-| 1.2.5 | «FILL: effective date» | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
+| 1.2.2 | 25 October 2026 | The token-list and price requests bypass the browser's HTTP cache, and the price request carries no cookies and no referrer (§§ 5.2, 5.11). |
+| 1.2.3 | 25 October 2026 | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
+| 1.2.4 | 25 October 2026 | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
+| 1.2.5 | 25 October 2026 | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
