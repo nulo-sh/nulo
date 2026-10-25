@@ -16,7 +16,7 @@ Codex consult (gpt-6.1-sol, high, read-only): the split is right, high confidenc
 
 ## 2026-10-25 · Mutation pass
 
-Each check A1 adds or touches was broken by a one-site scratch edit. The relevant suite then ran (all of `WC/`; the narrowest `P/` files first, then `P/service.integration.test.ts`), the red tests were recorded, and the file was restored from memory. The runner and its 59 edits live in the scratch directory, outside the tree. Round 1: 51 caught, 7 survived, 1 equivalent. A test was added for each survivor, and the survivors were re-run: all caught. Final: 58 of 58 non-equivalent mutations caught; the pass is re-run in full on the final head (section below).
+Each check A1 adds or touches was broken by a one-site scratch edit. The relevant suite then ran (all of `WC/`; the narrowest `P/` files first, then `P/service.integration.test.ts`), the red tests were recorded, and the file was restored from memory. The runner and its 59 edits live in the scratch directory, outside the tree. Round 1: 51 caught, 7 survived, 1 equivalent. A test was added for each survivor, and the survivors were re-run: all caught. After the fixes, 58 of 58 non-equivalent mutations were caught. The pass was re-run in full on the final head; see the final section below.
 
 | id | mutation | caught by (one named red test) |
 |---|---|---|
@@ -80,3 +80,20 @@ What the survivors had in common: the existing suites proved each refusal at one
   - two delegate comments and a stale tag in a comment A1 re-indented.
   Committed as `43205d984` and `389b5cb5b`. Rejected: none.
 - Mutations added for these, run against the new tests: C11 (the class keeps `type`), O13 (`exportImportedKeysDek` opens the DEK before the slots), Z1–Z10 (each wipe in `openSlots`, `OpenedSlots.wipe`, `decodeRestoreMaterial` and `openProfileSlots`). Z5 and Z8 survived the first run: the refused inputs were zero bytes already, so a missed wipe looked the same as a wipe. With non-zero inputs, all 13 are caught.
+
+## 2026-10-25 · Review rounds 2 and 3, and the final mutation pass
+
+- Codex round 2 (resumed): approve, both points verified and accepted (`1476a4d84`). The wipe test pinned exact buffer counts (1, 3, or 5 for the password change, which also reopens what it resealed): that is the implementation's allocations, not the wipe contract, so it now checks a lower bound and that every captured buffer is zero. The README said V8 pins `ENCRYPTION_GUARD`; V8 pins `PASSKEY_PRF_LABEL`, and the guard's pin is the canary in `password-secret-box.test.ts`.
+- Codex round 3 (resumed): approve, no new finding. Converged in three rounds.
+- Final mutation pass on `1476a4d84`, all 71 mutations: 70 caught, 1 equivalent (O12). The 59 of round 1 plus C11, O13 and Z1–Z10:
+
+| id | mutation | caught by |
+|---|---|---|
+| C11 | the password class keeps `type` | `P/profile-row.test.ts` › sorts each row a build writes into its own kind, carrying only the fields it checked |
+| O13 | `exportImportedKeysDek` opens the DEK before the slots | `P/service.open-slots.test.ts` › … reaches no decryptor on any password path |
+| Z1 | `openSlots` keeps the passhash when the slots refuse | › the passhash, master and entropy it opens are zero once each path returns, refused or not |
+| Z2–Z4 | `OpenedSlots.wipe` keeps the master / entropy / passhash | › same |
+| Z5–Z8 | each `decodeRestoreMaterial` refusal keeps a buffer it decoded | `P/restore-material.test.ts` › refuses …, wiping what it decoded |
+| Z9 | `openProfileSlots` keeps a master it does not hand back | `WC/profile-slots.test.ts` › what it opened is wiped when a later slot fails, and the guard always |
+| Z10 | `openProfileSlots` keeps the opened guard | › same |
+
