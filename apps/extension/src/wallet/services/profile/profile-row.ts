@@ -33,7 +33,10 @@ export type ClassifiedProfileRow =
 /** Sorts a decoded row before any of its sealed fields is read; never throws. */
 export function classifyProfileRow(raw: unknown): ClassifiedProfileRow {
 	const password = PasswordUnlock.safeParse(raw)
-	if (password.success) return { kind: "password", slots: password.data }
+	if (password.success) {
+		const { type: _type, ...slots } = password.data
+		return { kind: "password", slots }
+	}
 	const passkey = PasskeyUnlock.safeParse(raw)
 	if (passkey.success) return { kind: "passkey", credentialId: passkey.data.credentialId }
 	return { kind: "unreadable" }

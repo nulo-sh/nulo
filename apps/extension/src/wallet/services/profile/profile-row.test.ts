@@ -23,7 +23,7 @@ describe("classifyProfileRow", () => {
 	test("sorts each row a build writes into its own kind, carrying only the fields it checked", async () => {
 		const password = await passwordRow()
 		expect(ProfileRowSchema.safeParse(password).success).toBe(true)
-		expect(classifyProfileRow(password)).toStrictEqual({ kind: "password", slots: { type: "password", ...slots } })
+		expect(classifyProfileRow(password)).toStrictEqual({ kind: "password", slots })
 		const passkey = passkeyRow()
 		expect(ProfileRowSchema.safeParse(passkey).success).toBe(true)
 		expect(classifyProfileRow(passkey)).toStrictEqual({ kind: "passkey", credentialId: "Y3JlZA==" })

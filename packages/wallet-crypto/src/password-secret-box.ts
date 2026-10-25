@@ -153,14 +153,10 @@ export class PasswordSecretBox {
 		}
 	}
 
-	/** Encrypt GUARD + secret + entropy under the given key. Shared between `seal` and `reseal`. */
 	private sealInternal(key: EncryptionKey, secret: MasterSecretBytes, entropy: Uint8Array<ArrayBuffer>): Promise<EncryptedProfileSecret> {
 		return sealProfileSlots(passwordCipher(key), secret, entropy)
 	}
 
-	/** Decrypt GUARD and verify; decrypt secret + entropy. Shared between `unseal`,
-	 *  `unsealWithPasshash`, and `reseal`. Returns null on any
-	 *  wrong-password / corrupted-ciphertext condition. */
 	private unsealInternal(
 		key: EncryptionKey,
 		encrypted: EncryptedProfileSecret,

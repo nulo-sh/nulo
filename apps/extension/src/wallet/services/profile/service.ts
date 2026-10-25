@@ -827,7 +827,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				}
 				// Degradation state machine, rule 2: a DEK-unseal failure OR an envelope-MAC
 				// v3 failure opens DERIVED-ONLY — imported accounts quarantine per-account
-				// (A4: imported material must never profile-block derived funds; blocking
+				// (imported material must never profile-block derived funds; blocking
 				// here would hand a storage-writer a one-field DoS lever), a user-visible
 				// warning fires (the popup listens on onImportedKeysDegraded — never just a
 				// log), and NO bearer is persisted (open() enforces that from the absent dek).

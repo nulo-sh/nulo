@@ -15,13 +15,16 @@ Depends only on `wallet-core` for the `ILogger` interface and `Web Crypto` (avai
 | Path | Purpose |
 |---|---|
 | `src/encryption-key.ts` | `EncryptionKey` — PBKDF2 (SHA-256, 600k iterations) + AES-GCM framed ciphertext. The 1-byte version frame lets future formats coexist. |
-| `src/password-secret-box.ts` | `PasswordSecretBox` — password-based wrap around `EncryptionKey`, with no storage or session state. Its `passhash` is an unsalted SHA-256 of the password: password-equivalent, held in memory only, never persisted. |
+| `src/profile-slots.ts` | The `guard` / `secret` / `entropy` slots every profile row carries, sealed under the row's unlock: `ENCRYPTION_GUARD` (frozen by the V8 vector), the purpose AADs `PROFILE_AAD`, the guard check. A null on open means a wrong key or a corrupted or moved slot. |
+| `src/password-secret-box.ts` | `PasswordSecretBox` — the profile slots as `EncryptionKey` frames under a password, with no storage or session state. Its `passhash` is an unsalted SHA-256 of the password: password-equivalent, held in memory only, never persisted. |
 | `src/session-secret-box.ts` | `SessionSecretBox` — the lenient-mode silent-restore bearer: the master secret and the imported-keys key in one AES-256-GCM frame under a key HKDF-derived from a fresh random token, bound to the profile id. The session record holds nothing derived from the password. |
+| `src/passkey-unlock-key.ts` | `derivePasskeyUnlockKey` — HKDF-SHA256 over a passkey's 32-byte PRF output with the profile's own 32-byte `prfSalt`, into a non-extractable AES-256-GCM key; `newPrfSalt`. |
+| `src/passkey-secret-box.ts` | `sealPasskeySlots` / `openPasskeySlots` — the profile slots as `aes-gcm-frame` frames under a passkey unlock key. |
 | `src/passkey-credential.ts` | `PasskeyCredential` — WebAuthn PRF → HKDF master-secret. Exposes `recoverFromCredentialData()` for the in-page modal Path A flow. |
 | `src/backup-mac.ts` | `computeBackupMac` / `verifyBackupMac` — a passkey backup's check: HMAC-SHA256 over the body's checksum under `PasskeyCredential.deriveBackupMacKey()` (`nulo:backup-mac:v1`). |
 | `src/aes-gcm-frame.ts` | `sealFrame` / `openFrame` — the `version ‖ IV ‖ ciphertext` AES-GCM frame every DEK-rooted box and the row seal share, random 96-bit IV per seal. |
 | `src/row-seal.ts` | `deriveRowKeys` / `sealRow` / `openRow` / `keyedSegment` — the per-profile row-seal keys (HKDF over the master, bound to the profile's incarnation) and the AAD binding a sealed row to its root, storage key and profile. |
-| `src/constants.ts` | `ENCRYPTION_GUARD` (frozen by the V8 vector), `PASSKEY_PRF_LABEL`. |
+| `src/constants.ts` | `PASSKEY_PRF_LABEL`. |
 | `src/zeroize.ts` | `zeroize()` helper for explicit secret-buffer wipes. |
 | `src/index.ts` | Public exports. |
 | `src/public.ts` | The npm surface (`@nulo-sh/wallet-crypto`): `deriveNuloAccountKeys`, `deriveSigningKeyFromSeed`, `EncryptionKey`, `type Passhash`. Staged by [`scripts/publish/`](../../scripts/publish/README.md); widening it widens a published API. |
@@ -56,7 +59,7 @@ Treat that file as a contract. **A vector/KDF change is NOT an ordinary storage 
 
 ## Key invariants
 
-- **`ENCRYPTION_GUARD`** (`src/constants.ts`) is the V8-vector-frozen GCM associated-data tag. Changing it bricks every existing wallet.
+- **`ENCRYPTION_GUARD`** and **`PROFILE_AAD`** (`src/profile-slots.ts`) are the guard plaintext, frozen by the V8 vector, and the slots' AES-GCM associated data. Changing either bricks every existing wallet.
 - **`ROW_SEAL_LABELS`** and the row AAD (`src/row-seal.ts`) are frozen by V12, the shared frame by V13. Changing one hides every sealed row of every profile.
 - **Buffer ownership.** Secret material is allocated as `Uint8Array<ArrayBuffer>`, never `Buffer`. Callers own the lifecycle and call `zeroize()` on drop. The package never mutates a buffer it didn't allocate, and never returns a buffer it expects to keep alive.
 - **`PasswordSecretBox.seal()` and `unseal()` are not symmetric across the passhash boundary.** `seal()` produces both an `EncryptedProfileSecret` (the on-disk record) and a `passhash`, which callers use in memory and wipe; it is never persisted (the silent-restore bearer is `SessionSecretBox`). `unsealWithPasshash()` and `unseal(password, …)` produce the same plaintext via different routes; both must remain in lock-step with the V2/V8 vectors.
