@@ -1,10 +1,7 @@
 <script setup>
-/**
- * Method-selection list shown on the import page when no import method is
- * selected yet. Three entries; passkey is fired immediately as an event,
- * the others set the import option in the parent.
- */
-const emit = defineEmits(["select", "passkey"])
+/** Method-selection list shown on the import page when no import method is selected yet; each entry
+ *  sets the import option in the parent. */
+const emit = defineEmits(["select"])
 
 const props = defineProps({
 	type: { type: String, default: "import" }, // "import" | "recovery"
@@ -22,12 +19,6 @@ const props = defineProps({
 				chevron
 			/>
 			<SettingItem @click="emit('select', 'seed')" data-testid="import-option-seed" title="Recovery Phrase" chevron />
-			<SettingItem
-				@click="emit('passkey')"
-				data-testid="import-option-passkey"
-				title="Passkey"
-				chevron
-			/>
 		</ItemsContainer>
 	</div>
 </template>

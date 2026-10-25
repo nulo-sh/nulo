@@ -89,7 +89,12 @@ const passkeyProfile = (id = "pid"): Profile & { type: "passkey" } => ({
 	pxeGeneration: "gen-test",
 	dekSealed: "ZGVrLXNlYWxlZA==",
 	walletFingerprint: "fp-test",
+	guard: "Z3VhcmQ=",
+	secret: "c2VjcmV0",
+	entropy: "ZW50cm9weQ==",
+	envelopeMac: "bWFj",
 	credentialId: "cred-123",
+	prfSalt: "c2FsdA==",
 })
 
 /** 32-byte secret buffer; Fr-reducible. */

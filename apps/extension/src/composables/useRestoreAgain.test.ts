@@ -235,24 +235,49 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(store.get(KEY)).toEqual(before)
 	})
 
-	test("a passkey body with no check, even the one the reminder names, shows the import's words", async () => {
-		const body = await buildBackup({ data: { profile: { id: "src", name: "Daily", type: "passkey" } } })
-		await armRestoreOutcome("p1", body.checksum, ["N1", "N2"])
-		const { opts } = makeOpts()
-		const page = useRestoreAgain(opts)
-		await page.start()
-		page.selectedBackup.value = { name: "b.json", backup: body, kind: "plain", profileType: "passkey" }
-		const before = structuredClone(store.get(KEY))
+	// The body a passkey profile exported before 1.1 has no recovery phrase: even the one the reminder
+	// names is refused, at the pick, at the decrypt and at Import, before anything is offered or written.
+	describe("an earlier passkey body, even the one the reminder names", () => {
+		const EARLIER = ["full_backup", "Backup from an earlier version", expect.stringMatching(/earlier version of Nulo/)] as const
 
-		await page.restoreBackup()
+		async function armed() {
+			const body = await buildBackup({ data: { profile: { id: "src", name: "Daily", type: "passkey" } } })
+			await armRestoreOutcome("p1", body.checksum, ["N1", "N2"])
+			const { opts } = makeOpts()
+			const page = useRestoreAgain(opts)
+			await page.start()
+			return { body, opts, page, before: structuredClone(store.get(KEY)) }
+		}
 
-		expect(opts.fillError).toHaveBeenCalledWith(
-			"full_backup",
-			"Backup cannot be restored",
-			"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
-		)
-		expect(accountStateClient.restore).not.toHaveBeenCalled()
-		expect(store.get(KEY)).toEqual(before)
+		test("is refused at Import", async () => {
+			const { body, opts, page, before } = await armed()
+			page.selectedBackup.value = { name: "b.json", backup: body, kind: "plain", profileType: "passkey" }
+			await page.restoreBackup()
+			expect(opts.fillError).toHaveBeenCalledWith(...EARLIER)
+			expect(accountStateClient.restore).not.toHaveBeenCalled()
+			expect(store.get(KEY)).toEqual(before)
+		})
+
+		test("is refused at the pick and never offered", async () => {
+			const { body, opts, page, before } = await armed()
+			opts.pickFile.mockResolvedValue(new File([JSON.stringify(body)], "b.json", { type: "application/json" }) as never)
+			await page.pickBackupFile()
+			expect(page.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "b.json", backup: null, profileType: null })
+			expect(opts.fillError).toHaveBeenCalledExactlyOnceWith(...EARLIER)
+			expect(opts.clearError).not.toHaveBeenCalled()
+			expect(store.get(KEY)).toEqual(before)
+		})
+
+		test("is refused when its file password opens it, and never offered", async () => {
+			const { body, opts, page, before } = await armed()
+			const sealed = await sealFullBackupText(JSON.stringify(body), "pass1234")
+			page.selectedBackup.value = { name: "b.txt", backup: sealed, kind: "sealed", profileType: null }
+			page.decryptionPassword.value = "pass1234"
+			await page.decryptBackup()
+			expect(page.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "b.txt", backup: null, profileType: null })
+			expect(opts.fillError).toHaveBeenCalledExactlyOnceWith(...EARLIER)
+			expect(store.get(KEY)).toEqual(before)
+		})
 	})
 
 	test("a tampered body shows the integrity message", async () => {

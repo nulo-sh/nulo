@@ -121,6 +121,8 @@ export const REDACTED_KEYS: ReadonlySet<string> = new Set([
 	"passhash",
 	"passphrase",
 	"prf",
+	"prfSalt",
+	"prf-salt",
 	// Aztec-side secrets that reach us through the bridge/runtime types.
 	"claimSecret",
 	"claim-secret",

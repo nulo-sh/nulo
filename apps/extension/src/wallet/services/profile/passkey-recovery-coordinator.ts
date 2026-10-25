@@ -1,109 +1,51 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
- * `PasskeyRecoveryCoordinator` — passkey-side half of the profile flow.
+ * `PasskeyRecoveryCoordinator` — the passkey side of the profile flow: one shape for a passkey
+ * answer whichever host ran the prompt.
  *
- * Wraps the lower-level `PasskeyService` with a wallet-level semantic
- * interface:
- *   - Create a passkey credential bound to a new profile.
- *   - Recover the master secret from an existing credential (by id for
- *     the unlock path, or without one for the import path).
+ *   - PATH A: the page ran the prompt and hands over its `PasskeyCredentialData`.
+ *   - PATH B: the passkey window runs it (`PasskeyService.createKey` / `getKey`), and the answer
+ *     comes with the `finish` that tells the window how the step ended.
  *
- * Pure coordinator: no storage, no session state, no passwords, no
- * locking. The facade serializes cross-collaborator workflows.
+ * Pure coordinator: no storage, no session state, no passwords, no locking. The facade serializes
+ * cross-collaborator workflows.
  *
  * ## Lock scope contract
  *
- * WebAuthn prompts take up to 3 minutes (the user must physically touch
- * the authenticator). The `ProfileService` lock has a 5-minute safety
- * force-release; holding it across a WebAuthn prompt is legal in theory
- * but pathological in practice. Every passkey path follows the same
- * shape: **callers MUST run the prompt unlocked**, then re-enter the
- * lock for storage writes. The coordinator itself is lock-agnostic and
- * makes no locking assumptions. `service.ts:221-274` shows the
- * snapshot → unlocked-prompt → revalidate-under-lock pattern.
+ * WebAuthn prompts take up to 3 minutes (the user must physically touch the authenticator). The
+ * `ProfileService` lock has a 5-minute safety force-release; holding it across a WebAuthn prompt is
+ * legal in theory but pathological in practice. Every passkey path follows the same shape:
+ * **callers MUST run the prompt unlocked**, then re-enter the lock for storage writes.
  */
 
-import type { ILogger } from "@/wallet/logger"
+import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { PasskeyHandOver, PasskeyService } from "@/wallet/services/passkey/service"
-import type { Base64CredentialId, HexUserHandle, MasterSecretBytes, PasskeyCredential, PasskeyCredentialData } from "@nulo/wallet-crypto"
+import type { PasskeyCredential, PasskeyCredentialData } from "@nulo/wallet-crypto"
 
-/** Shape returned by create / import paths — everything the facade
- *  needs to persist a passkey Profile + open the first session.
- *
- *  `secret` is the canonical Fr-reduced master-key bytes as returned by
- *  `PasskeyCredential.deriveMasterSecret()`. It is a raw byte buffer,
- *  not an `Fr` instance — `SessionManager.open()` consumes a buffer
- *  directly, so there is no reason to round-trip through `Fr`. */
-export type PasskeyRecovery = {
-	credentialId: Base64CredentialId
-	secret: MasterSecretBytes
-	/** The AES-GCM wrap key for the imported-keys DEK slot, derived while the credential is
-	 *  transiently alive (same HKDF extract as the master, distinct expand — see
-	 *  `PasskeyCredential.deriveDekWrapKey`). Non-extractable; nothing to zeroize. */
-	dekWrapKey: CryptoKey
-	/** Optional because WebAuthn `get` may omit userHandle. */
-	userHandle?: HexUserHandle
+/** A passkey answer: its unlock key is bound to the PRF input the passkey evaluated
+ *  (`PasskeyCredential.unlockKeyFor`). */
+export type PasskeyAnswer = {
+	credential: PasskeyCredential
 	/** PATH B: tells the passkey window how the step ended. PATH A ran no window. */
 	finish?: PasskeyHandOver["finish"]
 }
 
 export class PasskeyRecoveryCoordinator {
-	public constructor(
-		private readonly passkeys: PasskeyService,
-		private readonly logger: ILogger,
-	) {}
+	public constructor(private readonly passkeys: PasskeyService) {}
 
-	/** Bind a new passkey credential to a freshly-chosen profile id +
-	 *  derive the master secret from the PRF output. Caller (the
-	 *  facade) pre-picked `profileId` via `ProfileRepository.generateUniqueId()`
-	 *  and will re-verify it under the lock after this returns. */
-	public async createForNewProfile(profileId: string, name: string): Promise<PasskeyRecovery> {
-		return this.toRecovery(await this.passkeys.createKey(profileId, name))
+	/** PATH B create of a new credential, evaluating the PRF at `prfSalt`. */
+	public createInWindow(userHandle: string, prfSalt: string, display: PasskeyDisplay): Promise<PasskeyAnswer> {
+		return this.passkeys.createKey(userHandle, prfSalt, display)
 	}
 
-	/** Unlock an existing passkey profile by credentialId. Returns the full recovery
-	 *  shape (credentialId echoes the request, userHandle may differ
-	 *  from what the caller had, secret is the PRF-derived master). */
-	public async recoverByCredentialId(credentialId: string, profileName: string): Promise<PasskeyRecovery> {
-		return this.toRecovery(await this.passkeys.getKey(credentialId, { step: "unlock", profileName }))
+	/** PATH B `get` bound to `credentialId`, evaluating the PRF at `prfSalt`. */
+	public getInWindow(credentialId: string, prfSalt: string, display: PasskeyDisplay): Promise<PasskeyAnswer> {
+		return this.passkeys.getKey(credentialId, prfSalt, display)
 	}
 
-	/** Import an existing passkey with no credentialId pre-known (used by
-	 *  `importPasskey`). WebAuthn's `get` with no allowedCredentials
-	 *  returns whichever credential the user selects. */
-	public async recoverUnknown(profileName: string): Promise<PasskeyRecovery> {
-		return this.toRecovery(await this.passkeys.getKey(undefined, { step: "import", profileName }))
-	}
-
-	/** PATH A — caller (popup) has already collected `PasskeyCredentialData`
-	 *  via the in-page WebAuthn ceremony. Materialize the credential
-	 *  SW-side and derive the master secret. Equivalent to
-	 *  `createForNewProfile` / `recoverByCredentialId` / `recoverUnknown`
-	 *  except no window is opened — the caller drove the ceremony.
-	 *
-	 *  The ceremony mode that was run is implicit in `data`:
-	 *    - `mode: "create"` → `data.userHandle` is the new profile id
-	 *    - `mode: "get"` → `data.userHandle` echoes whatever WebAuthn
-	 *      returned (may be undefined). */
-	public async recoverFromCredentialData(data: PasskeyCredentialData): Promise<PasskeyRecovery> {
-		return this.toRecovery({ credential: await this.passkeys.materializeCredential(data) })
-	}
-
-	/** A step that fails before it has a secret still owes the passkey window its outcome. */
-	private async toRecovery({
-		credential,
-		finish,
-	}: {
-		credential: PasskeyCredential
-		finish?: PasskeyHandOver["finish"]
-	}): Promise<PasskeyRecovery> {
-		try {
-			const secret = await credential.deriveMasterSecret()
-			const dekWrapKey = await credential.deriveDekWrapKey()
-			return { credentialId: credential.id, secret, dekWrapKey, userHandle: credential.userHandle, finish }
-		} catch (err) {
-			finish?.("failed")
-			throw err
-		}
+	/** PATH A: the page's answer, materialized here. Throws when the output or its input is not
+	 *  32 bytes. */
+	public async fromCredentialData(data: PasskeyCredentialData): Promise<PasskeyAnswer> {
+		return { credential: await this.passkeys.materializeCredential(data) }
 	}
 }

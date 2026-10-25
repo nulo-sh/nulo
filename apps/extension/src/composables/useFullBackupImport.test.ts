@@ -22,16 +22,9 @@
  */
 import { type Ref, ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import {
-	asBase64CredentialId,
-	asBase64SecretPrf,
-	asHexUserHandle,
-	computeBackupMac,
-	EncryptionKey,
-	PasskeyCredential,
-	type PasskeyCredentialData,
-} from "@nulo/wallet-crypto"
-import { RpcDisconnectedError, SessionEndedError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import fc from "fast-check"
+import { EncryptionKey } from "@nulo/wallet-crypto"
+import { RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import {
 	AS_SENDER,
 	accountClient,
@@ -109,17 +102,22 @@ vi.mock("@/wallet/storage/migrations", async () => (await import("../../tests/he
 import {
 	refreshRestoredTokensStage,
 	relinkRestoredTokenBalances,
-	resolvePasskeyCredential,
 	restoreAccountsAndFilterOwnedSlices,
 	restoreAccountsStage,
 	restoredNetworkIds,
 	settleHeldAccounts,
 } from "./full-backup-restore"
 import { deferred } from "@nulo/wallet-core/utils"
-import { DECRYPTION_FAILED, errorLogWriters, useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import {
+	DECRYPTION_FAILED,
+	EARLIER_PASSKEY_BACKUP,
+	errorLogWriters,
+	refusedAsEarlierPasskey,
+	useFullBackupImport,
+	validateAndMigrateBackup,
+} from "./useFullBackupImport"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
-import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { ACCOUNT_STATE_SKIP_DEADLINE, ACCOUNT_STATE_SKIP_WRONG_NETWORK } from "@/wallet/services/account-state/normalize"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
@@ -579,11 +577,17 @@ describe("useFullBackupImport — isAllowedToImportBackup", () => {
 		expect(c.isAllowedToImportBackup.value).toBe(true)
 	})
 
-	it("bypasses the password rule for passkey-typed backups", () => {
-		const opts = makeOpts({ password: "", repeatedPassword: "" })
+	// A passkey profile's backup restores as a password profile, so it needs the new password too.
+	it.each([
+		["no password", "", "", false],
+		["a 7-character password", "1234567", "1234567", false],
+		["a mismatched repeat", "longenough", "mismatch12", false],
+		["an 8-character password", "12345678", "12345678", true],
+	])("a passkey-typed backup with %s is allowed only with a valid new password", (_label, password, repeatedPassword, allowed) => {
+		const opts = makeOpts({ password, repeatedPassword })
 		const c = useFullBackupImport(opts)
 		c.selectedBackup.value = { name: "x.json", backup: {}, kind: "plain", profileType: "passkey" }
-		expect(c.isAllowedToImportBackup.value).toBe(true)
+		expect(c.isAllowedToImportBackup.value).toBe(allowed)
 	})
 })
 
@@ -2084,63 +2088,27 @@ describe("useFullBackupImport — failure branches", () => {
 
 // ── Passkey ceremony branch (Path A handoff) ─────────────────────────────────
 
-describe("useFullBackupImport — passkey backup", () => {
-	const PASSKEY_CRED_ID = Buffer.from("cred-PK123").toString("base64")
-	const prf = (fill: number) => asBase64SecretPrf(Buffer.from(new Uint8Array(32).fill(fill)).toString("base64"))
-	const PASSKEY_DATA = {
-		id: asBase64CredentialId(PASSKEY_CRED_ID),
-		prf: prf(4),
-		userHandle: asHexUserHandle("src-profile-id"),
-	}
-	/** The same credential id answered by another passkey. */
-	const OTHER_PASSKEY = { ...PASSKEY_DATA, prf: prf(5) }
-	const macOf = async (checksum: string, credential: PasskeyCredentialData = PASSKEY_DATA) =>
-		computeBackupMac(await PasskeyCredential.create(credential), checksum)
+describe("useFullBackupImport — a passkey profile's backup", () => {
+	const PASSKEY_PROFILE = { id: "src-profile-id", name: "PK", type: "passkey" }
+	const EARLIER = [EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message] as const
 
-	async function buildPasskeyBackup(): Promise<Record<string, unknown> & { checksum: string }> {
-		// For passkey backups, `master-key` IS the credentialId (per
-		// `ProfileService.exportPlain`'s passkey return). The composable
-		// uses `master-key` as the runCeremony's credentialId so the
-		// modal targets the right key.
-		// Passkey blobs must NOT carry an entropy field (the composable rejects one).
-		const backup = await buildBackup({
-			"master-key": PASSKEY_CRED_ID,
-			entropy: undefined,
-			// Passkey blobs carry the SEALED dek blob instead of the plaintext carrier.
-			"imported-keys-dek": undefined,
-			"imported-keys-dek-sealed": "AZGVrLXNlYWxlZA==",
-			data: {
-				profile: { id: "src-profile-id", name: "PK", type: "passkey" },
-				account: [{ profileId: "src-profile-id", chainId: 1, address: "0xaaaa" }],
-				token: [],
-			},
+	/** The body every build from 1.1 writes for a passkey profile: the password body's fields. */
+	const passkeyBody = (overrides: Record<string, unknown> = {}) =>
+		buildBackup({ ...overrides, data: { profile: PASSKEY_PROFILE, ...((overrides.data as object) ?? {}) } })
+
+	/** A body as a passkey profile exported it before 1.1: the passkey-sealed key, no phrase, and
+	 *  optionally the passkey check. */
+	async function earlierBody(withCheck: boolean) {
+		const { checksum: _c, ...body } = await passkeyBody({
+			"master-key": Buffer.from("cred-PK123").toString("base64"),
+			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
 		})
-		return { ...backup, "backup-mac": await macOf(backup.checksum) }
+		const { entropy: _e, "imported-keys-dek": _d, ...earlier } = body
+		const checksum = await EncryptionKey.getHashHex(JSON.stringify(earlier))
+		return { ...earlier, checksum, ...(withCheck ? { "backup-mac": Buffer.alloc(32, 7).toString("base64") } : {}) }
 	}
 
-	/** The refusal's words, pinned: changing them is the owner's UI decision. */
-	const UNCHECKED_REFUSAL = [
-		"Backup cannot be restored",
-		"This passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
-	] as const
-
-	/** The body edited after export, its checksum recomputed and its MAC kept. */
-	async function editedPasskeyBackup(edit: (body: { data: Record<string, unknown> } & Record<string, unknown>) => void) {
-		const { checksum: _stale, "backup-mac": mac, ...body } = await buildPasskeyBackup()
-		edit(body as { data: Record<string, unknown> } & Record<string, unknown>)
-		return { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)), "backup-mac": mac }
-	}
-
-	function mountPasskeyImport(backup: unknown, answer: PasskeyCredentialData = PASSKEY_DATA) {
-		const runCeremony = vi.fn().mockResolvedValue(answer)
-		const opts = { ...makeOpts({ password: "" }), runCeremony }
-		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-		profileClient.restore.mockResolvedValue({ id: "new-id", name: "PK", type: "passkey" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
-		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
-		return { c, opts, runCeremony }
-	}
+	const fileOf = (body: unknown) => new File([JSON.stringify(body, null, 2)], "_Daily_1760000000.json", { type: "application/json" })
 
 	function expectNothingWritten() {
 		expect(profileClient.restore).not.toHaveBeenCalled()
@@ -2150,307 +2118,126 @@ describe("useFullBackupImport — passkey backup", () => {
 		expect(configClient.restore).not.toHaveBeenCalled()
 	}
 
-	it("a body its own passkey checked restores (control)", async () => {
-		const { c, opts } = mountPasskeyImport(await buildPasskeyBackup())
+	function mockCleanRestore() {
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "PK", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+	}
+
+	it("restores as a password profile under the new password, with no passkey prompt (control)", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const backup = await passkeyBody()
+		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
+		mockCleanRestore()
 		await c.restoreBackup()
 		expect(opts.fillError).not.toHaveBeenCalled()
-		expect(profileClient.restore).toHaveBeenCalledOnce()
+		expect(profileClient.restore).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ type: "passkey", name: "PK" }),
+			{ masterKey: backup["master-key"], entropy: backup.entropy, importedKeysDek: backup["imported-keys-dek"] },
+			opts.password.value,
+			undefined,
+		)
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", opts.password.value)
 		expect(c.restoreStatus.value).toBe("finished")
 	})
 
 	it.each([
-		["a MAC of another body", async (b: Record<string, unknown>) => ({ ...b, "backup-mac": await macOf("0".repeat(64)) })],
-		[
-			"a MAC another passkey made",
-			async (b: Record<string, unknown>) => ({ ...b, "backup-mac": await macOf(b.checksum as string, OTHER_PASSKEY) }),
-		],
-		["a MAC that is not base64", async (b: Record<string, unknown>) => ({ ...b, "backup-mac": "not base64!" })],
-	])("%s is refused after the passkey answers, before anything is written", async (_label, doctor) => {
-		const { c, opts, runCeremony } = mountPasskeyImport(await doctor(await buildPasskeyBackup()))
-		await c.restoreBackup()
-		expect(runCeremony).toHaveBeenCalledOnce()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
-		expect(c.restoreStatus.value).toBe("failed")
-		expectNothingWritten()
-	})
-
-	it("a body another passkey answers for is refused", async () => {
-		const { c, opts } = mountPasskeyImport(await buildPasskeyBackup(), OTHER_PASSKEY)
-		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
-		expectNothingWritten()
-	})
-
-	it.each([
-		[
-			"a token",
-			(b: { data: Record<string, unknown> }) => {
-				b.data.token = [{ id: 1, chainId: 1, contract: `0x${"cd".repeat(32)}`, name: "Tether", symbol: "USDT", decimals: 2 }]
-			},
-		],
-		[
-			"a contact",
-			(b: { data: Record<string, unknown> }) => {
-				b.data.contact = [{ id: "c1", name: "Savings", address: `0x${"ef".repeat(32)}` }]
-			},
-		],
-		[
-			"a setting",
-			(b: { data: Record<string, unknown> }) => {
-				b.data.config = [{ key: "stealthMode", value: false }]
-			},
-		],
-		[
-			"the active chain",
-			(b: Record<string, unknown>) => {
-				b["active-chain-id"] = 31337
-			},
-		],
-	])("a body with %s changed and its checksum recomputed writes nothing", async (_label, edit) => {
-		const { c, opts } = mountPasskeyImport(await editedPasskeyBackup(edit as never))
-		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
-		expectNothingWritten()
-	})
-
-	it.each([
-		["no MAC", undefined],
-		["a MAC that is not a string", 42],
-	])("a passkey body with %s is refused before any prompt, with the way back", async (_label, mac) => {
-		const { c, opts, runCeremony } = mountPasskeyImport({ ...(await buildPasskeyBackup()), "backup-mac": mac })
-		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
-		expect(runCeremony).not.toHaveBeenCalled()
-		expectNothingWritten()
-	})
-
-	/** The exporter's field order and layout; `withCheck` adds the MAC. */
-	async function exportedPasskeyFile(withCheck: boolean): Promise<File> {
-		const profileId = "9f2c4e1ab37d4f60"
-		const body = {
-			"wallet-version": "0.31.0",
-			"aztec-version": "6.0.0-rc.3",
-			"compat-epoch": 5,
-			"backup-schema-version": 1,
-			"master-key": PASSKEY_CRED_ID,
-			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
-			"active-chain-id": 3415328944,
-			data: {
-				profile: { id: profileId, name: "Daily", type: "passkey" },
-				account: [
-					{
-						address: WIRE_ADDRESS,
-						profileId,
-						chainId: 3415328944,
-						l1ChainId: 11155111,
-						name: "Account 1",
-						index: 0,
-						type: 0,
-						visible: true,
-					},
-				],
-				token: [],
-				contact: [{ id: "c-7d1e", profileId, name: "Savings", address: `0x${"2e".repeat(32)}` }],
-				config: [{ key: "stealthMode", value: false }],
-			},
-		}
-		const checksum = await EncryptionKey.getHashHex(JSON.stringify(body))
-		const file = { ...body, checksum, ...(withCheck ? { "backup-mac": await macOf(checksum) } : {}) }
-		return new File([JSON.stringify(file, null, 2)], "_Daily_1760000000.json", { type: "application/json" })
-	}
-	const WIRE_ADDRESS = `0x${"1f".repeat(32)}`
-
-	it.each([
-		["with no check, as 0.31.0 wrote every one, is refused before any prompt with the way back", false],
-		["with its check reaches the passkey prompt (control)", true],
-	])("a passkey file picked from disk %s", async (_label, withCheck) => {
-		const { c, opts, runCeremony } = mountPasskeyImport(null)
-		accountClient.restore.mockResolvedValue([{ address: WIRE_ADDRESS }])
-		opts.pickFile.mockResolvedValue(await exportedPasskeyFile(withCheck))
+		["with its check", true],
+		["with no check, as 0.31.0 wrote every one", false],
+	])("an earlier passkey file picked from disk %s is refused at the pick, before it is offered", async (_label, withCheck) => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		opts.pickFile.mockResolvedValue(fileOf(await earlierBody(withCheck)))
 		await c.pickBackupFile()
-		expect(c.selectedBackup.value).toMatchObject({ kind: "plain", profileType: "passkey" })
-		await c.restoreBackup()
-		if (withCheck) {
-			expect(runCeremony).toHaveBeenCalledOnce()
-			expect(opts.fillError).not.toHaveBeenCalled()
-			return
-		}
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
-		expect(runCeremony).not.toHaveBeenCalled()
-		expectNothingWritten()
-	})
-
-	it("a passkey body of a retired generation without its check keeps the incompatible-version words", async () => {
-		const { checksum: _stale, "backup-mac": _mac, ...body } = await buildPasskeyBackup()
-		const retired = { ...body, "compat-epoch": 4 }
-		const { c, opts, runCeremony } = mountPasskeyImport({
-			...retired,
-			checksum: await EncryptionKey.getHashHex(JSON.stringify(retired)),
+		expect(c.selectedBackup.value).toStrictEqual({
+			kind: "unreadable",
+			name: "_Daily_1760000000.json",
+			backup: null,
+			profileType: null,
 		})
+		expect(opts.fillError).toHaveBeenCalledExactlyOnceWith("full_backup", ...EARLIER)
+		expect(c.isAllowedToImportBackup.value).toBe(false)
 		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Incompatible backup", expect.stringMatching(/Re-export a backup/))
-		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})
 
-	it.each([
-		["keeps its check through the seal and restores (control)", true],
-		["whose check was stripped before the seal is refused before any prompt", false],
-	])("an encrypted passkey file %s", async (_label, keepMac) => {
-		const { "backup-mac": mac, ...body } = await buildPasskeyBackup()
-		const sealed = await sealFullBackupText(JSON.stringify(keepMac ? { ...body, "backup-mac": mac } : body), "pass1234")
-		const { c, opts, runCeremony } = mountPasskeyImport(sealed)
+	it("an earlier passkey file under a file password is refused when it opens, before it is offered", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const sealed = await sealFullBackupText(JSON.stringify(await earlierBody(true)), "pass1234")
 		c.selectedBackup.value = { name: "x.txt", backup: sealed, kind: "sealed", profileType: null }
 		c.decryptionPassword.value = "pass1234"
 		await c.decryptBackup()
-		expect(c.selectedBackup.value?.profileType).toBe("passkey")
+		expect(c.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "x.txt", backup: null, profileType: null })
+		expect(opts.fillError).toHaveBeenCalledExactlyOnceWith("full_backup", ...EARLIER)
+		expect(opts.clearError).not.toHaveBeenCalled()
 		await c.restoreBackup()
-		if (keepMac) {
-			expect(opts.fillError).not.toHaveBeenCalled()
-			expect(profileClient.restore).toHaveBeenCalledOnce()
-			return
-		}
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...UNCHECKED_REFUSAL)
-		expect(runCeremony).not.toHaveBeenCalled()
 		expectNothingWritten()
 	})
 
-	it("a password body restores with no MAC field", async () => {
+	// Integrity, epoch and range run first, so a damaged or retired earlier body keeps their words.
+	it.each<[string, (body: Record<string, unknown>) => Promise<Record<string, unknown>>, string]>([
+		["a broken checksum", async (b) => ({ ...b, checksum: "0".repeat(64) }), "Backup Integrity Check Failed"],
+		[
+			"a retired generation",
+			async ({ checksum: _c, "backup-mac": _m, ...b }) => {
+				const retired = { ...b, "compat-epoch": 4 }
+				return { ...retired, checksum: await EncryptionKey.getHashHex(JSON.stringify(retired)) }
+			},
+			"Incompatible backup",
+		],
+	])("an earlier passkey body with %s keeps that refusal's words", async (_label, doctor, title) => {
+		const r = await validate(await doctor(await earlierBody(true)))
+		expect(r).toMatchObject({ kind: "rejected", title })
+	})
+
+	it("a new passkey body selected some other way is still refused at Import, before anything is written", async () => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = { name: "x.json", backup: await earlierBody(false), kind: "plain", profileType: "passkey" }
+		await c.restoreBackup()
+		expect(opts.fillError).toHaveBeenCalledWith("full_backup", ...EARLIER)
+		expectNothingWritten()
+	})
+
+	it("over generated bodies, every earlier passkey shape is refused and nothing else is", async () => {
+		const value = fc.oneof(fc.string(), fc.integer(), fc.constant(null), fc.boolean(), fc.array(fc.string(), { maxLength: 2 }))
+		const shape = fc.record(
+			{
+				check: fc.option(value, { nil: undefined }),
+				sealed: fc.option(value, { nil: undefined }),
+				entropy: fc.option(value, { nil: undefined }),
+				type: fc.constantFrom("password", "passkey"),
+			},
+			{ requiredKeys: ["type"] },
+		)
+		await fc.assert(
+			fc.asyncProperty(shape, async ({ check, sealed, entropy, type }) => {
+				const { checksum: _c, entropy: _e, ...base } = await buildBackup({ data: { profile: { ...PASSKEY_PROFILE, type } } })
+				const body = JSON.parse(
+					JSON.stringify({ ...base, entropy, ...(sealed === undefined ? {} : { "imported-keys-dek-sealed": sealed }) }),
+				)
+				const file = { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
+				if (check !== undefined) file["backup-mac"] = check
+				const earlier = type === "passkey" && (check !== undefined || sealed !== undefined || typeof body.entropy !== "string")
+				expect((await validate(file)) === EARLIER_PASSKEY_BACKUP).toBe(earlier)
+				expect(await refusedAsEarlierPasskey(file)).toBe(earlier)
+			}),
+			{ numRuns: 300 },
+		)
+	})
+
+	it("a password body restores with no check field (control)", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
 		const backup = await buildBackup()
 		expect("backup-mac" in backup).toBe(false)
 		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "password" }
-		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Imported", type: "password" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
-		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+		mockCleanRestore()
 		await c.restoreBackup()
 		expect(opts.fillError).not.toHaveBeenCalled()
 		expect(c.restoreStatus.value).toBe("finished")
-	})
-
-	it("runs the ceremony for passkey backups and passes credentialData to restore", async () => {
-		const runCeremony = vi.fn().mockResolvedValue(PASSKEY_DATA)
-		const opts = { ...makeOpts({ password: "" }), runCeremony }
-		const c = useFullBackupImport(opts)
-		const backup = await buildPasskeyBackup()
-		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-
-		profileClient.restore.mockResolvedValue({ id: "new-id", name: "PK", type: "passkey" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
-		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
-
-		await c.restoreBackup()
-
-		expect(runCeremony).toHaveBeenCalledWith({ mode: "get", credentialId: PASSKEY_CRED_ID, step: "restore", profileName: "PK" })
-		expect(profileClient.restore).toHaveBeenCalledWith(
-			expect.objectContaining({ type: "passkey" }),
-			{ type: "passkey", credentialId: PASSKEY_CRED_ID, dekSealed: "AZGVrLXNlYWxlZA==" },
-			"", // empty password for passkey
-			PASSKEY_DATA, // credentialData forwarded
-			undefined, // allowDuplicate: no confirmed override on the happy path
-		)
-		expect(opts.completeImport).toHaveBeenCalledOnce()
-	})
-
-	it("UserRejectedError from the ceremony silently resets state (no toast, no fillError)", async () => {
-		const runCeremony = vi.fn().mockRejectedValue(new UserRejectedError("cancelled"))
-		const opts = { ...makeOpts({ password: "" }), runCeremony }
-		const c = useFullBackupImport(opts)
-		const backup = await buildPasskeyBackup()
-		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-
-		await c.restoreBackup()
-
-		expect(c.restoreStatus.value).toBe("") // reset so the Import button is usable again
-		expect(opts.fillError).not.toHaveBeenCalled()
-		expect(opts.openToast).not.toHaveBeenCalled()
-		expect(profileClient.restore).not.toHaveBeenCalled()
-	})
-
-	it("an unconfirmed passkey prompt toasts, keeps the chosen backup, and a second Import restores it", async () => {
-		const runCeremony = vi
-			.fn()
-			.mockRejectedValueOnce(new DOMException("The operation either timed out or was not allowed.", "NotAllowedError"))
-			.mockResolvedValueOnce(PASSKEY_DATA)
-		const opts = { ...makeOpts({ password: "" }), runCeremony }
-		const c = useFullBackupImport(opts)
-		const backup = await buildPasskeyBackup()
-		const selection = { name: "x.json", backup, kind: "plain" as const, profileType: "passkey" as const }
-		c.selectedBackup.value = selection
-
-		await c.restoreBackup()
-
-		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Passkey not confirmed. Try again." })
-		expect(opts.fillError).not.toHaveBeenCalled()
-		expect(c.restoreStatus.value).toBe("")
-		expect(c.selectedBackup.value).toStrictEqual(selection)
-		expect(c.isAllowedToImportBackup.value).toBe(true)
-		expect(profileClient.restore).not.toHaveBeenCalled()
-
-		profileClient.restore.mockResolvedValue({ id: "new-id", name: "PK", type: "passkey" })
-		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
-		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
-		await c.restoreBackup()
-
-		expect(runCeremony).toHaveBeenCalledTimes(2)
-		expect(profileClient.restore).toHaveBeenCalledWith(expect.anything(), expect.anything(), "", PASSKEY_DATA, undefined)
-		expect(c.restoreStatus.value).toBe("finished")
-		expect(opts.completeImport).toHaveBeenCalledOnce()
-	})
-
-	it("non-cancel ceremony error surfaces a specific fillError (not generic 'Import failed')", async () => {
-		const runCeremony = vi.fn().mockRejectedValue(new Error("authenticator unavailable"))
-		const opts = { ...makeOpts({ password: "" }), runCeremony }
-		const c = useFullBackupImport(opts)
-		const backup = await buildPasskeyBackup()
-		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-
-		await c.restoreBackup()
-
-		expect(c.restoreStatus.value).toBe("failed")
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Couldn't authenticate", "authenticator unavailable")
-		expect(opts.openToast).not.toHaveBeenCalled()
-		expect(profileClient.restore).not.toHaveBeenCalled()
-	})
-
-	it("missing runCeremony option surfaces an actionable error (defensive — page should always wire it)", async () => {
-		const opts = makeOpts({ password: "" }) // no runCeremony
-		const c = useFullBackupImport(opts)
-		const backup = await buildPasskeyBackup()
-		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-
-		await c.restoreBackup()
-
-		expect(c.restoreStatus.value).toBe("failed")
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Can't import", expect.stringMatching(/ceremony not wired/i))
-		expect(profileClient.restore).not.toHaveBeenCalled()
-	})
-})
-
-describe("resolvePasskeyCredential — how a failed passkey step ends", () => {
-	const notAllowed = new DOMException("The operation either timed out or was not allowed.", "NotAllowedError")
-	it.each([
-		["a cancel", new UserRejectedError("cancelled"), { kind: "silent-reset" }, false],
-		["an unconfirmed prompt", notAllowed, { kind: "silent-reset" }, true],
-		[
-			"a passkey without PRF",
-			new PasskeyPrfError("no prf"),
-			{ kind: "fail", title: "Couldn't authenticate", message: "This passkey can't unlock Nulo." },
-			false,
-		],
-		[
-			"any other failure",
-			new Error("authenticator unavailable"),
-			{ kind: "fail", title: "Couldn't authenticate", message: "authenticator unavailable" },
-			false,
-		],
-	])("%s", async (_name, err, outcome, toasts) => {
-		const openToast = vi.fn()
-		const runCeremony = vi.fn().mockRejectedValue(err)
-
-		expect(await resolvePasskeyCredential({ type: "passkey" }, "cred", runCeremony, "PK", openToast)).toEqual(outcome)
-		expect(openToast).toHaveBeenCalledTimes(toasts ? 1 : 0)
 	})
 })
 
@@ -2822,7 +2609,6 @@ describe("useFullBackupImport — a legacy password backup's imported-keys key",
 		await c.restoreBackup()
 
 		expect(profileClient.restore.mock.calls[0][1]).toEqual({
-			type: "password",
 			masterKey: backup["master-key"],
 			entropy: backup.entropy,
 			importedKeysDek: backup["imported-keys-dek"],

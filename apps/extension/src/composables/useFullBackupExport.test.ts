@@ -7,23 +7,20 @@ import { flushPromises } from "@vue/test-utils"
 import { setActivePinia } from "pinia"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
-import { useAppStore } from "@/stores/app.store"
-import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullBackupExport"
 
 /**
  * The supersede table: a run discarded at any await of a create, encrypt or download publishes
  * nothing, toasts nothing, releases no latch, opens no ceremony and leaves no client connected.
- * The assembler and the passkey MAC are real; the clients, the profile manager, the seal and the
- * file write are fakes the table holds at each await.
+ * The assembler is real; the clients, the profile manager, the seal and the file write are fakes
+ * the table holds at each await.
  */
 
 const h = vi.hoisted(() => {
 	const state = {
 		built: [] as Array<{ kind: string; disconnect: ReturnType<typeof vi.fn> }>,
 		contactSlice: undefined as (() => Promise<unknown>) | undefined,
-		exportFullBackupKeys: vi.fn<(fence: unknown, password: string) => Promise<unknown>>(),
-		exportPasskeyBackupKeys: vi.fn<(fence: unknown, credentialData: unknown) => Promise<unknown>>(),
+		exportFullBackupKeys: vi.fn<(fence: unknown, password?: string, credentialData?: unknown) => Promise<unknown>>(),
 	}
 	function make(kind: string, extra: Record<string, unknown> = {}) {
 		const client = {
@@ -50,8 +47,7 @@ vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
 		return h.make("account", {
 			backupImportedKeys: vi.fn(async () => []),
-			exportFullBackupKeys: (fence: unknown, password: string) => h.state.exportFullBackupKeys(fence, password),
-			exportPasskeyBackupKeys: (fence: unknown, credentialData: unknown) => h.state.exportPasskeyBackupKeys(fence, credentialData),
+			exportFullBackupKeys: (...args: [unknown, string?, unknown?]) => h.state.exportFullBackupKeys(...args),
 		})
 	}),
 }))
@@ -101,18 +97,17 @@ vi.mock("@/wallet/services/config/client", () => ({
 const m = vi.hoisted(() => ({
 	captureRunFence: vi.fn<() => Promise<unknown>>(),
 	assertRunFence: vi.fn<(fence: unknown) => Promise<void>>(),
-	getPasskeyCredentialId: vi.fn<(id: string) => Promise<string>>(),
+	getPasskeyUnlockParams: vi.fn<(id: string) => Promise<{ credentialId: string; prfSalt: string }>>(),
 	seal: vi.fn<(plaintext: string | null, password: string) => Promise<string>>(),
 	downloadFile: vi.fn<(opts: { data: string; filename: string }) => Promise<void>>(),
 	openToast: vi.fn(),
-	requestConfirm: vi.fn<(request: { callback: () => void }) => void>(),
 }))
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
 			captureRunFence: () => m.captureRunFence(),
 			assertRunFence: (fence: unknown) => m.assertRunFence(fence),
-			getPasskeyCredentialId: (id: string) => m.getPasskeyCredentialId(id),
+			getPasskeyUnlockParams: (id: string) => m.getPasskeyUnlockParams(id),
 		},
 	},
 }))
@@ -128,7 +123,6 @@ vi.mock("@/composables/toast.js", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	useToast: () => ({ openToast: m.openToast }),
 }))
-vi.mock("@/composables/useConfirm", () => ({ useConfirm: () => ({ requestConfirm: m.requestConfirm }) }))
 
 type ProfileType = "password" | "passkey"
 type Api = ReturnType<typeof useFullBackupExport>
@@ -143,18 +137,11 @@ const material = () => ({
 	accounts: [],
 	importedKeyRows: [],
 })
-const PASSKEY_KEYS = {
-	credentialId: "cred-1",
-	dekSealed: "sealed",
-	dekReplaced: false,
-	unopenedImportedKeys: 2,
-	accounts: [],
-	importedKeyRows: [],
-}
-/** A credential with its PRF output, so the real passkey MAC runs. */
+const SALT = Buffer.alloc(32, 3).toString("base64")
 const CEREMONY_ANSWER = {
 	id: Buffer.from("cred-1").toString("base64"),
 	prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64"),
+	prfSalt: SALT,
 } as PasskeyCredentialData
 
 /** Values no backup run writes (it writes "" or "finished", releases the latch, sets the warnings
@@ -167,14 +154,12 @@ const SENTINELS = {
 	isDownloading: true,
 	showRecommendation: false,
 	isWrongPassword: false,
-	isPasswordMismatch: false,
 	dekReplaced: true,
 	chainStateOmitted: false,
 	unopenedImportedKeys: 0,
 	importsOnAddedNetworks: { accounts: 1, networks: 1 },
 	password: "sentinel",
 	repeatedPassword: "sentinel",
-	savedPlain: true,
 } as const
 type StateKey = keyof typeof SENTINELS
 
@@ -204,25 +189,22 @@ function setup(type: ProfileType) {
 	return { api, opts }
 }
 
-/** What a later reader of the page could still get out of the run: the plain file, the sealed
- *  file, and the text the next encrypt would seal. */
+/** What a later reader of the page could still get out of the run: the sealed file, and the text
+ *  the next encrypt would seal. */
 async function probeArtifacts(api: Api) {
-	const store = useAppStore()
-	// Only a passkey profile's plain file may leave, so the probe reads it as one.
-	store.profile = { ...store.profile, type: "passkey" } as ProfileInfo
 	api.isBusy.value = false
 	api.isDownloading.value = false
-	api.password.value = "probe"
-	api.repeatedPassword.value = "probe"
+	api.backupStatus.value = "encrypted"
+	api.password.value = "probe-pass"
+	api.repeatedPassword.value = "probe-pass"
 	m.downloadFile.mockClear()
 	m.seal.mockClear()
-	await api.downloadBackup(false)
-	await api.downloadBackup(true)
+	await api.downloadBackup()
 	await api.handleEncrypt()
 	return { downloads: m.downloadFile.mock.calls.length, sealedFrom: m.seal.mock.calls.map(([plaintext]) => plaintext) }
 }
 
-const exportCalls = () => h.state.exportFullBackupKeys.mock.calls.length + h.state.exportPasskeyBackupKeys.mock.calls.length
+const exportCalls = () => h.state.exportFullBackupKeys.mock.calls.length
 
 /** Counts at the moment of the supersede, so the assertions see only what the dropped run did. */
 function snapshot(opts: ReturnType<typeof setup>["opts"]) {
@@ -250,10 +232,9 @@ beforeEach(() => {
 	h.state.built.length = 0
 	h.state.contactSlice = undefined
 	h.state.exportFullBackupKeys.mockReset().mockImplementation(async () => material())
-	h.state.exportPasskeyBackupKeys.mockReset().mockImplementation(async () => PASSKEY_KEYS)
 	m.captureRunFence.mockReset().mockImplementation(async () => FENCE)
 	m.assertRunFence.mockReset().mockImplementation(async () => undefined)
-	m.getPasskeyCredentialId.mockReset().mockImplementation(async () => "cred-1")
+	m.getPasskeyUnlockParams.mockReset().mockImplementation(async () => ({ credentialId: "cred-1", prfSalt: SALT }))
 	m.seal.mockReset().mockImplementation(async () => "SEALED")
 	m.downloadFile.mockReset().mockImplementation(async () => undefined)
 })
@@ -281,10 +262,10 @@ const HOLDS: Hold[] = [
 		value: () => FENCE,
 	},
 	{
-		at: "getPasskeyCredentialId",
+		at: "getPasskeyUnlockParams",
 		types: ["passkey"],
-		hold: (d, reached) => m.getPasskeyCredentialId.mockImplementationOnce(parkAt(d, reached)),
-		value: () => "cred-1",
+		hold: (d, reached) => m.getPasskeyUnlockParams.mockImplementationOnce(parkAt(d, reached)),
+		value: () => ({ credentialId: "cred-1", prfSalt: SALT }),
 	},
 	{
 		at: "runCeremony",
@@ -295,11 +276,8 @@ const HOLDS: Hold[] = [
 	{
 		at: "the key export",
 		types: ["password", "passkey"],
-		hold: (d, reached, type) =>
-			(type === "passkey" ? h.state.exportPasskeyBackupKeys : h.state.exportFullBackupKeys).mockImplementationOnce(
-				parkAt(d, reached),
-			),
-		value: (type) => (type === "passkey" ? PASSKEY_KEYS : material()),
+		hold: (d, reached) => h.state.exportFullBackupKeys.mockImplementationOnce(parkAt(d, reached)),
+		value: () => material(),
 	},
 	{
 		at: "a slice read",
@@ -405,13 +383,13 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 	it("dispose ends the run and every later action is a no-op", async () => {
 		const { api, opts } = setup("passkey")
 		const held = deferred<unknown>()
-		h.state.exportPasskeyBackupKeys.mockReturnValueOnce(held.promise)
+		h.state.exportFullBackupKeys.mockReturnValueOnce(held.promise)
 		const run = api.handleBackup()
 		await flushPromises()
 
 		api.dispose()
 		for (const { disconnect } of h.state.built) expect(disconnect).toHaveBeenCalled()
-		held.resolve(PASSKEY_KEYS)
+		held.resolve(material())
 		await run
 		await flushPromises()
 		expect(api.backupStatus.value).toBe("progress")
@@ -423,12 +401,10 @@ describe("useFullBackupExport — a create superseded at an await", () => {
 		api.backupStatus.value = "finished"
 		await api.handleBackup()
 		await api.handleEncrypt()
-		await api.downloadBackup(false)
-		api.handleDownloadClick()
+		await api.downloadBackup()
 		expect(m.captureRunFence).toHaveBeenCalledOnce()
 		expect(m.seal).not.toHaveBeenCalled()
 		expect(m.downloadFile).not.toHaveBeenCalled()
-		expect(m.requestConfirm).not.toHaveBeenCalled()
 	})
 })
 
@@ -456,7 +432,7 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		await api.handleEncrypt()
 		const held = deferred<void>()
 		m.downloadFile.mockReturnValueOnce(held.promise)
-		const download = api.downloadBackup(true)
+		const download = api.downloadBackup()
 		await flushPromises()
 
 		api.reset()
@@ -468,20 +444,6 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		expect(m.downloadFile).toHaveBeenCalledOnce()
 		expect(m.downloadFile.mock.calls[0][0].data).toBe("SEALED")
 		await expectNothingPublished(api, opts, at)
-	})
-
-	it("a plain-download confirm answered after the run ended downloads nothing, even over a newer run", async () => {
-		const { api } = setup("passkey")
-		await api.handleBackup()
-		api.handleDownloadClick()
-		const { callback } = m.requestConfirm.mock.calls[0][0]
-
-		api.reset()
-		await api.handleBackup()
-		expect(api.backupStatus.value).toBe("finished")
-		callback()
-		await flushPromises()
-		expect(m.downloadFile).not.toHaveBeenCalled()
 	})
 })
 
@@ -498,40 +460,71 @@ describe("useFullBackupExport — a current run", () => {
 		})
 		for (const { kind, disconnect } of h.state.built) expect(disconnect, kind).toHaveBeenCalledOnce()
 		expect(m.assertRunFence).toHaveBeenCalledWith(FENCE)
+		expect(h.state.exportFullBackupKeys).toHaveBeenCalledExactlyOnceWith(FENCE, "pw")
 
-		await api.downloadBackup(false)
+		await api.downloadBackup()
 		expect(m.downloadFile).not.toHaveBeenCalled()
 		await api.handleEncrypt()
 		expect(m.seal).toHaveBeenCalledWith(expect.stringContaining('"master-key":"mk"'), "pw")
 		expect(api.backupStatus.value).toBe("encrypted")
-		await api.downloadBackup(true)
+		await api.downloadBackup()
 		expect(m.downloadFile).toHaveBeenCalledWith(
 			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^NuloEncryptedBackup_.+\.txt$/) }),
 		)
 	})
 
-	it("passkey profile: one ceremony, and the plain file after the confirm", async () => {
+	// The file holds the recovery phrase, so a passkey profile's leaves only under a password typed
+	// for it, which meets the new-password rule.
+	it("passkey profile: one prompt at the row's input, the password body, and the file leaves only under a valid file password", async () => {
 		const { api, opts } = setup("passkey")
 		await api.handleBackup()
-		expect(opts.runCeremony).toHaveBeenCalledWith({ mode: "get", credentialId: "cred-1", step: "export", profileName: "Test Profile" })
+		expect(opts.runCeremony).toHaveBeenCalledExactlyOnceWith({
+			mode: "get",
+			credentialId: "cred-1",
+			prfSalt: SALT,
+			step: "export",
+			profileName: "Test Profile",
+		})
+		expect(h.state.exportFullBackupKeys).toHaveBeenCalledExactlyOnceWith(FENCE, undefined, CEREMONY_ANSWER)
 		expect(api.backupStatus.value).toBe("finished")
+		await api.downloadBackup()
+		expect(m.downloadFile).not.toHaveBeenCalled()
 
-		api.handleDownloadClick()
-		m.requestConfirm.mock.calls[0][0].callback()
-		await flushPromises()
-		const file = JSON.parse(m.downloadFile.mock.calls[0][0].data)
-		expect(file["master-key"]).toBe("cred-1")
-		expect(file.entropy).toBeUndefined()
+		for (const [password, repeated] of [
+			["", ""],
+			["1234567", "1234567"],
+			["12345678", "12345679"],
+		]) {
+			api.password.value = password
+			api.repeatedPassword.value = repeated
+			expect(api.canEncrypt.value).toBe(false)
+			await api.handleEncrypt()
+		}
+		expect(m.seal).not.toHaveBeenCalled()
+
+		api.password.value = "12345678"
+		api.repeatedPassword.value = "12345678"
+		expect(api.canEncrypt.value).toBe(true)
+		await api.handleEncrypt()
+		const [plaintext, filePassword] = m.seal.mock.calls[0]
+		expect(filePassword).toBe("12345678")
+		const body = JSON.parse(plaintext as string)
+		expect(body).toMatchObject({ "master-key": "mk", entropy: "ent", "imported-keys-dek": "ik" })
+		expect(body).not.toHaveProperty("backup-mac")
+		expect(body).not.toHaveProperty("imported-keys-dek-sealed")
+		await api.downloadBackup()
+		expect(m.downloadFile).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ data: "SEALED", filename: expect.stringMatching(/^NuloEncryptedBackup_.+\.txt$/) }),
+		)
 	})
 
 	it("an accepted sealed download ends the run: done, with nothing left to download or seal", async () => {
 		const { api } = setup("password")
 		await api.handleBackup()
 		await api.handleEncrypt()
-		await api.downloadBackup(true)
+		await api.downloadBackup()
 		expect(readState(api)).toMatchObject({
 			backupStatus: "downloaded",
-			savedPlain: false,
 			isDownloading: false,
 			password: null,
 			repeatedPassword: null,
@@ -542,47 +535,15 @@ describe("useFullBackupExport — a current run", () => {
 		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
 	})
 
-	it("a passkey profile's accepted plain download ends the run the same way, marked plain", async () => {
-		const { api } = setup("passkey")
-		await api.handleBackup()
-		await api.downloadBackup(false)
-		expect(m.downloadFile).toHaveBeenCalledOnce()
-		expect(readState(api)).toMatchObject({
-			backupStatus: "downloaded",
-			savedPlain: true,
-			showRecommendation: false,
-			isDownloading: false,
-			password: null,
-		})
-		expect(api.canDownload.value).toBe(false)
-		expect(await probeArtifacts(api)).toEqual({ downloads: 0, sealedFrom: [null] })
-		api.reset()
-		expect(api.savedPlain.value).toBe(false)
-	})
-
-	it("a refused plain download keeps the plain file and Download", async () => {
-		const { api } = setup("passkey")
-		await api.handleBackup()
-		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
-		await api.downloadBackup(false)
-		expect(readState(api)).toMatchObject({ backupStatus: "finished", savedPlain: false })
-		expect(api.canDownload.value).toBe(true)
-		await api.downloadBackup(false)
-		expect(m.downloadFile).toHaveBeenCalledTimes(2)
-		const [first, second] = m.downloadFile.mock.calls.map(([file]) => file.data)
-		expect(second).toBe(first)
-		expect(readState(api)).toMatchObject({ backupStatus: "downloaded", savedPlain: true })
-	})
-
 	it("a refused sealed download keeps the sealed file and Download", async () => {
 		const { api } = setup("password")
 		await api.handleBackup()
 		await api.handleEncrypt()
 		m.downloadFile.mockRejectedValueOnce(new Error("refused"))
-		await api.downloadBackup(true)
+		await api.downloadBackup()
 		expect(api.backupStatus.value).toBe("encrypted")
 		expect(api.canDownload.value).toBe(true)
-		await api.downloadBackup(true)
+		await api.downloadBackup()
 		expect(m.downloadFile.mock.calls.map(([file]) => file.data)).toEqual(["SEALED", "SEALED"])
 		expect(api.backupStatus.value).toBe("downloaded")
 	})

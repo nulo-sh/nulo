@@ -5,7 +5,7 @@
  * file).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { computeBackupMac, EncryptionKey, PasskeyCredential } from "@nulo/wallet-crypto"
+import { EncryptionKey } from "@nulo/wallet-crypto"
 import { RpcDisconnectedError } from "@nulo/extension-messaging/errors"
 import {
 	AS_SENDER,
@@ -502,57 +502,38 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 	})
 })
 
-describe("epoch-4 passkey gates", () => {
-	const CRED_ID = Buffer.from(new Uint8Array(16).fill(7)).toString("base64")
-	const CREDENTIAL = { id: CRED_ID, prf: Buffer.from(new Uint8Array(32).fill(5)).toString("base64") }
-
+// A passkey profile's backup carries the password body's fields, so it meets the password body's
+// gates; one missing a field it needs is refused before anything is written.
+describe("a passkey profile's body meets the password body's gates", () => {
 	async function passkeyBackup(mutate: (body: Record<string, unknown>) => void) {
-		const base = await buildBackup({
-			"master-key": CRED_ID,
-			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(48).fill(3)).toString("base64"),
-			data: { profile: { id: "src-profile-id", name: "Imported", type: "passkey" } },
-		})
-		const { checksum: _c, entropy: _e, "imported-keys-dek": _dek, ...body } = base as Record<string, unknown>
+		const base = await buildBackup({ data: { profile: { id: "src-profile-id", name: "Imported", type: "passkey" } } })
+		const { checksum: _c, ...body } = base as Record<string, unknown>
 		mutate(body)
-		const checksum = await EncryptionKey.getHashHex(JSON.stringify(body))
-		return { ...body, checksum, "backup-mac": await computeBackupMac(await PasskeyCredential.create(CREDENTIAL), checksum) }
+		return { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
 	}
 
 	function mountPasskey(backup: unknown) {
-		const runCeremony = vi.fn(async () => CREDENTIAL as never)
-		const opts = { ...makeOpts({ password: "", repeatedPassword: "" }), runCeremony }
-		const c = useFullBackupImport(opts as never)
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
 		c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
-		return { c, opts, runCeremony }
+		return { c, opts }
 	}
 
-	it("a passkey backup WITH an entropy field fails with the exact copy", async () => {
+	it("a passkey body missing its imported-keys key fails with the exact copy", async () => {
 		const backup = await passkeyBackup((body) => {
-			body.entropy = Buffer.from(new Uint8Array(32).fill(9)).toString("base64")
-		})
-		const { c, opts } = mountPasskey(backup)
-		await c.restoreBackup()
-		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Can't import", "A passkey backup must not carry an entropy field.")
-		expect(c.restoreStatus.value).toBe("failed")
-	})
-
-	it("a passkey backup missing its sealed DEK fails with the exact copy", async () => {
-		const backup = await passkeyBackup((body) => {
-			body["imported-keys-dek-sealed"] = undefined
+			body["imported-keys-dek"] = undefined
 		})
 		const { c, opts } = mountPasskey(backup)
 		await c.restoreBackup()
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Can't import", "This backup is missing its imported-keys key.")
+		expect(c.restoreStatus.value).toBe("failed")
+		expect(profileClient.restore).not.toHaveBeenCalled()
 	})
 
-	it("PERMISSIVENESS: a passkey backup with an EXTRA plain DEK still imports", async () => {
+	it("a complete passkey body imports (control)", async () => {
 		happyWiring()
-		const backup = await passkeyBackup((body) => {
-			body["imported-keys-dek"] = Buffer.from(new Uint8Array(32).fill(2)).toString("base64")
-		})
-		const { c, opts, runCeremony } = mountPasskey(backup)
+		const { c, opts } = mountPasskey(await passkeyBackup(() => {}))
 		await c.restoreBackup()
-		expect(runCeremony).toHaveBeenCalledWith(expect.objectContaining({ mode: "get", credentialId: CRED_ID, step: "restore" }))
 		expect(c.restoreStatus.value).toBe("finished")
 		expect(opts.fillError).not.toHaveBeenCalled()
 	})

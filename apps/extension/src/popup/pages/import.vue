@@ -21,7 +21,6 @@ import { awaitProfileActivation } from "@/composables/unlockWait"
 /** Utils */
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor, releaseOwnWindow } from "@/utils/own-window"
-import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { resolveFullBackupEnterAction } from "./import-helpers"
@@ -30,7 +29,6 @@ import { retryResultText, withNetworkNames } from "@/components/composite/import
 /** Stores */
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
-import { useNotificationStore } from "@/stores/notification.store"
 import { usePopupStore } from "@/stores/popup.store"
 
 /** Components */
@@ -38,11 +36,9 @@ import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vu
 import ImportFullBackupForm from "@/components/composite/import/ImportFullBackupForm.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import ImportSecretForm from "@/components/composite/import/ImportSecretForm.vue"
-import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import ProfileNameField from "@/components/composite/ProfileNameField.vue"
 
 const appStore = useAppStore()
-const notificationStore = useNotificationStore()
 const { openToast } = useToast()
 
 const route = useRoute()
@@ -90,9 +86,6 @@ const {
 	shakeName,
 	nameInputRef,
 	handleNameInput,
-	ceremonyRequest,
-	onCeremonyResolve,
-	onCeremonyReject,
 	selectedImportOption,
 	seedPhrase,
 	password,
@@ -120,7 +113,6 @@ const {
 	restoreBackup,
 	showRestoreErrorLog,
 	handleImportSeed,
-	handleImportPasskey,
 	handlePasswordInput,
 	handleSecretInput,
 	handleCopyError,
@@ -135,7 +127,6 @@ const {
 		cacheStore.viewerData = withNetworkNames(errors, byNetworkId)
 		popupStore.open("data_viewer")
 	},
-	notifyImportFailed: (err) => notificationStore.create(passkeyImportFailedNotice(err)),
 	openToast,
 })
 
@@ -214,7 +205,6 @@ onBeforeUnmount(() => {
 			v-if="!selectedImportOption"
 			:type="type"
 			@select="selectImportOption"
-			@passkey="handleImportPasskey"
 		/>
 
 		<ImportFullBackupForm
@@ -338,16 +328,6 @@ onBeforeUnmount(() => {
 
 				<Button @click="handleFormBack" :disabled="backCtaBlocked(fullBackupCta)" variant="cta_outline">Back</Button>
 			</Flex>
-		</template>
-
-		<template #overlay>
-			<!-- Path A: in-page passkey ceremony for import flow. -->
-			<PasskeyCeremonyDialog
-				v-if="ceremonyRequest"
-				:request="ceremonyRequest"
-				@resolve="onCeremonyResolve"
-				@reject="onCeremonyReject"
-			/>
 		</template>
 	</CollapsingHeroLayout>
 </template>

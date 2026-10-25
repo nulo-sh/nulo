@@ -119,7 +119,7 @@ describe("recovery phrase — one reveal per press, none after the page left", (
 			await flushPromises()
 			expect(storageSet()).not.toHaveBeenCalled()
 			expect(vi.getTimerCount()).toBe(0)
-			vi.advanceTimersByTime(5 * 60_000)
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
 			expect(router.push).not.toHaveBeenCalled()
 		} finally {
 			vi.useRealTimers()
@@ -146,7 +146,7 @@ describe("recovery phrase — one reveal per press, none after the page left", (
 				"Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire.",
 			)
 			expect(vi.getTimerCount()).toBe(2)
-			vi.advanceTimersByTime(5 * 60_000)
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
 			expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
 		} finally {
 			vi.useRealTimers()

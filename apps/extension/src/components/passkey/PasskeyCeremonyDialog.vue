@@ -71,9 +71,7 @@ onMounted(async () => {
 			const cancelled = new UserRejectedError("User cancelled passkey ceremony")
 			emit(
 				"reject",
-				err instanceof PasskeyUnconfirmedError
-					? new PasskeyUnconfirmedError(err.credentialId, err.userHandle, cancelled)
-					: cancelled,
+				err instanceof PasskeyUnconfirmedError ? new PasskeyUnconfirmedError(err.credentialId, err.prfSalt, cancelled) : cancelled,
 			)
 		} else {
 			emit("reject", err instanceof Error || err instanceof DOMException ? err : new Error(String(err)))

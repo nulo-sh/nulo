@@ -3,7 +3,7 @@
  *
  *   - `EncryptionKey`      — PBKDF2 + AES-GCM framed ciphertext.
  *   - `PasswordSecretBox`  — password-based wrap around `EncryptionKey`.
- *   - `PasskeyCredential`  — WebAuthn PRF → HKDF master-secret.
+ *   - `PasskeyCredential`  — a passkey's PRF answer → the profile's unlock key.
  *
  * Every chain is locked by test vectors at
  * `apps/extension/src/wallet/crypto/key-vectors.test.ts`. Those
@@ -37,16 +37,13 @@ export {
 } from "./imported-keys-dek-box"
 export { computeWalletFingerprint } from "./wallet-fingerprint"
 export { SessionSecretBox, type SessionWrappedSecret } from "./session-secret-box"
-export { PASSKEY_BACKUP_MAC_LABEL, PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
-export { computeBackupMac, verifyBackupMac } from "./backup-mac"
-export { PASSKEY_PRF_LABEL } from "./constants"
+export { PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
 export { zeroize } from "./zeroize"
 export {
 	type Base64Ciphertext,
 	type Base64CredentialId,
 	type Base64MasterSecret,
 	type Base64SecretPrf,
-	type HexUserHandle,
 	type ImportedKeysDek,
 	type MasterSecretBytes,
 	type Passhash,
@@ -54,7 +51,6 @@ export {
 	asBase64CredentialId,
 	asBase64MasterSecret,
 	asBase64SecretPrf,
-	asHexUserHandle,
 	asImportedKeysDek,
 	asMasterSecretBytes,
 	asPasshash,

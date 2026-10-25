@@ -5,10 +5,18 @@
  * to hold an export mid-flight and to see the key buffers it was handed.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { fromBase64, toBase64 } from "@nulo/wallet-core/utils"
-import { asBase64MasterSecret, asImportedKeysDek, EncryptionKey, type ImportedKeysDek } from "@nulo/wallet-crypto"
+import {
+	asBase64MasterSecret,
+	asImportedKeysDek,
+	EncryptionKey,
+	type ImportedKeysDek,
+	PasskeyCredential,
+	type PasskeyCredentialData,
+} from "@nulo/wallet-crypto"
+import { InvalidPasswordError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { fakePasskeyAnswer, freshPrfSalt } from "../../../../tests/helpers/fake-passkey"
 import { validateAndMigrateBackup } from "@/composables/useFullBackupImport"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -85,7 +93,7 @@ async function build(opts: { api?: FakeBrowserApi; networks?: ReturnType<typeof 
 	const config = new ConfigStore()
 	const logger = new LoggerStore(config)
 	const services = new ServiceCollection()
-	services.add(svc(PASSKEY_SERVICE_NAME, {}))
+	services.add(svc(PASSKEY_SERVICE_NAME, { materializeCredential: (data: PasskeyCredentialData) => PasskeyCredential.create(data) }))
 	services.add(svc(NETWORK_SERVICE_NAME, opts.networks ?? networksOf(new Map([[CHAIN, L1]]))))
 	const profile = new ProfileService(config, logger, api)
 	services.add(profile)
@@ -136,6 +144,7 @@ async function backupFile(keys: {
 	importedKeysDek: string
 	accounts: Account[]
 	rows: ImportedAccountKey[]
+	type?: "password" | "passkey"
 }) {
 	const body = {
 		"compat-epoch": 5,
@@ -144,7 +153,7 @@ async function backupFile(keys: {
 		entropy: keys.entropy,
 		"imported-keys-dek": keys.importedKeysDek,
 		data: {
-			profile: { id: "source-id", name: "P", type: "password" },
+			profile: { id: "source-id", name: "P", type: keys.type ?? "password" },
 			[ACCOUNT_SERVICE_NAME]: keys.accounts,
 			[IMPORTED_KEYS_SERVICE_NAME]: keys.rows,
 		},
@@ -160,7 +169,6 @@ async function restoreProfileFrom(file: Awaited<ReturnType<typeof backupFile>>, 
 	const restored = await fresh.profile.restore(
 		{ id: "source-id", name: "Restored", type: "password" },
 		{
-			type: "password",
 			masterKey: asBase64MasterSecret(envelope["master-key"]!),
 			entropy: envelope.entropy!,
 			importedKeysDek: envelope["imported-keys-dek"]!,
@@ -280,6 +288,28 @@ describe("exportFullBackupKeys — restore", () => {
 		expect(restored).toEqual([Array(32).fill(0x2a)])
 	}, 60_000)
 
+	// One body for both methods: a passkey profile's file carries what a password profile's does, and
+	// opens with the file's password alone.
+	test("a passkey profile's backup, opened with its own answer, restores under the file password to the original signing key", async () => {
+		const { api, profile, account } = await build()
+		const answer = await fakePasskeyAnswer("cred-a", freshPrfSalt())
+		const p = await profile.createPasskeyProfile("PK", answer)
+		await seedImported(api, p.id, ADDR_A, 0x2b, (await profile.getProfileDek(p.id))!)
+		const fence = await profile.captureRunFence()
+		await expect(account.exportFullBackupKeys(fence, PASSWORD)).rejects.toBeInstanceOf(InvalidPasswordError)
+		await expect(account.exportFullBackupKeys(fence, undefined, await fakePasskeyAnswer("cred-a", freshPrfSalt()))).rejects.toThrow(
+			"Passkey did not open this profile",
+		)
+		const keys = await account.exportFullBackupKeys(fence, undefined, answer)
+		expect(keys.importedKeyRows).toHaveLength(1)
+
+		const restored = await restoreIntoFreshWallet(
+			await backupFile({ ...keys, importedKeysDek: keys.importedKeysKey, rows: keys.importedKeyRows, type: "passkey" }),
+		)
+
+		expect(restored).toEqual([Array(32).fill(0x2b)])
+	}, 60_000)
+
 	test("a legacy backup, which carries the profile's DEK and DEK-sealed rows, still restores", async () => {
 		const { api, profile, account, keys: repo } = await build()
 		const p = await profile.createProfile("P", PASSWORD)
@@ -386,7 +416,7 @@ describe("exportFullBackupKeys — the run fence", () => {
 		await profile.deleteProfile(a.id)
 		const recreated = await profile.restore(
 			{ id: a.id, name: "A", type: "password" },
-			{ type: "password", masterKey: asBase64MasterSecret(masterKey), entropy, importedKeysDek: toBase64(transferKey) },
+			{ masterKey: asBase64MasterSecret(masterKey), entropy, importedKeysDek: toBase64(transferKey) },
 			PASSWORD,
 		)
 		await profile.finalizeRestore(recreated.id, PASSWORD)
@@ -465,7 +495,7 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 		await expect(account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)).rejects.toThrow(/^ERR_RESET_PENDING/)
 	}, 30_000)
 
-	test("the passkey path's slices refuse when a reset journal appears while they read", async () => {
+	test("the imported-keys and accounts slices refuse when a reset journal appears while they read", async () => {
 		const { api, profile, account, keys } = await build()
 		const p = await profile.createProfile("P", PASSWORD)
 		await seedImported(api, p.id, ADDR_A, 0x2a, (await profile.getProfileDek(p.id))!)

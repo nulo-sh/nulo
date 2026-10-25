@@ -10,7 +10,7 @@ import {
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
 import { type Outcome, showSnack, type Snack } from "@/utils/snack"
-import { type BackupSelection, openSelection, readBackupFile } from "@/utils/full-backup-helpers"
+import { type BackupSelection, openSelection, readBackupFile, unreadableSelection } from "@/utils/full-backup-helpers"
 import { admitRestoreOutcome, readRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import type { Network } from "@/wallet/services/network/spec"
 import type { RunFence } from "@/wallet/services/profile/client"
@@ -28,9 +28,11 @@ import {
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
 	DECRYPTION_FAILED,
+	EARLIER_PASSKEY_BACKUP,
 	errorLogWriters,
 	type FullBackupEnvelope,
 	hasRowsBeyondRetry,
+	refusedAsEarlierPasskey,
 	UNRECOGNIZED_BACKUP,
 	validateAndMigrateBackup,
 } from "./useFullBackupImport"
@@ -152,6 +154,10 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 			return
 		}
 		const { selection, parseError } = await readBackupFile(file)
+		if (selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))) {
+			state.selectedBackup.value = unreadableSelection(selection.name)
+			return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
+		}
 		state.selectedBackup.value = selection
 		if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
 		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
@@ -171,7 +177,13 @@ async function runDecrypt(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	const stale = () => state.selectedBackup.value !== target
 	try {
 		const opened = await openSelection(target, state.decryptionPassword.value, stale)
-		if (opened.kind === "stale" || stale()) return
+		if (opened.kind === "stale") return
+		const refused = await refusedAsEarlierPasskey(opened.selection.backup)
+		if (stale()) return
+		if (refused) {
+			state.selectedBackup.value = unreadableSelection(target.name)
+			return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
+		}
 		state.selectedBackup.value = opened.selection
 		opts.clearError()
 	} catch {
@@ -237,8 +249,7 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
-		// Only the body this profile was restored from passes, and its import already checked it, so no
-		// passkey prompt runs again here.
+		// Only the body this profile was restored from passes.
 		if (validated.kind === "rejected" || validated.checksum !== record.backup) {
 			const refusal = validated.kind === "rejected" ? validated : RESTORE_AGAIN_OTHER_BACKUP
 			state.restoreStatus.value = "failed"

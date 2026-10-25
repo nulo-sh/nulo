@@ -25,8 +25,9 @@ vi.mock("@/wallet/utils/passkey-ceremony", async (importOriginal) => ({
 
 vi.mock("vue-router", () => ({ useRoute: () => ({ query: { requestId: "req-1" } }) }))
 
-const CREATE = { mode: "create", userHandle: "a3f29b14", name: "Savings", step: "create", profileName: "Savings" }
-const DATA = { id: "cred-1", prf: "cHJm", userHandle: "a3f29b14" }
+const SALT = "c2FsdA=="
+const CREATE = { mode: "create", userHandle: "a3f29b14", prfSalt: SALT, step: "create", profileName: "Savings" }
+const DATA = { id: "cred-1", prf: "cHJm", prfSalt: SALT }
 const dismissed = () => new DOMException("The operation either timed out or was not allowed.", "NotAllowedError")
 
 let closeWindow: ReturnType<typeof vi.spyOn>
@@ -97,7 +98,7 @@ describe("the passkey window", () => {
 	})
 
 	test("a saved but unconfirmed passkey is confirmed on Try again, never created twice", async () => {
-		ceremony.run.mockRejectedValue(new PasskeyUnconfirmedError("cred-1", "a3f29b14", dismissed()))
+		ceremony.run.mockRejectedValue(new PasskeyUnconfirmedError("cred-1", SALT, dismissed()))
 		ceremony.confirm.mockResolvedValue(DATA)
 		client.resolvePasskeyRequest.mockResolvedValue("done")
 		const wrapper = mountWindow()
@@ -108,13 +109,13 @@ describe("the passkey window", () => {
 		await flushPromises()
 
 		expect(ceremony.run).toHaveBeenCalledTimes(1)
-		expect(ceremony.confirm).toHaveBeenCalledWith("cred-1", "a3f29b14", expect.any(AbortSignal))
+		expect(ceremony.confirm).toHaveBeenCalledWith("cred-1", SALT, expect.any(AbortSignal))
 		expect(client.resolvePasskeyRequest).toHaveBeenCalledWith("req-1", DATA)
 	})
 
 	test("after an authenticator with no PRF, Try again starts a new passkey for the same request and never confirms", async () => {
 		ceremony.run
-			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", new PasskeyPrfError("no prf")))
+			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", SALT, new PasskeyPrfError("no prf")))
 			.mockReturnValueOnce(new Promise(() => {}))
 		const wrapper = mountWindow()
 		await flushPromises()
@@ -129,8 +130,8 @@ describe("the passkey window", () => {
 	})
 
 	test("no PRF found while confirming a saved passkey: the next Try again starts a new one", async () => {
-		ceremony.run.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", dismissed())).mockResolvedValueOnce(DATA)
-		ceremony.confirm.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", new PasskeyPrfError("no prf")))
+		ceremony.run.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", SALT, dismissed())).mockResolvedValueOnce(DATA)
+		ceremony.confirm.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", SALT, new PasskeyPrfError("no prf")))
 		client.resolvePasskeyRequest.mockResolvedValue("done")
 		const wrapper = mountWindow()
 		await flushPromises()
@@ -148,7 +149,7 @@ describe("the passkey window", () => {
 
 	test("a new passkey after no PRF that fails again keeps the saved-but-not-confirmed line", async () => {
 		ceremony.run
-			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", "a3f29b14", new PasskeyPrfError("no prf")))
+			.mockRejectedValueOnce(new PasskeyUnconfirmedError("cred-1", SALT, new PasskeyPrfError("no prf")))
 			.mockRejectedValueOnce(dismissed())
 		const wrapper = mountWindow()
 		await flushPromises()
@@ -184,25 +185,6 @@ describe("the passkey window", () => {
 
 		expect(windowState(wrapper)).toBe("step-failed")
 		expect(ceremony.run).toHaveBeenCalledTimes(1)
-	})
-
-	test("an import whose passkey already has a profile here says so, offers no Try again, and Close only closes", async () => {
-		client.getPendingRequest.mockResolvedValue({ mode: "get", step: "import", profileName: "Profile 2" })
-		ceremony.run.mockResolvedValue(DATA)
-		client.resolvePasskeyRequest.mockResolvedValue("exists")
-		const wrapper = mountWindow()
-		await flushPromises()
-
-		expect(windowState(wrapper)).toBe("step-exists")
-		expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
-		expect(wrapper.findAll("h1 span").map((line) => line.text())).toEqual(["Passkey", "already in use"])
-		expect(byTestId(wrapper, "passkey-window-error").text()).toBe(
-			"This passkey already has a profile in this wallet. Close this window, open Nulo and choose it on the lock screen.",
-		)
-		expect(byTestId(wrapper, "passkey-window-retry").exists()).toBe(false)
-		await byTestId(wrapper, "passkey-window-close").trigger("click")
-		expect(client.rejectPasskeyRequest).not.toHaveBeenCalled()
-		expect(closeWindow).toHaveBeenCalledTimes(1)
 	})
 
 	test("a step that failed after the passkey names what failed, and Close only closes", async () => {
