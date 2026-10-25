@@ -1,5 +1,31 @@
 # launch-prep-1: owner asks
 
+## Answers (decision page 69, 2026-10-20)
+
+- **P69-02: C**, "You accepted a draft of these Terms. This version is the one in effect." It
+  replaces P68-01's line B; Terms 1.1's `changes` entry is exactly this line
+  ([light](screenshots/p69-terms-line-c-light.png), [dark](screenshots/p69-terms-line-c-dark.png)).
+- **P69-03: A**, "Ship it as drawn." (the README at 1.0.0). Note: "FYI: Once we ship Mainnet though,
+  Mainnet will be default. But until then, yeah, its read perfect." Nothing changes for it now;
+  the lines naming the default network are listed for the Mainnet launch.
+
+## Answers (decision page 68, 2026-10-19)
+
+- **OA-1 (a), P68-01: B**, "The first line only." Note: "Reads very weirdly." A2 ships "These Terms
+  now take effect. The version you accepted was a draft."; that line and two rewordings were drawn
+  for the owner's last look before A2 merges (`p69-terms-line-{b,r1,r2}-{light,dark}.png`).
+- **OA-1 (b), P68-02: A**, "1.0 never takes effect: "Never in effect", a draft replaced by 1.1."
+- **OA-2, P68-03: A**, the five-line banner, plus one bullet from the owner's note: people who used
+  0.31.x or any earlier preview build start fresh in 1.0, on a new recovery phrase or a new
+  passkey, then move any funds (`p69-readme-final-{light,dark}.png`).
+- **OA-3, P68-04: B**, "Replace the box: before the promote, you send from the 1.0.0 candidate on
+  the new Testnet."
+- **OA-4, P68-05: A**, "Accept the window by name: #385 stays a known limit with its corrected
+  condition." Note: "Don't even mention it." So no launch document, `SECURITY.md`, README or
+  release note names it; the condition goes on #385 (the orchestrator posts it).
+
+The asks as they were put:
+
 A1 depends on none of these: OA-3 and OA-4 leave A1's text as it ships. A2 waits for OA-1 and OA-2
 and merges before the 1.0.0 promote; the Terms effective date stays `«FILL»` until the promote,
 where the owner gives it once and it goes in three places (`BEFORE-LAUNCH.md` § 3). If OA-2 is

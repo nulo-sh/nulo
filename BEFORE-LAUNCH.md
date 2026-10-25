@@ -79,22 +79,30 @@ loading remote scripts".
 
 ## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
 
-The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
-§ 2). It appears in three places, two in `legal/terms.md` (tests hold the version line to the
-manifest, not the history row's date), so change them together:
+Before the promote:
 
-- [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
-- [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
+- [ ] The owner sends from the 1.0.0 candidate on the new Testnet, which no e2e suite reaches
+      (they run against a local sandbox). Owner's call, 2026-10-19, decision page 68
+
+The Terms' **effective date** is the date the 1.0.0 listing goes live (privacy 1.0's is already
+set, § 2). Terms 1.0 never takes effect: it was a draft, replaced by 1.1, which carries the date.
+It appears in three places, two in `legal/terms.md` (tests hold the version line to the manifest,
+not the history row's date), so change them together:
+
+- [x] `legal/terms.md` — the version line at the top, and the 1.1 row of the history table
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.1 (26 October 2026; 1.0 stays
+      `null`)
+- [x] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
       1.1.1 per § 4
 
 Then:
 
-- [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
+- [x] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
       names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
-- [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
-      public page only once it has published it). Both did on 2026-10-19; check again on the day
-- [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
+- [x] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
+      public page only once it has published it). Both did on 2026-10-19 and on 2026-10-24 (AMO's
+      page answers a script with a challenge; its API reads the add-on public)
+- [x] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
 - [ ] After the deploy and before the Release PR merges, `nulo.sh/terms` shows **no DRAFT banner**
       and no `noindex` meta, and the current version's permalink (`nulo.sh/terms/v<version>/`)
       shows no DRAFT banner. A permalink always carries `noindex`: it duplicates the canonical page
@@ -102,7 +110,8 @@ Then:
       submission locks every dashboard field ([`release` skill](./.claude/skills/release/SKILL.md),
       troubleshooting)
 - [ ] AMO (owner): remove the "This add-on is experimental" flag
-- [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
+- [x] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten to the
+      owner's picks (2026-10-19, decision page 68)
 
 ## 4. Every later `release: promote dev → main`
 
@@ -137,8 +146,8 @@ version before that release reaches users (procedure above):
 token-list requests carry. The version is archived and in place; its effective date is the day the
 promote publishes it, so until then it reads `«FILL: effective date»`:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.2 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.2 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.2/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.2 text (`apps/extension/store/listing.md` § Privacy
       policy text)
@@ -148,8 +157,8 @@ version is archived and in place, and its effective date, like 1.2.2's, is the d
 publishes it. A promote that publishes both dates both, and the archived
 `legal/archive/privacy-1.2.2.md` with them, since it was archived before its date was known:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.3 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.3 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.3/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.3 text (`apps/extension/store/listing.md` § Privacy
       policy text)
@@ -161,8 +170,8 @@ and the last-selected account from its exceptions. Its effective date, like 1.2.
 promote publishes it. A promote that publishes both dates both, and the archived
 `legal/archive/privacy-1.2.3.md` with them:
 
-- [ ] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (now `null`), same date
+- [x] `legal/privacy.md` — the version line and the 1.2.4 history row, dated the day it is published
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.2.4 (25 October 2026), same date
 - [ ] After the deploy, `nulo.sh/privacy` and `nulo.sh/privacy/v1.2.4/` show no DRAFT banner, and
       AMO's Privacy policy field carries the 1.2.4 text (`apps/extension/store/listing.md` § Privacy
       policy text)
@@ -174,8 +183,9 @@ promote publishes it. A promote that publishes both dates both, and the archived
       until it is, an rc.3 update shows a store-installed V6 account the integrity barrier. #485,
       #486 and #487 merged on 2026-10-15, and #497 promoted them before 0.31.0 went to the stores
       that day
-- [ ] The owner sends from that build on the live Testnet, which no e2e suite reaches (they run
-      against a local sandbox)
+
+The owner's live-Testnet send moved to § 3: from the 1.0.0 candidate, before the promote (owner's
+call, 2026-10-19, decision page 68).
 
 ## Not legal text, same deadline
 
