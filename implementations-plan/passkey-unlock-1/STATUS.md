@@ -12,3 +12,4 @@
 - 2026-10-25 · A1 flake check, 30 consecutive runs at retry 0 each, on `bun --bun vitest run`: wallet-crypto `passkey-unlock-key`, `passkey-secret-box`, `profile-slots` 30/30; extension `profile-row`, `restore-material`, `service.open-slots`, `stored-shapes.scan`, `stored-shapes.writers` 30/30.
 - 2026-10-25 · A1 review loop: Codex rounds 1–3 approve (converged), Opus round 1 approve; every accepted point applied (`plan.md` § Review verdicts).
 - 2026-10-25 · A1 final mutation pass on `1476a4d84`: 71 mutations, 70 caught, 1 equivalent. Flake re-run after the review's test edits, 30 consecutive runs at retry 0 each: the three wallet-crypto files 30/30, the five extension files 30/30.
+- 2026-10-25 · A1 final gates on `bdb60874f`: lint 0, typecheck:all 0, test 0 (929 files passed, 3 skipped), test:all 0 (every workspace), baseline:storage unchanged, check:plans 0; the integration test, the password-secret-box test and `public.ts` unedited since the base. PR opened.
