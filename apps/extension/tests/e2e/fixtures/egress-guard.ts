@@ -70,7 +70,7 @@ export const MALFORMED = "<malformed>"
  * a network boundary.
  */
 export const LIVE_NODE_HOST = new URL(TESTNET_RPC_URL).hostname
-/** The default Mainnet node's host, which no launch answers. */
+/** The default Mainnet node's host, which no launch sends direct. */
 export const MAINNET_NODE_HOST = new URL(MAINNET_RPC_URL).hostname
 /** The published token list's host, which the live launch also sends direct. */
 export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
@@ -86,12 +86,9 @@ export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.az
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
 		LIVE_NODE_HOST,
-		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
+		"the seeded Testnet node: the background reads the active network's status at popup start, the offscreen PXE on Home, and a full backup or contacts export reads every network's. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
 	],
-	[
-		MAINNET_NODE_HOST,
-		"the default Mainnet node: a full backup export and a contacts export read every network's status, and each reads a refused one as inactive",
-	],
+	[MAINNET_NODE_HOST, "the seeded Mainnet node, the default: read as the Testnet node is, and held by its own stand-in the same way"],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[
 		LIVE_LIST_HOST,
@@ -356,27 +353,31 @@ export async function closeAfterEgressCheck(
 	{
 		guard,
 		canary,
-		node,
+		nodes = [],
 		label,
 		traffic,
 		liveHosts,
 	}: {
 		guard: EgressGuard
 		canary: EgressCanary
-		node?: HeldNode
+		nodes?: readonly HeldNode[]
 		label: string
 		traffic: Parameters<typeof egressFailure>[1]
 		liveHosts?: readonly string[]
 	},
 ): Promise<void> {
-	const nodeFailures = node ? await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`]) : []
+	const nodeFailures: string[] = []
+	for (const node of nodes) {
+		const failures = await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`])
+		nodeFailures.push(...failures.map((failure) => `${node.host}: ${failure}`))
+	}
 	let closeError: unknown
 	try {
 		await close()
 	} catch (err) {
 		closeError = err
 	} finally {
-		await Promise.all([guard.stop(), canary.stop(), node?.stop()])
+		await Promise.all([guard.stop(), canary.stop(), ...nodes.map((node) => node.stop())])
 	}
 	const failure = [
 		egressFailure(
@@ -384,7 +385,7 @@ export async function closeAfterEgressCheck(
 			traffic,
 			liveHosts,
 		),
-		nodeFailures.length ? `the stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
+		nodeFailures.length ? `a stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
 	]
 		.filter(Boolean)
 		.join("\n")
@@ -407,8 +408,9 @@ export interface GuardedLaunchDeps<B, S, L extends { close(): Promise<void> }> {
 	probeCanary(value: B, settled: S, url: string, recorded: () => boolean, budgetMs: number): Promise<void>
 	/** Wraps the browser close in the launch's other close-time checks; the egress check runs after them. */
 	wrapClose(closeBrowser: () => Promise<void>, value: B, settled: S): L
-	/** Arms what answers for an outside node, once the canary has proven the routing. */
-	holdNode?(value: B, settled: S): Promise<HeldNode>
+	/** Arms what answers for each outside node, once the canary has proven the routing; a failed arm
+	 *  stops the ones already armed before it throws. */
+	holdNodes?(value: B, settled: S): Promise<HeldNode[]>
 	startGuard?: () => Promise<EgressGuard>
 	startCanary?: () => Promise<EgressCanary>
 }
@@ -419,7 +421,7 @@ export interface GuardedLaunch<B, S, L> {
 	wrapped: L
 	guard: EgressGuard
 	canary: EgressCanary
-	node: HeldNode | undefined
+	nodes: readonly HeldNode[]
 	/** The first call closes and checks; a later one is the wrapped close alone. */
 	close(): Promise<void>
 }
@@ -434,7 +436,7 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 ): Promise<GuardedLaunch<B, S, L>> {
 	const guard = await (deps.startGuard ?? startEgressGuard)()
 	let canary: EgressCanary | undefined
-	let node: HeldNode | undefined
+	let nodes: HeldNode[] = []
 	let launched: { value: B; close(): Promise<void> } | undefined
 	try {
 		canary = await (deps.startCanary ?? startEgressCanary)()
@@ -448,25 +450,25 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 			const why = canary.connections() > 0 ? "went direct" : `never reached the guard within ${CANARY_PROBE_BUDGET_MS / 1000}s`
 			throw new Error(`egress guard: ${deps.label}: the canary request ${why}, so this launch's routing is not proven`)
 		}
-		node = await deps.holdNode?.(launched.value, settled)
+		nodes = (await deps.holdNodes?.(launched.value, settled)) ?? []
 		let closed = false
-		if (node) {
-			const held = node
-			// Judged until the close begins: a browser's shutdown can end the interception before the
-			// extension stops.
-			guard.watch(held.host, () => !closed && held.holding())
+		// Judged until the close begins: a browser's shutdown can end the interception before the
+		// extension stops. The guard watches by host, so nodes sharing one are held while any holds.
+		for (const host of new Set(nodes.map((node) => node.host))) {
+			const same = nodes.filter((node) => node.host === host)
+			guard.watch(host, () => !closed && same.some((node) => node.holding()))
 		}
 		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
-		const checked = { guard, canary, node, label: deps.label, traffic: deps.traffic, liveHosts: deps.liveHosts }
+		const checked = { guard, canary, nodes, label: deps.label, traffic: deps.traffic, liveHosts: deps.liveHosts }
 		const close = () => {
 			if (closed) return wrapped.close()
 			closed = true
 			return closeAfterEgressCheck(() => wrapped.close(), checked)
 		}
-		return { value: launched.value, settled, wrapped, guard, canary, node, close }
+		return { value: launched.value, settled, wrapped, guard, canary, nodes, close }
 	} catch (err) {
 		await launched?.close().catch(() => {})
-		await Promise.all([guard.stop(), canary?.stop(), node?.stop()])
+		await Promise.all([guard.stop(), canary?.stop(), ...nodes.map((node) => node.stop())])
 		throw err
 	}
 }

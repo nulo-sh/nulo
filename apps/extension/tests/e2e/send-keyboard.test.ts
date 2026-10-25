@@ -7,7 +7,15 @@ import { expect } from "vitest"
 import { trimAddress } from "@/utils/string"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
-import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
+import {
+	clickByTestId,
+	launchExtension,
+	openPopup,
+	registerOnListChain,
+	test,
+	waitForHash,
+	type ExtensionContext,
+} from "./fixtures/extension"
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { skipUnlessListPrices } from "./fixtures/token-list"
@@ -330,7 +338,7 @@ async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	try {
 		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
 		try {
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await pickSeededSponsorByKeyboard(ctx)
 			// Read before `stop()`, which drops Firefox's tally.
 			expect(await node.failures(), "testnet interception failures").toEqual([])

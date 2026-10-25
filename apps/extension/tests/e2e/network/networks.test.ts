@@ -61,7 +61,7 @@ test.skipIf(!hasLocalNetwork)("network switch to Local persists in header", asyn
 	await page.waitForFunction(
 		() => {
 			const btn = document.querySelector('[data-testid="network-button"]')
-			return btn && !btn.textContent?.toLowerCase().includes("testnet")
+			return btn && !btn.textContent?.toLowerCase().includes("mainnet")
 		},
 		{ timeout: 10_000 },
 	)

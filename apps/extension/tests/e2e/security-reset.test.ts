@@ -1,12 +1,10 @@
 import { expect } from "vitest"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc, reloadExtensionPage } from "./fixtures/browser"
 import { test, openPopup, waitForHash } from "./fixtures/extension"
 import { captureSoleProfileId, resetProfile, waitForProfilePurged } from "./fixtures/helpers"
+import { DEFAULT_NODE_ORIGIN } from "./fixtures/networks"
 import { readActivityScope } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
-
-const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
 // Reset deletes the only profile and lands on /popup/register. A file-scoped
 // fixture would leak that wiped state into any subsequent test; use the
@@ -45,7 +43,7 @@ test("reset purges within the same budget while the node refuses connections", a
 	await seedProtocolFpcs(page, scope)
 	expect(await fpcRowIds(page)).toEqual([...SEEDED_FPC_IDS].sort())
 
-	const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "refuse" })
+	const node = await interceptRpc(ctx.browser, ctx.extensionId, DEFAULT_NODE_ORIGIN, { kind: "refuse" })
 	try {
 		await reloadExtensionPage(page)
 		await waitForHash(page, "#/popup/general")

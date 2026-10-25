@@ -7,15 +7,17 @@ import { arrival } from "@/components/network-arrival/copy"
 import { seedForKind } from "@/wallet/services/network/seeds"
 import { clickByTestId } from "../fixtures/extension"
 import { NETWORKS } from "./identity-rows"
-import { readNetwork } from "./stale-network"
+import { readNetwork, storeActiveNetwork } from "./stale-network"
 
 const OFFERS = "nulo:core:network-seeded@"
 
 export const ARRIVAL = '[data-testid="network-arrival-takeover"]'
 
-/** Announces the seeded Mainnet on the open profile, as a profile made before it was seeded meets it. */
+/** Announces the seeded Mainnet on the open profile, as a profile made before it was seeded meets it:
+ *  on Testnet, the default then. */
 export async function seedNetworkArrival(page: Page): Promise<{ networkId: string; profileId: string }> {
 	const { id: networkId, profileId } = await readNetwork(page, "mainnet")
+	await storeActiveNetwork(page, "testnet")
 	await page.evaluate(
 		(key: string, value: string) => chrome.storage.local.set({ [key]: value }),
 		`${OFFERS}${profileId}`,

@@ -17,6 +17,7 @@ import {
 	seedUsdQuoteAndReload,
 	setDeveloperMode,
 	setTheme,
+	switchToNetwork,
 	unlockAfterBackgroundDeath,
 	waitForHomeReminders,
 } from "./fixtures/helpers"
@@ -1142,6 +1143,8 @@ test.skipIf(inject("liveLeg") === true)(
 			await createProfileAcceptingTerms(ctx)
 			const seeder = await openPopup(ctx)
 			await waitForHash(seeder, "#/popup/general", 30_000)
+			// The list names Testnet tokens only, and a new profile starts on Mainnet.
+			await switchToNetwork(seeder, "Testnet")
 			await seeder.waitForSelector(SEED_WORKING, { visible: true, timeout: 30_000 })
 			const loading = await rowHeight(seeder, SEED_WORKING)
 			await shotSend(seeder, "home-token-rows-loading", "tokens-list")

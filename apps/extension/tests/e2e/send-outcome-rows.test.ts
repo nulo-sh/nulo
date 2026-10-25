@@ -34,7 +34,7 @@ async function openSeeded(ctx: ExtensionContext): Promise<{ page: Page; scope: A
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
 	const scope = await readActivityScope(page)
-	expect(scope.chainId, "the smoke build's network is Testnet, the one chain an explorer covers").toBe(CHAIN_IDS.TESTNET)
+	expect(scope.chainId, "a new profile is on Mainnet, the default network, which an explorer covers").toBe(CHAIN_IDS.MAINNET)
 	const now = Date.now()
 	await seedTokenRow(page, scope, TOKEN_ID)
 	await seedTokenRow(page, scope, RAW_TOKEN_ID, {
@@ -181,7 +181,7 @@ test("a checked send's page shows its hash with the explorer's link, and under e
 }) => {
 	const { page } = await openSeeded(ctx)
 	const { id, txHash } = RECORDS.unconfirmed
-	const url = getTransactionExplorerUrl(CHAIN_IDS.TESTNET, "aztecscan", txHash)
+	const url = getTransactionExplorerUrl(CHAIN_IDS.MAINNET, "aztecscan", txHash)
 
 	await navigateByHash(page, `#/popup/journal/${id}`)
 	await page.waitForSelector(sel("journal-detail-tx-hash-link"), { visible: true, timeout: 10_000 })

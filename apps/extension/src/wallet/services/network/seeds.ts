@@ -46,7 +46,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		chainId: CHAIN_IDS.TESTNET, // (TESTNET_L1_CHAIN_ID ^ TESTNET_ROLLUP_VERSION) >>> 0 — single-sourced in @/utils/chain-ids
 		l1ChainId: TESTNET_L1_CHAIN_ID,
 		kind: "testnet",
-		isPrimaryActive: true,
+		isPrimaryActive: false,
 		endpointLabel: "dRPC",
 	},
 	{
@@ -63,7 +63,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		chainId: CHAIN_IDS.MAINNET,
 		l1ChainId: MAINNET_L1_CHAIN_ID,
 		kind: "mainnet",
-		isPrimaryActive: false,
+		isPrimaryActive: true,
 		endpointLabel: "dRPC",
 	},
 ]
@@ -74,7 +74,7 @@ export function isSeedChain(chainId: number): boolean {
 	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
 }
 
-/** The one seed marked `isPrimaryActive` (Testnet). Single source
+/** The one seed marked `isPrimaryActive` (Mainnet). Single source
  *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
  *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
 export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)

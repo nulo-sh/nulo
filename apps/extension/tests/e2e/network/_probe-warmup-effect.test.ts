@@ -59,7 +59,7 @@ async function runCapPopupCycle(label: string): Promise<TrialResult> {
 		await registerProfile(ctx)
 		// CRITICAL: switch to Local Network BEFORE connecting playground. Playground
 		// uses chainId 0 (Local Network); without this switch the extension stays
-		// on Testnet where there are no accounts → cap-account-item never renders.
+		// on Mainnet, the default, where there are no accounts → cap-account-item never renders.
 		// Same constraint as the dappConnectedExtension fixture.
 		const setupPage = await openPopup(ctx)
 		await waitForHash(setupPage, "#/popup/general", 30_000)

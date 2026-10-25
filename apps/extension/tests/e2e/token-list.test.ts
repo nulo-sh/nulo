@@ -9,7 +9,7 @@ import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
 import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, openHoldings, unlockAfterBackgroundDeath } from "./fixtures/helpers"
+import { navigateByHash, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import {
 	E2E_LIST_FLAGGED,
@@ -113,6 +113,8 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 
 			const popup = await openPopup(ctx)
 			await waitForHash(popup, "#/popup/general", 30_000)
+			// The list names Testnet tokens only, and a new profile starts on Mainnet.
+			await switchToNetwork(popup, "Testnet")
 			await popup.waitForSelector(SEED_ROW, { visible: true, timeout: 30_000 })
 			const listed = new Set(heldListEntries().map((e) => e.symbol))
 			const shown = await seedRowSymbols(popup)

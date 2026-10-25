@@ -178,14 +178,17 @@ runtime env var can never arm a build-time flag.
   the route with a canary only a direct path reaches, and sends bb.js's CRS hosts (`CRS_HOSTS`)
   direct (`fixtures/egress-guard.ts`; README § Egress guard). `close` fails on any host no list
   declares, a canary connection, a direct host seen at the guard, a failure of the stand-in's
-  interception, or a Testnet-node request that reached the guard while the stand-in held its
+  interception, or a seeded node's request that reached the guard while its stand-in held its
   origin, before the close began. A red naming a wallet or spec host means a new outside call: declare it in
   `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
   `ownHosts`. A held node request means a target the interception does not cover dialed the node:
   on Chrome rerun with `NULO_E2E_INTERCEPT_LOG=1` and find it; never declare the host or loosen the check.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
-  The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`)
-  in every launch but the artifact-only live spec's (`shipped-token-list.test.ts`: its
+  Each seeded remote node (Mainnet, the default, and Testnet) is answered by its own loopback
+  stand-in with a terminal 400 (`fixtures/node-stub.ts`); a new profile starts on Mainnet, so a spec
+  that needs the list's tokens, prices or the sponsor switches to Testnet first, and one that stages
+  the active node intercepts `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
+  the artifact-only live spec's (`shipped-token-list.test.ts`: its
   `launchExtension({ live: true })` sends the node's and the token list's hosts direct, and throws
   unless setup provides `liveLeg`); a smoke spec that needs a value only a node gives seeds it
   (`helpers/fpc-seeds.ts`) and, where the wallet writes beside the seed, holds the node itself from

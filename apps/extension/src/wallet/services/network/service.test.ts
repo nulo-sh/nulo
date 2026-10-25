@@ -188,7 +188,7 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 	test("seeds every default for the target profile and writes ITS active pointer, never touching the active profile's node cache", async () => {
 		const h = withProfiles(harness({}), ["p1", "p2"])
 		const p1 = await h.service.getOrInitNetworks()
-		const p1Primary = p1.find((n) => n.chainId === CHAIN_IDS.TESTNET)!
+		const p1Primary = p1.find((n) => n.chainId === CHAIN_IDS.MAINNET)!
 		const p1NodeBefore = await h.service.getNode(p1Primary.chainId)
 		const nodesBefore = new Map((h.service as unknown as { nodes: Map<number, unknown> }).nodes)
 
@@ -205,7 +205,7 @@ describe("NetworkService — seedDefaultsForProfile (full-backup import reseeds 
 		expect(await h.service.getNode(p1Primary.chainId)).toBe(p1NodeBefore)
 		// p2's pointer names p2's primary seed; p1's pointer is untouched.
 		const raw = (await h.browserApi.storage.local.get(null)) as Record<string, unknown>
-		const p2Primary = seeded.find((n) => n.chainId === CHAIN_IDS.TESTNET)!
+		const p2Primary = seeded.find((n) => n.chainId === CHAIN_IDS.MAINNET)!
 		expect(Object.entries(raw).some(([k, v]) => k.includes("p2") && v === p2Primary.id)).toBe(true)
 		expect(Object.entries(raw).some(([k, v]) => k.includes("p1") && v === p1Primary.id)).toBe(true)
 	})
@@ -1260,15 +1260,17 @@ describe("NetworkService public API", () => {
 			const { service } = setupServiceWithStorage({
 				"https://rpc.test/other": nodeInfoForChain(999_999),
 				"https://rpc.test/testnet": nodeInfoForChain(CHAIN_IDS.TESTNET),
+				"https://rpc.test/mainnet": nodeInfoForChain(CHAIN_IDS.MAINNET),
 			})
 			await service.addNetwork("Other", "https://rpc.test/other")
-			const testnet = await service.addNetwork("Testnet", "https://rpc.test/testnet")
+			await service.addNetwork("Testnet", "https://rpc.test/testnet")
+			const mainnet = await service.addNetwork("Mainnet", "https://rpc.test/mainnet")
 			const primary = await service.getPrimaryNetwork()
-			expect(primary?.id).toBe(testnet.id)
-			expect(primary?.chainId).toBe(CHAIN_IDS.TESTNET)
+			expect(primary?.id).toBe(mainnet.id)
+			expect(primary?.chainId).toBe(CHAIN_IDS.MAINNET)
 		})
 
-		test("returns null when the primary network is absent (e.g. the user deleted the Testnet)", async () => {
+		test("returns null when the primary network is absent (e.g. the user deleted Mainnet)", async () => {
 			const { service } = setupServiceWithStorage({
 				"https://rpc.test/other": nodeInfoForChain(999_999),
 			})

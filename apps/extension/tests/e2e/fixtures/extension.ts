@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from "node:fs"
 import type { Browser, Page } from "puppeteer"
 import { test as base, expect, inject } from "vitest"
 import path from "node:path"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { DEFAULT_SEEDS } from "@/wallet/services/network/seeds"
 import {
 	type LaunchedBrowser,
 	browserTraffic,
@@ -17,7 +17,7 @@ import {
 } from "./browser"
 import { createAccount, getAccountAddress, waitForSelectedAccount } from "./accounts"
 import { clickByTestId, expectNoNameField, isFrameDetachError, patchPagePolling, typeIntoInput, waitForHash } from "./dom"
-import { switchToLocalNetwork } from "./networks"
+import { switchToLocalNetwork, switchToNetwork } from "./networks"
 import { readLivenessBaseline, waitForWorkerLiveness } from "./session"
 import { importTokenAndWaitForBalance } from "./tokens"
 import { closeConfirmed, openPopup, seedLegalAcceptance, waitForServiceReady } from "./wallet-pages"
@@ -37,10 +37,14 @@ import {
 	guardArmed,
 	ownGuardedLaunch,
 } from "./egress-guard"
-import { holdNodeStub } from "./node-stub"
+import { holdNodeStubs } from "./node-stub"
 import { readSealedRows } from "./sealed-rows"
 import { heldListStorage } from "./token-list"
 import { PollTimeoutError, pollUntil } from "./poll"
+
+/** Every seeded remote node, which a guarded launch holds a stand-in for unless it sends that host
+ *  direct: the default network's node, and the one a spec switches to, both answer at once. */
+const SEEDED_NODE_URLS: readonly string[] = DEFAULT_SEEDS.filter((seed) => seed.kind !== "local").map((seed) => seed.rpcUrl)
 
 // Specs reach the page primitives and the popup openers through this hub; they live in leaves so
 // the modules the hub imports can use them without importing the hub back.
@@ -58,9 +62,9 @@ export interface ExtensionContext {
 	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
-	/** The launch's egress guard, canary and stand-in Testnet node; absent where
-	 *  no guard is armed, and no stand-in in a `live` launch. */
-	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
+	/** The launch's egress guard, canary and a stand-in for each seeded remote node; absent where no
+	 *  guard is armed, and no stand-in for a node a `live` launch sends direct. */
+	egress?: { guard: EgressGuard; canary: EgressCanary; nodes: readonly HeldNode[] }
 }
 
 /** Launch a fresh browser with the extension and wait for SW liveness.
@@ -183,11 +187,14 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser, cspArmed),
-		holdNode: directHosts.includes(LIVE_NODE_HOST)
-			? undefined
-			: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
+		holdNodes: (browser, extensionId) =>
+			holdNodeStubs(
+				browser,
+				extensionId,
+				SEEDED_NODE_URLS.filter((url) => !directHosts.includes(new URL(url).hostname)),
+			),
 	})
-	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
+	const { value: browser, settled: extensionId, wrapped, guard, canary, nodes } = guarded
 	return {
 		browser,
 		extensionId,
@@ -195,7 +202,7 @@ async function launchBehindEgressGuard(
 		pageErrors: [],
 		close: guarded.close,
 		checkCspViolations: wrapped.checkCspViolations,
-		egress: { guard, canary, node },
+		egress: { guard, canary, nodes },
 	}
 }
 
@@ -397,6 +404,16 @@ export async function registerProfile(ctx: ExtensionContext): Promise<void> {
 
 	await waitForHash(page, "#/popup/general", 30_000)
 	await page.waitForSelector('[data-testid="balance-amount"]', { visible: true, timeout: 30_000 })
+	await page.close()
+}
+
+/** Registers a profile and moves it to Testnet, the chain every entry of the held list names; a new
+ *  profile starts on Mainnet. */
+export async function registerOnListChain(ctx: ExtensionContext): Promise<void> {
+	await registerProfile(ctx)
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	await switchToNetwork(page, "Testnet")
 	await page.close()
 }
 
@@ -627,9 +644,10 @@ export const test = base.extend<{
 	 *  for tests that wipe profile/account state mid-flow (reset-profile,
 	 *  destructive recovery flows) so the wipe doesn't leak into siblings. */
 	registeredExtensionPerTest: ExtensionContext
-	/** `registeredExtension` over a held signed list, whose price ids price its tokens. */
+	/** `registeredExtension` over a held signed list, whose price ids price its tokens, on Testnet:
+	 *  the list, like the published one, names Testnet tokens only. */
 	listedExtension: ExtensionContext
-	/** `registeredExtensionPerTest` over a held signed list. */
+	/** `registeredExtensionPerTest` over a held signed list, on Testnet. */
 	listedExtensionPerTest: ExtensionContext
 	/** Registered extension + Local Network + dapp connected via @nulo/playground.
 	 *  File-scoped: shared across tests in the same file. Use `dappConnectedExtensionPerTest`
@@ -727,7 +745,7 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension({ tokenList: "held" })
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await use(ctx)
 			await ctx.close()
 		},
@@ -738,7 +756,7 @@ export const test = base.extend<{
 		// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
 		async ({}, use) => {
 			const ctx = await launchExtension({ tokenList: "held" })
-			await registerProfile(ctx)
+			await registerOnListChain(ctx)
 			await use(ctx)
 			await ctx.close()
 		},
@@ -758,8 +776,8 @@ export const test = base.extend<{
 	dappConnectedExtension: [
 		async ({ registeredExtension }, use) => {
 			// Switch to Local Network BEFORE connecting the playground. The playground passes
-			// Fr.ZERO chainInfo (= chainId 0 = Local Network) while the e2e build seeds Testnet as
-			// the active network. The wallet now provisions a chain's default account on a dApp's
+			// Fr.ZERO chainInfo (= chainId 0 = Local Network) while a new profile starts on Mainnet,
+			// the default network. The wallet now provisions a chain's default account on a dApp's
 			// request, so the mismatch alone no longer empties the account picker (pinned by
 			// cap-chain-mismatch.test.ts) — but sendTx/sim tests need the ACTIVE network on the
 			// sandbox (funded accounts, fee estimation, sync), which only the switch provides.

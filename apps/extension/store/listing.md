@@ -215,9 +215,10 @@ handling as well and so ticks more boxes; the two differ by design.
 The block between the two markers is sent as `approval_notes` with every version.
 
 <!-- reviewer-notes:start -->
-Testing without funds: install, choose "Create profile", set a password. The wallet opens on the
-Aztec testnet with a zero balance. Aztec Mainnet is also listed under Networks. Every screen is
-reachable without a transaction.
+Testing without funds: install, choose "Create profile", set a password. The wallet opens on Aztec
+Mainnet with a zero balance. Mainnet's v6 upgrade is executable on L1 from 2026-10-26; until it runs,
+the wallet shows Mainnet as unavailable. To try a send with sponsored fees, switch to the Aztec
+testnet under Networks. Every screen is reachable without a transaction.
 
 Build: the add-on is bundled (Vite). Source is attached to this version as a `git archive` of the
 tagged commit. `apps/extension/store/SOURCE-BUILD.md` inside it names the exact Bun version and the
