@@ -13,3 +13,6 @@
 - 2026-10-25 · A1 review loop: Codex rounds 1–3 approve (converged), Opus round 1 approve; every accepted point applied (`plan.md` § Review verdicts).
 - 2026-10-25 · A1 final mutation pass on `1476a4d84`: 71 mutations, 70 caught, 1 equivalent. Flake re-run after the review's test edits, 30 consecutive runs at retry 0 each: the three wallet-crypto files 30/30, the five extension files 30/30.
 - 2026-10-25 · A1 final gates on `bdb60874f`: lint 0, typecheck:all 0, test 0 (929 files passed, 3 skipped), test:all 0 (every workspace), baseline:storage unchanged, check:plans 0; the integration test, the password-secret-box test and `public.ts` unedited since the base. PR opened.
+- 2026-10-25 · A2 started: branch `passkey-unlock-1-a2` off `origin/dev` 0634a7954; re-cut step 1 done (base captured, `baseline:storage` unchanged there).
+- 2026-10-25 · A2.1 gate pass at retry 0: the seven named extension files (419 tests), the `extension-messaging` errors test (194), `wallet-crypto` (153). Committed aa9af0450.
+- 2026-10-25 · A2.2 gate pass at retry 0: lint 0, typecheck:all 0, `bun run test` 922 files passed with only the stored-shape guard red (`baseline.test.ts`, `snapshot.test.ts` R1 and R5), which A2.3's re-cut moves.

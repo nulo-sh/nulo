@@ -40,8 +40,8 @@ export function writePinnedBackup(name: PinnedBackup, browser: string, file: str
 	if (browser !== "chrome") throw new Error(`a pinned backup is made from Chrome, not ${browser}`)
 	const dir = path.join(E2E_STATE_DIR, "pinned-backups")
 	mkdirSync(dir, { recursive: true })
-	// The wallet names an encrypted backup `.txt` and a plain one `.json`.
-	const written = path.join(dir, `${name}.${name === "password" ? "txt" : "json"}`)
+	// The wallet names an encrypted backup `.txt`, and every full backup it writes is encrypted.
+	const written = path.join(dir, `${name}.txt`)
 	writeFileSync(written, file)
 	return { path: written, pin: createHash("sha256").update(file).digest("hex") }
 }

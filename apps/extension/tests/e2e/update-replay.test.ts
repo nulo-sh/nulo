@@ -15,7 +15,7 @@
  * the bump's own reset does not.
  *
  * The first case also exports the updated profile's full backup, encrypted, and the third registers
- * a passkey profile on the candidate and exports its backup, passkey check included. Failure mode: a
+ * a passkey profile on the candidate and exports its backup under a file password. Failure mode: a
  * backup the candidate writes drops rows or does not import into it. The stored-shape guard's R5
  * reads only the pinned files; only here does a real export, and a real passkey ceremony, make one.
  *
@@ -24,7 +24,6 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
-import { BACKUP_MAC_FIELD } from "@/utils/full-backup-helpers"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
 import { INCOMING_TRANSFER_SERVICE_NAME, IncomingTransferRecordSchema } from "@/wallet/services/incoming-transfer/spec"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "@/wallet/services/operation-journal/spec"
@@ -33,6 +32,7 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
 import { BROWSER } from "./fixtures/browser"
+import { TEST_PASSWORD } from "./fixtures/constants"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	captureSoleProfileId,
@@ -59,7 +59,7 @@ import { unreadRows } from "./fixtures/update/stored-rows"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "./fixtures/update/verify"
 import { exportImportedAccountBody, previewImport } from "./helpers/account-io"
 import { accountRows, accountScope, readNetworkRows } from "./helpers/identity-rows"
-import { downloadPlainPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./helpers/backup-export"
+import { downloadPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./helpers/backup-export"
 import { answerUpdatedTerms } from "./helpers/legal-drivers"
 import { readyToast } from "@/components/stale-network/copy"
 import { answerArrival } from "./helpers/network-arrival"
@@ -125,7 +125,7 @@ function droppedRows(envelope: unknown, stored: Record<string, unknown>): string
 /** `file`, a full backup's content as the candidate wrote it, with every row `stored` held, must
  *  import into this build. `NULO_E2E_BACKUP_RECORD=1` on Chrome also writes it for the stored-shape guard's R5. */
 async function expectBackupImports(name: PinnedBackup, file: string, stored: Record<string, unknown>): Promise<void> {
-	const envelope: unknown = name === "password" ? await openEncryptedBackup(file) : JSON.parse(file)
+	const envelope: unknown = await openEncryptedBackup(file)
 	expect(droppedRows(envelope, stored)).toEqual([])
 	expect(await backupProblems(envelope)).toEqual([])
 	if (process.env.NULO_E2E_BACKUP_RECORD !== "1") return
@@ -501,7 +501,7 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		})
 	})
 
-	test("a passkey profile on the candidate exports a full backup that imports with its passkey check", {
+	test("a passkey profile on the candidate exports a full backup, protected with a file password, that imports", {
 		timeout: 300_000,
 		retry: 0,
 	}, async () => {
@@ -514,8 +514,8 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 			const stored = await readLocalStorage(ctx)
 			await navigateByHash(page, "#/popup/settings/security/export/full", 15_000)
 			await clickByTestId(page, "agree-continue-btn")
-			const file = await downloadPlainPasskeyBackup(page)
-			expect(typeof (JSON.parse(file) as Record<string, unknown>)[BACKUP_MAC_FIELD]).toBe("string")
+			// The fixture password, so the stored-shape guard opens both pinned files with one password.
+			const file = await downloadPasskeyBackup(page, TEST_PASSWORD)
 			await expectBackupImports("passkey", file, stored)
 		} finally {
 			await ctx.close()

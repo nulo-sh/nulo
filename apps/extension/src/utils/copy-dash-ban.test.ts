@@ -79,11 +79,6 @@ const REVIEWED: Reviewed[] = [
 		why: "concurrent import",
 	},
 	{
-		file: "apps/extension/src/wallet/services/profile/service.ts",
-		text: "Profile integrity check failed — this profile cannot produce a trustworthy backup",
-		why: "export shows constant copy",
-	},
-	{
 		file: "apps/extension/src/wallet/services/operation-journal/service.ts",
 		text: "profile ${…} does not exist — operation not created",
 		why: "concurrent deletion",
@@ -197,11 +192,6 @@ const REVIEWED: Reviewed[] = [
 		file: "packages/extension-messaging/src/errors.ts",
 		text: "Another first transaction initialized this account — wait for network sync, then retry.",
 		why: "dApp envelope",
-	},
-	{
-		file: "apps/extension/src/composables/full-backup-restore.ts",
-		text: "Passkey ceremony not wired — restart the popup and try again.",
-		why: "unreachable: its caller passes a ceremony",
 	},
 	{
 		file: "apps/extension/src/wallet/services/backup/backup-migrator.ts",

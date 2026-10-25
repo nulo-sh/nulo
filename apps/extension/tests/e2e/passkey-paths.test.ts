@@ -4,28 +4,22 @@
  * Coverage in this file (in-page modal path A — same FrameTreeNode):
  *   1. Register a passkey profile via the in-page modal (path A).
  *      Asserts the popup lands on /popup/general with a valid 0x... address.
- *   2. Lock + unlock-via-passkey within the same extension session.
- *      Unblocked by path A: the modal runs in the popup's existing
- *      FrameTreeNode, so the credential created at register persists
- *      across the lock/unlock cycle on the SAME virtual authenticator.
- *   3. Register → reset profile → import via passkey discovery → same
- *      address. The "I wiped my profile and want it back" flow. Same
- *      popup, same FTN, same authenticator = same PRF = same master.
+ *   2. Lock + unlock-via-passkey within the same extension session, on a row sealed at the
+ *      profile's own PRF input. Unblocked by path A: the modal runs in the popup's existing
+ *      FrameTreeNode, so the credential created at register persists across the lock/unlock
+ *      cycle on the SAME virtual authenticator.
  *
  * Each step also proves it stayed in the page on both browsers: the passkey card mounted and no
  * window opened. Only Firefox's toolbar panel hands it to a window (`toolbar-panel.test.ts`).
  *
- * NOT covered (still blocked, see apps/extension/tests/e2e/PRF-NON-PORTABLE.md):
- *   - Passkey IMPORT in a FRESH extension instance. PRF state is per-
- *     credential authenticator-internal and not serializable via CDP.
- *     The reset-then-import test (3 above) is the closest in-FTN proxy.
- *   - Cross-browser passkey-only round-trip.
+ * A passkey restores nothing: a wallet comes back from its recovery phrase or a full backup
+ * (`passkey-backup.test.ts`). Why a passkey cannot cross extension instances in the suite:
+ * apps/extension/tests/e2e/PRF-NON-PORTABLE.md.
  */
 import { expect } from "vitest"
 import type { Page } from "puppeteer"
-import { clickByTestId, expectNoNameField, openPopup, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { confirmProfileReset, selectedAccount } from "./fixtures/helpers"
-import { waitForHomeReminders } from "./fixtures/tokens"
+import { clickByTestId, openPopup, waitForHash, test } from "./fixtures/extension"
+import { selectedAccount } from "./fixtures/helpers"
 import { readPasskeySurface, registerPasskeyProfile, setupPasskeyVirtualAuth, watchPasskeySurface } from "./fixtures/passkey"
 
 /** The selected account, which the wallet records after the post-register account derivation
@@ -68,6 +62,14 @@ test("lock + unlock via passkey: header-lock → auth-submit returns to /popup/g
 		await registerPasskeyProfile(page)
 		const addressBefore = await readActiveAccount(page)
 		expect(addressBefore.startsWith("0x")).toBe(true)
+		// The row the unlock opens holds the sealed slots and the profile's own PRF input.
+		const row = await page.evaluate(async () => {
+			const all = await chrome.storage.local.get(null)
+			const raw = Object.entries(all).find(([key]) => key.startsWith("nulo:core:profiles@"))?.[1]
+			const profile = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>
+			return { type: profile.type, keys: ["guard", "secret", "entropy", "prfSalt"].filter((key) => typeof profile[key] === "string") }
+		})
+		expect(row).toEqual({ type: "passkey", keys: ["guard", "secret", "entropy", "prfSalt"] })
 
 		// Lock via the header. Sets `appStore.isLogined = false` and calls
 		// `managers.profile.lockActiveProfile()`; a watcher in app.vue
@@ -112,70 +114,6 @@ test("lock + unlock via passkey: header-lock → auth-submit returns to /popup/g
 	}
 }, 90_000)
 
-test("register → reset profile → import via passkey discovery → same address", async ({ freshExtensionPerTest }) => {
-	const page = await openPopup(freshExtensionPerTest)
-	const auth = await setupPasskeyVirtualAuth(freshExtensionPerTest.browser, page)
-
-	try {
-		// Step 1: register passkey.
-		await registerPasskeyProfile(page)
-		const addressBefore = await readActiveAccount(page)
-		expect(addressBefore.startsWith("0x")).toBe(true)
-
-		// Step 2: reset profile via /popup/settings/security/reset.
-		await page.evaluate(() => {
-			window.location.hash = "#/popup/settings/security/reset"
-		})
-		await waitForHash(page, "#/popup/settings/security/reset", 5_000)
-
-		await confirmProfileReset(page, 5_000)
-		// reset.vue routes to /popup/register when no profiles remain.
-		await waitForHash(page, "#/popup/register", 10_000)
-
-		// Step 3: navigate to /popup/import and trigger import-passkey.
-		// The credential created at register lives in the popup's anchor
-		// authenticator (created by setupPasskeyVirtualAuth) — that
-		// authenticator persists across the SPA navigation, so WebAuthn
-		// `get` (no allowedCredentials = discovery) finds it. PRF output
-		// is identical (same authenticator instance, same credential =
-		// same internal HMAC seed), so the derived master is identical
-		// → the imported profile's account address must match.
-		await page.evaluate(() => {
-			window.location.hash = "#/popup/import"
-		})
-		await waitForHash(page, "#/popup/import", 5_000)
-		await waitForServiceReady(page, 15_000)
-
-		// The reset left no profile, so the re-import is a first profile: no name field.
-		await expectNoNameField(page, "import-page", "import-name-input")
-
-		await page.waitForSelector('[data-testid="import-option-passkey"]', { visible: true, timeout: 10_000 })
-		await watchPasskeySurface(page)
-		await clickByTestId(page, "import-option-passkey")
-
-		await waitForHash(page, "#/popup/general", 60_000)
-		expect(await readPasskeySurface(page)).toEqual(IN_PAGE)
-
-		const addressAfter = await readActiveAccount(page)
-		expect(addressAfter).toBe(addressBefore)
-		// The person brought this wallet in, so Home asks nothing of it.
-		await waitForHomeReminders(page)
-		expect(await page.$('[data-testid="get-started"]')).toBeNull()
-
-		// Same benign-error filter as lock+unlock — reset closes the SW
-		// session, in-flight ServiceClients reject with "Client disconnected".
-		const nonBenignErrors = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))
-		expect(nonBenignErrors).toEqual([])
-	} finally {
-		await auth.cleanup()
-		await page.close()
-	}
-}, 90_000)
-
-// NOTE: cross-browser passkey-only round-trip is STILL blocked even after
-// the in-page modal refactor. A different `puppeteer.launch()` = a different
-// browser context = a different popup target = a different authenticator
-// = no shared credential. The reset-then-import test above is the closest
-// in-the-same-FTN proxy: same authenticator instance, same PRF, same master.
-// See `apps/extension/tests/e2e/PRF-NON-PORTABLE.md` for the full
-// blocker analysis.
+// NOTE: a cross-browser passkey round-trip stays blocked: a different `puppeteer.launch()` is a
+// different authenticator, so no shared credential. See
+// `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`.

@@ -12,10 +12,10 @@ const stubs = {
 }
 
 describe("ImportMethodPicker", () => {
-	it("renders all three method entries with import label by default", () => {
+	it("renders the two method entries with import label by default", () => {
 		const wrapper = mount(ImportMethodPicker, { global: { stubs } })
 		const items = wrapper.findAll("button")
-		expect(items).toHaveLength(3)
+		expect(items.map((item) => item.attributes("data-testid"))).toStrictEqual(["import-option-full-backup", "import-option-seed"])
 		expect(wrapper.text()).toContain("Import with")
 	})
 
@@ -42,10 +42,9 @@ describe("ImportMethodPicker", () => {
 		expect(wrapper.find("[data-testid=import-option-public-key]").exists()).toBe(false)
 	})
 
-	it("emits passkey (not select) for the passkey row", async () => {
+	// A passkey brings no wallet back: its key opens a profile only on the device that sealed it.
+	it("offers no passkey entry", () => {
 		const wrapper = mount(ImportMethodPicker, { global: { stubs } })
-		await wrapper.find("[data-testid=import-option-passkey]").trigger("click")
-		expect(wrapper.emitted("passkey")).toBeTruthy()
-		expect(wrapper.emitted("select")).toBeFalsy()
+		expect(wrapper.find("[data-testid=import-option-passkey]").exists()).toBe(false)
 	})
 })

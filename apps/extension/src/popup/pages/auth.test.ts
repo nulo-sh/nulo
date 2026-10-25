@@ -18,7 +18,7 @@ import Auth from "./auth.vue"
 
 const unlockProfile = vi.fn()
 const unlockPasskeyProfile = vi.fn()
-const getPasskeyCredentialId = vi.fn()
+const getPasskeyUnlockParams = vi.fn()
 const runCeremony = vi.fn()
 const initTransactionServiceMock = vi.fn()
 const setLastActiveProfileIdMock = vi.fn(async () => undefined)
@@ -42,7 +42,7 @@ vi.mock("@/utils/core", () => ({
 		profile: {
 			unlockProfile: (...args: unknown[]) => unlockProfile(...args),
 			unlockPasskeyProfile: (...args: unknown[]) => unlockPasskeyProfile(...args),
-			getPasskeyCredentialId: (...args: unknown[]) => getPasskeyCredentialId(...args),
+			getPasskeyUnlockParams: (...args: unknown[]) => getPasskeyUnlockParams(...args),
 			getProfiles: vi.fn(async () => []),
 		},
 		account: undefined,
@@ -89,7 +89,7 @@ vi.mock("vue-router", () => ({
 beforeEach(() => {
 	unlockProfile.mockReset()
 	unlockPasskeyProfile.mockReset()
-	getPasskeyCredentialId.mockReset()
+	getPasskeyUnlockParams.mockReset()
 	runCeremony.mockReset()
 	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	openToastMock.mockReset()
@@ -433,12 +433,20 @@ describe("auth.vue — passkey unlock", () => {
 		await flushPromises()
 	}
 
-	test("in the page, the ceremony runs against this profile's credential", async () => {
-		getPasskeyCredentialId.mockResolvedValue("cred-1")
-		runCeremony.mockResolvedValue({ id: "cred-1" })
+	// Another input would rebuild another key, which opens nothing this profile sealed.
+	test("in the page, the ceremony runs against this profile's credential at its own input", async () => {
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
 		await submitPasskeyUnlock()
-		expect(runCeremony).toHaveBeenCalledWith({ mode: "get", credentialId: "cred-1", step: "unlock", profileName: "P" })
-		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1" })
+		expect(getPasskeyUnlockParams).toHaveBeenCalledWith("p1")
+		expect(runCeremony).toHaveBeenCalledWith({
+			mode: "get",
+			credentialId: "cred-1",
+			prfSalt: "c2FsdA==",
+			step: "unlock",
+			profileName: "P",
+		})
+		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1", prfSalt: "c2FsdA==" })
 	})
 
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
@@ -446,14 +454,14 @@ describe("auth.vue — passkey unlock", () => {
 		await submitPasskeyUnlock()
 		expect(unlockPasskeyProfile).toHaveBeenCalledTimes(1)
 		expect(unlockPasskeyProfile.mock.calls[0]).toEqual(["p1"])
-		expect(getPasskeyCredentialId).not.toHaveBeenCalled()
+		expect(getPasskeyUnlockParams).not.toHaveBeenCalled()
 		expect(runCeremony).not.toHaveBeenCalled()
 	})
 })
 
 describe("auth.vue — what a failed unlock says", () => {
 	async function failPasskeyUnlock(error: unknown) {
-		getPasskeyCredentialId.mockResolvedValue("cred-1")
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
 		runCeremony.mockRejectedValue(error)
 		const { wrapper, appStore } = mountAuth()
 		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
@@ -537,6 +545,53 @@ describe("auth.vue — what a failed unlock says", () => {
 	test("a cancelled passkey prompt stays silent", async () => {
 		await failPasskeyUnlock(new UserRejectedError("User cancelled passkey ceremony"))
 		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test("a passkey whose answer opens nothing gets the generic line, never the error's text", async () => {
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+		unlockPasskeyProfile.mockRejectedValue(new Error("Passkey did not open this profile"))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
+	})
+})
+
+describe("auth.vue — a passkey profile made before 1.1", () => {
+	async function mountRetired() {
+		const mounted = mountAuth()
+		mounted.appStore.profile = { id: "p1", name: "Old", type: "passkey", retired: true } as never
+		await flushPromises()
+		return mounted
+	}
+
+	test("offers only its deletion: no unlock form, no passkey prompt", async () => {
+		const { wrapper } = await mountRetired()
+		expect(wrapper.get('[data-testid="auth-setup-again"]').text()).toBe("Set upagain")
+		expect(wrapper.get('[data-testid="auth-setup-again-text"]').text()).toBe(
+			"This profile was made with an earlier version of Nulo and can't be opened in this version. Delete it, then create or import a profile. What it held stays on the network, out of this version's reach.",
+		)
+		expect(wrapper.find('[data-testid="auth-form"]').exists()).toBe(false)
+		expect(getPasskeyUnlockParams).not.toHaveBeenCalled()
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(unlockPasskeyProfile).not.toHaveBeenCalled()
+	})
+
+	test("Delete profile leads to the delete page", async () => {
+		const { wrapper } = await mountRetired()
+		await wrapper.get('[data-testid="auth-delete-retired"]').trigger("click")
+		expect(routerPush).toHaveBeenCalledWith("/popup/settings/security/reset")
+	})
+
+	test("a later profile picked on this screen gets its unlock form back", async () => {
+		const { wrapper, appStore } = await mountRetired()
+		appStore.profile = { id: "p2", name: "New", type: "passkey" } as never
+		await flushPromises()
+		expect(wrapper.find('[data-testid="auth-setup-again"]').exists()).toBe(false)
+		expect(wrapper.find('[data-testid="auth-form"]').exists()).toBe(true)
 	})
 })
 

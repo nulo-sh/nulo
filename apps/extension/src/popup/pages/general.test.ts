@@ -183,12 +183,20 @@ describe("Home — the backup reminder's sources", () => {
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
 	})
 
-	test("a funded passkey wallet gets the backup row, never the banner", async () => {
+	// A passkey profile's recovery phrase is the one thing that brings it back on another device.
+	test("a funded passkey wallet reads as a password one: the phrase row first, and no banner while the card shows", async () => {
 		gas = ZERO
 		tokenHoldings = "some"
 		const w = await mountHome("passkey")
 		expect(has(w, "backup-reminder-banner")).toBe(false)
-		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice", "presto"])
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
+	})
+
+	test("on a hidden card, a funded passkey wallet raises the banner", async () => {
+		gas = FUNDED
+		const w = await mountHome("passkey", HIDDEN)
+		expect(has(w, "backup-reminder-banner")).toBe(true)
+		expect(has(w, "get-started")).toBe(false)
 	})
 })
 
@@ -199,7 +207,7 @@ describe("Home — Get Fee Juice stays done once the profile holds Fee Juice", (
 		expect(storage.set).not.toHaveBeenCalled()
 		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
 		await flushPromises()
-		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice", "presto"])
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
 		expect(storage.set).not.toHaveBeenCalled()
 		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
 		await flushPromises()
@@ -207,7 +215,7 @@ describe("Home — Get Fee Juice stays done once the profile holds Fee Juice", (
 		storage.fire({ [FEE_JUICE_KEY]: { newValue: true } })
 		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
 		await flushPromises()
-		expect(rows(w)).toEqual(["backup", "aztec", "feeJuice done", "presto"])
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
 		gasByScope.set(activityScopeKey(HOME_SCOPE), FUNDED)
 		await flushPromises()
 		expect(storage.set).toHaveBeenCalledTimes(1)
@@ -267,20 +275,16 @@ describe("Home — an imported profile", () => {
 describe("Home — a later profile", () => {
 	const NOT_FIRST = { "nulo:ui:profileNotFirst@p1": true }
 
-	test("a later password profile shows its phrase row alone, with no Hide, and no banner once funded", async () => {
-		gas = ZERO
-		tokenHoldings = "some"
-		const w = await mountHome("password", NOT_FIRST)
-		expect(w.findAll('[data-testid^="get-started-"]').map((row) => row.attributes("data-testid"))).toEqual(["get-started-phrase"])
-		expect(has(w, "backup-reminder-banner")).toBe(false)
-	})
-
-	test("a later passkey profile shows no card, and Home still settles", async () => {
-		gas = ZERO
-		const w = await mountHome("passkey", NOT_FIRST)
-		expect(has(w, "get-started")).toBe(false)
-		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
-	})
+	test.each(["password", "passkey"] as const)(
+		"a later %s profile shows its phrase row alone, with no Hide, and no banner once funded",
+		async (type) => {
+			gas = ZERO
+			tokenHoldings = "some"
+			const w = await mountHome(type, NOT_FIRST)
+			expect(w.findAll('[data-testid^="get-started-"]').map((row) => row.attributes("data-testid"))).toEqual(["get-started-phrase"])
+			expect(has(w, "backup-reminder-banner")).toBe(false)
+		},
+	)
 })
 
 describe("Home — what the reminders do", () => {

@@ -57,7 +57,9 @@ async function readPhrase(
 ): Promise<string[] | undefined> {
 	if (profile.type === "passkey" && !credentialData) return undefined
 	try {
-		return await managers.profile.exportMnemonic(profile.id, profile.type === "password" ? typed : undefined, credentialData)
+		return profile.type === "password"
+			? await managers.profile.exportMnemonic(profile.id, typed)
+			: await managers.profile.exportMnemonic(profile.id, undefined, credentialData)
 	} catch (error) {
 		console.debug("onboarding phrase read failed", { error })
 		return undefined

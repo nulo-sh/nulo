@@ -96,6 +96,19 @@ describe("own window identity", () => {
 		expect(postAuthRoute()).toBe(route)
 	})
 
+	// The toolbar panel closes under the passkey prompt the reveal runs.
+	test("a marked recovery phrase URL is its own flow's window: back to the phrase after auth, no card, closes at the end", async () => {
+		const REVEAL = "/popup/settings/security/export/seed"
+		getCurrent.mockResolvedValue({ id: 31, type: "popup" })
+		captureOwnWindow(`#${REVEAL}?window=own`)
+		await ownWindowSettled()
+		expect(ownWindowRoute()).toBe(REVEAL)
+		expect(postAuthRoute()).toBe(REVEAL)
+		expect(isCardWindow()).toBe(false)
+		expect(await closeOwnWindow()).toBe(true)
+		expect(closeDocument).toHaveBeenCalledTimes(1)
+	})
+
 	test("an unmarked URL, another marker value or any other route is not", () => {
 		for (const hash of [`#${EXPORT}`, `#${EXPORT}?window=tab`, "#/popup/general?window=own", "#/windows/passkey?window=own"]) {
 			captureOwnWindow(hash)
