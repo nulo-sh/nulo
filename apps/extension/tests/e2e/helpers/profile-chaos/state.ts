@@ -1,0 +1,114 @@
+/**
+ * The live half of a profile chaos run: what the symbols of the plan are bound to in this browser,
+ * the pages the run holds, and the secrets it generated. Shared by the drivers and the runner.
+ */
+import { randomBytes } from "node:crypto"
+import type { Page } from "puppeteer"
+import type { ExtensionContext } from "../../fixtures/extension"
+import type { PasskeyAuthSetup } from "../../fixtures/passkey"
+import { type Bindings, emptyBindings, type VerifyReading } from "./checkers"
+import type { DrainedLog, ErrorCollector, RunPage } from "./collect"
+import type { Caps, CredentialRef, FileRef, Outcome, PhraseRef, ProfileRef, SecretRef } from "./model"
+
+/** A file the run holds on disk: an exported backup or account file, and what opens it. */
+export interface HeldFile {
+	path: string
+	kind: "backup" | "account"
+	/** An account file's signing key and address, as its export decrypted them. */
+	signingKey?: string
+	address?: string
+}
+
+export interface RunState {
+	ctx: ExtensionContext
+	caps: Caps
+	/** The page the run drives; on a browser that scopes a passkey to its page, it holds them all. */
+	anchor: Page
+	/** Extra pages a driver holds open across its own action only. */
+	extras: RunPage[]
+	auth?: PasskeyAuthSetup
+	errors: ErrorCollector
+	bindings: Bindings
+	secrets: Map<SecretRef, string>
+	phrases: Map<PhraseRef, string[]>
+	credentials: Map<CredentialRef, string>
+	files: Map<FileRef, HeldFile>
+	/** The run's own directory: downloads and corrupted copies land here. */
+	dir: string
+	/** Where the run's log drain stands, inside the current background's life, and the lines
+	 *  logged before the first step, which that step's error check reads with its own. */
+	logs: { lastId: number; carried: DrainedLog[] }
+	/** How many collected page errors earlier steps have read. */
+	errorMark: number
+	/** Warn lines per source over the run, for the coverage line. */
+	warns: Record<string, number>
+	/** Accepted errors per allowlist source over the run, for the coverage line. */
+	allowed: Record<string, number>
+	/** Files the runner has already scanned for leaks. */
+	scanned: Set<FileRef>
+	/** What the last `verifyAll` read, for O6. */
+	verified: VerifyReading[]
+}
+
+/** What a driver saw: the outcome, and how its settle went. */
+export interface Driven {
+	outcome: Outcome
+	settle: { reached: boolean; elapsedMs: number; boundMs: number; loading?: string[]; route?: string; visible?: string[] }
+}
+
+type Derived =
+	| "bindings"
+	| "secrets"
+	| "phrases"
+	| "credentials"
+	| "files"
+	| "extras"
+	| "logs"
+	| "errorMark"
+	| "warns"
+	| "allowed"
+	| "scanned"
+	| "verified"
+
+export function newRunState(init: Omit<RunState, Derived>): RunState {
+	return {
+		...init,
+		extras: [],
+		bindings: emptyBindings(),
+		secrets: new Map(),
+		phrases: new Map(),
+		credentials: new Map(),
+		files: new Map(),
+		logs: { lastId: 0, carried: [] },
+		errorMark: 0,
+		warns: {},
+		allowed: {},
+		scanned: new Set(),
+		verified: [],
+	}
+}
+
+/** A fresh password for `ref`: long, unique to the run, so a leak scan never matches by chance. */
+export function secretFor(s: RunState, ref: SecretRef): string {
+	const known = s.secrets.get(ref)
+	if (known) return known
+	const value = `Chaos-${ref}-${randomBytes(9).toString("base64url")}`
+	s.secrets.set(ref, value)
+	return value
+}
+
+/** A password the run never set, for the wrong-password variants. */
+export const wrongSecret = (): string => `Wrong-${randomBytes(9).toString("base64url")}`
+
+export function profileId(s: RunState, ref: ProfileRef): string {
+	const id = s.bindings.profiles.get(ref)
+	if (!id) throw new Error(`${ref} is not bound to a profile yet`)
+	return id
+}
+
+export function bindProfile(s: RunState, ref: ProfileRef, id: string): void {
+	const bound = s.bindings.profiles.get(ref)
+	if (bound && bound !== id) throw new Error(`${ref} is bound to ${bound}, now seen as ${id}`)
+	for (const [other, otherId] of s.bindings.profiles) if (otherId === id && other !== ref) throw new Error(`${id} is already ${other}`)
+	s.bindings.profiles.set(ref, id)
+}

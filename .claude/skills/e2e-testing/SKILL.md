@@ -88,7 +88,7 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
   dir): shard it, or `bun run e2e:reap` and run the files it did not reach
   (`implementations-plan/archive/e2e-stores-1/lessons/phase-3.md`).
 - **Offscreen sender shapes (Chrome, verified by probe)**: SW→offscreen `sender = { id, url: <getURL(manifest.background.service_worker)> }` (no `origin`, no `tab`); offscreen→SW `sender = { id, url: <getURL("src/offscreen/index.html")>, origin }`. A Chrome offscreen document has NO `chrome.runtime.getManifest` (fetch `manifest.json` by URL instead). When a sender predicate changes on either listener, probe the real shapes with a 30-second puppeteer script (pattern: `apps/extension/.playwright-mcp/sender-probe.mjs`) BEFORE the smoke run — the suite only shows the symptom (PXE timeouts, a profile reset stuck on its tombstone) three retries later. `MessageType` on the wire is numeric (`Event=1`, `Request=2`, `Response=3`).
-- **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks `pkill -f "chrome.*--load-extension=<EXTENSION_PATH>"`, a PREFIX match — two `test:e2e --shard` halves need two dist dirs whose paths do not prefix each other (`dist/chrome` + a copy at `dist/smoke2`, NOT `dist/chrome-2`, which the first half's teardown kills mid-run with `ConnectionClosedError` at `openPopup`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both.
+- **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks kill every Chrome loading exactly `EXTENSION_PATH` (`chromePattern` in `sandbox-ownership.ts`: the path as a literal, ending at the argument's end, so `dist/chrome` never matches `dist/chrome-2`) — two `test:e2e --shard` halves need two dist dirs (`dist/chrome` + a copy at `dist/chrome-2`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both. One dist shared by two halves still kills the other half mid-run with `ConnectionClosedError` at `openPopup`.
 - **Smoke builds nothing.** It loads `dist/<browser>`, or `EXTENSION_PATH`, which wins, and an
   `e2e:agent` run leaves a network build in that directory: before a smoke red or green that must
   mean the current source, `bun run build:<browser>` and run under `env -u EXTENSION_PATH`
@@ -222,6 +222,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_DATA_ROOT` | sandbox run-dir root (default `~/.cache/nulo-e2e`); short enough that `<run dir>/tmp` plus the node's 28-byte socket names fits `sun_path`, which setup checks |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
+| `NULO_E2E_CHAOS=1` (+`_SEED`, `_RUNS`, `_ACTIONS`) | arms the chaos files; the seed is random when unset and always logged. `profile-chaos` also takes a run count (consecutive seeds, one launch each) and a replay list (README § Chaos runs) |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
 | `ANVIL_URL`, `AZTEC_NODE_URL`, `PLAYGROUND_URL`, `*_PORT` | the port pack (`agent.sh` exports them from `ports.json`) |
 | `VITE_NULO_FEE_MULTIPLIER` | build-time fee envelope widening; CI sets `10` to absorb devnet base-fee drift. It is Normal's multiplier and scales Fast and Urgent with it (CI prices 10, 15, 25), so the speeds keep their order |
@@ -236,6 +237,11 @@ runtime env var can never arm a build-time flag.
 - Per-test `retry: 0` is mandatory for DESTRUCTIVE scenarios (a password change, a MAC tamper, a
   profile delete mid-file): a retry re-enters against mutated state and buries the real failure
   (`imported-account-lifecycle`, `frozen-account-canary`, `transfers` say why at the top).
+- The profile chaos files pin retry 0 too: a seed's steps change the profiles they run on, and a
+  red seed is triaged from its replay record (README § Chaos runs), never re-run until green.
+  A violation that is an instance of a filed issue goes in `KNOWN_FINDINGS` (`checkers.ts`) with
+  that issue's number, so the seed stays red and names it; an expected line that is no finding
+  goes in `ALLOWED_ERRORS` with the code line that writes it. Neither ever hides a new error text.
 - Never add a per-test `retry: 1|2` to hide a flake; root-cause it (§4) or file it in the ledger.
   Smoke's config-level 2 exists because the smoke gate is required on every PR; it is not licence
   for per-test overrides, and a local repro always runs at 0.
@@ -901,8 +907,8 @@ NULO_E2E_RETRY=0 taskset -c 0,1 bun run e2e:agent tests/e2e/network/frozen-accou
 
 A release-shaped smoke, as the nightly's and release's `smoke-against-artifact` run it: build with
 no `VITE_*` variable set and no `.env*` file (`_build-extension.yml` refuses the e2e and key flags),
-copy `dist/<browser>` out to a path that prefixes no other run's `EXTENSION_PATH` (the smoke
-teardown's `pkill` matches by prefix), then run with `NULO_E2E_ARTIFACT_RUN=1 EXTENSION_PATH=<copy>`
+copy `dist/<browser>` out to a path no other run uses as its `EXTENSION_PATH` (the smoke
+teardown kills every Chrome loading exactly that path), then run with `NULO_E2E_ARTIFACT_RUN=1 EXTENSION_PATH=<copy>`
 and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`. It runs guarded like a source run;
 `shipped-token-list.test.ts` is its one launch that reaches the live Testnet node, so a dRPC outage
 reds that spec, by name, and nothing else.

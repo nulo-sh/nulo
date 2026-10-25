@@ -4,8 +4,16 @@ import { describe, expect, test } from "vitest"
 import { ProfileRowSchema, STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
 	ALLOWED_ERRORS,
+	allowedFor,
 	type Bindings,
 	checkErrors,
+	evidenceGaps,
+	RESTART_LOG_GAP,
+	runVerdict,
+	type StepOutcome,
+	stopsRun,
+	UNPLANNED_RESTART,
+	GUARDED_NODE_REFUSAL,
 	checkLeaks,
 	checkLogContinuity,
 	checkProfiles,
@@ -43,8 +51,14 @@ import {
 	type World,
 } from "../../tests/e2e/helpers/profile-chaos/model"
 
-const CHROME: Caps = { ceremonyOffAnchor: false, restartUnderOpenPage: true, network: false, restoreGate: false }
-const FIREFOX: Caps = { ceremonyOffAnchor: true, restartUnderOpenPage: false, network: false, restoreGate: false }
+const CHROME: Caps = { ceremonyOffAnchor: false, restartUnderOpenPage: true, network: false, restoreGate: false, credentialSlots: 3 }
+const FIREFOX: Caps = {
+	ceremonyOffAnchor: true,
+	restartUnderOpenPage: false,
+	network: false,
+	restoreGate: false,
+	credentialSlots: Number.POSITIVE_INFINITY,
+}
 const NETWORK: Caps = { ...CHROME, network: true, restoreGate: true }
 const SEEDS = Array.from({ length: 1_000 }, (_, i) => i * 7_919 + 1)
 
@@ -154,6 +168,18 @@ describe("a hand-trimmed list", () => {
 			"F9 is no backup",
 		],
 		["an unknown action", [{ action: "jump", params: {} }], "unknown action jump"],
+		["a strict toggle on a passkey profile", [passkey, { action: "toggleStrict", params: {} }], "only to an open password profile"],
+		[
+			"a passkey create past the authenticator's storage, a deleted profile's credential counted",
+			[
+				passkey,
+				{ ...passkey, params: { ...passkey.params, ref: "P2", credential: "K2" } },
+				{ action: "deleteProfile", params: { via: "settings" } },
+				{ ...passkey, params: { ...passkey.params, ref: "P3", credential: "K3" } },
+				{ ...passkey, params: { ...passkey.params, ref: "P4", credential: "K4" } },
+			],
+			"the authenticator holds no more credentials",
+		],
 		[
 			"a phrase import of a phrase never read",
 			[create, { action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "x", password: "S2" } }],
@@ -230,6 +256,12 @@ describe("the model's clauses", () => {
 		expect(backOn.session).toEqual({ kind: "open", ref: "P1", bearer: false })
 	})
 
+	test("a password change reopens the session, which takes a bearer once strict mode is off", () => {
+		const change = { action: "changePassword", params: { variant: "right", password: "S2" } }
+		expect(run([create, { action: "toggleStrict", params: {} }, change]).session).toEqual({ kind: "open", ref: "P1", bearer: true })
+		expect(run([create, change]).session).toEqual({ kind: "open", ref: "P1", bearer: false })
+	})
+
 	test("a restart keeps a bearer's session, locks a password one without, and leaves a passkey row", () => {
 		const restart = { action: "backgroundRestart", params: {} }
 		expect(run([create, restart]).session).toEqual({ kind: "locked" })
@@ -301,9 +333,35 @@ describe("the model's clauses", () => {
 		expect(ends("importPhrase", {}, run([create]))).toEqual(["session"])
 	})
 
+	test("the planner mints no more passkey credentials than the authenticator holds", () => {
+		for (const seed of SEEDS.slice(0, 300)) {
+			const minted = plan(seed, "empty", CHROME).steps.filter((s) => s.action === "createPasskey").length
+			expect(minted, `seed ${seed}`).toBeLessThanOrEqual(CHROME.credentialSlots)
+		}
+	})
+
 	test("a race's outcomes share one successor state", () => {
 		const race = run([passkey, { action: "lock", params: {} }, { action: "raceLockDuringUnlock", params: {} }])
 		expect(race.session).toEqual({ kind: "locked" })
+	})
+
+	test("an import that does not commit leaves the session it entered through the lock screen locked", () => {
+		const second = { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K2", double: false } }
+		const restore = { action: "importBackup", params: { file: "F1", variant: "right", ref: "P3", password: "S3" } }
+		const refused = planFromList(
+			[passkey, { action: "exportBackup", params: { file: "F1" } }, second, restore] as ListedStep[],
+			"empty",
+			CHROME,
+		)
+		const last = refused.steps.at(-1)
+		expect(last?.expect.outcomes).toEqual(["refused"])
+		expect(last?.expect.next.session).toEqual({ kind: "locked" })
+	})
+
+	test("the lock that ends a race deletes a row a restart left", () => {
+		const restart = { action: "backgroundRestart", params: {} }
+		expect(run([passkey, restart]).session).toEqual({ kind: "locked", staleRow: "P1" })
+		expect(run([passkey, restart, { action: "raceLockDuringUnlock", params: {} }]).session).toEqual({ kind: "locked" })
 	})
 
 	test("every clause names its source", () => {
@@ -332,6 +390,9 @@ describe("the model's clauses", () => {
 		expect(c.schedules).toEqual({ raceDoubleUnlock: 1 })
 		expect(coverageLine(c, { profile: 2 })).toBe(
 			"families[create=1 lock=1 unlock=1 race=1] transitions=3 schedules[raceDoubleUnlock=1] warns[profile=2]",
+		)
+		expect(coverageLine(c, {}, { lock: 1 }, { "code:a.ts:1": 3 })).toBe(
+			"families[create=1 lock=1 unlock=1 race=1] transitions=3 schedules[raceDoubleUnlock=1] warns[] incomplete[lock=1] allowed[code:a.ts:1=3]",
 		)
 	})
 
@@ -561,7 +622,39 @@ describe("O4, errors", () => {
 			[page("Client disconnected"), { kind: "log", level: "warn", source: "profile", text: "slow" }],
 			["session"],
 		)
-		expect(verdict).toEqual({ violations: [], warns: { profile: 1 } })
+		expect(verdict).toEqual({
+			violations: [],
+			warns: { profile: 1 },
+			allowed: { "code:packages/extension-messaging/src/errors.ts:102": 1 },
+		})
+	})
+
+	describe("the guarded node's refusal", () => {
+		const refusal = (text: string): ErrorEntry => ({ kind: "log", level: "error", source: "pxe", text })
+		const refused = refusal(
+			'["[READ] getLatestBlockNumber failed",{"error":{"message":"Error 400 from server <url> no node answers a guarded e2e run"}}]',
+		)
+
+		test("passes at any step of a run with no node, and counts what it let through", () => {
+			expect(checkErrors([refused, refused], [], allowedFor({ network: false }))).toEqual({
+				violations: [],
+				warns: {},
+				allowed: { [GUARDED_NODE_REFUSAL.source]: 2 },
+			})
+		})
+
+		test.each([
+			["on a run a node answers", [refused], { network: true }],
+			[
+				"for an error log without the stand-in's text",
+				[refusal('["Failed to fetch node info",{"message":"fetch failed"}]')],
+				{ network: false },
+			],
+			["for a page error carrying the stand-in's text", [page("Error: no node answers a guarded e2e run")], { network: false }],
+		] as const)("fails %s", (label, entries, caps) => {
+			const verdict = checkErrors(entries as unknown as ErrorEntry[], [], allowedFor(caps))
+			expect(shown(`O4 the refusal allowance ${label}`, verdict.violations).length).toBeGreaterThan(0)
+		})
 	})
 
 	test.each([
@@ -579,11 +672,35 @@ describe("O4, errors", () => {
 		expect(v).toEqual({ oracle: "O4", message: "page-error on anchor: TypeError", detail: "TypeError: secret-looking text" })
 	})
 
-	test("every allowed error names its source and reason", () => {
-		for (const a of ALLOWED_ERRORS) {
-			expect(a.source).toMatch(/^code:\S+:\d+$/)
+	test("every allowed error names its reason and a source line that exists", () => {
+		for (const a of [...ALLOWED_ERRORS, GUARDED_NODE_REFUSAL]) {
+			const [, file, line] = /^code:(\S+):(\d+)$/.exec(a.source) ?? []
+			expect(file, a.source).toBeTruthy()
+			const path = join(import.meta.dirname, "../../../..", file)
+			expect(readFileSync(path, "utf8").split("\n")[Number(line) - 1]?.trim(), a.source).toBeTruthy()
 			expect(a.reason.length).toBeGreaterThan(20)
 		}
+	})
+
+	test("a filed finding's error line is marked with its issue; any other error line is not", () => {
+		const fenced = (label: string) => ({
+			kind: "log" as const,
+			level: "error" as const,
+			source: "execution",
+			text: `["Failed to get ${label} FeeJuice balance",{"message":"pxe op rejected: profile x has no current incarnation (deleted or tombstoned)"}]`,
+		})
+		expect(checkErrors([fenced("public"), fenced("private")], []).violations.map((v) => v.known)).toEqual([1131, 1131])
+		const other = checkErrors([{ ...fenced("public"), text: '["Failed to get public FeeJuice balance",{"message":"boom"}]' }], [])
+		expect(shown("O4 an error line beside a filed one's text", other.violations)[0]?.known).toBeUndefined()
+		const disconnect = {
+			kind: "log" as const,
+			level: "error" as const,
+			source: "ui",
+			text: '[{"name":"Error","message":"Client disconnected"}]',
+		}
+		expect(checkErrors([disconnect], []).violations[0]?.known).toBe(1132)
+		const elsewhere = checkErrors([{ ...disconnect, source: "profile" }], []).violations
+		expect(shown("O4 the disconnect line from another source", elsewhere)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {
@@ -593,6 +710,47 @@ describe("O4, errors", () => {
 		console.log(`[break] O4 a log-id gap: ${gap.reason}`)
 		expect(gap.complete).toBe(false)
 		expect(checkLogContinuity(10, [11, 13]).complete).toBe(false)
+	})
+})
+
+describe("the run's verdict", () => {
+	const known: Violation = { oracle: "O4", message: "error log from execution: unclassified", known: 1131 }
+	const fresh: Violation = { oracle: "O1", message: "locked, but the service reports p active" }
+	const step = (r: Partial<StepOutcome> = {}): StepOutcome => ({ violations: [], incomplete: [], ...r })
+
+	test("green only when every planned step ran with complete evidence", () => {
+		expect(runVerdict([step(), step()], 2)).toBe("green")
+		expect(runVerdict([step()], 2)).toBe("incomplete")
+		expect(runVerdict([step(), step({ incomplete: ["logs: x"] })], 2)).toBe("incomplete")
+		expect(runVerdict([step(), step({ crashed: "boom" })], 2)).toBe("incomplete")
+	})
+
+	test("a filed finding keeps the seed red and the run going; anything else stops it", () => {
+		expect(runVerdict([step({ violations: [known] }), step()], 2)).toBe("red")
+		expect(stopsRun(step({ violations: [known] }))).toBe(false)
+		expect(stopsRun(step({ violations: [known, fresh] }))).toBe(true)
+		expect(stopsRun(step({ crashed: "boom" }))).toBe(true)
+		expect(stopsRun(step({ incomplete: [UNPLANNED_RESTART] }))).toBe(true)
+		expect(stopsRun(step({ incomplete: [RESTART_LOG_GAP] }))).toBe(false)
+	})
+
+	test("a seed with no violation fails on every evidence gap but a planned restart's log window", () => {
+		const at = (index: number, r: Partial<StepOutcome> = {}) => ({ index, action: "lock", ...step(r) })
+		expect(evidenceGaps([at(0), at(1, { incomplete: [RESTART_LOG_GAP] })], 2)).toEqual([])
+		const breaks: [string, string[], string[]][] = [
+			[
+				"an unplanned restart",
+				evidenceGaps([at(0, { incomplete: [UNPLANNED_RESTART] })], 2),
+				[`step 0 lock: ${UNPLANNED_RESTART}`, "ran 1 of 2 planned steps"],
+			],
+			["a log-id gap", evidenceGaps([at(0, { incomplete: ["logs: id 14 after 10"] })], 1), ["step 0 lock: logs: id 14 after 10"]],
+			["a check that threw", evidenceGaps([at(0, { crashed: "boom" })], 1), ["step 0 lock: the checks threw"]],
+			["a short run", evidenceGaps([at(0)], 2), ["ran 1 of 2 planned steps"]],
+		]
+		for (const [label, gaps, want] of breaks) {
+			console.log(`[break] verdict ${label}: ${gaps.join("; ")}`)
+			expect(gaps, label).toEqual(want)
+		}
 	})
 })
 

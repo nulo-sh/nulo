@@ -281,6 +281,7 @@ export const chromeDriver: BrowserDriver = {
 	scheme: SCHEME,
 	credentialOutlivesPage: false,
 	stopsBackgroundUnderOpenPage: true,
+	residentCredentialSlots: 3,
 	ownHosts: CHROME_OWN_HOSTS,
 	launch,
 	reinstallExtension,

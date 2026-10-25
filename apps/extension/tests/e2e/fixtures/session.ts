@@ -52,7 +52,11 @@ export async function callService<T>(page: Page, service: string, method: string
 					port.disconnect()
 					fail(`no response within ${waitMs}ms`)
 				}, waitMs)
-				port.onDisconnect.addListener(() => fail("port closed before a response"))
+				port.onDisconnect.addListener(() => {
+					// Read, or Chrome logs the close on the page as an unchecked `runtime.lastError`.
+					const closed = (chrome.runtime as { lastError?: { message?: string } }).lastError?.message
+					fail(`port closed before a response${closed ? `: ${closed}` : ""}`)
+				})
 				port.onMessage.addListener(
 					(message: { type?: number; content?: { requestId?: number; result?: unknown; error?: string } }) => {
 						if (message?.type !== responseType || message.content?.requestId !== request.content.requestId) return

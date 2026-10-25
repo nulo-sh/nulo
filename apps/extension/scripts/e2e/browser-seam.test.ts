@@ -197,7 +197,7 @@ function directReloads(source: string): number[] {
 	return lines
 }
 
-const BROWSER_FLAGS = new Set(["isFirefox", "BROWSER", "credentialOutlivesPage", "stopsBackgroundUnderOpenPage"])
+const BROWSER_FLAGS = new Set(["isFirefox", "BROWSER", "credentialOutlivesPage", "stopsBackgroundUnderOpenPage", "residentCredentialSlots"])
 
 /**
  * 1-based lines where a file asks which browser it is on. A shared helper that does is a second,

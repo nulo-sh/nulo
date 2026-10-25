@@ -199,6 +199,25 @@ On Firefox, set `NULO_E2E_BROWSER=firefox` and pass the firefox candidate. The c
 builds into `dist/<browser>` before copying it out, so rebuild the armed smoke build before a
 source smoke run.
 
+## Chaos runs
+
+A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
+
+### Profile chaos
+
+`profile-chaos.test.ts` plans 24 profile actions per seed and a closing `verifyAll` from the model in `helpers/profile-chaos/model.ts`. The actions cover creates, locks and unlocks, switches, phrase reveals and imports, accounts, backups and account files, edits and deletes, strict mode, background restarts, second windows, abandoned ceremonies and three races. The run drives each one by testid, then checks seven oracles over what it left (`checkers.ts`): O1 session, O2 profile rows, O3 writes, O4 errors, O5 settle bounds, O6 `verifyAll`, O7 leaks. On the armed smoke build:
+
+```bash
+NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1 NULO_E2E_CHAOS_RUNS=5 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 \
+  bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0
+```
+
+- `NULO_E2E_CHAOS_SEED` is the first seed (random when unset, always logged). `NULO_E2E_CHAOS_RUNS` sets how many consecutive seeds run, one launch each.
+- `NULO_E2E_CHAOS_ACTIONS` replays a hand-trimmed list instead: a JSON array of `{ action, params }` or a path to one, such as a record's `plan`.
+- Each run writes its replay record to `.e2e-state/profile-chaos/<browser>-<seed>-<launch>.json`: the plan, the bindings, and each step's outcome and evidence. Every URL and secret in the record is masked.
+- A seed is **green** only when every step ran with complete evidence. A planned restart leaves its step **incomplete**: the logs of the background it stops cannot be read. A violation turns the seed **red** and stops it, unless it is an instance of a filed finding (`KNOWN_FINDINGS`): that keeps the seed red, names the issue, and lets the run go on.
+- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). With no node behind the smoke run, the stand-in's refusal is accepted only there (`allowedFor`).
+
 ## Running multiple agents in parallel
 
 Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
@@ -382,7 +401,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
 | Update scenarios' Chrome | Yes | launched over a pipe with no `--load-extension`, so the path sweep below never sees it; a pipe-launched Chrome exits when its run dies. Its profile, the release cache and the candidates live in `.e2e-state/` |
-| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
+| Chrome orphan cleanup | Yes | `pkill -f` on `chromePattern($EXTENSION_PATH)` (`sandbox-ownership.ts`): the exact path as a literal, ending at the argument's end, so `dist/chrome` never matches `dist/chrome-2`; at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |

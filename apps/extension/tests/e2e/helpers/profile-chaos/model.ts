@@ -28,6 +28,9 @@ export interface Caps {
 	network: boolean
 	/** The build holds the restore gate (proverless network builds only). */
 	restoreGate: boolean
+	/** Passkey credentials the run's authenticator can hold: every one a create minted counts,
+	 *  a deleted profile's included, since deleting a profile leaves its credential there. */
+	credentialSlots: number
 }
 
 export interface ModelProfile {
@@ -216,6 +219,7 @@ const PASSKEY_UNLOCK_BINDS = `${SERVICE}:927`
 const LOCK_CLOSES = `${SERVICE}:1026`
 const RENAME = `${SERVICE}:1146`
 const PASSWORD_CHANGE = `${SERVICE}:1285`
+const PASSWORD_CHANGE_REOPENS = `${SERVICE}:1319`
 const DELETE = `${SERVICE}:1607`
 const PHRASE_IMPORT = `${SERVICE}:1813`
 const PHRASE_EXPORT = `${SERVICE}:2088`
@@ -224,8 +228,10 @@ const RESTORE_CLONE = `${SERVICE}:2467`
 const PASSKEY_RESTORE_UNIQUE = `${SERVICE}:2629`
 const OPEN_BEARER = "code:src/wallet/services/profile/session-manager.ts:298"
 const SESSION_RESTORE = "code:src/wallet/services/profile/session-manager.ts:584"
+const LOCK_DELETES_ROW = "code:src/wallet/services/profile/session-manager.ts:427"
 const STRICT_TOGGLE = "code:src/wallet/services/profile/session-manager.ts:757"
 const STRICT_DEFAULT = "code:src/wallet/config/config.ts:31"
+const STRICT_ROW = "code:src/popup/pages/settings/lock.vue:195"
 const PICKER_PERSISTS = "code:src/popup/components/popups/SelectProfilePopup.vue:59"
 const RESET_ROUTES = "code:src/popup/pages/settings/security/reset.vue:177"
 const RESET_WHILE_LOCKED = "code:src/popup/pages/settings/security/reset.vue:5"
@@ -320,7 +326,18 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
+const PICKER_IMPORT = "code:src/popup/components/popups/SelectProfilePopup.vue:147"
+
+/** An import that does not commit: a later profile is imported from the lock screen only, so the
+ *  open session, if any, was locked on the way in. */
+const importNotCommitted = (w: World, outcome: Outcome, sources: string[]): Expectation =>
+	w.session.kind === "open"
+		? result(lockedWorld(w), [outcome], [], "unchanged", [...sources, PICKER_IMPORT, LOCK_CLOSES])
+		: unchanged(w, outcome, sources)
+
 const canAddProfile = (w: World): boolean => live(w).length < MAX_PROFILES
+
+const mintedCredentials = (w: World): number => new Set(w.profiles.flatMap((p) => (p.credential ? [p.credential] : []))).size
 
 const newProfileInvalid = (w: World, refs: Parameters<typeof freshRefs>[1]): string | undefined =>
 	canAddProfile(w) ? freshRefs(w, refs) : "the run's profile cap"
@@ -378,9 +395,12 @@ const createPasskey: ActionSpec<"createPasskey"> = {
 	name: "createPasskey",
 	family: "create",
 	weight: 3,
-	invalid: (w, p) => newProfileInvalid(w, { profile: p.ref, credential: p.credential }),
-	params: (rng, w) => {
-		if (!canAddProfile(w)) return undefined
+	invalid: (w, p, caps) =>
+		mintedCredentials(w) < caps.credentialSlots
+			? newProfileInvalid(w, { profile: p.ref, credential: p.credential })
+			: "the authenticator holds no more credentials",
+	params: (rng, w, caps) => {
+		if (!canAddProfile(w) || mintedCredentials(w) >= caps.credentialSlots) return undefined
 		const r = reserve(w)
 		return { ref: r.profile(), name: r.name(), credential: r.credential(), double: chance(rng, 0.25) }
 	},
@@ -401,10 +421,10 @@ const createPasskey: ActionSpec<"createPasskey"> = {
 
 // ── lock, unlock, switch ────────────────────────────────────────────────
 
-/** Closing an open session removes its row; a passkey row a restart left stays until replaced. */
+/** An explicit lock deletes whatever row the store holds, a passkey row a restart left included. */
 function lockedWorld(w: World): World {
 	const next = clone(w)
-	next.session = w.session.kind === "locked" && w.session.staleRow ? { kind: "locked", staleRow: w.session.staleRow } : { kind: "locked" }
+	next.session = { kind: "locked" }
 	return next
 }
 
@@ -549,7 +569,7 @@ const importPhrase: ActionSpec<"importPhrase"> = {
 		return phraseHolder(w, phrase) ? { ...base, duplicate: chance(rng, 0.75) ? "confirm" : "decline" } : base
 	},
 	expect: (w, p) => {
-		if (p.duplicate === "decline") return unchanged(w, "cancelled", [DUPLICATE_WARNS])
+		if (p.duplicate === "decline") return importNotCommitted(w, "cancelled", [DUPLICATE_WARNS])
 		const profile = {
 			ref: p.ref,
 			method: "password" as const,
@@ -671,13 +691,13 @@ const importBackup: ActionSpec<"importBackup"> = {
 	expect: (w, p) => {
 		const file = backupOf(w, p.file) as ModelFile
 		if (p.variant !== "right")
-			return unchanged(
+			return importNotCommitted(
 				w,
 				"refused",
 				p.variant === "wrong-password" ? [BACKUP_UNREADABLE] : [BACKUP_UNPARSED, BACKUP_INTEGRITY, BACKUP_UNREADABLE],
 			)
-		if (credentialLive(w, file)) return unchanged(w, "refused", [PASSKEY_RESTORE_UNIQUE])
-		if (p.duplicate === "decline") return unchanged(w, "cancelled", [DUPLICATE_WARNS])
+		if (credentialLive(w, file)) return importNotCommitted(w, "refused", [PASSKEY_RESTORE_UNIQUE])
+		if (p.duplicate === "decline") return importNotCommitted(w, "cancelled", [DUPLICATE_WARNS])
 		const sources = [RESTORE_CLONE, RESTORE_FINALIZES, OPEN_BEARER, ...(p.duplicate ? [DUPLICATE_WARNS] : [])]
 		return result(restoredWorld(w, file, p.ref, p.password), ["committed"], created(p.ref), "home", sources)
 	},
@@ -785,7 +805,14 @@ const changePassword: ActionSpec<"changePassword"> = {
 		const target = openProfile(next) as ModelProfile
 		target.password = p.password
 		bump(next, { secret: 1 })
-		return result(next, ["committed"], [{ kind: "profile", ref: target.ref }], "unchanged", [PASSWORD_CHANGE])
+		// The change reopens the open session under the new password, so the row takes the bearer a
+		// fresh open would under the device's strict mode.
+		next.session = { kind: "open", ref: target.ref, bearer: !w.device.strict }
+		return result(next, ["committed"], [{ kind: "profile", ref: target.ref }], "unchanged", [
+			PASSWORD_CHANGE,
+			PASSWORD_CHANGE_REOPENS,
+			OPEN_BEARER,
+		])
 	},
 }
 
@@ -805,7 +832,7 @@ const rename: ActionSpec<"rename"> = {
 }
 
 /** The profile a delete removes: the open one from Settings, the lock screen's from Forgot password. */
-const deleteTarget = (w: World, via: ParamsMap["deleteProfile"]["via"]): ModelProfile | undefined =>
+export const deleteTarget = (w: World, via: ParamsMap["deleteProfile"]["via"]): ModelProfile | undefined =>
 	via === "settings" ? openProfile(w) : locked(w) ? selectedProfile(w) : undefined
 
 function deletedWorld(w: World, target: ProfileRef): World {
@@ -842,13 +869,13 @@ const toggleStrict: ActionSpec<"toggleStrict"> = {
 	name: "toggleStrict",
 	family: "strict",
 	weight: 2,
-	invalid: (w) => (openProfile(w) ? undefined : "Settings needs an open session"),
-	params: (_rng, w) => (openProfile(w) ? {} : undefined),
+	invalid: (w) => (openProfile(w)?.method === "password" ? undefined : "the strict row shows only to an open password profile"),
+	params: (_rng, w) => (openProfile(w)?.method === "password" ? {} : undefined),
 	expect: (w) => {
 		const next = clone(w)
 		next.device.strict = !w.device.strict
 		if (next.device.strict && next.session.kind === "open") next.session.bearer = false
-		return result(next, ["committed"], [{ kind: "device" }], "unchanged", [STRICT_TOGGLE, STRICT_DEFAULT])
+		return result(next, ["committed"], [{ kind: "device" }], "unchanged", [STRICT_TOGGLE, STRICT_DEFAULT, STRICT_ROW])
 	},
 }
 
@@ -913,7 +940,11 @@ const raceLockDuringUnlock: ActionSpec<"raceLockDuringUnlock"> = {
 	params: (_rng, w) => (lockedOnPasskey(w) ? {} : undefined),
 	expect: (w) => {
 		const writes: WriteScope[] = [{ kind: "profile", ref: w.selected as ProfileRef }, { kind: "device" }]
-		return result(lockedWorld(w), ["committed-then-locked", "cancelled", "refused"], writes, "lock", [LOCK_CLOSES, "decision:D17"])
+		return result(lockedWorld(w), ["committed-then-locked", "cancelled", "refused"], writes, "lock", [
+			LOCK_CLOSES,
+			LOCK_DELETES_ROW,
+			"decision:D17",
+		])
 	},
 }
 
@@ -926,8 +957,8 @@ const raceDoubleUnlock: ActionSpec<"raceDoubleUnlock"> = {
 	expect: (w) => unlockedOn(w, selectedProfile(w) as ModelProfile, "home", [OPEN_BEARER]),
 }
 
-/** A passkey unlock that committed in the stopped background leaves its row; the lock after the
- *  release finds no session to close. */
+/** A passkey unlock that committed in the stopped background leaves its row, and the next
+ *  background keeps it for the lock screen; the lock after the release deletes it. */
 const raceRestartDuringUnlock: ActionSpec<"raceRestartDuringUnlock"> = {
 	name: "raceRestartDuringUnlock",
 	family: "race",
@@ -936,10 +967,12 @@ const raceRestartDuringUnlock: ActionSpec<"raceRestartDuringUnlock"> = {
 		caps.restartUnderOpenPage ? abandonCeremony.invalid(w, {}, caps) : "the background will not stop under the held page",
 	params: (_rng, w, caps) => (raceRestartDuringUnlock.invalid(w, {}, caps) ? undefined : {}),
 	expect: (w) => {
-		const next = clone(w)
-		next.session = { kind: "locked", staleRow: w.selected }
 		const writes: WriteScope[] = [{ kind: "profile", ref: w.selected as ProfileRef }, { kind: "device" }]
-		return result(next, ["committed-then-locked", "cancelled", "refused"], writes, "lock", [SESSION_RESTORE, "decision:D17"])
+		return result(lockedWorld(w), ["committed-then-locked", "cancelled", "refused"], writes, "lock", [
+			SESSION_RESTORE,
+			LOCK_DELETES_ROW,
+			"decision:D17",
+		])
 	},
 }
 
@@ -1175,9 +1208,13 @@ export function coverageLine(
 	c: Coverage,
 	warns: Readonly<Record<string, number>>,
 	incomplete: Readonly<Record<string, number>> = {},
+	allowed: Readonly<Record<string, number>> = {},
+	known: Readonly<Record<string, number>> = {},
 ): string {
 	const gaps = Object.keys(incomplete).length ? ` incomplete[${counts(incomplete)}]` : ""
-	return `families[${counts(c.families)}] transitions=${Object.keys(c.transitions).length} schedules[${counts(c.schedules)}] warns[${counts(warns)}]${gaps}`
+	const accepted = Object.keys(allowed).length ? ` allowed[${counts(allowed)}]` : ""
+	const filed = Object.keys(known).length ? ` known[${counts(known)}]` : ""
+	return `families[${counts(c.families)}] transitions=${Object.keys(c.transitions).length} schedules[${counts(c.schedules)}] warns[${counts(warns)}]${gaps}${accepted}${filed}`
 }
 
 /** A plan's steps as a printable list: symbols only, never a bound value. */

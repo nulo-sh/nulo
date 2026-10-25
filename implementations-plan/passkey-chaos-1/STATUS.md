@@ -11,3 +11,4 @@
 - 2026-10-25 plan at the approval gate; nothing approved until the orchestrator says so.
 - 2026-10-25 C1 phase 0: plan approved by the orchestrator with D19 (Outline B as C4.2) and D20 (C1's testing bar); origin/dev at 67cae683b, nothing to merge.
 - 2026-10-25 C1.1 gate green: model test 30/30 at retry 0 (124 tests), lint, typecheck:all, test:all; Codex design consult applied (12/12, D21 to D24).
+- 2026-10-25 C1.2 gate green: Chrome seeds 1-5 ran every step (red only on filed #1131/#1132), passkey-paths/retry/backup green on both browsers, model test 30/30 at retry 0, lint, typecheck:all, test:all.

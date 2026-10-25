@@ -8,7 +8,7 @@
  * Imports nothing from Puppeteer or Vitest.
  */
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
-import { type Method, type ModelProfile, type ProfileRef, type StepEnd, type World, type WriteScope, live } from "./model"
+import { type Caps, type Method, type ModelProfile, type ProfileRef, type StepEnd, type World, type WriteScope, live } from "./model"
 
 export type OracleId = "O1" | "O2" | "O3" | "O4" | "O5" | "O6" | "O7"
 
@@ -17,6 +17,8 @@ export interface Violation {
 	message: string
 	/** Text the wallet produced; the runner masks every needle in it before recording it. */
 	detail?: string
+	/** The filed issue this violation is an instance of: it keeps the seed red, not the run stopped. */
+	known?: number
 }
 
 const violation = (oracle: OracleId, message: string, detail?: string): Violation =>
@@ -369,8 +371,8 @@ export type ErrorEntry =
 export interface AllowedError {
 	pattern: RegExp
 	kinds: readonly ErrorEntry["kind"][]
-	/** Only during a step that ends one of these on purpose. */
-	during: readonly StepEnd[]
+	/** Only during a step that ends one of these on purpose, or at any point of the run. */
+	during: readonly StepEnd[] | "any step"
 	source: string
 	reason: string
 }
@@ -386,32 +388,113 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 	},
 ]
 
+/** A run with no node behind it reaches only the guarded launch's stand-in. The entry needs the
+ *  stand-in's own refusal text, so an error from anything else still fails the run. */
+export const GUARDED_NODE_REFUSAL: AllowedError = {
+	pattern: /no node answers a guarded e2e run/,
+	kinds: ["log"],
+	during: "any step",
+	source: "code:apps/extension/tests/e2e/fixtures/node-stub.ts:12",
+	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
+}
+
+/** The allowlist a run checks against: the stand-in's refusal only where no node answers. */
+export const allowedFor = (caps: Pick<Caps, "network">): readonly AllowedError[] =>
+	caps.network ? ALLOWED_ERRORS : [...ALLOWED_ERRORS, GUARDED_NODE_REFUSAL]
+
+/** A filed product finding the runs keep meeting. Its error line keeps the seed red, but the run
+ *  goes on, so the steps after it are still checked; only an error line qualifies, never a state. */
+export interface KnownFinding {
+	issue: number
+	pattern: RegExp
+	kinds: readonly ErrorEntry["kind"][]
+	/** A log line's source, when the finding names one. */
+	source?: string
+}
+
+export const KNOWN_FINDINGS: readonly KnownFinding[] = [
+	{ issue: 1131, pattern: /Failed to get (public|private) FeeJuice balance.*has no current incarnation/, kinds: ["log"] },
+	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
+]
+
+const isInstance = (k: KnownFinding, e: ErrorEntry): boolean =>
+	k.kinds.includes(e.kind) && (k.source === undefined || (e.kind === "log" && e.source === k.source)) && k.pattern.test(e.text)
+
 /** An error's class for a shareable message: its leading `SomethingError`, else `unclassified`. */
 const errorClass = (text: string): string => /^[A-Z][A-Za-z]*(Error|Exception)\b/.exec(text)?.[0] ?? "unclassified"
 
 export interface ErrorVerdict {
 	violations: Violation[]
 	warns: Record<string, number>
+	/** Accepted errors per allowlist source, so the coverage line shows what the run let through. */
+	allowed: Record<string, number>
 }
+
+const allows = (a: AllowedError, e: ErrorEntry, ends: readonly StepEnd[]): boolean =>
+	a.kinds.includes(e.kind) && (a.during === "any step" || a.during.some((d) => ends.includes(d))) && a.pattern.test(e.text)
 
 export function checkErrors(
 	entries: readonly ErrorEntry[],
 	ends: readonly StepEnd[],
 	allowed: readonly AllowedError[] = ALLOWED_ERRORS,
+	known: readonly KnownFinding[] = KNOWN_FINDINGS,
 ): ErrorVerdict {
 	const warns: Record<string, number> = {}
+	const accepted: Record<string, number> = {}
 	const violations: Violation[] = []
 	for (const e of entries) {
 		if (e.kind === "log" && e.level === "warn") {
 			warns[e.source] = (warns[e.source] ?? 0) + 1
 			continue
 		}
-		const ok = allowed.some((a) => a.kinds.includes(e.kind) && a.during.some((d) => ends.includes(d)) && a.pattern.test(e.text))
-		if (ok) continue
+		const entry = allowed.find((a) => allows(a, e, ends))
+		if (entry) {
+			accepted[entry.source] = (accepted[entry.source] ?? 0) + 1
+			continue
+		}
 		const where = e.kind === "log" ? `error log from ${e.source}` : `${e.kind} on ${e.page}`
-		violations.push(violation("O4", `${where}: ${errorClass(e.text)}`, e.text))
+		const finding = known.find((k) => isInstance(k, e))
+		violations.push({ ...violation("O4", `${where}: ${errorClass(e.text)}`, e.text), ...(finding ? { known: finding.issue } : {}) })
 	}
-	return { violations, warns }
+	return { violations, warns, allowed: accepted }
+}
+
+// ── the run's verdict ───────────────────────────────────────────────────
+
+export interface StepOutcome {
+	violations: readonly Violation[]
+	incomplete: readonly string[]
+	/** A check that threw: the step's evidence is unread. */
+	crashed?: string
+}
+
+export type RunVerdict = "green" | "incomplete" | "red"
+
+/** Red on any violation, a known one included; green only when every planned step ran with
+ *  complete evidence. */
+export function runVerdict(steps: readonly StepOutcome[], planned: number): RunVerdict {
+	if (steps.some((r) => r.violations.length)) return "red"
+	return steps.length === planned && steps.every((r) => !r.incomplete.length && !r.crashed) ? "green" : "incomplete"
+}
+
+export const UNPLANNED_RESTART = "the background restarted unplanned: the run stops here"
+
+/** A step after which the run cannot go on: a violation not filed yet, a check that threw, or a
+ *  restart the plan did not draw. */
+export const stopsRun = (r: StepOutcome): boolean =>
+	r.violations.some((v) => v.known === undefined) || r.crashed !== undefined || r.incomplete.includes(UNPLANNED_RESTART)
+
+/** The evidence a planned restart cannot give: the stopped background's last lines are unread. */
+export const RESTART_LOG_GAP = "logs: the background restarted inside the step"
+
+/** Why a seed with no violation is still no pass: a planned step it never ran, a check that threw,
+ *  or any evidence it could not read but a planned restart's log window. */
+export function evidenceGaps(steps: readonly (StepOutcome & { index: number; action: string })[], planned: number): string[] {
+	const gaps = steps.flatMap((r) => [
+		...(r.crashed === undefined ? [] : [`step ${r.index} ${r.action}: the checks threw`]),
+		...r.incomplete.filter((why) => why !== RESTART_LOG_GAP).map((why) => `step ${r.index} ${r.action}: ${why}`),
+	])
+	return steps.length < planned ? [...gaps, `ran ${steps.length} of ${planned} planned steps`] : gaps
 }
 
 /** Log ids run on without a gap inside one background's life: a missing id is a line the drain lost. */
@@ -434,6 +517,8 @@ export interface SettleReading {
 	/** On a miss: the loading testids visible when the bound ran out. */
 	loading?: string[]
 	route?: string
+	/** On a miss: every testid visible then. */
+	visible?: string[]
 }
 
 export function checkSettle(name: string, r: SettleReading): Violation[] {
@@ -443,6 +528,7 @@ export function checkSettle(name: string, r: SettleReading): Violation[] {
 		violation(
 			"O5",
 			`${name} did not settle within ${r.boundMs} ms (route ${r.route ?? "?"}, loading: ${(r.loading ?? []).join(", ") || "none"})`,
+			r.visible?.length ? `visible ${r.visible.join(",")}` : undefined,
 		),
 	]
 }
@@ -533,7 +619,7 @@ export interface LeakHit {
 export interface StructureReading {
 	/** Rows of sealed families whose value is not a seal envelope. */
 	unsealedRows: string[]
-	/** Password profile slots that are not framed ciphertext: `profileId.field`. */
+	/** Sealed profile-row fields that are not their method's frame: `profileId.field (why)`. */
 	unframedSlots: string[]
 	/** Where `prfSalt` appears: `area:key`, `log:<id>`, `file:<ref>`. */
 	prfSalt: string[]

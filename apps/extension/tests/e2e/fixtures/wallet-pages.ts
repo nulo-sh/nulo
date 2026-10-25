@@ -15,7 +15,7 @@ import { PRESTO_HTTPS_HEALTH_URL, PRESTO_HTTP_HEALTH_URL } from "./presto"
  * extension error. Only a refused connection to the two exact health URLs is exempt; a 500,
  * a certificate failure, or any other URL still counts.
  */
-function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
+export function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
 	if (!msg.text().startsWith("Failed to load resource") || !msg.text().includes("net::ERR_CONNECTION_REFUSED")) return false
 	const url = msg.location().url
 	return url === PRESTO_HTTPS_HEALTH_URL || url === PRESTO_HTTP_HEALTH_URL

@@ -843,6 +843,7 @@ export const firefoxDriver: BrowserDriver = {
 	scheme: SCHEME,
 	credentialOutlivesPage: true,
 	stopsBackgroundUnderOpenPage: false,
+	residentCredentialSlots: Number.POSITIVE_INFINITY,
 	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
 	// A temporary install over the installed add-on is an update to it; the UUID and storage stay.
