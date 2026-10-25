@@ -86,6 +86,7 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	"nulo:imported-account-key:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:kdf:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:master:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:passkey-unlock:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row-seal:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row-seal:aead:v1": { kind: "label", reason: "a domain separator" },

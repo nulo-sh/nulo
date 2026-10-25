@@ -24,6 +24,8 @@ export { DAPP_SESSION_MAC_LABEL, deriveDappSessionMacKey } from "./dapp-session-
 export { deriveRowKeys, keyedSegment, openRow, ROW_SEAL_LABELS, sealRow, type RowBinding, type RowKeys } from "./row-seal"
 export { EncryptionKey } from "./encryption-key"
 export { PasswordSecretBox, PROFILE_AAD, type EncryptedProfileSecret, type Sealed } from "./password-secret-box"
+export { openPasskeySlots, sealPasskeySlots } from "./passkey-secret-box"
+export { derivePasskeyUnlockKey, newPrfSalt, PRF_BYTES } from "./passkey-unlock-key"
 export { computeEnvelopeMacV3, verifyEnvelopeMacV3, type MacEnvelopeV3 } from "./entropy-mac"
 export { sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "./imported-account-key-box"
 export {
