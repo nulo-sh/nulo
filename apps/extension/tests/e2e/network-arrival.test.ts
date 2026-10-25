@@ -9,11 +9,11 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { CHAIN_IDS } from "@/utils/chain-ids"
+import { CHAIN_IDS, MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/chain-ids"
 import { interceptRpc, isFirefox, stopBackground } from "./fixtures/browser"
 import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
 import { waitForSelectedAccount } from "./fixtures/accounts"
-import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
+import { clickByTestId, type ExtensionContext, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import { unlockAfterBackgroundDeath } from "./fixtures/auth"
 import { switchToNetwork } from "./fixtures/networks"
 import { pointerClick, reloadWithLegalState, waitForSheet } from "./helpers/legal-drivers"
@@ -30,9 +30,15 @@ const mainnetRequests = (extension: ExtensionContext) => extension.egress?.nodes
 /** The rollup the public Mainnet node serves until its v6 upgrade executes. */
 const ALPHA_ROLLUP_VERSION = 4248422647
 
-/** Runs `body` with the Mainnet node answering as that rollup, as the public one does today. */
-async function onAlphaMainnet(extension: ExtensionContext, body: (methods: readonly string[]) => Promise<void>): Promise<void> {
-	const stub = await startStub((method) => (method === "aztec_getNodeInfo" ? nodeInfoResult(1, ALPHA_ROLLUP_VERSION) : undefined))
+/** Runs `body` with the Mainnet node answering as `rollupVersion`; every other call fails. */
+async function onMainnetRollup(
+	extension: ExtensionContext,
+	rollupVersion: number,
+	body: (methods: readonly string[]) => Promise<void>,
+): Promise<void> {
+	const stub = await startStub((method) =>
+		method === "aztec_getNodeInfo" ? nodeInfoResult(MAINNET_L1_CHAIN_ID, rollupVersion) : undefined,
+	)
 	const node = await interceptRpc(extension.browser, extension.extensionId, `https://${MAINNET_NODE_HOST}`, {
 		kind: "redirect",
 		to: stub.url,
@@ -96,30 +102,42 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		expect(extension.egress?.guard.attempts().filter(({ host }) => host === MAINNET_NODE_HOST)).toEqual([])
 	}, 180_000)
 
-	test("a new profile starts on Mainnet with no arrival; a node on another chain reads invalid, and Testnet is one switch away", async ({
-		registeredExtension: extension,
-	}) => {
-		await onAlphaMainnet(extension, async (methods) => {
-			const page = await openPopup(extension)
-			await waitForHash(page, "#/popup/general", 30_000)
-			const mainnet = await readNetwork(page, "mainnet")
-			expect(mainnet.chainId).toBe(CHAIN_IDS.MAINNET)
-			const active = await page.evaluate(
-				async (key: string) => (await chrome.storage.local.get(key))[key],
-				`nulo:core:active-network@${mainnet.profileId}`,
-			)
-			expect(active).toBe(mainnet.id)
-			expect(await page.$(ARRIVAL)).toBeNull()
-			await page.waitForSelector('[data-testid="network-button"][data-status="invalidchain"]', { visible: true, timeout: 30_000 })
-			expect(await textOf(page, "network-name")).toBe("Mainnet")
-			const onMainnet = await waitForSelectedAccount(page, (address) => !!address, "a Mainnet account is selected", 30_000)
+	test.for([
+		["before its v6 upgrade, as the public node is today, reads invalid", ALPHA_ROLLUP_VERSION, "invalidchain"],
+		["serving the pinned chain reads active, with no token list or sponsor", MAINNET_ROLLUP_VERSION, "active"],
+	] as const)(
+		"a new profile starts on Mainnet with no arrival, also after a cold start; its node %s; Testnet is one switch away",
+		async ([, rollupVersion, status], { freshExtensionPerTest: extension }) => {
+			await onMainnetRollup(extension, rollupVersion, async (methods) => {
+				await registerProfile(extension)
+				let page = await openPopup(extension)
+				await waitForHash(page, "#/popup/general", 30_000)
+				const mainnet = await readNetwork(page, "mainnet")
+				expect(mainnet.chainId).toBe(CHAIN_IDS.MAINNET)
+				const active = await page.evaluate(
+					async (key: string) => (await chrome.storage.local.get(key))[key],
+					`nulo:core:active-network@${mainnet.profileId}`,
+				)
+				expect(active).toBe(mainnet.id)
+				const onMainnet = await waitForSelectedAccount(page, (address) => !!address, "a Mainnet account is selected", 30_000)
 
-			await switchToNetwork(page, "Testnet")
-			await waitForSelectedAccount(page, (address) => !!address && address !== onMainnet, "a Testnet account is selected", 30_000)
-			await page.close()
-			expect(methods).toContain("aztec_getNodeInfo")
-		})
-	}, 120_000)
+				await page.close()
+				await stopBackground(extension)
+				page = await openPopup(extension)
+				await unlockAfterBackgroundDeath(page)
+				await page.waitForSelector(`[data-testid="network-button"][data-status="${status}"]`, { visible: true, timeout: 30_000 })
+				expect(await textOf(page, "network-name")).toBe("Mainnet")
+				expect(await page.$(ARRIVAL)).toBeNull()
+				await waitForSelectedAccount(page, (address) => address === onMainnet, "the same Mainnet account is selected", 30_000)
+
+				await switchToNetwork(page, "Testnet")
+				await waitForSelectedAccount(page, (address) => !!address && address !== onMainnet, "a Testnet account is selected", 30_000)
+				await page.close()
+				expect(methods).toContain("aztec_getNodeInfo")
+			})
+		},
+		180_000,
+	)
 })
 
 describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
@@ -138,7 +156,7 @@ describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
 	test("a new profile's Home on Mainnet, its node on another chain, dark and light", { timeout: 300_000, retry: 0 }, async ({
 		registeredExtensionPerTest: ctx,
 	}) => {
-		await onAlphaMainnet(ctx, async () => {
+		await onMainnetRollup(ctx, ALPHA_ROLLUP_VERSION, async () => {
 			const page = await openPopup(ctx)
 			await page.setViewport(CAPTURE_VIEWPORT)
 			await waitForHash(page, "#/popup/general", 30_000)

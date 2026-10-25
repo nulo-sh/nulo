@@ -29,6 +29,7 @@ import {
 	waitForLockScreen,
 	waitForToast,
 } from "../fixtures/helpers"
+import { switchToNetwork } from "../fixtures/networks"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../fixtures/restore-gate"
 import { TEST_PASSWORD } from "../helpers/import-drivers"
 import {
@@ -86,6 +87,8 @@ describe("stale network reset after a background death", () => {
 				await registerProfile(ctx)
 				page = await openPopup(ctx)
 				await waitForHash(page, "#/popup/general", 30_000)
+				// A new profile starts on Mainnet; the stale seeds move Testnet's rows.
+				await switchToNetwork(page, "Testnet")
 				await createAccount(page, "Savings")
 				await closeStuckPopup(page)
 				const testnetBefore = (await readAccounts(page, CHAIN_IDS.TESTNET)).map(identity)

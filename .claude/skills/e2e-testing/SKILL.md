@@ -186,8 +186,9 @@ runtime env var can never arm a build-time flag.
   The smoke setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
   Each seeded remote node (Mainnet, the default, and Testnet) is answered by its own loopback
   stand-in with a terminal 400 (`fixtures/node-stub.ts`); a new profile starts on Mainnet, so a spec
-  that needs the list's tokens, prices or the sponsor switches to Testnet first, and one that stages
-  the active node intercepts `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
+  that needs the list's tokens, prices, the sponsor or Testnet's own accounts (the stale-network seeds
+  move them) switches to Testnet first, and one that stages the active node intercepts
+  `DEFAULT_NODE_ORIGIN`. The Testnet stand-in is armed in every launch but
   the artifact-only live spec's (`shipped-token-list.test.ts`: its
   `launchExtension({ live: true })` sends the node's and the token list's hosts direct, and throws
   unless setup provides `liveLeg`); a smoke spec that needs a value only a node gives seeds it
