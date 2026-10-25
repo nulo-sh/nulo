@@ -9,3 +9,4 @@
 - 2026-10-25 Opus audit r1: conditional approve, 15 findings (verified). Plan revised for both rounds (250 lines).
 - 2026-10-25 Codex final fresh pass: conditional approve, 7 findings (verified, all accepted); conditions applied (252 lines).
 - 2026-10-25 plan at the approval gate; nothing approved until the orchestrator says so.
+- 2026-10-25 C1 phase 0: plan approved by the orchestrator with D19 (Outline B as C4.2) and D20 (C1's testing bar); origin/dev at 67cae683b, nothing to merge.

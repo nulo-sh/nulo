@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 67cae683b
 trunk: dev
-status: planned (awaiting approval)
+status: approved (orchestrator, 2026-10-25); C1 in progress
 issues: none (tests the change of #1127, closed by passkey-unlock-1)
 post_implementation_hardening: not scheduled
 ---
@@ -98,8 +98,10 @@ The owner, 2026-10-25:
 | D16 | Accessibility: none; no product file changes. A driver that needs a missing `data-testid` adds it (not a UI change) | | CLAUDE.md § testid preservation |
 | D17 | A race's `expect` returns a set of allowed outcomes with one successor state, or ends in a lock; every `expect` clause names its source | one outcome per race; an unsourced model | a precomputed plan must continue from whichever allowed outcome happened; an unsourced clause is how a model drifts to match a bug (Opus 5, 6) |
 | D18 | The leak needles in an agent session are the values filled into secret fields (password, repeat password, file password, recovery phrase), found by their testids; no `secret` verb and no openability check in sessions | a `secret` verb; every long `fill` value | an agent forgets to register; a profile name is stored in plaintext by design and would be a false leak (Opus 10; final pass 1) |
+| D19 | Outline B, narrow, joins C4 as phase C4.2 (orchestrator, 2026-10-25): after passkey-unlock-1's A3 merges, a seeded sequence test drives the profile service graph in-process under `tests/COMPOSITION-TESTS.md`'s rules, reusing `helpers/profile-chaos/model.ts`, with a fixed seed set in the unit suite under a stated time budget and an armed long mode for the campaign | Outline B as the main layer; leaving it out with a reopening condition | the owner asked for this change to be tested much harder than usual ("Please, do test a LOT this."); the cheapest volume is in-process; the objection that A2 and A3 rewrite the service API no longer holds once A3 has merged (Codex, round 1). Replaces the reopening condition in § Review verdicts |
+| D20 | C1's testing bar, on top of each gate (orchestrator, 2026-10-25): `profile-chaos-model.test.ts` passes 30 consecutive runs at retry 0; every oracle's break fixture is shown failing in the gate's output, not only asserted; the baseline table records every seed's coverage line | the gates alone | the owner's "Please, do test a LOT this." |
 
-**Outline B** (both audits see it): a composition-level stateful test over the real profile service graph (fake `chrome.storage`, fake PRF bytes, no browser) as the main seeded layer, thousands of sequences per run in the unit suite, with only a thin e2e chaos layer and the agents on top. Disputed in round 1 and not added; the disposition and its reopening condition are in § Review verdicts.
+**Outline B** (both audits see it): a composition-level stateful test over the real profile service graph (fake `chrome.storage`, fake PRF bytes, no browser) as the main seeded layer, thousands of sequences per run in the unit suite, with only a thin e2e chaos layer and the agents on top. Disputed in round 1; the orchestrator's D19 adds it, narrow, as C4.2.
 
 ## Architecture & Implementation
 
@@ -201,6 +203,8 @@ Fast layers: `bun run lint`, `bun run typecheck:all`, `bun run test`. Smoke runs
 
 **C4.1** A3's flows: the unlock choice after phrase import and restore, the unlock method page both ways, one passkey for several profiles, passkey and strict mode, the passkey account file. Gate: as C3.1, with I6 verified.
 
+**C4.2** (D19) a seeded sequence test over the profile service graph in-process, under `tests/COMPOSITION-TESTS.md`, reusing `model.ts`'s catalog and `plan()`: a fixed seed set in the unit suite under a stated time budget, and an armed long mode for the campaign. Gate: fast layers; the fixed set inside its budget; the long mode's seed count per OA-C3.
+
 **C5.1** the campaign on A3's merged head per OA-C3; the fleet per OA-C1 (the orchestrator spawns it); the testnet pass if OA-C2 says so, before C5's acceptance. Gate: OA-C3's criteria met, every finding triaged and filed; the coverage and findings tables in this plan.
 
 If A2 merges before C1's PR, C1 absorbs C3.1 and runs its gates on `dev` with A2; a baseline red in a path A2 replaced is recorded, not filed, unless it reproduces after A2.
@@ -216,7 +220,7 @@ None. No product file changes; a missing `data-testid` is added only where a dri
 | C1 | C1.1-C1.3 | `dev` | `test(e2e): seeded profile chaos with model oracles on chrome and firefox` | off |
 | C2 | C2.1-C2.2 | `dev` after C1 | `test(e2e): agent chaos sessions over an isolated, instrumented wallet` | off |
 | C3 | C3.1 | `dev` after C2 and A2 | `test(e2e): profile chaos covers the recovery phrase of passkey profiles` | off |
-| C4 | C4.1 | `dev` after C3 and A3 | `test(e2e): profile chaos covers unlock method changes and shared passkeys` | off |
+| C4 | C4.1-C4.2 | `dev` after C3 and A3 | `test(e2e): profile chaos covers unlock method changes and shared passkeys` | off |
 | C5 | C5.1, close-out | `dev` after C4 | `test(e2e): profile chaos campaign results and close-out` | off |
 
 - No PR closes an issue (`Closes` none); C5's body links #1127 and every finding's issue.
@@ -239,7 +243,7 @@ Each finding was checked against the tree before its disposition; detail in less
 - **Codex, harness design (consult, before the plan):** sound direction; eleven findings, all accepted (D1 to D8, D11).
 - **Codex, round 1:** reject. Accepted: F4 and the bearer (D3, the model's strict clause); `STORED_SHAPES` for the census (F5, D4); the egress guard's real limits and the shell it does not confine (Security); every log level for the leak scan and every encoding (D5, D6); no model in agent sessions (D8); one test per seed, completed transitions counted, red-filed apart from green (Planning, C1.3); capability-specific schedules and no assumed discovery order (D1, I6); the A2 and A3 contracts (the model); privacy class first and a directory per launch (CHARTERS.md § Triage, the session); the testnet pass placed inside C5 and kept manual (OA-C2). Rejected: moving OA-C6 (report format) and the fleet's model choice to the orchestrator: the lane brief names the report format as an owner ask, and the agents' model is the fleet's main cost.
 - **Opus, round 1:** conditional approve. Accepted: the driver fact and import rule (D1, Shape); the registry and the two family groups (D4); strict both ways with controls (C1.1); race outcome sets and sourced clauses (D17); the hold reads and the proverless marker (catalog, Shape); the anchor's surfaces (the model's capabilities clause); the restart close-failure rate (C1.2); the fleet's permissions and needles from `fill` (CHARTERS.md, D18); OA-C2's manual pass; pinned timeouts, split commands and OA-C3's cost (Planning, gates, OA-C3); warn counted not failed, `targetcreated`, in-page scans, unplanned restarts (Oracles); CI output kept to ids (OA-C4); A2 landing before C1 (gates). Cuts accepted: the send-chaos network replay, the launcher's own armed-dist check, the `secret` verb, a replay requirement on red pilots. Rejected: moving OA-C6 and the model choice, as above.
-- **Outline B:** disputed. Codex would add a narrow seeded sequence test over `src/wallet/services/profile/service.integration.test.ts`'s graph; Opus would keep it out. Not added: passkey-unlock-1 tests each service path it adds (its refusal matrix and composition tests), a second driver set over a service API that A2 and A3 rewrite doubles the upkeep, and triage already sends a service-logic finding's regression test to that layer. The model imports nothing from Puppeteer or Vitest, so a composition driver can reuse it. Reopening condition: two or more baseline or campaign reds whose cause is service logic.
+- **Outline B:** disputed in planning (Codex for a narrow seeded sequence test over `src/wallet/services/profile/service.integration.test.ts`'s graph, Opus against, on the upkeep of a second driver set over a service API A2 and A3 rewrite). Settled by the orchestrator's D19: added, narrow, as C4.2 once A3 has merged.
 
 ## Seeds (draft; finalized after approval)
 
