@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto"
 import type { Page } from "puppeteer"
 import { readyToast } from "@/components/stale-network/copy"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { PRIMARY_SEED } from "@/wallet/services/network/seeds"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { revealSeedPhrase, waitForToast } from "../fixtures/helpers"
 import {
@@ -176,8 +177,8 @@ export const PREVIOUS_LOCAL_CHAIN_ID = (LOCAL_L1_CHAIN_ID ^ 5) >>> 0
 
 /**
  * Local as a reset bump meets it, with both causes, on a profile that never opened Local: the row
- * on {@link PREVIOUS_LOCAL_CHAIN_ID}, the Testnet's derived accounts copied onto it at moved
- * addresses, and Local active. Refuses a profile that already holds Local accounts, whose PXE
+ * on {@link PREVIOUS_LOCAL_CHAIN_ID}, the derived accounts of the network a new profile starts on
+ * copied onto it at moved addresses, and Local active. Refuses a profile that already holds Local accounts, whose PXE
  * store for the seed chain would already exist. Run it locked.
  */
 export async function seedStaleLocalBothCauses(
@@ -186,10 +187,10 @@ export async function seedStaleLocalBothCauses(
 ): Promise<{ profileId: string; networkId: string; moved: string[] }> {
 	const rows = await networkRows(page, networks)
 	const local = rows.find((row) => row.kind === "local")
-	const testnet = rows.find((row) => row.kind === "testnet")
-	if (!local || !testnet) throw new Error("seedStaleLocalBothCauses: no Local or Testnet network the wallet reads")
+	const start = rows.find((row) => row.kind === PRIMARY_SEED?.kind)
+	if (!local || !start) throw new Error("seedStaleLocalBothCauses: no Local or default network the wallet reads")
 	if ((await accountRows(page, CHAIN_IDS.SANDBOX)).length > 0) throw new Error("the profile already opened Local")
-	const derived = (await accountRows(page, testnet.chainId, { complete: true })).filter((row) => row.type === 0)
+	const derived = (await accountRows(page, start.chainId, { complete: true })).filter((row) => row.type === 0)
 	const writes: Record<string, string> = {
 		[`${NETWORKS}${local.id}`]: JSON.stringify({ ...local, chainId: PREVIOUS_LOCAL_CHAIN_ID }),
 		[`nulo:core:active-network@${local.profileId}`]: local.id,
