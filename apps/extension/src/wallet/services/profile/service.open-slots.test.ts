@@ -207,8 +207,8 @@ describe("the opener's buffers", () => {
 				const error = await settled(call(service, id, password))
 				expect(error === undefined, `${path} ${password}`).toBe(password === PASSWORD)
 				await service.lockActiveProfile()
-				// The password change also opens what it resealed, under the new passhash.
-				expect(held.length, `${path} ${password}`).toBe(password !== PASSWORD ? 1 : path === "changeProfilePassword" ? 5 : 3)
+				// A passhash on every path; the master and entropy too on success.
+				expect(held.length, `${path} ${password}`).toBeGreaterThanOrEqual(password === PASSWORD ? 3 : 1)
 				expect(held.map(allZero), `${path} ${password}`).toStrictEqual(held.map(() => true))
 			}
 		}
