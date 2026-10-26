@@ -175,7 +175,10 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   release's rows from the recording. A sealing release's it reads from a separate install of the
   release, never updated: the recording written into it, unlocked under the test password, every
   row read through the release's own services, each root's count checked against the rows it
-  stores, with a refusing stub held on every dial. While the candidate's Testnet seed equals the
+  stores, with a refusing stub held on every dial; its selection must be a Testnet account other
+  than the first, and its dials must cover every loopback origin its rows name. Its endpoints sit on
+  those stubs, so its reset takes the moved-endpoint branch; a plaintext release's replay keeps the
+  seed's. While the candidate's Testnet seed equals the
   recorded one the update opens with no takeover; once it differs, the takeover's reset must carry
   every account to the new chain. Its second case moves the recorded Testnet rows off the seed, so
   the reset over release rows runs before that happens. The recording's dApp session expires 7

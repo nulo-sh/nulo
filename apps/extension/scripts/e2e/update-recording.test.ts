@@ -4,6 +4,7 @@ import { committedBaseline } from "@/wallet/storage/stored-shapes/baseline"
 import { type Recording, readRecording, recordingProblems } from "../../tests/e2e/fixtures/update/recording"
 import { RELEASE_DIGESTS, RELEASE_TRAITS, releaseTraits } from "../../tests/e2e/fixtures/update/release"
 import {
+	firstAccount,
 	isLoopbackUrl,
 	loopbackOrigins,
 	namedHostCount,
@@ -59,6 +60,15 @@ describe("recordingProblems", () => {
 		])
 	})
 
+	test("the committed v1.0.0 recording replays as a sealing release's, and names no URL off this machine", () => {
+		const v100 = readRecording("v1.0.0") as Recording
+		expect(recordingProblems(v100, "v1.0.0", "sealed")).toEqual([])
+		// Counted, never listed: an outside endpoint may carry a provider's key.
+		const urls = JSON.stringify(v100).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
+		expect(urls.length).toBeGreaterThan(0)
+		expect(urls.filter((url) => !isLoopbackUrl(url)).length).toBe(0)
+	})
+
 	test("a sealing release's recording must hold its selection row and name loopback dials", () => {
 		expect(recordingProblems(recording(SEALED, { dials: DIALS }), "v1.0.0", "sealed")).toEqual([])
 		const noSelection = storedFamilies("uiActiveAccount", "uiSelectedAccount")
@@ -83,17 +93,22 @@ describe("recordingProblems", () => {
 })
 
 const NOW = 1_800_000_000_000
-const account = (address: string) => ({ address })
+const TESTNET = 685146337
+const DIAL = "http://127.0.0.1:4000"
+const FIRST = { address: "0xa", chainId: TESTNET, index: 0 }
+const SECOND = { address: "0xb", chainId: TESTNET, index: 1 }
+/** `SEALED` with a second Testnet account's row. */
+const TWO_ACCOUNTS = { ...SEALED, [`nulo:core:accounts@["account","p",${TESTNET},"0xb"]`]: "row" }
 
-/** Reads of a release that stores exactly `SEALED`'s rows: one per family it reads. */
+/** Reads of a release that stores exactly `TWO_ACCOUNTS`' rows, its second account selected. */
 function reads(over: Partial<ReleaseReads> = {}): ReleaseReads {
 	const one = [{}]
 	return {
 		profileId: "p",
-		selection: "0xa",
+		selection: SECOND.address,
 		preferences: { pins: {}, picks: { app: {}, send: {} } },
-		networks: [{}],
-		accounts: [account("0xa")],
+		networks: [{ kind: "testnet", chainId: TESTNET, endpoints: [{ rpcUrl: `${DIAL}/0` }] }],
+		accounts: [FIRST, SECOND],
 		rows: {
 			contacts: one,
 			dappSessions: [{ expiry: NOW + SESSION_MARGIN_MS + 1 }],
@@ -110,23 +125,46 @@ function reads(over: Partial<ReleaseReads> = {}): ReleaseReads {
 }
 
 describe("readsProblems", () => {
-	test("accepts reads that count every stored row and name a selection among their accounts", () => {
-		expect(readsProblems(reads(), SEALED, NOW)).toEqual([])
+	test("accepts reads that count every stored row, select a Testnet account but the first, and dial every origin", () => {
+		expect(readsProblems(reads(), TWO_ACCOUNTS, [DIAL], NOW)).toEqual([])
 	})
 
-	test("refuses a root read back short, no selection, a selection of no account, and an expiring session", () => {
-		const short = reads({ accounts: [account("0xa"), account("0xb")] })
-		expect(readsProblems(short, SEALED, NOW)).toEqual(["accounts: the release read 2 of the 1 rows it stores"])
-		expect(readsProblems(reads({ selection: undefined }), SEALED, NOW)).toEqual([
-			"the release's selection (none) names none of its accounts",
+	test("refuses a root read back short", () => {
+		const extra = reads({ accounts: [FIRST, SECOND, { address: "0xc", chainId: TESTNET, index: 2 }] })
+		expect(readsProblems(extra, TWO_ACCOUNTS, [DIAL], NOW)).toEqual(["accounts: the release read 3 of the 2 rows it stores"])
+	})
+
+	test("refuses no selection, one of no Testnet account, and the first one, which a popup that read none opens on", () => {
+		expect(readsProblems(reads({ selection: undefined }), TWO_ACCOUNTS, [DIAL], NOW)).toEqual([
+			"the release's selection (none) names none of its Testnet accounts",
 		])
-		expect(readsProblems(reads({ selection: "0xc" }), SEALED, NOW)).toEqual(["the release's selection 0xc names none of its accounts"])
+		expect(readsProblems(reads({ selection: "0xc" }), TWO_ACCOUNTS, [DIAL], NOW)).toEqual([
+			"the release's selection 0xc names none of its Testnet accounts",
+		])
+		expect(readsProblems(reads({ selection: FIRST.address }), TWO_ACCOUNTS, [DIAL], NOW)).toEqual([
+			"the release's selection is Testnet's first account, which a popup that read none opens on too: record it again",
+		])
+	})
+
+	test("refuses a loopback origin the rows name that the recording does not dial, and an expiring session", () => {
+		expect(readsProblems(reads(), TWO_ACCOUNTS, ["http://127.0.0.1:4001"], NOW)).toEqual([
+			`the release's rows name ${DIAL}, which the recording does not dial`,
+		])
 		const expiry = NOW + SESSION_MARGIN_MS - 1
 		const expiring = reads()
 		expiring.rows.dappSessions = [{ expiry }]
-		expect(readsProblems(expiring, SEALED, NOW)).toEqual([
+		expect(readsProblems(expiring, TWO_ACCOUNTS, [DIAL], NOW)).toEqual([
 			`a dApp session expires ${new Date(expiry).toISOString()}: record the release again`,
 		])
+	})
+})
+
+describe("firstAccount", () => {
+	test("orders by index, then address", () => {
+		const b0 = { address: "0xb", chainId: 1, index: 0 }
+		const a0 = { address: "0xa", chainId: 1, index: 0 }
+		expect(firstAccount([SECOND, b0, a0])).toBe(a0)
+		expect(firstAccount([])).toBeUndefined()
 	})
 })
 

@@ -67,6 +67,7 @@ import {
 	switchAccount,
 	switchToNetwork,
 	waitForFreshBalanceRow,
+	waitForShownAccount,
 	waitForToast,
 } from "../fixtures/helpers"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
@@ -76,7 +77,7 @@ import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
 import { moveEndpointsToLoopback } from "../fixtures/update/loopback-endpoints"
 import { expectReleasePreferences, plaintextPreferences } from "../fixtures/update/preferences"
-import { writeRecording } from "../fixtures/update/recording"
+import { recordingProblems, writeRecording } from "../fixtures/update/recording"
 import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
 import { readRelease } from "../fixtures/update/read-release"
 import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
@@ -219,12 +220,16 @@ async function receiveOnSandbox(cfg: AztecTestConfig, to: string): Promise<void>
 
 async function incomingCards(page: Page, atLeast: number): Promise<number> {
 	await navigateByHash(page, "#/popup/activity", 15_000)
-	await page.waitForFunction(
-		(n: number) => document.querySelectorAll('[data-testid="tx-incoming-card"]').length >= n,
+	// The count the wait saw: the list re-renders as its sync settles, so a later read can meet it empty.
+	const shown = await page.waitForFunction(
+		(n: number) => {
+			const cards = document.querySelectorAll('[data-testid="tx-incoming-card"]').length
+			return cards >= n ? cards : false
+		},
 		{ timeout: 180_000, polling: 1_000 },
 		atLeast,
 	)
-	return page.evaluate(() => document.querySelectorAll('[data-testid="tx-incoming-card"]').length)
+	return (await shown.jsonValue()) as number
 }
 
 async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile: string, release: ReleaseTraits): Promise<Populated> {
@@ -288,14 +293,13 @@ async function endOnSecondAccount(
 	await switchAccount(page, "Second")
 	const reads = await readRelease(page, await captureSoleProfileId(page))
 	await page.close()
-	if (namedHostCount({ reads, stored: await readLocalStorage(ctx) }, moved) > 0) {
-		throw new Error("the release still holds a host its endpoints moved off")
-	}
+	const stored = await readLocalStorage(ctx)
+	if (namedHostCount({ reads, stored }, moved) > 0) throw new Error("the release still holds a host its endpoints moved off")
 	const second = reads.accounts.find(
 		(row) => row.name === "Second" && row.chainId === reads.networks.find((n) => n.kind === "testnet")?.chainId,
 	)
 	if (!second || reads.selection !== second.address) throw new Error("the release does not read its second Testnet account as selected")
-	return { selection: reads.selection, preferences: reads.preferences, dials: loopbackOrigins(reads) }
+	return { selection: reads.selection, preferences: reads.preferences, dials: loopbackOrigins({ reads, stored }) }
 }
 
 /** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
@@ -359,6 +363,7 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	await answerArrival(page, populated.before)
 	if (populated.release.storage === "plaintext") expect(populated.selection, "the release's selection").toBe(populated.account)
 	expect(await getAccountAddress(page)).toBe(populated.selection)
+	await waitForShownAccount(page, populated.selection, "the header shows the release's selection")
 	await expectReleasePreferences(ctx, page, populated.preferences, await captureSoleProfileId(page))
 	if (populated.release.storage === "sealed") await switchToNetwork(page, SANDBOX)
 
@@ -402,6 +407,8 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 				builds,
 				populate: async (ctx) => {
 					const populated = await populate(ctx, cfg, accountFile, release)
+					const recording = { tag: builds.tag, browser: BROWSER, entries: populated.before, dials: populated.dials }
+					expect(recordingProblems(recording, builds.tag, release.storage)).toEqual([])
 					if (record) writeRecording(builds.tag, BROWSER, populated.before, populated.dials)
 					return populated
 				},

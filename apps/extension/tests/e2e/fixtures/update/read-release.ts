@@ -97,10 +97,16 @@ export async function readSealedRelease(
 		await writeLocalStorage(ctx, entries)
 		// The background booted over an empty store; its successor boots over the recording.
 		await stopBackground(ctx)
-		return await readUnlocked(ctx)
+		const reads = await readUnlocked(ctx)
+		const failures = (await Promise.all(held.map((node) => node.failures()))).flat()
+		if (failures.length > 0) throw new Error(`the release's dials did not refuse every request: ${failures.join("; ")}`)
+		return reads
 	} finally {
-		await ctx.close()
-		await Promise.all(held.map((node) => node.stop()))
+		try {
+			await ctx.close()
+		} finally {
+			await Promise.all(held.map((node) => node.stop()))
+		}
 	}
 }
 

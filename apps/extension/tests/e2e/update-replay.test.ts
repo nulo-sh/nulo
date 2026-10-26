@@ -25,7 +25,11 @@
  *
  * A release that seals its rows is read through its own services in an install of its own, the
  * recording written in and unlocked, before the case's install, which it never unlocks, updates:
- * what the candidate must read back is what the release itself read.
+ * what the candidate must read back is what the release itself read. Its Testnet and Mainnet rows sit
+ * on loopback stand-ins the replay refuses, so a reset there takes the branch for an endpoint the
+ * user moved (probed, refused, the seed's added), where a plaintext release's keeps the seed's, the
+ * branch a default install takes. Its second case moves the network and account rows only: a sealed
+ * row of another root names its chain inside its envelope, so the reset's purge never meets one.
  *
  * Runtime: estimated 2 min per case per browser; measured 12 to 47 s, with the release cached.
  */
@@ -51,6 +55,7 @@ import {
 	ensureUnlocked,
 	navigateByHash,
 	waitForSelectedAccount,
+	waitForShownAccount,
 	waitForToastGone,
 } from "./fixtures/helpers"
 import { pollUntil } from "./fixtures/poll"
@@ -70,6 +75,7 @@ import { type PinnedBackup, type Recording, readRecording, recordingProblems, wr
 import { releaseTraits } from "./fixtures/update/release"
 import { readSealedRelease } from "./fixtures/update/read-release"
 import {
+	firstAccount,
 	type ReadRoot,
 	type ReleasePreferences,
 	type ReleaseReads,
@@ -169,7 +175,7 @@ let sealedReads: Promise<ReleaseReads<NetworkRow, AccountRow>> | undefined
 async function sealedExpected(recording: Recording, from: string): Promise<Expected> {
 	sealedReads ??= readSealedRelease(from, recording.entries, recording.dials ?? [])
 	const reads = await sealedReads
-	const problems = readsProblems(reads, recording.entries)
+	const problems = readsProblems(reads, recording.entries, recording.dials ?? [])
 	if (problems.length > 0) throw new Error(`the release's reads of the recording of ${recording.tag}: ${problems.join("; ")}`)
 	const read = reads.rows as Partial<Record<ExpectedRoot, Row[]>>
 	return {
@@ -421,14 +427,12 @@ function offline(entries: Record<string, unknown>): Record<string, unknown> {
 	)
 }
 
-type Installed = { before: Record<string, unknown>; held: HeldNode[] }
-
 /**
  * Writes the recording into the release. A plaintext release's endpoints are moved offline in its
  * rows; a sealed row cannot be rewritten, so each origin the recording dials answers with a refusal
  * instead, for the install's life, through the update.
  */
-async function install(ctx: ExtensionContext, recording: Recording): Promise<Installed> {
+async function install(ctx: ExtensionContext, recording: Recording): Promise<{ before: Record<string, unknown>; held: HeldNode[] }> {
 	const sealed = releaseTraits(recording.tag).storage === "sealed"
 	const entries = sealed ? recording.entries : offline(recording.entries)
 	const held = sealed ? await holdNodeStubs(ctx.browser, ctx.extensionId, recording.dials ?? []) : []
@@ -438,28 +442,39 @@ async function install(ctx: ExtensionContext, recording: Recording): Promise<Ins
 		expect(Object.fromEntries(Object.keys(entries).map((key) => [key, before[key]]))).toEqual(entries)
 		return { before, held }
 	} catch (error) {
-		await releaseHeld(held)
+		await Promise.all(held.map((node) => node.stop()))
 		throw error
 	}
 }
 
-/** Stops `held` once each has answered every request it met. */
-async function releaseHeld(held: HeldNode[]): Promise<void> {
-	const failures = (await Promise.all(held.map((node) => node.failures()))).flat()
-	await Promise.all(held.map((node) => node.stop()))
-	expect(failures).toEqual([])
-}
-
-/** Runs `verify` over an install, then releases what the install held. */
-const verifyInstalled =
-	(verify: (ctx: ExtensionContext, before: Record<string, unknown>) => Promise<void>) =>
-	async (ctx: ExtensionContext, { before, held }: Installed): Promise<void> => {
-		try {
-			await verify(ctx, before)
-		} finally {
-			await releaseHeld(held)
-		}
+/**
+ * Updates an install of `recording` in place and runs `verify` over it. What the install holds
+ * stops on every path, and a run that verified also checks it answered every request it met, read
+ * while the browser is open.
+ */
+async function replay(
+	pair: UpdateBuilds,
+	recording: Recording,
+	verify: (ctx: ExtensionContext, before: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+	const held: HeldNode[] = []
+	try {
+		await inPlaceUpdate({
+			builds: pair,
+			populate: async (ctx) => {
+				const installed = await install(ctx, recording)
+				held.push(...installed.held)
+				return installed.before
+			},
+			verify: async (ctx, before) => {
+				await verify(ctx, before)
+				expect((await Promise.all(held.map((node) => node.failures()))).flat()).toEqual([])
+			},
+		})
+	} finally {
+		await Promise.all(held.map((node) => node.stop()))
 	}
+}
 
 /** The updated wallet, locked, on Testnet: its rows read, and it shows no barrier. */
 async function openUpdated(ctx: ExtensionContext, before: Record<string, unknown>, expected: Expected): Promise<Page> {
@@ -497,16 +512,16 @@ async function expectContacts(page: Page, expected: Expected): Promise<void> {
 }
 
 /** The popup opens on the release's selection while `chain` holds it, and otherwise on the chain's
- *  first account in the account list's order (index, then address), as before the seal: a release
- *  that selected a sandbox account opens on Testnet's first, and one that selected a Testnet
- *  account other than the first opens there only if the candidate read the selection. */
+ *  first account, as before the seal: a release that selected a sandbox account opens on Testnet's
+ *  first, and one that selected a Testnet account other than the first opens there only if the
+ *  candidate read the selection. Both the stored selection and the header must name it. */
 async function expectSelection(page: Page, chain: number, selection: string | undefined): Promise<void> {
 	const rows = await readAccounts(page, chain)
-	const [first] = [...rows].sort((a, b) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))
 	const kept = rows.find((row) => row.address === selection)
-	const want = (kept ?? first)?.address
+	const want = (kept ?? firstAccount(rows.map((row) => ({ ...row, chainId: chain }))))?.address
 	const label = kept ? "the selection is the release's" : "the selection is Testnet's first account"
 	expect(await waitForSelectedAccount(page, (address) => address === want, label, 30_000)).toBe(want)
+	await waitForShownAccount(page, want ?? "", `${label}, in the header`)
 }
 
 /** `chain`'s accounts as {@link readAccounts} orders them, from rows read before the update. */
@@ -617,20 +632,16 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		const pair = builds()
 		const expected = await expectedOf(recording, pair.from)
 		const chain = recordedTestnet(expected)
-		await inPlaceUpdate({
-			builds: pair,
-			populate: (ctx) => install(ctx, recording),
-			verify: verifyInstalled(async (ctx, before) => {
-				const page = await openUpdated(ctx, before, expected)
-				if (chain === CHAIN_IDS.TESTNET) await opensWithoutTakeover(ctx, page, recording, expected, before)
-				else {
-					const reset = { oldChain: chain, before: await accountsBefore(page, expected, chain), importedOpens: true }
-					await throughTheReset(ctx, page, recording, expected, reset)
-				}
-				await page.close()
-				const stored = await readLocalStorage(ctx)
-				await expectBackupImports("password", await exportBackupFile(ctx), stored)
-			}),
+		await replay(pair, recording, async (ctx, before) => {
+			const page = await openUpdated(ctx, before, expected)
+			if (chain === CHAIN_IDS.TESTNET) await opensWithoutTakeover(ctx, page, recording, expected, before)
+			else {
+				const reset = { oldChain: chain, before: await accountsBefore(page, expected, chain), importedOpens: true }
+				await throughTheReset(ctx, page, recording, expected, reset)
+			}
+			await page.close()
+			const stored = await readLocalStorage(ctx)
+			await expectBackupImports("password", await exportBackupFile(ctx), stored)
 		})
 	})
 
@@ -642,20 +653,16 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		const pair = builds()
 		const expected = await expectedOf(recording, pair.from)
 		if (recordedTestnet(expected) !== CHAIN_IDS.TESTNET) skip("the seed has moved: the first case resets the recording itself")
-		await inPlaceUpdate({
-			builds: pair,
-			populate: (ctx) => install(ctx, recording),
-			verify: verifyInstalled(async (ctx, before) => {
-				const page = await openUpdated(ctx, before, expected)
-				await seedStaleNetwork(page, "network-reset", expected.locked)
-				const moved = await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)
-				await throughTheReset(ctx, page, recording, expected, {
-					oldChain: PREVIOUS_TESTNET_CHAIN_ID,
-					before: moved,
-					importedOpens: false,
-				})
-				await page.close()
-			}),
+		await replay(pair, recording, async (ctx, before) => {
+			const page = await openUpdated(ctx, before, expected)
+			await seedStaleNetwork(page, "network-reset", expected.locked)
+			const moved = await readAccounts(page, PREVIOUS_TESTNET_CHAIN_ID)
+			await throughTheReset(ctx, page, recording, expected, {
+				oldChain: PREVIOUS_TESTNET_CHAIN_ID,
+				before: moved,
+				importedOpens: false,
+			})
+			await page.close()
 		})
 	})
 

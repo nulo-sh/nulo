@@ -5,6 +5,15 @@ import { shapeOfKey } from "./stored-rows"
 
 type Row = Record<string, unknown>
 
+/** What the checks read of an account. */
+export type ReadAccount = { address: string; chainId: number; index: number }
+
+/** A popup that reads no selection opens on its network's first account in this order: index, then
+ *  address. */
+export function firstAccount<A extends ReadAccount>(accounts: readonly A[]): A | undefined {
+	return [...accounts].sort((a, b) => a.index - b.index || (a.address < b.address ? -1 : a.address > b.address ? 1 : 0))[0]
+}
+
 /** A profile's pins and fee picks, as the release holds them. */
 export type ReleasePreferences = { pins: PinMap; picks: FeePicks }
 
@@ -23,10 +32,10 @@ export type ReadRoot =
 /**
  * What a release reads of its sole profile's rows through its own services, from a page unlocked on
  * that profile: what a replay of a release that seals them expects the candidate to read. Held in
- * memory only: its networks carry their endpoints. The checks here read no more of a network or an
- * account than its address, so they stay free of the page helpers' row types.
+ * memory only: its networks carry their endpoints. The checks here read no more of an account than
+ * {@link ReadAccount}, so they stay free of the page helpers' row types.
  */
-export type ReleaseReads<Network = Row, Account extends { address: string } = { address: string }> = {
+export type ReleaseReads<Network extends Row = Row, Account extends ReadAccount = ReadAccount> = {
 	profileId: string
 	selection: string | undefined
 	preferences: ReleasePreferences
@@ -56,10 +65,12 @@ export const SESSION_MARGIN_MS = 600_000
 /**
  * Why `reads` cannot stand for the rows `entries` stores, or nothing: a root read back with another
  * count than it stores rows (a row the release dropped, filtered or failed to open, or a read of the
- * wrong profile), no selection, a selection naming none of its accounts, or a dApp session that
- * expires before `now` plus {@link SESSION_MARGIN_MS}.
+ * wrong profile), a selection that is not a Testnet account other than Testnet's first (a popup
+ * that read none opens on its network's first, so only another proves a read), a loopback origin
+ * the rows name that `dials` lacks, or a dApp session that expires before `now` plus
+ * {@link SESSION_MARGIN_MS}.
  */
-export function readsProblems(reads: ReleaseReads, entries: Record<string, unknown>, now = Date.now()): string[] {
+export function readsProblems(reads: ReleaseReads, entries: Record<string, unknown>, dials: readonly string[], now = Date.now()): string[] {
 	const stored = (name: StoredShapeName) => Object.keys(entries).filter((key) => shapeOfKey(key) === name).length
 	const read: Record<keyof typeof STORED_AS, number> = {
 		networks: reads.networks.length,
@@ -70,13 +81,23 @@ export function readsProblems(reads: ReleaseReads, entries: Record<string, unkno
 		const [got, held] = [read[root as keyof typeof STORED_AS], stored(name)]
 		return got === held ? [] : [`${root}: the release read ${got} of the ${held} rows it stores`]
 	})
-	const selection = reads.accounts.some((account) => account.address === reads.selection)
-		? []
-		: [`the release's selection ${reads.selection ?? "(none)"} names none of its accounts`]
+	const undialed = loopbackOrigins(reads).filter((origin) => !dials.includes(origin))
+	const dialed = undialed.length > 0 ? [`the release's rows name ${undialed.join(", ")}, which the recording does not dial`] : []
 	const expiring = reads.rows.dappSessions
 		.filter((session) => (session.expiry as number) < now + SESSION_MARGIN_MS)
 		.map((session) => `a dApp session expires ${new Date(session.expiry as number).toISOString()}: record the release again`)
-	return [...counts, ...selection, ...expiring]
+	return [...counts, ...selectionProblems(reads), ...dialed, ...expiring]
+}
+
+function selectionProblems(reads: ReleaseReads): string[] {
+	const testnet = reads.networks.find((network) => network.kind === "testnet")?.chainId
+	const accounts = reads.accounts.filter((account) => account.chainId === testnet)
+	if (!accounts.some((account) => account.address === reads.selection)) {
+		return [`the release's selection ${reads.selection ?? "(none)"} names none of its Testnet accounts`]
+	}
+	return firstAccount(accounts)?.address === reads.selection
+		? ["the release's selection is Testnet's first account, which a popup that read none opens on too: record it again"]
+		: []
 }
 
 const LOOPBACK_ORIGIN = /\bhttps?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?![\w.-])/g
