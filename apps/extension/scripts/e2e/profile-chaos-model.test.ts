@@ -211,7 +211,11 @@ describe("a hand-trimmed list", () => {
 			"F9 is no backup",
 		],
 		["an unknown action", [{ action: "jump", params: {} }], "unknown action jump"],
-		["a strict toggle on a passkey profile", [passkey, { action: "toggleStrict", params: {} }], "only to an open password profile"],
+		[
+			"a strict toggle with no profile open",
+			[passkey, { action: "lock", params: {} }, { action: "toggleStrict", params: {} }],
+			"only to an open profile",
+		],
 		[
 			"a passkey create past the authenticator's storage, a deleted profile's credential counted",
 			[
@@ -875,7 +879,7 @@ describe("O4, errors", () => {
 			source: "ui",
 			text: `["[full-backup] restore failed:",{"error":{"name":"Error","message":"${message}"}}]`,
 		})
-		const source = "code:apps/extension/src/composables/full-backup-restore.ts:998"
+		const source = "code:apps/extension/src/composables/full-backup-restore.ts:999"
 		expect(checkErrors([failed("Client disconnected")], ["session", "background"])).toEqual({
 			violations: [],
 			warns: {},

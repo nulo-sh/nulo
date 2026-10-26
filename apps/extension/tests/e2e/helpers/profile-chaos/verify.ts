@@ -70,6 +70,7 @@ function retiredArgs(id: string): Record<(typeof RETIRED_REFUSALS)[number], unkn
 		exportMnemonic: [id, pw],
 		exportPlain: [id, pw],
 		changeProfilePassword: [id, pw, wrongSecret()],
+		changeUnlockMethod: [id, { password: pw }, { password: wrongSecret() }],
 		finalizeRestore: [id, pw],
 	}
 }

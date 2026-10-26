@@ -244,80 +244,80 @@ export const ACTIONS_PER_RUN = 24
 const SERVICE = "src/wallet/services/profile/service.ts"
 const SESSIONS = "src/wallet/services/profile/session-manager.ts"
 const IMPORT = "src/composables/useFullBackupImport.ts"
-const CREATE_OPENS = cite(SERVICE, 715, "public async createProfile(")
-const PASSKEY_CREATE_OPENS = cite(SERVICE, 826, "public async createPasskeyProfile(")
-const PASSKEY_CREATE_PHRASE = cite(SERVICE, 852, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
-const UNLOCK_REFUSES = cite(SERVICE, 777, "throw new InvalidPasswordError()")
-const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 906, "answer.credential.id !== snapshot.credentialId")
-const LOCK_CLOSES = cite(SERVICE, 969, "public async lockActiveProfile(")
-const RENAME = cite(SERVICE, 1089, "public async changeProfileName(")
-const PASSWORD_CHANGE = cite(SERVICE, 1225, 'throw new Error("Invalid profile old password")')
-const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1258, "this.reopenAfterPasswordChangeHoldingLock(")
-const DELETE = cite(SERVICE, 1546, "public async deleteProfile(")
-const PHRASE_IMPORT = cite(SERVICE, 1751, "public async importMnemonic(")
-const PHRASE_EXPORT = cite(SERVICE, 1911, 'new Error("Invalid profile old password")')
-const DUPLICATE_WARNS = cite(SERVICE, 2015, "throw new DuplicateWalletError(")
-const RESTORE_CLONE = cite(SERVICE, 2161, "CLONE DIVERGENCE")
-const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2101, "if (!password) {")
-const OPEN_BEARER = cite(SESSIONS, 298, "persistBearer && dek")
-const SESSION_RESTORE = cite(SESSIONS, 584, 'if (profile.type === "passkey") {')
-const LOCK_DELETES_ROW = cite(SESSIONS, 427, "this.deletePersistedSession()")
-const STRICT_TOGGLE = cite(SESSIONS, 757, 'prop.key === "strictSecurityMode"')
+const CREATE_OPENS = cite(SERVICE, 759, "public async createProfile(")
+const PASSKEY_CREATE_OPENS = cite(SERVICE, 870, "public async createPasskeyProfile(")
+const PASSKEY_CREATE_PHRASE = cite(SERVICE, 900, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
+const UNLOCK_REFUSES = cite(SERVICE, 821, "throw new InvalidPasswordError()")
+const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 955, "answer.credential.id !== snapshot.credentialId")
+const LOCK_CLOSES = cite(SERVICE, 1018, "public async lockActiveProfile(")
+const RENAME = cite(SERVICE, 1138, "public async changeProfileName(")
+const PASSWORD_CHANGE = cite(SERVICE, 1290, 'throw new Error("Invalid profile old password")')
+const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1323, "this.reopenAfterPasswordChangeHoldingLock(")
+const DELETE = cite(SERVICE, 1767, "public async deleteProfile(")
+const PHRASE_IMPORT = cite(SERVICE, 1972, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 2193, 'new Error("Invalid profile old password")')
+const DUPLICATE_WARNS = cite(SERVICE, 2297, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2440, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2383, "if (!credentialData && !password) {")
+const OPEN_BEARER = cite(SESSIONS, 289, "const bearer = !this.strictSecurityMode && dek")
+const SESSION_RESTORE = cite(SESSIONS, 580, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
+const LOCK_DELETES_ROW = cite(SESSIONS, 418, "this.deletePersistedSession()")
+const STRICT_TOGGLE = cite(SESSIONS, 740, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
-const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 195, 'v-if="!isPasskey"')
+const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 194, ':title="strictRow.title"')
 const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 177, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
-const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 114, "if (!ext.prf) throw new PasskeyPrfError(")
-const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 81, 'inner.name === "NotAllowedError") return "not-confirmed"')
-const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 275, "public async createAccount(")
+const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 119, "if (!ext.prf) throw new PasskeyPrfError(")
+const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
+const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 287, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
 const FULL_EXPORT = cite(EXPORT, 369, "sealFullBackupText(plaintext as string, state.password.value as string)")
 const FILE_PASSWORD_RULE = cite(EXPORT, 502, "!isPasskeyProfile.value || isNewPasswordValid(")
 const FILE_PASSWORD_BLOCKED = cite(EXPORT, 360, "if (filePasswordBlocked(ctx)) return")
-const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 651, "public async exportAccount(")
-const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 719, "public async importAccount(")
-const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 790, "This account is already in your wallet")
-const BACKUP_UNREADABLE = cite(IMPORT, 617, "DECRYPTION_FAILED.title")
-const BACKUP_INTEGRITY = cite(IMPORT, 164, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
-const BACKUP_UNPARSED = cite(IMPORT, 567, "parseError.title, parseError.tooltip")
+const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 665, "public async exportAccount(")
+const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 749, "public async importAccount(")
+const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 820, "This account is already in your wallet")
+const BACKUP_UNREADABLE = cite(IMPORT, 644, "DECRYPTION_FAILED.title")
+const BACKUP_INTEGRITY = cite(IMPORT, 166, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(IMPORT, 594, "parseError.title, parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
-	138,
+	140,
 	"askNewPassword && selectedBackup?.profileType",
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	965,
+	966,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 474, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 501, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
 const REVEAL_PASSKEY = cite(SEED_PAGE, 106, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
 const REVEAL_CANCEL = cite(SEED_PAGE, 110, "handleCancelOrUnconfirmed(error, openToast)")
 const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
-const SLOTS_BIND_PASSKEY = cite(SERVICE, 422, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
-const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 910, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
-const PASSKEY_KIND_GATE = cite(SERVICE, 129, 'if (row.type === "password") throw new Error("Profile requires password")')
-const RETIRED_UNLOCK = cite(SERVICE, 124, 'if (kind === "retired") throw new RetiredProfileError()')
-const RETIRED_SLOTS = cite(SERVICE, 382, 'if (classified.kind === "retired") throw new RetiredProfileError()')
-const RETIRED_EXPORTS = cite(SERVICE, 480, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_LISTED = cite(SERVICE, 2081, 'classifyProfileRow(profile).kind === "retired")')
-const RETIRED_RESEAL = cite(SERVICE, 1218, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_FINALIZE = cite(SERVICE, 2264, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const SLOTS_BIND_PASSKEY = cite(SERVICE, 460, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
+const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 959, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
+const PASSKEY_KIND_GATE = cite(SERVICE, 150, 'if (row.type === "password") throw new Error("Profile requires password")')
+const RETIRED_UNLOCK = cite(SERVICE, 145, 'if (kind === "retired") throw new RetiredProfileError()')
+const RETIRED_SLOTS = cite(SERVICE, 405, 'if (classified.kind === "retired") throw new RetiredProfileError()')
+const RETIRED_EXPORTS = cite(SERVICE, 518, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_LISTED = cite(SERVICE, 2362, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_RESEAL = cite(SERVICE, 1283, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2544, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 300, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 110, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 123, "if (isMounted()) router.push(doneRoute(path.value))")
-const ONBOARDING_LATER = cite(ONBOARDING, 127, "router.push(doneRoute(path.value))")
-const EARLIER_AT_PICK = cite(IMPORT, 562, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_AT_DECRYPT = cite(IMPORT, 607, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_SHAPE = cite(IMPORT, 125, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+const ONBOARDING_PHRASE = cite(ONBOARDING, 112, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 125, "if (isMounted()) router.push(doneRoute(path.value))")
+const ONBOARDING_LATER = cite(ONBOARDING, 129, "router.push(doneRoute(path.value))")
+const EARLIER_AT_PICK = cite(IMPORT, 589, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_AT_DECRYPT = cite(IMPORT, 634, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_SHAPE = cite(IMPORT, 127, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
-const EARLIER_TITLE_SOURCE = cite(IMPORT, 113, `title: "${EARLIER_TITLE}"`)
+const EARLIER_TITLE_SOURCE = cite(IMPORT, 115, `title: "${EARLIER_TITLE}"`)
 
 /** The names a release gives the two profiles the `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const
@@ -406,10 +406,10 @@ function freshRefs(
 /** The name a new profile gets: a first profile shows no name field and is called "Main". */
 const nameFor = (w: World, planned: string): string => (live(w).length === 0 ? "Main" : planned)
 
-const sessionFor = (w: World, ref: ProfileRef, method: Method): Session => ({
+const sessionFor = (w: World, ref: ProfileRef): Session => ({
 	kind: "open",
 	ref,
-	bearer: method === "password" && !w.device.strict,
+	bearer: !w.device.strict,
 })
 
 const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: Settle, sources: string[]): Expectation => ({
@@ -454,7 +454,7 @@ function addProfile(w: World, profile: Omit<ModelProfile, "deleted">): World {
 	const next = clone(w)
 	next.profiles.push({ ...profile, deleted: false })
 	next.selected = profile.ref
-	next.session = sessionFor(next, profile.ref, profile.method)
+	next.session = sessionFor(next, profile.ref)
 	return next
 }
 
@@ -537,7 +537,7 @@ const lock: ActionSpec<"lock"> = {
 function opened(w: World, target: ModelProfile): World {
 	const next = clone(w)
 	next.selected = target.ref
-	next.session = sessionFor(next, target.ref, target.method)
+	next.session = sessionFor(next, target.ref)
 	return next
 }
 
@@ -1020,8 +1020,8 @@ const toggleStrict: ActionSpec<"toggleStrict"> = {
 	name: "toggleStrict",
 	family: "strict",
 	weight: 2,
-	invalid: (w) => (openProfile(w)?.method === "password" ? undefined : "the strict row shows only to an open password profile"),
-	params: (_rng, w) => (openProfile(w)?.method === "password" ? {} : undefined),
+	invalid: (w) => (openProfile(w) ? undefined : "the strict row shows only to an open profile"),
+	params: (_rng, w) => (openProfile(w) ? {} : undefined),
 	expect: (w) => {
 		const next = clone(w)
 		next.device.strict = !w.device.strict

@@ -407,6 +407,9 @@ const importPhrase: Drivers["importPhrase"] = async (s, p, _step, before) => {
 	const page = s.anchor
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 10_000 })
+	// A phrase import opens on Passkey; the model imports under a password.
+	await clickByTestId(page, "import-method-password")
+	await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 10_000 })
 	const password = secretFor(s, p.password)
 	const words = s.phrases.get(p.phrase)
 	if (!words) throw new Error(`${p.phrase} was never read`)

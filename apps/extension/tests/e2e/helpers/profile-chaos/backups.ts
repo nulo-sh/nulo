@@ -117,7 +117,7 @@ async function afterPick(s: RunState): Promise<string | undefined> {
 	return label
 }
 
-/** Decrypts with the file's password, or another one; true once the form asks for the new one. */
+/** Decrypts with the file's password or another; true once the form asks how to unlock. */
 async function decrypt(s: RunState, file: ModelFile, wrong: boolean): Promise<boolean> {
 	const page = s.anchor
 	await replaceInputValue(
@@ -126,7 +126,7 @@ async function decrypt(s: RunState, file: ModelFile, wrong: boolean): Promise<bo
 		wrong ? wrongSecret() : secretFor(s, file.password as never),
 	)
 	await clickByTestId(page, "import-full-backup-decrypt-btn")
-	const { label } = await firstSignal(page, [ERROR, { label: "form", testid: "import-full-backup-password-input" }], 60_000)
+	const { label } = await firstSignal(page, [ERROR, { label: "form", testid: "import-full-backup-method-password" }], 60_000)
 	if (label === undefined) throw new Error("the decrypt step showed neither a refusal nor the form")
 	return label === "form"
 }
@@ -192,6 +192,9 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
 	if (picked === "refused") return false
 	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
+	// A passkey profile's backup opens on Passkey; the model restores under a password.
+	await clickByTestId(page, "import-full-backup-method-password")
+	await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
 	const password = secretFor(s, p.password)
 	await setInputs(page, {
 		'[data-testid="import-full-backup-password-input"] input': password,
