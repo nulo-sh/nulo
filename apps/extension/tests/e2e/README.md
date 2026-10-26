@@ -227,6 +227,27 @@ NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1001 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--d
 
 Run it from the repository root. The runner rebuilds `dist/<browser>` proverless, so rebuild the smoke dist before the next smoke chaos run.
 
+#### Start states
+
+A seed starts `empty`, on a fresh install, unless `NULO_E2E_UPDATE_FROM` names a release; then it starts `pre-update`. The release makes a password profile and then a passkey profile through its own popup, the candidate `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts on the candidate with the release's rows bound to `P1` and `P2`. Before the first step the start's own check reads every profile row the release wrote: stored byte for byte, listed, the passkey one as retired (`checkPreUpdate`). A retired profile is never opened: `verifyAll` reads its lock screen and calls every method of the refusal matrix on it (`RETIRED_REFUSALS`), and a delete may remove it. The smoke file only; the candidate is a production build, so build it from a committed head:
+
+```bash
+bash apps/extension/scripts/e2e/build-update-candidate.sh chrome
+cd apps/extension && NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome \
+  NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=3001 NULO_E2E_CHAOS_RUNS=5 bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0
+```
+
+#### Passkey profiles
+
+A passkey profile keeps a recovery phrase its passkey unlocks, and the catalog drives each place it shows:
+
+- Onboarding makes the first profile in the anchor's own tab, so its passkey stays with the page that holds every other, and shows the phrase stage for either unlock.
+- Reveal answers with the passkey: approved, refused, without PRF, or by another credential.
+- A full backup takes a file password of its own; a short one is refused before any file exists. O7 opens every held file with its password and refuses another. Every backup restores under a new password, as a password profile.
+- The earlier passkey backup the wallet's tests pin is refused at the pick, and a held one whose phrase field was made a number is refused once it opens, each under the title `EARLIER_TITLE` names.
+- Three faults reach stored rows, each put back byte for byte after its step: a row field changed while an unlock waits at its prompt, a slot's tag byte flipped before an unlock, and a lock while a reveal waits at its prompt.
+- O7 adds every PRF output a page of the run received (`prf-capture.ts`) and each stored `prfSalt` value, allowed only in its own row. A passkey profile's phrase is learnt where a screen shows it, or from the first backup of it the run opens; logs and files already read are searched again for it then.
+
 ## Running multiple agents in parallel
 
 Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:

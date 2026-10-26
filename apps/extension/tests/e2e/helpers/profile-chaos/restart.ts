@@ -54,9 +54,9 @@ export async function restartBackground(s: RunState, next: World): Promise<Drive
 	const t0 = Date.now()
 	await backgroundServing(s.anchor, RESTART_MS)
 	const locked: Signal = live(next).length ? { label: "lock", hash: "/popup/auth" } : REGISTER
-	// An open session keeps the page where it stood, Settings included, so any page showing the
-	// account selector reads as open.
-	const open: Signal[] = [HOME, { label: "open", testid: "account-selector" }]
+	// An open session keeps the page where it stood: any page showing the account selector, or any
+	// Settings page, which a locked wallet leaves for the lock screen, reads as open. O1 judges which.
+	const open: Signal[] = [HOME, { label: "open", testid: "account-selector" }, { label: "open", hash: "/popup/settings/" }]
 	const wants = next.session.kind === "open" ? open : [locked]
 	const driven = await settle(s.anchor, wants, Object.fromEntries(wants.map((w) => [w.label, "committed"])), RESTART_MS)
 	driven.settle.elapsedMs = Date.now() - t0

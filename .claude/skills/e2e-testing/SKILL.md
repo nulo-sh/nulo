@@ -222,7 +222,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_DATA_ROOT` | sandbox run-dir root (default `~/.cache/nulo-e2e`); short enough that `<run dir>/tmp` plus the node's 28-byte socket names fits `sun_path`, which setup checks |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
 | `NULO_E2E_OPENPOPUP_LOG=1` | log `openPopup`'s fast-path/fallback timing |
-| `NULO_E2E_CHAOS=1` (+`_SEED`, `_RUNS`, `_ACTIONS`) | arms the chaos files; the seed is random when unset and always logged. `profile-chaos` also takes a run count (consecutive seeds, one launch each) and a replay list (README § Chaos runs) |
+| `NULO_E2E_CHAOS=1` (+`_SEED`, `_RUNS`, `_ACTIONS`) | arms the chaos files; the seed is random when unset and always logged. `profile-chaos` also takes a run count (consecutive seeds, one launch each) and a replay list (README § Chaos runs); with `NULO_E2E_UPDATE_FROM` and `_TO` set, the smoke file starts each seed from that release updated in place (README § Start states) |
 | `NULO_E2E_CONSOLE_PROBE=1`, `NULO_E2E_PROBE=1` | enable the two `_probe-*` files (skipped by default; probes, not gates) |
 | `ANVIL_URL`, `AZTEC_NODE_URL`, `PLAYGROUND_URL`, `*_PORT` | the port pack (`agent.sh` exports them from `ports.json`) |
 | `VITE_NULO_FEE_MULTIPLIER` | build-time fee envelope widening; CI sets `10` to absorb devnet base-fee drift. It is Normal's multiplier and scales Fast and Urgent with it (CI prices 10, 15, 25), so the speeds keep their order |
@@ -239,6 +239,9 @@ runtime env var can never arm a build-time flag.
   (`imported-account-lifecycle`, `frozen-account-canary`, `transfers` say why at the top).
 - The profile chaos files pin retry 0 too: a seed's steps change the profiles they run on, and a
   red seed is triaged from its replay record (README § Chaos runs), never re-run until green.
+- A driver that loads a popup document anew settles on Home's account selector, not the hash: a
+  fresh document boots through the lock screen and advances once it finds the session, so
+  `#/popup/general` shows before that redirect.
   A violation that is an instance of a filed issue goes in `KNOWN_FINDINGS` (`checkers.ts`) with
   that issue's number, so the seed stays red and names it; an expected line that is no finding
   goes in `ALLOWED_ERRORS` with the code line that writes it. Neither ever hides a new error text.
