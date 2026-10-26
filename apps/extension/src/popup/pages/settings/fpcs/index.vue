@@ -85,6 +85,7 @@ const handleDelete = (fpc) => {
 	requestConfirm({
 		confirm_text: "Yes, delete FPC",
 		confirm_color: "red",
+		irreversible: true,
 		title: "Delete this FPC?",
 		description: "By confirming this action, the selected FPC will be permanently deleted from your wallet",
 		callback: async () => {

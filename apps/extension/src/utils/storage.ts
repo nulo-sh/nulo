@@ -70,6 +70,13 @@ export async function storageLocalGet(keys?: string | string[] | null): Promise<
 	return chrome.storage.local.get(keys ?? undefined)
 }
 
+/** `keys` and the migration marker in one read that never waits: `undefined` while a migration runs,
+ *  for a caller that must not block on one. */
+export async function storageLocalGetUnlessMigrating(keys: string[]): Promise<Record<string, unknown> | undefined> {
+	const read = await chrome.storage.local.get([SCHEMA_RUNNING_KEY, ...keys])
+	return SCHEMA_RUNNING_KEY in read ? undefined : read
+}
+
 /**
  * Writes a clone of `items`, taken at the call, once no migration is running: a value that cannot be
  * structured-cloned (a Vue reactive Proxy, which Firefox's storage refuses and Chrome's serialises)
