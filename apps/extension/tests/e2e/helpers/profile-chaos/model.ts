@@ -34,6 +34,18 @@ export interface Caps {
 	credentialSlots: number
 }
 
+/** The caps as a record holds them, and back: JSON has no `Infinity`, which an unlimited
+ *  authenticator's slot count is. */
+export type RecordedCaps = Omit<Caps, "credentialSlots"> & { credentialSlots: number | "unlimited" }
+
+export function recordCaps(caps: Caps): RecordedCaps {
+	return { ...caps, credentialSlots: Number.isFinite(caps.credentialSlots) ? caps.credentialSlots : "unlimited" }
+}
+
+export function capsOfRecord(caps: RecordedCaps): Caps {
+	return { ...caps, credentialSlots: caps.credentialSlots === "unlimited" ? Number.POSITIVE_INFINITY : caps.credentialSlots }
+}
+
 export interface ModelProfile {
 	ref: ProfileRef
 	method: Method
@@ -254,15 +266,15 @@ const RENAME = cite(SERVICE, 1138, "public async changeProfileName(")
 const PASSWORD_CHANGE = cite(SERVICE, 1290, 'throw new Error("Invalid profile old password")')
 const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1323, "this.reopenAfterPasswordChangeHoldingLock(")
 const DELETE = cite(SERVICE, 1767, "public async deleteProfile(")
-const PHRASE_IMPORT = cite(SERVICE, 1972, "public async importMnemonic(")
-const PHRASE_EXPORT = cite(SERVICE, 2193, 'new Error("Invalid profile old password")')
-const DUPLICATE_WARNS = cite(SERVICE, 2297, "throw new DuplicateWalletError(")
-const RESTORE_CLONE = cite(SERVICE, 2440, "CLONE DIVERGENCE")
-const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2383, "if (!credentialData && !password) {")
+const PHRASE_IMPORT = cite(SERVICE, 1971, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 2192, 'new Error("Invalid profile old password")')
+const DUPLICATE_WARNS = cite(SERVICE, 2296, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2439, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2382, "if (!credentialData && !password) {")
 const OPEN_BEARER = cite(SESSIONS, 299, "const bearer = !this.strictSecurityMode && dek")
-const SESSION_RESTORE = cite(SESSIONS, 590, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
+const SESSION_RESTORE = cite(SESSIONS, 611, "session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer")
 const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
-const STRICT_TOGGLE = cite(SESSIONS, 750, 'prop.key === "strictSecurityMode"')
+const STRICT_TOGGLE = cite(SESSIONS, 769, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
 const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 197, ':title="strictRow.title"')
 const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
@@ -305,9 +317,9 @@ const PASSKEY_KIND_GATE = cite(SERVICE, 150, 'if (row.type === "password") throw
 const RETIRED_UNLOCK = cite(SERVICE, 145, 'if (kind === "retired") throw new RetiredProfileError()')
 const RETIRED_SLOTS = cite(SERVICE, 405, 'if (classified.kind === "retired") throw new RetiredProfileError()')
 const RETIRED_EXPORTS = cite(SERVICE, 518, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_LISTED = cite(SERVICE, 2362, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_LISTED = cite(SERVICE, 2361, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1283, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_FINALIZE = cite(SERVICE, 2544, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2543, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 300, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 142, 'stage.value = "phrase"')

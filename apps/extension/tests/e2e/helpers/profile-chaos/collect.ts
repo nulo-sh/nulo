@@ -9,6 +9,7 @@ import { LogLevel } from "@nulo/wallet-core/logger"
 import { EXTENSION_SCHEME } from "../../fixtures/browser"
 import { callService } from "../../fixtures/session"
 import { isPrestoProbeNoise } from "../../fixtures/wallet-pages"
+import { readFace } from "./page-face"
 import {
 	type ErrorEntry,
 	FAMILY_GROUPS,
@@ -206,20 +207,19 @@ export async function readSession(probe: Page, pages: readonly RunPage[], locked
 					{ timeout: 5_000, polling: 100 },
 				)
 				.catch(() => {})
-			const { hash, lockScreen } = await p.page.evaluate(() => {
-				const shown = (id: string) => {
-					const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
-					return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden"
-				}
-				const onAuth = location.hash.replace(/^#/, "").split("?")[0] === "/popup/auth"
-				const lock = onAuth ? { setupAgain: shown("auth-setup-again"), unlockOffered: shown("auth-submit") } : undefined
-				return { hash: location.hash, lockScreen: lock }
-			})
+			const face = await readFace(p.page)
+			if (!face) return undefined
+			const { hash, lockScreen } = face
 			const route = hash.replace(/^#/, "").split("?")[0]
 			return { label: p.label, anchor: p.anchor, route, ...(lockScreen ? { lockScreen } : {}) }
 		}),
 	)
-	return { row, active: active?.id, pages: routes, ...(locked ? { protectedCallRefused: await protectedCallRefused(probe) } : {}) }
+	return {
+		row,
+		active: active?.id,
+		pages: routes.filter((r) => r !== undefined),
+		...(locked ? { protectedCallRefused: await protectedCallRefused(probe) } : {}),
+	}
 }
 
 export async function readProfiles(page: Page): Promise<ProfileReading> {

@@ -1022,7 +1022,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			const live = this.sessionHandle()
 			if (handle !== undefined && live !== undefined && live !== handle) return
 			// An explicit lock also ends every pending restore, before the close can fail: a
-			// stashed restore secret must not outlive the user's intent to lock.
+			// stashed DEK rewrap context must not outlive the user's intent to lock.
 			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
 			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
@@ -1790,10 +1790,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.writeTombstoneHoldingLock(id, snapshot, epoch)
 			await this.repo.delete(id)
 			// Close the session BEFORE the emit (a subscriber reacting to the emit
-			// must not observe a still-open session for a deleted profile).
-			if (this.sessionManager.isActive(id)) {
-				await this.sessionManager.close()
-			}
+			// must not observe a still-open session for a deleted profile). A record an
+			// earlier failed delete left with no session in memory goes too.
+			await this.sessionManager.closeProfile(id)
 			// Deleting a profile mid-restore must drop + zeroize its rewrap context (its
 			// buffers aren't aged yet, so the TTL sweep wouldn't reap them).
 			this.pendingDekRewraps.drop(id)
@@ -1879,7 +1878,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				// but not yet deleted the row / closed the session.
 				await this.runExclusive(async () => {
 					if (await this.repo.get(t.profileId)) await this.repo.delete(t.profileId)
-					if (this.sessionManager.isActive(t.profileId)) await this.sessionManager.close()
+					await this.sessionManager.closeProfile(t.profileId)
 					await this.restorePending.delete(t.profileId)
 					// Idempotent, same as the live `deleteProfile` phase-1 block: a deletion that
 					// crashed before these clears must still drop the integrity records so a deleted
