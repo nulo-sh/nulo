@@ -36,6 +36,8 @@ import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vu
 import ImportFullBackupForm from "@/components/composite/import/ImportFullBackupForm.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import ImportSecretForm from "@/components/composite/import/ImportSecretForm.vue"
+import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
+import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import ProfileNameField from "@/components/composite/ProfileNameField.vue"
 
 const appStore = useAppStore()
@@ -81,6 +83,7 @@ const completeImport = async (profile) => {
 const {
 	nameFieldState,
 	profileName,
+	trimmedName,
 	holdsOwnName,
 	nameError,
 	shakeName,
@@ -90,9 +93,13 @@ const {
 	seedPhrase,
 	password,
 	repeatedPassword,
+	unlockMethod,
 	maxPasswordLength,
 	error,
 	isCopied,
+	ceremonyRequest,
+	onCeremonyResolve,
+	onCeremonyReject,
 	isAllowedToImportBySeedPhrase,
 	selectedBackup,
 	decryptionPassword,
@@ -111,8 +118,10 @@ const {
 	pickBackupFile,
 	decryptBackup,
 	restoreBackup,
+	restoreBackupWithExistingPasskey,
 	showRestoreErrorLog,
 	handleImportSeed,
+	handleImportSeedWithExistingPasskey,
 	handlePasswordInput,
 	handleSecretInput,
 	handleCopyError,
@@ -130,21 +139,21 @@ const {
 	openToast,
 })
 
-// An own window opens with Full Backup chosen and the name typed in the panel. Set before the
+// An own window opens with its method chosen and the name typed in the panel. Set before the
 // profile list lands, the name stays the user's: neither the default nor a backup's name replaces it.
-if (route.query.option === "full_backup") selectedImportOption.value = "full_backup"
+if (route.query.option === "full_backup" || route.query.option === "seed") selectedImportOption.value = route.query.option
 if (typeof route.query.name === "string") profileName.value = route.query.name
 
-/** Firefox's toolbar panel closes under a passkey prompt, and a backup's kind is unknown until its
- *  file is read, so a Full Backup restore there moves to its own window. A failed move stays here. */
+/** Firefox's toolbar panel closes under a passkey prompt, which both methods may ask, so either
+ *  moves to its own window there first. A failed move stays here. */
 const selectImportOption = async (option) => {
-	if (option === "full_backup" && (await leavePanelFor(ownWindowRestoreRoute()))) return
+	if ((option === "full_backup" || option === "seed") && (await leavePanelFor(ownWindowImportRoute(option)))) return
 	selectedImportOption.value = option
 }
 
 /** A name Nulo filled in is left behind, so the backup's own name can still replace it there. */
-const ownWindowRestoreRoute = () => {
-	const query = new URLSearchParams({ option: "full_backup", type: type.value, from: backTo.value })
+const ownWindowImportRoute = (option) => {
+	const query = new URLSearchParams({ option, type: type.value, from: backTo.value })
 	if (holdsOwnName() && profileName.value?.trim()) query.set("name", profileName.value)
 	return `${OWN_WINDOW_ROUTES.import}?${query}`
 }
@@ -212,6 +221,7 @@ onBeforeUnmount(() => {
 			v-model:decryptionPassword="decryptionPassword"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
+			v-model:unlockMethod="unlockMethod"
 			:selectedBackup="selectedBackup"
 			:restoreStatus="restoreStatus"
 			:isRestoreHasErrors="isRestoreHasErrors"
@@ -232,6 +242,7 @@ onBeforeUnmount(() => {
 			v-model:seedPhrase="seedPhrase"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
+			v-model:unlockMethod="unlockMethod"
 			:method="selectedImportOption"
 			:error="error"
 			:maxPasswordLength="maxPasswordLength"
@@ -253,16 +264,23 @@ onBeforeUnmount(() => {
 					>
 						Decrypt Backup
 					</Button>
-					<Button
-						v-if="showsRestoreCta(fullBackupCta)"
-						@click="restoreBackup"
-						@keydown.enter="refuseRepeatEnter"
-						:disabled="restoreCtaBlocked(fullBackupCta)"
-						data-testid="import-full-backup-submit-btn"
-						variant="cta"
-					>
-						{{ restoreStatus === "progress" ? "Importing…" : `Import ${selectedBackup?.backup?.data?.profile?.name ?? "Profile"}` }}
-					</Button>
+					<template v-if="showsRestoreCta(fullBackupCta)">
+						<Button
+							@click="restoreBackup"
+							@keydown.enter="refuseRepeatEnter"
+							:disabled="restoreCtaBlocked(fullBackupCta)"
+							data-testid="import-full-backup-submit-btn"
+							variant="cta"
+						>
+							{{ restoreStatus === "progress" ? "Importing…" : `Import ${selectedBackup?.backup?.data?.profile?.name ?? "Profile"}` }}
+						</Button>
+						<PasskeyReuseLink
+							v-if="unlockMethod === 'passkey'"
+							testid="import-full-backup-passkey-reuse"
+							:disabled="restoreCtaBlocked(fullBackupCta)"
+							@click="restoreBackupWithExistingPasskey"
+						/>
+					</template>
 					<!--
 					Finishing window: restore finished cleanly but `completeImport` is
 					awaiting the activation (`awaitProfileActivation`). Without this
@@ -323,11 +341,21 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToImportBySeedPhrase"
 					variant="cta"
 				>
-					Use Recovery Phrase
+					{{ `Import ${trimmedName || "Profile"}` }}
 				</Button>
+				<PasskeyReuseLink
+					v-if="selectedImportOption === 'seed' && unlockMethod === 'passkey'"
+					testid="import-seed-passkey-reuse"
+					:disabled="!isAllowedToImportBySeedPhrase"
+					@click="handleImportSeedWithExistingPasskey"
+				/>
 
 				<Button @click="handleFormBack" :disabled="backCtaBlocked(fullBackupCta)" variant="cta_outline">Back</Button>
 			</Flex>
+		</template>
+
+		<template #overlay>
+			<PasskeyCeremonyDialog v-if="ceremonyRequest" :request="ceremonyRequest" @resolve="onCeremonyResolve" @reject="onCeremonyReject" />
 		</template>
 	</CollapsingHeroLayout>
 </template>

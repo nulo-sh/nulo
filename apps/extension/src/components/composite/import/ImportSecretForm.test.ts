@@ -27,14 +27,26 @@ const baseProps = (over = {}) => ({
 	method: "seed",
 	error: { type: "", title: "", tooltip: "" },
 	maxPasswordLength: 128,
+	unlockMethod: "password",
 	...over,
 })
 
 describe("ImportSecretForm", () => {
-	it("renders phrase input + new+confirm password fields when method=seed", () => {
+	it("a phrase opens on Passkey: its note, and no password field until Password is picked", async () => {
+		const { unlockMethod: _, ...props } = baseProps()
+		const wrapper = mount(ImportSecretForm, { props, global: { stubs } })
+		expect(wrapper.get("[data-testid=import-method-passkey]").attributes("aria-selected")).toBe("true")
+		expect(wrapper.find("[data-testid=unlock-method-passkey-note]").exists()).toBe(true)
+		expect(wrapper.find("[data-testid=import-password-input]").exists()).toBe(false)
+		await wrapper.get("[data-testid=import-method-password]").trigger("click")
+		expect(wrapper.emitted("update:unlockMethod")).toEqual([["password"]])
+	})
+
+	it("renders phrase input + new+confirm password fields when Password is picked", () => {
 		const wrapper = mount(ImportSecretForm, { props: baseProps(), global: { stubs } })
 		expect(wrapper.text()).toContain("Recovery Phrase")
-		expect(wrapper.text()).toContain("New Password")
+		expect(wrapper.text()).toContain("How you'll unlock Nulo")
+		expect(wrapper.find("[data-testid=unlock-method-passkey-note]").exists()).toBe(false)
 		// new + confirm
 		expect(wrapper.find("[data-testid=import-password-input]").exists()).toBe(true)
 		expect(wrapper.find("[data-testid=import-password-confirm-input]").exists()).toBe(true)

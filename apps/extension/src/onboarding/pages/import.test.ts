@@ -153,6 +153,7 @@ describe("onboarding import", () => {
 		useToast().closeToast()
 		await mountImport()
 		const flow = importFlow.api!
+		flow.unlockMethod.value = "password"
 		flow.seedPhrase.value = "abandon ".repeat(24).trim()
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
@@ -338,9 +339,11 @@ const IMPORTING: OnboardingCta = ["Importing...", "onboarding-submit-import", tr
 const RETRY: OnboardingCta = ["Retry", "import-full-backup-retry-btn", false, "false", "cta_outline", "large"]
 const CONTINUE: OnboardingCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta", "large"]
 const VIEW_ERRORS: OnboardingCta = ["View errors", "import-full-backup-view-errors-btn", false, null, "cta_outline", "large"]
+const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a passkey I already have", testid, disabled, null, "", ""]
+const REUSE_BACKUP = REUSE("onboarding-import-backup-passkey-reuse")
 
 type Apis = { flow: NonNullable<typeof importFlow.api>; backup: NonNullable<typeof backupImport.api> }
-type ApisPatch = (a: Apis) => void
+type ApisPatch = (a: Apis) => void | Promise<void>
 
 const validPair = ({ flow }: Apis) => {
 	flow.password.value = "password123"
@@ -353,7 +356,7 @@ async function mountFullBackup(patch: ApisPatch): Promise<VueWrapper> {
 	const apis = { flow: importFlow.api!, backup: backupImport.api! }
 	apis.flow.selectedImportOption.value = "full_backup"
 	await flushPromises()
-	patch(apis)
+	await patch(apis)
 	await flushPromises()
 	return w
 }
@@ -392,16 +395,28 @@ const ONBOARDING_CTA_STATES: Array<[string, ApisPatch, OnboardingCta[]]> = [
 		[IMPORT, BACK],
 	],
 	[
+		// A passkey-made backup opens the unlock choice on Passkey, which asks no new password.
 		"decrypted passkey backup with no new password",
 		({ backup }) => {
 			backup.selectedBackup.value = PASSKEY_BACKUP
 		},
+		[IMPORT, REUSE_BACKUP, BACK],
+	],
+	[
+		"decrypted passkey backup switched to Password, with no new password",
+		async ({ flow, backup }) => {
+			backup.selectedBackup.value = PASSKEY_BACKUP
+			await flushPromises()
+			flow.unlockMethod.value = "password"
+		},
 		[IMPORT_OFF, BACK],
 	],
 	[
-		"decrypted passkey backup with a valid new password",
-		(a) => {
+		"decrypted passkey backup switched to Password, with a valid new password",
+		async (a) => {
 			a.backup.selectedBackup.value = PASSKEY_BACKUP
+			await flushPromises()
+			a.flow.unlockMethod.value = "password"
 			validPair(a)
 		},
 		[IMPORT, BACK],
@@ -491,7 +506,10 @@ describe("onboarding import — the CTA bar in each state", () => {
 		const flow = importFlow.api!
 		flow.selectedImportOption.value = "seed"
 		await flushPromises()
-		expect(onboardingCtas(w)).toEqual([["Import profile", "onboarding-submit-import", true, "false", "cta", "large"], BACK])
+		expect(onboardingCtas(w)).toEqual([IMPORT_OFF, REUSE("onboarding-import-passkey-reuse", true), BACK])
+		flow.unlockMethod.value = "password"
+		await flushPromises()
+		expect(onboardingCtas(w)).toEqual([IMPORT_OFF, BACK])
 
 		flow.seedPhrase.value = "abandon ".repeat(24).trim()
 		flow.password.value = "password123"

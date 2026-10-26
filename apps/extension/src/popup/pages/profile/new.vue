@@ -29,6 +29,7 @@ import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vu
 import NewProfileCredentials from "@/popup/components/modules/settings/new-profile/NewProfileCredentials.vue"
 import NewProfileMethodTabs from "@/popup/components/modules/settings/new-profile/NewProfileMethodTabs.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
 import ProfileNameField from "@/components/composite/ProfileNameField.vue"
 
 const appStore = useAppStore()
@@ -65,6 +66,7 @@ const {
 	strengthHint,
 	isAllowedToContinue,
 	handleCreate,
+	handleCreateWithExistingPasskey,
 	dispose,
 } = useProfileCreateFlow({
 	// Popup activation is listener-based (app.vue's onActiveProfileChanged runs
@@ -131,6 +133,13 @@ onBeforeUnmount(() => {
 			>
 				{{ isCreating ? "Creating…" : `Create with ${capitalize(type)}` }}
 			</Button>
+			<PasskeyReuseLink
+				v-if="type === 'passkey'"
+				testid="register-passkey-reuse"
+				:disabled="isCreating"
+				:class="$style.reuse"
+				@click="handleCreateWithExistingPasskey"
+			/>
 		</template>
 
 		<template #overlay>
@@ -157,5 +166,10 @@ onBeforeUnmount(() => {
 .section_label {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
+}
+
+.reuse {
+	display: block;
+	margin: 8px auto 0;
 }
 </style>

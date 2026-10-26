@@ -1,0 +1,304 @@
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true,
+		"hideHeader": true,
+		"showBottomNav": false
+	}
+}
+</route>
+
+<script setup>
+/** Components */
+import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+
+/** Services */
+import { managers } from "@/utils/core"
+import { InvalidPasswordError, UnlockMethodChangedError } from "@nulo/extension-messaging/errors"
+
+/** Composables */
+import { useToast } from "@/composables/toast.js"
+import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { createRunFence } from "@/composables/runFence"
+import { useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
+import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
+const { openToast } = useToast()
+
+/** Utils */
+import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+
+const router = useRouter()
+
+const maxPasswordLength = 128
+
+const isPasskey = computed(() => appStore.profile?.type === "passkey")
+/** "" | "enterPassword": a password profile's check before its passkey | "newPassword": a passkey
+ *  profile's new password, after its passkey answered. */
+const step = ref("")
+const password = ref("")
+const isPasswordHidden = ref(true)
+const isWrongPassword = ref(false)
+const newPassword = ref("")
+const repeatedNewPassword = ref("")
+const isNewPasswordHidden = ref(true)
+const isBusy = ref(false)
+const newPasswordHintText = computed(() => newPasswordHint(newPassword.value ?? "", repeatedNewPassword.value ?? ""))
+const canSaveNewPassword = computed(() => isNewPasswordValid(newPassword.value ?? "", repeatedNewPassword.value ?? ""))
+
+const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
+const newPasskey = useNewProfilePasskey(runCeremony)
+/** Fences every step to the profile it started for: a switch or a reset drops what it returns. */
+const runs = createRunFence()
+/** The current passkey's answer, held from its card to Save on the new-password step only. */
+let heldAnswer = null
+
+function reset() {
+	runs.invalidate()
+	step.value = ""
+	password.value = ""
+	isWrongPassword.value = false
+	newPassword.value = ""
+	repeatedNewPassword.value = ""
+	isBusy.value = false
+	heldAnswer = null
+}
+
+/** The current passkey's card, asked at the profile's own input. */
+async function currentPasskey() {
+	const { id, name } = appStore.profile
+	const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(id)
+	return runCeremony({ mode: "get", credentialId, prfSalt, step: "unlockMethod", profileName: name })
+}
+
+/** A new passkey's card, at an input minted for this profile. */
+const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
+
+/** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
+ *  changed. A change saved but not reopened ends at the lock screen. */
+async function attempt(run) {
+	if (isBusy.value) return
+	isBusy.value = true
+	const isCurrent = runs.snapshot()
+	try {
+		const done = await run(isCurrent)
+		if (!isCurrent() || !done) return
+		newPasskey.forget()
+		reset()
+		openToast({ kind: "success", label: done })
+	} catch (error) {
+		if (!isCurrent()) return
+		if (error instanceof UnlockMethodChangedError) {
+			reset()
+			openToast({ kind: "info", label: "Unlock method changed. Unlock Nulo again to continue." })
+			router.replace("/popup/auth")
+			return
+		}
+		if (handleCancelOrUnconfirmed(error, openToast)) return
+		console.error("[unlock-method] change failed", { error })
+		openToast({ kind: "error", label: "Couldn't change the unlock method. Try again." })
+	} finally {
+		if (isCurrent()) isBusy.value = false
+	}
+}
+
+/** Password profile, Continue: the password must open the profile before any passkey is made. */
+const handleContinue = () =>
+	attempt(async (isCurrent) => {
+		if (!password.value) return undefined
+		const id = appStore.profile.id
+		try {
+			await managers.profile.verifyProfilePassword(id, password.value)
+		} catch (error) {
+			if (!(error instanceof InvalidPasswordError)) throw error
+			if (isCurrent()) isWrongPassword.value = true
+			return undefined
+		}
+		const next = await nextPasskey()
+		if (!isCurrent()) return undefined
+		await managers.profile.changeUnlockMethod(id, { password: password.value }, { passkey: next })
+		return "Now unlocks with your passkey"
+	})
+
+const handleNewPasskey = () =>
+	attempt(async (isCurrent) => {
+		const id = appStore.profile.id
+		const current = await currentPasskey()
+		if (!isCurrent()) return undefined
+		const next = await nextPasskey()
+		if (!isCurrent()) return undefined
+		await managers.profile.changeUnlockMethod(id, { passkey: current }, { passkey: next })
+		return "Now unlocks with your new passkey"
+	})
+
+const handleUsePassword = () =>
+	attempt(async (isCurrent) => {
+		const answer = await currentPasskey()
+		if (!isCurrent()) return undefined
+		heldAnswer = answer
+		step.value = "newPassword"
+		return undefined
+	})
+
+const handleSavePassword = () =>
+	attempt(async (isCurrent) => {
+		if (!canSaveNewPassword.value || !heldAnswer) return undefined
+		await managers.profile.changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer }, { password: newPassword.value })
+		return isCurrent() ? "Now unlocks with your password" : undefined
+	})
+
+const onKeydown = (e) => {
+	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
+	if (step.value === "enterPassword") handleContinue()
+	else if (step.value === "newPassword") handleSavePassword()
+}
+
+watch(() => appStore.profile?.id, reset)
+
+// Firefox's toolbar panel closes under the passkey prompt every change runs, so the page moves to its
+// own window first. A failed move keeps the page where it is.
+onBeforeMount(() => {
+	if (closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
+})
+
+onBeforeUnmount(() => {
+	reset()
+})
+</script>
+
+<template>
+	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" @keydown="onKeydown">
+		<div :class="step ? 'export_section' : 'export_section_last'">
+			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
+				{{ isPasskey ? "This profile unlocks with a passkey." : "This profile unlocks with a password." }}
+			</Text>
+		</div>
+
+		<div v-if="step === 'enterPassword'" class="export_section_last">
+			<div :class="[isWrongPassword && $style.shake]">
+				<Input
+					v-model="password"
+					:type="isPasswordHidden ? 'password' : 'text'"
+					:error="isWrongPassword"
+					:ariaInvalid="isWrongPassword"
+					placeholder="Enter password"
+					autocomplete="current-password"
+					autofocus
+					data-testid="unlock-method-password-input"
+					@input="isWrongPassword = false"
+				>
+					<template #suffix>
+						<PasswordVisibilityToggle
+							:hidden="isPasswordHidden"
+							data-testid="unlock-method-password-input-visibility-toggle"
+							@toggle="isPasswordHidden = !isPasswordHidden"
+						/>
+					</template>
+				</Input>
+			</div>
+			<Transition name="fade">
+				<span v-if="isWrongPassword" :class="$style.error_text" role="alert" data-testid="unlock-method-error-text">
+					Wrong password
+				</span>
+			</Transition>
+		</div>
+
+		<div v-if="step === 'newPassword'" class="export_section_last">
+			<span class="export_section_label type--label-section">New Password</span>
+			<Flex direction="column" gap="12">
+				<Input
+					v-model="newPassword"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
+					:maxLength="maxPasswordLength"
+					placeholder="Enter new password"
+					autocomplete="new-password"
+					autofocus
+					data-testid="unlock-method-new-password-input"
+				>
+					<template #suffix>
+						<PasswordVisibilityToggle
+							:hidden="isNewPasswordHidden"
+							data-testid="unlock-method-new-password-input-visibility-toggle"
+							@toggle="isNewPasswordHidden = !isNewPasswordHidden"
+						/>
+					</template>
+					<template #bottom>
+						<Flex align="center" gap="6" :class="$style.hint_row">
+							<Icon name="lock" :size="12" color="tertiary" />
+							<Text variant="body" color="tertiary">{{ newPasswordHintText }}</Text>
+						</Flex>
+					</template>
+				</Input>
+				<Input
+					v-model="repeatedNewPassword"
+					:type="isNewPasswordHidden ? 'password' : 'text'"
+					:maxLength="maxPasswordLength"
+					placeholder="Repeat password"
+					autocomplete="new-password"
+					data-testid="unlock-method-new-password-confirm-input"
+				/>
+			</Flex>
+		</div>
+
+		<template #bottom>
+			<Button
+				v-if="step === 'newPassword'"
+				variant="cta"
+				:disabled="!canSaveNewPassword || isBusy"
+				data-testid="unlock-method-save"
+				@click="handleSavePassword"
+				@keydown.enter="refuseRepeatEnter"
+			>
+				Save
+			</Button>
+			<Flex v-else-if="isPasskey" direction="column" gap="8" wide>
+				<Button variant="cta" :disabled="isBusy" data-testid="unlock-method-new-passkey" @click="handleNewPasskey">
+					Use a new passkey
+				</Button>
+				<Button variant="cta_outline" :disabled="isBusy" data-testid="unlock-method-use-password" @click="handleUsePassword">
+					Use a password instead
+				</Button>
+			</Flex>
+			<Button
+				v-else-if="step === 'enterPassword'"
+				variant="cta"
+				:disabled="!password || isBusy"
+				data-testid="unlock-method-continue"
+				@click="handleContinue"
+				@keydown.enter="refuseRepeatEnter"
+			>
+				Continue
+			</Button>
+			<Button v-else variant="cta" data-testid="unlock-method-use-passkey" @click="step = 'enterPassword'">
+				Use a passkey instead
+			</Button>
+		</template>
+	</CollapsingHeroLayout>
+
+	<PasskeyCeremonyDialog v-if="ceremonyRequest" :request="ceremonyRequest" @resolve="onCeremonyResolve" @reject="onCeremonyReject" />
+</template>
+
+<style module>
+.hint_row {
+	margin-top: 4px;
+}
+
+.error_text {
+	composes: type--body from global;
+	color: var(--txt-danger);
+	margin-top: 4px;
+	display: block;
+}
+
+.shake {
+	composes: shake_password from "@/components/composite/shake.module.css";
+}
+</style>

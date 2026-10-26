@@ -2,7 +2,8 @@ import { effectScope } from "vue"
 import { flushPromises } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
-import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
+import { DuplicateWalletError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 vi.mock("@/utils/core", () => {
 	const profileMock = {
@@ -21,8 +22,9 @@ import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./usePro
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
 
 /** Run the composable inside an owned effect scope so its internal `watch` is
- *  disposed between tests; return the flow + a scope-stopper. */
-function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}) {
+ *  disposed between tests; return the flow + a scope-stopper. The flow starts on the Password tab
+ *  unless `onPasskey`. */
+function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}, onPasskey = false) {
 	const opts: UseProfileImportFlowOptions = {
 		completeImport: vi.fn(async () => undefined),
 		showErrorLog: vi.fn(),
@@ -34,6 +36,7 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}) {
 	scope.run(() => {
 		flow = useProfileImportFlow(opts)
 	})
+	if (!onPasskey) flow.unlockMethod.value = "password"
 	return { flow, opts, stop: () => scope.stop() }
 }
 
@@ -55,7 +58,7 @@ describe("useProfileImportFlow", () => {
 		flow.repeatedPassword.value = "password123"
 		flow.seedPhrase.value = SEED_24
 		await flow.handleImportSeed()
-		expect(profileApi.importMnemonic).toHaveBeenCalledWith("MyProfile", SEED_24.split(" "), "password123", false)
+		expect(profileApi.importMnemonic).toHaveBeenCalledWith("MyProfile", SEED_24.split(" "), "password123", false, undefined)
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		expect(flow.isImporting.value).toBe(false)
 	})
@@ -79,7 +82,7 @@ describe("useProfileImportFlow", () => {
 		flow.repeatedPassword.value = "password123"
 		flow.seedPhrase.value = SEED_24
 		await flow.handleImportSeed()
-		expect(profileApi.importMnemonic).toHaveBeenCalledWith("Main", SEED_24.split(" "), "password123", false)
+		expect(profileApi.importMnemonic).toHaveBeenCalledWith("Main", SEED_24.split(" "), "password123", false, undefined)
 	})
 
 	test("a selected backup's name prefills an untouched field: named → nameless → named", async () => {
@@ -201,7 +204,7 @@ describe("useProfileImportFlow", () => {
 			await p
 
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(2)
-			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true)
+			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true, undefined)
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
@@ -248,7 +251,7 @@ describe("useProfileImportFlow", () => {
 			await second
 
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(3)
-			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true)
+			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true, undefined)
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
@@ -262,6 +265,112 @@ describe("useProfileImportFlow", () => {
 			await flow.handleImportSeed()
 			expect(flow.error.value.tooltip).toBe("boom")
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	describe("a phrase imported under a passkey", () => {
+		const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
+		/** A flow on the Passkey tab with a 24-word phrase and a name, and no password typed. */
+		function passkeyFlow() {
+			const made = makeFlow({}, true)
+			made.flow.profileName.value = "MyProfile"
+			made.flow.seedPhrase.value = SEED_24
+			return made
+		}
+
+		test("a phrase opens on Passkey; Import asks a new passkey for the profile, then imports under its answer", async () => {
+			const { flow, opts } = passkeyFlow()
+			expect(flow.unlockMethod.value).toBe("passkey")
+			expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true)
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() =>
+				expect(flow.ceremonyRequest.value).toMatchObject({ mode: "create", step: "import", profileName: "MyProfile" }),
+			)
+			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+			flow.onCeremonyResolve(ANSWER)
+			await run
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith("MyProfile", SEED_24.split(" "), undefined, false, ANSWER)
+			expect(opts.completeImport).toHaveBeenCalledOnce()
+		})
+
+		test("with a passkey the person already has, the card asks a discovery; on the Password tab nothing runs", async () => {
+			const { flow } = passkeyFlow()
+			const run = flow.handleImportSeedWithExistingPasskey()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value?.mode).toBe("discover"))
+			flow.onCeremonyResolve(ANSWER)
+			await run
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith("MyProfile", SEED_24.split(" "), undefined, false, ANSWER)
+			flow.unlockMethod.value = "password"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await flow.handleImportSeedWithExistingPasskey()
+			expect(profileApi.importMnemonic).toHaveBeenCalledOnce()
+		})
+
+		test("a cancelled card imports nothing, reports nothing, and leaves the form filled", async () => {
+			const { flow, opts } = passkeyFlow()
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
+			flow.onCeremonyReject(new UserRejectedError())
+			await run
+			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+			expect(opts.openToast).not.toHaveBeenCalled()
+			expect([flow.profileName.value, flow.seedPhrase.value, flow.unlockMethod.value, flow.error.value.type]).toEqual([
+				"MyProfile",
+				SEED_24,
+				"passkey",
+				"",
+			])
+			expect(flow.isImporting.value).toBe(false)
+		})
+
+		test("a failed card reports and imports nothing", async () => {
+			const { flow } = passkeyFlow()
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
+			flow.onCeremonyReject(new Error("authenticator broke"))
+			await run
+			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+			expect(flow.error.value).toMatchObject({ type: "unknown", tooltip: "authenticator broke" })
+		})
+
+		test("the duplicate warning's confirm imports under the same answer, asking no second card", async () => {
+			profileApi.importMnemonic
+				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
+				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "passkey" })
+			const { flow } = passkeyFlow()
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
+			flow.onCeremonyResolve(ANSWER)
+			await vi.waitFor(() => expect(profileApi.importMnemonic).toHaveBeenCalledOnce())
+			await tick()
+			const { useCacheStore } = await import("@/stores/cache.store")
+			;(useCacheStore().confirm as { callback?: () => void }).callback?.()
+			await run
+			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), undefined, true, ANSWER)
+			expect(flow.ceremonyRequest.value).toBeNull()
+		})
+
+		test("a backup opens the choice on the method it was made with; a cleared form opens on Passkey again", async () => {
+			const { flow } = passkeyFlow()
+			const pick = pickFile as unknown as ReturnType<typeof vi.fn>
+			const backupFile = (type: string) =>
+				new File([JSON.stringify({ data: { profile: { type, name: "B" } } })], "b.json", { type: "application/json" })
+			pick.mockResolvedValueOnce(backupFile("password"))
+			await flow.pickBackupFile()
+			await flushPromises()
+			expect(flow.unlockMethod.value).toBe("password")
+			flow.unlockMethod.value = "passkey"
+			pick.mockResolvedValueOnce(backupFile("passkey"))
+			await flow.pickBackupFile()
+			await flushPromises()
+			expect(flow.unlockMethod.value).toBe("passkey")
+			pick.mockResolvedValueOnce(backupFile("password"))
+			await flow.pickBackupFile()
+			await flushPromises()
+			expect(flow.unlockMethod.value).toBe("password")
+			flow.handleBack()
+			expect(flow.unlockMethod.value).toBe("passkey")
 		})
 	})
 

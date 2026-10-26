@@ -3,7 +3,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { describe, expect, test, vi } from "vitest"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
-import { createPasskeyProfileInPage } from "./create-passkey-profile"
+import { createPasskeyProfileInPage, newProfilePasskeyRequest } from "./create-passkey-profile"
 
 const answerTo = (req: PasskeyRequest) => ({ id: "Y3JlZA==", prf: "cHJm", prfSalt: req.prfSalt }) as PasskeyCredentialData
 
@@ -52,5 +52,39 @@ describe("createPasskeyProfileInPage", () => {
 		})
 		await expect(createPasskeyProfileInPage("X", deps)).rejects.toBeInstanceOf(UserRejectedError)
 		expect(deps.createPasskeyProfile).not.toHaveBeenCalled()
+	})
+})
+
+describe("newProfilePasskeyRequest", () => {
+	const display = { step: "import", profileName: "Main" } as const
+
+	// The answer seals the new profile, so its input is minted here and never names a credential.
+	test("with an existing passkey: a discovery get at a fresh input, naming no credential", () => {
+		const first = newProfilePasskeyRequest(display, { existing: true })
+		const second = newProfilePasskeyRequest(display, { existing: true, saved: { credentialId: "c2F2ZWQ=", prfSalt: "c2FsdA==" } })
+		expect(Object.keys(first).sort()).toEqual(["mode", "prfSalt", "profileName", "step"])
+		expect(first).toMatchObject({ mode: "discover", ...display })
+		expect(Buffer.from(first.prfSalt, "base64")).toHaveLength(32)
+		expect(second.mode).toBe("discover")
+		expect(second.prfSalt).not.toBe(first.prfSalt)
+		expect(second.prfSalt).not.toBe("c2FsdA==")
+	})
+
+	test("otherwise a create, which confirms a saved credential at its own input", () => {
+		expect(newProfilePasskeyRequest(display)).toMatchObject({ mode: "create", credentialId: undefined, ...display })
+		expect(newProfilePasskeyRequest(display, { saved: { credentialId: "c2F2ZWQ=", prfSalt: "c2FsdA==" } })).toMatchObject({
+			mode: "create",
+			credentialId: "c2F2ZWQ=",
+			prfSalt: "c2FsdA==",
+		})
+	})
+
+	test("createPasskeyProfileInPage with an existing passkey creates the profile from the discovery's answer", async () => {
+		const deps = makeDeps()
+		const created = await createPasskeyProfileInPage("My Wallet", deps, undefined, true)
+		const req = deps.runCeremony.mock.calls[0][0]
+		expect(req).toMatchObject({ mode: "discover", step: "create", profileName: "My Wallet" })
+		expect(deps.createPasskeyProfile).toHaveBeenCalledExactlyOnceWith("My Wallet", created.credentialData)
+		expect(created.credentialData.prfSalt).toBe(req.prfSalt)
 	})
 })

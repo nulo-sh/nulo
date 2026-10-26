@@ -13,6 +13,10 @@ import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
+import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
+import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
+import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
+import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
 
 /**
  * Shared orchestration for the profile-IMPORT flow, consumed by both the
@@ -148,7 +152,8 @@ interface ImportHandlerDeps {
 	isAllowedToImportBySeedPhrase: Ref<boolean>
 	resolveName: () => Promise<string | null>
 	seedPhrase: Ref<string | undefined>
-	password: Ref<string>
+	unlockMethod: Ref<UnlockMethod>
+	chooseUnlock: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	allowDuplicate: Ref<boolean>
 	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
 	fillUnknownImportError: (err: unknown) => void
@@ -160,21 +165,17 @@ interface ImportHandlerDeps {
 function createImportHandlers(deps: ImportHandlerDeps) {
 	// In-flight latch is set BEFORE the async `getProfiles()` fetch so two rapid
 	// clicks can't both pass the pre-check before the lock is set.
-	const handleImportSeed = async () => {
+	// `existing`: the profile takes a passkey the person already has.
+	const importSeed = async (existing: boolean) => {
 		if (!deps.isAllowedToImportBySeedPhrase.value || deps.isImporting.value) return
+		if (existing && deps.unlockMethod.value !== "passkey") return
 		deps.isImporting.value = true
 		try {
 			const name = await deps.resolveName()
 			if (name === null) return
-			const profile = await deps.withDuplicateConfirm(() =>
-				managers.profile.importMnemonic(
-					name,
-					(deps.seedPhrase.value ?? "").split(" "),
-					deps.password.value,
-					deps.allowDuplicate.value,
-				),
-			)
-			// `undefined` = the user declined the duplicate warning; stay on the form.
+			const profile = await importNamed(name, existing)
+			// `undefined` = the passkey card was cancelled or the duplicate warning declined; stay on
+			// the form.
 			if (!profile) return
 			await deps.completeImport(profile)
 		} catch (err) {
@@ -184,7 +185,18 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 		}
 	}
 
-	return { handleImportSeed }
+	async function importNamed(name: string, existing: boolean) {
+		const unlock = await deps.chooseUnlock({ step: "import", profileName: name }, existing)
+		if (unlock === null) return undefined
+		const words = (deps.seedPhrase.value ?? "").split(" ")
+		// A passkey answer is held across the duplicate confirm only: the next Import asks again.
+		return deps.withDuplicateConfirm(() =>
+			managers.profile.importMnemonic(name, words, unlock.password, deps.allowDuplicate.value, unlock.credentialData),
+		)
+	}
+
+	// Two handlers rather than a flag: a click handler receives the click event as its argument.
+	return { handleImportSeed: () => importSeed(false), handleImportSeedWithExistingPasskey: () => importSeed(true) }
 }
 
 /** Capped pick: the byte gate must run inside pickFile (compressed files
@@ -207,6 +219,32 @@ export function cappedBackupPick(fillError: (type?: string, title?: string, tool
 			throw err
 		}
 	}
+}
+
+/** What a new profile is sealed under, by the tab picked, and the page's passkey card that asks it.
+ *  `completeImport` wraps the page's, dropping what the card remembered once an import succeeded. */
+function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>, opts: UseProfileImportFlowOptions) {
+	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
+	const newPasskey = useNewProfilePasskey(runCeremony)
+
+	/** The new password, or the passkey answer the page's card returns; `null` when the card was
+	 *  cancelled, which leaves the form as it was. */
+	async function chooseUnlock(display: PasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
+		if (unlockMethod.value === "password") return { password: password.value }
+		try {
+			return { credentialData: await newPasskey.ask(display, existing) }
+		} catch (err) {
+			if (handleCancelOrUnconfirmed(err, opts.openToast)) return null
+			throw new Error(passkeyFailureCopy(err, errorMessageFromUnknown(err)))
+		}
+	}
+
+	const completeImport: UseProfileImportFlowOptions["completeImport"] = (profile) => {
+		newPasskey.forget()
+		return opts.completeImport(profile)
+	}
+
+	return { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport }
 }
 
 async function listProfileNames(): Promise<string[]> {
@@ -241,33 +279,43 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	const repeatedPassword = ref("")
 	const maxPasswordLength = 128
 	const isImporting = ref(false)
+	// A phrase opens on Passkey, as Create does; a backup opens on the unlock it was made with.
+	const unlockMethod = ref<UnlockMethod>("passkey")
+
+	const { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport } = useImportUnlock(
+		unlockMethod,
+		password,
+		opts,
+	)
 
 	// Name check is excluded on purpose — name is validated at submit time so
 	// an empty name shakes the input instead of silently disabling the buttons.
-	const isAllowedToContinue = computed(() => isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""))
-	const isAllowedToImportBySeedPhrase = computed(() => {
-		if (!isAllowedToContinue.value) return false
-		return seedPhrase.value?.split(" ").length === 24 && password.value.length >= 8
-	})
+	const isAllowedToContinue = computed(
+		() => unlockMethod.value === "passkey" || isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""),
+	)
+	const isAllowedToImportBySeedPhrase = computed(() => isAllowedToContinue.value && seedPhrase.value?.split(" ").length === 24)
 
-	const { handleImportSeed } = createImportHandlers({
+	const { handleImportSeed, handleImportSeedWithExistingPasskey } = createImportHandlers({
 		isImporting,
 		isAllowedToImportBySeedPhrase,
 		resolveName: () => nameDefault.resolveName(),
 		seedPhrase,
-		password,
+		unlockMethod,
+		chooseUnlock,
 		allowDuplicate,
 		withDuplicateConfirm,
 		fillUnknownImportError,
-		completeImport: opts.completeImport,
+		completeImport,
 	})
 
 	const backup = wireBackupImport({
+		unlockMethod,
+		chooseUnlock,
 		password,
 		repeatedPassword,
 		fillError,
 		clearError,
-		completeImport: opts.completeImport,
+		completeImport,
 		nameDefault,
 		showErrorLog: opts.showErrorLog,
 		allowDuplicate,
@@ -281,6 +329,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		seedPhrase.value = undefined
 		password.value = ""
 		repeatedPassword.value = ""
+		unlockMethod.value = "passkey"
 		backup.resetBackupState()
 		clearError()
 	}
@@ -296,16 +345,22 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		seedPhrase,
 		password,
 		repeatedPassword,
+		unlockMethod,
 		maxPasswordLength,
 		isImporting,
 		error,
 		isCopied,
+		// the page's passkey card
+		ceremonyRequest,
+		onCeremonyResolve,
+		onCeremonyReject,
 		// per-method gates
 		isAllowedToImportBySeedPhrase,
 		// full backup (surface from the wiring sub-composable, verbatim keys)
 		...backup.surface,
 		// handlers
 		handleImportSeed,
+		handleImportSeedWithExistingPasskey,
 		handlePasswordInput,
 		handleSecretInput,
 		handleCopyError,
@@ -317,6 +372,8 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 }
 
 interface WireBackupImportDeps {
+	unlockMethod: Ref<UnlockMethod>
+	chooseUnlock: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	password: Ref<string>
 	repeatedPassword: Ref<string>
 	fillError: (type?: string, title?: string, tooltip?: string) => void
@@ -351,10 +408,13 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 		pickBackupFile,
 		decryptBackup,
 		restoreBackup,
+		restoreBackupWithExistingPasskey,
 		showRestoreErrorLog,
 		resetBackupState,
 		dispose,
 	} = useFullBackupImport({
+		unlockMethod: deps.unlockMethod,
+		chooseUnlock: deps.chooseUnlock,
 		password: deps.password,
 		repeatedPassword: deps.repeatedPassword,
 		fillError: deps.fillError,
@@ -370,6 +430,13 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 	// The selected backup's own name prefills an untouched field; a nameless one restores the
 	// default. A name the user typed is never replaced.
 	watch(parsedBackupName, (name) => deps.nameDefault.offer(name))
+	// A backup opens the unlock choice on the method it was made with, still switchable.
+	watch(
+		() => selectedBackup.value?.profileType,
+		(made) => {
+			if (made === "password" || made === "passkey") deps.unlockMethod.value = made
+		},
+	)
 
 	return {
 		resetBackupState,
@@ -393,6 +460,7 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 			pickBackupFile,
 			decryptBackup,
 			restoreBackup,
+			restoreBackupWithExistingPasskey,
 			showRestoreErrorLog,
 		},
 	}
