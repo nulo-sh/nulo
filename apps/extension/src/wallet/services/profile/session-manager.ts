@@ -51,6 +51,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ConfigProp, IConfig } from "@/wallet/config"
+import { defaultConfig } from "@/wallet/config/config"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { ValueStorage } from "@/wallet/storage"
 import type { AlarmEvent, AlarmsPort, BrowserApi } from "@nulo/wallet-core/ports"
@@ -84,6 +85,9 @@ const MAX_EXPIRY_DEFERRAL_MS = 10 * 60_000
 /** How far one deferral moves the deadline, capped again by the TTL. */
 const EXPIRY_DEFERRAL_STEP_MS = 60_000
 
+/** The timeout a session runs on when the stored one is unusable. */
+const DEFAULT_SESSION_TTL = defaultConfig().sessionTtl
+
 /** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
 const CLOSE_DELETE_ATTEMPTS = 2
 
@@ -93,6 +97,12 @@ export type CloseOutcome = { emitted: boolean; recordKept: boolean }
 
 /** The deadline and TTL revision a snapshot-based write was decided on. */
 type CommitExpectation = { lockedAt: number | undefined; configRev: number }
+
+/** A stored timeout that is negative or not finite reads as the default: applied as stored, it
+ *  would expire every session the moment it opens, with no way back to Settings. */
+function usableTtl(ttl: number): number {
+	return Number.isFinite(ttl) && ttl >= 0 ? ttl : DEFAULT_SESSION_TTL
+}
 
 /** Callback the facade passes to `restore()` so SessionManager can fetch
  *  the profile named in the persisted session without reaching into
@@ -182,7 +192,7 @@ export class SessionManager {
 		runExclusive?: <T>(fn: () => Promise<T>) => Promise<T>,
 	) {
 		this.onChange = onChange
-		this.sessionTtl = config.get("sessionTtl")
+		this.sessionTtl = usableTtl(config.get("sessionTtl"))
 		this.strictSecurityMode = config.get("strictSecurityMode")
 		config.onUpdate.add(this.onConfigUpdated)
 		this.session = new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
@@ -731,7 +741,7 @@ export class SessionManager {
 	private readonly onConfigUpdated = (prop: ConfigProp) => {
 		if (prop.key === "sessionTtl") {
 			const oldTtl = this.sessionTtl
-			const newTtl = prop.value
+			const newTtl = usableTtl(prop.value)
 			this.sessionTtl = newTtl
 			if (oldTtl === newTtl) return
 			// Don't await — config.set returns immediately and the listener

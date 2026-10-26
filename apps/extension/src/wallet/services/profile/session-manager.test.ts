@@ -453,6 +453,31 @@ describe("SessionManager", () => {
 
 			await expect(manager.getActive()).resolves.toBeUndefined()
 		})
+
+		const persistedWindow = async (api: FakeBrowserApi) => {
+			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
+			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
+			return (persisted.lockedAt as number) - persisted.since
+		}
+
+		test.each([
+			{ stored: -300_000, runsOn: 1_800_000 },
+			{ stored: Number.POSITIVE_INFINITY, runsOn: 1_800_000 },
+			{ stored: 60_000, runsOn: 60_000 },
+		])("a stored TTL of $stored opens the session on $runsOn", async ({ stored, runsOn }) => {
+			const { api, manager } = setup(stored)
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
+			await expect(manager.getActive()).resolves.toBeDefined()
+			expect(await persistedWindow(api)).toBe(runsOn)
+		})
+
+		test("a negative TTL pushed mid-session keeps the session open on the default", async () => {
+			const { api, config, manager } = setup(60_000)
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
+			config.setTtl(-300_000)
+			await vi.waitFor(async () => expect(await persistedWindow(api)).toBe(1_800_000), { timeout: 1000 })
+			await expect(manager.getActive()).resolves.toBeDefined()
+		})
 	})
 
 	describe("getSecret", () => {

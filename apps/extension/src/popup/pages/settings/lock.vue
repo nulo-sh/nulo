@@ -146,8 +146,11 @@ function landLockConfig({ ttl, strict }, updatedSince) {
 watch(
 	() => sessionTtlMinutes.value,
 	debounce(() => {
-		updateSessionTtl(Number(sessionTtlMinutes.value) * 60 * 1_000)
-		switch (Number(sessionTtlMinutes.value)) {
+		const minutes = Number(sessionTtlMinutes.value)
+		// Only whole minutes from 0 (never) to the maximum are a timeout: a stored negative expires
+		// every session the moment it opens.
+		if (Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_SESSION_TTL) updateSessionTtl(minutes * 60 * 1_000)
+		switch (minutes) {
 			case 0:
 				fillNotification("'0' means the wallet will never be locked automatically")
 				break

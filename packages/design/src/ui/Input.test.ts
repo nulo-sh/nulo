@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
-import { defineComponent, h, nextTick } from "vue"
+import { defineComponent, h, nextTick, ref } from "vue"
 import Input from "./Input.vue"
 
 const STUBS = {
@@ -219,13 +219,40 @@ describe("Input", () => {
 		expect(w.text()).not.toContain("Already exist")
 	})
 
-	test("(BUG PIN) subtype='int' emits parseInt of the RAW text (stops at first non-digit), not the cleaned digits", async () => {
-		// Quirk preserved verbatim: handleInput cleans `value` (→ "123") but emits
-		// `parseInt(text.value, 10)` where text.value is the raw "12a3" → 12 (parseInt stops at "a").
-		const w = mountInput({ subtype: "int" })
-		await w.find("input").setValue("12a3")
-		const emits = w.emitted("update:modelValue")
-		expect(emits?.[emits.length - 1]).toEqual([12])
+	describe("subtype='int' emits the number the field shows", () => {
+		// Bound with v-model as a page binds it, so the field shows what the round trip writes back.
+		const IntHost = defineComponent({
+			props: { initial: { type: String, default: "" } },
+			setup(props) {
+				const model = ref<string | number>(props.initial)
+				return () =>
+					h(Input, {
+						type: "text",
+						subtype: "int",
+						placeholder: "30",
+						modelValue: model.value,
+						"onUpdate:modelValue": (value: string | number) => {
+							model.value = value
+						},
+					})
+			},
+		})
+
+		test.each([
+			{ how: "a minus typed before 5", initial: "5", text: "-5", paste: false, shows: "5", emits: 5 },
+			{ how: "-5 pasted", initial: "", text: "-5", paste: true, shows: "5", emits: 5 },
+			{ how: "a separator inside the digits", initial: "", text: "12a3", paste: false, shows: "123", emits: 123 },
+			{ how: "plain digits", initial: "", text: "12", paste: false, shows: "12", emits: 12 },
+		])("$how: shows $shows and emits $emits", async ({ initial, text, paste, shows, emits }) => {
+			const w = mount(IntHost, { props: { initial }, global: { stubs: STUBS } })
+			const el = w.get("input").element as HTMLInputElement
+			if (paste) el.dispatchEvent(new Event("paste", { cancelable: true }))
+			el.value = text
+			el.dispatchEvent(new Event("input"))
+			await nextTick()
+			expect(w.getComponent(Input).emitted("update:modelValue")?.at(-1)).toEqual([emits])
+			expect(el.value).toBe(shows)
+		})
 	})
 
 	test("(oddity) exposes inputEl + focus via defineExpose", () => {
