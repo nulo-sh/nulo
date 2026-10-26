@@ -714,6 +714,7 @@ describe("O3, writes", () => {
 			ctx([...base.slice(0, 2), entry(`nulo:core:profiles@${P2}`, "c2")], [{ kind: "profile", ref: "P2" }]),
 		],
 		["a balance refresh for the open profile", ctx([...base, entry("nulo:core:token-balances@1", "t", P1)], [])],
+		["the open profile's selection stamped by its account setup", ctx([...base, entry("nulo:ui:selectedAccount@device", "s", P1)], [])],
 		["a device write the contract names", ctx([...base, entry("nulo:ui:lastActiveProfile", "l")], [{ kind: "device" }])],
 		["the harness's own key", ctx([...base, entry("nulo:e2e:proof-gate", "g")], [])],
 		["a create that stores its row", ctx(base, [{ kind: "create", ref: "P2" }])],
@@ -734,6 +735,7 @@ describe("O3, writes", () => {
 		],
 		["a device write the contract does not name", ctx([...base, entry("nulo:config", "c")], [])],
 		["a balance write for a locked profile", ctx([...base, entry("nulo:core:token-balances@2", "t", P2)], [])],
+		["a selection stamped for a locked profile", ctx([...base, entry("nulo:ui:selectedAccount@device", "s", P2)], [])],
 		["a row for a deleted profile", ctx([...base, entry("nulo:core:tokens@9", "t", P2)], [], { deletedIds: new Set([P2]) })],
 		["a row left by a delete", ctx(base, [{ kind: "delete", ref: "P1" }])],
 		[
@@ -1010,6 +1012,8 @@ describe("O4, errors", () => {
 		expect(checkErrors([deleted], []).violations[0]?.known).toBe(1135)
 		const fencedWrite = discovery("profile x is being deleted — write rejected (epoch 0 → 1)")
 		expect(checkErrors([fencedWrite], []).violations[0]?.known).toBe(1135)
+		const purged = discovery("profile x deleted")
+		expect(checkErrors([purged], []).violations[0]?.known).toBe(1135)
 		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
 		const pxe = [
 			read(

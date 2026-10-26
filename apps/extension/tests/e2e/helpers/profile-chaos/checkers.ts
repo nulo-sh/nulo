@@ -301,7 +301,11 @@ export const FAMILY_GROUPS = {
 	uiPinnedTokens: action("root:nulo:ui:pinnedTokens", "a person's pin writes it", SEALED),
 	uiFeePicks: action("root:nulo:ui:feePaymentMethods", "a person's fee pick writes it", SEALED),
 	uiSendFeePicks: action("root:nulo:ui:sendFeePaymentMethods", "a person's fee pick writes it", SEALED),
-	uiSelectedAccount: action("root:nulo:ui:selectedAccount", "created with a profile and moved by a person's account pick", SEALED),
+	uiSelectedAccount: background(
+		"root:nulo:ui:selectedAccount",
+		"a person's pick moves it, and a create's activation or a window's account setup stamps the open profile's",
+		SEALED,
+	),
 	uiRestoreOutcome: action("root:nulo:ui:restoreOutcome", "a restore records the networks it skipped"),
 	uiGetStartedPhraseSaved: action("root:nulo:ui:getStartedPhraseSaved", UI_FLAG),
 	uiGetStartedBackupSaved: action("root:nulo:ui:getStartedBackupSaved", UI_FLAG),
@@ -580,7 +584,7 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{
 		issue: 1135,
 		pattern:
-			/^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation|is being deleted — write rejected)/,
+			/^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation|is being deleted — write rejected|"profile \w+ deleted")/,
 		kinds: ["log"],
 		source: "fpc",
 	},
