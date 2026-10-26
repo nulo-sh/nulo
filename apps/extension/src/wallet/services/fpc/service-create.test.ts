@@ -1,8 +1,9 @@
 /**
  * FPC creation fences: `addFpc` and the `getFpcs` protocol-discovery writes
- * capture the session's fence and a network liveness mark at their entry and
- * assert both flush against the row write — a lock, a deletion, a network
- * delete or reset completing during the PXE work must never land a row.
+ * capture the deletion fence and a network liveness mark at their entry and
+ * assert both flush against the row write — a deletion, network delete or
+ * reset completing during the PXE work must never land a row. The discovery,
+ * which no user action asks for, is also bound to its session: a lock refuses it.
  *
  * A purge or sweep is awaited while a registration is parked, so one that
  * waited on the registration times the case out instead of racing a timer.
@@ -164,6 +165,26 @@ describe("FPC creation fences", () => {
 		writes.restore()
 		expect(writes.log).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("addFpc: a lock completing DURING the artifact fetch still stores the row the user asked for", async () => {
+		const h = await makeHarness()
+		const gate = deferred<unknown>()
+		setPxe(h, {
+			getContractInstance: async () => ({ currentContractClassId: "c1" }),
+			getContractArtifact: () => gate.promise,
+		})
+		const emitted: unknown[] = []
+		h.service.onFpcAdded.add((f) => emitted.push(f))
+
+		const run = h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, `0x${"11".repeat(32)}`, "New")
+		await macrotask()
+		h.lock()
+		gate.resolve(SPONSOR_ARTIFACT)
+
+		await expect(run).resolves.toMatchObject({ name: "New", profileId: "p1" })
+		expect(emitted).toHaveLength(1)
+		expect(await fpcRowCount(h.api)).toBe(1)
 	})
 
 	test("getFpcs discovery: stores one row per protocol FPC and returns both as protocol rows", async () => {
