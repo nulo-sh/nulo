@@ -74,7 +74,11 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 		browserVersion: await ctx.browser.version(),
 		extensionVersion: await run.anchor.evaluate(() => chrome.runtime.getManifest().version),
 		...(r.update ? { release: { tag: r.update.tag, candidateCommit: candidateCommit(r.update.to) } } : {}),
-		flags: { actionList: !!process.env.NULO_E2E_CHAOS_ACTIONS, proverless: !!process.env.NULO_E2E_PROVERLESS, network: !!r.network },
+		flags: {
+			actionList: !!process.env.NULO_E2E_CHAOS_ACTIONS,
+			proverless: process.env.NULO_E2E_PROVERLESS === "1",
+			network: !!r.network,
+		},
 	}
 	let missed: string[] = []
 	try {

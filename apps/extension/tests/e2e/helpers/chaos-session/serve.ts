@@ -93,8 +93,6 @@ const QUIET_MS = 800
 /** The checks after a command; past it the session can no longer vouch for what it saw, and ends. */
 const CHECKS_MS = 120_000
 const POLL_MS = 100
-/** A capture's share of its command's deadline is all but this, so it fails before the command does. */
-const SHOT_MARGIN_MS = 5_000
 /** A download larger than this is recorded, not kept. */
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 /** How long the launch waits, once serving ended past a bound, for the late work to stop: a launch
@@ -462,7 +460,7 @@ class Session {
 			case "close":
 				return { data: await this.closePage(cmd.page) }
 			case "screenshot":
-				return { data: { file: await this.screenshot(n, cmd.page, Math.max(cmd.deadlineMs - SHOT_MARGIN_MS, 1_000)) } }
+				return { data: { file: await this.screenshot(n, cmd.page) } }
 			case "pick-file":
 				return this.pickFile(n, cmd)
 			case "downloads":
@@ -481,17 +479,11 @@ class Session {
 	/** A screenshot cannot mask what the page shows, so a page that may show a node endpoint is
 	 *  refused: the network pages, a page showing a URL, and a page with a shadow root, whose text
 	 *  the check cannot read. */
-	private async screenshot(n: number, id: PageId, ms: number): Promise<string> {
+	private async screenshot(n: number, id: PageId): Promise<string> {
 		const page = this.page(id)
 		const risk = await page.evaluate(screenshotRisk, NETWORK_ROUTE.source)
 		if (risk) throw new CommandRefused(`${id} ${risk}, which a screenshot would carry unmasked; snapshot masks it`)
-		// A window that renders no frame never answers a capture; that fails the command, not the
-		// session, since a capture changes nothing the session vouches for.
-		const shot = await withDeadline(page.screenshot(), ms).catch((err: unknown) => {
-			if (err instanceof DeadlineExceeded) throw new Error(`${id} rendered no frame within ${ms} ms; snapshot reads it without one`)
-			throw err
-		})
-		return writeOwn(this.dirs, "screenshots", `${n}-${id}.png`, shot)
+		return writeOwn(this.dirs, "screenshots", `${n}-${id}.png`, await page.screenshot())
 	}
 
 	/** The network pages hold node endpoints, which may carry a provider key: a session reads their
