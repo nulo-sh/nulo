@@ -18,7 +18,7 @@
  * **callers MUST run the prompt unlocked**, then re-enter the lock for storage writes.
  */
 
-import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
+import type { NewPasskeyDisplay, PasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { PasskeyHandOver, PasskeyService } from "@/wallet/services/passkey/service"
 import type { PasskeyCredential, PasskeyCredentialData } from "@nulo/wallet-crypto"
 
@@ -34,7 +34,7 @@ export class PasskeyRecoveryCoordinator {
 	public constructor(private readonly passkeys: PasskeyService) {}
 
 	/** PATH B create of a new credential, evaluating the PRF at `prfSalt`. */
-	public createInWindow(userHandle: string, prfSalt: string, display: PasskeyDisplay): Promise<PasskeyAnswer> {
+	public createInWindow(userHandle: string, prfSalt: string, display: NewPasskeyDisplay): Promise<PasskeyAnswer> {
 		return this.passkeys.createKey(userHandle, prfSalt, display)
 	}
 

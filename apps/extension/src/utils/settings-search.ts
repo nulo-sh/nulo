@@ -116,7 +116,7 @@ export const SETTINGS_ROWS = {
 		page: HUB,
 		section: "Safety",
 		title: "Lock",
-		description: (context) => (context.passkey ? "Auto-lock" : "Auto-lock, strict mode"),
+		description: "Auto-lock, strict mode",
 		synonyms: ["auto-lock", "timeout", "session"],
 		testid: "setting-nav-lock",
 		to: "/popup/settings/lock",

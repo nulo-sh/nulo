@@ -113,6 +113,8 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 
 **Decided, P86-08:** "the passkey's name, and one passkey for several profiles: **option C**. "Nulo wallet", and one passkey may unlock several profiles."
 
+**Revised, 2026-10-26 (owner, chat):** the passkey is named by its profile, option A of the orchestrator's follow-up; the link stays.
+
 **Today.** Each passkey profile creates its own passkey. Your password manager lists it as `nulo-{profile name}-{8-character id}`, for example `nulo-main-3f9a2c71`; the site shows as "Nulo". The name is synced to your password manager's cloud.
 
 - **A:** keep today's naming and one passkey per profile.
