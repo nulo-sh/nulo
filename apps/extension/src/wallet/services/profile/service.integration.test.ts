@@ -2050,6 +2050,65 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		expect(key in (await api.storage.local.get(key))).toBe(corrupt)
 	})
 
+	describe("a deleted profile leaves no session record", () => {
+		const hasRecord = async (api: FakeBrowserApi) => SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))
+		const recordedProfile = async (api: FakeBrowserApi) =>
+			(JSON.parse((await api.storage.session.get(SESSION_STORAGE_ROOT))[SESSION_STORAGE_ROOT] as string) as { profile: string })
+				.profile
+
+		/** A restart whose restore could not delete the record: no session in memory, the record kept. */
+		async function restartKeepingRecord(api: FakeBrowserApi): Promise<ProfileService> {
+			vi.spyOn(api.storage.session, "remove").mockRejectedValueOnce(new Error("session remove failed"))
+			const { service } = await makeServiceFromExistingApi(api, { strict: true })
+			expect(await service.getActiveProfile()).toBeUndefined()
+			return service
+		}
+
+		test("a delete after a restart that kept the profile's record removes it", async () => {
+			const { api, service } = await makeService({ strict: true })
+			const pk = await service.createPasskeyProfile("PK")
+			const rebooted = await restartKeepingRecord(api)
+			expect(await recordedProfile(api)).toBe(pk.id)
+
+			await rebooted.deleteProfile(pk.id)
+
+			expect(await hasRecord(api)).toBe(false)
+		}, 30_000)
+
+		test("a deletion resumed at boot removes the record its restart kept", async () => {
+			const { api, service } = await makeService({ strict: true })
+			const pk = await service.createPasskeyProfile("PK")
+			// The worker stops after the tombstone is written and before the row is deleted.
+			vi.spyOn((service as unknown as { repo: ProfileRepository }).repo, "delete").mockRejectedValueOnce(new Error("worker stopped"))
+			await expect(service.deleteProfile(pk.id)).rejects.toThrow("worker stopped")
+			const rebooted = await restartKeepingRecord(api)
+			expect(await recordedProfile(api)).toBe(pk.id)
+
+			await rebooted.resumePendingDeletions()
+
+			expect(await hasRecord(api)).toBe(false)
+		}, 30_000)
+
+		test.each([
+			["another profile's open session stays open", false],
+			["the record another profile's restart kept stays", true],
+		])(
+			"%s",
+			async (_, restart) => {
+				const { api, service } = await makeService({ strict: true })
+				const deleted = await service.createProfile("A", "password123")
+				const kept = await service.createPasskeyProfile("PK")
+				const current = restart ? await restartKeepingRecord(api) : service
+
+				await current.deleteProfile(deleted.id)
+
+				expect(await recordedProfile(api)).toBe(kept.id)
+				expect((await current.getActiveProfile())?.id).toBe(restart ? undefined : kept.id)
+			},
+			30_000,
+		)
+	})
+
 	describe("a delete that arrives before the coordinator has started", () => {
 		const noopDelegate = () => ({
 			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
