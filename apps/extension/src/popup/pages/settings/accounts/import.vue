@@ -22,7 +22,7 @@ import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
-import { FULL_BACKUP_TAG_FAMILY } from "@/utils/full-backup-helpers"
+import { FULL_BACKUP_TAG_FAMILY, parseEncryptedBackup } from "@/utils/full-backup-helpers"
 import { ACCOUNT_FILE_UNREADABLE } from "@/wallet/services/account/spec"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 
@@ -32,7 +32,7 @@ const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { errorMessageFromUnknown, fromBase64 } from "@nulo/wallet-core/utils"
+import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
 
 const router = useRouter()
@@ -67,17 +67,13 @@ const nameTaken = computed(() =>
 )
 
 /** The refusal a picked body earns before any password is asked, or "" for one worth opening. A
- *  protected file is the service decoder's base64, so a body that decoder rejects never asks. */
+ *  protected account file is the untagged sealed frame an early full backup also is, so a body that
+ *  cannot be one never asks for a password. */
 const pickRefusal = (body) => {
 	if (!body) return "The file is empty."
 	if (body.startsWith(FULL_BACKUP_TAG_FAMILY)) return "This is a full backup. Restore it from Import profile > Full Backup."
-	if (body.startsWith("{")) return ""
-	try {
-		fromBase64(body)
-		return ""
-	} catch {
-		return "This is not an account file, or it is damaged."
-	}
+	if (body.startsWith("{") || parseEncryptedBackup(body)) return ""
+	return "This is not an account file, or it is damaged."
 }
 
 const heldOnChain = (address) =>
@@ -185,11 +181,11 @@ const handleConfirmImport = async () => {
 	}
 }
 
-// A confirmed address is only valid for the exact body+password it was previewed from. Any edit
-// invalidates it — including a preview RPC still in flight (generation bump) — so the user must
-// re-preview (the service also recomputes and rejects a stale confirmation, but this keeps the UI
-// honest).
-watch([fileBody, password], () => {
+// A confirmed address is only valid for the exact body+password it was previewed from, in the
+// profile and chain it was previewed in. Any edit, or a scope another window moves, invalidates it —
+// including a preview RPC still in flight (generation bump) — so the user must re-preview (the
+// service also recomputes and rejects a stale confirmation, but this keeps the UI honest).
+watch([fileBody, password, () => appStore.profile?.id, () => appStore.network?.chainId], () => {
 	generation++
 	previewAddress.value = ""
 	previewHeld.value = false

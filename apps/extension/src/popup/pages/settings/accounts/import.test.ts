@@ -1,11 +1,14 @@
 import { Input } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { toBase64 } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { expectNativeAttrs } from "../../../../../tests/helpers/credential-pins"
 
 const ADDRESS = `0x${"0b".repeat(32)}`
+/** The shape of a protected account file: a version byte 0, an IV and a GCM tag at the least. */
+const SEALED = toBase64(new Uint8Array(29))
 const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
 	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, chainId: 7, name: "Imported" })),
@@ -36,6 +39,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 import { pickFile } from "@/utils"
+import { useAppStore } from "@/stores/app.store"
 import ImportAccount from "./import.vue"
 
 const wrappers: VueWrapper[] = []
@@ -135,7 +139,7 @@ describe("settings/accounts/import — the account name", () => {
 })
 
 test("the protected file's password field names its purpose to a password manager", async () => {
-	vi.mocked(pickFile).mockResolvedValueOnce({ name: "account.nulo", text: async () => "c2VhbGVk" } as never)
+	vi.mocked(pickFile).mockResolvedValueOnce({ name: "account.nulo", text: async () => SEALED } as never)
 	const w = mountImport({ realInput: true })
 	await w.get('[data-testid="import-account-pick-file"]').trigger("click")
 	await flushPromises()
@@ -143,7 +147,6 @@ test("the protected file's password field names its purpose to a password manage
 })
 
 describe("settings/accounts/import — a file the page cannot open", () => {
-	const SEALED = "c2VhbGVk"
 	const pickBody = (w: VueWrapper, text: string, name = "account.txt") => {
 		vi.mocked(pickFile).mockResolvedValueOnce({ name, text: async () => text } as never)
 		return w.get('[data-testid="import-account-pick-file"]').trigger("click").then(flushPromises)
@@ -168,7 +171,7 @@ describe("settings/accounts/import — a file the page cannot open", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="import-account-error"]').exists()).toBe(true)
 
-		await pickBody(w, "b3RoZXI=", "other.txt")
+		await pickBody(w, toBase64(new Uint8Array(30)), "other.txt")
 		expect((w.get('[data-testid="import-account-password-input"] input').element as HTMLInputElement).value).toBe("")
 		expect(w.find('[data-testid="import-account-error"]').exists()).toBe(false)
 		expect(w.get('[data-testid="import-account-submit"]').attributes("disabled")).toBeDefined()
@@ -181,6 +184,7 @@ describe("settings/accounts/import — a file the page cannot open", () => {
 		["an empty file", "  \n", "The file is empty."],
 		["the wallet's full backup", "nulo:full-backup:v2:AAAA", "This is a full backup. Restore it from Import profile > Full Backup."],
 		["a file that is neither JSON nor base64", "\u0089PNG\r\n\u001a\n", "This is not an account file, or it is damaged."],
+		["base64 too short to be a protected file", "AAAA", "This is not an account file, or it is damaged."],
 	])("%s is refused at pick, with no password asked and nothing to submit", async (_case, body, line) => {
 		const w = mountImport()
 		await pickBody(w, SEALED)
@@ -227,6 +231,29 @@ describe("settings/accounts/import — an account the wallet already holds", () 
 		expect(await nameAndEnter(w, "Imported")).toEqual({ warns: false, disabled: false })
 		expect(account.importAccount).toHaveBeenCalledTimes(1)
 		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+	})
+
+	test("a profile another window switches to voids the preview, which re-runs in that profile", async () => {
+		account.previewImportAccount.mockResolvedValueOnce(HELD)
+		const w = mountImport()
+		await w.get('[data-testid="import-account-pick-file"]').trigger("click")
+		await flushPromises()
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(true)
+
+		const appStore = useAppStore()
+		appStore.profile = { id: "p2" } as never
+		appStore.accounts = []
+		await flushPromises()
+		expect(w.find('[data-testid="import-account-preview"]').exists()).toBe(false)
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+
+		account.previewImportAccount.mockResolvedValueOnce(HELD)
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+		expect(w.text()).toContain(COVERAGE)
 	})
 
 	test("the same address on another chain is not held", async () => {
