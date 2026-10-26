@@ -13,3 +13,4 @@
 - 2026-10-25 C1.1 gate green: model test 30/30 at retry 0 (124 tests), lint, typecheck:all, test:all; Codex design consult applied (12/12, D21 to D24).
 - 2026-10-25 C1.2 gate green: Chrome seeds 1-5 ran every step (red only on filed #1131/#1132), passkey-paths/retry/backup green on both browsers, model test 30/30 at retry 0, lint, typecheck:all, test:all.
 - 2026-10-26 C1.3 gate on a4d89ac81 (dev merged at 0634a7954): smoke 20 seeds per browser and network 5 per browser, every seed red-filed or incomplete (restart only), except Chrome smoke 1018, which was unreproduced in 0 of 3 replays; model test 30/30 at retry 0 (153 tests, 84 break lines over O1 to O7); lint, typecheck:all, test:all, test:ci-gating (686), check:plans, build. Codex 3 rounds done; #1138 filed.
+- 2026-10-26 C3.1 phase 0: A2 merged before #1140 (D-orch-3): C1 absorbs C3.1 on this branch; C3 runs beside C2 (D-orch-2); page 87 recorded in OWNER-ASKS.md.

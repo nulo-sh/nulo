@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 67cae683b
 trunk: dev
-status: approved (orchestrator, 2026-10-25); C1 in progress
+status: approved (orchestrator, 2026-10-25); C1 and C3.1 in PR #1140
 issues: none (tests the change of #1127, closed by passkey-unlock-1)
 post_implementation_hardening: not scheduled
 ---
@@ -69,7 +69,7 @@ Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Charters and 
 - I5. A2's 0.31.0 passkey case yields a start state the chaos run can continue from (C3).
 - I6. A discovery request's answer names its credential, so the run binds the profile to the credential returned, never to an assumed order (C4).
 
-**Asks:** OWNER-ASKS.md, OA-C1 to OA-C6. The working assumption is each ask's recommendation. C1 to C4 depend on none of them; C5 waits for OA-C1, C2, C3, C5 and C6; OA-C4 is a separate CI change after C5.
+**Asks:** OWNER-ASKS.md, OA-C1 to OA-C6, all answered on decision page 87 (P87-01 to P87-08 on #1127, quoted per ask). Where a record departs from an ask's recommendation: OA-C1's model (P87-02, Opus for every agent), OA-C3 (P87-04, 30 seeds per browser and one fleet wave), OA-C4 (P87-05, no CI change). C1 to C4 depend on none of them.
 
 ## Decision ledger
 
@@ -124,6 +124,8 @@ The owner, 2026-10-25:
 | D42 | A known finding names its producer: a log line its source and its message's start; a page error counts only beside the popup forwarder's line for the same rejection in the same step; the stand-in's allowance covers an entry only when every message it carries is the refusal, and never an unhandled rejection or a failed restore | text-only patterns | a new defect with a filed one's text would have been filed under the old issue, and a compound entry or an unhandled rejection carrying the refusal would have passed (round 1, both reviewers) |
 | D43 | The import run logs one debug line where it ends, `[full-backup] restore run ended` with its stage and status, and the held restore waits for it after the gate opens, then refuses a session the restore left on any profile but the restored one, before its cleanup lock | the listed profiles and the session holding still for 5 s | a lock routes the import page away while the run goes on, so no page state marks its end; a run that never ended read as quiet, and the cleanup lock hid a session on the wrong profile (round 3, Codex) |
 | D44 | A restore that a planned restart fails before finalize logs `[full-backup] restore failed:` with the client's disconnect at error. The allowlist accepts that exact line only during a step that ends the background on purpose | a known finding; no entry | the line is the wallet's own correct report of the restore the fault failed, and the model expects the rollback; any other message, or the same line outside a planned restart, still fails |
+| D-orch-2 | C3 runs beside C2 (the orchestrator, 2026-10-26): C2 in its own worktree on a branch off this one, its PR after #1140 merges; C3's README text sits under its own sub-heading of § Chaos runs, and this branch merges `origin/dev` before each gate and before the final push | C3 after C2, as the Delivery table had it | the two share no module but `tests/e2e/README.md` § Chaos runs, and the owner asked for the campaign sooner |
+| D-orch-3 | A2 merged (#1139) before C1's PR, so C1 absorbs C3.1 (the orchestrator, 2026-10-26, applying the phases' own rule): the work continues on `worktree-passkey-chaos-1` and PR #1140 carries C1 and C3.1, with new signed commits only; the harness is fitted to A2 first | a new branch and PR for C3; rewriting C1's history | the merge of A2 left the branch red in the harness alone (a removed plain passkey backup helper, moved citations, a changed row schema), and the rule "If A2 merges before C1's PR, C1 absorbs C3.1" already decides it |
 
 **Outline B** (both audits see it): a composition-level stateful test over the real profile service graph (fake `chrome.storage`, fake PRF bytes, no browser) as the main seeded layer, thousands of sequences per run in the unit suite, with only a thin e2e chaos layer and the agents on top. Disputed in round 1; the orchestrator's D19 adds it, narrow, as C4.2.
 
@@ -332,7 +334,7 @@ None. One product line: the import run logs a debug line where it ends, with its
 |---|---|---|---|---|
 | C1 | C1.1-C1.3 | `dev` | `test(e2e): seeded profile chaos with model oracles on chrome and firefox` | off |
 | C2 | C2.1-C2.2 | `dev` after C1 | `test(e2e): agent chaos sessions over an isolated, instrumented wallet` | off |
-| C3 | C3.1 | `dev` after C2 and A2 | `test(e2e): profile chaos covers the recovery phrase of passkey profiles` | off |
+| C3 | C3.1 | absorbed into C1's PR #1140 (D-orch-3) | C1's title stands | off |
 | C4 | C4.1-C4.2 | `dev` after C3 and A3 | `test(e2e): profile chaos covers unlock method changes and shared passkeys` | off |
 | C5 | C5.1, close-out | `dev` after C4 | `test(e2e): profile chaos campaign results and close-out` | off |
 
