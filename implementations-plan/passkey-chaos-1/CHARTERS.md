@@ -12,7 +12,19 @@ A charter tells one agent where to push and how to behave. The orchestrator's fl
 
 ## Fleet permissions
 
-The host's sandbox does not confine a process, and agents share one user, so the boundary is each agent's tool configuration: its only shell command is `bun apps/extension/scripts/e2e/chaos-session.ts cmd <its session directory> …`, its only file reads are inside that directory (snapshots, screenshots, downloads), and it has no GitHub token, no `gh`, no `git` and no other network tool. `snapshot` gives it every testid on the page, so it never needs the source or the dist copy. C2.2 proves this with a probe before the pilot.
+The host's sandbox does not confine a process, and agents share one user, so the boundary is each agent's tool configuration: its only shell command is the launcher's `cmd` on its own session directory, its only file reads are inside that directory (snapshots, screenshots, downloads), and it has no GitHub token, no `gh`, no `git` and no other network tool. `snapshot` gives it every testid on the page, so it never needs the source or the dist copy. Each agent is spawned exactly so (`<worktree>` is the worktree's absolute path, `<dir>` the session's):
+
+```bash
+cd <dir>
+env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8 USER="$USER" CLAUDE_USAGE_MODEL=opus \
+  claude-usage run best -p "<charter prompt>" --model opus \
+  --permission-mode default --permission-prompts none \
+  --tools Bash,Read --strict-mcp-config --setting-sources "" --safe-mode \
+  --allowedTools "Bash(bun <worktree>/apps/extension/scripts/e2e/chaos-session.ts cmd <dir> *)" "Read(/<dir>/**)" \
+  --output-format stream-json --verbose > <transcript> 2>&1
+```
+
+The working directory is the session directory, not the worktree: Claude Code approves reads and read-only commands inside its working directory without a rule, so at the worktree root an agent could read `apps/extension/src` and the build (D53). `--setting-sources ""` and `--safe-mode` keep the user's allow rules, hooks and instructions away from the agent; `env -i` leaves its shell no credential; `--permission-prompts none` refuses whatever would ask. Never `--dangerously-skip-permissions` or `bypassPermissions`. The C2.2 probe shows what this line refuses: `src`, the build, the dist copy, the runner's log, other sessions, links, every write, `gh`, `git push`, network tools and every injection into the allowed command (lessons/phase-C2.md). What it lets through: the agent's own directory, and shell expansion of a non-secret variable or a file name into a `cmd` argument.
 
 The dApp flows (a dApp calling while locked or mid-unlock) are not a fleet charter: the launcher has no network mode, and the seeded network file covers them.
 
