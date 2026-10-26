@@ -20,7 +20,7 @@
  * (AES-GCM authenticates under the password) and for non-self-consistent plaintext mutations.
  */
 import { bytesToHex, fromBase64, toBase64 } from "@nulo/wallet-core/utils"
-import { EncryptionKey, zeroize } from "@nulo/wallet-crypto"
+import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey, zeroize } from "@nulo/wallet-crypto"
 import { Fq } from "@aztec-labs/foundation/curves/bn254"
 import { sha256 } from "@aztec-labs/foundation/crypto/sha256"
 import { NULO_KDF_DIGEST, V6_REGIME } from "./address-freeze"
@@ -32,7 +32,16 @@ export const ACCOUNT_EXPORT_VERSION = 1
 
 /** AES-GCM AAD for the encrypted variant — a fixed purpose tag (no per-file identity is needed;
  *  the payload is self-describing and the password authenticates it). */
-const ACCOUNT_EXPORT_AAD = new TextEncoder().encode("nulo:account-export:v1") as Uint8Array<ArrayBuffer>
+const ACCOUNT_EXPORT_AAD = new TextEncoder().encode(ACCOUNT_EXPORT_AAD_LABEL) as Uint8Array<ArrayBuffer>
+
+/** Every way an encrypted file fails to open: a wrong password, a damaged or truncated frame, a body
+ *  that is not base64. Authentication cannot tell them apart, so the error claims none of them. */
+export class AccountExportUnreadableError extends Error {
+	constructor() {
+		super("Account export could not be opened: wrong password or a damaged file")
+		this.name = "AccountExportUnreadableError"
+	}
+}
 
 /** The frozen digests THIS build derives accounts under — an imported file must match all four,
  *  or it belongs to a different contract shape / KDF and is rejected before any address work. */
@@ -154,10 +163,15 @@ export async function encryptAccountExport(exp: AccountExportV1, password: strin
 	}
 }
 
-/** Decrypt an encrypted export; wrong password / corruption / AAD mismatch all throw. */
+/** Decrypt an encrypted export; any decode or authentication failure throws `AccountExportUnreadableError`. */
 export async function decryptAccountExport(base64: string, password: string): Promise<string> {
 	const key = await EncryptionKey.fromPassword(password)
-	const pt = await key.decrypt(fromBase64(base64) as Uint8Array<ArrayBuffer>, ACCOUNT_EXPORT_AAD)
+	let pt: Uint8Array<ArrayBuffer>
+	try {
+		pt = await key.decrypt(fromBase64(base64) as Uint8Array<ArrayBuffer>, ACCOUNT_EXPORT_AAD)
+	} catch {
+		throw new AccountExportUnreadableError()
+	}
 	try {
 		return new TextDecoder().decode(pt)
 	} finally {

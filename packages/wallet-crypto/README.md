@@ -15,6 +15,7 @@ Depends only on `wallet-core` for the `ILogger` interface and `Web Crypto` (avai
 | Path | Purpose |
 |---|---|
 | `src/encryption-key.ts` | `EncryptionKey` — PBKDF2 (SHA-256, 600k iterations) + AES-GCM framed ciphertext. The 1-byte version frame lets future formats coexist. |
+| `src/account-export-aad.ts` | `ACCOUNT_EXPORT_AAD_LABEL` — the AES-GCM associated data of an encrypted account file, read by the file's sealer and by the full-backup importer that recognises one. |
 | `src/profile-slots.ts` | The slot format for a profile's `guard` / `secret` / `entropy`, whatever key seals them: `ENCRYPTION_GUARD`, the purpose AADs `PROFILE_AAD`, the guard check. A null on open means a wrong key or a corrupted or moved slot. |
 | `src/password-secret-box.ts` | `PasswordSecretBox` — the profile slots as `EncryptionKey` frames under a password, with no storage or session state. Its `passhash` is an unsalted SHA-256 of the password: password-equivalent, held in memory only, never persisted. |
 | `src/session-secret-box.ts` | `SessionSecretBox` — the lenient-mode silent-restore bearer: the master secret and the imported-keys key in one AES-256-GCM frame under a key HKDF-derived from a fresh random token, bound to the profile id. The session record holds nothing derived from the password. |
@@ -58,6 +59,7 @@ Treat that file as a contract. **A vector/KDF change is NOT an ordinary storage 
 ## Key invariants
 
 - **`ENCRYPTION_GUARD`** and **`PROFILE_AAD`** (`src/profile-slots.ts`) are the guard plaintext and the slots' AES-GCM associated data, pinned by `password-secret-box.test.ts` and `profile-slots.test.ts`. Changing either bricks every existing wallet.
+- **`ACCOUNT_EXPORT_AAD_LABEL`** (`src/account-export-aad.ts`) authenticates every encrypted account file. Changing it makes every exported file unreadable.
 - **`ROW_SEAL_LABELS`** and the row AAD (`src/row-seal.ts`) are frozen by V12, the shared frame by V13. Changing one hides every sealed row of every profile.
 - **Buffer ownership.** Secret material is allocated as `Uint8Array<ArrayBuffer>`, never `Buffer`. Callers own the lifecycle and call `zeroize()` on drop. The package never mutates a buffer it didn't allocate, and never returns a buffer it expects to keep alive.
 - **`PasswordSecretBox.seal()` and `unseal()` are not symmetric across the passhash boundary.** `seal()` produces both an `EncryptedProfileSecret` (the on-disk record) and a `passhash`, which callers use in memory and wipe; it is never persisted (the silent-restore bearer is `SessionSecretBox`). `unsealWithPasshash()` and `unseal(password, …)` produce the same plaintext via different routes; both must remain in lock-step with the V2 vector.

@@ -8,7 +8,7 @@ import { expectNativeAttrs } from "../../../../../tests/helpers/credential-pins"
 const ADDRESS = `0x${"0b".repeat(32)}`
 const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
-	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, name: "Imported" })),
+	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, chainId: 7, name: "Imported" })),
 }))
 const uiPreference = vi.hoisted(() => ({ setSelectedAccount: vi.fn(async () => true) }))
 vi.mock("@/utils/core", () => ({ managers: { account, uiPreference } }))
@@ -46,7 +46,7 @@ const InputStub = {
 	template: `<label><input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></label>`,
 }
 
-function mountImport({ realInput = false } = {}) {
+function mountImport({ realInput = false, extraAccounts = [] as Array<Record<string, unknown>> } = {}) {
 	const w = mount(ImportAccount, {
 		global: {
 			components: realInput ? { Input } : {},
@@ -60,6 +60,7 @@ function mountImport({ realInput = false } = {}) {
 							accounts: [
 								{ address: `0x${"01".repeat(32)}`, chainId: 7, name: "Account 1" },
 								{ address: `0x${"02".repeat(32)}`, chainId: 7, name: "Savings", hidden: true },
+								...extraAccounts,
 							],
 						},
 					},
@@ -139,6 +140,105 @@ test("the protected file's password field names its purpose to a password manage
 	await w.get('[data-testid="import-account-pick-file"]').trigger("click")
 	await flushPromises()
 	expectNativeAttrs(w, "import-account-password-input", { autocomplete: "current-password" })
+})
+
+describe("settings/accounts/import — a file the page cannot open", () => {
+	const SEALED = "c2VhbGVk"
+	const pickBody = (w: VueWrapper, text: string, name = "account.txt") => {
+		vi.mocked(pickFile).mockResolvedValueOnce({ name, text: async () => text } as never)
+		return w.get('[data-testid="import-account-pick-file"]').trigger("click").then(flushPromises)
+	}
+
+	test("a protected file whose preview fails with an empty message shows the one refusal line", async () => {
+		account.previewImportAccount.mockRejectedValueOnce(new Error(""))
+		const w = mountImport()
+		await pickBody(w, SEALED)
+		await w.get('[data-testid="import-account-password-input"] input').setValue("typed-for-this-file")
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="import-account-error"]').text()).toBe("Wrong file password, or the file is damaged.")
+	})
+
+	test("a re-pick clears the password typed for the previous file, and its refusal", async () => {
+		account.previewImportAccount.mockRejectedValueOnce(new Error("Wrong file password, or the file is damaged."))
+		const w = mountImport()
+		await pickBody(w, SEALED)
+		await w.get('[data-testid="import-account-password-input"] input').setValue("typed-for-the-first-file")
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="import-account-error"]').exists()).toBe(true)
+
+		await pickBody(w, "b3RoZXI=", "other.txt")
+		expect((w.get('[data-testid="import-account-password-input"] input').element as HTMLInputElement).value).toBe("")
+		expect(w.find('[data-testid="import-account-error"]').exists()).toBe(false)
+		expect(w.get('[data-testid="import-account-submit"]').attributes("disabled")).toBeDefined()
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
+		await flushPromises()
+		expect(account.previewImportAccount).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["an empty file", "  \n", "The file is empty."],
+		["the wallet's full backup", "nulo:full-backup:v2:AAAA", "This is a full backup. Restore it from Import profile > Full Backup."],
+		["a file that is neither JSON nor base64", "\u0089PNG\r\n\u001a\n", "This is not an account file, or it is damaged."],
+	])("%s is refused at pick, with no password asked and nothing to submit", async (_case, body, line) => {
+		const w = mountImport()
+		await pickBody(w, SEALED)
+		await w.get('[data-testid="import-account-password-input"] input').setValue("typed-for-the-first-file")
+		await pickBody(w, body, "picked.txt")
+		expect(w.get('[data-testid="import-account-error"]').text()).toBe(line)
+		expect(w.find('[data-testid="import-account-password-input"]').exists()).toBe(false)
+		expect(w.get('[data-testid="import-account-submit"]').attributes("disabled")).toBeDefined()
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
+		await flushPromises()
+		expect(account.previewImportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a protected file still reaches the password step", async () => {
+		const w = mountImport()
+		await pickBody(w, SEALED)
+		expect(w.find('[data-testid="import-account-error"]').exists()).toBe(false)
+		expect(w.find('[data-testid="import-account-password-input"]').exists()).toBe(true)
+	})
+})
+
+describe("settings/accounts/import — an account the wallet already holds", () => {
+	const HELD = `0x${"01".repeat(32)}`
+	const COVERAGE = "This account is not covered by your recovery phrase. Keep its file safe."
+
+	test("its preview names it held, drops the coverage sentence and keeps Import Account disabled", async () => {
+		account.previewImportAccount.mockResolvedValueOnce(HELD)
+		const w = mountImport()
+		await w.get('[data-testid="import-account-pick-file"]').trigger("click")
+		await flushPromises()
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="import-account-held"]').text()).toBe("This account is already in your wallet.")
+		expect(w.text()).not.toContain(COVERAGE)
+		expect(await nameAndEnter(w, "A fresh name")).toEqual({ warns: false, disabled: true })
+		expect(account.importAccount).not.toHaveBeenCalled()
+	})
+
+	test("a new address keeps the coverage sentence and imports once named, and the import does not mark it held", async () => {
+		surface.cardWindow = true
+		const w = await confirmStep()
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+		expect(w.text()).toContain(COVERAGE)
+		expect(await nameAndEnter(w, "Imported")).toEqual({ warns: false, disabled: false })
+		expect(account.importAccount).toHaveBeenCalledTimes(1)
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+	})
+
+	test("the same address on another chain is not held", async () => {
+		account.previewImportAccount.mockResolvedValueOnce(`0x${"03".repeat(32)}`)
+		const w = mountImport({ extraAccounts: [{ address: `0x${"03".repeat(32)}`, chainId: 8, name: "Elsewhere" }] })
+		await w.get('[data-testid="import-account-pick-file"]').trigger("click")
+		await flushPromises()
+		await w.get('[data-testid="import-account-submit"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
+		expect(w.text()).toContain(COVERAGE)
+	})
 })
 
 describe("settings/accounts/import — Firefox's toolbar panel", () => {
