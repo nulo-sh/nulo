@@ -1110,6 +1110,14 @@ negative grep; on every file that needs it, a `beforeAll` stamp check — plus t
 scanned; a new build flag needs its own runner guard). The trust boundary in prod is the absent
 listener, not `chrome.storage` access.
 
+### Changing a shared driver
+
+A helper under `tests/e2e/helpers/` (the import and backup drivers above all) runs in files far
+from the change, network matrices included. Before the PR, run every file that imports it
+(`rg -l '<helper>' apps/extension/tests/e2e`) on the suite it belongs to: a form that opened on a
+new default tab broke the plain-backup driver in the network matrix's passkey row, which no local
+run had covered and CI failed (`implementations-plan/passkey-unlock-1/lessons/phase-A3.md`).
+
 ### Adding a stage gate
 
 Presence-only `chrome.storage.session` key (present = hold), `remove()` on release AND on a loud

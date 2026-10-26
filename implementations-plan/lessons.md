@@ -22,11 +22,11 @@
 ## Extension runtime
 
 - A popup call waits for the worker's Ready and fails 60 s after it began unless its client sets `requestTimeoutMs`, so one awaiting a proof fails as the send lands; a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
-- `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
+- `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch or unlock change elsewhere updates open pages in place: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md), [more](passkey-unlock-1/plan.md)
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
-- `getAll()` hides undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
+- `getAll()` hides undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. Gate a row on its reader's fields, not its writer schema; zod 4.6.7 strips unknown keys: a legacy variant forbids newer ones. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows), [more](passkey-unlock-1/lessons/phase-A1.md)
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
@@ -38,7 +38,6 @@
 
 ## Aztec
 
-- 6.0.0's PXE refused the vendored account (oracle major 32 → 33): read its major first; `bun patch` applies a hunk by line number, unchecked (1.4.2). [Evidence](archive/aztec-6-0-0/plan.md)
 - Blocks above the proven tip can be pruned and a symbolic tag can name another fork per call: pin reads to one block hash; reconcile records above the tip. [Evidence](archive/incoming-public-transfers/plan.md#pruning)
 - The node client retries a failed POST but not a 4xx refusal, so a refused retry can hide a send that landed (6.0.0-rc.1). [Evidence](archive/failed-send-check/plan.md#node-retries)
 - HandshakeRegistry (6.0.0-rc.1): a pair's first send uses it for every token; the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-same-token-concurrent-sends/plan.md#note-index)
