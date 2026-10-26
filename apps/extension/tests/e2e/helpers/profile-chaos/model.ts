@@ -295,8 +295,8 @@ const RESTORE_FINALIZES = cite(IMPORT, 501, "restoreRun = await finalizeWithRemi
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
-const REVEAL_PASSKEY = cite(SEED_PAGE, 106, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
-const REVEAL_CANCEL = cite(SEED_PAGE, 110, "handleCancelOrUnconfirmed(error, openToast)")
+const REVEAL_PASSKEY = cite(SEED_PAGE, 108, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
+const REVEAL_CANCEL = cite(SEED_PAGE, 112, "handleCancelOrUnconfirmed(error, openToast)")
 const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
 const SLOTS_BIND_PASSKEY = cite(SERVICE, 460, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
 const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 959, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
