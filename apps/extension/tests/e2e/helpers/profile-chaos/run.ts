@@ -12,6 +12,7 @@ import { decryptAccountExport } from "@nulo/aztec-runtime/account"
 import { getEntropy, getMnemonic } from "@nulo/wallet-core/utils"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { backgroundOrigin } from "../../fixtures/browser"
+import { pollUntil } from "../../fixtures/poll"
 import { callService } from "../../fixtures/session"
 import { derivedAddresses } from "./accounts-io"
 import {
@@ -38,6 +39,7 @@ import {
 	type StructureReading,
 	type Violation,
 	carriedBy,
+	releaseRowOwner,
 } from "./checkers"
 import { drainLogs, logErrors, readCensus, readProfiles, readSession, scanStorage } from "./collect"
 import { DRIVERS } from "./drivers"
@@ -56,7 +58,7 @@ import {
 	startWorld,
 	type World,
 } from "./model"
-import { type Drive, type Driven, type RunState, type ScannedFile, secretFor, wrongSecret } from "./state"
+import { type Drive, type Driven, profileId, type RunState, type ScannedFile, secretFor, wrongSecret } from "./state"
 import { dismissNotices, isLocked, whereStuck } from "./ui"
 
 export type VerdictKind = RunVerdict
@@ -344,6 +346,47 @@ async function checkState(s: RunState, step: PlannedStep, before: World, census:
 	return out
 }
 
+const LEGACY_SEAL_MS = 15_000
+
+/** A release's plaintext row is exempt from the sealed-root rule only until its profile ends a step
+ *  open: the wallet seals it once that profile's row keys are ready, asynchronously, so a row still
+ *  holding the release's text after a bounded wait is reported unsealed. */
+async function expireLegacy(s: RunState, next: World): Promise<void> {
+	if (next.session.kind !== "open") return
+	const id = profileId(s, next.session.ref)
+	const ids = new Set(s.bindings.profiles.values())
+	const due = Object.entries(s.legacyPlain).filter(([key, text]) => releaseRowOwner(key, text, ids) === id)
+	if (!due.length) return
+	const sealed = () =>
+		s.anchor
+			.evaluate(async (rows: [string, string][]) => {
+				const now = await chrome.storage.local.get(rows.map(([key]) => key))
+				return rows.every(([key, text]) => now[key] !== text)
+			}, due)
+			.catch(() => false)
+	await pollUntil(sealed, Boolean, { label: "release rows sealed", timeoutMs: LEGACY_SEAL_MS, intervalMs: 250 }).catch(() => {})
+	for (const [key] of due) delete s.legacyPlain[key]
+}
+
+const passkeyIdsOf = (s: RunState, w: World): Set<string> =>
+	idsOf(
+		s.bindings,
+		live(w)
+			.filter((p) => p.method === "passkey")
+			.map((p) => p.ref),
+	)
+
+const homesOf = (needles: readonly Needle[]): Map<string, string> =>
+	new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
+
+/** The start's storage before any step: every needle and the sealed-root rule, a release's own
+ *  plaintext rows exempt, so a row the first step purges is still judged. */
+export async function checkStartStorage(s: RunState, w: World): Promise<Violation[]> {
+	const needles = await needlesOf(s)
+	const storage = await scanStorage(s.anchor, needles, s.legacyPlain)
+	return checkLeaks(storage.hits, { ...storage.structure, exports: [] }, passkeyIdsOf(s, w), homesOf(needles))
+}
+
 async function checkStep(
 	s: RunState,
 	step: PlannedStep,
@@ -358,6 +401,7 @@ async function checkStep(
 	out.push(...checkSettle(step.action, driven.settle))
 	await drainPages(s)
 	if (out.length) return { violations: masked(out, await needlesOf(s)), incomplete: [] }
+	await expireLegacy(s, next)
 	const unread = await learn(s, next)
 	const opened = await openNewFiles(s, next)
 	const needles = await needlesOf(s)
@@ -366,14 +410,10 @@ async function checkStep(
 	const storage = await scanStorage(s.anchor, needles, s.legacyPlain)
 	const fileHits = scanFiles(s, needles)
 	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...opened.prfSalt], exports: opened.exports }
-	const passkeyIds = idsOf(
-		s.bindings,
-		live(next)
-			.filter((p) => p.method === "passkey")
-			.map((p) => p.ref),
+	out.push(
+		...logs.violations,
+		...checkLeaks([...storage.hits, ...logs.hits, ...fileHits], structure, passkeyIdsOf(s, next), homesOf(needles)),
 	)
-	const homes = new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
-	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...fileHits], structure, passkeyIds, homes))
 	return { violations: masked(out, needles), incomplete: [...logs.incomplete, ...unread, ...opened.gaps] }
 }
 

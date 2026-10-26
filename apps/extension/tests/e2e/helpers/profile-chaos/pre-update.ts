@@ -102,7 +102,11 @@ export async function bindPreUpdate(s: RunState, released: Released): Promise<Vi
 	}
 	const updated = profileRows(await readLocalStorage(s.ctx))
 	const listed = (await readProfiles(s.anchor)).listed
-	await waitForRoute(s.anchor, "#/popup/auth", 30_000).catch(() => {})
+	const onAuth = await waitForRoute(s.anchor, "#/popup/auth", 30_000).then(
+		() => true,
+		() => false,
+	)
 	const session = await readSession(s.anchor, [{ label: "anchor", page: s.anchor, anchor: true }], true)
-	return [...checkPreUpdate(world, { released: released.rows, updated, listed }, s.bindings), ...checkSession(world, session, s.bindings)]
+	const start = checkPreUpdate(world, { released: released.rows, updated, listed, onAuth }, s.bindings)
+	return [...start, ...checkSession(world, session, s.bindings)]
 }

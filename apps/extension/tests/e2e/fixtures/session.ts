@@ -36,9 +36,19 @@ export async function waitForSessionRow(page: Page, predicate: (row: SessionRow)
 	return row as SessionRow
 }
 
-/** Call one background service method over a port of its own, as the popup's clients do. Unlike a
- *  popup interaction, it navigates nowhere, so it never refreshes the session. */
-export async function callService<T>(page: Page, service: string, method: string, params: unknown[] = [], timeoutMs = 15_000): Promise<T> {
+/** A service's answer as its port carries it: the result, or the error text with the typed
+ *  error's code when the service threw a `WalletError`. */
+export type ServiceAnswer = { result: unknown } | { error: string; code?: string }
+
+/** One background service method's answer over a port of its own, as the popup's clients get it.
+ *  Rejects only when no answer comes: a timeout or a closed port. */
+export async function serviceAnswer(
+	page: Page,
+	service: string,
+	method: string,
+	params: unknown[] = [],
+	timeoutMs = 15_000,
+): Promise<ServiceAnswer> {
 	const envelope = { type: MessageType.Request, content: { requestId: 1, method, params: wrapParams(params) } }
 	return (await page.evaluate(
 		(name: string, request: typeof envelope, responseType: number, waitMs: number) =>
@@ -58,12 +68,17 @@ export async function callService<T>(page: Page, service: string, method: string
 					fail(`port closed before a response${closed ? `: ${closed}` : ""}`)
 				})
 				port.onMessage.addListener(
-					(message: { type?: number; content?: { requestId?: number; result?: unknown; error?: string } }) => {
+					(message: {
+						type?: number
+						content?: { requestId?: number; result?: unknown; error?: string; errorPayload?: { code?: unknown } }
+					}) => {
 						if (message?.type !== responseType || message.content?.requestId !== request.content.requestId) return
 						port.disconnect()
-						if (message.content.error !== undefined) return fail(message.content.error)
 						clearTimeout(timer)
-						resolve(message.content.result)
+						const { error, errorPayload, result } = message.content
+						if (error === undefined) return resolve({ result })
+						const code = errorPayload?.code
+						resolve(typeof code === "string" ? { error, code } : { error })
 					},
 				)
 				port.postMessage(request)
@@ -72,7 +87,15 @@ export async function callService<T>(page: Page, service: string, method: string
 		envelope,
 		MessageType.Response,
 		timeoutMs,
-	)) as T
+	)) as ServiceAnswer
+}
+
+/** Call one background service method over a port of its own, as the popup's clients do. Unlike a
+ *  popup interaction, it navigates nowhere, so it never refreshes the session. */
+export async function callService<T>(page: Page, service: string, method: string, params: unknown[] = [], timeoutMs = 15_000): Promise<T> {
+	const answer = await serviceAnswer(page, service, method, params, timeoutMs)
+	if ("error" in answer) throw new Error(`${service}.${method}: ${answer.error}`)
+	return answer.result as T
 }
 
 /** The active profile as the profile service reports it. A navigation would refresh the session

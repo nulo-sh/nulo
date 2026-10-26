@@ -334,14 +334,33 @@ export interface StoredEntry {
 	envelope: boolean
 }
 
-/** A row's owner: a sealed row's envelope profile, or the profile its plaintext names; a plain root
- *  row's id up to its first separator, known to the run or not; nobody for a value key or an
- *  unregistered one. */
-export function ownerOf(entry: StoredEntry): string | undefined {
+/** The profile in `ids` a key names as one whole segment of its id: a root whose rows carry no
+ *  `profileId`, as an account's or a flag's, names its owner in its key. */
+export function keyOwner(key: string, ids: ReadonlySet<string>): string | undefined {
+	const segments = key.slice(key.indexOf("@") + 1).split(/[^0-9A-Za-z_-]/)
+	return [...ids].find((id) => segments.includes(id))
+}
+
+/** Whose plaintext row a release left: the `profileId` it names, else the profile its key names. */
+export function releaseRowOwner(key: string, text: string, ids: ReadonlySet<string>): string | undefined {
+	const named = (() => {
+		try {
+			return (JSON.parse(text) as { profileId?: unknown } | null)?.profileId
+		} catch {
+			return undefined
+		}
+	})()
+	return typeof named === "string" ? named : keyOwner(key, ids)
+}
+
+/** A row's owner: a sealed row's envelope profile, or the profile its plaintext or its key names; a
+ *  plain root row's id up to its first separator, known to the run or not; nobody for a value key or
+ *  an unregistered one. */
+export function ownerOf(entry: StoredEntry, ids: ReadonlySet<string> = new Set()): string | undefined {
 	const family = familyOfKey(entry.key)
 	if (!family) return undefined
 	const e = FAMILY_GROUPS[family] as FamilyEntry
-	if (e.sealed) return entry.envelopeOwner ?? entry.plainOwner
+	if (e.sealed) return entry.envelopeOwner ?? entry.plainOwner ?? (entry.envelope ? undefined : keyOwner(entry.key, ids))
 	if (e.ref.startsWith("value:")) return undefined
 	return /^[^|:@/]+/.exec(entry.key.slice(entry.key.indexOf("@") + 1))?.[0]
 }
@@ -395,7 +414,7 @@ function checkChange(key: string, entry: StoredEntry, change: Change, ctx: Write
 	const { group, sealed } = FAMILY_GROUPS[family] as FamilyEntry
 	// A removed row is judged by what it held: sealing or purging a release's plaintext row writes none.
 	if (sealed && !entry.envelope && change !== "removed") return violation("O3", `${key} (${family}) is stored outside a seal envelope`)
-	const owner = ownerOf(entry)
+	const owner = ownerOf(entry, ctx.knownIds)
 	const owned = ownershipViolation(key, family, owner, ctx)
 	if (owned) return owned
 	if (group === "background") {
@@ -418,7 +437,7 @@ function checkLifecycle(ctx: WriteContext): Violation[] {
 		const id = idOf(ctx.bindings, scope.ref)
 		if (scope.kind === "create" && !ctx.after.some((e) => e.key === `nulo:core:profiles@${id}`))
 			out.push(violation("O3", `${scope.ref} was created but no profile row is stored for ${id}`))
-		const left = scope.kind === "delete" && id ? ctx.after.filter((e) => ownerOf(e) === id) : []
+		const left = scope.kind === "delete" && id ? ctx.after.filter((e) => ownerOf(e, ctx.knownIds) === id) : []
 		if (left.length)
 			out.push(
 				violation("O3", `${scope.ref} was deleted but ${left.length} row(s) it owned remain: ${left.map((e) => e.key).join(", ")}`),
@@ -850,6 +869,8 @@ export interface StartReading {
 	released: Record<string, string>
 	updated: Record<string, string | undefined>
 	listed: ProfileReading["listed"]
+	/** Whether the anchor reached the lock screen after the update. */
+	onAuth: boolean
 }
 
 const PROFILE_ROOT = "nulo:core:profiles@"
@@ -857,7 +878,7 @@ const PROFILE_ROOT = "nulo:core:profiles@"
 /**
  * After an in-place update from the release: every profile row the release wrote is still stored,
  * byte for byte, and listed, a retired one as retired and no other; the model
- * holds exactly those profiles. Before the first step, so a dropped or rewritten row is never
+ * holds exactly those profiles; the wallet shows its lock screen. Before the first step, so a dropped or rewritten row is never
  * read as the first step's doing.
  */
 export function checkPreUpdate(w: World, r: StartReading, b: Bindings): Violation[] {
@@ -867,6 +888,7 @@ export function checkPreUpdate(w: World, r: StartReading, b: Bindings): Violatio
 			? []
 			: [violation("O2", `the release wrote ${keys.length} profile row(s); the start holds ${live(w).length}`)]
 	for (const key of keys) out.push(...releaseRowKept(key, r))
+	if (!r.onAuth) out.push(violation("O1", "the wallet did not reach the lock screen after the update"))
 	return [...out, ...startBound(w, r, b, keys)]
 }
 

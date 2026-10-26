@@ -34,6 +34,7 @@ import {
 	familyOfKey,
 	findNeedles,
 	ownerOf,
+	releaseRowOwner,
 	pageErrorText,
 	PROFILE_ROW_FIELDS,
 	RETIRED_REFUSALS,
@@ -75,7 +76,6 @@ const SEEDS = Array.from({ length: 1_000 }, (_, i) => i * 7_919 + 1)
 const listOf = (steps: { action: ActionName; params: unknown }[]): ListedStep[] =>
 	steps.map((s) => ({ action: s.action, params: s.params }) as ListedStep)
 
-/** A break fixture's violations go to the gate's output, so a reader sees each checker fail. */
 /** Each citation whose file is missing or whose line no longer holds its fragment. */
 function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 	return [...cited].flatMap(([source, fragment]) => {
@@ -85,6 +85,7 @@ function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 	})
 }
 
+/** A break fixture's violations go to the gate's output, so a reader sees each checker fail. */
 function shown(label: string, violations: Violation[]): Violation[] {
 	console.log(`[break] ${label}: ${violations.map((v) => `${v.oracle} ${v.message}`).join(" | ") || "<none>"}`)
 	return violations
@@ -670,6 +671,11 @@ describe("O3, writes", () => {
 	})
 	const base = [entry(`nulo:core:profiles@${P1}`, "a"), entry(`nulo:core:accounts@x1`, "b", P1), entry(`nulo:core:profiles@${P2}`, "c")]
 	const released: StoredEntry = { key: "nulo:core:networks@n1", digest: "r", envelope: false, plainOwner: P1 }
+	const releasedByKey: StoredEntry = {
+		key: `nulo:core:accounts@${JSON.stringify(["account", P1, 31337, "0x01"])}`,
+		digest: "k",
+		envelope: false,
+	}
 	const ctx = (after: StoredEntry[], contract: WriteContext["contract"], extra: Partial<WriteContext> = {}): WriteContext => ({
 		before: base,
 		after,
@@ -731,6 +737,10 @@ describe("O3, writes", () => {
 			"a delete that left its release-era plaintext row",
 			ctx([base[2], released], [{ kind: "delete", ref: "P1" }], { before: [...base, released] }),
 		],
+		[
+			"a delete that left a release-era row its key names",
+			ctx([base[2], releasedByKey], [{ kind: "delete", ref: "P1" }], { before: [...base, releasedByKey] }),
+		],
 	])("fails %s", (label, c) => {
 		expect(shown(`O3 ${label}`, checkWrites(c)).length).toBeGreaterThan(0)
 	})
@@ -771,6 +781,13 @@ describe("O3, writes", () => {
 		expect(ownerOf(entry("nulo:core:accounts@hashed", "x"))).toBeUndefined()
 		expect(ownerOf({ key: "nulo:core:accounts@hashed", digest: "x", envelope: false, plainOwner: P1 })).toBe(P1)
 		expect(ownerOf(entry("nulo:config", "x"))).toBeUndefined()
+		const ids = new Set([P1, P2])
+		const byKey = { key: `nulo:core:accounts@${JSON.stringify(["account", P2, 31337, `0x${P1}00`])}`, digest: "x", envelope: false }
+		expect(ownerOf(byKey, ids)).toBe(P2)
+		expect(ownerOf({ ...byKey, envelope: true }, ids)).toBeUndefined()
+		expect(releaseRowOwner("nulo:core:networks@n1", `{"profileId":"${P1}"}`, ids)).toBe(P1)
+		expect(releaseRowOwner(byKey.key, "{}", ids)).toBe(P2)
+		expect(releaseRowOwner("nulo:core:networks@n1", "not json", ids)).toBeUndefined()
 	})
 })
 
@@ -1361,28 +1378,29 @@ describe("the pre-update start", () => {
 	]
 
 	test("passes both release rows kept byte for byte and listed, the passkey one as retired", () => {
-		expect(checkPreUpdate(w, { released, updated: { ...released }, listed }, b)).toEqual([])
+		expect(checkPreUpdate(w, { released, updated: { ...released }, listed, onAuth: true }, b)).toEqual([])
 	})
 
 	test.each([
-		["a release row missing after the update", { released, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed }, b],
+		["a release row missing after the update", { released, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed, onAuth: true }, b],
 		[
 			"a release row rewritten by the update",
-			{ released, updated: { ...released, [`nulo:core:profiles@${P2}`]: `${rowP2} ` }, listed },
+			{ released, updated: { ...released, [`nulo:core:profiles@${P2}`]: `${rowP2} ` }, listed, onAuth: true },
 			b,
 		],
 		[
 			"a start with a row missing",
-			{ released: { [`nulo:core:profiles@${P1}`]: rowP1 }, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed },
+			{ released: { [`nulo:core:profiles@${P1}`]: rowP1 }, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed, onAuth: true },
 			b,
 		],
 		[
 			"a retired row listed as openable",
-			{ released, updated: { ...released }, listed: [listed[0], { ...listed[1], retired: false }] },
+			{ released, updated: { ...released }, listed: [listed[0], { ...listed[1], retired: false }], onAuth: true },
 			b,
 		],
-		["a retired row not listed", { released, updated: { ...released }, listed: [listed[0]] }, b],
-		["a profile bound to no release row", { released, updated: { ...released }, listed }, bind([["P1", P1]])],
+		["a retired row not listed", { released, updated: { ...released }, listed: [listed[0]], onAuth: true }, b],
+		["a profile bound to no release row", { released, updated: { ...released }, listed, onAuth: true }, bind([["P1", P1]])],
+		["a start off the lock screen", { released, updated: { ...released }, listed, onAuth: false }, b],
 	] as const)("fails %s", (label, r, bindings) => {
 		expect(shown(`start ${label}`, checkPreUpdate(w, r as never, bindings)).length).toBeGreaterThan(0)
 	})

@@ -5,7 +5,7 @@
  */
 import { RetiredProfileError } from "@nulo/extension-messaging/errors"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
-import { callService, lockFromAnotherWindow } from "../../fixtures/session"
+import { callService, lockFromAnotherWindow, type ServiceAnswer, serviceAnswer } from "../../fixtures/session"
 import { answerWithCredential } from "../../fixtures/passkey"
 import { derivedAddresses, reexportImported } from "./accounts-io"
 import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
@@ -73,6 +73,14 @@ function retiredArgs(id: string): Record<(typeof RETIRED_REFUSALS)[number], unkn
 	}
 }
 
+/** `retired` only for the typed refusal, its code and its text; any other answer by its code alone,
+ *  so an error's free text, which may carry a secret, never reaches the record. */
+function retiredAnswer(answer: ServiceAnswer): string {
+	if (!("error" in answer)) return "answered"
+	if (answer.code === RetiredProfileError.CODE && answer.error.includes(RetiredProfileError.MESSAGE)) return "retired"
+	return `refused: ${answer.code ?? "untyped"}`
+}
+
 /** A retired profile's lock screen, then every call of the refusal matrix against it: `retired`
  *  where the wallet answered with its retired refusal, else how the call ended. */
 async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading> {
@@ -89,11 +97,7 @@ async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading
 	const before = new Map((await readCensus(page)).map((e) => [e.key, e.digest]))
 	const calls: Record<string, string> = {}
 	for (const [method, params] of Object.entries(retiredArgs(id)))
-		calls[method] = await callService(page, "profile", method, params, 30_000).then(
-			() => "answered",
-			(e: Error) =>
-				e.message.includes(RetiredProfileError.MESSAGE) ? "retired" : `refused: ${e.message.split(": ").at(-1)?.slice(0, 80)}`,
-		)
+		calls[method] = await serviceAnswer(page, "profile", method, params, 30_000).then(retiredAnswer, () => "no answer")
 	const after = await readCensus(page)
 	const wrote = after.filter((e) => before.get(e.key) !== e.digest && !e.key.startsWith("nulo:e2e:")).map((e) => e.key)
 	for (const key of before.keys()) if (!after.some((e) => e.key === key)) wrote.push(key)

@@ -11,9 +11,9 @@ import { chaosSeed } from "../../fixtures/chaos-seed"
 import { type ExtensionContext, test } from "../../fixtures/extension"
 import { inPlaceUpdate, updateBuilds } from "../../fixtures/update/in-place"
 import { evidenceGaps } from "./checkers"
-import { type Caps, describePlan, type ListedStep, type Plan, plan, planFromList, type StartState } from "./model"
+import { type Caps, describePlan, type ListedStep, type Plan, plan, planFromList, type StartState, startWorld } from "./model"
 import { bindPreUpdate, populateRelease, type Released } from "./pre-update"
-import { recordTarget, runPlan, type Verdict } from "./run"
+import { checkStartStorage, recordTarget, runPlan, type Verdict } from "./run"
 import { startRun } from "./start"
 import type { NetworkRun } from "./state"
 
@@ -62,7 +62,7 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 	const run = await startRun(ctx, r.caps, files, r.network)
 	let missed: string[] = []
 	try {
-		const start = r.released ? await bindPreUpdate(run, r.released) : []
+		const start = r.released ? [...(await bindPreUpdate(run, r.released)), ...(await checkStartStorage(run, startWorld(p.start)))] : []
 		const verdict = await runPlan(run, p, record, start)
 		console.log(
 			`[profile-chaos] seed ${seed}: ${verdict.kind} in ${verdict.elapsedMs} ms; ${verdict.coverageLine}; needles[phrases=${run.phrases.size} prf=${run.prf.size}]; record ${verdict.recordPath}`,

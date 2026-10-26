@@ -27,3 +27,9 @@ Every consult, gate and meaningful attempt of phase C3.1. Paths repo-relative.
 ## Review round 1 (Codex and Opus, on 3c4149706)
 
 Both changes-needed; verdicts and what was declined in plan.md § Review verdicts. Verified before fixing: `openBackupTransfer` and `exportImportedKeysDek` are not in `ProfileService.rpcMethods`, and the base service drops such a call unanswered; `PasskeyCeremonyDialog` cancels its ceremony on unmount, so the reveal race's word check could never fail; 0.31.0 stores `nulo:core:networks@…` plain, and the sealed store keeps such a row plain until its profile unlocks. The citation test caught a wrong line in the fix itself (85, not 84).
+
+## Review round 2
+
+- The wallet seals a release's plaintext rows asynchronously (`onRowKeysReady` → `sealLegacy`), and a keyed root moves the row to a new key and drops the legacy one; so the exemption expires after a step that ends with the owner open, polled for 15 s, never on the unlock step's own census alone.
+- Account, flag and incoming roots name their owner in the row's key (`["account", profileId, chainId, address]`), not in its body; an owner read from `profileId` alone missed them.
+- `callService` loses the typed error (`errorPayload.code`); `serviceAnswer` keeps it, and `callService` is now a wrapper over it with the same rejection text.
