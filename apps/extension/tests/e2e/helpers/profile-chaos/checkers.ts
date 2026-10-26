@@ -435,6 +435,13 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
 	},
 	GUARDED_NODE_REFUSAL,
+	{
+		pattern: /^\["\[full-backup\] restore failed:",\{"error":\{"name":"Error","message":"Client disconnected"\}\}\]$/,
+		kinds: ["log"],
+		during: ["background"],
+		source: "code:apps/extension/src/composables/full-backup-restore.ts:1070",
+		reason: "a planned restart under a running restore drops the run's client, and the run reports its own failure and rolls the profile back, which the model expects",
+	},
 ]
 
 /** A filed product finding the runs keep meeting. Its error line keeps the seed red, but the run

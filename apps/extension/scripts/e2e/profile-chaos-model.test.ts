@@ -709,6 +709,27 @@ describe("O4, errors", () => {
 		})
 	})
 
+	test("passes a restore a planned restart failed, only during that restart and only for the disconnect", () => {
+		const failed = (message: string): ErrorEntry => ({
+			kind: "log",
+			level: "error",
+			source: "ui",
+			text: `["[full-backup] restore failed:",{"error":{"name":"Error","message":"${message}"}}]`,
+		})
+		const source = "code:apps/extension/src/composables/full-backup-restore.ts:1070"
+		expect(checkErrors([failed("Client disconnected")], ["session", "background"])).toEqual({
+			violations: [],
+			warns: {},
+			allowed: { [source]: 1 },
+		})
+		expect(
+			shown("O4 a restore failed with no planned restart", checkErrors([failed("Client disconnected")], ["session"]).violations),
+		).toHaveLength(1)
+		expect(
+			shown("O4 a restore failed for another reason", checkErrors([failed("Profile locked")], ["background"]).violations),
+		).toHaveLength(1)
+	})
+
 	test.each([
 		["an uncaught error", [page("TypeError: x is undefined")], ["session"]],
 		["an error log line", [{ kind: "log", level: "error", source: "profile", text: "Failed to refresh profile session" }], []],
