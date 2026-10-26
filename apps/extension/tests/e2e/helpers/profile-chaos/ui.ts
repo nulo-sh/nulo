@@ -115,8 +115,8 @@ export function timed(t0: number, boundMs: number, outcome: Driven["outcome"]): 
 	return { outcome, settle: { reached: elapsedMs <= boundMs, elapsedMs, boundMs } }
 }
 
-export async function isLocked(page: Page): Promise<boolean> {
-	return !(await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile"))
+export async function isLocked(page: Page, timeoutMs?: number): Promise<boolean> {
+	return !(await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile", [], timeoutMs))
 }
 
 /** Locks through Home's header when a session is open, since a settings page has none; else opens
@@ -187,15 +187,16 @@ export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> 
 	)
 }
 
-/** Where a held unlock's race ended within `boundMs`. A committed attempt holds its session
- *  before its submit goes idle and leaves the lock screen only once the router resolves Home. */
+/** Where a held unlock's race ended within `boundMs`; a service read past it throws. A committed
+ *  attempt holds its session before its submit goes idle and leaves the lock screen only once the
+ *  router resolves Home. */
 export async function raceEnd(page: Page, boundMs: number): Promise<"home" | "lock" | "lock over a session" | undefined> {
 	const lock: Signal = { label: "lock", hash: "/popup/auth" }
 	const deadline = Date.now() + boundMs
 	for (;;) {
 		const { label } = await firstSignal(page, [HOME, lock], Math.max(deadline - Date.now(), 1))
 		if (label !== "lock") return label === "home" ? "home" : undefined
-		if (await isLocked(page)) return "lock"
+		if (await isLocked(page, Math.max(deadline - Date.now(), 1))) return "lock"
 		// A shorter read than this could time out on a screen that still shows the lock.
 		if (deadline - Date.now() < 500) return "lock over a session"
 		await new Promise((r) => setTimeout(r, 200))
