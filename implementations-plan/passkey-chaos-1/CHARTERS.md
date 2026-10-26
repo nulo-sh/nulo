@@ -75,7 +75,7 @@ P87-03 B: a manual pass, once per browser, after the local campaign's fixes land
 | # | Step | Expected |
 |---|---|---|
 | 1 | Install; onboarding opens. Create a **password** profile, pass the recovery phrase stage with "I saved it" (write the 24 words down), switch it to Testnet | Home with one account; no error notice |
-| 2 | From the lock screen's New profile, create a **passkey** profile; at its phrase stage choose "Do it later"; switch it to Testnet | a passkey prompt, then Home with another account; Get started offers the phrase |
+| 2 | From the lock screen's New profile, create a **passkey** profile (a create in the popup has no phrase stage); switch it to Testnet | a passkey prompt, then Home with another account; Get started offers the phrase |
 | 3 | Reveal each profile's phrase (Settings → Security → Backup → Recovery phrase): the password profile with its password, the passkey profile with "Reveal with passkey" | 24 words each; the password profile's match step 1's |
 | 4 | Import each phrase as a new profile, one choosing Password, the other Passkey, confirming the duplicate-wallet warning; switch each to Testnet | each imported profile shows the same first account address as its source |
 | 5 | Fund the password profile's first account | the balance shows after sync |
