@@ -72,6 +72,7 @@ const handleCopyAddress = (address) => {
 const handleDelete = (sender) => {
 	requestConfirm({
 		confirm_color: "red",
+		irreversible: true,
 		confirm_text: "Yes, delete sender",
 		title: "Delete this sender?",
 		description:

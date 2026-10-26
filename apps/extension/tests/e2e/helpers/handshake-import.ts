@@ -38,6 +38,7 @@ import {
 	importToken,
 	lockWallet,
 	navigateByHash,
+	openProfileChooser,
 	readSessionRow,
 	resetProfile,
 	switchAccountByAddress,
@@ -167,8 +168,7 @@ async function expectPrivateBalance(page: Page, account: string, token: string, 
 
 async function unlock(page: Page, credential: Credential, profileId: string): Promise<void> {
 	if (credential === "password") return unlockProfile(page, profileId, TEST_PASSWORD)
-	await page.waitForSelector('[data-testid="auth-profile"]', { visible: true, timeout: 15_000 })
-	await clickByTestId(page, "auth-profile")
+	await openProfileChooser(page)
 	const row = `[data-testid="select-profile-row"][data-profile-id="${profileId}"]`
 	await page.waitForSelector(row, { visible: true, timeout: 10_000 })
 	await clickSelector(page, row)
@@ -210,7 +210,10 @@ export async function exportBackup(page: Page, credential: Credential, account: 
 
 /** Deletes the unlocked profile; the lock view reaches the same reset page through "Delete profile". */
 export async function deleteProfile(page: Page, from: DeleteFrom): Promise<void> {
-	if (from === "settings") return resetProfile(page)
+	if (from === "settings") {
+		await resetProfile(page)
+		return
+	}
 	await lockWallet(page)
 	await clickByTestId(page, "auth-reset")
 	await page.waitForSelector('[data-testid="forgot-reset-btn"]', { visible: true, timeout: 10_000 })

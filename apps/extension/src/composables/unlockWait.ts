@@ -36,6 +36,10 @@ export interface ActivationWaitOptions {
 	/** An overall bound that a start does not end: past it the wait rejects with
 	 *  `UnlockTimeoutError` however far the activation got. */
 	limitMs?: number
+	/** Whether the shell's activation of the expected profile is still running, read reactively.
+	 *  A profile opened in place keeps the `isLogined` of the one before until its own activation
+	 *  settles, so until then the wait does not count it active. */
+	activating?: () => boolean
 }
 
 /** What one change of the watched store means for the wait. `started` is `undefined` without a
@@ -72,7 +76,8 @@ export function awaitProfileActivation(
 	opts: ActivationWaitOptions = {},
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
-		if (store.isLogined && store.profile?.id === expectedId) {
+		const settled = () => !opts.activating?.()
+		if (store.isLogined && store.profile?.id === expectedId && settled()) {
 			return resolve()
 		}
 		const initialFailure = store.bootstrapFailure
@@ -89,16 +94,19 @@ export function awaitProfileActivation(
 			if (error) reject(error)
 			else resolve()
 		}
-		const stop = watch([() => store.isLogined, () => store.profile?.id, () => store.bootstrapFailure], ([logged, id, failure]) => {
-			const f = failure as ProfileActivationWithFailureSubject["bootstrapFailure"]
-			const step = activationStep(logged, id, f, expectedId, started)
-			if (step === "active") finish()
-			else if (step === "failed") finish(new BootstrapFailedError(f?.message))
-			else if (step === "superseded") finish(new ActivationSupersededError())
-			else if (step === "start") {
-				started = true
-				clearTimeout(timer)
-			}
-		})
+		const stop = watch(
+			[() => store.isLogined && settled(), () => store.profile?.id, () => store.bootstrapFailure],
+			([logged, id, failure]) => {
+				const f = failure as ProfileActivationWithFailureSubject["bootstrapFailure"]
+				const step = activationStep(logged, id, f, expectedId, started)
+				if (step === "active") finish()
+				else if (step === "failed") finish(new BootstrapFailedError(f?.message))
+				else if (step === "superseded") finish(new ActivationSupersededError())
+				else if (step === "start") {
+					started = true
+					clearTimeout(timer)
+				}
+			},
+		)
 	})
 }

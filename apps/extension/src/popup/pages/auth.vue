@@ -22,7 +22,8 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 /** Utils */
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
-import { getLastActiveProfileId, setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { getLastActiveProfileId, onLastActiveProfileChanged, setLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { lockScreenProfile } from "@/popup/lock-screen-profile"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -224,23 +225,52 @@ const handleUnlockWallet = async () => {
 	}
 }
 
+/** Selects the profile this screen opens on (`lockScreenProfile`). A selected profile that no
+ *  longer exists, with none to presume, leaves the choice to the person in the profile chooser. The
+ *  lookup waits for the service, so it can outlast this page or lose to an activation: a profile
+ *  selected or opened meanwhile stands, as in the route guard. */
+const settleProfile = async () => {
+	const selectedAtStart = appStore.profile?.id
+	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
+	const profiles = await managers.profile.getProfiles().catch(() => undefined)
+	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart) return
+	const profile = lockScreenProfile(profiles, lastActiveProfileId)
+	if (profile) {
+		appStore.profile = profile
+	} else if (!profiles.some((p) => p.id === selectedAtStart)) {
+		appStore.profile = undefined
+		if (profiles.length) popupStore.open("select_profile")
+		else router.push("/popup/register")
+	}
+}
+
+/** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
+ *  Never during an unlock here, whose steps read the selected profile. */
+let follows = 0
+const followPick = async (id) => {
+	const follow = ++follows
+	if (!id || id === appStore.profile?.id || appStore.isLogined || isAwaitingResponse.value) return
+	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
+	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || isAwaitingResponse.value) return
+	appStore.profile = profile
+}
+const stopFollowingPicks = onLastActiveProfileChanged(followPick)
+
+const onProfileDeleted = (deleted) => {
+	if (deleted?.id === appStore.profile?.id && !isAwaitingResponse.value) void settleProfile()
+}
+managers.profile.onProfileDeleted.add(onProfileDeleted)
+
 onMounted(async () => {
 	if (isProfileKnown.value && !isPasskeyProfile.value) {
 		passwordInput.value?.focus()
 	}
-
-	// The lookup waits for the service, so it can outlast this page or lose to an activation: a
-	// profile selected or opened meanwhile stands, as in the route guard.
-	const selectedAtStart = appStore.profile?.id
-	const lastActiveProfileId = await getLastActiveProfileId()
-	if (lastActiveProfileId) {
-		const profile = (await managers.profile.getProfiles())?.find((p) => p.id === lastActiveProfileId)
-		const unchanged = !isUnmounted && !appStore.isLogined && appStore.profile?.id === selectedAtStart
-		if (profile && unchanged) appStore.profile = profile
-	}
+	await settleProfile()
 })
 onUnmounted(() => {
 	isUnmounted = true
+	stopFollowingPicks()
+	managers.profile.onProfileDeleted.remove(onProfileDeleted)
 })
 watch(
 	() => appStore.profile?.id,

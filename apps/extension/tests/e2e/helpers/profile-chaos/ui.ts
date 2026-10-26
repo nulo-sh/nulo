@@ -3,7 +3,7 @@
  * state reached within a bound, and a miss reports the route and the loading testids on screen.
  */
 import type { Page } from "puppeteer"
-import { pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
+import { openProfileChooser, pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
@@ -145,8 +145,7 @@ export async function storedSelection(page: Page): Promise<string | undefined> {
 /** Points the lock screen at `profileId` through the picker, unless it is stored there already. */
 export async function pickOnLockScreen(page: Page, profileId: string): Promise<void> {
 	if ((await storedSelection(page)) === profileId) return
-	await page.waitForSelector('[data-testid="auth-profile"]', { visible: true, timeout: 15_000 })
-	await clickByTestId(page, "auth-profile")
+	await openProfileChooser(page)
 	const row = `[data-testid="select-profile-row"][data-profile-id="${profileId}"]`
 	await page.waitForSelector(row, { visible: true, timeout: 10_000 })
 	await clickSelector(page, row)
