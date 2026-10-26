@@ -82,7 +82,8 @@ export async function storeActiveNetwork(page: Page, kind: string, networks?: Ne
 
 /** What the wallet reads of `chainId`: the network row `networkId`, the accounts on the chain, how
  *  many imported keys name it, and every other row naming it, exactly as stored. A sealed row of
- *  another root names its chain only inside its envelope, so none is here. */
+ *  another root names its chain only inside its envelope, so none is here. `networks` and `accounts`
+ *  stand in for rows a locked wallet cannot open, read before the lock. */
 export type ChainSnapshot = {
 	network: NetworkRow | undefined
 	accounts: AccountRow[]
@@ -90,7 +91,13 @@ export type ChainSnapshot = {
 	rows: Record<string, string>
 }
 
-export async function snapshotChain(page: Page, chainId: number, networkId: string, networks?: NetworkRow[]): Promise<ChainSnapshot> {
+export async function snapshotChain(
+	page: Page,
+	chainId: number,
+	networkId: string,
+	networks?: NetworkRow[],
+	accounts?: AccountRow[],
+): Promise<ChainSnapshot> {
 	const stored = await storedEntries(page, ["nulo:core:"])
 	const rows: Record<string, string> = {}
 	for (const [key, raw] of Object.entries(stored)) {
@@ -99,7 +106,7 @@ export async function snapshotChain(page: Page, chainId: number, networkId: stri
 	}
 	return {
 		network: (await networkRows(page, networks)).find((network) => network.id === networkId),
-		accounts: await accountRows(page, chainId),
+		accounts: accounts?.filter((account) => account.chainId === chainId) ?? (await accountRows(page, chainId)),
 		importedKeys: Object.keys(stored).filter((key) => key.startsWith(IMPORTED_KEYS) && accountScope(key)?.chainId === chainId).length,
 		rows,
 	}
@@ -133,12 +140,13 @@ function movedAccount(account: AccountRow, shape: Shape, fake: () => number, hid
  * would act on half the writes. A moved imported key no longer opens, since its seal binds its
  * chainId, so after `network-reset` or `both` every imported account reads unmovable. A sealed row
  * of another root names its chain only inside its envelope, so it stays as it is: seed before any
- * send on Testnet.
+ * send on Testnet. `networks` and `accounts` stand in for rows a locked wallet cannot open, read
+ * before the lock.
  */
 export async function seedStaleNetwork(
 	page: Page,
 	shape: Shape,
-	opts: { hideIndex?: number; networks?: NetworkRow[] } = {},
+	opts: { hideIndex?: number; networks?: NetworkRow[]; accounts?: AccountRow[] } = {},
 ): Promise<void> {
 	const seed = CHAIN_IDS.TESTNET
 	const moves = shape !== "address-change"
@@ -148,9 +156,8 @@ export async function seedStaleNetwork(
 		if (moves) writes[`${NETWORKS}${network.id}`] = JSON.stringify({ ...network, chainId: PREVIOUS_TESTNET_CHAIN_ID })
 	}
 	let fake = 0
-	const accounts = (await accountRows(page, seed, { complete: true })).map((account) =>
-		movedAccount(account, shape, () => ++fake, opts.hideIndex ?? null),
-	)
+	const held = opts.accounts?.filter((account) => account.chainId === seed) ?? (await accountRows(page, seed, { complete: true }))
+	const accounts = held.map((account) => movedAccount(account, shape, () => ++fake, opts.hideIndex ?? null))
 	for (const account of accounts) writes[plaintextKey(ACCOUNTS, account)] = JSON.stringify(account)
 	for (const account of moves ? accounts.filter((row) => row.type === 1) : []) {
 		const { profileId, chainId, address } = account

@@ -151,21 +151,39 @@ version. The zip is downloaded once with `gh release download` into `.e2e-state/
 candidate names the commit it was built from: a candidate from another commit, or a checkout with
 uncommitted changes a build reads, is refused, so commit before you build it.
 
+- Each release a scenario updates from has reviewed traits beside its digests (`RELEASE_TRAITS` in
+  `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, and whether
+  its connect prompt replaces the popup's page or opens its own window. A tag with none is refused.
 - The live scenario populates the release through its own UI: a password profile with a second and
-  an imported account and two contacts on Testnet, then a network on the run's sandbox with a
-  token it pins, a Send fee pick, a public and a private receipt, a connected playground and one
-  send from the wallet whose fee payer it picks. It requires every key family `HELD` names before it
-  updates. After the update it checks that no key was lost, no barrier shows, every key is
-  registered and read by its read code, the profile unlocks, the release's pins and fee picks are
+  an imported account and two contacts on Testnet (switched to first, as a release that seeds
+  Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,
+  a public and a private receipt, a connected playground and one send from the wallet whose fee
+  payer it picks. It requires every key family `HELD` names for the release's storage before it
+  updates: the legacy selection key for a plaintext release, the sealed selection row and the
+  seeding record for a sealing one. A sealing release first moves every outside endpoint onto a
+  loopback node that reports that network's chain, through its own service, since its sealed rows
+  cannot be rewritten offline and its recording names no outside endpoint; the scenario refuses to
+  record while any moved host is still held. It then ends on its second Testnet account, read back
+  through its own service, so the update must keep a selection that is not the fallback. After the
+  update it checks that no key was lost, no barrier shows, every key is registered and read by its
+  read code, the profile unlocks on the release's selection, the release's pins and fee picks are
   sealed and read back through the service, the UI reads it all, the imported key opens and the
-  playground's stored session still answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the release's storage to
-  `fixtures/update/<tag>.storage.json`, the replay's recording.
-- The replay writes that recording into the release, offline, and updates it. While the
-  candidate's Testnet seed equals the recorded one the update opens with no takeover; once it
-  differs, the takeover's reset must carry every account to the new chain. Its second case moves
-  the recorded Testnet rows off the seed, so the reset over release rows runs before that happens.
-  The recording's dApp session expires 7 days after it was made, and the replay refuses it from
-  then on: record again from a checkout on the release's Aztec line.
+  playground's stored session still answers. `NULO_E2E_UPDATE_RECORD=1` on Chrome also writes the
+  release's storage to `fixtures/update/<tag>.storage.json`, the replay's recording; a sealing
+  release's names the loopback origins its rows point at (`dials`).
+- The replay writes that recording into the release, offline, and updates it. It reads a plaintext
+  release's rows from the recording. A sealing release's it reads from a separate install of the
+  release, never updated: the recording written into it, unlocked under the test password, every
+  row read through the release's own services, each root's count checked against the rows it
+  stores, with a refusing stub held on every dial; its selection must be a Testnet account other
+  than the first, and its dials must cover every loopback origin its rows name. Its endpoints sit on
+  those stubs, so its reset takes the moved-endpoint branch; a plaintext release's replay keeps the
+  seed's. While the candidate's Testnet seed equals the
+  recorded one the update opens with no takeover; once it differs, the takeover's reset must carry
+  every account to the new chain. Its second case moves the recorded Testnet rows off the seed, so
+  the reset over release rows runs before that happens. The recording's dApp session expires 7
+  days after it was made, and the replay refuses it from then on: record again from a checkout on
+  the release's Aztec line.
 - The replay also exports two full backups from the candidate, the updated password profile's and
   a fresh passkey profile's, both encrypted under the test password, and checks each carries every
   row storage held, then validates, migrates and reads it. `NULO_E2E_BACKUP_RECORD=1` on Chrome
