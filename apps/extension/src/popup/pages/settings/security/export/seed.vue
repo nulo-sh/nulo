@@ -166,8 +166,12 @@ onBeforeUnmount(() => {
 			</div>
 		</template>
 
-		<!-- Password gate; a passkey profile's gate is its button alone -->
-		<template v-else-if="isStarted && !isUnlocked && isPasskeyProfile" />
+		<!-- Password gate; a passkey profile's gate is its button, under one sentence -->
+		<div v-else-if="isStarted && !isUnlocked && isPasskeyProfile" class="export_section_last">
+			<Text variant="body" height="150" color="body" data-testid="reveal-passkey-note">
+				Your passkey confirms it's you before the phrase shows.
+			</Text>
+		</div>
 		<SecretUnlockSection
 			v-else-if="isStarted && !isUnlocked"
 			v-model="password"

@@ -268,7 +268,7 @@ const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 197, ':title="stric
 const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 177, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
-const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 119, "if (!ext.prf) throw new PasskeyPrfError(")
+const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
 const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 287, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"

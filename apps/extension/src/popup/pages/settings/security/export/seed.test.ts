@@ -207,11 +207,18 @@ describe("recovery phrase — a passkey profile", () => {
 	const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" }
 	const passkeyButton = (w: VueWrapper) => w.get('[data-testid="reveal-passkey-btn"]')
 
-	test("after the agreement the gate is Reveal with passkey alone, with no password field", async () => {
+	test("after the agreement the gate is Reveal with passkey under one sentence, with no password field", async () => {
 		const w = await mountAgreed("passkey")
 		expect(passkeyButton(w).text()).toBe("Reveal with passkey")
+		expect(w.get('[data-testid="reveal-passkey-note"]').text()).toBe("Your passkey confirms it's you before the phrase shows.")
 		expect(w.find('[data-testid="unlock-password-input"]').exists()).toBe(false)
 		expect(w.find('[data-testid="unlock-submit-btn"]').exists()).toBe(false)
+	})
+
+	test("(control) a password profile's gate is its field, without the passkey's sentence", async () => {
+		const w = await mountAgreed("password")
+		expect(w.find('[data-testid="unlock-password-input"]').exists()).toBe(true)
+		expect(w.find('[data-testid="reveal-passkey-note"]').exists()).toBe(false)
 	})
 
 	test("the passkey is asked at this profile's own input, and its answer opens the words once", async () => {

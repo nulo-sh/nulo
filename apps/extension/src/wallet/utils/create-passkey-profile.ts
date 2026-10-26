@@ -1,6 +1,6 @@
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
-import { newCreateInput, type PasskeyDisplay, type PasskeyRequest } from "@/wallet/services/passkey/spec"
+import { type NewPasskeyDisplay, newCreateInput, type PasskeyRequest } from "@/wallet/services/passkey/spec"
 
 /**
  * The page's two steps of an in-page passkey create, injected so the helper is testable apart
@@ -28,7 +28,7 @@ export type CreatedPasskeyProfile = { profile: ProfileInfo; credentialData: Pass
  * input), or with `existing` a discovery get any Nulo passkey on the device may answer.
  */
 export function newProfilePasskeyRequest(
-	display: PasskeyDisplay,
+	display: NewPasskeyDisplay,
 	opts: { existing?: boolean; saved?: SavedPasskeyCredential } = {},
 ): PasskeyRequest {
 	const input = newCreateInput()

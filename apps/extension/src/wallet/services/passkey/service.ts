@@ -6,6 +6,7 @@ import {
 	PASSKEY_SERVICE_NAME,
 	PASSKEY_TIMEOUT,
 	type Methods,
+	type NewPasskeyDisplay,
 	type PasskeyCredentialData,
 	type PasskeyDisplay,
 	type PasskeyRequest,
@@ -79,7 +80,7 @@ export class PasskeyService extends Service<Methods> implements ServiceSpec<Meth
 	}
 
 	/** PATH B create, evaluating the PRF at `prfSalt`. */
-	public async createKey(userHandle: string, prfSalt: string, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+	public async createKey(userHandle: string, prfSalt: string, display: NewPasskeyDisplay): Promise<PasskeyHandOver> {
 		return await this.openWindowAndWait({ mode: "create", userHandle, prfSalt, ...display })
 	}
 

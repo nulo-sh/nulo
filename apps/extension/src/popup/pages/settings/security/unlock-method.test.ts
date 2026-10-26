@@ -48,11 +48,16 @@ import UnlockMethod from "./unlock-method.vue"
 
 const wrappers: VueWrapper[] = []
 
-function mountPage(type: "password" | "passkey") {
+function mountPage(type: "password" | "passkey", recoveryMode?: true) {
 	const w = mount(UnlockMethod, {
 		attachTo: document.body,
 		global: {
-			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: { id: "p1", name: "Main", type } } } })],
+			plugins: [
+				createTestingPinia({
+					createSpy: vi.fn,
+					initialState: { app: { profile: { id: "p1", name: "Main", type, recoveryMode } } },
+				}),
+			],
 			components: { Flex, Icon, Input, Text },
 			stubs: {
 				CollapsingHeroLayout: { template: "<div><slot /><slot name='bottom' /></div>" },
@@ -334,6 +339,26 @@ describe("a profile the change would refuse", () => {
 		expect(has(w, "unlock-method-new-password-input")).toBe(false)
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Couldn't change the unlock method. Try again." })
 		nothingChanged()
+	})
+})
+
+describe("a profile open in recovery mode", () => {
+	test.each(["password", "passkey"] as const)("a %s profile is told it can't change, and no change is offered or asked", async (type) => {
+		surface.panel = true
+		const w = mountPage(type, true)
+		await flushPromises()
+		expect(w.get('[data-testid="unlock-method-unavailable"]').text()).toBe("This profile can't change its unlock method.")
+		expect(w.findAll("button")).toEqual([])
+		expect(surface.move).not.toHaveBeenCalled()
+		expect(ceremony.run).not.toHaveBeenCalled()
+		expect(profile.verifyUnlockCredential).not.toHaveBeenCalled()
+	})
+
+	test("(control) a profile open with its keys has no such line", async () => {
+		const w = mountPage("passkey")
+		await flushPromises()
+		expect(has(w, "unlock-method-unavailable")).toBe(false)
+		expect(has(w, "unlock-method-new-passkey")).toBe(true)
 	})
 })
 

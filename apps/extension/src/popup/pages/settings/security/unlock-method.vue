@@ -42,6 +42,9 @@ const router = useRouter()
 const maxPasswordLength = 128
 
 const isPasskey = computed(() => appStore.profile?.type === "passkey")
+/** A profile open in recovery mode has no imported-keys key, which every reseal needs: the page says
+ *  so before any prompt and offers no change, since a retry cannot succeed. */
+const cannotChange = computed(() => !!appStore.profile?.recoveryMode)
 /** "" | "enterPassword": a password profile's check before its passkey. */
 const step = ref("")
 const password = ref("")
@@ -183,7 +186,7 @@ watch(() => appStore.profile?.id, reset)
 // Firefox's toolbar panel closes under the passkey prompt every change runs, so the page moves to its
 // own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
+	if (closesOnFocusLoss() && !cannotChange.value) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
 })
 
 onBeforeUnmount(() => {
@@ -196,6 +199,9 @@ onBeforeUnmount(() => {
 		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'">
 			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
 				{{ currentLine }}
+			</Text>
+			<Text v-if="cannotChange" variant="body" height="150" color="body" data-testid="unlock-method-unavailable">
+				This profile can't change its unlock method.
 			</Text>
 		</div>
 
@@ -265,7 +271,7 @@ onBeforeUnmount(() => {
 			</Flex>
 		</div>
 
-		<template #bottom>
+		<template v-if="!cannotChange" #bottom>
 			<Button
 				v-if="isNewPasswordStep"
 				variant="cta"
