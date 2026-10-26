@@ -86,6 +86,18 @@ export interface BrowserDriver {
 	 */
 	readonly credentialOutlivesPage: boolean
 	/**
+	 * Whether `stopBackground` ends the background while an extension page stays open. Chrome stops
+	 * its service worker under any page; Firefox will not end an event page that one keeps busy, so a
+	 * spec there closes every extension page before a restart.
+	 */
+	readonly stopsBackgroundUnderOpenPage: boolean
+	/**
+	 * How many resident credentials one virtual authenticator keeps; a create past it is refused at
+	 * once with `NotAllowedError`, as a dismissed prompt is. Chrome's CTAP2 virtual device stores
+	 * three and CDP has no option to raise it; Firefox's keeps every one.
+	 */
+	readonly residentCredentialSlots: number
+	/**
 	 * Hosts this browser reaches on its own on every run, whatever the wallet does, each with why.
 	 * The egress guard refuses them without failing a launch. Exact names, never a domain, so a wallet
 	 * dependency that calls a new host under a vendor's domain still fails the run.
@@ -244,6 +256,8 @@ export const BROWSER: BrowserKind = driver.kind
 export const EXTENSION_SCHEME = driver.scheme
 export const isFirefox = BROWSER === "firefox"
 export const credentialOutlivesPage = driver.credentialOutlivesPage
+export const stopsBackgroundUnderOpenPage = driver.stopsBackgroundUnderOpenPage
+export const residentCredentialSlots = driver.residentCredentialSlots
 /** What the egress guard checks a launch's record against: whose traffic it is, and which of it is the browser's own. */
 export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts }
 

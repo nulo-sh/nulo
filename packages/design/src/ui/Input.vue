@@ -218,7 +218,9 @@ function emitParsedValue(event?: Event) {
 		)
 	} else if (props.subtype === "int") {
 		const value = (event!.target as HTMLInputElement).value.replace(/[^\d]/g, "")
-		let res = value ? Number.parseInt(text.value as string, 10) : 0
+		// Parsed from the digits the field keeps, never the raw text, so a typed sign or separator
+		// cannot make the emitted number differ from the one shown.
+		let res = value ? Number.parseInt(value, 10) : 0
 		text.value = value ? value : 0
 
 		if (props.max) {
