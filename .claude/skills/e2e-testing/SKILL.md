@@ -1116,7 +1116,7 @@ A helper under `tests/e2e/helpers/` (the import and backup drivers above all) ru
 from the change, network matrices included. Before the PR, run every file that imports it
 (`rg -l '<helper>' apps/extension/tests/e2e`) on the suite it belongs to: a form that opened on a
 new default tab broke the plain-backup driver in the network matrix's passkey row, which no local
-run had covered and CI failed (`implementations-plan/passkey-unlock-1/lessons/phase-A3.md`).
+run had covered and CI failed (`implementations-plan/archive/passkey-unlock-1/lessons/phase-A3.md`).
 
 ### Adding a stage gate
 
