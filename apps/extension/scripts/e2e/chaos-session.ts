@@ -20,7 +20,7 @@ import { basename, dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createHash, randomInt } from "node:crypto"
 import { readStartTime } from "../../tests/e2e/owned-processes"
-import type { ActionRecord, EndState } from "../../tests/e2e/helpers/chaos-session/checks"
+import type { ActionRecord, SessionEnd } from "../../tests/e2e/helpers/chaos-session/checks"
 import { boundValue, compareReplay, pauseBefore, replayedFile } from "../../tests/e2e/helpers/chaos-session/checks"
 import { isLaunchProfile, type Marks, SESSION_ENV, stillTheSame, sweepSession } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
@@ -390,8 +390,8 @@ function readActions(dir: string): (ActionRecord & { reason?: string })[] {
 		.map((l) => JSON.parse(l) as ActionRecord)
 }
 
-function readEnd(dir: string): EndState {
-	return (JSON.parse(readFileSync(join(dir, SUMMARY_FILE), "utf8")) as { end: EndState }).end
+function readEnd(dir: string): SessionEnd {
+	return (JSON.parse(readFileSync(join(dir, SUMMARY_FILE), "utf8")) as { end: SessionEnd }).end
 }
 
 /** The command a recorded action replays: as sent, a bound fill taking its value from the replay's

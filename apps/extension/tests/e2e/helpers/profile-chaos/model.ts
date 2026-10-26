@@ -34,6 +34,18 @@ export interface Caps {
 	credentialSlots: number
 }
 
+/** The caps as a record holds them, and back: JSON has no `Infinity`, which an unlimited
+ *  authenticator's slot count is. */
+export type RecordedCaps = Omit<Caps, "credentialSlots"> & { credentialSlots: number | "unlimited" }
+
+export function recordCaps(caps: Caps): RecordedCaps {
+	return { ...caps, credentialSlots: Number.isFinite(caps.credentialSlots) ? caps.credentialSlots : "unlimited" }
+}
+
+export function capsOfRecord(caps: RecordedCaps): Caps {
+	return { ...caps, credentialSlots: caps.credentialSlots === "unlimited" ? Number.POSITIVE_INFINITY : caps.credentialSlots }
+}
+
 export interface ModelProfile {
 	ref: ProfileRef
 	method: Method
