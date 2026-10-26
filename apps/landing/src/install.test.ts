@@ -111,7 +111,7 @@ describe("detectInstall", () => {
 })
 
 describe.each(["index.html", "how-aztec-works.html"])("%s", (page) => {
-	// The listings open on 3 Nov 2026; until then a page links no store and serves no button for
+	// Until the store listings open, a page links no store and serves no button for
 	// `mountInstall` to turn into one.
 	it("links no store and serves no install button before the listings open", () => {
 		const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8")
