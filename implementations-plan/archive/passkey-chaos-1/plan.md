@@ -20,14 +20,14 @@ post_implementation_hardening: not scheduled
 - **Status:** delivered against `dev`: C1 and C3.1 in #1140 (`dde9b989b`, D-orch-3), C2 in #1156 (`5d4dff0f6`), C5 as one ready PR that carries this close-out, whose merge closes the plan; C4 deferred after 1.1.0 (D-orch-5, #1157).
 - **Shipped:** the seeded, model-based profile chaos on Chrome and Firefox (`apps/extension/tests/e2e/profile-chaos.test.ts`, `network/profile-chaos.test.ts`, `helpers/profile-chaos/`), oracles O1 to O7, each with a break fixture in `apps/extension/scripts/e2e/profile-chaos-model.test.ts`; A2's and A3's flows in the model (C3.1); the agent session launcher (`apps/extension/scripts/e2e/chaos-session.ts`, `helpers/chaos-session/`), its confinement probe, the charters and the triage (CHARTERS.md); C5's fixes to both (D76 to D80) and records that name their builds (D77); the campaign.
 - **Campaign (§ Campaign, at `36306f06b`):** 80 seeds at retry 0 (smoke 30 per browser, `pre-update` 5, network 5), 1,971 steps run, each seed red only on filed findings or incomplete for a planned restart's log window, but Chrome smoke 5016 (harness, D79) and Firefox network 5202 (#1135's other form, D80). Fleet wave 1: 12 Opus agents, 6,257 commands, 5.2 agent-hours (Chrome 2.0, Firefox 3.2). Findings: S2 open #1134, #1137, #1190; S3 open #1138, #1145 to #1147, #1149, #1150, #1170 to #1177, #1179 to #1182, #1184, #1185, and #1158 (another lane's); S4 open #1131 to #1133, #1135, #1136, #1148, #1178, #1183, #1186; fixed #1144 (#1155); no suspected weakness.
-- **Exit criteria (OA-C3 as page 87 reads it, D-orch-6):** 30 seeds per browser, met (30 smoke each, beside 5 `pre-update` and 5 network each). A fleet wave of 12 agents for 60 minutes, not met: wave 1 had about 31 minutes per agent (D76), wave 2 has 8 agents; #1189. No open S1 or S2, not met: #1134, #1137, #1190. Every finding filed, met. The Testnet pass, pending the owner's word; #1189. C4's flows in the seeded model, deferred, D-orch-5.
+- **Exit criteria (OA-C3 as page 87 reads it, D-orch-6):** 30 seeds per browser, met (30 smoke each, beside 5 `pre-update` and 5 network each). A fleet wave of 12 agents for 60 minutes, not met: wave 1 had about 31 minutes per agent (D76), wave 2 has 8 agents; #1189. No open S1 or S2, not met: #1134, #1137, #1190. Every finding filed, met. The Testnet pass, pending the owner's word; #1189. C4's flows in the seeded model, deferred, D-orch-5. Wave 2's triage (§ Fleet wave 2): the owner counted wave 2, eight agents at the full sixty minutes, as the full-size wave (2026-10-26, chat), so the fleet criterion is met by that call.
 - **Review loop:** per arc, Codex at its three-round limit with an Opus agent beside its first round (C1, C3.1, C2, C5) and C2's landing round; then one fresh Codex session over every arc, resumed twice to convergence. Every round is in § Review verdicts.
 - **Gates at the head:** `origin/dev` merged at `c1015f234` (`fa20f3134`: #1168's onboarding create fix, which re-cites three model lines, #1187, #1188); there `bun run lint`, `typecheck:all` and `test` (15,689 passed) exit 0, the model and launcher unit tests 295 at retry 0 (the D79 and D80 cases red on the previous checker), smoke seeds 5001 to 5005 per browser on a rebuilt armed dist red only on filed findings or incomplete (restart only), every step run; `check:plans` green after the move.
 - **Suite wall-clock:** unchanged by C5: each suite still carries one chaos test, skipped without `NULO_E2E_CHAOS`, and C5 changes no smoke or network scenario.
 - **Deviations:** C3 absorbed into C1's PR (D-orch-3); C4 deferred (D-orch-5); the fleet gate unmet (D76, D-orch-6); D79 and D80 landed after the campaign's pass, both allowances, which can only turn a red seed green.
 - **Dropped:** C4.2's in-process sequence test (D19) goes with C4 to #1157.
 - **Known limits:** #1151; met, not this plan's: #432. The harness's own limits are in the ledger (Chrome passkeys on the anchor page only, D11; three resident credentials, D27).
-- **Open items:** #1189 (the Testnet pass and a full-size wave, with wave 2's triage, the orchestrator's), #1157 (C4), and the open findings above, each graded on its issue.
+- **Open items:** #1189 (the Testnet pass stands by the owner's own manual pass, and wave 2 counts as the full-size wave, both recorded on the issue; wave 2's triage is § Fleet wave 2), #1157 (C4), and the open findings above, each graded on its issue.
 - **Lessons:** one promoted (the e2e virtual authenticator approves silently and a fault lasts one command), one retired (6.0.0's oracle major, which the `aztec-update` skill holds).
 - **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
@@ -632,6 +632,26 @@ Twelve Opus agents from 16:50:30 to 17:22:17 UTC, six per browser, on sessions s
 | a12 | CH8 | Firefox | 32 | 624 | 4 / 1 | #1146, #1149 | deadline | same; 10 snapshot differences |
 
 A snapshot difference is a testid that one run showed and the other did not at the same command (a toast, a balance still loading); no replay met a finding the original did not, or missed one before it diverged, except a05's #1131 line arriving one command later. a01 and a03 diverged in every try, so their tries 2 and 3 ran on the armed dist after the campaign.
+
+### Fleet wave 2
+
+Eight Opus agents on wave 1's charter and browser pairs of a01, a02, a03, a04, a07, a09, a11 and a08, on sessions started at 17:26:10 UTC with 65-minute deadlines and spawned at 17:27:40, so D76 held: Firefox agents had 62 to 64 minutes. The launcher ran at `788258ef1` with uncommitted harness changes; its armed builds are byte-identical to `36306f06b`'s, which changes no `src/` file. 5.7 agent-hours: Chrome 1.5, Firefox 4.2. Every session replayed once on `36306f06b`, and every finding met before a divergence replayed. Counted as in wave 1.
+
+| Agent | Charter | Browser | Minutes | Commands | New S3 / S4 | Filed met | Ended | Replay |
+|---|---|---|---|---|---|---|---|---|
+| b01 | CH1 | Chrome | 21 | 360 | 1 / 0 | #1148, #1149, #1177, #1178, #1183 | screenshot hang (D78) | same to the same hang; 2 snapshot differences (a reuse's credential at 259, #1150 at 359) |
+| b02 | CH3 | Chrome | 39 | 903 | 1 / 0 | #1146, #1148, #1151, #1171, #1173, #1175, #1178, #1179, #1181 | screenshot hang (D78) | diverged at 419: the reuse at 411 took another credential |
+| b03 | CH4 | Chrome | 27 | 558 | 1 / 0 | #1170, #1172, #1173, #1175, #1178, #1179, #1181 | screenshot hang (D78) | same to the same hang; 3 snapshot differences |
+| b04 | CH5 | Chrome | 5 | 68 | 0 / 0 | #1148 | screenshot hang (D78) | same to the same hang |
+| b05 | CH2 | Firefox | 64 | 1115 | 0 / 0 | #1147, #1178, #1180, #1181, #1184, #1185 | the agent's end | same to command 1100, where the replay's deadline fell; 9 snapshot differences |
+| b06 | CH7 | Firefox | 62 | 1186 | 0 / 0 | #1147, #1151, #1178, #1184, #1185 | the agent's end | same; 11 snapshot differences |
+| b07 | CH8 | Firefox | 64 | 1060 | 0 / 0 | #1146, #1173, #1175, #1176, #1178, #1179 | deadline | diverged at 536: another fallback profile (#1150) |
+| b08 | CH3 | Firefox | 64 | 1312 | 0 / 0 | #1146, #1151, #1170, #1172, #1173, #1174, #1175, #1178, #1179 | deadline | diverged at 527: another fallback profile after a delete (#1150) |
+
+- **New, S3, no S1 or S2:** #1195 (a full backup sealed under a password another window has replaced; b02, replayed), #1196 (the export banners' "profile password" after a later change, an owner copy decision; b03), #1197 (a register window that stays put after another window creates and opens a profile; b01, replayed). #1178 gained the one error line it did not list.
+- **Fixed in flight, read from the branches' diffs:** the pilot's fixes answer #1146 to #1150 and the lock screen's half of #1179; passkey-ux-1 (#1191) answers b07's unlock-method page staying open after its change.
+- **Not findings:** the silent authenticator again (b05, b06, b07 armed a fault after "Use a password instead", whose press asserts the passkey; b07 and b08 read Full Backup's agreement as asking none), and the behaviour wave 1 lists as allowed.
+- **Harness, all recurring:** every Chrome session ended on D78's hung capture of a page behind a later window, which the head keeps terminal by design; closed popups linger in Chrome snapshots; discoverable requests over several credentials wait on Firefox and diverge Chrome's replays; Firefox pages stop taking focus for key input; the replay compares late-loading content. Wave 2's prompts were wave 1's, so it met the silent authenticator, the single-command faults and the three-credential cap again. lessons/phase-C5.md has the proposals.
 
 ### Findings
 
