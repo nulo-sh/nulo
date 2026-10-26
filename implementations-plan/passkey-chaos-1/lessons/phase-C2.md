@@ -78,6 +78,17 @@ What else the probes taught:
 - This account's stored login had lapsed (`claude auth status`: not logged in), so agents run through `claude-usage run best`, which picks the roster account with headroom; no account name appears in any command or file.
 - An agent refused, on its own judgment, the items that expanded credential variables into `report`; a model's refusal is not the boundary, so the environment was checked by a fixed command instead. One such check ran with permissions bypassed in a scratch directory; it was redone under the normal permissions and its result is the one above.
 
+## C2.2 pilot, round 1 (2026-10-26, before the review)
+
+Three agents on the final spawn line, on the code before the review: CH1 on Chrome (103 commands), CH3 on Firefox (112), CH2 on Firefox (107). Each ran about five to six minutes, not thirty: the prompt told it to wind down near 100 to 120 commands. No permission denial in any transcript; every session ended on the agent's `end`, `stop` was graceful and nothing was left. Replays: CH3's differed only in the code revision; CH1's and CH2's also in the O1 lines the harness fix below removed.
+
+Triage of what the agents and the checks reported (CHARTERS.md § Triage):
+
+- **Harness artifacts, fixed in the harness:** O1 read `/popup/profile/new` and `/popup/settings/security/reset` as unlocked-only routes, but the lock screen opens both (every route whose meta sets `isAuthRequired: false` now counts as shown while locked); O2's passkey row fields predate the row's sealed slots (`apps/extension/src/wallet/services/profile/profile-row.ts:5-10`), the other lead's stale table, recorded there; an agent read "the button does nothing" where the wallet showed the empty-name error as `role="alert"` text with no testid (`apps/extension/src/components/composite/ProfileNameField.vue:34`), which the snapshot did not list.
+- **Behaviour the contract allows:** an error notice stays until closed, across screens (CLAUDE.md § Common patterns, toasts), so a passkey error still showing after a later success is the contract; `no-prf` on a create applied to nothing, since the fault is an assertion's (now documented and reported when unspent); a passkey profile created from the popup leaves the phrase to the Get started card.
+- **Product candidates:** both full-backup import forms say "Select a .json or .txt file" though an export is a gzip (`ImportFullBackupForm.vue:73`, `settings/accounts/import.vue:212`); every red confirm is labelled "Irreversible" (`ConfirmPopup.vue:60`), including the strict-mode disable, which one click undoes; turning strict mode off says re-entry is skipped across restarts, yet the next restart asked for the password (the bearer is minted at the next unlock); a second lock screen keeps showing the profile it opened on after another window switched, and its Continue then unlocks that profile and moves the other window; opening the onboarding tab after onboarding logs `Failed to fetch dynamically imported module` at error level on Chrome as the tab closes itself (every tour).
+- **Suspected weaknesses:** 1, held privately (CHARTERS.md § Triage, step 1) and withdrawn when round 2 retested it: the run had armed its fault too late, and the wallet behaved as it should.
+
 ## Review round 1 (2026-10-26, Codex gpt-6.1-sol high read-only, and an Opus agent beside it)
 
 Codex: reject, 9 must-fix and 2 consider; Opus: conditional approve, 4 must-fix and 9 consider, six of them shared. Each finding was read in the tree before its disposition; all were accepted but one (plan.md § Review verdicts, D54 to D58).
@@ -101,5 +112,66 @@ Reject, 7 must-fix and 1 consider; 6 accepted and fixed, 2 declined (plan.md § 
 
 Reject on two replay-determinism defects, both fixed without a fourth round; every round-2 fix confirmed closed and both declines accepted (plan.md § Review verdicts).
 
-- An id mask that needs a digit misses about one 8-hex id in 2,600 (`(6/16)^8`): rare per run, certain across a fleet.
+- An id mask that needs a digit misses about one 8-hex id in 2,560 (`(6/16)^8`): rare per run, certain across a fleet.
 - The profile repository declares its enumeration order unspecified (`apps/extension/src/wallet/services/profile/repository.ts:51`), so a list position is no identity across runs; the order the session first saw each profile is.
+
+## C2.2 pilot, round 2 (2026-10-26, at `e2c1b37b4`)
+
+Three agents on Opus on the spawn line (CHARTERS.md § Fleet permissions), sessions of 30 minutes started together; the prompt now asks for the whole session (CHARTERS.md § Rules).
+
+| Charter | Browser | Commands | Agent ran | Cost | Reports | Denials |
+|---|---|---|---|---|---|---|
+| CH1 | Chrome | 433 | 22.0 min | $7.56 | 20 | 0 |
+| CH2 | Firefox | 270 | 17.6 min | $4.30 | 14 | 0 |
+| CH3 | Firefox | 354 | 15.7 min | $5.10 | 11 | 0 |
+
+- Every session ended at its deadline (an agent that stops early leaves its session to run out); every `stop` was graceful and an independent scan found no process left.
+- $0.24 to $0.34 per agent-minute on these charters: OA-C1's two waves of 12 × 60 minutes cost about $350 to $500 if every agent drives the whole hour, less if they stop early as here, after 52 to 73 % of the session.
+- Unfiled lines (787, 270, 274) are almost all the other lead's stale O2 table (§ The other lead's reds); incomplete checks 6, 7 and 5, each a planned restart or a fault that met no prompt.
+
+Triage (CHARTERS.md § Triage), each read in the tree before its class:
+
+- **Filed:**
+  - #1144 (S2): a negative auto-lock locks every profile out (CH2 175 to 247; the replay's unlocks also hang 30 s).
+  - #1145 (S3): two windows creating profiles at once put OA-8's message on the wrong window (CH1 259, 391 to 396).
+  - #1146 (S3): the full-backup import asks for `.json` or `.txt`.
+  - #1147 (S3): every red confirm reads "Irreversible".
+  - #1148 (S4): the onboarding tab's self-close logs at error level on Chrome.
+  - #1149 (S3): a lock screen keeps its profile after another window picks another.
+  - #1150 (S4): after deleting its profile, the lock screen falls back to an arbitrary one.
+  - None dedupes against an earlier issue; #100 is the decision #1145 departs from.
+- **Already filed:** "Client disconnected" at error level on Firefox's first passkey `do` is #1132.
+- **The contract:** a PRF error logged when an armed `no-prf` fails a passkey export; strict mode off taking effect at the next unlock (`session-manager.ts:767`); the duplicate-wallet dialog naming one profile; Escape on the phrase page; back as history.
+- **Owner-decision candidates, not filed:**
+  - revealing the phrase counts as saving it (CH1 81, 132);
+  - deleting a profile whose phrase was never saved warns no more than any delete (CH1 181);
+  - auto-lock `0` saves with no confirmation (CH2 173).
+- **Harness:**
+  - an agent read a refused click as "nothing happens" where the wallet showed error or hint text with no testid (`ProfileNameField.vue:34`, `NewProfileCredentials.vue:43`), so a snapshot now lists a screen's untagged visible text (none on network routes) and marks an invalid field;
+  - CH3 32 (the first `do` password profile named "Main") is C1's catalog;
+  - CH1 337 is the planned restart's incomplete line.
+- **Suspected weaknesses:** none.
+
+Replays (`replay <dir>`, at the same commit and build):
+
+- **CH1:** 4 differences.
+  - The `end` the replay's stop sent after an original that ended at its deadline.
+  - Command 313's opened page read `#/popup` in one run and `#/popup/general` in the other, before it settled.
+  - At command 275, a background restart caught a PXE request in flight in the replay only (`foundation:retry` logged a failed fetch at error level), and so the end's unfiled list differed.
+  - Every other command, path and the end matched, the two-window creates included.
+- **CH2:** 19 differences.
+  - The stop's `end`, three opened pages' first routes, the O5 lines' loading lists (an unlock click hung 30 s in both runs, once with `aria-busy` read at the bound and once with nothing) and a gas refresh mark.
+  - From command 229: after the reset at 221 to 228 deleted the selected profile, the lock screen fell back to a passkey profile in one run and a password profile in the other (#1150), so the next unlock clicks met another screen.
+- **CH3:** 16 differences.
+  - The stop's `end` and two opened pages' first routes.
+  - The backup the wallet exported was 1474 bytes in one run and 1471 in the other, so every pick's size differed, and a flip at byte 1473 fell past the replay's copy.
+  - Command 123 met the other fallback profile (#1150).
+
+Fixed in the harness (`e27ea8dd9`, D60):
+
+- an opened page compares by its id;
+- a pick compares by being picked;
+- a position in a file's second half is recorded from its end;
+- a finding's loading list, refresh and skeleton marks, and the stop's `end` are left out.
+
+A live check on each browser then replayed to the same end: a 3-minute session ending at its deadline that exports a backup, picks it with a flip and a cut in its second half (recorded as -3 and -5), opens a page and reads "Profile name is required." beside an invalid name field. The difference #1150 causes stays until that issue is fixed.
