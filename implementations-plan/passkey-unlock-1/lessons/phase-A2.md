@@ -81,3 +81,42 @@ What the survivors had in common: each guarded a refusal another check already r
 | LG2 | prf-salt is not redacted | `utils.test.ts` › trim — secret key names blanks prf-salt |
 | BK1 | a profile's identity carries the whole row | `service.integration.test.ts` › account-integrity delegate — the session-open chokepoint imported-keys DEK lifecycle recovery mode: a degraded unlock projects `recoveryMode` on the live info only, and the DEK-keyed derivation refuses |
 | CR1 | the passkey phrase stage asks a password | `create.test.ts` › onboarding create — the recovery phrase step a passkey wallet reads its words once with the answer it was made from, before bootstrap, then shows them as step 3 |
+
+## 2026-10-26 · Final mutation pass
+
+At `038a064ae`, 77 mutations: the 62 of the first pass, all caught again, and 15 for the review's fixes. 76 were caught on the first run. AX2 survived: on every test path `exportPlain` refuses first, so no test saw the account export open an imported key from the session instead of by the password. A test now opens it while another profile is unlocked (`c13530bab`), and AX2 is caught: 77/77. The new rows:
+
+| Id | Mutation | Caught by |
+|---|---|---|
+| SB9 | the input decodes before the wipe's try | `passkey-credential.test.ts › PasskeyCredential wipes the decoded output when the input does not decode` |
+| EP1 | an empty password is refused as missing on every path | `service.open-slots.test.ts › an empty password gets each password path's own wrong-password refusal; exportPlain asks for a password` |
+| EP2 | exportPlain counts an empty password as a wrong one | `service.open-slots.test.ts › an empty password gets each password path's own wrong-password refusal; exportPlain asks for a password` |
+| PK1 | an overtaken import pick publishes its selection | `useFullBackupImport.test.ts › useFullBackupImport — a passkey profile's backup a pick a later pick overtook while it read publishes nothing, when its read refuses its body` |
+| PK2 | an overtaken import pick publishes its read error | `useFullBackupImport.test.ts › useFullBackupImport — a passkey profile's backup a pick a later pick overtook while it read publishes nothing, when its read fails` |
+| PK3 | an overtaken Restore again pick publishes its selection | `useRestoreAgain.test.ts › useRestoreAgain: refusals change nothing an earlier passkey body, even the one the reminder names a pick a later pick overtook while it read publishes nothing, when its read refuses its body` |
+| PK4 | an overtaken Restore again pick publishes its read error | `useRestoreAgain.test.ts › useRestoreAgain: refusals change nothing an earlier passkey body, even the one the reminder names a pick a later pick overtook while it read publishes nothing, when its read fails` |
+| PK5 | a pick takes no serial, so none is ever overtaken | `useFullBackupImport.test.ts › useFullBackupImport — a passkey profile's backup a pick a later pick overtook while it read publishes nothing, when its read refuses its body` |
+| PK6 | an import pick back from its chooser during a restore publishes | `useFullBackupImport.test.ts › useFullBackupImport — a passkey profile's backup a pick a restore overtook while its chooser is open publishes nothing over the run` |
+| PK7 | an import restore's start leaves a reading pick current | `useFullBackupImport.test.ts › useFullBackupImport — a passkey profile's backup a pick a restore overtook while its read runs publishes nothing over the run` |
+| PK8 | a Restore again pick back from its chooser during a run publishes | `useRestoreAgain.test.ts › useRestoreAgain: refusals change nothing an earlier passkey body, even the one the reminder names a pick a restore overtook while its chooser is open publishes nothing over the run` |
+| PK9 | a Restore again run's start leaves a reading pick current | `useRestoreAgain.test.ts › useRestoreAgain: refusals change nothing an earlier passkey body, even the one the reminder names a pick a restore overtook while its read runs publishes nothing over the run` |
+| AX1 | the reset-held export opens the DEK from the session | `full-backup-keys.test.ts › account exports — a retired profile row exportResetHeldAccount opens the key of a password row, and refuses the same row retired before it opens one or writes` |
+| AX2 | the account export opens an imported key from the session DEK | **survived the first run**; now `full-backup-keys.test.ts › exportAccount — an imported account's key opens under the profile's own DEK by its password while another profile is unlocked` |
+| AX3 | the account export skips the master check | `full-backup-keys.test.ts › account exports — a retired profile row exportAccount, a derived account opens the key of a password row, and refuses the same row retired before it opens one or writes` |
+
+## 2026-10-26 · Flake checks
+
+- **Unit, component and composition**, 30 consecutive runs at retry 0 at `038a064ae`, over the 49 test files A2 adds or edits:
+  - wallet-crypto (4 files, 29 tests) 30/30;
+  - extension-messaging (1 file, 194 tests) 30/30;
+  - extension (44 files, 1315 tests) 30/30;
+  - `full-backup-keys.test.ts` again after its last edit (`c13530bab`, 22 tests) 30/30.
+- **Void batches.** The first unit batch is void from extension run 20: a red-verify edit of `useRestoreAgain.ts` in the same tree overlapped it. The first e2e batch is void too: HEAD moved past the candidate it had built, and the replay refuses a stale candidate. Both were rerun from the start at the final head. The final mutation pass ran in a scratch worktree so it could run beside them.
+- **E2E**, 5 runs per browser at retry 0 at `038a064ae`. The smoke files were `legal-acceptance`, `onboarding-tab`, `passkey-backup`, `passkey-paths`, `passkey-retry`, and `toolbar-panel` on Firefox; the update replay ran from v0.31.0.
+  - Chrome: smoke 5/5 (30 tests), replay 5/5.
+  - Firefox: smoke 4/5 (35 tests), replay 5/5.
+- **The Firefox red (run 2).** `toolbar-panel` › "export, restore and the contacts import leave the dying panel for windows of their own" timed out at "the picker's input clicked and cancelled": after 10 s the input was still connected.
+  - That step is the contacts import's file chooser. It is unchanged since #1026, and no A2 change reaches it.
+  - Headless Firefox cancels the chooser at once, but not within 10 s on that run, with the host's 5-minute load near 120.
+  - The file passed the other 4 runs, then 3 more runs alone (load1 54 to 82).
+
