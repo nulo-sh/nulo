@@ -108,11 +108,14 @@ describe("visibility", () => {
 		expect(visible(passkey)).toEqual(expect.arrayContaining(["lock-strict-mode", "hub-unlock-method"]))
 		expect(settingsRow("hub-unlock-method", passkey).description).toBe("Passkey")
 		expect(settingsRow("hub-unlock-method", CHROME).description).toBe("Password")
+		expect(settingsRow("hub-lock", passkey).description).toBe("Auto-lock, strict mode")
+		expect(find("strict", passkey)).toEqual([
+			["Safety", ["hub-lock"]],
+			["Lock", ["lock-strict-mode"]],
+		])
 	})
 
 	test("a context-dependent description resolves from the context", () => {
-		expect(settingsRow("hub-lock", CHROME).description).toBe("Auto-lock, strict mode")
-		expect(settingsRow("hub-lock", { ...CHROME, passkey: true }).description).toBe("Auto-lock")
 		expect(settingsRow("hub-proving", { ...CHROME, provingStatus: "Presto · update needed" }).description).toBe(
 			"Presto · update needed",
 		)

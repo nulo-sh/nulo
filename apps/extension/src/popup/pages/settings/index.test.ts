@@ -176,11 +176,11 @@ describe("settings hub — rows", () => {
 		expect(groups.map((g) => g.props("danger"))).toEqual([false, false, false, false, false, false, true])
 	})
 
-	test("a passkey profile sees no Change password row, and Lock describes auto-lock only", async () => {
+	test("a passkey profile sees no Change password row, and Lock names strict mode too", async () => {
 		const w = await mountHub(PASSKEY)
 		expect(rowIds(w)).toEqual(PASSWORD_ROWS.map(([id]) => id).filter((id) => id !== "change-password-link-btn"))
 		const lock = w.findAllComponents(SettingItem).find((row) => row.attributes("data-testid") === "setting-nav-lock")
-		expect(lock?.props("description")).toBe("Auto-lock")
+		expect(lock?.props("description")).toBe("Auto-lock, strict mode")
 		const unlock = w.findAllComponents(SettingItem).find((row) => row.attributes("data-testid") === "setting-nav-unlock-method")
 		expect(unlock?.props("description")).toBe("Passkey")
 		expect(w.get('[data-testid="setting-nav-profile"]').text()).toContain("Passkey profile")

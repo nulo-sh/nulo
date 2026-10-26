@@ -392,15 +392,15 @@ onBeforeUnmount(() => {
 	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 
 	max-width: 120px;
 	flex-shrink: 1;
 	min-width: 0;
 	min-height: calc(1lh + 14px);
 
-	/* At the popup's width, 5px sides hold "TESTNET" whole with 2px to spare; 6px cut it by a fraction of a pixel. */
-	padding: 6px 5px;
+	/* At the popup's width, 3px sides and the 4px gap hold "ALPHA V6", the default's name, whole. */
+	padding: 6px 3px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;

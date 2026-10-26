@@ -1,6 +1,6 @@
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { classifyPasskeyFailure } from "@/utils/passkey-copy"
-import type { PasskeyDisplay, PasskeyRequest } from "@/wallet/services/passkey/spec"
+import type { NewPasskeyDisplay, PasskeyRequest } from "@/wallet/services/passkey/spec"
 import { newProfilePasskeyRequest, type SavedPasskeyCredential } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 
@@ -23,8 +23,8 @@ export type NewProfileUnlock =
 export function useNewProfilePasskey(runCeremony: (request: PasskeyRequest) => Promise<PasskeyCredentialData>) {
 	let unconfirmed: { name: string; credential: SavedPasskeyCredential } | null = null
 
-	async function ask(display: PasskeyDisplay, existing = false): Promise<PasskeyCredentialData> {
-		const name = display.profileName ?? ""
+	async function ask(display: NewPasskeyDisplay, existing = false): Promise<PasskeyCredentialData> {
+		const name = display.profileName
 		const saved = !existing && unconfirmed?.name === name ? unconfirmed.credential : undefined
 		try {
 			return await runCeremony(newProfilePasskeyRequest(display, { existing, saved }))
