@@ -46,8 +46,8 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Data | Where it lives | Leaves the device | Destination |
 |---|---|---|---|
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
-| Passkey credential id and sealed key material | Extension local storage | Only when the user exports a backup file | The file the user saves (`downloads`) |
-| Passkey label (profile name + short handle) | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:47-57` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
+| Passkey credential id and the random value it is used with | Extension local storage | No | — |
+| Passkey label ("Nulo wallet") | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:40-44` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
 | Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
 | Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
@@ -176,6 +176,15 @@ match them.
 | Privacy policy | The text of `legal/privacy.md` at its current version, as published at https://nulo.sh/privacy, pasted as § Privacy policy text says |
 | Channel | Listed |
 
+### Release notes
+
+The version's "Release notes" field, which Chrome's dashboard does not have. For 1.1.0, the first
+version in which passkey profiles have a recovery phrase:
+
+```
+Passkey profiles now keep a recovery phrase. A passkey profile made with an earlier version needs to be set up again.
+```
+
 ### Privacy policy text
 
 AMO's privacy field renders Markdown but deletes headings, so the policy goes in with each heading
@@ -204,11 +213,11 @@ The value here must equal the manifest's; the test enforces it. Firefox's taxono
 `authenticationInfo` (passwords and keys never leave the device), `browsingActivity` /
 `websiteActivity` / `websiteContent` (connected-app origins are stored locally and sent nowhere),
 `personallyIdentifyingInfo` (contacts and profile names stay local). One reading is contestable
-and is stated in `legal/privacy.md` § 5.4: for passkey profiles a label derived from the profile
-name and an identifier are handed to the browser's WebAuthn API and on to the user's authenticator
-(`wallet/utils/passkey-label.ts:51-53`); the declaration treats that as the browser acting at the
-user's request, not the add-on sending data to a party of its choosing. Chrome's form covers local
-handling as well and so ticks more boxes; the two differ by design.
+and is stated in `legal/privacy.md` § 5.4: for passkey profiles the label "Nulo wallet" and a random
+identifier are handed to the browser's passkey interface (`wallet/utils/passkey-label.ts:6`); the
+declaration treats that as the browser acting at the user's request, not the add-on sending data to
+a party of its choosing. Chrome's form covers local handling as well and so ticks more boxes; the
+two differ by design.
 
 ### Reviewer notes
 

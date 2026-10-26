@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.1 — effective 26 October 2026**
+**Version 1.2 — effective «FILL: effective date»**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -88,8 +88,7 @@ control and then selecting Continue.** Nulo records that acceptance on your devi
 you accepted and the time; the record is not sent anywhere and is not part of a backup. These Terms
 apply from that acceptance and do not retrospectively change rights or liabilities arising before it.
 
-Before accepting, review the network, security and recovery risks in §§ 4–5. **Recovery options
-differ between password and passkey profiles** — see § 4.3.
+Before accepting, review the network, security and recovery risks in §§ 4–5.
 
 If you do not meet the conditions above, or do not agree, you must not install or use Nulo, and you
 should uninstall it.
@@ -98,9 +97,9 @@ should uninstall it.
 
 This section is the most important one in this document.
 
-**4.1 How your keys are protected.** Password profiles derive their master secret from a recovery
-phrase. Passkey profiles derive it from the original WebAuthn credential's PRF output. Separately
-imported accounts may use signing keys that are not derived from either profile's master secret.
+**4.1 How your keys are protected.** Every profile has a recovery phrase, and the accounts in it
+come from that phrase. A password or a passkey unlocks the profile on your device. Separately
+imported accounts may use signing keys that do not come from the recovery phrase.
 
 The Developer does not receive or escrow your signing credentials through normal wallet operation.
 Your ability to control them depends on the security of your device, your authenticator and your
@@ -108,24 +107,13 @@ recovery material.
 
 **4.2 There is no reset and no backdoor.** The Developer cannot reset your credentials or recover
 your keys. Losing access becomes permanent if no working credential or supported recovery material
-remains. A password-profile recovery phrase can restore accounts derived from that phrase in a
-compatible version; it does not restore separately imported account keys or every item of local
-wallet data.
+remains. A recovery phrase can restore accounts derived from that phrase in a compatible version;
+it does not restore separately imported account keys or every item of local wallet data.
 
-**4.3 Passkey profiles do not have a recovery phrase.** This is the most important sentence on this
-page for anyone using a passkey. Nulo cannot export a recovery phrase for a passkey profile, and no
-phrase exists that would restore one.
-
-Recovery requires the same passkey credential identifier and the same PRF output used to create the
-profile, through a compatible browser and authenticator. A synced copy or supported cross-device use
-can satisfy this requirement; the original physical device is not necessarily required. A full
-backup does not replace that credential. Recreating a passkey with the same name does not recreate
-the wallet. Do not assume that moving a passkey between providers preserves the credential and PRF
-behaviour that Nulo requires.
-
-The credential alone does not restore separately imported account keys or all local wallet data;
-those require appropriate intact backup material. **Successful profile restoration is not proof that
-every account was recovered.**
+**4.3 A passkey unlocks; it does not restore.** A passkey unlocks your profile on the device where
+you set it up. It does not bring a profile back by itself: on a new device, or if the passkey is
+lost, you restore with the recovery phrase or a full backup and choose how to unlock again. A
+passkey profile made with a version before 1.1 cannot be opened in this version.
 
 **4.4 Backups and exports are your responsibility.** Available exports depend on profile type and
 include full backups and, for supported profiles or accounts, recovery phrases or account-key
@@ -195,8 +183,8 @@ Clearing browser data, removing the extension, a browser or profile reset, disk 
 storage upgrade, or a change to the Aztec protocol can destroy it.
 
 Keep recovery material outside the browser appropriate to your profile and accounts. A recovery
-phrase alone does not restore passkey profiles, separately imported keys or all local application
-data, and cannot repair an incompatible or unavailable network.
+phrase alone does not restore separately imported keys or all local application data, and cannot
+repair an incompatible or unavailable network.
 
 **5.6 Future versions may not be backward compatible.** Certain changes, particularly to how
 accounts are derived, cannot be applied to existing profiles. If such a change becomes necessary, it
@@ -498,9 +486,8 @@ current version is published at `nulo.sh/terms`. Previous versions remain archiv
 
 If you decline revised Terms, they do not take effect by that refusal alone. Declining will not
 itself disable the backup or export functions available for your profile under the previously
-accepted Terms. Those functions still require the relevant credentials and functioning software, and
-passkey backups still require the original credential for recovery. Changes do not retrospectively
-alter accrued claims.
+accepted Terms. Those functions still require the relevant credentials and functioning software.
+Changes do not retrospectively alter accrued claims.
 
 ## 21. Ending this agreement
 
@@ -579,3 +566,4 @@ public feedback forms.
 |---|---|---|
 | 1.0 | Never in effect | A draft, replaced by 1.1 before it took effect. |
 | 1.1 | 26 October 2026 | First version in effect. |
+| 1.2 | «FILL: effective date» | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
