@@ -216,7 +216,16 @@ NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1 NULO_E2E_CHAOS_RUNS=5 NULO_E2E_MIGRATION_
 - `NULO_E2E_CHAOS_ACTIONS` replays a hand-trimmed list instead: a JSON array of `{ action, params }` or a path to one, such as a record's `plan`.
 - Each run writes its replay record to `.e2e-state/profile-chaos/<browser>-<seed>-<launch>.json`: the plan, the bindings, and each step's outcome and evidence. Every URL and secret in the record is masked.
 - A seed is **green** only when every step ran with complete evidence. A planned restart leaves its step **incomplete**: the logs of the background it stops cannot be read. A violation turns the seed **red** and stops it, unless it is an instance of a filed finding (`KNOWN_FINDINGS`): that keeps the seed red, names the issue, and lets the run go on.
-- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). With no node behind the smoke run, the stand-in's refusal is accepted only there (`allowedFor`).
+- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). Every launch is guarded, so the stand-in's refusal of a node call outside the run is accepted on both files (`GUARDED_NODE_REFUSAL`).
+
+`network/profile-chaos.test.ts` runs the same catalog against the sandbox and the playground, plus a dApp that asks to connect while the wallet is locked or while a passkey unlock is held, and a restore held at `service-restore` or `account-state` that a lock, a restart or a delete meets. Every profile a step opens for the first time goes on Local Network first. The restore gate exists only in a proverless build:
+
+```bash
+NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1001 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 \
+  bun run e2e:agent tests/e2e/network/profile-chaos.test.ts
+```
+
+Run it from the repository root. The runner rebuilds `dist/<browser>` proverless, so rebuild the smoke dist before the next smoke chaos run.
 
 ## Running multiple agents in parallel
 

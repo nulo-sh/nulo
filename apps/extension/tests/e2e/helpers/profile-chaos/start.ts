@@ -3,6 +3,7 @@ import { LOCAL_NETWORK_RPC_URL } from "@/wallet/services/network/seeds"
 import type { ExtensionContext } from "../../fixtures/extension"
 import { holdNodeStub } from "../../fixtures/node-stub"
 import { setupPasskeyVirtualAuth } from "../../fixtures/passkey"
+import { callService } from "../../fixtures/session"
 import { openPopup } from "../../fixtures/wallet-pages"
 import { ErrorCollector } from "./collect"
 import type { Caps } from "./model"
@@ -25,6 +26,9 @@ export async function startRun(
 	await errors.start()
 	const anchor = await openPopup(ctx)
 	errors.watch(anchor, "anchor")
+	// Debug mode keeps every level in the log ring, so the leak scan reads the lines a default
+	// wallet drops at the source.
+	await callService(anchor, "config", "setValue", ["debugMode", true])
 	const auth = await setupPasskeyVirtualAuth(ctx.browser, anchor)
 	const state = newRunState({ ctx, caps, anchor, auth, errors, dir, network })
 	return Object.assign(state, {

@@ -2,6 +2,7 @@
  *  page, and the corrupted copies a restore must refuse. */
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import type { Page } from "puppeteer"
 import { clickByTestId, pickFileByTestId, replaceInputValue } from "../../fixtures/dom"
 import { downloadEncryptedBackup, downloadPlainPasskeyBackup } from "../backup-export"
 import { setInputs } from "../import-drivers"
@@ -80,6 +81,7 @@ async function decrypt(s: RunState, file: ModelFile, wrong: boolean): Promise<bo
 	)
 	await clickByTestId(page, "import-full-backup-decrypt-btn")
 	const { label } = await firstSignal(page, [ERROR, { label: "form", testid: "import-full-backup-password-input" }], 60_000)
+	if (label === undefined) throw new Error("the decrypt step showed neither a refusal nor the form")
 	return label === "form"
 }
 
@@ -107,6 +109,17 @@ async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["
 	return settle(page, [HOME, ERROR], { home: "committed", refused: "refused" }, 1_000)
 }
 
+/** Presses an errors screen's Continue, as a person keeping the restored profile would, and waits
+ *  for Home; false when the page shows none. */
+export async function continuePastErrors(page: Page): Promise<boolean> {
+	const shown = await page.evaluate(() => !!document.querySelector('[data-testid="import-full-backup-continue-btn"]'))
+	if (!shown) return false
+	await clickByTestId(page, "import-full-backup-continue-btn")
+	const home = await settle(page, [HOME], { home: "committed" }, RESTORE_MS)
+	if (!home.settle.reached) throw new Error("the errors screen's Continue never reached Home")
+	return true
+}
+
 /** Picks `file` on the import page the caller opened and fills the form up to its submit; false
  *  when the wallet refused the file on the way. */
 export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<boolean> {
@@ -114,7 +127,8 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 	await clickByTestId(page, "import-option-full-backup")
 	await pickFileByTestId(page, "import-full-backup-pick-file", variantPath(s, file, p.variant))
 	const picked = await afterPick(s)
-	if (picked === "refused" || picked === undefined) return false
+	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
+	if (picked === "refused") return false
 	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
 	if (file.method === "password") {
 		const password = secretFor(s, p.password)

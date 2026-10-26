@@ -27,7 +27,6 @@ export interface Signal {
 	noLocalKey?: string
 }
 
-/** The first of `signals` the page reaches within `boundMs`, or undefined. */
 export async function firstSignal(page: Page, signals: readonly Signal[], boundMs: number): Promise<{ label?: string; elapsedMs: number }> {
 	const t0 = Date.now()
 	const handle = await page
@@ -165,6 +164,18 @@ export async function authSubmitReady(page: Page): Promise<void> {
 	)
 }
 
+/** Waits for the lock screen's unlock attempt to end: Home, or the submit no longer busy and no
+ *  passkey prompt shown. The route cannot tell, since a pending attempt stays on it. */
+export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> {
+	await page.waitForFunction(
+		() =>
+			location.hash.includes("/popup/general") ||
+			(!document.querySelector('[data-testid="auth-submit"][aria-busy="true"]') &&
+				!document.querySelector('[data-testid="passkey-ceremony-dialog"]')),
+		{ timeout: ms, polling: 100 },
+	)
+}
+
 export async function typePasswordAndSubmit(page: Page, password: string): Promise<void> {
 	await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="auth-password-input"]', password)
@@ -200,7 +211,6 @@ export async function openRoute(page: Page, hash: string): Promise<void> {
 	await navigateByHash(page, hash, 15_000)
 }
 
-/** The profile the service reports open, or undefined. */
 export async function activeProfileId(page: Page): Promise<string | undefined> {
 	return (await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile"))?.id
 }
@@ -211,14 +221,12 @@ export async function confirmLeft(page: Page): Promise<void> {
 	await settleClosedPopup(page, "confirm-submit")
 }
 
-/** Answers the open confirmation popup, then waits for it to leave. */
 export async function answerConfirm(page: Page, answer: "submit" | "cancel"): Promise<void> {
 	await page.waitForSelector(`[data-testid="confirm-${answer}"]`, { visible: true, timeout: 10_000 })
 	await clickByTestId(page, `confirm-${answer}`)
 	await confirmLeft(page)
 }
 
-/** Waits until the hash's route, its query aside, is `route`. */
 export async function waitForRoute(page: Page, route: string, timeout: number): Promise<void> {
 	await page.waitForFunction((want: string) => location.hash.split("?")[0] === want, { timeout, polling: 200 }, route)
 }

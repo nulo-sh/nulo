@@ -141,7 +141,7 @@ function checkLiveProfile(p: ModelProfile, r: ProfileReading, b: Bindings, field
 	const out: Violation[] = []
 	const name = p.name ?? b.names.get(p.ref)
 	if (name !== undefined && (listed.name !== name || row.name !== name))
-		out.push(violation("O2", `${p.ref} is named "${listed.name}", not "${name}"`))
+		out.push(violation("O2", `${p.ref} does not hold the name the model gave it`, `named "${listed.name}", not "${name}"`))
 	if (listed.type !== p.method || row.type !== p.method) out.push(violation("O2", `${p.ref} is a ${row.type} profile, not ${p.method}`))
 	if (row.id !== row.keyId) out.push(violation("O2", `${p.ref}'s row names id ${row.id} under key ${row.keyId}`))
 	const want = [...fields[p.method]].sort().join(",")
@@ -405,19 +405,27 @@ export interface AllowedError {
 	during: readonly StepEnd[] | "any step"
 	source: string
 	reason: string
+	/** Every error message the entry carries must match, so one that also carries another error
+	 *  still fails. */
+	everyMessage?: true
+	/** Entries this one never covers, whatever they carry. */
+	except?: RegExp
 }
 
-/** The reviewed allowlist. */
 /** Every guarded launch, a sandbox run's included, holds a stand-in for each seeded remote node.
  *  The entry needs the stand-in's own refusal text, so an error from anything else still fails. */
 export const GUARDED_NODE_REFUSAL: AllowedError = {
 	pattern: /no node answers a guarded e2e run/,
 	kinds: ["log"],
 	during: "any step",
+	everyMessage: true,
+	// An unhandled rejection is a defect whatever it carries, and a failed restore is the user's.
+	except: /^\["(?:unhandled rejection|\[full-backup\] restore failed)/,
 	source: "code:apps/extension/tests/e2e/fixtures/node-stub.ts:12",
 	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
 }
 
+/** The reviewed allowlist. */
 export const ALLOWED_ERRORS: readonly AllowedError[] = [
 	{
 		pattern: /^Error: Client disconnected$/,
@@ -437,25 +445,33 @@ export interface KnownFinding {
 	kinds: readonly ErrorEntry["kind"][]
 	/** A log line's source, when the finding names one. */
 	source?: string
+	/** A page error counts only beside a log line of the same step matching this, from `source`
+	 *  of that line: the page cannot name its producer, the forwarder's line can. */
+	alongside?: { source: string; pattern: RegExp }
 }
+
+const UNHANDLED_LOCKED = /^\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]$/
 
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{
 		issue: 1131,
 		pattern:
-			/Failed to get (public|private) FeeJuice balance.*(has no current incarnation|"message":"Wallet locked"|PXE_STORE_KEY_MISSING)/,
+			/^\["Failed to get (?:public|private) FeeJuice balance",.*(?:has no current incarnation|"message":"Wallet locked"|PXE_STORE_KEY_MISSING)/,
 		kinds: ["log"],
+		source: "execution",
 	},
 	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
+	{ issue: 1133, pattern: UNHANDLED_LOCKED, kinds: ["log"], source: "ui" },
 	{
 		issue: 1133,
-		pattern:
-			/^(?:\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]|Error: (?:Wallet|Profile) locked)$/,
-		kinds: ["log", "page-error"],
+		pattern: /^Error: (?:Wallet|Profile) locked$/,
+		kinds: ["page-error"],
+		alongside: { source: "ui", pattern: UNHANDLED_LOCKED },
 	},
 	{
 		issue: 1135,
-		pattern: /^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation)/,
+		pattern:
+			/^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation|is being deleted — write rejected)/,
 		kinds: ["log"],
 		source: "fpc",
 	},
@@ -468,8 +484,18 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	},
 ]
 
-const isInstance = (k: KnownFinding, e: ErrorEntry): boolean =>
-	k.kinds.includes(e.kind) && (k.source === undefined || (e.kind === "log" && e.source === k.source)) && k.pattern.test(e.text)
+const isInstance = (k: KnownFinding, e: ErrorEntry, step: readonly ErrorEntry[]): boolean =>
+	k.kinds.includes(e.kind) &&
+	(k.source === undefined || (e.kind === "log" && e.source === k.source)) &&
+	k.pattern.test(e.text) &&
+	(k.alongside === undefined ||
+		step.some((o) => o.kind === "log" && o.source === k.alongside?.source && k.alongside.pattern.test(o.text)))
+
+/** The `message` values a logged entry carries, or the whole text when it names none. */
+function messagesOf(text: string): string[] {
+	const found = [...text.matchAll(/"message":"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1] as string)
+	return found.length ? found : [text]
+}
 
 const UNCAUGHT = /^Uncaught (?:\(in promise\) )?/
 const CLASSED = /^\w*(?:Error|Exception): /
@@ -504,7 +530,10 @@ export interface ErrorVerdict {
 }
 
 const allows = (a: AllowedError, e: ErrorEntry, ends: readonly StepEnd[]): boolean =>
-	a.kinds.includes(e.kind) && (a.during === "any step" || a.during.some((d) => ends.includes(d))) && a.pattern.test(e.text)
+	a.kinds.includes(e.kind) &&
+	(a.during === "any step" || a.during.some((d) => ends.includes(d))) &&
+	!a.except?.test(e.text) &&
+	(a.everyMessage ? messagesOf(e.text).every((m) => a.pattern.test(m)) : a.pattern.test(e.text))
 
 export function checkErrors(
 	entries: readonly ErrorEntry[],
@@ -526,7 +555,7 @@ export function checkErrors(
 			continue
 		}
 		const where = e.kind === "log" ? `error log from ${e.source}` : `${e.kind} on ${e.page}`
-		const finding = known.find((k) => isInstance(k, e))
+		const finding = known.find((k) => isInstance(k, e, entries))
 		violations.push({ ...violation("O4", `${where}: ${errorClass(e.text)}`, e.text), ...(finding ? { known: finding.issue } : {}) })
 	}
 	return { violations, warns, allowed: accepted }
@@ -620,8 +649,10 @@ export interface VerifyReading {
 }
 
 /** Profiles that must derive the same accounts: those sharing a phrase or a credential. */
+/** Profiles that share `p`'s phrase or credential, deleted ones included: a restore must derive the
+ *  addresses its source derived before that source was deleted. */
 function siblings(w: World, p: ModelProfile): ModelProfile[] {
-	return live(w).filter(
+	return w.profiles.filter(
 		(x) => x.ref !== p.ref && ((p.phrase && x.phrase === p.phrase) || (p.credential && x.credential === p.credential)),
 	)
 }

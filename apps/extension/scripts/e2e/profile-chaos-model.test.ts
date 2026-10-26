@@ -525,6 +525,15 @@ describe("O2, profile rows", () => {
 		expect(shown(`O2 ${label}`, checkProfiles(w, r, b)).length).toBeGreaterThan(0)
 	})
 
+	test("a name the wallet shows goes only to the masked detail", () => {
+		const r = good()
+		r.listed[0].name = "hunter2-typed-as-a-name"
+		r.rows[0].name = "hunter2-typed-as-a-name"
+		const [v] = checkProfiles(w, r, b)
+		expect(v?.message).not.toContain("hunter2")
+		expect(v?.detail).toContain("hunter2")
+	})
+
 	test("the row fields are the schema's", () => {
 		const shapes = Object.fromEntries(ProfileRowSchema.options.map((o) => [o.shape.type.value, Object.keys(o.shape).sort()]))
 		expect({ password: [...PROFILE_ROW_FIELDS.password].sort(), passkey: [...PROFILE_ROW_FIELDS.passkey].sort() }).toEqual(shapes)
@@ -666,6 +675,26 @@ describe("O4, errors", () => {
 		test.each([
 			["for an error log without the stand-in's text", [refusal('["Failed to fetch node info",{"message":"fetch failed"}]')]],
 			["for a page error carrying the stand-in's text", [page("Error: no node answers a guarded e2e run")]],
+			[
+				"for an entry that also carries another error",
+				[
+					refusal(
+						'["Failed to sync",{"message":"Error 400 from server <url> no node answers a guarded e2e run"},{"message":"QuotaExceededError: disk full"}]',
+					),
+				],
+			],
+			[
+				"for an unhandled rejection carrying it",
+				[refusal('["unhandled rejection",{"error":{"message":"Error 400 from server <url> no node answers a guarded e2e run"}}]')],
+			],
+			[
+				"for a failed restore carrying it",
+				[
+					refusal(
+						'["[full-backup] restore failed:",{"error":{"message":"Error 400 from server <url> no node answers a guarded e2e run"}}]',
+					),
+				],
+			],
 		] as const)("fails %s", (label, entries) => {
 			const verdict = checkErrors(entries as unknown as ErrorEntry[], [])
 			expect(shown(`O4 the refusal allowance ${label}`, verdict.violations).length).toBeGreaterThan(0)
@@ -750,6 +779,8 @@ describe("O4, errors", () => {
 			{ kind: "page-error" as const, page: "second", text: "Error: Profile locked" },
 		]
 		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133, 1133])
+		const unpaired = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked" }], []).violations
+		expect(shown("O4 a locked page error with no forwarded rejection beside it", unpaired)[0]?.known).toBeUndefined()
 		const otherRefusal = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked while x" }], []).violations
 		expect(shown("O4 a refusal beside a filed one's text", otherRefusal)[0]?.known).toBeUndefined()
 		const discovery = (message: string) => ({
@@ -763,6 +794,8 @@ describe("O4, errors", () => {
 		)
 		const deleted = discovery("pxe op rejected: profile x has no current incarnation (deleted or tombstoned)")
 		expect(checkErrors([deleted], []).violations[0]?.known).toBe(1135)
+		const fencedWrite = discovery("profile x is being deleted — write rejected (epoch 0 → 1)")
+		expect(checkErrors([fencedWrite], []).violations[0]?.known).toBe(1135)
 		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
 		const pxe = [
 			read(
@@ -940,6 +973,42 @@ describe("O6, accounts across siblings and imports", () => {
 		],
 	] as const)("fails %s", (label, readings) => {
 		expect(shown(`O6 ${label}`, checkVerify(w, readings as never, b)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("O6, a restore of a deleted profile's backup", () => {
+	const w = world([
+		pw,
+		{ action: "exportBackup", params: { file: "F1" } },
+		{ action: "createPassword", params: { ref: "P2", name: "y", password: "S2", double: false } },
+		{ action: "lock", params: {} },
+		{ action: "switchProfile", params: { to: "P1" } },
+		{ action: "unlockPassword", params: { target: "P1", variant: "right" } },
+		{ action: "deleteProfile", params: { via: "settings" } },
+		{ action: "importBackup", params: { file: "F1", variant: "right", ref: "P3", password: "S3" } },
+	])
+	const b = bind([
+		["P2", P2],
+		["P3", P1],
+	])
+	b.addresses.set("P1", ["0xa1"])
+	b.addresses.set("P3", ["0xa1"])
+	const reading = (ref: "P2" | "P3", addresses: string[]) => ({
+		ref,
+		wrongRefused: true,
+		wrongWrote: [],
+		opened: true,
+		addresses,
+		sentinels: [],
+	})
+
+	test("passes a restore deriving its deleted source's accounts", () => {
+		expect(checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xa1"])], b)).toEqual([])
+	})
+
+	test("fails a restore deriving another wallet's accounts", () => {
+		const v = checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xf9"])], b)
+		expect(shown("O6 a restore deriving another wallet than its deleted source", v).length).toBeGreaterThan(0)
 	})
 })
 

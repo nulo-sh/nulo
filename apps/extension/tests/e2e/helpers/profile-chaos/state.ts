@@ -10,6 +10,14 @@ import { type Bindings, emptyBindings, type VerifyReading } from "./checkers"
 import type { DrainedLog, ErrorCollector, RunPage } from "./collect"
 import type { ActionName, Caps, CredentialRef, FileRef, Outcome, PhraseRef, PlannedStep, ProfileRef, SecretRef, World } from "./model"
 
+export interface ScannedFile {
+	text: string
+	/** The body its own password opened, when it has one. */
+	body?: string
+	/** The needle names the body carries by design. */
+	carried: (name: string) => boolean
+}
+
 /** A file the run holds on disk: an exported backup or account file, and what opens it. */
 export interface HeldFile {
 	path: string
@@ -37,15 +45,25 @@ export interface RunState {
 	dir: string
 	/** Where the run's log drain stands, inside the current background's life, and the lines
 	 *  logged before the first step, which that step's error check reads with its own. */
-	logs: { lastId: number; carried: DrainedLog[] }
+	logs: {
+		lastId: number
+		carried: DrainedLog[]
+		/** Every line drained so far, searched again for each needle the run learns later. */
+		seen: { id: number; text: string }[]
+		/** The needles `seen` was already searched for. */
+		searched: Set<string>
+	}
+	/** The background serving the run when the last step's checks ended. */
+	origin?: number
 	/** How many collected page errors earlier steps have read. */
 	errorMark: number
 	/** Warn lines per source over the run, for the coverage line. */
 	warns: Record<string, number>
 	/** Accepted errors per allowlist source over the run, for the coverage line. */
 	allowed: Record<string, number>
-	/** Files the runner has already scanned for leaks. */
-	scanned: Set<FileRef>
+	/** Each held file's text and opened body, read once and searched again at every step, since a
+	 *  secret the run learns later may already sit in a file it holds. */
+	scanned: Map<FileRef, ScannedFile>
 	/** What the last `verifyAll` read, for O6. */
 	verified: VerifyReading[]
 	/** Present on a run with a node. */
@@ -90,11 +108,11 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		phrases: new Map(),
 		credentials: new Map(),
 		files: new Map(),
-		logs: { lastId: 0, carried: [] },
+		logs: { lastId: 0, carried: [], seen: [], searched: new Set() },
 		errorMark: 0,
 		warns: {},
 		allowed: {},
-		scanned: new Set(),
+		scanned: new Map(),
 		verified: [],
 	}
 }

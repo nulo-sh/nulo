@@ -8,11 +8,13 @@ import { clickByTestId } from "../../fixtures/dom"
 import { switchToLocalNetwork } from "../../fixtures/networks"
 import { holdNextGet } from "../../fixtures/passkey"
 import { openPlayground } from "../../fixtures/playground"
+import { pollUntil } from "../../fixtures/poll"
 import { approveConnect, approveVerify, waitForPopup } from "../../fixtures/popups"
 import { armRestoreGate, clearRestoreGate, readRestoreGate, waitForRestoreGateHeld } from "../../fixtures/restore-gate"
 import { callService, lockFromAnotherWindow } from "../../fixtures/session"
-import { fillRestore } from "./backups"
+import { continuePastErrors, fillRestore } from "./backups"
 import { bindProfile } from "./checkers"
+import { drainLogs } from "./collect"
 import { DRIVERS, openImport } from "./drivers"
 import type { ModelFile, ParamsMap, PlannedStep, ProfileRef, World } from "./model"
 import { restartBackground } from "./restart"
@@ -25,14 +27,21 @@ const UNLOCK_MS = 60_000
 const HELD_MS = 60_000
 const COMPETE_MS = 2_000
 const RESTORE_MS = 300_000
-const TERMINAL_STAGES = ["finished", "failed", "rolled-back", "rollback-failed"]
+/** A finished restore still activates its profile before Home, or shows its errors screen, so
+ *  `finished` alone does not end it. */
+const ENDED_STAGES = ["failed", "rolled-back", "rollback-failed"]
+const DRAINED_QUEUED = /^\["Processing queued discovery: request /
 
 interface Ask {
 	dapp: Page
 	discover: Promise<Page | undefined>
 }
 
-/** A fresh playground page asks to connect; while the wallet is locked no window may open. */
+const dappConnected = (dapp: Page): Promise<boolean> =>
+	dapp.evaluate(() => document.querySelector('[data-testid="pg-status"]')?.getAttribute("data-status") === "connected")
+
+/** A fresh playground page asks to connect; while the wallet is locked no window may open and the
+ *  dApp may not read as connected. */
 async function askWhileLocked(s: RunState): Promise<Ask> {
 	const dapp = await openPlayground(s.ctx)
 	const discover = waitForPopup(s.ctx, "discover", { timeout: CONNECT_MS + UNLOCK_MS }).catch(() => undefined)
@@ -40,7 +49,18 @@ async function askWhileLocked(s: RunState): Promise<Ask> {
 	await new Promise((resolve) => setTimeout(resolve, QUEUE_MS))
 	if (s.ctx.browser.targets().some((t) => t.url().includes("#/windows/discover")))
 		throw new Error("a dApp connect window opened while the wallet was locked")
+	if (await dappConnected(dapp)) throw new Error("the dApp read as connected while the wallet was locked")
 	return { dapp, discover }
+}
+
+/** The background's own record that the unlock drained a request it queued while locked, since the
+ *  step began: a request that reached it only after the unlock never met the locked queue. */
+async function drainedQueued(s: RunState): Promise<void> {
+	await pollUntil(
+		() => drainLogs(s.anchor, s.logs.lastId),
+		(lines) => lines.some((l) => l.source === "wallet-sdk" && DRAINED_QUEUED.test(l.text)),
+		{ label: "the unlock draining the queued connect", timeoutMs: CONNECT_MS, intervalMs: 500 },
+	)
 }
 
 /** After the unlock: answers the connect window the queued ask opens, or sees the dApp connected
@@ -60,6 +80,7 @@ async function connectAcrossUnlock(s: RunState, ask: Ask, t0: number, unlock: ()
 		await unlock()
 		await waitForRoute(s.anchor, "#/popup/general", UNLOCK_MS)
 		await finishConnect(s, ask)
+		await drainedQueued(s)
 		const elapsedMs = Date.now() - t0
 		return { outcome: "committed", settle: { reached: true, elapsedMs, boundMs: UNLOCK_MS + CONNECT_MS } }
 	} finally {
@@ -133,17 +154,19 @@ async function compete(
 	return { done: call }
 }
 
-/** Waits for the import page's restore to end, or for the page to leave the import route. */
+/** Waits for the import page's restore to end: a failed or rolled-back stage, its errors screen, or
+ *  the page leaving the import route. */
 async function restoreSettled(page: Page): Promise<{ reached: boolean; elapsedMs: number }> {
 	const t0 = Date.now()
 	const reached = await page
 		.waitForFunction(
-			(terminal: string[]) => {
+			(ended: string[]) => {
 				const stage = document.querySelector("[data-restore-stage]")?.getAttribute("data-restore-stage") ?? ""
-				return terminal.includes(stage) || !location.hash.startsWith("#/popup/import")
+				const errors = !!document.querySelector('[data-testid="import-full-backup-continue-btn"]')
+				return ended.includes(stage) || errors || !location.hash.startsWith("#/popup/import")
 			},
 			{ timeout: RESTORE_MS, polling: 250 },
-			TERMINAL_STAGES,
+			ENDED_STAGES,
 		)
 		.then(
 			() => true,
@@ -161,8 +184,10 @@ async function runHeld(s: RunState, p: ParamsMap["restoreHeld"], step: PlannedSt
 	const competing = await compete(s, p, step.expect.next, deleted)
 	await assertHeld(page, p.stage, "after")
 	await clearRestoreGate(page)
-	await competing.done.catch(() => {})
+	// The competing step's own refusal fails the step: the cleanup lock below would hide it.
+	await competing.done
 	const settled = await restoreSettled(page)
+	await continuePastErrors(page)
 	const kept = s.bindings.profiles.has(p.ref) ? undefined : await unboundProfileId(s, deleted)
 	if (kept) bindProfile(s.bindings, p.ref, kept, deleted)
 	await toLockScreen(page)

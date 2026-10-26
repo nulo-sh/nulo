@@ -26,7 +26,7 @@ import {
 	type World,
 	live,
 } from "./model"
-import { restartBackground } from "./restart"
+import { drainBeforeStop, restartBackground } from "./restart"
 import { bindProfile } from "./checkers"
 import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
@@ -45,6 +45,7 @@ import {
 	timed,
 	toLockScreen,
 	typePasswordAndSubmit,
+	unlockAttemptEnded,
 	waitForRoute,
 	anchorAdvanced,
 } from "./ui"
@@ -440,15 +441,22 @@ const secondWindow: Drivers["secondWindow"] = async (s, p, _step, before) => {
 	}
 }
 
+/** A passkey request held on another page, acknowledged, then that page closed: the anchor keeps
+ *  the authenticator, so closing it would lose every credential. */
 const abandonCeremony: Drivers["abandonCeremony"] = async (s) => {
-	const page = s.anchor
-	await openRoute(page, "#/popup/auth")
-	await authSubmitReady(page)
-	const hold = await holdNextGet(page)
-	await clickByTestId(page, "auth-submit")
-	await hold.reached()
-	await clickByTestId(page, "passkey-ceremony-cancel")
-	return settle(page, [{ label: "cancelled", testid: "auth-submit", hash: "/popup/auth" }], { cancelled: "cancelled" }, EDIT_MS)
+	const other = await openPopup(s.ctx)
+	s.errors.watch(other, "abandon")
+	try {
+		await waitForRoute(other, "#/popup/auth", 15_000)
+		await authSubmitReady(other)
+		const hold = await holdNextGet(other)
+		await clickByTestId(other, "auth-submit")
+		await hold.reached()
+	} finally {
+		await other.close().catch(() => {})
+	}
+	await openRoute(s.anchor, "#/popup/auth")
+	return settle(s.anchor, [{ label: "cancelled", testid: "auth-submit", hash: "/popup/auth" }], { cancelled: "cancelled" }, EDIT_MS)
 }
 
 // ── races ───────────────────────────────────────────────────────────────
@@ -466,7 +474,10 @@ async function heldUnlockRace(s: RunState, compete: () => Promise<void>): Promis
 	await hold.reached()
 	await compete()
 	await hold.release()
+	await unlockAttemptEnded(page, UNLOCK_MS)
 	const seen = await firstSignal(s.anchor, [HOME, { label: "lock", hash: "/popup/auth" }], UNLOCK_MS)
+	// The cleanup lock below would wipe a session the race left open behind the lock screen.
+	if (seen.label !== "home" && !(await isLocked(page))) throw new Error("the lock screen shows while the service holds a session")
 	const outcome = seen.label === "home" ? "committed-then-locked" : "cancelled"
 	await lockFromAnotherWindow(s.anchor)
 	await waitForLockScreen(s.anchor, LOCK_MS)
@@ -477,6 +488,7 @@ const raceLockDuringUnlock: Drivers["raceLockDuringUnlock"] = async (s) => heldU
 
 const raceRestartDuringUnlock: Drivers["raceRestartDuringUnlock"] = async (s) =>
 	heldUnlockRace(s, async () => {
+		await drainBeforeStop(s)
 		await stopBackground(s.ctx)
 		await backgroundServing(s.anchor, UNLOCK_MS)
 	})

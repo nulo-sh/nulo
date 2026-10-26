@@ -12,6 +12,7 @@ import { decryptAccountExport } from "@nulo/aztec-runtime/account"
 import { getEntropy } from "@nulo/wallet-core/utils"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { backgroundOrigin } from "../../fixtures/browser"
+import { callService } from "../../fixtures/session"
 import { derivedAddresses } from "./accounts-io"
 import {
 	runVerdict,
@@ -43,6 +44,7 @@ import {
 	coverage,
 	coverageLine,
 	endsOf,
+	type FileRef,
 	live,
 	type Plan,
 	type PlannedStep,
@@ -50,7 +52,7 @@ import {
 	startWorld,
 	type World,
 } from "./model"
-import { type Drive, type Driven, type RunState, secretFor, wrongSecret } from "./state"
+import { type Drive, type Driven, type RunState, type ScannedFile, secretFor, wrongSecret } from "./state"
 import { dismissNotices, isLocked, whereStuck } from "./ui"
 
 export type VerdictKind = RunVerdict
@@ -138,32 +140,39 @@ interface FileScan {
 	prfSalt: string[]
 }
 
-/** One new file: its text scanned raw; a password export opened with its own password, refused
- *  another, and its opened body scanned apart (an account file's own key excepted). */
-async function scanFile(s: RunState, next: World, ref: string, needles: readonly Needle[], out: FileScan): Promise<void> {
-	const held = s.files.get(ref as never)
-	if (!held) return
+/** A file's first sight: its raw text, and, for a password export, the check that it opens with its
+ *  own password and refuses another, keeping the opened body. */
+async function readHeldFile(s: RunState, next: World, ref: FileRef, out: FileScan): Promise<ScannedFile | undefined> {
+	const held = s.files.get(ref)
+	if (!held) return undefined
 	const text = readFileSync(held.path, "utf8")
-	out.hits.push(...findNeedles(text, needles).map((needle) => ({ where: `file:${ref}`, needle })))
 	if (text.includes("prfSalt")) out.prfSalt.push(`file:${ref}`)
 	const model = next.files.find((f) => f.ref === ref)
-	if (!model?.password) return
+	if (!model?.password) return { text, carried: () => false }
 	const open = held.kind === "backup" ? (pw: string) => openFullBackupText(text, pw) : (pw: string) => decryptAccountExport(text, pw)
 	const { body, ...check } = await opensOnlyWith(open, secretFor(s, model.password))
 	out.exports.push({ file: ref, ...check })
-	if (body === undefined) return
-	const carried = carriedBy(model)
-	const own = needles.filter((n) => !carried(n.name))
-	out.hits.push(...findNeedles(body, own).map((needle) => ({ where: `file:${ref}:opened`, needle })))
-	if (body.includes("prfSalt")) out.prfSalt.push(`file:${ref}:opened`)
+	if (body?.includes("prfSalt")) out.prfSalt.push(`file:${ref}:opened`)
+	return { text, body, carried: carriedBy(model) }
 }
 
+/** Every held file against every needle known now. A body may carry a secret by design under another
+ *  needle's name as well (an imported account file re-exported), so what it carries is excepted by
+ *  value. */
 async function scanFiles(s: RunState, next: World, needles: readonly Needle[]): Promise<FileScan> {
 	const out: FileScan = { hits: [], exports: [], prfSalt: [] }
 	for (const ref of s.files.keys()) {
-		if (s.scanned.has(ref)) continue
-		s.scanned.add(ref)
-		await scanFile(s, next, ref, needles, out)
+		let file = s.scanned.get(ref)
+		if (!file) {
+			file = await readHeldFile(s, next, ref, out)
+			if (!file) continue
+			s.scanned.set(ref, file)
+		}
+		out.hits.push(...findNeedles(file.text, needles).map((needle) => ({ where: `file:${ref}`, needle })))
+		if (file.body === undefined) continue
+		const carried = new Set(needles.filter((n) => file.carried(n.name)).map((n) => n.value))
+		const own = needles.filter((n) => !carried.has(n.value))
+		out.hits.push(...findNeedles(file.body, own).map((needle) => ({ where: `file:${ref}:opened`, needle })))
 	}
 	return out
 }
@@ -195,16 +204,37 @@ async function checkStepLogs(
 	s.logs.carried = []
 	const pageErrors = s.errors.since(s.errorMark)
 	s.errorMark += pageErrors.length
-	const hits = logs.flatMap((l) => findNeedles(l.text, needles).map((needle) => ({ where: `log:${l.id}`, needle })))
+	const fresh = needles.filter((n) => !s.logs.searched.has(n.name))
+	const hits = [
+		...s.logs.seen.flatMap((l) => findNeedles(l.text, fresh).map((needle) => ({ where: `log:${l.id}`, needle }))),
+		...logs.flatMap((l) => findNeedles(l.text, needles).map((needle) => ({ where: `log:${l.id}`, needle }))),
+	]
+	s.logs.seen.push(...logs.map(({ id, text }) => ({ id, text })))
+	for (const n of needles) s.logs.searched.add(n.name)
 	const errors = checkErrors([...pageErrors, ...logErrors(logs)], endsOf(step, before))
 	add(s.warns, errors.warns)
 	add(s.allowed, errors.allowed)
 	return { violations: errors.violations, incomplete, hits }
 }
 
-/** Learns what the step showed for the first time: a restored profile's name, and each derived
- *  address of the open profile at its first sighting. */
+/** Each live password profile's phrase, read once through the wallet's own export with its
+ *  password, so a phrase leaked before any reveal is a needle from its first step. */
+async function learnPhrases(s: RunState, next: World): Promise<void> {
+	for (const p of live(next)) {
+		const id = s.bindings.profiles.get(p.ref)
+		if (p.method !== "password" || !p.phrase || !p.password || !id || s.phrases.has(p.phrase)) continue
+		// A refusal is O2's and verifyAll's to judge; the phrase is learnt at the next step instead.
+		const words = await callService<string[]>(s.anchor, "profile", "exportMnemonic", [id, secretFor(s, p.password)]).catch(
+			() => undefined,
+		)
+		if (words) s.phrases.set(p.phrase, words)
+	}
+}
+
+/** Learns what the step showed for the first time: each password profile's phrase, a restored
+ *  profile's name, and each derived address of the open profile at its first sighting. */
 async function learn(s: RunState, next: World): Promise<void> {
+	await learnPhrases(s, next)
 	const ref = next.session.kind === "open" ? next.session.ref : undefined
 	const id = ref && s.bindings.profiles.get(ref)
 	// The session oracle reports a wallet that holds no session where the model expects one.
@@ -256,7 +286,11 @@ async function checkStep(
 	if (!step.expect.outcomes.includes(driven.outcome))
 		out.push({ oracle: "O5", message: `${step.action} ended ${driven.outcome}; the model allows ${step.expect.outcomes.join(" or ")}` })
 	out.push(...checkSettle(step.action, driven.settle))
-	if (out.length) return { violations: out, incomplete: [] }
+	if (out.length) {
+		const known = await needlesOf(s)
+		for (const v of out) if (v.detail) v.detail = mask(v.detail, known)
+		return { violations: out, incomplete: [] }
+	}
 	await learn(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
@@ -345,6 +379,8 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	const census = await readCensus(s.anchor)
 	const origin = await backgroundOrigin(s.ctx)
 	const t0 = Date.now()
+	// A restart during the last step's checks or since loses lines the drain can never read.
+	if (s.origin !== undefined && origin !== s.origin) return recordOf(step, t0, { incomplete: [UNPLANNED_RESTART] })
 	let driven: Driven
 	try {
 		driven = await drive(s, step, before)
@@ -359,6 +395,7 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	if (restarted) s.logs.lastId = 0
 	try {
 		const evidence = await checkStep(s, step, before, census, driven, restarted)
+		s.origin = await backgroundOrigin(s.ctx)
 		return recordOf(step, t0, { outcome: driven.outcome, ...evidence })
 	} catch (err) {
 		const crashed = mask(`${err instanceof Error ? err.message : String(err)}${callSite(err)}`, await needlesOf(s))
