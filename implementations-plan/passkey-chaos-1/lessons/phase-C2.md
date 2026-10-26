@@ -175,3 +175,18 @@ Fixed in the harness (`e27ea8dd9`, D60):
 - a finding's loading list, refresh and skeleton marks, and the stop's `end` are left out.
 
 A live check on each browser then replayed to the same end: a 3-minute session ending at its deadline that exports a backup, picks it with a flip and a cut in its second half (recorded as -3 and -5), opens a page and reads "Profile name is required." beside an invalid name field. The difference #1150 causes stays until that issue is fixed.
+
+## C2 final gate (2026-10-26, at `b41be8a46`; `dev` merged at `bd4e666b9`, #1143)
+
+- `test:all` after the merge failed `browser-seam.test.ts` on this arc's own code: `serve.ts` built the browser's caps from `fixtures/browser`, and a shared helper may not branch on the browser. The session file now builds them, as `profile-chaos.test.ts` does, and passes them in (`b41be8a46`). Every gate below ran after that fix.
+- Launcher unit test: 30/30 at retry 0 (84 tests); each run prints 42 refusals and 26 replay-break lines.
+- Tours: 5/5 per browser at retry 0, a Chrome and a Firefox session at once each time, endings alternating `end` and a timed-out `bg-restart`: Chrome 75 to 95 s (83 or 84 commands), Firefox 88 to 110 s (82 or 83).
+- Live replays: one per browser, `same: true`.
+- An independent `/proc` scan over every session and replay found nothing left, and no extension copy remained.
+  - A confinement-probe session from the morning had never been stopped, so its extension copy was still on disk with no process. `stop` removed it.
+- `lint`, `check:plans` and `test:ci-gating` (686) are green.
+- `typecheck:all` and `test:all` are red only on the other lead's files: `helpers/profile-chaos/backups.ts` and the 3 tests of `profile-chaos-model.test.ts`.
+- Smoke wall-clock:
+  - Before, by the CI job envelope (e2e-testing skill § Runtime budget): Chrome 10 min (run 40304252983), Firefox 14 min (run 40304253046), the latest successful runs on another PR. After is this PR's run.
+  - The selection gains `chaos-session.test.ts`, which skips unarmed with 0 ms of test time. Its import took 5.3 s on Chrome and 6.4 s on Firefox on a quiet host, and 8 to 19 s under load.
+  - Importing the harness only when armed showed no saving under that load, so it was not kept.

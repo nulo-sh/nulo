@@ -16,6 +16,8 @@ Whatever the size, the fleet starts only after C2.2's probe shows each agent con
 
 Also: which model the agents run on. Recommendation: Opus 5.5 for the hostile charters, Sonnet for the clumsy and impatient ones.
 
+**Decided (owner, decision page 87):** P87-01 **B**, two waves of 12 agents, 60 minutes each, run by C5. P87-02 **A**, every agent on Opus.
+
 ## OA-C2. The testnet pass
 
 Someone drives a release-candidate build against unleashed's testnet app (`https://testnet.app.unleashed.systems`): create or restore profiles, connect, send, lock and unlock, restore on a second install. It is the manual pre-release smoke CLAUDE.md names, never a gate. It needs testnet funds and puts load on the build's own Testnet endpoint. It cannot run through the lane's harness, whose egress guard refuses every outside host by design.
@@ -25,6 +27,8 @@ Someone drives a release-candidate build against unleashed's testnet app (`https
 - **C, agents:** two agents, one per browser. This needs a launcher mode without the egress guard, which is a plan change: the agents would hold the host's credentials while reading untrusted public pages, would sign public transactions, and would run a build that holds the Testnet endpoint.
 
 Also: where the funds come from (a faucet, a funded account the owner names, or unleashed's bridge), and whether public transactions from new accounts are acceptable.
+
+**Decided (owner, decision page 87):** P87-03 **B**, the testnet pass is manual. No launcher mode runs without the egress guard.
 
 ## OA-C3. The campaign's exit criteria
 
@@ -53,6 +57,8 @@ A soak entry is not possible: the soak cannot run an armed file (CI.md § the so
 - **S4:** cosmetic.
 
 Recommended: S1 and S2 block the release; S3 blocks unless the owner accepts it by name; S4 never blocks. A suspected exploitable weakness is handled privately, whatever its severity.
+
+**Decided (owner, decision page 87):** P87-06 **A**, S1 and S2 block the release.
 
 ## OA-C6. The campaign's report
 
