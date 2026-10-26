@@ -343,8 +343,8 @@ Nulo keeps a rolling in-memory log to help diagnose problems, capped in size.
 
 Nulo supports both unencrypted and password-encrypted exports.
 
-- For **password-profile** full backups, optional file encryption uses the profile password entered
-  during export.
+- For **password-profile** full backups, file encryption uses the profile password entered during
+  export.
 - For **passkey-profile** full backups, you choose a file-encryption password.
 - **Unencrypted** password-profile and account exports may contain material sufficient to spend
   funds.
