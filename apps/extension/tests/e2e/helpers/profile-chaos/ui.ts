@@ -209,23 +209,61 @@ export async function pressTwice(page: Page, testid: string): Promise<void> {
  * shows is not remounted and its last error would read as this step's: the page leaves it first,
  * for Home or Settings while a session is open, for Import or the lock screen while locked.
  */
-/** Presses `testid` until it leaves the page, at most three times: a route the router replaces
- *  within milliseconds of mounting drops a press on the copy it discards, faster than any person
- *  could press. A control a press never removes throws. */
+type StillProbe = Window & { __chaosStill?: { node: Element | null; since: number }; __chaosGone?: number }
+
+/** Waits until `testid` is one node for 250 ms: a route the router replaces just after it mounts
+ *  swaps the node within milliseconds, so a press before then lands on the copy it discards. */
+async function holdStill(page: Page, testid: string): Promise<void> {
+	await page.evaluate(() => {
+		;(window as StillProbe).__chaosStill = undefined
+	})
+	await page.waitForFunction(
+		(t: string) => {
+			const probe = window as StillProbe
+			const node = document.querySelector(`[data-testid="${t}"]`)
+			if (!node || probe.__chaosStill?.node !== node) {
+				probe.__chaosStill = { node, since: Date.now() }
+				return false
+			}
+			return Date.now() - probe.__chaosStill.since >= 250
+		},
+		{ timeout: 10_000, polling: 50 },
+		testid,
+	)
+}
+
+/** Whether `testid` leaves the page and stays gone for 300 ms within 2 s. */
+async function staysGone(page: Page, testid: string): Promise<boolean> {
+	await page.evaluate(() => {
+		;(window as StillProbe).__chaosGone = undefined
+	})
+	return page
+		.waitForFunction(
+			(t: string) => {
+				const probe = window as StillProbe
+				if (document.querySelector(`[data-testid="${t}"]`)?.getClientRects().length) {
+					probe.__chaosGone = undefined
+					return false
+				}
+				probe.__chaosGone ??= Date.now()
+				return Date.now() - probe.__chaosGone >= 300
+			},
+			{ timeout: 2_000, polling: 50 },
+			testid,
+		)
+		.then(
+			() => true,
+			() => false,
+		)
+}
+
+/** Presses `testid` once it holds still, until it leaves the page for good, at most three times:
+ *  a control a press never removes throws. */
 export async function pressUntilGone(page: Page, testid: string): Promise<void> {
 	for (let press = 0; press < 3; press++) {
+		await holdStill(page, testid)
 		await clickByTestId(page, testid)
-		const gone = await page
-			.waitForFunction(
-				(t: string) => !document.querySelector(`[data-testid="${t}"]`)?.getClientRects().length,
-				{ timeout: 2_000, polling: 100 },
-				testid,
-			)
-			.then(
-				() => true,
-				() => false,
-			)
-		if (gone) return
+		if (await staysGone(page, testid)) return
 	}
 	throw new Error(`${testid} stayed on the page through three presses`)
 }
