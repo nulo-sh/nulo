@@ -9,10 +9,27 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 67cae683b
 trunk: dev
-status: approved (orchestrator, 2026-10-25); C1 and C3.1 in PR #1140
+status: completed (C1 and C3.1 in #1140, C2 in #1156, C5 in its close-out PR; C4 deferred, #1157)
 issues: none (tests the change of #1127, closed by passkey-unlock-1)
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-26.
+- **Status:** delivered against `dev`: C1 and C3.1 in #1140 (`dde9b989b`, D-orch-3), C2 in #1156 (`5d4dff0f6`), C5 as one ready PR that carries this close-out, whose merge closes the plan; C4 deferred after 1.1.0 (D-orch-5, #1157).
+- **Shipped:** the seeded, model-based profile chaos on Chrome and Firefox (`apps/extension/tests/e2e/profile-chaos.test.ts`, `network/profile-chaos.test.ts`, `helpers/profile-chaos/`), oracles O1 to O7, each with a break fixture in `apps/extension/scripts/e2e/profile-chaos-model.test.ts`; A2's and A3's flows in the model (C3.1); the agent session launcher (`apps/extension/scripts/e2e/chaos-session.ts`, `helpers/chaos-session/`), its confinement probe, the charters and the triage (CHARTERS.md); C5's fixes to both (D76 to D80) and records that name their builds (D77); the campaign.
+- **Campaign (§ Campaign, at `36306f06b`):** 80 seeds at retry 0 (smoke 30 per browser, `pre-update` 5, network 5), 1,971 steps run, each seed red only on filed findings or incomplete for a planned restart's log window, but Chrome smoke 5016 (harness, D79) and Firefox network 5202 (#1135's other form, D80). Fleet wave 1: 12 Opus agents, 6,257 commands, 5.2 agent-hours (Chrome 2.0, Firefox 3.2). Findings: S2 open #1134, #1137, #1190; S3 open #1138, #1145 to #1147, #1149, #1150, #1170 to #1177, #1179 to #1182, #1184, #1185, and #1158 (another lane's); S4 open #1131 to #1133, #1135, #1136, #1148, #1178, #1183, #1186; fixed #1144 (#1155); no suspected weakness.
+- **Exit criteria (OA-C3 as page 87 reads it, D-orch-6):** 30 seeds per browser, met (30 smoke each, beside 5 `pre-update` and 5 network each). A fleet wave of 12 agents for 60 minutes, not met: wave 1 had about 31 minutes per agent (D76), wave 2 has 8 agents; #1189. No open S1 or S2, not met: #1134, #1137, #1190. Every finding filed, met. The Testnet pass, pending the owner's word; #1189. C4's flows in the seeded model, deferred, D-orch-5.
+- **Review loop:** per arc, Codex at its three-round limit with an Opus agent beside its first round (C1, C3.1, C2, C5) and C2's landing round; then one fresh Codex session over every arc, resumed twice to convergence. Every round is in § Review verdicts.
+- **Gates at the head:** `origin/dev` unchanged at `960b0b2ce`, so nothing to merge; `bun run lint`, `typecheck:all` and `test` (15,684 passed) exit 0, `check:plans` green after the move; the model and launcher unit tests 295 at retry 0, the D79 and D80 cases red on the previous checker.
+- **Suite wall-clock:** unchanged by C5: each suite still carries one chaos test, skipped without `NULO_E2E_CHAOS`, and C5 changes no smoke or network scenario.
+- **Deviations:** C3 absorbed into C1's PR (D-orch-3); C4 deferred (D-orch-5); the fleet gate unmet (D76, D-orch-6); D79 and D80 landed after the campaign's pass, both allowances, which can only turn a red seed green.
+- **Dropped:** C4.2's in-process sequence test (D19) goes with C4 to #1157.
+- **Known limits:** #1151; met, not this plan's: #432. The harness's own limits are in the ledger (Chrome passkeys on the anchor page only, D11; three resident credentials, D27).
+- **Open items:** #1189 (the Testnet pass and a full-size wave, with wave 2's triage, the orchestrator's), #1157 (C4), and the open findings above, each graded on its issue.
+- **Lessons:** one promoted (the e2e virtual authenticator approves silently and a fault lasts one command), one retired (6.0.0's oracle major, which the `aztec-update` skill holds).
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # passkey-chaos-1: chaos-test the passkey change and every profile flow around it
 
@@ -160,6 +177,10 @@ The owner, 2026-10-25:
 | D-orch-5 | C4 is deferred after 1.1.0 (the owner, 2026-10-26, on #1127 under "## Decision": "I love that piece of work, but can we not making it blocker for the release? It sounds like a great add-on for afterwards."): C4.1's flows and C4.2's in-process sequence test follow the release as their own lane, filed as #1157; the campaign (P87-04 C) stays the acceptance. Its known gap: the seeded model does not drive the unlock-method page, a passkey chosen at import or restore, a shared passkey or the passkey account file; the fleet's charters (CH7, CH8, CH3, CH4) do | C4 before C5 | the owner's call; every exit criterion that depended on C4 reads "deferred, D-orch-5" |
 | D-orch-6 | The orchestrator's reading of page 87: P87-04's 30 seeds per browser are the smoke chaos from `empty`; the campaign also runs 5 seeds per browser from `pre-update` (v0.31.0) and 5 per browser of the network chaos, which reach what no fleet charter does (the dApp flows); wave 1 is the wave P87-04 counts, and wave 2 (P87-01) is the orchestrator's, after C5's triage; while no wave meets P87-01's size and length (D76), the fleet gate is unmet | 100 seeds per browser (OA-C3's recommendation); both waves before acceptance | P87-04 C names one wave and 30 seeds; P87-01 B sizes two waves |
 | D76 | Wave 1's sessions started before the seeds (16:17:17 UTC, 65-minute deadlines); the fleet spawned at 16:50:30, so each agent had about 31 minutes, recorded as it ran them, so P87-01's wave (12 agents, 60 minutes each, half per browser) is unmet: wave 1 is short in length, and wave 2 (spawned 17:27:40, 8 agents at full length) is short in size. The fleet gate stays unmet until a wave meets both or the owner accepts less. For a later wave `spawn-one.sh` renews, from the armed dist only, a session whose deadline leaves under 60 minutes. CH7 and CH8 run twice each on Firefox, CH3 once per browser | sessions started by the fleet at spawn; one agent per charter plus three repeats of the "both" charters | a session's deadline counts from its start, not its agent's spawn (Codex, C5 round 1); the two charters are the only chaos the unlock-method page and a shared passkey get while #1157 is open (D-orch-5) |
+| D77 | A seed's record names the browser's and the extension's versions, a `pre-update` start's release tag and its candidate's commit, three flags (an action list, proverless, network), and its caps in a form JSON keeps (an unlimited authenticator as `"unlimited"`) | the checkout revision alone | the revision names neither the loaded builds nor the release the start ran, and `Infinity` became `null` in the record (Codex, C5 cross-arc) |
+| D78 | A `do` records its drawn params before its driver runs; a page whose read fails is read again unless it closed, and a second failure throws; a replay of a session whose end was not read says so; a screenshot past its deadline still ends its session | params recorded only on success; skipping every detached page; a bounded capture that fails only its command | a failed `do`'s replay drew again; skipping an open page counted it as checked; an abandoned capture keeps the browser's screenshot lock, so later commands hang (Codex, C5 cross-arc) |
+| D79 | `uiSelectedAccount` joins the background group: besides a person's pick, a created profile's activation (`openCreatedProfile`) and each window's account setup (`setupActiveAccountRun`, when no stored selection names the open profile) stamp the open profile's selection, and a stamp can land after the step that opened the profile; a change for a profile locked throughout the step, or deleted, still fails | the action group (written by a create and a person's pick only) | Chrome smoke 5016 met a stamp for the profile its import had opened two steps before, at step 19, a second window's lock; 0 of 3 runs by seed met it, and the record names no writer, so the attribution is by producer |
+| D80 | #1135's known entry also names the deletion fence's refusal after its purge (`profile <id> deleted`, `profileDeletedError`) beside the in-flight `is being deleted` one | a new issue for the second refusal | Firefox network 5202 met it at step 1: the same producer and the same moot write; of six more runs by seed, one met the same refusal and one the in-flight form, both at step 1 |
 
 **Outline B** (both audits see it): a composition-level stateful test over the real profile service graph (fake `chrome.storage`, fake PRF bytes, no browser) as the main seeded layer, thousands of sequences per run in the unit suite, with only a thin e2e chaos layer and the agents on top. Disputed in round 1; the orchestrator's D19 adds it, narrow, as C4.2.
 
@@ -435,6 +456,206 @@ On the head after the merge of `dev` at #1155 (572292012, which only re-cites fi
 | 3004 | red-filed | 56 s | 25/25 | `families[backup=4 create=4 restart=3 delete=2 switch=1 unlock=4 window=1 strict=2 lock=2 verify=2] transitions=23 schedules[] warns[price=4 wallet=37 pxe=62 fpc=30 account-state=6] incomplete[backgroundRestart=3]` | #1131, #1132 |
 | 3005 | red-filed | 52 s | 25/25 | `families[tamper=1 create=3 lock=4 ceremony=1 phrase=1 window=2 unlock=2 strict=2 delete=2 switch=2 backup=2 restart=1 race=1 verify=1] transitions=24 schedules[tamperedUnlock=1 raceDoubleUnlock=1] warns[price=3 wallet=26 pxe=47 fpc=24 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132 |
 
+## Campaign (2026-10-26)
+
+C5.1 as D-orch-6 reads page 87. Every seed ran at retry 0, its first run on the head it names; lessons/phase-C5.md has the triage, attempt by attempt.
+
+Code at `36306f06b`: `dev` at `960b0b2ce` with C5's harness fixes. The PR's head adds D79 and D80 after this pass, both allowances of the checks (one census family regrouped, one filed line's sibling named), which can only turn a red seed green, and the docs. Smoke from `NULO_E2E_CHAOS_SEED=5001` through `chaos-session.ts seeded`, three batches of ten per browser in parallel, each in its own isolation; `pre-update` from 5101 (`NULO_E2E_UPDATE_FROM=v0.31.0`, against candidates built from that commit); network from 5201 through `e2e:agent`, proverless. Every seed ran at retry 0, its first run on that code. An earlier pass on `5d4dff0f6` found the harness reds this one proves fixed; lessons/phase-C5.md has it and every attempt below.
+
+Wall-clock per seed, launch included (Vitest's duration over the seeds; the network's sandbox boot excluded):
+
+| suite | Chrome | Firefox |
+|---|---|---|
+| smoke | 45 s (30 seeds in 1,343 s over three batches; 8 minutes end to end) | 69 s (2,058 s; 12 minutes) |
+| `pre-update` | 51 s (5 seeds in 256 s) | 77 s (386 s) |
+| network | 89 s (444 s) | 94 s (469 s) |
+
+Every seed was red only on filed findings, or incomplete for a planned restart's log window alone (5 Chrome smoke seeds), except two, each triaged by CHARTERS.md § Triage (neither is a suspected weakness):
+
+- **Chrome smoke 5016, harness (D79).** O3 at step 19, a second window's lock: the device's selection row changed for P5, which the import at step 17 had opened. A created profile's activation and each window's account setup stamp the open profile's selection, and a stamp can land after the step that opened it; the census allowed only a create and a person's pick. 0 of 3 runs by seed met it.
+- **Firefox network 5202, #1135 (D80).** At step 1, protocol FPC discovery's write for the profile the step deleted was refused by the deletion fence after the purge (`profileDeletedError`, `apps/extension/src/wallet/services/profile/profile-deletion-state.ts`) and logged at error: the fence's other refusal beside the `is being deleted` one #1135's entry names. Of six more runs by seed, one met the same refusal and one the named form, both at step 1.
+- **Met while reproducing 5202: #1190 (S2, new, product).** At step 17, a background restart about 3 s after a passkey create opened its profile, a PXE read failed with `SqliteCorruptionError` (`SQLITE_CORRUPT`, "database disk image is malformed"): the new profile's encrypted chain store read as torn once Firefox ended the page that hosts the PXE. Upstream's contract for that error is to wipe and reopen the store; nothing in the wallet matches it, so the grade is S2 by that contract (a store that never recovers, short of deleting the profile), not by observation: the run stops at its first unclassified error. Of the seven runs of 5202 on this head, five reached step 17 and one met it, so it is filed on its evidence alone; no secret leaves and no key is lost.
+
+The seeded model drives no unlock-method change and no shared passkey (D-orch-5, #1157); the fleet's CH7 and CH8 did, by hand. Coverage, completed actions per family and named schedules, then seeds meeting each filed finding:
+
+| | smoke Chrome | smoke Firefox | `pre-update` Chrome | `pre-update` Firefox | network Chrome | network Firefox |
+|---|---|---|---|---|---|---|
+| seeds | 30 | 30 | 5 | 5 | 5 | 5 |
+| steps run | 745 | 750 | 125 | 125 | 125 | 101 |
+| transitions | 685 | 691 | 113 | 114 | 114 | 91 |
+| account | 24 | 34 | 2 | 4 | 7 | 6 |
+| account-file | 24 | 23 | 0 | 2 | 4 | 3 |
+| backup | 91 | 82 | 11 | 15 | 12 | 8 |
+| ceremony | 10 | 8 | 0 | 3 | 4 | 1 |
+| create | 133 | 141 | 16 | 16 | 22 | 20 |
+| dapp | 0 | 0 | 0 | 0 | 5 | 4 |
+| delete | 50 | 50 | 7 | 7 | 6 | 5 |
+| edit | 17 | 15 | 2 | 1 | 2 | 3 |
+| lock | 45 | 42 | 9 | 8 | 5 | 3 |
+| phrase | 53 | 35 | 3 | 4 | 8 | 4 |
+| race | 14 | 14 | 6 | 4 | 2 | 2 |
+| restart | 52 | 59 | 13 | 11 | 12 | 9 |
+| strict | 17 | 18 | 4 | 6 | 6 | 6 |
+| switch | 21 | 19 | 11 | 7 | 4 | 3 |
+| tamper | 15 | 17 | 4 | 3 | 1 | 1 |
+| unlock | 88 | 96 | 16 | 15 | 9 | 11 |
+| verify | 51 | 60 | 12 | 11 | 7 | 3 |
+| window | 39 | 37 | 9 | 8 | 9 | 7 |
+| `editRowDuringUnlock` | 5 | 4 | 1 | 2 | 1 | 0 |
+| `raceDoubleUnlock` | 2 | 2 | 2 | 2 | 1 | 1 |
+| `raceLockDuringReveal` | 2 | 3 | 0 | 0 | 1 | 1 |
+| `raceLockDuringUnlock` | 5 | 9 | 2 | 2 | 0 | 0 |
+| `raceRestartDuringUnlock` | 5 | 0 | 2 | 0 | 0 | 0 |
+| `tamperedUnlock` | 10 | 13 | 3 | 1 | 0 | 1 |
+| #1131, seeds | 20 | 23 | 3 | 3 | 3 | 2 |
+| #1132, seeds | 14 | 28 | 4 | 5 | 4 | 4 |
+| #1133, seeds | 2 | 4 | 0 | 2 | 1 | 1 |
+| #1135, seeds | 0 | 10 | 0 | 2 | 1 | 1 |
+| #1136, seeds | 0 | 0 | 0 | 0 | 5 | 4 |
+| #1137, seeds | 0 | 0 | 0 | 0 | 0 | 1 |
+
+| Chrome smoke seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5001 | incomplete (restart only) | 37 s | 25/25 | `families[restart=4 create=3 backup=3 account=1 window=1 account-file=2 unlock=4 switch=1 phrase=1 edit=2 lock=1 verify=2] transitions=24 schedules[] warns[price=3 wallet=39 pxe=63 fpc=30 account-state=6] incomplete[backgroundRestart=4]` | none |
+| 5002 | red-filed | 29 s | 25/25 | `families[create=5 window=1 race=1 restart=1 phrase=1 account-file=3 backup=3 delete=1 unlock=3 account=2 switch=2 lock=1 verify=1] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=28 pxe=58 fpc=26 account-state=6] incomplete[backgroundRestart=1]` | #1132 |
+| 5003 | red-filed | 28 s | 25/25 | `families[create=4 backup=5 switch=2 delete=3 lock=1 restart=2 phrase=2 account=1 unlock=2 window=2 verify=1] transitions=24 schedules[] warns[price=3 wallet=30 pxe=54 fpc=26 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5004 | red-filed | 23 s | 25/25 | `families[create=5 strict=1 account=2 race=1 delete=2 phrase=4 lock=2 backup=1 unlock=3 edit=3 verify=1] transitions=24 schedules[raceLockDuringReveal=1] warns[price=2 wallet=27 pxe=65 fpc=30]` | #1131 |
+| 5005 | red-filed | 30 s | 25/25 | `families[create=3 restart=2 window=3 lock=3 unlock=2 delete=1 edit=2 phrase=4 backup=1 account=1 switch=1 tamper=1 verify=1] transitions=23 schedules[tamperedUnlock=1] warns[price=3 wallet=31 pxe=59 fpc=28] incomplete[backgroundRestart=2]` | #1131 |
+| 5006 | red-filed | 37 s | 25/25 | `families[create=5 delete=2 restart=2 backup=4 lock=3 verify=3 unlock=3 account=1 phrase=1 account-file=1] transitions=22 schedules[] warns[price=3 wallet=36 pxe=68 fpc=32 account-state=3 config=8] incomplete[backgroundRestart=2]` | #1131 |
+| 5007 | red-filed | 28 s | 25/25 | `families[create=5 phrase=1 account-file=1 delete=3 restart=2 strict=1 window=3 race=1 lock=1 unlock=4 switch=1 ceremony=1 verify=1] transitions=24 schedules[raceDoubleUnlock=1] warns[price=3 wallet=33 pxe=54 fpc=26] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5008 | incomplete (restart only) | 31 s | 25/25 | `families[create=5 phrase=1 backup=4 delete=2 account=1 account-file=2 unlock=2 lock=2 tamper=2 verify=2 strict=1 restart=1] transitions=22 schedules[tamperedUnlock=2] warns[price=2 wallet=29 pxe=71 fpc=32 account-state=3] incomplete[backgroundRestart=1]` | none |
+| 5009 | red-filed | 36 s | 25/25 | `families[create=3 backup=2 phrase=1 restart=4 account=2 delete=1 unlock=3 window=2 tamper=2 strict=1 ceremony=1 verify=2 race=1] transitions=23 schedules[editRowDuringUnlock=2 raceLockDuringUnlock=1] warns[price=5 wallet=38 pxe=67 fpc=32 account-state=3 config=8] incomplete[backgroundRestart=4]` | #1131, #1132 |
+| 5010 | red-filed | 45 s | 25/25 | `families[restart=3 create=5 window=3 race=2 delete=2 lock=2 phrase=2 backup=3 account-file=1 verify=2] transitions=23 schedules[raceRestartDuringUnlock=2] warns[price=5 wallet=49 pxe=72 fpc=34 account-state=6] incomplete[backgroundRestart=3 raceRestartDuringUnlock=2]` | #1131 |
+| 5011 | red-filed | 30 s | 25/25 | `families[backup=4 create=5 lock=1 unlock=4 verify=3 restart=1 account-file=2 window=1 delete=3 phrase=1] transitions=21 schedules[] warns[price=3 wallet=29 pxe=47 fpc=24 account-state=3] incomplete[backgroundRestart=1]` | #1131 |
+| 5012 | incomplete (restart only) | 23 s | 25/25 | `families[create=4 phrase=3 backup=3 restart=1 window=2 switch=1 edit=2 lock=2 unlock=5 tamper=1 verify=1] transitions=23 schedules[editRowDuringUnlock=1] warns[price=2 wallet=28 pxe=51 fpc=24 account-state=6] incomplete[backgroundRestart=1]` | none |
+| 5013 | red-filed | 21 s | 25/25 | `families[create=3 restart=3 delete=2 backup=3 lock=2 race=1 tamper=1 ceremony=1 phrase=3 switch=1 unlock=4 verify=1] transitions=23 schedules[raceLockDuringUnlock=1 tamperedUnlock=1] warns[price=3 wallet=22 pxe=30 fpc=14 account-state=3] incomplete[backgroundRestart=3]` | #1132 |
+| 5014 | red-filed | 25 s | 25/25 | `families[create=6 window=2 delete=3 account=3 backup=2 phrase=2 edit=3 unlock=2 strict=1 verify=1] transitions=23 schedules[] warns[price=2 wallet=33 pxe=63 fpc=28 account-state=3]` | #1131 |
+| 5015 | red-filed | 30 s | 25/25 | `families[create=4 edit=1 lock=2 tamper=1 verify=2 phrase=3 restart=3 delete=1 strict=2 unlock=3 account=1 backup=2] transitions=24 schedules[tamperedUnlock=1] warns[price=4 wallet=30 pxe=61 fpc=28 account-state=3] incomplete[backgroundRestart=3]` | #1132 |
+| 5016 | red, harness (D79) | 22 s | 20/25 | `families[create=4 verify=1 ceremony=1 delete=1 backup=4 unlock=3 strict=2 restart=1 phrase=2] transitions=17 schedules[] warns[price=2 wallet=32 pxe=52 fpc=24 account-state=9] incomplete[backgroundRestart=1]` | #1131, #1132; stopped at step 19 secondWindow (O3: the selection row changed for P5, the profile the import at step 17 opened; D79) |
+| 5017 | red-filed | 31 s | 25/25 | `families[create=5 verify=3 restart=1 backup=3 delete=2 switch=1 unlock=1 edit=1 window=2 phrase=4 account-file=1 account=1] transitions=24 schedules[] warns[price=3 wallet=44 pxe=70 fpc=34 account-state=6] incomplete[backgroundRestart=1]` | #1131 |
+| 5018 | red-filed | 32 s | 25/25 | `families[create=6 phrase=3 delete=4 verify=2 race=3 restart=2 window=1 unlock=2 backup=2] transitions=21 schedules[raceLockDuringReveal=1 raceRestartDuringUnlock=2] warns[price=4 wallet=31 pxe=52 fpc=24] incomplete[backgroundRestart=2 raceRestartDuringUnlock=2]` | #1131, #1132, #1133 |
+| 5019 | red-filed | 31 s | 25/25 | `families[create=4 window=3 backup=5 ceremony=2 restart=3 unlock=3 account=1 lock=2 edit=1 verify=1] transitions=23 schedules[] warns[price=4 wallet=39 pxe=63 fpc=30 account-state=9] incomplete[backgroundRestart=3]` | #1132 |
+| 5020 | red-filed | 29 s | 25/25 | `families[create=5 backup=6 phrase=2 window=2 unlock=2 ceremony=2 switch=3 verify=2 delete=1] transitions=24 schedules[] warns[price=2 wallet=34 pxe=62 fpc=30 account-state=3]` | #1131, #1132 |
+| 5021 | incomplete (restart only) | 28 s | 25/25 | `families[create=3 lock=5 backup=3 phrase=1 window=2 restart=1 strict=1 account-file=2 account=2 switch=1 unlock=3 verify=1] transitions=22 schedules[] warns[price=3 wallet=30 pxe=52 fpc=24 account-state=3 config=8] incomplete[backgroundRestart=1]` | none |
+| 5022 | red-filed | 30 s | 25/25 | `families[create=4 account=1 backup=3 verify=3 unlock=3 phrase=4 lock=2 delete=1 account-file=2 strict=1 window=1] transitions=23 schedules[] warns[price=2 wallet=38 pxe=81 fpc=38 account-state=6 config=8]` | #1131 |
+| 5023 | red-filed | 22 s | 25/25 | `families[create=4 lock=1 unlock=3 backup=2 race=1 tamper=3 verify=2 restart=1 delete=2 switch=1 account-file=3 account=1 strict=1] transitions=24 schedules[raceLockDuringUnlock=1 tamperedUnlock=2 editRowDuringUnlock=1] warns[price=3 wallet=18 pxe=26 fpc=12] incomplete[backgroundRestart=1]` | #1131 |
+| 5024 | red-filed | 27 s | 25/25 | `families[create=6 account=2 delete=4 edit=2 strict=3 phrase=2 lock=1 window=2 backup=2 verify=1] transitions=23 schedules[] warns[price=2 wallet=32 pxe=71 fpc=34]` | #1131, #1132 |
+| 5025 | red-filed | 29 s | 25/25 | `families[create=3 restart=4 verify=2 phrase=2 strict=1 window=1 unlock=4 backup=2 switch=3 tamper=1 race=2] transitions=24 schedules[tamperedUnlock=1 raceLockDuringUnlock=1 raceRestartDuringUnlock=1] warns[price=4 wallet=25 pxe=46 fpc=20] incomplete[backgroundRestart=4 raceRestartDuringUnlock=1]` | #1131, #1132, #1133 |
+| 5026 | red-filed | 21 s | 25/25 | `families[restart=4 create=3 backup=3 lock=1 unlock=4 switch=2 delete=2 verify=3 window=1 tamper=1 ceremony=1] transitions=24 schedules[editRowDuringUnlock=1] warns[price=4 wallet=21 pxe=25 fpc=12 account-state=3] incomplete[backgroundRestart=4]` | #1131 |
+| 5027 | red-filed | 29 s | 25/25 | `families[backup=2 restart=2 create=6 lock=4 unlock=3 account=1 phrase=1 verify=2 delete=2 account-file=1 tamper=1] transitions=23 schedules[tamperedUnlock=1] warns[price=2 wallet=30 pxe=72 fpc=34] incomplete[backgroundRestart=2]` | #1131 |
+| 5028 | red-filed | 37 s | 25/25 | `families[create=4 backup=8 delete=2 restart=1 race=1 account-file=2 phrase=1 lock=2 unlock=2 tamper=1 verify=1] transitions=23 schedules[raceDoubleUnlock=1 tamperedUnlock=1] warns[price=2 wallet=36 pxe=63 fpc=30 account-state=9 config=8] incomplete[backgroundRestart=1]` | #1132 |
+| 5029 | incomplete (restart only) | 28 s | 25/25 | `families[create=4 lock=2 restart=2 ceremony=1 unlock=7 backup=4 strict=1 window=1 switch=1 account-file=1 verify=1] transitions=22 schedules[] warns[price=3 wallet=37 pxe=61 fpc=30 account-state=9] incomplete[backgroundRestart=2]` | none |
+| 5030 | red-filed | 36 s | 25/25 | `families[create=7 delete=3 window=3 unlock=4 backup=2 verify=2 lock=2 phrase=1 restart=1] transitions=21 schedules[] warns[price=3 wallet=39 pxe=70 fpc=34 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132 |
+
+| Firefox smoke seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5001 | red-filed | 57 s | 25/25 | `families[restart=4 create=3 backup=3 account=1 window=1 account-file=2 unlock=4 switch=1 phrase=1 edit=2 lock=1 verify=2] transitions=24 schedules[] warns[price=3 wallet=37 pxe=63 fpc=30 account-state=6] incomplete[backgroundRestart=4]` | #1131, #1132, #1133 |
+| 5002 | red-filed | 49 s | 25/25 | `families[create=5 window=1 ceremony=1 restart=1 phrase=1 account-file=3 backup=3 delete=1 unlock=3 account=2 switch=2 lock=1 verify=1] transitions=24 schedules[] warns[price=3 wallet=27 pxe=56 fpc=24 account-state=6] incomplete[backgroundRestart=1]` | #1131, #1132 |
+| 5003 | red-filed | 65 s | 25/25 | `families[create=5 backup=3 switch=1 delete=2 restart=2 tamper=1 phrase=1 account-file=2 unlock=4 verify=3 account=1] transitions=24 schedules[editRowDuringUnlock=1] warns[price=4 wallet=44 pxe=87 fpc=44 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132, #1135 |
+| 5004 | red-filed | 51 s | 25/25 | `families[create=5 strict=3 account=3 race=1 lock=2 delete=1 unlock=2 phrase=1 restart=2 account-file=1 backup=1 verify=2 tamper=1] transitions=24 schedules[raceLockDuringReveal=1 tamperedUnlock=1] warns[price=3 wallet=34 pxe=69 fpc=36 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132, #1135 |
+| 5005 | red-filed | 50 s | 25/25 | `families[create=3 restart=2 window=3 lock=3 unlock=2 delete=1 edit=2 phrase=4 backup=1 account=1 switch=1 tamper=1 verify=1] transitions=23 schedules[tamperedUnlock=1] warns[price=4 wallet=33 pxe=63 fpc=32] incomplete[backgroundRestart=2]` | #1131, #1132, #1135 |
+| 5006 | red-filed | 58 s | 25/25 | `families[create=5 delete=2 restart=2 backup=4 lock=2 verify=3 unlock=3 account=1 phrase=1 account-file=1 strict=1] transitions=22 schedules[] warns[price=4 wallet=36 pxe=73 fpc=34 account-state=3 config=8] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5007 | red-filed | 45 s | 25/25 | `families[create=5 phrase=1 account-file=1 delete=3 restart=2 strict=1 window=3 race=1 lock=1 unlock=4 switch=1 ceremony=1 verify=1] transitions=24 schedules[raceDoubleUnlock=1] warns[price=3 wallet=30 pxe=51 fpc=24] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5008 | red-filed | 45 s | 25/25 | `families[create=7 phrase=1 backup=5 delete=3 account=2 account-file=2 verify=2 edit=1 unlock=1 lock=1] transitions=22 schedules[] warns[price=2 wallet=40 pxe=81 fpc=36 account-state=12]` | #1132 |
+| 5009 | red-filed | 57 s | 25/25 | `families[create=5 backup=4 phrase=1 restart=3 account=1 delete=3 unlock=1 window=3 verify=2 tamper=2] transitions=23 schedules[tamperedUnlock=1 editRowDuringUnlock=1] warns[price=5 wallet=40 pxe=65 fpc=32 account-state=3] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+| 5010 | red-filed | 57 s | 25/25 | `families[restart=3 create=5 window=3 race=2 delete=2 lock=2 phrase=2 backup=3 account-file=1 verify=2] transitions=23 schedules[raceLockDuringUnlock=2] warns[price=3 wallet=49 pxe=58 fpc=34 account-state=6] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+| 5011 | red-filed | 47 s | 25/25 | `families[backup=4 create=5 lock=1 unlock=4 verify=3 restart=1 account-file=2 window=1 delete=3 phrase=1] transitions=21 schedules[] warns[price=3 wallet=28 pxe=51 fpc=24 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132 |
+| 5012 | red-filed | 56 s | 25/25 | `families[create=6 phrase=1 backup=2 restart=2 window=2 delete=2 switch=1 lock=2 account=1 unlock=3 verify=3] transitions=24 schedules[] warns[price=3 wallet=41 pxe=85 fpc=40] incomplete[backgroundRestart=2]` | #1132 |
+| 5013 | red-filed | 45 s | 25/25 | `families[create=4 restart=4 unlock=4 window=1 ceremony=1 delete=3 edit=2 account=1 backup=1 account-file=1 strict=1 lock=1 verify=1] transitions=22 schedules[] warns[price=4 wallet=19 pxe=33 fpc=16 account-state=3] incomplete[backgroundRestart=4]` | #1133 |
+| 5014 | red-filed | 45 s | 25/25 | `families[create=6 window=2 delete=3 account=3 backup=2 phrase=2 edit=3 unlock=2 strict=1 verify=1] transitions=23 schedules[] warns[price=2 wallet=32 pxe=65 fpc=28 account-state=3]` | #1132 |
+| 5015 | red-filed | 51 s | 25/25 | `families[create=4 edit=1 lock=2 tamper=1 verify=2 phrase=3 restart=3 delete=1 strict=2 unlock=3 account=1 backup=2] transitions=24 schedules[tamperedUnlock=1] warns[price=4 wallet=30 pxe=65 fpc=30 account-state=3] incomplete[backgroundRestart=3]` | #1132 |
+| 5016 | red-filed | 57 s | 25/25 | `families[create=4 lock=2 unlock=7 backup=3 account-file=2 account=2 restart=2 phrase=1 strict=1 verify=1] transitions=22 schedules[] warns[price=3 wallet=28 pxe=53 fpc=26 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132, #1135 |
+| 5017 | red-filed | 53 s | 25/25 | `families[create=5 verify=3 restart=2 backup=1 unlock=5 race=2 delete=1 window=1 account=1 lock=2 switch=1 account-file=1] transitions=23 schedules[raceLockDuringReveal=1 raceLockDuringUnlock=1] warns[price=4 wallet=38 pxe=70 fpc=34] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5018 | red-filed | 50 s | 25/25 | `families[create=6 phrase=2 delete=3 verify=2 race=3 restart=4 lock=1 account=3 unlock=1] transitions=23 schedules[raceLockDuringReveal=1 raceLockDuringUnlock=2] warns[price=4 wallet=29 pxe=57 fpc=30] incomplete[backgroundRestart=4]` | #1131, #1132, #1135 |
+| 5019 | red-filed | 45 s | 25/25 | `families[create=6 window=2 race=1 strict=2 delete=2 switch=1 ceremony=1 tamper=1 unlock=2 restart=1 verify=3 lock=1 account=1 backup=1] transitions=24 schedules[raceLockDuringUnlock=1 tamperedUnlock=1] warns[price=3 wallet=46 pxe=76 fpc=34 account-state=3] incomplete[backgroundRestart=1]` | #1131 |
+| 5020 | red-filed | 51 s | 25/25 | `families[create=5 backup=3 phrase=1 window=3 unlock=6 verify=2 restart=2 race=1 delete=2] transitions=22 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=41 pxe=66 fpc=32 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132, #1133 |
+| 5021 | red-filed | 47 s | 25/25 | `families[create=3 lock=1 backup=5 phrase=1 window=2 verify=3 unlock=1 account=1 restart=1 tamper=3 switch=2 ceremony=1 delete=1] transitions=24 schedules[tamperedUnlock=2 editRowDuringUnlock=1] warns[price=2 wallet=30 pxe=48 fpc=22 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132 |
+| 5022 | red-filed | 45 s | 25/25 | `families[create=3 account=2 backup=5 verify=3 unlock=4 phrase=1 lock=2 restart=2 switch=1 delete=1 tamper=1] transitions=22 schedules[tamperedUnlock=1] warns[price=3 wallet=36 pxe=58 fpc=26 account-state=12] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5023 | red-filed | 45 s | 25/25 | `families[create=3 lock=2 unlock=4 backup=3 ceremony=1 tamper=4 verify=3 window=2 phrase=1 account=2] transitions=24 schedules[tamperedUnlock=3 editRowDuringUnlock=1] warns[price=2 wallet=32 pxe=60 fpc=26]` | #1131, #1132 |
+| 5024 | red-filed | 46 s | 25/25 | `families[create=6 account=2 delete=4 edit=2 strict=3 phrase=2 lock=1 window=2 backup=2 verify=1] transitions=23 schedules[] warns[price=2 wallet=32 pxe=72 fpc=34]` | #1131, #1132 |
+| 5025 | red-filed | 53 s | 25/25 | `families[create=3 restart=4 verify=2 phrase=2 strict=1 window=1 unlock=4 backup=2 switch=3 tamper=1 ceremony=1 race=1] transitions=24 schedules[tamperedUnlock=1 raceLockDuringUnlock=1] warns[price=4 wallet=23 pxe=36 fpc=22] incomplete[backgroundRestart=4]` | #1131, #1132, #1133, #1135 |
+| 5026 | red-filed | 50 s | 25/25 | `families[restart=3 create=5 race=1 lock=3 unlock=4 switch=2 delete=1 backup=2 edit=1 strict=1 account=1 verify=1] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=4 wallet=27 pxe=57 fpc=30 account-state=3] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+| 5027 | red-filed | 57 s | 25/25 | `families[backup=3 restart=3 create=4 lock=2 unlock=5 account=1 phrase=1 verify=3 switch=1 edit=1 account-file=1] transitions=23 schedules[] warns[price=3 wallet=38 pxe=76 fpc=36] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 5028 | red-filed | 51 s | 25/25 | `families[create=4 backup=8 delete=2 restart=1 race=1 account-file=2 phrase=1 lock=2 unlock=2 tamper=1 verify=1] transitions=23 schedules[raceDoubleUnlock=1 tamperedUnlock=1] warns[price=2 wallet=36 pxe=64 fpc=30 account-state=9 config=8] incomplete[backgroundRestart=1]` | #1132 |
+| 5029 | red-filed | 45 s | 25/25 | `families[create=4 lock=2 restart=2 ceremony=1 unlock=7 backup=4 strict=1 window=1 switch=1 account-file=1 verify=1] transitions=22 schedules[] warns[price=4 wallet=36 pxe=61 fpc=30 account-state=9] incomplete[backgroundRestart=2]` | #1132 |
+| 5030 | red-filed | 48 s | 25/25 | `families[create=7 delete=3 window=3 unlock=4 backup=2 verify=2 lock=2 phrase=1 restart=1] transitions=21 schedules[] warns[price=3 wallet=40 pxe=65 fpc=32 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132, #1135 |
+
+| Chrome pre-update seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5101 | red-filed | 31 s | 25/25 | `families[unlock=5 restart=6 switch=1 verify=2 delete=1 create=3 strict=2 backup=2 lock=2 race=1] transitions=23 schedules[raceLockDuringUnlock=1] warns[price=6 wallet=26 pxe=46 fpc=24 account-state=3] incomplete[backgroundRestart=6]` | #1132 |
+| 5102 | red-filed | 24 s | 25/25 | `families[backup=2 delete=3 unlock=2 create=4 restart=2 verify=2 window=3 lock=1 race=1 account=1 edit=2 tamper=1 switch=1] transitions=23 schedules[raceDoubleUnlock=1 tamperedUnlock=1] warns[price=3 wallet=36 pxe=48 fpc=24 account-state=3] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 5103 | red-filed | 24 s | 25/25 | `families[create=3 window=2 unlock=4 strict=1 lock=3 switch=2 backup=1 race=3 phrase=2 restart=1 tamper=1 delete=1 verify=1] transitions=24 schedules[raceDoubleUnlock=1 raceRestartDuringUnlock=1 raceLockDuringUnlock=1 editRowDuringUnlock=1] warns[price=3 wallet=26 pxe=41 fpc=20] incomplete[backgroundRestart=1 raceRestartDuringUnlock=1]` | #1131 |
+| 5104 | red-filed | 31 s | 25/25 | `families[tamper=2 create=3 lock=2 race=1 window=1 restart=4 switch=3 verify=3 delete=1 unlock=4 phrase=1] transitions=21 schedules[tamperedUnlock=2 raceRestartDuringUnlock=1] warns[price=4 wallet=35 pxe=61 fpc=32] incomplete[raceRestartDuringUnlock=1 backgroundRestart=4]` | #1131, #1132 |
+| 5105 | red-filed | 43 s | 25/25 | `families[switch=4 verify=4 create=3 window=3 account=1 backup=6 delete=1 lock=1 strict=1 unlock=1] transitions=22 schedules[] warns[price=2 wallet=39 pxe=50 fpc=24 account-state=3]` | #1132 |
+
+| Firefox pre-update seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5101 | red-filed | 56 s | 25/25 | `families[unlock=3 restart=6 switch=1 verify=2 delete=2 create=3 strict=2 backup=3 lock=1 ceremony=1 window=1] transitions=24 schedules[] warns[price=6 wallet=28 pxe=31 fpc=24 account-state=3 config=8] incomplete[backgroundRestart=6]` | #1131, #1132, #1135 |
+| 5102 | red-filed | 53 s | 25/25 | `families[backup=4 delete=3 unlock=2 create=5 restart=4 verify=2 window=1 account=2 edit=1 lock=1] transitions=21 schedules[] warns[price=4 wallet=35 pxe=52 fpc=28 account-state=6] incomplete[backgroundRestart=4]` | #1131, #1132, #1135 |
+| 5103 | red-filed | 37 s | 25/25 | `families[create=3 window=2 unlock=4 strict=1 lock=3 switch=2 backup=1 race=2 phrase=2 restart=1 ceremony=1 tamper=1 delete=1 verify=1] transitions=24 schedules[raceDoubleUnlock=1 raceLockDuringUnlock=1 editRowDuringUnlock=1] warns[price=2 wallet=24 pxe=44 fpc=20] incomplete[backgroundRestart=1]` | #1131, #1132, #1133 |
+| 5104 | red-filed | 42 s | 25/25 | `families[tamper=2 create=2 lock=2 ceremony=1 unlock=5 race=2 verify=2 strict=2 account-file=2 backup=1 phrase=2 account=1 window=1] transitions=23 schedules[tamperedUnlock=1 editRowDuringUnlock=1 raceLockDuringUnlock=1 raceDoubleUnlock=1] warns[price=2 wallet=31 pxe=51 fpc=24 account-state=3]` | #1132 |
+| 5105 | red-filed | 58 s | 25/25 | `families[switch=4 verify=4 create=3 window=3 account=1 backup=6 delete=1 lock=1 strict=1 unlock=1] transitions=22 schedules[] warns[price=2 wallet=38 pxe=51 fpc=24 account-state=3]` | #1132, #1133 |
+
+| Chrome network seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5201 | red-filed | 51 s | 25/25 | `families[create=4 window=4 phrase=1 ceremony=1 delete=1 switch=2 lock=2 verify=2 unlock=1 dapp=1 backup=1 account=2 account-file=2 restart=1] transitions=23 schedules[] warns[price=3 wallet=11 pxe=20 fpc=8 account-state=2] incomplete[backgroundRestart=1]` | #1132, #1136 |
+| 5202 | red-filed | 61 s | 25/25 | `families[create=5 delete=2 window=2 restart=2 dapp=2 strict=1 phrase=3 backup=2 race=1 account=1 lock=2 ceremony=1 verify=1] transitions=23 schedules[raceDoubleUnlock=1] warns[price=4 wallet=15 pxe=30 fpc=16 account-state=2] incomplete[backgroundRestart=2]` | #1131, #1132, #1135, #1136 |
+| 5203 | red-filed | 57 s | 25/25 | `families[create=4 lock=1 delete=1 strict=2 restart=4 dapp=1 account-file=2 account=1 window=1 unlock=3 switch=1 backup=2 phrase=1 verify=1] transitions=24 schedules[] warns[price=4 wallet=13 pxe=25 fpc=10 account-state=2] incomplete[backgroundRestart=4]` | #1131, #1132, #1136 |
+| 5204 | red-filed | 43 s | 25/25 | `families[create=5 strict=3 window=2 phrase=2 account=3 restart=2 switch=1 unlock=2 edit=1 dapp=1 delete=1 backup=1 verify=1] transitions=22 schedules[] warns[price=3 wallet=10 pxe=25 fpc=10] incomplete[backgroundRestart=2]` | #1132, #1133, #1136 |
+| 5205 | red-filed | 32 s | 25/25 | `families[create=4 backup=6 race=1 delete=1 restart=3 unlock=3 tamper=1 ceremony=2 phrase=1 verify=2 edit=1] transitions=22 schedules[raceLockDuringReveal=1 editRowDuringUnlock=1] warns[price=2 wallet=16 pxe=20 fpc=8 account-state=8] incomplete[backgroundRestart=3]` | #1131, #1136 |
+
+| Firefox network seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 5201 | red-filed | 54 s | 24/25 | `families[create=5 window=3 phrase=1 ceremony=1 delete=1 switch=1 restart=2 unlock=5 strict=1 account-file=1 edit=1 lock=1] transitions=21 schedules[] warns[price=4 wallet=11 pxe=25 fpc=10] incomplete[backgroundRestart=2]` | #1132, #1133, #1136, #1137; stopped at step 23 verifyAll (O6, #1137) |
+| 5202 | red-filed | 5 s | 2/25 | `families[create=1] transitions=0 schedules[] warns[price=1 wallet=2 pxe=5 fpc=3]` | #1135 (the deletion fence's other refusal, D80); stopped at step 1 deleteProfile (O4) |
+| 5203 | red-filed | 75 s | 25/25 | `families[create=4 lock=1 delete=1 strict=2 restart=4 dapp=1 account-file=2 account=1 window=1 unlock=3 switch=1 backup=2 phrase=1 verify=1] transitions=24 schedules[] warns[price=4 wallet=13 pxe=25 fpc=10 account-state=2] incomplete[backgroundRestart=4]` | #1131, #1132, #1136 |
+| 5204 | red-filed | 78 s | 25/25 | `families[create=5 strict=3 window=2 phrase=2 account=3 restart=2 switch=1 unlock=2 edit=1 dapp=1 delete=1 backup=1 verify=1] transitions=22 schedules[] warns[price=4 wallet=10 pxe=25 fpc=10] incomplete[backgroundRestart=2]` | #1131, #1132, #1136 |
+| 5205 | red-filed | 60 s | 25/25 | `families[create=5 backup=5 race=2 window=1 dapp=2 account=2 delete=2 tamper=1 lock=1 restart=1 unlock=1 edit=1 verify=1] transitions=24 schedules[raceLockDuringReveal=1 tamperedUnlock=1 raceDoubleUnlock=1] warns[price=3 wallet=14 pxe=25 fpc=10 account-state=4] incomplete[backgroundRestart=1]` | #1132, #1136 |
+
+### Fleet wave 1
+
+Twelve Opus agents from 16:50:30 to 17:22:17 UTC, six per browser, on sessions started at 16:17:17 (D76), so P87-01's 60 minutes per agent is unmet. 5.2 agent-hours: Chrome 2.0, Firefox 3.2. Findings are counted per agent by the issues its reports produced (S3 and S4 new, then filed ones met); every replay loaded the session's own build, and its comparison is HEAD's (`compareReplay` of D78), since the replays began before that fix.
+
+| Agent | Charter | Browser | Minutes | Commands | New S3 / S4 | Filed met | Ended | Replay |
+|---|---|---|---|---|---|---|---|---|
+| a01 | CH1 | Chrome | 22 | 431 | 1 / 1 | #1148 | screenshot hang (D78) | diverged in each of three tries: at command 182 its lock screen came up on another profile; at 162 and at 159 an unlock answered with another profile's passkey opened the profile, most likely because Profile 4's reuse of an existing passkey (command 152) took another credential. #1177's reports come later and rest on their evidence and the source |
+| a02 | CH3 | Chrome | 32 | 699 | 1 / 1 | #1146, #1148, #1149 | deadline | same commands; 4 snapshot or path differences |
+| a03 | CH4 | Chrome | 32 | 674 | 6 / 1 | — | deadline | diverged in each of three tries: at command 368 in two, where an account-file import the original completed stayed on Import and later showed an error (the record keeps no text); at 456 in the third, where an export answered with another profile's passkey saved a file the original's refused (#1173). Its later reports rest on their evidence and the source |
+| a04 | CH5 | Chrome | 17 | 241 | 1 / 0 | #1132, #1151 | screenshot hang (D78) | diverged at command 188, then the same hang at 191 |
+| a05 | CH6 | Chrome | 9 | 203 | 2 / 0 | #1131, #1148 | screenshot hang (D78) | same to the same hang; #1131's line one command later |
+| a06 | CH9 | Chrome | 10 | 226 | 2 / 0 | #1148 | a closing page under the checks (D78) | same to the same end |
+| a07 | CH2 | Firefox | 32 | 539 | 3 / 2 | #1147, #1149, #1158 | deadline | diverged at command 443: another fallback profile (#1150) |
+| a08 | CH3 | Firefox | 32 | 585 | 5 / 1 | #1146 | deadline | same; 3 snapshot differences |
+| a09 | CH7 | Firefox | 32 | 686 | 3 / 2 | #1131, #1145, #1149 | deadline | same; 10 snapshot differences |
+| a10 | CH7 | Firefox | 32 | 729 | 1 / 1 | #1147, #1149 | deadline | same; 2 snapshot differences |
+| a11 | CH8 | Firefox | 32 | 620 | 6 / 1 | #1145, #1149 | deadline | same; 2 snapshot differences |
+| a12 | CH8 | Firefox | 32 | 624 | 4 / 1 | #1146, #1149 | deadline | same; 10 snapshot differences |
+
+A snapshot difference is a testid that one run showed and the other did not at the same command (a toast, a balance still loading); no replay met a finding the original did not, or missed one before it diverged, except a05's #1131 line arriving one command later. a01 and a03 diverged in every try, so their tries 2 and 3 ran on the armed dist after the campaign.
+
+### Findings
+
+Grades under OA-C5 as signed (P87-06 A: S1 and S2 block, S3 blocks unless the owner accepts it by name, S4 never blocks). Class: product unless marked; no suspected weakness remains (one candidate cleared by evidence, lessons/phase-C5.md).
+
+| Issue | Grade | Status | Met in C5 |
+|---|---|---|---|
+| #1134 | S2 (regraded from S4) | open | not met in C5 (C1's baseline met it in four seeds) |
+| #1137 | S2 (regraded from S4) | open | network 5201: both browsers in the first pass, Firefox in the final |
+| #1190 | S2 | open, new | network 5202 on Firefox, a run by seed (1 of 5 that reached the step) |
+| #1144 | S2 | fixed (#1155) | — |
+| #1138 | S3 | open | not met in C5 |
+| #1145 | S3 | open | wave 1, two single-window forms |
+| #1146 | S3 | open | wave 1 |
+| #1147 | S3 | open | wave 1 |
+| #1149 | S3 | open | wave 1, the held-unlock forms |
+| #1150 | S3 (regraded from S4) | open | wave 1 (a07's replay) |
+| #1170 to #1177, #1179 to #1182, #1184, #1185 | S3 | open, new | wave 1 |
+| #1131, #1132, #1133, #1135, #1136, #1148 | S4 | open | the seeds (counts above; #1136 in the network suite only) and wave 1, but #1148 in wave 1 only |
+| #1178, #1183, #1186 | S4 | open, new | wave 1 |
+| #432 | known limit | closed `known-limit` | `pre-update` 5101 on Chrome, first pass |
+| #1151 | known limit | closed `known-limit` | wave 1 |
+| #1158 | S3 | open (another lane's) | wave 1 |
+
 ## UI impact
 
 None. One product line: the import run logs a debug line where it ends, with its stage and status only (D43), which no screen shows. A missing `data-testid` is added only where a driver needs one, which is not a UI change.
@@ -484,6 +705,12 @@ Each finding was checked against the tree before its disposition; detail in less
 - **C2 implementation, Codex round 2:** reject; 7 must-fix, 1 consider. Accepted and fixed: `do` exports handed to the browser through `/proc/self` (a regression of round 1's fix), now outside the directory by real path, which also takes their final-file links out of an agent's reach (D74); Firefox's refusal was its authenticator's, so it met every page, and the call count took a create for an assertion: every fault is a one-shot page shim, spent when its shim is gone, unknown when its page was reloaded or closed, and reconciled at the end (D71); end routes masked like the others; the open profile compared per command (D72); a phrase `do` could not read becomes an incomplete check. Declined: the pick-file upload's directory-swap race and the pid check-to-signal window, both needing a same-user process acting while the session runs, which can already do whatever the user can (D74); Node and Bun expose no pidfd.
 - **C2 implementation, Codex round 3 (the last):** reject; 2 must-fix, both accepted and fixed without a fourth round: an 8-hex id with no digit escaped the id mask, and the open profile's place in the wallet's list, which has no set order, made a replay differ; profiles are now numbered in the order the session first listed them (D72). Every round-2 finding was confirmed closed, and both declines were accepted: no actor inside the boundary invalidates the same-user premise.
 - **C2 landing (Codex, one round and its resume):** landed on dev after #1140, join reviewed. #1140 landed as one squash, so C2's change was applied on `dev` and its ledger rows renumbered D60 to D75 after C3.1's D45 to D59. Changes-needed, 3 findings, all accepted and fixed: a passkey session's bearer outside strict mode read as O1 (A3 gives either method one); a replay ignored the original's runner exit; the README's `--nth`/`--now` verbs and needle list. Beside them, the session's leak check now passes C3.1's needle homes, without which a `do`-made passkey profile's `prfSalt` read as O7 in its own row. Resume: approve. Not blocking: sessions inherit C3.1's PRF needles only through `do`'s drivers, and the model-free O2 reads no retired row, which no session start reaches.
+- **C5 implementation, Codex round 1:** changes-needed, 7 must-fix, 1 consider, all accepted and fixed: `raceEnd` treated a missing signal as an end and gave nested reads the whole bound; 5101's retry line is #432's (closed `known-limit`) and named so, and 5104 is recorded on #1131 rather than dropped for not replaying; #1134 and #1137 regraded S2 under the signed scale; the testnet checklist switches each profile to Testnet, expects a silent cancel, names each export's and restore's password, and installs Firefox so it survives a restart; D76 records the agents' real time; #1137 attributed by producer, said so.
+- **C5 implementation, Opus round 1 (beside Codex round 1):** changes needed, 6 must-fix, 2 consider, overlapping Codex on three. Accepted and fixed, beyond Codex's: the race's bound is 10 s, not the unlock's 60 s; no 1 ms end read; a restart under an open page keeps Import and New profile whatever the profiles left (`decideLockLanding`); #432's pattern narrowed to its fetch failure, with two near misses; 5104 placed by its record (P4 open until at most 1.8 s before); step 9 restarts the background for the strict contrast, then the browser; step 4 confirms the duplicate-wallet warning.
+- **C5 implementation, Codex round 2:** not converged, 3 must-fix, all accepted: the race's service read bounded by its deadline; P87-01's fleet gate recorded unmet; Firefox's background stopped with every wallet window closed and checked stopped.
+- **C5 implementation, Codex round 3 (the last):** not converged, 2 must-fix, both accepted and fixed without a fourth round: an answer counts only inside the race's bound (`becb2772a`); P87-01's wave is unmet in size as well as length, and D-orch-6 defers to that gate.
+- **C5 cross-arc (a fresh Codex session over every arc's tests, launcher and plan):** changes-needed, 4 must-fix, all accepted and fixed (`d1688a491`): a Firefox record lost its unlimited authenticator to JSON; a `do` that threw recorded no drawn params, so its replay drew again; records named no browser or extension version, release or candidate; #1150 is S3, not S4. With them, the launcher defects the wave-1 replays exposed: a replay of a session cut short threw on its unread end, and a page closing itself as the checks read it ended a session. A screenshot that rendered no frame ended three of six Chrome sessions early, and it still ends its session (D78).
+- **C5 cross-arc, resumed:** changes-needed, 2 must-fix, 1 consider, all accepted and fixed: a capture bounded by its deadline would leave the browser's screenshot lock held, so the hang stays an end; a page read that fails is read again unless the page closed, and a second failure throws, so an open page is never skipped as checked; the proverless flag reads `NULO_E2E_PROVERLESS === "1"` as the suite does. Resumed again: converged.
 - **Outline B:** disputed in planning (Codex for a narrow seeded sequence test over `src/wallet/services/profile/service.integration.test.ts`'s graph, Opus against, on the upkeep of a second driver set over a service API A2 and A3 rewrite). Settled by the orchestrator's D19: added, narrow, as C4.2 once A3 has merged.
 
 ## Seeds (draft; finalized after approval)
