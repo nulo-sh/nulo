@@ -135,16 +135,17 @@ const handleReset = async () => {
 	const deletedId = appStore.profile.id
 
 	isResetting.value = true
-	if (!(await listsEveryImport())) {
-		isResetting.value = false
-		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
-		void readImported()
-		return
-	}
+	const listed = await listsEveryImport()
 	// The read can outlast the page, or see its profile moved; the deletion is then never sent.
 	if (isUnmounted || appStore.profile?.id !== deletedId) {
 		isResetting.value = false
 		if (isUnmounted) deleteService.disconnect()
+		return
+	}
+	if (!listed) {
+		isResetting.value = false
+		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
+		void readImported()
 		return
 	}
 
@@ -163,8 +164,13 @@ const handleReset = async () => {
 		isResetting.value = false
 		clearTimeout(slowDeleteTimer)
 		isSlowDelete.value = false
-		// Refused as an unknown id, the profile may be gone already: the window follows it, with no retry to offer.
-		if (isInvalidProfileIdError(err) && ["followed", "superseded"].includes(await checkSelection())) return
+		// Refused as an unknown id, the profile may be gone already: a window that followed it, or has
+		// moved off it, has no retry to offer.
+		if (
+			isInvalidProfileIdError(err) &&
+			(appStore.profile?.id !== deletedId || ["followed", "superseded"].includes(await checkSelection()))
+		)
+			return
 		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
 		return
 	}

@@ -96,6 +96,15 @@ describe("a session opened without a lock", () => {
 		other.onSessionOpened("p2")
 		expect(other.store.popups).toBe(0)
 	})
+
+	test("keeps the sheets of a page that needs no profile, whose flow owns them", () => {
+		for (const routeName of ["popup-import", "popup-profile-new", "popup-register"]) {
+			const s = shell([p1], { routeName })
+			s.store.isLogined = false
+			s.onSessionOpened("p2")
+			expect(s.store.popups).toBe(1)
+		}
+	})
 })
 
 describe("the lock event", () => {
@@ -194,6 +203,14 @@ describe("a list that no longer holds the selected profile", () => {
 		)
 		expect(empty.store.selected).toBeUndefined()
 		expect(empty.routes).toEqual(["/popup/register"])
+
+		const none = shell([p1, p2])
+		none.store.selected = undefined
+		await none.onLockEvent(
+			async () => [p2],
+			() => true,
+		)
+		expect([none.store.selected, none.store.chooser, none.routes]).toEqual([undefined, false, ["/popup/auth"]])
 	})
 
 	test("a locked window's check lands it as a lock does, and says the profile was followed", async () => {
@@ -214,6 +231,18 @@ describe("a list that no longer holds the selected profile", () => {
 			),
 		).toBe("followed")
 		expect([last.store.selected, last.routes]).toEqual([undefined, ["/popup/register"]])
+	})
+
+	test("a window with no selection checks too: the deletion that leaves no profile lands it on register", async () => {
+		const s = lockedShell([p2])
+		s.store.selected = undefined
+		expect(
+			await s.checkSelection(
+				async () => [],
+				() => true,
+			),
+		).toBe("followed")
+		expect(s.routes).toEqual(["/popup/register"])
 	})
 
 	test("on a page that needs no profile, the check changes the selection and nothing else", async () => {

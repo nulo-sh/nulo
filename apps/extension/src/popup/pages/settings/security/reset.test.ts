@@ -183,6 +183,19 @@ describe("Delete Profile's client", () => {
 			w.unmount()
 		}
 		vi.clearAllMocks()
+		let refuse: (error: Error) => void = () => {}
+		client.deleteProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)))
+		const page = await mountReady()
+		await page.w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
+		page.app.profile = other
+		refuse(new Error("Invalid profile id"))
+		await flushPromises()
+		expect(checkSelection).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+		page.w.unmount()
+
+		vi.clearAllMocks()
 		client.deleteProfile.mockRejectedValueOnce(new Error("coordinator not ready"))
 		const { w } = await mountReady()
 		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
@@ -236,17 +249,30 @@ describe("Delete Profile stays bound to the profile it was opened for", () => {
 		expect([router.push, router.replace, router.back].map((f) => f.mock.calls.length)).toEqual([0, 0, 0])
 	})
 
-	test("a press whose list read outlasts the page sends no deletion, and lets go of the client", async () => {
-		let answer: (networks: unknown[]) => void = () => {}
-		const { w } = await mountReady({ isLogined: true })
-		await flushPromises()
-		reads.getNetworks.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
-		await deleteButton(w).trigger("click")
-		w.unmount()
-		answer([])
-		await flushPromises()
-		expect(client.deleteProfile).not.toHaveBeenCalled()
-		expect(client.disconnect).toHaveBeenCalledTimes(1)
+	test("a press whose list read outlasts the page sends no deletion, says nothing and lets go of the client", async () => {
+		for (const outcome of ["answers", "fails"]) {
+			vi.clearAllMocks()
+			let answer: (networks: unknown[]) => void = () => {}
+			let fail: (error: Error) => void = () => {}
+			const { w } = await mountReady({ isLogined: true })
+			await flushPromises()
+			reads.getNetworks.mockReturnValueOnce(
+				new Promise((resolve, reject) => {
+					answer = resolve
+					fail = reject
+				}),
+			)
+			await deleteButton(w).trigger("click")
+			w.unmount()
+			if (outcome === "answers") answer([])
+			else fail(new Error("worker gone"))
+			await flushPromises()
+			expect(client.deleteProfile).not.toHaveBeenCalled()
+			expect(openToast).not.toHaveBeenCalled()
+			// The mount's read and the press's, and none after the page left.
+			expect(reads.getNetworks).toHaveBeenCalledTimes(2)
+			expect(client.disconnect).toHaveBeenCalledTimes(1)
+		}
 	})
 })
 

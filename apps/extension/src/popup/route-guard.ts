@@ -16,7 +16,6 @@ import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { postAuthRoute } from "@/utils/own-window"
 import { authRequiredGate } from "./auth-guard"
-import { lockScreenProfile } from "./lock-screen-profile"
 import type { StartGrace } from "./start-grace"
 
 type AppStore = ReturnType<typeof useAppStore>
@@ -79,9 +78,10 @@ async function decideWithReads(
 	if (!appStore.profile && to.name !== "popup-register" && to.name !== "popup-import" && to.name !== "popup-profile-new") {
 		const profiles = await profileApi.getProfiles()
 		if (!profiles.length) return { name: "popup-register" }
-		const onLockScreen = lockScreenProfile(profiles, await getLastActiveProfileId())
+		const lastActiveId = await getLastActiveProfileId()
+		const lastActive = lastActiveId ? profiles.find((p) => p.id === lastActiveId) : undefined
 		// A boot run can select a profile while these reads are in flight; its choice stands.
-		if (!appStore.profile) appStore.profile = onLockScreen
+		if (!appStore.profile) appStore.profile = lastActive ?? profiles[0]
 	}
 
 	if (to.meta.requirePasswordProfile && appStore.profile?.type === "passkey") return { path: "/popup/settings/profile" }

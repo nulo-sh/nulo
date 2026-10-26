@@ -43,10 +43,10 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		shell.resetContactImports()
 	}
 	/** A selection `profiles` no longer holds gives way to the lock screen's profile; with none to
-	 *  presume, the window chooses. */
+	 *  presume, the window chooses. No selection stays none, for the route guard to fill. */
 	const reselect = (profiles: P[], lastActiveId: string | undefined) => {
 		const selected = shell.selectedId()
-		if (selected !== undefined && profiles.some((p) => p.id === selected)) return
+		if (selected === undefined || profiles.some((p) => p.id === selected)) return false
 		const next = lockScreenProfile(profiles, lastActiveId)
 		shell.select(next)
 		return next === undefined && profiles.length > 0
@@ -108,10 +108,12 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 	/** A session opened without a lock before it (a password change re-opens one). An import fenced to
 	 *  the session it replaced may still await the PXE, and must not hold Lock in this one. No sheet of
 	 *  the lock screen or of another profile stays over the profile it opens; a re-open of the profile
-	 *  this window already shows keeps what it has open. */
+	 *  this window already shows keeps what it has open, and so does a page that needs no profile,
+	 *  whose sheets belong to its own flow. */
 	const onSessionOpened = (profileId: string) => {
 		shell.resetContactImports()
-		if (shell.openProfileId() !== profileId) shell.closePopups()
+		if (shell.openProfileId() === profileId || PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) return
+		shell.closePopups()
 	}
 
 	return { enter, onLockEvent, checkSelection, onSessionOpened }

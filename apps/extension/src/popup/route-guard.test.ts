@@ -88,15 +88,6 @@ describe("lateDecision", () => {
 		expect(api.getProfiles).toHaveBeenCalledTimes(3)
 	})
 
-	test("no profile, several left and the last active gone: it presumes none, never a list position", async () => {
-		const api = profileApi()
-		api.getProfiles.mockResolvedValueOnce([{ id: "a" }, { id: "b" }] as never)
-		lastActiveMock.mockResolvedValueOnce("deleted")
-		const s = store()
-		expect(await lateDecision(route("popup-auth"), s, api, readyGrace())).toBeUndefined()
-		expect((s as { profile?: { id: string } }).profile).toBeUndefined()
-	})
-
 	test("a password-only route bounces a passkey profile to settings", async () => {
 		expect(
 			await lateDecision(
