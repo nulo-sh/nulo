@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
 import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
+import { applyAccountRow } from "@/utils/account-rows"
 import { managers } from "@/utils/core"
 
 /** Composables */
@@ -68,7 +69,7 @@ const handleCreateAccount = async () => {
 
 		// The account is created either way; only SELECTING it moves the scope, so
 		// that part is re-checked after the creation RPC.
-		appStore.accounts.push(account)
+		applyAccountRow(appStore, account)
 		const selected = await appStore.commitScopeChange(() => {
 			appStore.account = account
 		})

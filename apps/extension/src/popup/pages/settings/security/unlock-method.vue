@@ -16,7 +16,7 @@ import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vu
 
 /** Services */
 import { managers } from "@/utils/core"
-import { InvalidPasswordError, UnlockMethodChangedError } from "@nulo/extension-messaging/errors"
+import { InvalidPasswordError, StaleUnlockCredentialError, UnlockMethodChangedError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -30,7 +30,7 @@ const { openToast } = useToast()
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
-import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
 
 /** Store */
@@ -65,6 +65,9 @@ const runs = createRunFence()
  *  profile's new-password step. Shallow: the answer itself is never made reactive. */
 const heldAnswer = shallowRef(null)
 const isNewPasswordStep = computed(() => heldAnswer.value !== null)
+/** This page's own changes still with the service. The update and the reopened session one causes
+ *  arrive before its answer, and only that answer says whether the change was made. */
+let commitsInFlight = 0
 const currentLine = computed(() => {
 	if (isNewPasswordStep.value)
 		return "This profile currently unlocks with a passkey. After the change, it unlocks with the password you set here."
@@ -73,21 +76,53 @@ const currentLine = computed(() => {
 	return isPasskey.value ? "This profile unlocks with a passkey." : "This profile unlocks with a password."
 })
 
-function reset() {
-	runs.invalidate()
+managers.profile.onProfileUpdated.add(onProfileUpdated)
+function onProfileUpdated(profile) {
+	if (profile?.id === appStore.profile?.id) onChangedElsewhere()
+}
+
+function clearStep() {
 	step.value = ""
 	password.value = ""
 	isWrongPassword.value = false
 	newPassword.value = ""
 	repeatedNewPassword.value = ""
-	isBusy.value = false
 	heldAnswer.value = null
 }
 
-/** The current passkey's card, asked at the profile's own input. */
-async function currentPasskey() {
+function reset() {
+	runs.invalidate()
+	clearStep()
+	isBusy.value = false
+}
+
+/** Another window changed this profile's unlock or password: the step, and what it holds, were
+ *  asked of an unlock the profile no longer has. */
+function onChangedElsewhere() {
+	if (commitsInFlight === 0) reset()
+}
+
+/** A lock or an ended session: nothing asked under it outlives it. A change still with the service
+ *  keeps its run, to report what the service answers. */
+function onSessionEnded() {
+	if (commitsInFlight > 0) clearStep()
+	else reset()
+}
+
+const changeUnlockMethod = async (id, current, next) => {
+	commitsInFlight++
+	try {
+		await managers.profile.changeUnlockMethod(id, current, next)
+	} finally {
+		commitsInFlight--
+	}
+}
+
+/** The current passkey's card, asked at the profile's own input, and never once the run is stale. */
+async function currentPasskey(isCurrent) {
 	const { id, name } = appStore.profile
 	const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(id)
+	if (!isCurrent()) return undefined
 	return runCeremony({ mode: "get", credentialId, prfSalt, step: "unlockMethod", profileName: name })
 }
 
@@ -115,9 +150,14 @@ async function attempt(run) {
 			router.replace("/popup/auth")
 			return
 		}
+		if (error instanceof StaleUnlockCredentialError) {
+			reset()
+			openToast({ kind: "info", label: "Unlock method changed in another window." })
+			return
+		}
 		if (handleCancelOrUnconfirmed(error, openToast)) return
 		console.error("[unlock-method] change failed", { error })
-		openToast({ kind: "error", label: "Couldn't change the unlock method. Try again." })
+		openToast({ kind: "error", label: passkeyFailureCopy(error, "Couldn't change the unlock method. Try again.") })
 	} finally {
 		if (isCurrent()) isBusy.value = false
 	}
@@ -140,7 +180,7 @@ const handleContinue = () =>
 		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
-		await managers.profile.changeUnlockMethod(id, { password: typed }, { passkey: next })
+		await changeUnlockMethod(id, { password: typed }, { passkey: next })
 		return "Now unlocks with your passkey"
 	})
 
@@ -148,19 +188,19 @@ const handleContinue = () =>
 const handleNewPasskey = () =>
 	attempt(async (isCurrent) => {
 		const id = appStore.profile.id
-		const current = await currentPasskey()
+		const current = await currentPasskey(isCurrent)
 		if (!isCurrent()) return undefined
 		await managers.profile.verifyUnlockCredential(id, { passkey: current })
 		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
-		await managers.profile.changeUnlockMethod(id, { passkey: current }, { passkey: next })
+		await changeUnlockMethod(id, { passkey: current }, { passkey: next })
 		return "Now unlocks with your new passkey"
 	})
 
 const handleUsePassword = () =>
 	attempt(async (isCurrent) => {
-		const answer = await currentPasskey()
+		const answer = await currentPasskey(isCurrent)
 		if (!isCurrent()) return undefined
 		await managers.profile.verifyUnlockCredential(appStore.profile.id, { passkey: answer })
 		if (!isCurrent()) return undefined
@@ -171,7 +211,7 @@ const handleUsePassword = () =>
 const handleSavePassword = () =>
 	attempt(async (isCurrent) => {
 		if (!canSaveNewPassword.value || !heldAnswer.value) return undefined
-		await managers.profile.changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
+		await changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
 		return isCurrent() ? "Now unlocks with your password" : undefined
 	})
 
@@ -182,6 +222,13 @@ const onKeydown = (e) => {
 }
 
 watch(() => appStore.profile?.id, reset)
+watch(() => appStore.profile?.type, onChangedElsewhere)
+watch(
+	() => appStore.isLogined,
+	(logged) => {
+		if (!logged) onSessionEnded()
+	},
+)
 
 // Firefox's toolbar panel closes under the passkey prompt every change runs, so the page moves to its
 // own window first. A failed move keeps the page where it is.
@@ -190,6 +237,7 @@ onBeforeMount(() => {
 })
 
 onBeforeUnmount(() => {
+	managers.profile.onProfileUpdated.remove(onProfileUpdated)
 	reset()
 })
 </script>

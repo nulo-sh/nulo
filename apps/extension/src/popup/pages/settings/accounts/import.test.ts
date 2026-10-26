@@ -8,7 +8,9 @@ import { expectNativeAttrs } from "../../../../../tests/helpers/credential-pins"
 const ADDRESS = `0x${"0b".repeat(32)}`
 const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
-	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, name: "Imported" })),
+	importAccount: vi.fn(
+		async (): Promise<unknown> => ({ profileId: "p1", chainId: 7, address: `0x${"0b".repeat(32)}`, name: "Imported" }),
+	),
 }))
 const uiPreference = vi.hoisted(() => ({ setSelectedAccount: vi.fn(async () => true) }))
 vi.mock("@/utils/core", () => ({ managers: { account, uiPreference } }))
@@ -35,6 +37,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 	closeOwnWindow: surface.closeOwnWindow,
 }))
 
+import { useAppStore } from "@/stores/app.store"
 import { pickFile } from "@/utils"
 import ImportAccount from "./import.vue"
 
@@ -236,5 +239,18 @@ describe("settings/accounts/import — the hand-off window", () => {
 		await flushPromises()
 		expect(surface.closeOwnWindow).toHaveBeenCalledTimes(1)
 		expect(pickFile).not.toHaveBeenCalled()
+	})
+})
+
+describe("settings/accounts/import — the account list", () => {
+	test("an account the service's event listed before the import answered is listed once", async () => {
+		const row = { profileId: "p1", chainId: 7, address: ADDRESS, name: "Imported" }
+		account.importAccount.mockImplementationOnce(async () => {
+			useAppStore().accounts.push(row as never)
+			return row
+		})
+		const w = await confirmStep()
+		await nameAndEnter(w, "Imported")
+		expect(useAppStore().accounts.filter((a) => a.address === ADDRESS)).toEqual([row])
 	})
 })

@@ -5,7 +5,12 @@
  */
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, Icon, Input, Text } from "@nulo/design"
-import { InvalidPasswordError, UnlockMethodChangedError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import {
+	InvalidPasswordError,
+	StaleUnlockCredentialError,
+	UnlockMethodChangedError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
@@ -17,6 +22,16 @@ const profile = vi.hoisted(() => ({
 	verifyUnlockCredential: vi.fn(async (_id: string, _credential: unknown): Promise<void> => undefined),
 	changeUnlockMethod: vi.fn(async (_id: string, _current: unknown, _next: unknown): Promise<void> => undefined),
 	getPasskeyUnlockParams: vi.fn(async (_id: string) => ({ credentialId: "Y3VycmVudA==", prfSalt: "Y3VyLXNhbHQ=" })),
+	onProfileUpdated: (() => {
+		const listeners = new Set<(p: unknown) => void>()
+		return {
+			add: (fn: (p: unknown) => void) => void listeners.add(fn),
+			remove: (fn: (p: unknown) => void) => void listeners.delete(fn),
+			invoke: (p: unknown) => {
+				for (const fn of listeners) fn(p)
+			},
+		}
+	})(),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile } }))
 const ceremony = vi.hoisted(() => ({ run: vi.fn(async (_req: { mode: string; prfSalt: string }): Promise<unknown> => undefined) }))
@@ -43,7 +58,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 import { useAppStore } from "@/stores/app.store"
-import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
+import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import UnlockMethod from "./unlock-method.vue"
 
 const wrappers: VueWrapper[] = []
@@ -55,7 +70,7 @@ function mountPage(type: "password" | "passkey", recoveryMode?: true) {
 			plugins: [
 				createTestingPinia({
 					createSpy: vi.fn,
-					initialState: { app: { profile: { id: "p1", name: "Main", type, recoveryMode } } },
+					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Main", type, recoveryMode } } },
 				}),
 			],
 			components: { Flex, Icon, Input, Text },
@@ -405,5 +420,127 @@ describe("how a change ends", () => {
 		mountPage("password")
 		await flushPromises()
 		expect(surface.move).not.toHaveBeenCalled()
+	})
+})
+
+describe("another window's change, a lock and an ended session", () => {
+	const as = (type: "password" | "passkey") => ({ id: "p1", name: "Main", type }) as never
+
+	/** A passkey profile at New Password, its card answered and both fields typed. */
+	async function atNewPassword() {
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-use-password")
+		await typePassword(w, "unlock-method-new-password-input", "new-password")
+		await typePassword(w, "unlock-method-new-password-confirm-input", "new-password")
+		expect(disabled(w, "unlock-method-save")).toBe(false)
+		return w
+	}
+
+	test("a passkey profile converted to a password elsewhere drops the card's answer and the typed password", async () => {
+		const w = await atNewPassword()
+		useAppStore().profile = as("password")
+		await flushPromises()
+		expect(current(w)).toBe("This profile unlocks with a password.")
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		expect(has(w, "unlock-method-save")).toBe(false)
+		expect(has(w, "unlock-method-use-passkey")).toBe(true)
+		nothingChanged()
+	})
+
+	test("a password profile converted to a passkey elsewhere drops the password step, and Enter asks nothing", async () => {
+		const w = mountPage("password")
+		await flushPromises()
+		await click(w, "unlock-method-use-passkey")
+		await typePassword(w, "unlock-method-password-input", "password123")
+		useAppStore().profile = as("passkey")
+		await flushPromises()
+		expect(current(w)).toBe("This profile unlocks with a passkey.")
+		expect(has(w, "unlock-method-password-input")).toBe(false)
+		w.get('[data-testid="unlock-method-current"]').element.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+		)
+		await flushPromises()
+		expect(profile.verifyUnlockCredential).not.toHaveBeenCalled()
+		nothingChanged()
+	})
+
+	test("an update to this profile from elsewhere, a new passkey of the same kind, drops the answer; another profile's does not", async () => {
+		const w = await atNewPassword()
+		profile.onProfileUpdated.invoke({ id: "p2", name: "Other", type: "passkey" })
+		await flushPromises()
+		expect(has(w, "unlock-method-new-password-input")).toBe(true)
+		profile.onProfileUpdated.invoke({ id: "p1", name: "Main", type: "passkey" })
+		await flushPromises()
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		nothingChanged()
+	})
+
+	test("the page's own change keeps its run through the update and the reopened session it causes", async () => {
+		const w = await atNewPassword()
+		profile.changeUnlockMethod.mockImplementationOnce(async () => {
+			profile.onProfileUpdated.invoke({ id: "p1", name: "Main", type: "password" })
+			useAppStore().profile = as("password")
+			await flushPromises()
+		})
+		await click(w, "unlock-method-save")
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your password" })
+		leftForSettings()
+	})
+
+	test("a change refused because the method changed meanwhile says so and starts the page over", async () => {
+		profile.changeUnlockMethod.mockRejectedValueOnce(new StaleUnlockCredentialError())
+		const w = await atNewPassword()
+		await click(w, "unlock-method-save")
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "info", label: "Unlock method changed in another window." })
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		expect(disabled(w, "unlock-method-use-password")).toBe(false)
+		stayed()
+	})
+
+	test("a passkey that gives no PRF result is told it can't unlock Nulo", async () => {
+		ceremony.run.mockRejectedValueOnce(new PasskeyPrfError("Passkey PRF has no results"))
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-use-password")
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "This passkey can't unlock Nulo." })
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		nothingChanged()
+	})
+
+	/** The lock's landing read is held, so a newer unlock of the same profile supersedes it and the
+	 *  page stays mounted with the same profile id across both. */
+	async function lockThenUnlock() {
+		const app = useAppStore()
+		app.isLogined = false
+		await flushPromises()
+		app.isLogined = true
+		app.profile = as("passkey")
+		await flushPromises()
+	}
+
+	test("a lock and an unlock of the same profile leave the page holding no answer and no typed password", async () => {
+		const w = await atNewPassword()
+		await lockThenUnlock()
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		expect(has(w, "unlock-method-save")).toBe(false)
+		await click(w, "unlock-method-use-password")
+		expect(nativeInput(w, "unlock-method-new-password-input").value).toBe("")
+		expect(nativeInput(w, "unlock-method-new-password-confirm-input").value).toBe("")
+		nothingChanged()
+	})
+
+	test("a card asked before a lock and answered after the unlock holds nothing", async () => {
+		const read = Promise.withResolvers<{ credentialId: string; prfSalt: string }>()
+		profile.getPasskeyUnlockParams.mockReturnValueOnce(read.promise)
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-use-password")
+		await lockThenUnlock()
+		read.resolve({ credentialId: CURRENT.id, prfSalt: CURRENT.prfSalt })
+		await flushPromises()
+		expect(ceremony.run).not.toHaveBeenCalled()
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		nothingChanged()
 	})
 })

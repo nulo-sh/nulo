@@ -20,6 +20,7 @@ import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
 import { AccountServiceClient } from "@/wallet/services/account/client"
+import { applyAccountRow } from "@/utils/account-rows"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
 import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
@@ -105,6 +106,14 @@ const arrivals = useArrivals({
 })
 const { seeded: arrivalsSeeded } = arrivals
 provide(ARRIVALS_KEY, arrivals)
+
+// Its own client: `managers.account` is replaced on every activation and network switch, and an
+// account another window adds or edits must reach this window's lists whichever is current.
+const accountRows = new AccountServiceClient()
+const onAccountRow = (row) => applyAccountRow(appStore, row)
+accountRows.onAccountAdded.add(onAccountRow)
+accountRows.onAccountUpdated.add(onAccountRow)
+void accountRows.connect()
 
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
@@ -551,6 +560,7 @@ onBeforeUnmount(() => {
 	arrivalsIncoming.disconnect()
 	arrivalsTokens.disconnect()
 	arrivalsPrices.disconnect()
+	accountRows.disconnect()
 	arrivals.dispose()
 	stale.dispose()
 	networkArrival.dispose()

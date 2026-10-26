@@ -98,7 +98,8 @@ async function dispose(w: VueWrapper) {
 beforeEach(() => {
 	appStoreState.accounts = []
 	appStoreState.hasInFlightSend = false
-	createAccountMock.mockResolvedValue({ name: "Account 1", address: "0xacct" })
+	// The created row, scoped as the service writes it.
+	createAccountMock.mockResolvedValue({ profileId: "p1", chainId: 1, name: "Account 1", address: "0xacct" })
 	commitScopeChangeMock.mockResolvedValue(true)
 	setSelectedAccountMock.mockResolvedValue(true)
 })
@@ -130,7 +131,7 @@ describe("NewAccountPopup — submit re-entrancy latch", () => {
 		await w.find('[data-testid="form-submit"]').trigger("click") // route 2b: click mid-flight
 		await flushPromises()
 
-		resolveCreate({ name: "Account 1", address: "0xacct" })
+		resolveCreate({ profileId: "p1", chainId: 1, name: "Account 1", address: "0xacct" })
 		await flushPromises()
 
 		const calls = createAccountMock.mock.calls.length
@@ -149,6 +150,21 @@ describe("NewAccountPopup — submit re-entrancy latch", () => {
 		expect(w.emitted("onClose")).toBeTruthy()
 		expect(w.find("[data-submit-loading]").attributes("data-submit-loading")).toBe("false")
 		await dispose(w)
+	})
+})
+
+describe("NewAccountPopup — the account list", () => {
+	test("an account the service's event listed before the create answered is listed once", async () => {
+		const row = { profileId: "p1", chainId: 1, name: "Account 1", address: "0xacct" }
+		createAccountMock.mockImplementationOnce(async () => {
+			appStoreState.accounts.push(row)
+			return row
+		})
+		const w = await mountShown()
+		pressEnterOnInput()
+		await flushPromises()
+		await dispose(w)
+		expect(appStoreState.accounts).toEqual([row])
 	})
 })
 
