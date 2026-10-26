@@ -487,6 +487,28 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 
+	it("a change of the profile's unlock made elsewhere starts the page over before the file is protected", async () => {
+		const wrapper = await reachBackupReady()
+		useAppStore().profile = { id: "p1", type: "password", name: "Test Profile" } as never
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
+		pressOn(wrapper.element as HTMLElement, "Enter")
+		await flushPromises()
+		expect(seal).not.toHaveBeenCalled()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a rename made elsewhere keeps the backup ready, and it still leaves under the password typed here", async () => {
+		const wrapper = await reachBackupReady()
+		useAppStore().profile = { id: "p1", type: "passkey", name: "Renamed" } as never
+		await flushPromises()
+		await typePair(wrapper, "pass1234", "pass1234")
+		await protectButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(seal).toHaveBeenCalledTimes(1))
+		expect(seal.mock.calls[0][1]).toBe("pass1234")
+	})
+
 	it("a switch during the passkey prompt ends that prompt, and the new profile's backup runs", async () => {
 		let endPrompt: (err: Error) => void = () => undefined
 		runCeremony.mockReturnValueOnce(

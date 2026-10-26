@@ -128,13 +128,14 @@ watch(backupStatus, async (status) => {
 	closeButton.value?.$el?.focus()
 })
 
-// A profile switch made elsewhere updates this page in place. A backup it holds is the previous
-// profile's, and the download rule would read the new profile's type, so the page starts over.
+// A profile switch, or a change of its unlock, made elsewhere updates this page in place. A backup it
+// holds was made for the previous profile or unlock, and the file-password rule reads the live type,
+// so the page starts over.
 watch(
-	() => appStore.profile?.id,
+	[() => appStore.profile?.id, () => appStore.profile?.type],
 	() => {
 		reset()
-		onCeremonyReject(new Error("The active profile changed"))
+		onCeremonyReject(new Error("The active profile or its unlock changed"))
 		pendingReset.value = null
 		void syncPendingReset()
 	},
