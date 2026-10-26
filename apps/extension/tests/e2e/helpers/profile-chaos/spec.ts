@@ -53,7 +53,9 @@ export function describeProfileChaos(title: string, opts: { armed: boolean; brow
 			test(`seed ${seed}`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async ({ freshExtensionPerTest }) => {
 				const p = list ? planFromList(list, "empty", caps, seed) : plan(seed, "empty", caps)
 				console.log(`[profile-chaos] seed ${seed} on ${JSON.stringify(caps)}\n${describePlan(p).join("\n")}`)
-				const record = recordTarget(join(process.cwd(), ".e2e-state"), browser, seed)
+				// A run the session launcher started keeps its records in that session's directory.
+				const records = process.env.NULO_E2E_CHAOS_SESSION ?? join(process.cwd(), ".e2e-state")
+				const record = recordTarget(records, browser, seed)
 				const files = `${record.path}.files`
 				const run = await startRun(freshExtensionPerTest, caps, files, network)
 				let missed: string[] = []

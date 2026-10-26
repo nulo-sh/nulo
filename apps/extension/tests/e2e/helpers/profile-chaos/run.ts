@@ -49,6 +49,7 @@ import {
 	type Plan,
 	type PlannedStep,
 	profileOf,
+	type StepEnd,
 	startWorld,
 	type World,
 } from "./model"
@@ -79,7 +80,7 @@ export interface Verdict {
 }
 
 /** Every secret the run knows, in each encoding a leak could take. */
-async function needlesOf(s: RunState): Promise<Needle[]> {
+export async function needlesOf(s: RunState): Promise<Needle[]> {
 	const out: Needle[] = []
 	const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64")
 	for (const [ref, value] of s.secrets)
@@ -105,7 +106,7 @@ const LOOPBACK_ORIGIN = /^[a-z][a-z0-9+.-]*:\/\/(localhost|127\.0\.0\.1|\[::1\])
 
 /** Every URL and every needle's value replaced by a name, so the record can carry an error's text:
  *  a node URL may carry a provider key. A loopback URL keeps its origin, which names a local port. */
-function mask(text: string, needles: readonly Needle[]): string {
+export function mask(text: string, needles: readonly Needle[]): string {
 	const unlinked = text.replace(URL_IN_TEXT, (url) => LOOPBACK_ORIGIN.exec(url)?.[0] ?? "<url>")
 	return needles.reduce((t, n) => (n.value.length >= 8 ? t.split(n.value).join(`<${n.name}>`) : t), unlinked)
 }
@@ -177,15 +178,17 @@ async function scanFiles(s: RunState, next: World, needles: readonly Needle[]): 
 	return out
 }
 
-interface StepEvidence {
+export interface StepEvidence {
 	violations: Violation[]
 	incomplete: string[]
 }
 
-async function checkStepLogs(
+/** Drains the logs since the last read and checks them with the page errors since the last mark:
+ *  O4 over what `ends` allows, the continuity of the ids, and every needle in every line, the lines
+ *  read before included for a needle learnt since. */
+export async function checkStepLogs(
 	s: RunState,
-	step: PlannedStep,
-	before: World,
+	ends: readonly StepEnd[],
 	restarted: boolean,
 	needles: readonly Needle[],
 ): Promise<StepEvidence & { hits: LeakHit[] }> {
@@ -212,7 +215,7 @@ async function checkStepLogs(
 	]
 	s.logs.seen.push(...logs.map(({ id, text }) => ({ id, text })))
 	for (const n of needles) s.logs.searched.add(n.name)
-	const errors = checkErrors([...pageErrors, ...logErrors(logs)], endsOf(step, before))
+	const errors = checkErrors([...pageErrors, ...logErrors(logs)], ends)
 	add(s.warns, errors.warns)
 	add(s.allowed, errors.allowed)
 	return { violations: errors.violations, incomplete, hits }
@@ -300,7 +303,7 @@ async function checkStep(
 	const unread = await learn(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
-	const logs = await checkStepLogs(s, step, before, restarted, needles)
+	const logs = await checkStepLogs(s, endsOf(step, before), restarted, needles)
 	const storage = await scanStorage(s.anchor, needles)
 	const files = await scanFiles(s, next, needles)
 	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...files.prfSalt], exports: files.exports }

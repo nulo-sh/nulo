@@ -7,13 +7,8 @@ import { live, type World } from "./model"
 import type { Driven, RunState } from "./state"
 import { backgroundServing, HOME, REGISTER, type Signal, settle } from "./ui"
 
-const RESTART_MS = 90_000
+export const RESTART_MS = 90_000
 
-/**
- * Stops the background and waits for its successor. Where the background will not stop under an
- * open page, every extension page closes first and the anchor reopens to wake the successor; the
- * authenticator there is the session's, so the run's passkeys survive.
- */
 /** Reads the background's lines right before it stops, so the step checks them with its successor's:
  *  only what it logs between this read and the stop stays unread. A failed read or a gap in it is
  *  the step's own gap, apart from the restart's. */
@@ -34,7 +29,10 @@ export async function drainBeforeStop(s: RunState): Promise<void> {
 	if (lines.length) s.logs.lastId = (lines.at(-1) as DrainedLog).id
 }
 
-export async function restartBackground(s: RunState, next: World): Promise<Driven> {
+/** Stops the background once its last lines are read, and returns once a successor runs. Where the
+ *  background will not stop under an open page, every extension page closes first and a fresh
+ *  anchor wakes the successor; the authenticator there is the session's, so the passkeys survive. */
+export async function replaceBackground(s: RunState): Promise<void> {
 	const before = await backgroundOrigin(s.ctx)
 	await drainBeforeStop(s)
 	if (!s.caps.restartUnderOpenPage) {
@@ -51,6 +49,10 @@ export async function restartBackground(s: RunState, next: World): Promise<Drive
 		(origin) => origin !== undefined && origin !== before,
 		{ label: "a successor background", timeoutMs: RESTART_MS, intervalMs: 250 },
 	)
+}
+
+export async function restartBackground(s: RunState, next: World): Promise<Driven> {
+	await replaceBackground(s)
 	const t0 = Date.now()
 	await backgroundServing(s.anchor, RESTART_MS)
 	const locked: Signal = live(next).length ? { label: "lock", hash: "/popup/auth" } : REGISTER
