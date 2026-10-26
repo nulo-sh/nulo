@@ -292,11 +292,19 @@ const lockedState = createLockedState({
 	clearActivity: () => appStore.clearActivity(),
 	resetInFlight: () => appStore.resetInFlight(),
 	resetContactImports: () => appStore.resetContactImports(),
+	openProfileId: () => (appStore.isLogined ? appStore.profile?.id : undefined),
 	cachedProfiles: () => appStore.profiles,
 	setProfiles: (profiles) => {
 		appStore.profiles = profiles
 	},
 	route: (path) => router.push(path),
+	selectedId: () => appStore.profile?.id,
+	select: (profile) => {
+		appStore.profile = profile
+	},
+	readLastActiveId: getLastActiveProfileId,
+	routeName: () => route.name,
+	openChooser: () => popupStore.open("select_profile"),
 })
 
 /** Sequence token for profile events. Handlers await service round-trips, and under load a
@@ -309,7 +317,7 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
-		lockedState.onSessionOpened()
+		lockedState.onSessionOpened(profile.id)
 		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
 		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an
@@ -334,6 +342,22 @@ const onActiveProfileChanged = async (profile) => {
 		() => managers.profile.getProfiles(),
 		() => seq === profileEventSeq,
 	)
+}
+
+/** Checks this window's selected profile against the stored list (`checkSelection`). */
+const checkSelection = () => {
+	const seq = profileEventSeq
+	return lockedState.checkSelection(
+		() => managers.profile.getProfiles(),
+		() => seq === profileEventSeq,
+	)
+}
+provide("checkSelection", checkSelection)
+
+/** A deletion while locked closes no session, so no lock event lands the window; one of the open
+ *  profile closes its session first, and the lock event lands it. */
+const onProfileDeleted = (profile) => {
+	if (profile?.id === appStore.profile?.id && !appStore.isLogined) void checkSelection()
 }
 
 /** The profile unlocked in RECOVERY MODE: its imported-keys DEK (or the envelope MAC over it)
@@ -422,6 +446,7 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	bootOutcome.value = ""
 	managers.profile.onActiveProfileChanged.add(onActiveProfileChanged)
 	managers.profile.onImportedKeysDegraded.add(onImportedKeysDegraded)
+	managers.profile.onProfileDeleted.add(onProfileDeleted)
 
 	const result = await reconcileLockedBoot({
 		readEventSeq: () => profileEventSeq,

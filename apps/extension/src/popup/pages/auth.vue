@@ -21,6 +21,7 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 
 /** Utils */
 import { AccountServiceClient } from "@/wallet/services/account/client"
+import { isInvalidProfileIdError } from "@/wallet/services/profile/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
@@ -72,6 +73,7 @@ const isProfileKnown = computed(() => !!appStore.profile)
 const bootOutcome = inject("bootOutcome", ref(""))
 const bootRetrying = inject("bootRetrying", ref(false))
 const isBootWithheld = computed(() => bootOutcome.value === "failed" || bootRetrying.value)
+const checkSelection = inject("checkSelection", async () => "unread")
 
 // Path A: in-page passkey ceremony. The dialog is mounted via `v-if="ceremonyRequest"`
 // in the template; we drive it imperatively via `runCeremony` to keep the
@@ -164,12 +166,22 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 	openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
 }
 
+/** An unknown-id refusal of an unlock whose profile may be gone: a screen that follows its deletion,
+ *  or that has already moved off it, has nothing to retry. */
+const followedMissingProfile = async (error, attemptId) => {
+	if (!isInvalidProfileIdError(error)) return false
+	if (appStore.profile?.id !== attemptId) return true
+	const check = await checkSelection()
+	return check === "followed" || check === "superseded"
+}
+
 const handleUnlockWallet = async () => {
 	if (!isAllowedToContinue.value) return
 	// Reentry guard: two programmatic submits while the first unlock awaits
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
+	const attemptId = appStore.profile?.id
 	// Closed before the attempt, so one that unlocks lands on a clean Home and a second failure shows
 	// its toast afresh.
 	if (toast.value?.kind === "error") closeToast()
@@ -190,7 +202,7 @@ const handleUnlockWallet = async () => {
 			// the analogous import handshake allows 30 s).
 			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
 		} catch (error) {
-			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
+			if (!(await followedMissingProfile(error, attemptId))) handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
 			return
 		} finally {
 			isAwaitingResponse.value = false

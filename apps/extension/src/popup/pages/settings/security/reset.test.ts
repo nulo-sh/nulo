@@ -26,8 +26,14 @@ const client = vi.hoisted(() => {
 		},
 	}
 })
-vi.mock("@/wallet/services/profile/client", () => ({ deleteProfileClient: () => client }))
-const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock("@/wallet/services/profile/client", async (importOriginal) => ({
+	isInvalidProfileIdError: (await importOriginal<typeof import("@/wallet/services/profile/client")>()).isInvalidProfileIdError,
+	deleteProfileClient: () => client,
+}))
+const activation = vi.hoisted(() => ({ running: false }))
+vi.mock("@/composables/useProfileBootstrap", () => ({ isActivatingOtherThan: () => activation.running }))
+const checkSelection = vi.hoisted(() => vi.fn(async () => "present"))
+const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
@@ -57,6 +63,7 @@ async function mountReady(app: Record<string, unknown> = {}) {
 	const w = mount(Reset, {
 		global: {
 			plugins: [pinia],
+			provide: { checkSelection },
 			components: { Flex, Text },
 			stubs: {
 				CollapsingHeroLayout: { template: "<div><slot /><slot name='bottom' /></div>" },
@@ -80,6 +87,8 @@ async function mountReady(app: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	activation.running = false
+	checkSelection.mockResolvedValue("present")
 	installChromeStorage({}, { persist: false })
 	reads.getNetworks.mockResolvedValue([])
 	reads.getAccounts.mockResolvedValue([])
@@ -101,7 +110,8 @@ describe("Delete Profile's client", () => {
 		await flushPromises()
 		expect(client.disconnect).toHaveBeenCalledTimes(1)
 		expect(app.profiles).toEqual([other])
-		expect(app.profile).toEqual(other)
+		// The lock screen picks the profile it opens on.
+		expect(app.profile).toBeUndefined()
 		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
 		expect(router.push).toHaveBeenCalledWith("/popup/auth")
 	})
@@ -126,9 +136,116 @@ describe("Delete Profile's client", () => {
 		expect(client.disconnect).toHaveBeenCalledTimes(1)
 	})
 
+	test("a profile opening while the deletion runs keeps what it set; one only selected on the lock screen stands, and the deleted profile's state is cleared", async () => {
+		for (const opening of [true, false]) {
+			client.deleteProfile.mockReset()
+			const call = client.pending()
+			const { w, app } = await mountReady()
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			await flushPromises()
+			w.unmount()
+			const network = { id: "n1", chainId: 1 } as never
+			const account = { address: `0x${"1".repeat(64)}` } as never
+			app.profile = other
+			app.network = network
+			app.accounts = [account]
+			app.account = account
+			activation.running = opening
+
+			call.resolve(main)
+			await flushPromises()
+			expect(app.profile).toEqual(other)
+			if (opening) {
+				expect([app.network, app.accounts, app.account]).toEqual([network, [account], account])
+				expect(router.push).not.toHaveBeenCalled()
+			} else {
+				expect([app.network, app.accounts, app.account]).toEqual([null, [], null])
+				expect(router.push).toHaveBeenCalledWith("/popup/auth")
+			}
+			vi.clearAllMocks()
+		}
+	})
+
+	test("refused as an unknown id: a profile the window followed away says nothing, one still listed offers a retry", async () => {
+		for (const [check, toasts] of [
+			["followed", false],
+			["superseded", false],
+			["present", true],
+		] as const) {
+			vi.clearAllMocks()
+			client.deleteProfile.mockRejectedValueOnce(new Error("Invalid profile id"))
+			checkSelection.mockResolvedValueOnce(check)
+			const { w } = await mountReady()
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			await flushPromises()
+			expect(checkSelection).toHaveBeenCalledTimes(1)
+			expect(openToast).toHaveBeenCalledTimes(toasts ? 1 : 0)
+			w.unmount()
+		}
+		vi.clearAllMocks()
+		client.deleteProfile.mockRejectedValueOnce(new Error("coordinator not ready"))
+		const { w } = await mountReady()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
+		expect(checkSelection).not.toHaveBeenCalled()
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
+	})
+
 	test("a page left with no deletion running lets go of its client at once", async () => {
 		const { w } = await mountReady()
 		w.unmount()
+		expect(client.disconnect).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("Delete Profile stays bound to the profile it was opened for", () => {
+	const deleteButton = (w: Awaited<ReturnType<typeof mountReady>>["w"]) => w.get('[data-testid="reset-submit-btn"]')
+
+	test("another window's unlock re-targets nothing: the page keeps its profile, drops the agreements, deletes nothing and leaves", async () => {
+		const { w, app } = await mountReady()
+		app.profile = other
+		app.isLogined = true
+		await flushPromises()
+
+		expect(w.find('[data-profile-name="Main"]').exists()).toBe(true)
+		expect(w.text()).not.toContain("Other")
+		expect(router.replace).toHaveBeenCalledWith("/popup/general")
+
+		for (const name of ["Other", "Main"]) {
+			await w.get('[data-testid="reset-confirm-input"]').setValue(name)
+			await deleteButton(w).trigger("click")
+		}
+		app.profile = main
+		app.isLogined = false
+		await w.get('[data-testid="reset-confirm-input"]').setValue("Main")
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+	})
+
+	test("locked, a move of the selection drops the agreements and leaves the landing to the lock or the deletion", async () => {
+		const { w, app } = await mountReady()
+		app.profile = other
+		await flushPromises()
+		app.profile = main
+		await flushPromises()
+		await w.get('[data-testid="reset-confirm-input"]').setValue("Main")
+		await deleteButton(w).trigger("click")
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+		expect([router.push, router.replace, router.back].map((f) => f.mock.calls.length)).toEqual([0, 0, 0])
+	})
+
+	test("a press whose list read outlasts the page sends no deletion, and lets go of the client", async () => {
+		let answer: (networks: unknown[]) => void = () => {}
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		reads.getNetworks.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+		await deleteButton(w).trigger("click")
+		w.unmount()
+		answer([])
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
 		expect(client.disconnect).toHaveBeenCalledTimes(1)
 	})
 })

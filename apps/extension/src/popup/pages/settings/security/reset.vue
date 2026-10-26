@@ -11,15 +11,18 @@
 
 <script setup>
 /** Services */
-import { deleteProfileClient } from "@/wallet/services/profile/client"
+import { deleteProfileClient, isInvalidProfileIdError } from "@/wallet/services/profile/client"
 import { managers, requireAccount, requireNetwork } from "@/utils/core"
 
 /** Utils */
 import { dashIfBlank, trimAddress } from "@/utils/string"
+import { leaveFor } from "@/utils/page-back"
+import { postAuthRoute } from "@/utils/own-window"
 import { importedKey, readImportedAccounts } from "./imported-accounts"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { isActivatingOtherThan } from "@/composables/useProfileBootstrap"
 const { openToast } = useToast()
 
 /** Components */
@@ -30,6 +33,11 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const router = useRouter()
+const checkSelection = inject("checkSelection", async () => "unread")
+
+/** The profile this page was opened for. Another window's unlock or a deletion moves the window's
+ *  selection; the page never follows it to another profile. */
+const target = appStore.profile && { id: appStore.profile.id, name: appStore.profile.name, retired: appStore.profile.retired === true }
 
 const checks = reactive({
 	permanent: false,
@@ -82,7 +90,13 @@ const exportFirstTo = computed(() => {
 const importedSettled = computed(() => !appStore.isLogined || imported.value !== null || importedReadFailed.value)
 
 const isReadyToReset = computed(
-	() => checks.permanent && checks.undone && checks.sure && confirmText.value === appStore.profile?.name && importedSettled.value,
+	() =>
+		checks.permanent &&
+		checks.undone &&
+		checks.sure &&
+		appStore.profile?.id === target?.id &&
+		confirmText.value === target?.name &&
+		importedSettled.value,
 )
 
 const isResetting = ref(false)
@@ -100,6 +114,7 @@ let slowDeleteTimer = null
 // unmounts this page before the purge returns, and the rest of the reset must still run.
 const deleteService = deleteProfileClient()
 let isUnmounted = false
+let deletedHere = false
 
 /** A press deletes only what the page lists: it reads the list again, and an import made since, in
  *  another window, refuses it until the page has shown that account. */
@@ -126,6 +141,12 @@ const handleReset = async () => {
 		void readImported()
 		return
 	}
+	// The read can outlast the page, or see its profile moved; the deletion is then never sent.
+	if (isUnmounted || appStore.profile?.id !== deletedId) {
+		isResetting.value = false
+		if (isUnmounted) deleteService.disconnect()
+		return
+	}
 
 	// AWAIT the deletion: deleteProfile now drives the coordinator's full awaited
 	// purge internally. If it REJECTS (e.g. the coordinator isn't ready, or a
@@ -136,11 +157,14 @@ const handleReset = async () => {
 	}, SLOW_DELETE_HINT_DELAY_MS)
 	try {
 		await deleteService.deleteProfile(deletedId)
-	} catch (_err) {
+		deletedHere = true
+	} catch (err) {
 		if (isUnmounted) deleteService.disconnect()
 		isResetting.value = false
 		clearTimeout(slowDeleteTimer)
 		isSlowDelete.value = false
+		// Refused as an unknown id, the profile may be gone already: the window follows it, with no retry to offer.
+		if (isInvalidProfileIdError(err) && ["followed", "superseded"].includes(await checkSelection())) return
 		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
 		return
 	}
@@ -149,14 +173,20 @@ const handleReset = async () => {
 	clearTimeout(slowDeleteTimer)
 	isSlowDelete.value = false
 
+	finishDeletion(deletedId)
+}
+
+/** The window once its deletion returned. */
+const finishDeletion = (deletedId) => {
 	appStore.profiles = appStore.profiles.filter((p) => p.id !== deletedId)
 	// The lock this deletion causes lets another profile be unlocked before a long purge returns;
-	// that profile's session and route stand.
-	if (appStore.profile && appStore.profile.id !== deletedId) {
+	// that profile's session and route stand. One the lock screen only selected has neither.
+	if (appStore.profile && appStore.profile.id !== deletedId && (appStore.isLogined || isActivatingOtherThan(deletedId))) {
 		openToast({ kind: "success", label: "Profile deleted" })
 		return
 	}
-	appStore.profile = appStore.profiles.length && appStore.profiles[0]
+	// The lock screen picks the profile it opens on, never a list position, and may have already.
+	if (appStore.profile?.id === deletedId) appStore.profile = undefined
 	appStore.networks = []
 	appStore.network = null
 	appStore.accounts = []
@@ -182,6 +212,18 @@ const handleReset = async () => {
 }
 
 watch(() => [appStore.isLogined, appStore.profile?.id], readImported, { immediate: true })
+// A change of the window's selection or session moves the profile the agreements were given for, so
+// they lapse. Unlocked, the page goes where an unlock goes; locked, the change is a lock or this
+// profile's deletion, and each lands the window itself. A deletion that returned routes by itself.
+watch(
+	() => [appStore.isLogined, appStore.profile?.id],
+	() => {
+		if (deletedHere) return
+		Object.assign(checks, { permanent: false, undone: false, sure: false })
+		confirmText.value = ""
+		if (appStore.isLogined) leaveFor(router, postAuthRoute(appStore.pageAwaitingAuth))
+	},
+)
 
 onBeforeUnmount(() => {
 	isUnmounted = true
@@ -198,13 +240,13 @@ onBeforeUnmount(() => {
 		collapsingLabel="Delete Profile"
 		backTo="/popup/settings"
 		tone="destructive"
-		:data-profile-name="appStore.profile?.name ?? ''"
+		:data-profile-name="target?.name ?? ''"
 	>
 		<!-- Profile -->
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile to delete</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" raw />
+				<SettingItem :title="target?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
 		</div>
 
@@ -250,12 +292,12 @@ onBeforeUnmount(() => {
 
 				type="text"
 				label="Profile name"
-				:placeholder="`Type &quot;${appStore.profile?.name}&quot; to confirm`"
+				:placeholder="`Type &quot;${target?.name}&quot; to confirm`"
 				data-testid="reset-confirm-input"
 			/>
 			<Text variant="body" color="tertiary" height="150" data-testid="reset-recovery-note">
 				{{
-					appStore.profile?.retired
+					target?.retired
 						? "This profile has no recovery phrase. Deleting it can't be undone."
 						: "You will be able to recover the accounts created from your recovery phrase later if you have saved it"
 				}}

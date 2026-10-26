@@ -265,8 +265,8 @@ const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
 const STRICT_TOGGLE = cite(SESSIONS, 750, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
 const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 197, ':title="strictRow.title"')
-const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
-const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 177, "if (!appStore.profiles.length) {")
+const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 67, "setLastActiveProfileId(profile.id)")
+const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 207, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
 const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
@@ -307,7 +307,7 @@ const RETIRED_EXPORTS = cite(SERVICE, 518, 'if (classifyProfileRow(profile).kind
 const RETIRED_LISTED = cite(SERVICE, 2362, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1283, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_FINALIZE = cite(SERVICE, 2544, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 300, 'data-testid="auth-delete-retired"')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 312, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 142, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 155, "if (isMounted()) router.push(doneRoute(path.value))")
@@ -422,7 +422,7 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
-const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 147, "handleImportProfile")
+const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 163, "handleImportProfile")
 
 /** An import that does not commit: a later profile is imported from the lock screen only, so the
  *  open session, if any, was locked on the way in. */

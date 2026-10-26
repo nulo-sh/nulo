@@ -38,6 +38,19 @@ describe("earlyDecision (synchronous)", () => {
 		expect(earlyDecision(route("popup-register"), route("y"), store())).toBeUndefined()
 		expect(earlyDecision(route("popup-auth"), route("y"), store())).toBeUndefined()
 	})
+
+	test("Back to the lock screen from a page it leads to, once unlocked, goes where an unlock goes, never onto the page again", () => {
+		const deletePage = route("popup-settings-security-reset", { isAuthRequired: false })
+		expect(earlyDecision(route("popup-auth"), deletePage, store({ isLogined: true }))).toEqual({
+			kind: "redirect",
+			to: "/popup/general",
+		})
+		expect(earlyDecision(route("popup-auth"), deletePage, store())).toBeUndefined()
+		expect(earlyDecision(route("popup-auth"), route("popup-settings", { isAuthRequired: true }), store({ isLogined: true }))).toEqual({
+			kind: "redirect",
+			to: { name: "popup-settings" },
+		})
+	})
 })
 
 describe("lateDecision", () => {
@@ -73,6 +86,15 @@ describe("lateDecision", () => {
 		// The onboarding routes never trigger the selection.
 		expect(await lateDecision(route("popup-import"), store(), api, readyGrace())).toBeUndefined()
 		expect(api.getProfiles).toHaveBeenCalledTimes(3)
+	})
+
+	test("no profile, several left and the last active gone: it presumes none, never a list position", async () => {
+		const api = profileApi()
+		api.getProfiles.mockResolvedValueOnce([{ id: "a" }, { id: "b" }] as never)
+		lastActiveMock.mockResolvedValueOnce("deleted")
+		const s = store()
+		expect(await lateDecision(route("popup-auth"), s, api, readyGrace())).toBeUndefined()
+		expect((s as { profile?: { id: string } }).profile).toBeUndefined()
 	})
 
 	test("a password-only route bounces a passkey profile to settings", async () => {

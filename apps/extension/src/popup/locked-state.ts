@@ -1,4 +1,11 @@
 import { watch } from "vue"
+import { lockScreenProfile } from "./lock-screen-profile"
+
+/** Pages that need no selected profile, as the route guard leaves them without one. */
+const PROFILE_FREE_ROUTES: ReadonlySet<string> = new Set(["popup-register", "popup-import", "popup-profile-new"])
+
+/** How a check of the window's selected profile against the stored list ended. */
+export type SelectionCheck = "present" | "followed" | "superseded" | "unread"
 
 export interface LockedStateShell<P> {
 	closePopups: () => void
@@ -9,14 +16,21 @@ export interface LockedStateShell<P> {
 	clearActivity: () => void
 	resetInFlight: () => void
 	resetContactImports: () => void
+	/** The profile this window shows unlocked, if any. */
+	openProfileId: () => string | undefined
 	cachedProfiles: () => P[]
 	setProfiles: (profiles: P[]) => void
 	route: (path: string) => void
+	selectedId: () => string | undefined
+	select: (profile: P | undefined) => void
+	readLastActiveId: () => Promise<string | undefined>
+	routeName: () => string | undefined
+	openChooser: () => void
 }
 
 /** The seal runs before anything awaits, so no snack stays up and no late result presents while
  *  a lock looks up where to land. */
-export function createLockedState<P>(shell: LockedStateShell<P>) {
+export function createLockedState<P extends { id: string }>(shell: LockedStateShell<P>) {
 	const seal = () => {
 		shell.closePopups()
 		shell.onLocked()
@@ -28,9 +42,20 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 		shell.resetInFlight()
 		shell.resetContactImports()
 	}
-	const land = (profiles: P[]) => {
+	/** A selection `profiles` no longer holds gives way to the lock screen's profile; with none to
+	 *  presume, the window chooses. */
+	const reselect = (profiles: P[], lastActiveId: string | undefined) => {
+		const selected = shell.selectedId()
+		if (selected !== undefined && profiles.some((p) => p.id === selected)) return
+		const next = lockScreenProfile(profiles, lastActiveId)
+		shell.select(next)
+		return next === undefined && profiles.length > 0
+	}
+	const land = (profiles: P[], lastActiveId?: string) => {
 		shell.setProfiles(profiles)
+		const choose = reselect(profiles, lastActiveId)
 		shell.route(profiles.length ? "/popup/auth" : "/popup/register")
+		if (choose) shell.openChooser()
 	}
 
 	/** Entered where the lock is already known and nothing is left to read. */
@@ -46,19 +71,50 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 	 */
 	const onLockEvent = async (readProfiles: () => Promise<P[]>, isCurrent: () => boolean) => {
 		seal()
+		// Read before the list, so no deletion lands between the list's answer and its use.
+		const lastActiveId = await shell.readLastActiveId().catch(() => undefined)
 		let profiles = shell.cachedProfiles()
 		try {
 			profiles = await readProfiles()
 		} catch {}
 		if (!isCurrent()) return
-		land(profiles)
+		land(profiles, lastActiveId)
+	}
+
+	/**
+	 * A locked window's selected profile may be gone: deleted in another window, which closes no
+	 * session here, or refused by an action as an unknown id. Gone, the window lands as a lock does,
+	 * unless it is on a page that needs no profile. A lock, an unlock or another selection meanwhile
+	 * supersedes the check.
+	 */
+	const checkSelection = async (readProfiles: () => Promise<P[]>, isCurrent: () => boolean): Promise<SelectionCheck> => {
+		const selected = shell.selectedId()
+		const lastActiveId = await shell.readLastActiveId().catch(() => undefined)
+		let profiles: P[]
+		try {
+			profiles = await readProfiles()
+		} catch {
+			return "unread"
+		}
+		if (!isCurrent() || shell.openProfileId() !== undefined || shell.selectedId() !== selected) return "superseded"
+		if (selected !== undefined && profiles.some((p) => p.id === selected)) return "present"
+		if (PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) {
+			shell.setProfiles(profiles)
+			reselect(profiles, lastActiveId)
+		} else land(profiles, lastActiveId)
+		return "followed"
 	}
 
 	/** A session opened without a lock before it (a password change re-opens one). An import fenced to
-	 *  the session it replaced may still await the PXE, and must not hold Lock in this one. */
-	const onSessionOpened = () => shell.resetContactImports()
+	 *  the session it replaced may still await the PXE, and must not hold Lock in this one. No sheet of
+	 *  the lock screen or of another profile stays over the profile it opens; a re-open of the profile
+	 *  this window already shows keeps what it has open. */
+	const onSessionOpened = (profileId: string) => {
+		shell.resetContactImports()
+		if (shell.openProfileId() !== profileId) shell.closePopups()
+	}
 
-	return { enter, onLockEvent, onSessionOpened }
+	return { enter, onLockEvent, checkSelection, onSessionOpened }
 }
 
 /** A lock control (the header chip or Lock now) marks the popup locked before the worker answers its

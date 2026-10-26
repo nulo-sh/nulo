@@ -116,9 +116,10 @@ const InputStub = {
 	template: `<input :value="modelValue" data-stub-input @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)" />`,
 }
 
-function mountAuth() {
+function mountAuth(provide: Record<string, unknown> = {}) {
 	const wrapper = mount(Auth, {
 		global: {
+			provide,
 			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
 			stubs: {
 				Input: InputStub,
@@ -556,6 +557,49 @@ describe("auth.vue — what a failed unlock says", () => {
 		await flushPromises()
 		await wrapper.find("form").trigger("submit")
 		await flushPromises()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
+	})
+})
+
+describe("auth.vue — an unlock refused as an unknown id", () => {
+	async function refuse(check: string, { passkey = false, moveTo }: { passkey?: boolean; moveTo?: string } = {}) {
+		const checkSelection = vi.fn(async () => check)
+		const { wrapper, appStore } = mountAuth({ checkSelection })
+		const refusal = new Error("Invalid profile id")
+		if (passkey) {
+			appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+			getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+			runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+			unlockPasskeyProfile.mockImplementation(async () => {
+				if (moveTo) appStore.profile = { id: moveTo, name: "Q", type: "password" } as never
+				throw refusal
+			})
+		} else unlockProfile.mockRejectedValue(refusal)
+		await flushPromises()
+		if (!passkey) await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		return checkSelection
+	}
+
+	test("the screen that followed the deleted profile, or moved on meanwhile, offers no retry", async () => {
+		for (const check of ["followed", "superseded"]) {
+			openToastMock.mockReset()
+			expect(await refuse(check)).toHaveBeenCalledTimes(1)
+			expect(openToastMock).not.toHaveBeenCalled()
+		}
+	})
+
+	test("a passkey attempt whose profile was replaced on screen during its prompt says nothing and checks nothing", async () => {
+		expect(await refuse("present", { passkey: true, moveTo: "p2" })).not.toHaveBeenCalled()
+		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test("a profile still listed, or a list that could not be read, keeps the attempt's own failure line", async () => {
+		await refuse("present")
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+		openToastMock.mockReset()
+		await refuse("unread", { passkey: true })
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
 	})
 })
