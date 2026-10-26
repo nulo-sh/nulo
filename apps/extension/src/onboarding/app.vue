@@ -11,12 +11,9 @@ import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 /** Utils */
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
+import { openPopupWindowAndClose } from "./hand-over"
 import { doneRoute } from "./steps"
 
-/** Store */
-import { useAppStore } from "@/stores/app.store"
-
-const appStore = useAppStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
 
@@ -45,32 +42,11 @@ function followSystemScheme() {
 }
 systemScheme.addEventListener("change", followSystemScheme)
 
-const POPUP_URL = chrome.runtime.getURL("src/popup/index.html")
-const ONBOARDING_TAB_ID_KEY = "nulo:onboarding:tab-id"
-
-async function openPopupWindowAndClose() {
-	await chrome.windows.create({
-		url: POPUP_URL,
-		type: "popup",
-		width: 380,
-		height: 620,
-	})
-	await chrome.storage.session.remove(ONBOARDING_TAB_ID_KEY)
-	window.close()
-}
-
 onBeforeMount(() => {
 	void themeRead.read()
 })
 
 onMounted(async () => {
-	await appStore.loadOnboardingCompleted()
-
-	if (appStore.onboardingCompleted) {
-		await openPopupWindowAndClose()
-		return
-	}
-
 	const active = await hydrateKnownProfile()
 	if (active) {
 		// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.

@@ -150,12 +150,13 @@ function createStaleNetworkState() {
 // Onboarding flag
 // ---------------------------------------------------------------------------------------------
 
+export const ONBOARDING_COMPLETED_KEY = "nulo:onboarding:completed"
+
 /** Onboarding state. True once the user has walked through the full onboarding tab flow
  *  (Create/Import → Aztec primer → Accelerator → Done). Persisted to chrome.storage.local so popup
  *  and onboarding tab agree on whether to redirect / resume. Cleared on profile reset. */
 function createOnboardingFlag() {
 	const onboardingCompleted = ref<boolean>(false)
-	const ONBOARDING_COMPLETED_KEY = "nulo:onboarding:completed"
 	const loadOnboardingCompleted = async () => {
 		const result = await storageLocalGet(ONBOARDING_COMPLETED_KEY)
 		onboardingCompleted.value = result[ONBOARDING_COMPLETED_KEY] === true

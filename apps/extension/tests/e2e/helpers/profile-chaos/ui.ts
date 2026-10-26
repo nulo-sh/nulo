@@ -3,7 +3,7 @@
  * state reached within a bound, and a miss reports the route and the loading testids on screen.
  */
 import type { Page } from "puppeteer"
-import { pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
+import { openProfileChooser, pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
@@ -115,8 +115,8 @@ export function timed(t0: number, boundMs: number, outcome: Driven["outcome"]): 
 	return { outcome, settle: { reached: elapsedMs <= boundMs, elapsedMs, boundMs } }
 }
 
-export async function isLocked(page: Page): Promise<boolean> {
-	return !(await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile"))
+export async function isLocked(page: Page, timeoutMs?: number): Promise<boolean> {
+	return !(await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile", [], timeoutMs))
 }
 
 /** Locks through Home's header when a session is open, since a settings page has none; else opens
@@ -145,8 +145,7 @@ export async function storedSelection(page: Page): Promise<string | undefined> {
 /** Points the lock screen at `profileId` through the picker, unless it is stored there already. */
 export async function pickOnLockScreen(page: Page, profileId: string): Promise<void> {
 	if ((await storedSelection(page)) === profileId) return
-	await page.waitForSelector('[data-testid="auth-profile"]', { visible: true, timeout: 15_000 })
-	await clickByTestId(page, "auth-profile")
+	await openProfileChooser(page)
 	const row = `[data-testid="select-profile-row"][data-profile-id="${profileId}"]`
 	await page.waitForSelector(row, { visible: true, timeout: 10_000 })
 	await clickSelector(page, row)
@@ -185,6 +184,31 @@ export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> 
 		},
 		{ timeout: ms, polling: 100 },
 	)
+}
+
+/** Where a held unlock's race ended within `boundMs`; an answer past it throws. A committed
+ *  attempt holds its session before its submit goes idle and leaves the lock screen only once the
+ *  router resolves Home. */
+export async function raceEnd(page: Page, boundMs: number): Promise<"home" | "lock" | "lock over a session" | undefined> {
+	const lock: Signal = { label: "lock", hash: "/popup/auth" }
+	const deadline = Date.now() + boundMs
+	// An answer counts only if it arrived inside the bound, whatever the read's own timeout.
+	const left = () => {
+		const ms = deadline - Date.now()
+		if (ms <= 0) throw new Error("the race did not end within its bound")
+		return ms
+	}
+	for (;;) {
+		const { label } = await firstSignal(page, [HOME, lock], left())
+		left()
+		if (label !== "lock") return label === "home" ? "home" : undefined
+		const locked = await isLocked(page, left())
+		const ms = left()
+		if (locked) return "lock"
+		// A shorter read than this could time out on a screen that still shows the lock.
+		if (ms < 500) return "lock over a session"
+		await new Promise((r) => setTimeout(r, 200))
+	}
 }
 
 export async function typePasswordAndSubmit(page: Page, password: string): Promise<void> {

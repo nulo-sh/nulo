@@ -187,6 +187,17 @@ them:
       AMO's Privacy policy field carries the 1.2.5 text (`apps/extension/store/listing.md` § Privacy
       policy text)
 
+**Due at the release that publishes Terms 1.2 and privacy 1.2.6:** both say that a passkey profile
+has a recovery phrase. Terms 1.2 is material, so every install that accepted 1.1 meets the
+re-acceptance sheet. Both effective dates are the day the promote publishes them:
+
+- [ ] `legal/terms.md` and `legal/privacy.md` — the version lines and the 1.2 and 1.2.6 history
+      rows, dated the day they are published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2 and `privacy` 1.2.6, same date
+- [ ] After the deploy, `nulo.sh/terms`, `nulo.sh/terms/v1.2/`, `nulo.sh/privacy` and
+      `nulo.sh/privacy/v1.2.6/` show no DRAFT banner, and AMO's Privacy policy field carries the
+      1.2.6 text (`apps/extension/store/listing.md` § Privacy policy text)
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 

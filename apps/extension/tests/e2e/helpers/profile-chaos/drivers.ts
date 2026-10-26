@@ -5,7 +5,7 @@
  */
 import type { Page } from "puppeteer"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
-import { waitForLockScreen } from "../../fixtures/auth"
+import { openProfileChooser, waitForLockScreen } from "../../fixtures/auth"
 import { extensionUrl, gotoExtensionPage, stopBackground } from "../../fixtures/browser"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet, withholdGetPrf } from "../../fixtures/passkey"
@@ -43,6 +43,7 @@ import {
 	pressUntilGone,
 	pickOnLockScreen,
 	pressTwice,
+	raceEnd,
 	REGISTER,
 	settle,
 	timed,
@@ -87,7 +88,7 @@ const PASSKEY_REFUSAL: { label: string; text: string }[] = [
  *  its dimmer never takes the next page's first press. */
 async function fromProfilePicker(page: Page, button: "select-profile-new-btn" | "select-profile-import-btn"): Promise<void> {
 	await toLockScreen(page)
-	await clickByTestId(page, "auth-profile")
+	await openProfileChooser(page)
 	await clickByTestId(page, button)
 	await settleClosedPopup(page, button)
 }
@@ -623,10 +624,13 @@ async function heldUnlockRace(s: RunState, compete: () => Promise<void>): Promis
 	await compete()
 	await hold.release()
 	await unlockAttemptEnded(page, UNLOCK_MS)
-	const seen = await firstSignal(s.anchor, [HOME, { label: "lock", hash: "/popup/auth" }], UNLOCK_MS)
-	// The cleanup lock below would wipe a session the race left open behind the lock screen.
-	if (seen.label !== "home" && !(await isLocked(page))) throw new Error("the lock screen shows while the service holds a session")
-	const outcome = seen.label === "home" ? "committed-then-locked" : "cancelled"
+	// Short: a session held behind the lock screen for longer is the failure, not a slow router.
+	const seen = await raceEnd(page, 10_000)
+	// The cleanup lock below would wipe a session the race left open behind the lock screen, and
+	// would put a page that reached neither end back on it.
+	if (seen === "lock over a session") throw new Error("the lock screen shows while the service holds a session")
+	if (seen === undefined) throw new Error("the race reached neither Home nor the lock screen")
+	const outcome = seen === "home" ? "committed-then-locked" : "cancelled"
 	await lockFromAnotherWindow(s.anchor)
 	await waitForLockScreen(s.anchor, LOCK_MS)
 	return timed(t0, UNLOCK_MS + LOCK_MS, outcome)

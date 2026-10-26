@@ -40,7 +40,7 @@ function checkLocked(r: SessionReading, p: ProfileReading): Violation[] {
 	if (r.protectedCallRefused === false) out.push(violation("O1", "locked, but a call that needs an open session was served"))
 	if (r.row) {
 		// A passkey profile's row outlives a background restart with no session behind it, and never
-		// holds a bearer (`code:apps/extension/src/wallet/services/profile/session-manager.ts:584`).
+		// holds a bearer (`code:apps/extension/src/wallet/services/profile/session-manager.ts:605`).
 		const passkey = p.listed.some((x) => x.id === r.row?.profile && x.type === "passkey")
 		if (!passkey || r.row.hasBearer || r.row.hasPasshash)
 			out.push(violation("O1", `locked, but a session row for ${r.row.profile} remains${r.row.hasBearer ? " with a bearer" : ""}`))
@@ -157,6 +157,9 @@ export function replayedFile(recorded: string, listing: (sub: string) => readonl
 /** What a session ends on: each page's route and stable testids, the listed profiles, the session,
  *  its findings not yet filed and its incomplete checks, each by what it says with ids masked. Filed
  *  findings are kept apart, since they recur by chance. */
+/** A session's end as its summary holds it: read, or why it could not be. */
+export type SessionEnd = EndState | { unreadable: string }
+
 export interface EndState {
 	pages: { id: string; route: string; testids: string[] }[]
 	profiles: { name: string; type: string }[]
@@ -282,8 +285,8 @@ function withoutLauncherEnd(original: readonly ActionRecord[], replay: readonly 
 /** Every way a replay differs from what it replays: a command sent otherwise, a status, a snapshot,
  *  the end, the findings. */
 export function compareReplay(
-	original: { actions: readonly ActionRecord[]; end: EndState },
-	replay: { actions: readonly ActionRecord[]; end: EndState },
+	original: { actions: readonly ActionRecord[]; end: SessionEnd },
+	replay: { actions: readonly ActionRecord[]; end: SessionEnd },
 ): string[] {
 	const out: string[] = []
 	const actions = withoutLauncherEnd(original.actions, replay.actions)
@@ -295,6 +298,11 @@ export function compareReplay(
 	})
 	const o = original.end
 	const r = replay.end
+	if ("unreadable" in o || "unreadable" in r) {
+		if ("unreadable" in o) out.push(`the original's end is unreadable: ${o.unreadable}`)
+		if ("unreadable" in r) out.push(`the replay's end is unreadable: ${r.unreadable}`)
+		return out
+	}
 	out.push(...comparePages(o, r))
 	if (sortedJson(o.profiles) !== sortedJson(r.profiles))
 		out.push(`the profiles end as ${sortedJson(r.profiles)}, not ${sortedJson(o.profiles)}`)
