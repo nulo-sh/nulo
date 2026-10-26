@@ -9,7 +9,7 @@
  *                                                       exits 0 served, 2 refused, 1 otherwise
  *   stop <dir>                                                                  prints what it stopped
  *   seeded --browser chrome|firefox --seed <n> [--runs <n>]                     runs profile chaos seeds
- *   replay <dir>                                                                replays a session's commands
+ *   replay <dir>                                                                replays a session's commands at its pace
  *
  * The pure contract lives in `tests/e2e/helpers/chaos-session/protocol.ts`; this file only spawns,
  * waits and reports.
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url"
 import { randomInt } from "node:crypto"
 import { readStartTime } from "../../tests/e2e/owned-processes"
 import type { ActionRecord, EndState } from "../../tests/e2e/helpers/chaos-session/checks"
-import { boundValue, compareReplay, replayedFile } from "../../tests/e2e/helpers/chaos-session/checks"
+import { boundValue, compareReplay, pauseBefore, replayedFile } from "../../tests/e2e/helpers/chaos-session/checks"
 import { SESSION_ENV, stillTheSame, sweepSession } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
 	ACTIONS_FILE,
@@ -365,7 +365,8 @@ async function replayMain(argv: readonly string[]): Promise<number> {
 		seed: info.seed,
 	})
 	out(`replaying ${actions.length} commands of ${info.id} in ${dir}`)
-	for (const a of actions) {
+	for (const [i, a] of actions.entries()) {
+		await sleep(pauseBefore(actions[i - 1], a))
 		const result = await send(dir, replayCommand(dir, a))
 		if (result.status === "ended") break
 	}

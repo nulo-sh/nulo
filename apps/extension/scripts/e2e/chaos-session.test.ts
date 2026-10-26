@@ -11,6 +11,7 @@ import {
 	compareReplay,
 	type EndState,
 	findingKey,
+	pauseBefore,
 	replayedFile,
 	secretFieldKind,
 } from "../../tests/e2e/helpers/chaos-session/checks"
@@ -436,6 +437,15 @@ describe("a replay", () => {
 		expect(bindingOf("typed by hand", [shown])).toBeUndefined()
 		const replayed = { ...shown, items: shown.items.map((i, k) => (k < 3 ? { ...i, text: `w${k}` } : i)) }
 		expect(boundValue(bound as NonNullable<typeof bound>, replayed)).toBe("w1 w2")
+	})
+
+	test("keeps the original's pause before each command, bounded", () => {
+		const at = (n: number, at: number, elapsedMs: number): ActionRecord => ({ n, command: {}, status: "ok", at, elapsedMs })
+		expect(pauseBefore(undefined, at(1, 5_000, 100))).toBe(0)
+		expect(pauseBefore(at(1, 5_000, 100), at(2, 9_000, 1_000))).toBe(3_000)
+		expect(pauseBefore(at(1, 5_000, 100), at(2, 5_500, 1_000))).toBe(0)
+		expect(pauseBefore(at(1, 0, 0), at(2, 900_000, 0))).toBe(120_000)
+		expect(pauseBefore(at(1, 5_000, 100), { n: 2, command: {}, status: "ok" })).toBe(0)
 	})
 
 	test("picks the replay's own download or copy of the same number", () => {

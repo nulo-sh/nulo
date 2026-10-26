@@ -189,6 +189,19 @@ export interface ActionRecord {
 	bound?: Binding
 	/** A snapshot's route and stable testids. */
 	seen?: { route: string; testids: string[] }
+	/** When the command's result was recorded, and how long serving it took. */
+	at?: number
+	elapsedMs?: number
+}
+
+/** The longest pause a replay keeps between two commands. */
+const MAX_PAUSE_MS = 120_000
+
+/** How long the original waited between `prev`'s result and sending `a`: a replay keeps the same
+ *  pauses, since a screen still loading reads otherwise than one that has loaded. */
+export function pauseBefore(prev: ActionRecord | undefined, a: ActionRecord): number {
+	if (prev?.at === undefined || a.at === undefined || a.elapsedMs === undefined) return 0
+	return Math.min(Math.max(a.at - a.elapsedMs - prev.at, 0), MAX_PAUSE_MS)
 }
 
 const PICKED = /^((?:downloads|files)\/\d+-).*$/
