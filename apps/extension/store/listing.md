@@ -54,8 +54,8 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
 | Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about daily (§ 5.11) |
-| Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:10-18` | Only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above) | The file the user saves (`downloads`) |
-| Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:36-51` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
+| Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:11-19` | Only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above) | The file the user saves (`downloads`) |
+| Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:47-62` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
 | Diagnostic logs | Memory; session storage with Developer Mode on | Only when the user exports them | The file the user saves |
 | Terms-acceptance record | Extension local storage | No | — |
 
@@ -80,24 +80,24 @@ private file system and grows with use; the default quota would evict it.
 Schedules four jobs: the token-price refresh while the wallet is unlocked and fiat display is on,
 the token list's daily refresh once the Terms are accepted, the session auto-lock timer, and the
 activity journal's upkeep, which settles operations left in flight and prunes old records
-(`wallet/index.ts:94-97`, `wallet/services/token-list/service.ts:128-130`,
-`wallet/services/profile/session-manager.ts:194`, `wallet/runtime.ts:656`, `:669`).
+(`wallet/index.ts:99-102`, `wallet/services/token-list/service.ts:143-145`,
+`wallet/services/profile/session-manager.ts:200`, `wallet/runtime.ts:694`, `:711`).
 
 #### `offscreen`
 
 Chrome only. Runs the private execution environment (the Aztec PXE, WASM-heavy) in a hidden
-extension document, because a service worker cannot host it (`wallet/utils/offscreen.ts:196-215`).
+extension document, because a service worker cannot host it (`wallet/utils/offscreen.ts:258-277`).
 Firefox hosts the same page as a frame of the background page and does not declare it.
 
 #### `sidePanel`
 
 Chrome only. Lets the user open the wallet in the browser's side panel instead of the popup
-(`popup/app.vue:114`). Every call is feature-gated; Firefox does not declare it.
+(`popup/app.vue:122`). Every call is feature-gated; Firefox does not declare it.
 
 #### `downloads`
 
 Saves backups, account exports, contacts and diagnostic logs when the user asks for an export
-(`utils/files.ts:64`). Nothing is downloaded without a click.
+(`utils/files.ts:71`). Nothing is downloaded without a click.
 
 #### Host `https://passkey.nulo.sh/`
 
@@ -156,7 +156,7 @@ match them.
   - *Authentication information* — passwords and keys (local, encrypted); the passkey label handed
     to the authenticator.
   - *Personally identifiable information* — contact names and addresses, profile names (local); the
-    passkey's name, which carries the profile name the user typed and which the user's password
+    passkey's name, which carries the profile's name and which the user's password
     manager may sync.
   - *Web history* — the origins and URLs of connected applications (local only).
 - **Certifications:** all three — not sold to third parties; not used or transferred for purposes
@@ -216,7 +216,7 @@ The value here must equal the manifest's; the test enforces it. Firefox's taxono
 `personallyIdentifyingInfo` (contacts stay local; a passkey profile's name is part of its passkey
 label (§ 5.4)). One reading is contestable and is stated in `legal/privacy.md` § 5.4: for passkey
 profiles the label "Nulo wallet · \<profile name\>" and a random
-identifier are handed to the browser's passkey interface (`wallet/services/passkey/spec.ts:74-75`,
+identifier are handed to the browser's passkey interface (`wallet/services/passkey/spec.ts:78-79`,
 `wallet/utils/passkey-ceremony.ts:40-44`); the declaration treats that as the browser acting at the
 user's request, not the add-on sending data to a party of its choosing. Chrome's form covers local handling as well and so ticks more boxes; the
 two differ by design.
@@ -249,7 +249,7 @@ Modifications to third-party code, stated exactly:
   `fetch()`es the bundled WASM asset (`apps/extension/scripts/bb-fetch-code-shim.ts`,
   `apps/extension/src/shims/bb-fetch-code.ts`), and the build fails if the upstream loader survives;
   upstream uses a dynamic `import()` that MV3 service workers forbid.
-- The bundled contract artifacts (`apps/extension/vite.shared.ts:51-54`) have their `debug_symbols`
+- The bundled contract artifacts (`apps/extension/vite.shared.ts:69-72`) have their `debug_symbols`
   and `file_map` blanked (`vite.config.ts:94`, `scripts/strip-artifact-debug-info.ts`); this removes
   the embedded Noir sources and changes no bytecode.
 
