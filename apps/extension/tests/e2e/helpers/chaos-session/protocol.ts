@@ -39,6 +39,9 @@ export const extCopyOf = (root: string, id: string): string => join(root, ".ext"
 /** The runner's output sits outside it too: the browser writes page errors there unmasked. */
 export const logOf = (root: string, id: string): string => join(root, ".log", `${id}.log`)
 
+/** Where a `do`'s exports go: outside the directory, since the browser reads them back by path. */
+export const doDirOf = (root: string, id: string): string => join(root, ".do", id)
+
 /** What the session tells the launcher about its browser, outside the directory an agent reads. */
 export const runOf = (root: string, id: string): string => join(root, ".run", `${id}.json`)
 

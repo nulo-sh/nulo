@@ -87,3 +87,12 @@ Codex: reject, 9 must-fix and 2 consider; Opus: conditional approve, 4 must-fix 
 - Chrome's `refuseNextStep` replaces the page's `navigator.credentials` methods, so a hit counter set before it was overwritten and reported a fault that had applied as unmet. The counter now wraps the refusal.
 - Firefox's browser process is not Puppeteer's child (geckodriver starts it), so the session records no profile for it; its processes keep the session's environment, which is how `stop` finds them.
 - `/proc/self/fd/<fd>/<name>` gives a path API the effect of `openat`: a directory held open stays the one written to, whatever is renamed over its name.
+
+## Review round 2 (2026-10-26, Codex resumed, high)
+
+Reject, 7 must-fix and 1 consider; 6 accepted and fixed, 2 declined (plan.md § Review verdicts, D56, D57, D59).
+
+- Round 1's held-directory fix handed C1's `do` exports to the browser as `/proc/self/fd/<fd>/<name>`; Puppeteer passes that path to the browser, where `/proc/self` is the browser. A descriptor path is only good inside the process that holds it. The tours never exercised a `do` export and a restore, so only the review caught it.
+- Firefox's `refuseNextStep` sets the session authenticator's user verification off, so it refuses every page's prompts until lifted; a page-local fault needs a page-local shim.
+- Whether a shim was spent reads best as whether it is still installed: each one puts the page's own method back on its first call.
+- Gate after round 2's fixes: a tour pair (Chrome ending on `end`, Firefox on a timeout) passed, the spent `refuse`, `no-prf` and `other` faults reported nothing, and the unspent `no-prf` (both) and the `refuse` left armed at `end` (Chrome) were reported.

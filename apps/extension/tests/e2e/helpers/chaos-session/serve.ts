@@ -83,6 +83,7 @@ import {
 	readSessionInfo,
 	resFile,
 	type Result,
+	doDirOf,
 	runOf,
 	type SessionDirs,
 	type SessionInfo,
@@ -134,6 +135,8 @@ interface Done {
 	/** The wallet went on working after the dispatch; the next settled command checks it. */
 	unsettled?: true
 	settle?: SettleReading
+	/** What the leak scan could not learn from the command, each an incomplete check. */
+	gaps?: string[]
 }
 
 /** A finding line: an oracle's violation, a check the session could not complete, or the agent's. */
@@ -153,8 +156,8 @@ export async function serveSession(ctx: ExtensionContext, dir: string): Promise<
 	recordBrowser(ctx, dir, info.id)
 	const dirs = holdSessionDirs(dir)
 	try {
-		// The run writes a `do`'s exports through the held directory too.
-		const run = await startRun(ctx, CAPS, dirs.out.files.path())
+		// A `do`'s exports stay outside the directory: the browser reads them back by path.
+		const run = await startRun(ctx, CAPS, doDirOf(dirname(dir), info.id))
 		const session = new Session(dir, dirs, info, run)
 		try {
 			await session.serve()
@@ -191,8 +194,9 @@ class Session {
 	private lateOutlived = false
 	/** A `--now` command's work has not been settled and checked since. */
 	private unsettled = false
-	/** What the last checks saw: each page's route and whether a session is open. */
-	private after: { open: boolean; routes: [PageId, string][] } | undefined
+	/** What the last checks saw: each page's route, and the open profile by name, method and place
+	 *  in the list, which two runs share where its id differs. */
+	private after: { open: false | { name: string; type: string; at: number }; routes: [PageId, string][] } | undefined
 	/** `do` reaches a starting point: it runs from `empty` through the catalog until a command drives
 	 *  the wallet directly, and stops once a `do` ends outside the model's outcomes. */
 	private doWorld: World | undefined = startWorld("empty")
@@ -279,8 +283,7 @@ class Session {
 			for (const v of checkSettle(verb, await this.settle())) lines.push({ kind: "violation", n, verb, ...v })
 			this.unsettled = false
 		}
-		for (const id of this.faults.unreleased())
-			lines.push({ kind: "incomplete", n, verb, reason: `the passkey hold on ${id} was never released` })
+		for (const reason of await this.faults.outstanding()) lines.push({ kind: "incomplete", n, verb, reason })
 		return lines
 	}
 
@@ -391,6 +394,7 @@ class Session {
 			const unmet = ACTS_ON_PAGE.has(cmd.verb) ? await this.faults.lift(cmd.page) : undefined
 			if (unmet) lines.push({ kind: "incomplete", n, verb: cmd.verb, reason: unmet })
 		}
+		for (const reason of done.gaps ?? []) lines.push({ kind: "incomplete", n, verb: cmd.verb, reason })
 		if (cmd.verb === "end") lines.push(...(await this.finalLines(n, cmd.verb)))
 		if (cmd.verb === "report") lines.push({ kind: "agent", n, text: mask(cmd.text, await needlesOf(this.s)) })
 		else lines.push(...(await this.check(n, cmd.verb, done.ends ?? [])))
@@ -660,13 +664,14 @@ class Session {
 		const allowed = step.expect.outcomes.includes(driven.outcome)
 		this.doWorld = allowed ? step.expect.next : undefined
 		if (allowed) this.doList.push(listed)
-		if (allowed) await learnPhrases(this.s, step.expect.next)
+		const gaps = allowed ? await learnPhrases(this.s, step.expect.next) : []
 		const secrets = Object.fromEntries(refs.map((ref) => [ref, this.s.secrets.get(ref as never)]))
 		return {
 			resolved: { ...cmd, params: params as Record<string, unknown> },
 			data: { action: cmd.action, params, outcome: driven.outcome, allowed: step.expect.outcomes, secrets },
 			ends: endsOf(listed, before),
 			settle: driven.settle,
+			gaps,
 		}
 	}
 
@@ -753,7 +758,11 @@ class Session {
 		for (const v of violations)
 			lines.push({ kind: "violation", n, verb, ...v, ...(v.detail ? { detail: mask(v.detail, needles) } : {}) })
 		s.origin = await backgroundOrigin(s.ctx)
-		this.after = { open: active !== undefined, routes: (await this.routes()).map(({ id, route }) => [id, maskIds(route)]) }
+		const at = profiles.listed.findIndex((p) => p.id === active?.id)
+		this.after = {
+			open: at < 0 ? false : { name: profiles.listed[at].name, type: profiles.listed[at].type, at },
+			routes: (await this.routes()).map(({ id, route }) => [id, maskIds(route)]),
+		}
 		return lines
 	}
 
@@ -796,7 +805,7 @@ class Session {
 		const pages = await Promise.all(
 			this.pages.list().map(async ({ id, page }) => {
 				const read = await page.evaluate(readQuiet).catch(() => undefined)
-				return { id, route: read?.route ?? "<closed>", testids: stableTestids(read?.ids ?? []) }
+				return { id, route: maskIds(read?.route ?? "<closed>"), testids: stableTestids(read?.ids ?? []) }
 			}),
 		)
 		const listed = await callService<{ id: string; name: string; type: string }[]>(this.s.anchor, "profile", "getProfiles")
