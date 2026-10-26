@@ -6,7 +6,7 @@ import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { classifyPasskeyFailure, handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { classifyPasskeyFailure, handleCancelOrUnconfirmed, PASSKEY_COPY } from "@/utils/passkey-copy"
 import {
 	type CreatePasskeyProfileDeps,
 	createPasskeyProfileInPage,
@@ -113,6 +113,11 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 
 	function reportCreateFailure(e: unknown) {
 		if (handleCancelOrUnconfirmed(e, opts.openToast)) return
+		// A passkey without PRF can never unlock Nulo, so the create says so as unlock does.
+		if (classifyPasskeyFailure(e) === "no-prf") {
+			opts.openToast({ kind: "error", label: PASSKEY_COPY.noPrf })
+			return
+		}
 		opts.notifyCreateFailed(authMethod.value === "passkey")
 		console.error("Failed to create profile:", e)
 	}

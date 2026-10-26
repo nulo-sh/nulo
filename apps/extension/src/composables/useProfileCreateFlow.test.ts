@@ -217,6 +217,20 @@ describe("useProfileCreateFlow", () => {
 		expect(flow.isCreating.value).toBe(false)
 	})
 
+	test.each([
+		["a passkey the person already has", true, new PasskeyPrfError("Passkey PRF not available")],
+		["a new passkey", false, new PasskeyUnconfirmedError("Y3JlZA==", "c2FsdA==", new PasskeyPrfError("Passkey PRF not available"))],
+	])("%s that gives no PRF toasts the unlock's line and raises no notice", async (_case, existing, failure) => {
+		passkeyRetry.mockRejectedValueOnce(failure)
+		const { flow, opts } = makeFlow()
+		flow.profileName.value = "MyProfile"
+		flow.authMethod.value = "passkey"
+		await (existing ? flow.handleCreateWithExistingPasskey() : flow.handleCreate())
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "This passkey can't unlock Nulo." })
+		expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+		expect(flow.isCreating.value).toBe(false)
+	})
+
 	test("password create failure notifies with isPasskey=false", async () => {
 		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
 		const { flow, opts } = makeFlow()

@@ -46,9 +46,16 @@ export const useNotificationStore = defineStore("notification", () => {
 		showNext()
 	}
 
+	/** Drops the shown notice and every queued one: a notice reports a step that has ended. */
+	const clear = () => {
+		queue.value = []
+		active.value = null
+	}
+
 	return {
 		active,
 		create,
 		removeActive,
+		clear,
 	}
 })
