@@ -123,10 +123,16 @@ const phraseNeverRevealed = async (profile) => {
 	return !flags?.phraseSaved && !flags?.imported
 }
 
+/** Whether the page still offers to delete `profileId`: an unlock elsewhere moves the profile, and a
+ *  page left meanwhile asks and deletes nothing. */
+const stillOffers = (profileId) => !isUnmounted && isReadyToReset.value && !isResetting.value && appStore.profile?.id === profileId
+
 const handleReset = async () => {
 	if (!isReadyToReset.value || isResetting.value) return
 	const profileId = appStore.profile.id
-	if (!(await phraseNeverRevealed(appStore.profile))) return runDeletion(profileId)
+	const warn = await phraseNeverRevealed(appStore.profile)
+	if (!stillOffers(profileId)) return
+	if (!warn) return runDeletion(profileId)
 	requestConfirm({
 		title: "Delete this profile?",
 		description: "Its recovery phrase was never saved. Without it, or a backup, its accounts are gone for good.",
@@ -137,10 +143,8 @@ const handleReset = async () => {
 	})
 }
 
-/** Starts only on a page still showing `deletedId`: an unlock elsewhere moves the profile, and a
- *  page left before the start deletes nothing. */
 const runDeletion = async (deletedId) => {
-	if (isUnmounted || !isReadyToReset.value || isResetting.value || appStore.profile?.id !== deletedId) return
+	if (!stillOffers(deletedId)) return
 
 	isResetting.value = true
 	if (!(await listsEveryImport())) {

@@ -483,6 +483,55 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(appStore.profile?.id).toBe("pA")
 	})
 
+	test("a selection made here while another window's pick loads stands", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([A, B, C]))))
+		elsewhere.pick("pB")
+		appStore.profile = C
+		release()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a pick or a deletion elsewhere during an unlock that fails here settles the profile once it ends", async () => {
+		const unlockThatFails = async (profile: ProfileInfo, elsewhereMeanwhile: () => void) => {
+			let fail!: () => void
+			unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+			const mounted = mountAuth()
+			mounted.appStore.profile = profile
+			await flushPromises()
+			await mounted.wrapper.find("[data-stub-input]").setValue("pass1234")
+			await mounted.wrapper.find("form").trigger("submit")
+			await flushPromises()
+			elsewhereMeanwhile()
+			await flushPromises()
+			expect(mounted.appStore.profile?.id).toBe(profile.id)
+			fail()
+			await flushPromises()
+			return mounted
+		}
+
+		const picked = await unlockThatFails(A, () => {
+			vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+			elsewhere.pick("pB")
+		})
+		expect(picked.appStore.profile?.id).toBe("pB")
+		picked.wrapper.unmount()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
+		const deleted = await unlockThatFails(A, () => {
+			vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+			elsewhere.delete("pA")
+		})
+		expect(deleted.appStore.profile).toBeUndefined()
+		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+
 	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A

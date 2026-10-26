@@ -28,10 +28,14 @@
  */
 import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 
+/** Whether a migration is running now, read once without waiting for it to end. */
+export async function isMigrationRunning(): Promise<boolean> {
+	return SCHEMA_RUNNING_KEY in (await chrome.storage.local.get(SCHEMA_RUNNING_KEY))
+}
+
 /** Resolves once no migration is running. Fast path: one read, no listener. */
 export async function migrationIdle(): Promise<void> {
-	const flag = await chrome.storage.local.get(SCHEMA_RUNNING_KEY)
-	if (!(SCHEMA_RUNNING_KEY in flag)) return
+	if (!(await isMigrationRunning())) return
 	await new Promise<void>((resolve, reject) => {
 		const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
 			if (area !== "local" || !(SCHEMA_RUNNING_KEY in changes)) return

@@ -195,6 +195,10 @@ const handleUnlockWallet = async () => {
 			return
 		} finally {
 			isAwaitingResponse.value = false
+			if (missedDuringUnlock) {
+				missedDuringUnlock = false
+				if (!appStore.isLogined) void settleProfile()
+			}
 		}
 
 		// IMMEDIATE post-wait identity check — the wait can resolve for this
@@ -244,20 +248,29 @@ const settleProfile = async () => {
 	}
 }
 
+/** A pick or a deletion elsewhere waits out an unlock here, whose steps read the selected profile;
+ *  one that leaves the page locked settles the profile again. */
+let missedDuringUnlock = false
+const unlockRunning = () => {
+	if (isAwaitingResponse.value) missedDuringUnlock = true
+	return isAwaitingResponse.value
+}
+
 /** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
- *  Never during an unlock here, whose steps read the selected profile. */
+ *  A selection made here during the lookup stands. */
 let follows = 0
 const followPick = async (id) => {
 	const follow = ++follows
-	if (!id || id === appStore.profile?.id || appStore.isLogined || isAwaitingResponse.value) return
+	const selectedAtStart = appStore.profile?.id
+	if (!id || id === selectedAtStart || appStore.isLogined || unlockRunning()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
-	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || isAwaitingResponse.value) return
-	appStore.profile = profile
+	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart) return
+	if (!unlockRunning()) appStore.profile = profile
 }
 const stopFollowingPicks = onLastActiveProfileChanged(followPick)
 
 const onProfileDeleted = (deleted) => {
-	if (deleted?.id === appStore.profile?.id && !isAwaitingResponse.value) void settleProfile()
+	if (deleted?.id === appStore.profile?.id && !unlockRunning()) void settleProfile()
 }
 managers.profile.onProfileDeleted.add(onProfileDeleted)
 

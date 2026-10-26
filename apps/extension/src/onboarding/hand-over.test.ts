@@ -1,5 +1,8 @@
+import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 import { describe, expect, test, vi } from "vitest"
-import { startOnboarding } from "./hand-over"
+import { ONBOARDING_COMPLETED_KEY } from "@/stores/app.store"
+import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
+import { isOnboardingDone, startOnboarding } from "./hand-over"
 
 const start = (isDone: () => Promise<boolean>, handOver: () => Promise<void> = vi.fn(async () => undefined)) => {
 	const mount = vi.fn()
@@ -33,5 +36,14 @@ describe("startOnboarding", () => {
 		expect(mount).toHaveBeenCalledTimes(1)
 		expect(warn).toHaveBeenCalledWith("onboarding hand-over to the popup failed", { error: expect.any(Error) })
 		warn.mockRestore()
+	})
+})
+
+describe("isOnboardingDone", () => {
+	test("a migration still running reads as not done at once, so the tab mounts its migration barrier", async () => {
+		installChromeStorage({ [SCHEMA_RUNNING_KEY]: 2, [ONBOARDING_COMPLETED_KEY]: true })
+		expect(await isOnboardingDone()).toBe(false)
+		installChromeStorage({ [ONBOARDING_COMPLETED_KEY]: true })
+		expect(await isOnboardingDone()).toBe(true)
 	})
 })

@@ -178,6 +178,21 @@ describe("Delete Profile asks first when the recovery phrase was never revealed"
 		}
 	})
 
+	test("a flag read that answers after the page was left, or its profile moved, asks nothing and deletes nothing", async () => {
+		const leaves = [(w: { unmount: () => void }) => w.unmount(), (_w: unknown, app: { profile?: ProfileInfo }) => (app.profile = other)]
+		for (const leave of leaves) {
+			const storage = installChromeStorage({}, { persist: false })
+			const { w, app } = await mountReady()
+			const held = storage.deferNextGet()
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			leave(w, app)
+			held.release()
+			await flushPromises()
+			expect(useCacheStore().confirm).toEqual({})
+			expect(client.deleteProfile).not.toHaveBeenCalled()
+		}
+	})
+
 	test("a Yes after the page's profile moved deletes nothing", async () => {
 		installChromeStorage({}, { persist: false })
 		const { w, app } = await mountReady()

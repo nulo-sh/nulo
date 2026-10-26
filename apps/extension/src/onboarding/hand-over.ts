@@ -1,5 +1,5 @@
 import { ONBOARDING_COMPLETED_KEY } from "@/stores/app.store"
-import { storageLocalGet } from "@/utils/storage"
+import { isMigrationRunning, storageLocalGet } from "@/utils/storage"
 import { clearOnboardingTabTracking } from "@/wallet/utils/onboarding-tab"
 
 /** Opens the wallet in its own popup window and closes this tab. */
@@ -14,7 +14,10 @@ export async function openPopupWindowAndClose(): Promise<void> {
 	window.close()
 }
 
+/** Never done while a migration runs: the flag's read would wait for it, and a blocked one does not
+ *  end, so the tab mounts and its migration barrier offers the recovery. */
 export async function isOnboardingDone(): Promise<boolean> {
+	if (await isMigrationRunning()) return false
 	return (await storageLocalGet(ONBOARDING_COMPLETED_KEY))[ONBOARDING_COMPLETED_KEY] === true
 }
 
