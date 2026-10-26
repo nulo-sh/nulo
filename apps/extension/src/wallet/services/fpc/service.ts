@@ -3,8 +3,9 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { ProfileService } from "@/wallet/services/profile/service"
-import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -35,10 +36,10 @@ export type ProtocolAddresses = { sponsored: string; private: string }
 /** Stored shape strips the in-memory `isProtocol` decoration. */
 type StoredFpc = Omit<FpcInfo, "isProtocol">
 
-/** What a row write is fenced against: the profile's deletion epoch, and the network's
- *  reservations since the liveness mark `since`. */
+/** What a row write is fenced against: the session and the profile's deletion epoch, and the
+ *  network's reservations since the liveness mark `since`. */
 type WriteScope = {
-	fence: { profileId: string; epoch: number }
+	fence: ExecutionFence
 	deletion: ReturnType<ProfileService["getDeletionState"]>
 	networkId: string
 	since: number
@@ -173,7 +174,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		chainId: number,
 		hasSponsoredFpc: boolean,
 		hasPrivateFpc: boolean,
-		fence: { profileId: string; epoch: number },
+		fence: ExecutionFence,
 		deletion: ReturnType<ProfileService["getDeletionState"]>,
 	): Promise<void> {
 		const network = await resolveNetworkByChainId(this.networkService, chainId)
@@ -191,6 +192,11 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 				this.logInfo(`Registered protocol FPC: ${item.instance.address.toString()}`)
 				await this.lock.withLock(() => this.storeProtocolFpc(item, type, chainId, scope))
 			} catch (err) {
+				// A lock, a switch or a deletion since the discovery began makes the rest of it moot.
+				if (!this.profileService.isFenceLive(fence)) {
+					this.logDebug("Protocol FPC discovery stopped: its session ended")
+					return
+				}
 				this.logWarn(`getFpcs: Failed to discover FPC ${item.instance.address.toString()}:`, err)
 				this.logError(`Failed to discover FPC ${item.instance.address.toString()}`, err)
 			}
@@ -233,15 +239,20 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	}
 
 	/** Caller holds the lock the sweeps take, so a row lands before a sweep or is refused: the
-	 *  epoch covers a profile deletion, the mark a network delete or reset since it was taken. */
+	 *  epoch covers a profile deletion, the mark a network delete or reset since it was taken, and
+	 *  the session a lock or a switch, which leave the profile's row keys in the worker. */
 	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
 		const { fence, deletion } = scope
-		deletion.assertCurrent(fence.profileId, fence.epoch)
+		const assertLive = () => {
+			deletion.assertCurrent(fence.profileId, fence.epoch)
+			if (!this.profileService.isFenceLive(fence)) throw new SessionEndedError()
+		}
+		assertLive()
 		const write = await this.storage.prepare(fpc.id, fpc)
 		if (!(await this.networkService.isNetworkLive(scope.networkId, scope.since))) {
 			throw new Error("network deleted")
 		}
-		deletion.assertCurrent(fence.profileId, fence.epoch)
+		assertLive()
 		await write.commit()
 		// The set awaits — compensate before the row becomes observable.
 		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
