@@ -233,9 +233,96 @@ Fast layers: `bun run lint`, `bun run typecheck:all`, `bun run test`. Smoke runs
 
 If A2 merges before C1's PR, C1 absorbs C3.1 and runs its gates on `dev` with A2; a baseline red in a path A2 replaced is recorded, not filed, unless it reproduces after A2.
 
+## C1 baseline (2026-10-26)
+
+Code at fb1d99613; later commits on the branch change only this plan. Every seed ran at retry 0 from `NULO_E2E_CHAOS_SEED=1001`.
+
+How to read the tables:
+
+- **red-filed:** every violation in the seed is a filed finding.
+- **stopped at:** a filed state finding ended the run there (D26).
+- **incomplete (restart only):** D38. No violation; the only gap is a planned restart's log window.
+- **time:** the sum of the seed's step times.
+
+Wall-clock per seed, launch included:
+
+| suite | Chrome | Firefox |
+|---|---|---|
+| smoke | 39 s (20 seeds in 784 s) | 59 s (seeds 1005–1020 in 941 s) |
+| network | 79 s (5 seeds in 395 s, sandbox included) | 96 s (5 seeds in 480 s) |
+
+No seed is red for a harness reason, and none is red on an unfiled finding. The filed findings met are #1131 to #1138; #1138 was filed from this baseline. The coverage column is each seed's coverage line, with its allowance counts cut.
+
+| Chrome smoke seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 1001 | red-filed | 18 s | 25/25 | `families[create=6 phrase=3 delete=3 backup=2 lock=2 unlock=3 account=2 restart=1 switch=1 window=1 verify=1] transitions=24 schedules[] warns[price=2 wallet=34 pxe=59 fpc=28 account-state=6] incomplete[backgroundRestart=1]` | #1131 |
+| 1002 | red-filed | 22 s | 25/25 | `families[create=4 lock=1 backup=2 window=1 restart=1 unlock=6 verify=3 switch=1 delete=2 ceremony=2 race=2] transitions=24 schedules[raceLockDuringUnlock=2] warns[price=2 wallet=40 pxe=62 fpc=30 account-state=6] incomplete[backgroundRestart=1]` | #1131 |
+| 1003 | red-filed | 25 s | 25/25 | `families[restart=8 create=4 window=1 lock=2 ceremony=1 unlock=4 verify=2 switch=2 race=1] transitions=20 schedules[raceRestartDuringUnlock=1] warns[price=4 wallet=28 pxe=48 fpc=24] incomplete[backgroundRestart=8 raceRestartDuringUnlock=1]` | #1131 |
+| 1004 | red-filed | 25 s | 25/25 | `families[create=5 backup=3 account=1 strict=1 window=2 delete=1 switch=1 unlock=5 race=2 ceremony=1 lock=2 verify=1] transitions=23 schedules[raceLockDuringUnlock=1 raceRestartDuringUnlock=1] warns[price=2 wallet=33 pxe=51 fpc=24 account-state=3] incomplete[raceRestartDuringUnlock=1]` | #1132 |
+| 1005 | red-filed | 28 s | 25/25 | `families[create=4 restart=2 unlock=8 lock=2 race=1 window=1 verify=3 backup=2 edit=1 account=1] transitions=21 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=46 pxe=84 fpc=42 account-state=6] incomplete[backgroundRestart=2]` | #1133 |
+| 1006 | red-filed | 21 s | 24/25 | `families[restart=4 create=4 window=1 verify=2 delete=2 unlock=5 switch=3 lock=2] transitions=20 schedules[] warns[price=2 wallet=24 pxe=40 fpc=20] incomplete[backgroundRestart=4]` | #1131, #1134; stopped at step 23 deleteProfile (O1, #1134) |
+| 1007 | red-filed | 27 s | 25/25 | `families[create=4 strict=2 window=2 verify=2 backup=4 unlock=3 restart=1 lock=1 race=2 account=1 ceremony=1 delete=1 switch=1] transitions=24 schedules[raceDoubleUnlock=1 raceRestartDuringUnlock=1] warns[price=3 wallet=25 pxe=55 fpc=26 account-state=3] incomplete[backgroundRestart=1 raceRestartDuringUnlock=1]` | #1131 |
+| 1008 | red-filed | 26 s | 25/25 | `families[create=6 backup=5 edit=4 lock=1 unlock=3 race=1 delete=3 restart=1 verify=1] transitions=21 schedules[raceRestartDuringUnlock=1] warns[price=3 wallet=28 pxe=54 fpc=26 account-state=6] incomplete[raceRestartDuringUnlock=1 backgroundRestart=1]` | #1131, #1132 |
+| 1009 | red-filed | 27 s | 25/25 | `families[create=3 backup=5 edit=1 restart=4 race=2 delete=1 ceremony=1 unlock=5 window=1 lock=1 verify=1] transitions=21 schedules[raceLockDuringUnlock=2] warns[price=4 wallet=27 pxe=36 fpc=18 account-state=3 config=8] incomplete[backgroundRestart=4]` | #1131 |
+| 1010 | red-filed | 29 s | 25/25 | `families[restart=3 create=5 delete=2 unlock=4 window=2 race=1 strict=1 edit=1 phrase=3 verify=2 account=1] transitions=23 schedules[raceDoubleUnlock=1] warns[price=3 wallet=36 pxe=75 fpc=36] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 1011 | incomplete (restart only) | 33 s | 25/25 | `families[restart=3 create=3 unlock=4 window=2 verify=2 account=1 edit=1 lock=2 strict=2 backup=2 account-file=3] transitions=24 schedules[] warns[price=4 wallet=33 pxe=65 fpc=32 account-state=3] incomplete[backgroundRestart=3]` | none |
+| 1012 | red-filed | 22 s | 25/25 | `families[create=2 lock=3 unlock=6 ceremony=2 edit=1 backup=2 race=3 delete=1 verify=4 restart=1] transitions=22 schedules[raceRestartDuringUnlock=3] warns[price=4 wallet=25 pxe=24 fpc=10 account-state=3] incomplete[raceRestartDuringUnlock=3 backgroundRestart=1]` | #1131, #1132 |
+| 1013 | incomplete (restart only) | 27 s | 25/25 | `families[create=5 lock=2 account=1 window=2 unlock=4 backup=1 phrase=1 ceremony=1 delete=1 strict=1 edit=3 restart=1 verify=2] transitions=23 schedules[] warns[price=2 wallet=37 pxe=60 fpc=28 account-state=3] incomplete[backgroundRestart=1]` | none |
+| 1014 | incomplete (restart only) | 26 s | 25/25 | `families[restart=4 create=3 account=3 phrase=2 strict=1 lock=2 window=3 edit=1 delete=1 unlock=3 backup=1 verify=1] transitions=23 schedules[] warns[price=3 wallet=27 pxe=53 fpc=24 account-state=3] incomplete[backgroundRestart=4]` | none |
+| 1015 | red-filed | 28 s | 25/25 | `families[create=5 lock=2 account=2 backup=2 delete=1 unlock=3 window=1 verify=2 edit=4 phrase=3] transitions=23 schedules[] warns[price=2 wallet=42 pxe=84 fpc=40 account-state=6]` | #1131 |
+| 1016 | red-filed | 22 s | 25/25 | `families[create=6 window=1 race=1 restart=2 unlock=5 account=1 delete=3 ceremony=1 edit=2 lock=2 verify=1] transitions=23 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=28 pxe=51 fpc=24] incomplete[backgroundRestart=2]` | #1131 |
+| 1017 | incomplete (restart only) | 23 s | 25/25 | `families[create=5 restart=2 account=1 window=2 phrase=2 switch=2 unlock=6 lock=3 delete=1 verify=1] transitions=22 schedules[] warns[price=3 wallet=28 pxe=54 fpc=26] incomplete[backgroundRestart=2]` | none |
+| 1018 | red-filed | 22 s | 25/25 | `families[create=5 account=1 lock=2 ceremony=1 unlock=3 delete=3 window=2 restart=3 switch=1 race=1 backup=1 phrase=1 verify=1] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=25 pxe=37 fpc=18 account-state=3] incomplete[backgroundRestart=3]` | #1131, #1133 |
+| 1019 | red-filed | 27 s | 25/25 | `families[restart=3 create=4 strict=1 edit=2 account=2 lock=1 delete=1 unlock=6 phrase=1 verify=2 switch=1 race=1] transitions=24 schedules[raceRestartDuringUnlock=1] warns[price=2 wallet=28 pxe=58 fpc=26] incomplete[backgroundRestart=3 raceRestartDuringUnlock=1]` | #1131 |
+| 1020 | red-filed | 27 s | 25/25 | `families[create=7 delete=4 account=3 account-file=2 restart=2 switch=1 window=1 unlock=2 strict=1 lock=1 verify=1] transitions=21 schedules[] warns[price=3 wallet=26 pxe=66 fpc=30] incomplete[backgroundRestart=2]` | #1131, #1132 |
+
+| Firefox smoke seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 1001 | red-filed | 29 s | 21/25 | `families[create=6 phrase=3 delete=3 backup=2 lock=2 unlock=2 account=1 restart=1] transitions=19 schedules[] warns[price=2 wallet=24 pxe=46 fpc=20 account-state=6] incomplete[backgroundRestart=1]` | #1131, #1132, #1134; stopped at step 20 deleteProfile (O1, #1134) |
+| 1002 | red-filed | 34 s | 25/25 | `families[create=5 lock=4 backup=2 window=2 race=1 unlock=3 account=1 delete=2 switch=1 verify=2 strict=2] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=2 wallet=39 pxe=70 fpc=32 account-state=6]` | #1131, #1132 |
+| 1003 | red-filed | 53 s | 19/25 | `families[restart=7 create=4 window=1 unlock=3 lock=1 account=1 verify=1] transitions=14 schedules[] warns[price=2 wallet=15 pxe=32 fpc=14] incomplete[backgroundRestart=7]` | #1132, #1134; stopped at step 18 deleteProfile (O1, #1134) |
+| 1004 | red-filed | 58 s | 25/25 | `families[create=5 backup=3 account=1 strict=1 window=4 delete=1 switch=1 unlock=2 ceremony=1 lock=1 restart=3 phrase=1 verify=1] transitions=23 schedules[] warns[price=3 wallet=29 pxe=50 fpc=24 account-state=3] incomplete[backgroundRestart=3]` | #1131, #1132, #1133, #1135 |
+| 1005 | red-filed | 66 s | 25/25 | `families[create=6 restart=3 unlock=4 lock=3 backup=3 account-file=2 delete=2 window=1 verify=1] transitions=21 schedules[] warns[price=4 wallet=36 pxe=57 fpc=32 account-state=6] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+| 1006 | red-filed | 45 s | 25/25 | `families[restart=3 create=5 window=3 verify=3 delete=2 unlock=1 backup=4 account=1 ceremony=1 switch=1 lock=1] transitions=24 schedules[] warns[price=2 wallet=39 pxe=54 fpc=24 account-state=9] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 1007 | red-filed | 40 s | 25/25 | `families[create=5 strict=2 window=3 verify=2 backup=5 unlock=2 restart=1 lock=2 race=1 account=1 delete=1] transitions=24 schedules[raceDoubleUnlock=1] warns[price=2 wallet=33 pxe=64 fpc=30 account-state=3] incomplete[backgroundRestart=1]` | #1131, #1132 |
+| 1008 | red-filed | 57 s | 25/25 | `families[create=5 backup=3 edit=2 lock=2 unlock=5 race=1 delete=1 restart=3 verify=2 window=1] transitions=21 schedules[raceLockDuringUnlock=1] warns[price=4 wallet=37 pxe=66 fpc=34 account-state=3] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+| 1009 | red-filed | 11 s | 7/25 | `families[create=1 backup=1 edit=1 restart=1 ceremony=2] transitions=5 schedules[] warns[price=1 wallet=5 pxe=5 fpc=2 account-state=3] incomplete[backgroundRestart=1]` | #1134; stopped at step 6 deleteProfile (O1, #1134) |
+| 1010 | red-filed | 46 s | 25/25 | `families[restart=3 create=5 delete=2 unlock=4 window=2 race=1 strict=1 edit=1 phrase=3 verify=2 account=1] transitions=23 schedules[raceDoubleUnlock=1] warns[price=3 wallet=36 pxe=72 fpc=34] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 1011 | red-filed | 47 s | 25/25 | `families[restart=3 create=3 unlock=4 window=2 verify=2 account=1 edit=1 lock=2 strict=2 backup=2 account-file=3] transitions=24 schedules[] warns[price=4 wallet=33 pxe=74 fpc=36 account-state=3] incomplete[backgroundRestart=3]` | #1132 |
+| 1012 | incomplete (restart only) | 28 s | 25/25 | `families[create=2 lock=5 unlock=3 window=5 restart=2 ceremony=2 delete=1 verify=4 edit=1] transitions=20 schedules[] warns[price=3 wallet=33 pxe=40 fpc=20] incomplete[backgroundRestart=2]` | none |
+| 1013 | red-filed | 46 s | 25/25 | `families[create=5 lock=3 delete=2 edit=1 account=2 backup=3 verify=2 ceremony=1 restart=3 switch=1 unlock=2] transitions=23 schedules[] warns[price=3 wallet=38 pxe=72 fpc=34 account-state=6 config=8] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 1014 | red-filed | 40 s | 25/25 | `families[restart=4 create=3 account=3 phrase=2 strict=1 lock=2 window=3 edit=1 delete=1 unlock=3 backup=1 verify=1] transitions=23 schedules[] warns[price=3 wallet=29 pxe=52 fpc=24 account-state=3] incomplete[backgroundRestart=4]` | #1131, #1132, #1135 |
+| 1015 | red-filed | 36 s | 25/25 | `families[create=5 lock=2 account=2 backup=2 delete=1 unlock=3 window=1 verify=2 edit=4 phrase=3] transitions=23 schedules[] warns[price=2 wallet=44 pxe=85 fpc=40 account-state=6]` | #1131, #1132 |
+| 1016 | red-filed | 35 s | 25/25 | `families[create=6 window=2 ceremony=3 restart=2 unlock=4 account=2 delete=3 switch=1 lock=1 verify=1] transitions=21 schedules[] warns[price=3 wallet=22 pxe=44 fpc=20] incomplete[backgroundRestart=2]` | #1131, #1132 |
+| 1017 | red-filed | 38 s | 25/25 | `families[create=4 restart=2 account=1 window=3 phrase=3 switch=2 unlock=3 lock=3 backup=2 account-file=1 verify=1] transitions=23 schedules[] warns[price=3 wallet=31 pxe=50 fpc=24 account-state=6] incomplete[backgroundRestart=2]` | #1132 |
+| 1018 | red-filed | 49 s | 25/25 | `families[create=5 account=1 lock=1 ceremony=1 unlock=2 delete=1 verify=3 window=4 edit=1 restart=4 race=1 switch=1] transitions=23 schedules[raceDoubleUnlock=1] warns[price=5 wallet=46 pxe=81 fpc=42] incomplete[backgroundRestart=4]` | #1131, #1132, #1135 |
+| 1019 | red-filed | 39 s | 25/25 | `families[restart=3 create=4 strict=1 edit=2 account=2 lock=1 delete=1 unlock=5 phrase=1 verify=2 switch=2 race=1] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=2 wallet=28 pxe=59 fpc=26] incomplete[backgroundRestart=3]` | #1131, #1132 |
+| 1020 | red-filed | 42 s | 25/25 | `families[create=7 delete=3 account=2 account-file=1 restart=3 switch=1 race=1 ceremony=1 edit=1 lock=1 strict=1 unlock=1 window=1 verify=1] transitions=24 schedules[raceLockDuringUnlock=1] warns[price=3 wallet=32 pxe=66 fpc=32] incomplete[backgroundRestart=3]` | #1131, #1132, #1135 |
+
+| Chrome network seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 1001 | red-filed | 64 s | 25/25 | `families[create=4 phrase=2 delete=2 backup=8 lock=2 switch=1 dapp=1 account=1 edit=1 account-file=1 verify=2] transitions=22 schedules[] warns[price=2 wallet=16 pxe=20 fpc=8 account-state=8 config=16]` | #1132, #1136 |
+| 1002 | red-filed | 42 s | 25/25 | `families[create=6 lock=2 backup=2 window=1 ceremony=2 switch=1 verify=4 unlock=3 delete=3 race=1] transitions=21 schedules[raceRestartDuringUnlock=1] warns[price=3 wallet=16 pxe=30 fpc=12 account-state=4] incomplete[raceRestartDuringUnlock=1]` | #1132, #1136 |
+| 1003 | red-filed | 51 s | 17/25 | `families[restart=6 create=3 window=1 ceremony=1 unlock=1 delete=2 backup=2] transitions=12 schedules[] warns[price=1 wallet=8 pxe=15 fpc=6 account-state=2] incomplete[backgroundRestart=6]` | #1132, #1136, #1138; stopped at step 16 restoreHeld (O5, #1138) |
+| 1004 | red-filed | 34 s | 25/25 | `families[create=4 backup=5 account=1 strict=1 window=3 phrase=1 unlock=4 delete=2 switch=1 lock=1 ceremony=1 verify=1] transitions=24 schedules[] warns[price=2 wallet=12 pxe=20 fpc=9 account-state=4 config=8]` | #1131, #1132, #1133, #1135, #1136 |
+| 1005 | red-filed | 12 s | 7/25 | `families[create=3 restart=1 unlock=1 lock=1] transitions=5 schedules[] warns[price=2 wallet=6 pxe=15 fpc=6] incomplete[backgroundRestart=1]` | #1132, #1136, #1137; stopped at step 6 abandonCeremony (O3, #1137) |
+
+| Firefox network seed | outcome | time | steps | coverage | findings met |
+|---|---|---|---|---|---|
+| 1001 | red-filed | 88 s | 25/25 | `families[create=4 phrase=2 delete=2 backup=8 lock=2 switch=1 dapp=1 account=1 edit=1 account-file=1 verify=2] transitions=22 schedules[] warns[price=3 wallet=16 pxe=20 fpc=8 account-state=8 config=16]` | #1132, #1136 |
+| 1002 | red-filed | 10 s | 3/25 | `families[create=1 lock=1] transitions=1 schedules[] warns[price=1 wallet=4 pxe=9 fpc=4]` | #1132, #1136, #1137; stopped at step 2 createPassword (O3, #1137) |
+| 1003 | red-filed | 81 s | 25/25 | `families[restart=6 create=4 window=3 verify=2 unlock=2 account=2 lock=2 backup=1 account-file=2 ceremony=1] transitions=20 schedules[] warns[price=2 wallet=10 pxe=20 fpc=8 account-state=2] incomplete[backgroundRestart=6]` | #1132, #1133, #1136 |
+| 1004 | red-filed | 48 s | 25/25 | `families[create=4 backup=4 account=1 strict=1 window=3 phrase=1 unlock=4 delete=2 switch=2 lock=1 ceremony=1 verify=1] transitions=24 schedules[] warns[price=2 wallet=12 pxe=20 fpc=8 account-state=4 config=8]` | #1132, #1136 |
+| 1005 | red-filed | 48 s | 15/25 | `families[create=4 restart=1 unlock=1 lock=1 backup=2 account-file=1 delete=1 restore-held=2 verify=1] transitions=13 schedules[restoreHeld=2] warns[price=3 wallet=12 pxe=20 fpc=8 account-state=4 config=16 ui=2] incomplete[backgroundRestart=1]` | #1132, #1136, #1137; stopped at step 14 verifyAll (O6, #1137) |
+
+Two hand lists reached the held-restore pairs the seeds did not, both on fb1d99613's tree:
+
+- **Chrome, 15 steps:** a lock at account-state kept the profile and locked; a restart at service-restore rolled it back, with its failure line allowed (D44); a restart at account-state met #1138, its third replay.
+- **Firefox, 14 steps:** a lock at both stages. It ran every step; it was red only on #1132 and #1136.
+
 ## UI impact
 
-None. No product file changes; a missing `data-testid` is added only where a driver needs one, which is not a UI change.
+None. One product line: the import run logs a debug line where it ends, with its stage and status only (D43), which no screen shows. A missing `data-testid` is added only where a driver needs one, which is not a UI change.
 
 ## Delivery
 
