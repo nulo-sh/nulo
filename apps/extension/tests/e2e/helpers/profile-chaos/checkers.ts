@@ -40,8 +40,15 @@ export interface Bindings {
 	profiles: Map<ProfileRef, string>
 	/** Names a restore gave, learnt at their first sighting. */
 	names: Map<ProfileRef, string>
-	/** Each profile's derived account addresses, by index, as first read. */
-	addresses: Map<ProfileRef, string[]>
+	/** Each profile's derived account addresses, by index, as first read on the chain it stood on. */
+	addresses: Map<ProfileRef, ChainAddresses>
+}
+
+/** Derived addresses read on one chain: an address takes its chain's L1 id, so two readings
+ *  compare only on one chain. */
+export interface ChainAddresses {
+	chainId: number
+	addresses: string[]
 }
 
 export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map() })
@@ -339,6 +346,23 @@ export interface StoredEntry {
 export function keyOwner(key: string, ids: ReadonlySet<string>): string | undefined {
 	const segments = key.slice(key.indexOf("@") + 1).split(/[^0-9A-Za-z_-]/)
 	return [...ids].find((id) => segments.includes(id))
+}
+
+/**
+ * The roots where a release row `id` owns left its key with no sealed row of `id`'s taking its
+ * place: a keyed root seals each row under a new key, so every row gone needs one envelope of
+ * `id`'s that `before` did not hold; an unkeyed root seals in place, keeping the key.
+ */
+export function lostRelease(keys: readonly string[], before: readonly StoredEntry[], now: readonly StoredEntry[], id: string): string[] {
+	const rootOf = (key: string) => key.slice(0, key.indexOf("@") + 1)
+	const had = new Set(before.map((e) => e.key))
+	const out: string[] = []
+	for (const root of new Set(keys.map(rootOf))) {
+		const gone = keys.filter((k) => rootOf(k) === root && !now.some((e) => e.key === k)).length
+		const added = now.filter((e) => rootOf(e.key) === root && e.envelopeOwner === id && !had.has(e.key)).length
+		if (gone > added) out.push(`${root} lost ${gone - added} of ${id}'s release rows on its first open`)
+	}
+	return out
 }
 
 /** Whose plaintext row a release left: the `profileId` it names, else the profile its key names. */
@@ -763,7 +787,12 @@ export interface VerifyReading {
 	/** Keys the refused attempt changed; for a retired profile, the probe below. */
 	wrongWrote: string[]
 	opened: boolean
+	/** The opened profile's derived addresses on its active chain. */
 	addresses: string[]
+	chainId: number
+	/** The roots where a release row the profile owns left its key with no sealed row taking its
+	 *  place, once the profile opened. */
+	lost?: string[]
 	/** Each imported account's signing key as exported now, beside the one it was imported with.
 	 *  A password profile must show exactly the files the model says it imported. */
 	sentinels: { file: string; now: string; imported: string }[]
@@ -814,10 +843,16 @@ function siblings(w: World, p: ModelProfile): ModelProfile[] {
 function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings): Violation[] {
 	const out: Violation[] = []
 	for (const s of siblings(w, p)) {
-		const theirs = b.addresses.get(s.ref) ?? []
-		theirs.forEach((a, i) => {
+		const theirs = b.addresses.get(s.ref)
+		if (theirs?.chainId !== r.chainId) continue
+		theirs.addresses.forEach((a, i) => {
 			if (r.addresses[i] !== undefined && r.addresses[i] !== a)
-				out.push(violation("O6", `${r.ref} and ${s.ref} share a secret but derive ${r.addresses[i]} and ${a} at ${i}`))
+				out.push(
+					violation(
+						"O6",
+						`${r.ref} and ${s.ref} share a secret but derive ${r.addresses[i]} and ${a} at ${i} on chain ${r.chainId}`,
+					),
+				)
 		})
 	}
 	return out
@@ -846,11 +881,13 @@ function checkVerifyOne(w: World, r: VerifyReading, b: Bindings): Violation[] {
 	if (!r.opened) out.push(violation("O6", `${r.ref} did not open with its own secret`))
 	if (r.addresses.length !== p.derived)
 		out.push(violation("O6", `${r.ref} shows ${r.addresses.length} derived accounts, not ${p.derived}`))
-	const recorded = b.addresses.get(p.ref) ?? []
-	recorded.forEach((a, i) => {
-		if (r.addresses[i] !== undefined && r.addresses[i] !== a)
-			out.push(violation("O6", `${r.ref}'s account ${i} moved from ${a} to ${r.addresses[i]}`))
-	})
+	const recorded = b.addresses.get(p.ref)
+	if (recorded?.chainId === r.chainId)
+		recorded.addresses.forEach((a, i) => {
+			if (r.addresses[i] !== undefined && r.addresses[i] !== a)
+				out.push(violation("O6", `${r.ref}'s account ${i} moved from ${a} to ${r.addresses[i]} on chain ${r.chainId}`))
+		})
+	for (const m of r.lost ?? []) out.push(violation("O3", m))
 	return [...out, ...checkSiblings(w, p, r, b), ...checkSentinels(p, r)]
 }
 

@@ -12,7 +12,6 @@ import { decryptAccountExport } from "@nulo/aztec-runtime/account"
 import { getEntropy, getMnemonic } from "@nulo/wallet-core/utils"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { backgroundOrigin } from "../../fixtures/browser"
-import { pollUntil } from "../../fixtures/poll"
 import { callService } from "../../fixtures/session"
 import { derivedAddresses } from "./accounts-io"
 import {
@@ -39,10 +38,10 @@ import {
 	type StructureReading,
 	type Violation,
 	carriedBy,
-	releaseRowOwner,
 } from "./checkers"
 import { drainLogs, logErrors, readCensus, readProfiles, readSession, scanStorage } from "./collect"
 import { DRIVERS } from "./drivers"
+import { expireRelease } from "./pre-update"
 import { capturePrf, drainPrf } from "./prf-capture"
 import {
 	type ActionName,
@@ -315,9 +314,11 @@ async function learn(s: RunState, next: World): Promise<string[]> {
 		const listed = (await readProfiles(s.anchor)).listed.find((p) => p.id === id)
 		if (listed) s.bindings.names.set(ref, listed.name)
 	}
-	const seen = s.bindings.addresses.get(ref) ?? []
 	const now = await derivedAddresses(s.anchor, id)
-	s.bindings.addresses.set(ref, [...seen, ...now.slice(seen.length)])
+	const seen = s.bindings.addresses.get(ref)
+	// A reset or a restore's reseed moves a profile to another chain; its record restarts there.
+	const kept = seen?.chainId === now.chainId ? seen.addresses : []
+	s.bindings.addresses.set(ref, { chainId: now.chainId, addresses: [...kept, ...now.addresses.slice(kept.length)] })
 	return gaps
 }
 
@@ -344,28 +345,6 @@ async function checkState(s: RunState, step: PlannedStep, before: World, census:
 		}),
 	)
 	return out
-}
-
-const LEGACY_SEAL_MS = 15_000
-
-/** A release's plaintext row is exempt from the sealed-root rule only until its profile ends a step
- *  open: the wallet seals it once that profile's row keys are ready, asynchronously, so a row still
- *  holding the release's text after a bounded wait is reported unsealed. */
-async function expireLegacy(s: RunState, next: World): Promise<void> {
-	if (next.session.kind !== "open") return
-	const id = profileId(s, next.session.ref)
-	const ids = new Set(s.bindings.profiles.values())
-	const due = Object.entries(s.legacyPlain).filter(([key, text]) => releaseRowOwner(key, text, ids) === id)
-	if (!due.length) return
-	const sealed = () =>
-		s.anchor
-			.evaluate(async (rows: [string, string][]) => {
-				const now = await chrome.storage.local.get(rows.map(([key]) => key))
-				return rows.every(([key, text]) => now[key] !== text)
-			}, due)
-			.catch(() => false)
-	await pollUntil(sealed, Boolean, { label: "release rows sealed", timeoutMs: LEGACY_SEAL_MS, intervalMs: 250 }).catch(() => {})
-	for (const [key] of due) delete s.legacyPlain[key]
 }
 
 const passkeyIdsOf = (s: RunState, w: World): Set<string> =>
@@ -401,7 +380,8 @@ async function checkStep(
 	out.push(...checkSettle(step.action, driven.settle))
 	await drainPages(s)
 	if (out.length) return { violations: masked(out, await needlesOf(s)), incomplete: [] }
-	await expireLegacy(s, next)
+	const lost = next.session.kind === "open" ? await expireRelease(s, profileId(s, next.session.ref), census) : []
+	out.push(...lost.map((message): Violation => ({ oracle: "O3", message })))
 	const unread = await learn(s, next)
 	const opened = await openNewFiles(s, next)
 	const needles = await needlesOf(s)
@@ -489,7 +469,23 @@ async function drive(s: RunState, step: PlannedStep, before: World): Promise<Dri
 	return driven
 }
 
+/** Answers what the update left for its profile's first open once a step ends with it open. */
+async function answerAfterUpdate(s: RunState, before: World): Promise<void> {
+	const pending = s.afterUpdate
+	if (!pending || before.session.kind !== "open" || before.session.ref !== pending.ref) return
+	s.afterUpdate = undefined
+	await pending.answer(s)
+}
+
 async function runOne(s: RunState, step: PlannedStep, before: World): Promise<StepRecord> {
+	try {
+		await answerAfterUpdate(s, before)
+	} catch (err) {
+		const detail = mask(`${err instanceof Error ? err.message : String(err)}${callSite(err)}`, await needlesOf(s))
+		return recordOf(step, Date.now(), {
+			violations: [{ oracle: "O5", message: "the update's first open could not be answered", detail }],
+		})
+	}
 	await dismissNotices(s.anchor)
 	const census = await readCensus(s.anchor)
 	const origin = await backgroundOrigin(s.ctx)

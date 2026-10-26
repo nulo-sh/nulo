@@ -8,6 +8,7 @@ import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { readActiveNetwork } from "../../fixtures/networks"
 import { callService } from "../../fixtures/session"
 import { exportAccountBody, previewImport } from "../account-io"
+import type { ChainAddresses } from "./checkers"
 import type { FileRef, ModelFile, ModelProfile, ParamsMap } from "./model"
 import { type Driven, type RunState, profileId, secretFor } from "./state"
 import { settle, timed } from "./ui"
@@ -18,17 +19,21 @@ const DERIVED_TYPE = 0
 
 type AccountRow = { address: string; index: number; type: number; name: string }
 
-async function accountsOf(page: Page, id: string): Promise<AccountRow[]> {
+async function accountsOn(page: Page, id: string): Promise<{ chainId: number; rows: AccountRow[] }> {
 	const { chainId } = await readActiveNetwork(page)
-	return callService<AccountRow[]>(page, "account", "getAccounts", [id, chainId, true])
+	return { chainId, rows: await callService<AccountRow[]>(page, "account", "getAccounts", [id, chainId, true]) }
 }
 
-/** The open profile's derived addresses, by index. */
-export async function derivedAddresses(page: Page, id: string): Promise<string[]> {
-	return (await accountsOf(page, id))
+const accountsOf = async (page: Page, id: string): Promise<AccountRow[]> => (await accountsOn(page, id)).rows
+
+/** The open profile's derived addresses on its active chain, by index. */
+export async function derivedAddresses(page: Page, id: string): Promise<ChainAddresses> {
+	const { chainId, rows } = await accountsOn(page, id)
+	const addresses = rows
 		.filter((a) => a.type === DERIVED_TYPE)
 		.sort((a, b) => a.index - b.index)
 		.map((a) => a.address)
+	return { chainId, addresses }
 }
 
 /** The name an imported account file is given, so a later export finds its row. */

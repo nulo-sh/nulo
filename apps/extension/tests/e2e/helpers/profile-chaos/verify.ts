@@ -11,6 +11,7 @@ import { derivedAddresses, reexportImported } from "./accounts-io"
 import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
 import { readCensus } from "./collect"
 import { live, type ModelProfile, type World } from "./model"
+import { expireRelease } from "./pre-update"
 import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import { authSubmitReady, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
 import { waitForLockScreen } from "../../fixtures/auth"
@@ -102,7 +103,16 @@ async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading
 	const wrote = after.filter((e) => before.get(e.key) !== e.digest && !e.key.startsWith("nulo:e2e:")).map((e) => e.key)
 	for (const key of before.keys()) if (!after.some((e) => e.key === key)) wrote.push(key)
 	const opened = (await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile"))?.id === id
-	return { ref: p.ref, wrongRefused: true, wrongWrote: wrote, opened, addresses: [], sentinels: [], retired: { ...screen, calls } }
+	return {
+		ref: p.ref,
+		wrongRefused: true,
+		wrongWrote: wrote,
+		opened,
+		addresses: [],
+		chainId: 0,
+		sentinels: [],
+		retired: { ...screen, calls },
+	}
 }
 
 async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<VerifyReading> {
@@ -111,13 +121,15 @@ async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<Verify
 	const id = profileId(s, p.ref)
 	await openRoute(page, "#/popup/auth")
 	await pickOnLockScreen(page, id)
-	const before = new Map((await readCensus(page)).map((e) => [e.key, e.digest]))
+	const census = await readCensus(page)
+	const before = new Map(census.map((e) => [e.key, e.digest]))
 	const wrongRefused = await wrongAttempt(s, p, w)
 	const after = await readCensus(page)
 	const wrongWrote = after.filter((e) => before.get(e.key) !== e.digest && !e.key.startsWith("nulo:e2e:")).map((e) => e.key)
 	for (const key of before.keys()) if (!after.some((e) => e.key === key)) wrongWrote.push(key)
 	const opened = await rightAttempt(s, p)
-	const addresses = opened ? await derivedAddresses(page, id) : []
+	const lost = opened ? await expireRelease(s, id, census) : []
+	const { addresses, chainId } = opened ? await derivedAddresses(page, id) : { addresses: [], chainId: 0 }
 	const sentinels: VerifyReading["sentinels"] = []
 	if (opened && p.method === "password") {
 		for (const file of p.imported) {
@@ -126,7 +138,7 @@ async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<Verify
 	}
 	await lockFromAnotherWindow(page)
 	await waitForLockScreen(page, STEP_MS)
-	return { ref: p.ref, wrongRefused, wrongWrote, opened, addresses, sentinels }
+	return { ref: p.ref, wrongRefused, wrongWrote, opened, addresses, chainId, lost, sentinels }
 }
 
 export async function verifyAll(s: RunState, before: World, next: World): Promise<Driven> {

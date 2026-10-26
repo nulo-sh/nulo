@@ -75,6 +75,9 @@ export interface RunState {
 	/** The rows a release wrote plain in roots sealed since, by key: they stay plain until their
 	 *  profile next opens, and only these bytes are exempt. */
 	legacyPlain: Record<string, string>
+	/** What an update leaves for the first open of the release's profile, answered between steps
+	 *  once a step ends with it open, then cleared. */
+	afterUpdate?: { ref: ProfileRef; answer: (s: RunState) => Promise<void> }
 	/** Present on a run with a node. */
 	network?: NetworkRun
 }

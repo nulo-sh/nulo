@@ -35,6 +35,8 @@ import {
 	findNeedles,
 	ownerOf,
 	releaseRowOwner,
+	lostRelease,
+	type ChainAddresses,
 	pageErrorText,
 	PROFILE_ROW_FIELDS,
 	RETIRED_REFUSALS,
@@ -72,6 +74,9 @@ const FIREFOX: Caps = {
 }
 const NETWORK: Caps = { ...CHROME, network: true, restoreGate: true }
 const SEEDS = Array.from({ length: 1_000 }, (_, i) => i * 7_919 + 1)
+
+const CHAIN = 1
+const on = (addresses: string[], chainId = CHAIN): ChainAddresses => ({ chainId, addresses })
 
 const listOf = (steps: { action: ActionName; params: unknown }[]): ListedStep[] =>
 	steps.map((s) => ({ action: s.action, params: s.params }) as ListedStep)
@@ -1085,21 +1090,65 @@ describe("O5, settle bounds", () => {
 	})
 })
 
+describe("O3, a release row on its profile's first open", () => {
+	const legacy = `nulo:core:accounts@${JSON.stringify(["account", P1, 31337, "0x01"])}`
+	const plain: StoredEntry = { key: legacy, digest: "p", envelope: false }
+	const twin: StoredEntry = { key: "nulo:core:accounts@hashed", digest: "s", envelope: true, envelopeOwner: P1 }
+	const network: StoredEntry = { key: "nulo:core:networks@n1", digest: "p", envelope: false, plainOwner: P1 }
+
+	test("passes a row sealed under a new key and one sealed in place", () => {
+		const inPlace: StoredEntry = { ...network, digest: "s", envelope: true, envelopeOwner: P1, plainOwner: undefined }
+		expect(lostRelease([legacy, network.key], [plain, network], [twin, inPlace], P1)).toEqual([])
+	})
+
+	test.each([
+		["a row gone with no sealed row in its place", [] as StoredEntry[]],
+		["a row gone beside another profile's sealed row", [{ ...twin, envelopeOwner: P2 }]],
+		["a row gone beside a sealed row that was already there", [twin]],
+	] as const)("fails %s", (label, now) => {
+		const before = label.includes("already") ? [plain, twin] : [plain]
+		expect(
+			shown(
+				`O3 ${label}`,
+				lostRelease([legacy], before, now, P1).map((message) => ({ oracle: "O3" as const, message })),
+			).length,
+		).toBe(1)
+	})
+})
+
 describe("O6, verifyAll", () => {
 	const b = bind([
 		["P1", P1],
 		["P2", P2],
 	])
-	b.addresses.set("P1", ["0xa1"])
+	b.addresses.set("P1", on(["0xa1"]))
 	const w = world([
 		pw,
 		{ action: "revealPhrase", params: { variant: "right" } },
 		{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "n", password: "S2", duplicate: "confirm" } },
 	])
-	const ok = (ref: "P1" | "P2") => ({ ref, wrongRefused: true, wrongWrote: [], opened: true, addresses: ["0xa1"], sentinels: [] })
+	const ok = (ref: "P1" | "P2") => ({
+		ref,
+		wrongRefused: true,
+		wrongWrote: [],
+		opened: true,
+		addresses: ["0xa1"],
+		chainId: CHAIN,
+		sentinels: [],
+	})
 
 	test("passes two profiles of one phrase deriving one account", () => {
 		expect(checkVerify(w, [ok("P1"), ok("P2")], b)).toEqual([])
+	})
+
+	test("compares addresses on one chain only: a reset or a restore's reseed moves a profile's chain", () => {
+		const moved = bind([
+			["P1", P1],
+			["P2", P2],
+		])
+		moved.addresses.set("P1", on(["0xold"], 2))
+		moved.addresses.set("P2", on(["0xa1"]))
+		expect(checkVerify(w, [ok("P1"), { ...ok("P2"), addresses: ["0xb2"], chainId: 3 }], moved)).toEqual([])
 	})
 
 	test.each([
@@ -1112,12 +1161,13 @@ describe("O6, verifyAll", () => {
 		["a profile left unverified", [ok("P1")]],
 		["a profile verified twice", [ok("P1"), ok("P2"), ok("P2")]],
 		["a profile the model never held", [ok("P1"), ok("P2"), { ...ok("P2"), ref: "P3" }]],
+		["a release row lost on the profile's first open", [{ ...ok("P1"), lost: ["nulo:core:accounts@ lost 1"] }, ok("P2")]],
 		[
 			"an imported account the model never recorded",
 			[{ ...ok("P1"), sentinels: [{ file: "F1", now: "k1", imported: "k1" }] }, ok("P2")],
 		],
 	] as const)("fails %s", (label, readings) => {
-		b.addresses.set("P2", ["0xa1"])
+		b.addresses.set("P2", on(["0xa1"]))
 		expect(shown(`O6 ${label}`, checkVerify(w, readings as never, b)).length).toBeGreaterThan(0)
 	})
 })
@@ -1139,16 +1189,17 @@ describe("O6, accounts across siblings and imports", () => {
 		{ action: "importAccountFile", params: { file: "F1" } },
 	])
 	b.profiles.set("P3", "cccc3333")
-	b.addresses.set("P1", ["0xa1", "0xa2"])
+	b.addresses.set("P1", on(["0xa1", "0xa2"]))
 	// P2's accounts as first read, before its second one existed: only a sibling check sees index 1.
-	b.addresses.set("P2", ["0xa1"])
-	b.addresses.set("P3", ["0xc1"])
+	b.addresses.set("P2", on(["0xa1"]))
+	b.addresses.set("P3", on(["0xc1"]))
 	const reading = (ref: "P1" | "P2" | "P3", over: object = {}) => ({
 		ref,
 		wrongRefused: true,
 		wrongWrote: [],
 		opened: true,
 		addresses: ref === "P3" ? ["0xc1"] : ["0xa1", "0xa2"],
+		chainId: CHAIN,
 		sentinels: ref === "P3" ? [{ file: "F1", now: "k1", imported: "k1" }] : [],
 		...over,
 	})
@@ -1185,14 +1236,15 @@ describe("O6, a restore of a deleted profile's backup", () => {
 		["P3", P1],
 	])
 	// P3's own first read is the wrong wallet, so only its deleted source's accounts can catch it.
-	b.addresses.set("P1", ["0xa1"])
-	b.addresses.set("P3", ["0xf9"])
+	b.addresses.set("P1", on(["0xa1"]))
+	b.addresses.set("P3", on(["0xf9"]))
 	const reading = (ref: "P2" | "P3", addresses: string[]) => ({
 		ref,
 		wrongRefused: true,
 		wrongWrote: [],
 		opened: true,
 		addresses,
+		chainId: CHAIN,
 		sentinels: [],
 	})
 
@@ -1201,8 +1253,8 @@ describe("O6, a restore of a deleted profile's backup", () => {
 			["P2", P2],
 			["P3", P1],
 		])
-		right.addresses.set("P1", ["0xa1"])
-		right.addresses.set("P3", ["0xa1"])
+		right.addresses.set("P1", on(["0xa1"]))
+		right.addresses.set("P3", on(["0xa1"]))
 		expect(checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xa1"])], right)).toEqual([])
 	})
 
@@ -1288,17 +1340,26 @@ describe("O6, a retired profile", () => {
 	])
 	const w = startWorld("pre-update")
 	const calls = Object.fromEntries(RETIRED_REFUSALS.map((c) => [c, "retired"]))
-	const openable = { ref: "P1" as const, wrongRefused: true, wrongWrote: [], opened: true, addresses: ["0xa1"], sentinels: [] }
+	const openable = {
+		ref: "P1" as const,
+		wrongRefused: true,
+		wrongWrote: [],
+		opened: true,
+		addresses: ["0xa1"],
+		chainId: CHAIN,
+		sentinels: [],
+	}
 	const probe = {
 		ref: "P2" as const,
 		wrongRefused: true,
 		wrongWrote: [] as string[],
 		opened: false,
 		addresses: [],
+		chainId: 0,
 		sentinels: [],
 		retired: { setupAgain: true, unlockOffered: false, calls },
 	}
-	b.addresses.set("P1", ["0xa1"])
+	b.addresses.set("P1", on(["0xa1"]))
 
 	test("passes a retired profile refused on every call of the matrix, with no write", () => {
 		expect(checkVerify(w, [openable, probe], b)).toEqual([])

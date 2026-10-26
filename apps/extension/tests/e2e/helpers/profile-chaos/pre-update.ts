@@ -5,14 +5,21 @@
  */
 import { randomBytes } from "node:crypto"
 import type { Page } from "puppeteer"
+import { readyToast } from "@/components/stale-network/copy"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { clickByTestId, replaceInputValue, waitForHash } from "../../fixtures/dom"
 import type { ExtensionContext } from "../../fixtures/extension"
 import { setupPasskeyVirtualAuth } from "../../fixtures/passkey"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
 import { readLocalStorage } from "../../fixtures/update/in-place"
 import { openPopup, waitForServiceReady } from "../../fixtures/wallet-pages"
-import { bindProfile, checkPreUpdate, checkSession, type Violation } from "./checkers"
-import { readProfiles, readSession, SEALED_PREFIXES } from "./collect"
+import { waitForToastGone } from "../../fixtures/widgets"
+import { answerUpdatedTerms } from "../legal-drivers"
+import { answerArrival } from "../network-arrival"
+import { readyToastSaysMoved, takeoverScreen } from "../stale-network"
+import { pollUntil } from "../../fixtures/poll"
+import { bindProfile, checkPreUpdate, checkSession, lostRelease, releaseRowOwner, type StoredEntry, type Violation } from "./checkers"
+import { readCensus, readProfiles, readSession, SEALED_PREFIXES } from "./collect"
 import { PRE_UPDATE_NAMES, startWorld } from "./model"
 import { capturePrf, takePrf } from "./prf-capture"
 import type { RunState } from "./state"
@@ -28,6 +35,8 @@ export interface Released {
 	plain: Record<string, string>
 	password: string
 	prf: string[]
+	/** Everything the release stored, read once its profiles were made. */
+	entries: Record<string, unknown>
 }
 
 const ENVELOPE = /^\{"profileId":"[^"]+","sealed":"[^"]+"\}$/
@@ -79,10 +88,41 @@ export async function populateRelease(ctx: ExtensionContext): Promise<Released> 
 		await waitForHash(page, "#/popup/general", CREATE_MS)
 		await lockToAuth(page)
 		const stored = await readLocalStorage(ctx)
-		return { rows: profileRows(stored), plain: plainSealedRows(stored), password, prf: await takePrf(page) }
+		return { rows: profileRows(stored), plain: plainSealedRows(stored), password, prf: await takePrf(page), entries: stored }
 	} finally {
 		await auth.cleanup().catch(() => {})
 		await page.close().catch(() => {})
+	}
+}
+
+/** The Testnet chain the release's network row names. */
+function releasedTestnet(released: Released): number | undefined {
+	for (const [key, text] of Object.entries(released.plain)) {
+		if (!key.startsWith("nulo:core:networks@")) continue
+		const row = JSON.parse(text) as { kind?: unknown; chainId?: unknown }
+		if (row.kind === "testnet" && typeof row.chainId === "number") return row.chainId
+	}
+	return undefined
+}
+
+/** The first open of the release's profile, as `update-replay` drives it: the reset's takeover when
+ *  the release's Testnet row names a chain this build no longer seeds, then the Terms sheet and the
+ *  Mainnet arrival the release's storage calls for. That test proves what each writes; the run only
+ *  answers them, between steps, so no step's census holds their writes. */
+function answerFirstOpen(released: Released): (s: RunState) => Promise<void> {
+	return async (s) => {
+		const page = s.anchor
+		if (releasedTestnet(released) !== CHAIN_IDS.TESTNET) {
+			await takeoverScreen(page, "network-reset", 30_000)
+			await clickByTestId(page, "stale-network-reset")
+			await page.waitForSelector('[data-testid="stale-confirm-submit"]', { visible: true, timeout: 10_000 })
+			await clickByTestId(page, "stale-confirm-submit")
+			const moved = await readyToastSaysMoved(page, "Testnet")
+			await waitForHash(page, "#/popup/general", 30_000)
+			await waitForToastGone(page, readyToast("Testnet", moved).sub, 15_000)
+		}
+		await answerUpdatedTerms(page, released.entries)
+		await answerArrival(page, released.entries)
 	}
 }
 
@@ -99,6 +139,7 @@ export async function bindPreUpdate(s: RunState, released: Released): Promise<Vi
 		const type = p.method
 		const row = rows.find((r) => r.name === PRE_UPDATE_NAMES[type] && r.type === type)
 		if (row) bindProfile(s.bindings, p.ref, row.id, new Set())
+		if (row && !p.retired) s.afterUpdate = { ref: p.ref, answer: answerFirstOpen(released) }
 	}
 	const updated = profileRows(await readLocalStorage(s.ctx))
 	const listed = (await readProfiles(s.anchor)).listed
@@ -109,4 +150,33 @@ export async function bindPreUpdate(s: RunState, released: Released): Promise<Vi
 	const session = await readSession(s.anchor, [{ label: "anchor", page: s.anchor, anchor: true }], true)
 	const start = checkPreUpdate(world, { released: released.rows, updated, listed, onAuth }, s.bindings)
 	return [...start, ...checkSession(world, session, s.bindings)]
+}
+
+const RELEASE_SEAL_MS = 15_000
+
+/**
+ * Ends the exemption of the release rows `id` owns, now that it is open: the wallet seals them
+ * asynchronously once the profile's row keys are ready, so each gets 15 s to leave the release's
+ * text, then is judged by the sealed-root rule like any row. `before` is the census from before the
+ * open; returns the roots where a row left its key with no sealed row taking its place.
+ */
+export async function expireRelease(s: RunState, id: string, before: readonly StoredEntry[]): Promise<string[]> {
+	const ids = new Set(s.bindings.profiles.values())
+	const due = Object.entries(s.legacyPlain).filter(([key, text]) => releaseRowOwner(key, text, ids) === id)
+	if (!due.length) return []
+	const left = () =>
+		s.anchor
+			.evaluate(async (rows: [string, string][]) => {
+				const now = await chrome.storage.local.get(rows.map(([key]) => key))
+				return rows.every(([key, text]) => now[key] !== text)
+			}, due)
+			.catch(() => false)
+	await pollUntil(left, Boolean, { label: "release rows sealed", timeoutMs: RELEASE_SEAL_MS, intervalMs: 250 }).catch(() => {})
+	for (const [key] of due) delete s.legacyPlain[key]
+	return lostRelease(
+		due.map(([key]) => key),
+		before,
+		await readCensus(s.anchor),
+		id,
+	)
 }
