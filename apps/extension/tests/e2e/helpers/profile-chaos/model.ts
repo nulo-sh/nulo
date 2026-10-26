@@ -10,6 +10,7 @@
  * Imports nothing from Puppeteer or Vitest, so an in-process driver can run the same catalog.
  */
 import { prng } from "../../fixtures/chaos-seed"
+import { cite } from "./citations"
 
 export type Method = "password" | "passkey"
 export type ProfileRef = `P${number}`
@@ -40,13 +41,16 @@ export interface ModelProfile {
 	name?: string
 	password?: SecretRef
 	credential?: CredentialRef
-	/** The phrase behind a password profile's master; profiles sharing one derive the same accounts. */
+	/** The phrase behind the profile's master, whichever unlock it has; profiles sharing one derive
+	 *  the same accounts. A retired profile has none. */
 	phrase?: PhraseRef
 	/** Derived accounts on the active network. */
 	derived: number
 	/** Account files imported into this profile and not since lost. */
 	imported: FileRef[]
 	deleted: boolean
+	/** A passkey profile an earlier build made: listed, never opened, deletable. */
+	retired?: true
 }
 
 export type Session =
@@ -62,7 +66,8 @@ export interface ModelFile {
 	kind: "backup" | "account"
 	from: ProfileRef
 	method: Method
-	/** The password that opens the file: the profile's at export. */
+	/** The password that opens the file: a password profile's at export, or the file password a
+	 *  passkey profile's export asked for. */
 	password?: SecretRef
 	phrase?: PhraseRef
 	credential?: CredentialRef
@@ -88,7 +93,7 @@ export interface World {
 	next: { profile: number; credential: number; file: number; secret: number; phrase: number; name: number }
 }
 
-export type StartState = "empty"
+export type StartState = "empty" | "pre-update"
 
 export type Outcome = "committed" | "refused" | "cancelled" | "committed-then-locked"
 
@@ -107,6 +112,8 @@ export interface Expectation {
 	settle: Settle
 	/** `code:<file>:<line>` or `decision:<id>`, one per clause the expectation rests on. */
 	sources: string[]
+	/** The title a refusal must show, where the clause names which refusal it is. */
+	shows?: string
 }
 
 export type Family =
@@ -127,6 +134,7 @@ export type Family =
 	| "race"
 	| "dapp"
 	| "restore-held"
+	| "tamper"
 	| "verify"
 
 export interface ParamsMap {
@@ -134,9 +142,10 @@ export interface ParamsMap {
 	createPasskey: { ref: ProfileRef; name: string; credential: CredentialRef; double: boolean }
 	lock: Record<string, never>
 	unlockPassword: { target: ProfileRef; variant: "right" | "wrong" }
-	unlockPasskey: { target: ProfileRef; variant: "approve" | "refuse" | "no-prf" | "other"; other?: CredentialRef }
+	unlockPasskey: { target: ProfileRef; variant: PasskeyVariant; other?: CredentialRef }
 	switchProfile: { to: ProfileRef }
-	revealPhrase: { variant: "right" | "wrong" }
+	/** `right` and `wrong` reveal a password profile's phrase; the others a passkey profile's. */
+	revealPhrase: { variant: "right" | "wrong" | PasskeyVariant; other?: CredentialRef }
 	importPhrase: {
 		ref: ProfileRef
 		phrase: PhraseRef
@@ -146,10 +155,13 @@ export interface ParamsMap {
 		duplicate?: "confirm" | "decline"
 	}
 	addAccount: Record<string, never>
-	exportBackup: { file: FileRef }
+	/** A passkey profile's export takes a file password, `short` one under the wallet's rule. */
+	exportBackup: { file: FileRef; password?: SecretRef; variant?: "short" }
 	importBackup: {
 		file: FileRef
-		variant: "right" | "wrong-password" | "truncated" | "flipped"
+		/** `earlier-shape`: a passkey profile's file opened, its recovery phrase field made no string,
+		 *  and sealed again under its own password. */
+		variant: "right" | "wrong-password" | "truncated" | "flipped" | "earlier-shape"
 		ref: ProfileRef
 		password: SecretRef
 		duplicate?: "confirm" | "decline"
@@ -177,8 +189,26 @@ export interface ParamsMap {
 		ref: ProfileRef
 		password: SecretRef
 	}
+	/** The first profile, made in the onboarding tab, which shows the phrase stage. */
+	onboardingCreate: {
+		ref: ProfileRef
+		method: Method
+		password?: SecretRef
+		credential?: CredentialRef
+		answer: "saved" | "later"
+	}
+	/** The backup a passkey profile made before 1.1, picked on the import page. */
+	importEarlierBackup: Record<string, never>
+	/** A passkey unlock held at its prompt while the profile's stored row changes; restored after. */
+	editRowDuringUnlock: { field: "prfSalt" | "credentialId" | "secret" | "type" }
+	/** One byte of a stored slot flipped, then an unlock with the profile's own secret; restored after. */
+	tamperedUnlock: { target: ProfileRef; slot: "guard" | "secret" | "entropy" }
+	/** A passkey reveal held at its prompt while another window locks. */
+	raceLockDuringReveal: Record<string, never>
 	verifyAll: Record<string, never>
 }
+
+export type PasskeyVariant = "approve" | "refuse" | "no-prf" | "other"
 
 export type ActionName = keyof ParamsMap
 
@@ -211,48 +241,93 @@ export interface ActionSpec<N extends ActionName> {
 export const MAX_PROFILES = 4
 export const ACTIONS_PER_RUN = 24
 
-const SERVICE = "code:src/wallet/services/profile/service.ts"
-const CREATE_OPENS = `${SERVICE}:734`
-const PASSKEY_CREATE_OPENS = `${SERVICE}:854`
-const UNLOCK_REFUSES = `${SERVICE}:796`
-const PASSKEY_UNLOCK_BINDS = `${SERVICE}:959`
-const LOCK_CLOSES = `${SERVICE}:1058`
-const RENAME = `${SERVICE}:1178`
-const PASSWORD_CHANGE = `${SERVICE}:1313`
-const PASSWORD_CHANGE_REOPENS = `${SERVICE}:1346`
-const DELETE = `${SERVICE}:1634`
-const PHRASE_IMPORT = `${SERVICE}:1840`
-const PHRASE_EXPORT = `${SERVICE}:2100`
-const DUPLICATE_WARNS = `${SERVICE}:2204`
-const RESTORE_CLONE = `${SERVICE}:2432`
-const PASSKEY_RESTORE_UNIQUE = `${SERVICE}:2594`
-const OPEN_BEARER = "code:src/wallet/services/profile/session-manager.ts:298"
-const SESSION_RESTORE = "code:src/wallet/services/profile/session-manager.ts:584"
-const LOCK_DELETES_ROW = "code:src/wallet/services/profile/session-manager.ts:427"
-const STRICT_TOGGLE = "code:src/wallet/services/profile/session-manager.ts:757"
-const STRICT_DEFAULT = "code:src/wallet/config/config.ts:31"
-const STRICT_ROW = "code:src/popup/pages/settings/lock.vue:195"
-const PICKER_PERSISTS = "code:src/popup/components/popups/SelectProfilePopup.vue:59"
-const RESET_ROUTES = "code:src/popup/pages/settings/security/reset.vue:177"
-const RESET_WHILE_LOCKED = "code:src/popup/pages/settings/security/reset.vue:5"
-const PRF_REQUIRED = "code:src/wallet/utils/passkey-ceremony.ts:139"
-const PROMPT_DISMISSED = "code:src/utils/passkey-copy.ts:86"
-const ADD_ACCOUNT = "code:src/wallet/services/account/service.ts:277"
-const FULL_EXPORT = "code:src/popup/pages/settings/security/export/full.vue"
-const ACCOUNT_EXPORT = "code:src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_IMPORT = "code:src/popup/pages/settings/accounts/import.vue"
-const ACCOUNT_DUPLICATE = "code:src/wallet/services/account/service.ts:792"
-const BACKUP_UNREADABLE = "code:src/composables/useFullBackupImport.ts:603"
-const BACKUP_INTEGRITY = "code:src/composables/useFullBackupImport.ts:157"
-const BACKUP_UNPARSED = "code:src/composables/useFullBackupImport.ts:560"
-const RESTORE_ROLLS_BACK = "code:src/composables/full-backup-restore.ts:1037"
-const RESTORE_FINALIZES = "code:src/composables/useFullBackupImport.ts:483"
-const RESTORE_GATE = "code:src/e2e/chrome-storage-restore-gate.ts:45"
-const DAPP_QUEUE = "code:src/wallet/services/wallet-sdk/background.ts:759"
+const SERVICE = "src/wallet/services/profile/service.ts"
+const SESSIONS = "src/wallet/services/profile/session-manager.ts"
+const IMPORT = "src/composables/useFullBackupImport.ts"
+const CREATE_OPENS = cite(SERVICE, 715, "public async createProfile(")
+const PASSKEY_CREATE_OPENS = cite(SERVICE, 826, "public async createPasskeyProfile(")
+const PASSKEY_CREATE_PHRASE = cite(SERVICE, 852, "deriveMasterFromMnemonic(await getMnemonic(entropy))")
+const UNLOCK_REFUSES = cite(SERVICE, 777, "throw new InvalidPasswordError()")
+const PASSKEY_UNLOCK_BINDS = cite(SERVICE, 906, "answer.credential.id !== snapshot.credentialId")
+const LOCK_CLOSES = cite(SERVICE, 969, "public async lockActiveProfile(")
+const RENAME = cite(SERVICE, 1089, "public async changeProfileName(")
+const PASSWORD_CHANGE = cite(SERVICE, 1225, 'throw new Error("Invalid profile old password")')
+const PASSWORD_CHANGE_REOPENS = cite(SERVICE, 1258, "this.reopenAfterPasswordChangeHoldingLock(")
+const DELETE = cite(SERVICE, 1546, "public async deleteProfile(")
+const PHRASE_IMPORT = cite(SERVICE, 1751, "public async importMnemonic(")
+const PHRASE_EXPORT = cite(SERVICE, 1911, 'new Error("Invalid profile old password")')
+const DUPLICATE_WARNS = cite(SERVICE, 2015, "throw new DuplicateWalletError(")
+const RESTORE_CLONE = cite(SERVICE, 2161, "CLONE DIVERGENCE")
+const RESTORE_TAKES_PASSWORD = cite(SERVICE, 2101, "if (!password) {")
+const OPEN_BEARER = cite(SESSIONS, 298, "persistBearer && dek")
+const SESSION_RESTORE = cite(SESSIONS, 584, 'if (profile.type === "passkey") {')
+const LOCK_DELETES_ROW = cite(SESSIONS, 427, "this.deletePersistedSession()")
+const STRICT_TOGGLE = cite(SESSIONS, 757, 'prop.key === "strictSecurityMode"')
+const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
+const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 195, 'v-if="!isPasskey"')
+const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
+const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 177, "if (!appStore.profiles.length) {")
+const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
+const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 114, "if (!ext.prf) throw new PasskeyPrfError(")
+const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 81, 'inner.name === "NotAllowedError") return "not-confirmed"')
+const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 275, "public async createAccount(")
+const EXPORT = "src/composables/useFullBackupExport.ts"
+const FULL_EXPORT = cite(EXPORT, 369, "sealFullBackupText(plaintext as string, state.password.value as string)")
+const FILE_PASSWORD_RULE = cite(EXPORT, 502, "!isPasskeyProfile.value || isNewPasswordValid(")
+const FILE_PASSWORD_BLOCKED = cite(EXPORT, 360, "if (filePasswordBlocked(ctx)) return")
+const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 651, "public async exportAccount(")
+const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 719, "public async importAccount(")
+const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 790, "This account is already in your wallet")
+const BACKUP_UNREADABLE = cite(IMPORT, 617, "DECRYPTION_FAILED.title")
+const BACKUP_INTEGRITY = cite(IMPORT, 164, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(IMPORT, 567, "parseError.title, parseError.tooltip")
+const RESTORE_ASKS_PASSWORD = cite(
+	"src/components/composite/import/ImportFullBackupForm.vue",
+	138,
+	"askNewPassword && selectedBackup?.profileType",
+)
+const RESTORE_ROLLS_BACK = cite(
+	"src/composables/full-backup-restore.ts",
+	965,
+	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
+)
+const RESTORE_FINALIZES = cite(IMPORT, 474, "restoreRun = await finalizeWithReminder(")
+const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
+const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
+const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
+const REVEAL_PASSKEY = cite(SEED_PAGE, 106, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
+const REVEAL_CANCEL = cite(SEED_PAGE, 110, "handleCancelOrUnconfirmed(error, openToast)")
+const REVEAL_FENCED = cite(SEED_PAGE, 108, "if (isCurrent()) showWords(profileId, mnemonic)")
+const SLOTS_BIND_PASSKEY = cite(SERVICE, 422, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
+const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 910, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
+const PASSKEY_KIND_GATE = cite(SERVICE, 129, 'if (row.type === "password") throw new Error("Profile requires password")')
+const RETIRED_UNLOCK = cite(SERVICE, 124, 'if (kind === "retired") throw new RetiredProfileError()')
+const RETIRED_SLOTS = cite(SERVICE, 382, 'if (classified.kind === "retired") throw new RetiredProfileError()')
+const RETIRED_EXPORTS = cite(SERVICE, 480, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_LISTED = cite(SERVICE, 2081, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 300, 'data-testid="auth-delete-retired"')
+const ONBOARDING = "src/onboarding/pages/create.vue"
+const ONBOARDING_PHRASE = cite(ONBOARDING, 110, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 122, 'await markGetStarted(createdId, "phraseSaved")')
+const ONBOARDING_LATER = cite(ONBOARDING, 126, "function onPhraseLater() {")
+const EARLIER_AT_PICK = cite(IMPORT, 562, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_AT_DECRYPT = cite(IMPORT, 607, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_SHAPE = cite(IMPORT, 125, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+/** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
+export const EARLIER_TITLE = "Backup from an earlier version"
+const EARLIER_TITLE_SOURCE = cite(IMPORT, 113, `title: "${EARLIER_TITLE}"`)
 
+/** The names a release gives the two profiles the `pre-update` start makes on it. */
+export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const
+
+/**
+ * `empty`: a fresh install. `pre-update`: the release build made a password profile, then a passkey
+ * profile, and locked; the wallet then updated in place. The password profile carries over (P86-14);
+ * the passkey one is retired (P86-11). Its credential counts toward no slot: on a browser that keeps
+ * a credential on its page, it went with the release's page, and a retired profile never asks it.
+ */
 export function startWorld(start: StartState): World {
-	if (start !== "empty") throw new Error(`unknown start state ${start}`)
-	return {
+	const empty: World = {
 		device: { strict: true },
 		profiles: [],
 		session: { kind: "locked" },
@@ -260,14 +335,33 @@ export function startWorld(start: StartState): World {
 		knownPhrases: [],
 		next: { profile: 1, credential: 1, file: 1, secret: 1, phrase: 1, name: 1 },
 	}
+	if (start === "empty") return empty
+	if (start !== "pre-update") throw new Error(`unknown start state ${start}`)
+	const base = { derived: 1, imported: [], deleted: false }
+	return {
+		...empty,
+		profiles: [
+			{ ref: "P1", method: "password", name: PRE_UPDATE_NAMES.password, password: "S1", phrase: "W1", ...base },
+			{ ref: "P2", method: "passkey", name: PRE_UPDATE_NAMES.passkey, retired: true, ...base },
+		],
+		selected: "P2",
+		next: { profile: 3, credential: 1, file: 1, secret: 2, phrase: 2, name: 2 },
+	}
 }
 
 export const live = (w: World): ModelProfile[] => w.profiles.filter((p) => !p.deleted)
+/** Live profiles an unlock may open: every one but a retired one. */
+export const openable = (w: World): ModelProfile[] => live(w).filter((p) => !p.retired)
 export const profileOf = (w: World, ref: ProfileRef): ModelProfile | undefined => w.profiles.find((p) => p.ref === ref)
 const liveOf = (w: World, ref: ProfileRef | undefined): ModelProfile | undefined =>
 	ref === undefined ? undefined : live(w).find((p) => p.ref === ref)
+const openableOf = (w: World, ref: ProfileRef | undefined): ModelProfile | undefined => {
+	const p = liveOf(w, ref)
+	return p?.retired ? undefined : p
+}
 export const openProfile = (w: World): ModelProfile | undefined => (w.session.kind === "open" ? liveOf(w, w.session.ref) : undefined)
 export const selectedProfile = (w: World): ModelProfile | undefined => liveOf(w, w.selected)
+const selectedOpenable = (w: World): ModelProfile | undefined => openableOf(w, w.selected)
 const locked = (w: World): boolean => w.session.kind === "locked"
 
 const clone = (w: World): World => structuredClone(w)
@@ -326,7 +420,7 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
-const PICKER_IMPORT = "code:src/popup/components/popups/SelectProfilePopup.vue:147"
+const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 147, "handleImportProfile")
 
 /** An import that does not commit: a later profile is imported from the lock screen only, so the
  *  open session, if any, was locked on the way in. */
@@ -410,12 +504,13 @@ const createPasskey: ActionSpec<"createPasskey"> = {
 			method: "passkey" as const,
 			name: nameFor(w, p.name),
 			credential: p.credential,
+			phrase: `W${w.next.phrase}` as PhraseRef,
 			derived: 1,
 			imported: [],
 		}
 		const next = addProfile(w, profile)
-		bump(next, { profile: 1, credential: 1, name: 1 })
-		return result(next, ["committed"], created(p.ref), "home", [PASSKEY_CREATE_OPENS, OPEN_BEARER])
+		bump(next, { profile: 1, credential: 1, phrase: 1, name: 1 })
+		return result(next, ["committed"], created(p.ref), "home", [PASSKEY_CREATE_OPENS, PASSKEY_CREATE_PHRASE, OPEN_BEARER])
 	},
 }
 
@@ -478,15 +573,21 @@ const unlockPassword: ActionSpec<"unlockPassword"> = {
 }
 
 const otherCredentials = (w: World, target: ProfileRef): CredentialRef[] =>
-	live(w)
+	openable(w)
 		.filter((x) => x.ref !== target && x.credential !== undefined)
 		.map((x) => x.credential as CredentialRef)
 
-function passkeyVariant(rng: Rng, w: World, target: ProfileRef): ParamsMap["unlockPasskey"] {
+function passkeyVariant(rng: Rng, w: World, target: ProfileRef): { variant: PasskeyVariant; other?: CredentialRef } {
 	const other = pick(rng, otherCredentials(w, target))
 	const variants = ["approve", "approve", "refuse", "no-prf", ...(other ? (["other"] as const) : [])] as const
-	const variant = pick(rng, variants) as ParamsMap["unlockPasskey"]["variant"]
-	return variant === "other" ? { target, variant, other } : { target, variant }
+	const variant = pick(rng, variants) as PasskeyVariant
+	return variant === "other" ? { variant, other } : { variant }
+}
+
+/** Why a passkey variant cannot name `other` against `target`, or undefined when it can. */
+function otherInvalid(w: World, target: ProfileRef, variant: PasskeyVariant, other: CredentialRef | undefined): string | undefined {
+	if (variant === "other" && !(other && otherCredentials(w, target).includes(other))) return "no other live credential"
+	return variant !== "other" && other ? "only the other-credential variant names one" : undefined
 }
 
 const unlockPasskey: ActionSpec<"unlockPasskey"> = {
@@ -495,17 +596,16 @@ const unlockPasskey: ActionSpec<"unlockPasskey"> = {
 	weight: 5,
 	invalid: (w, p) => {
 		if (!locked(w)) return "not locked"
-		if (liveOf(w, p.target)?.method !== "passkey") return `${p.target} is no live passkey profile`
-		if (p.variant === "other" && !(p.other && otherCredentials(w, p.target).includes(p.other))) return "no other live credential"
-		return p.variant !== "other" && p.other ? "only the other-credential variant names one" : undefined
+		if (openableOf(w, p.target)?.method !== "passkey") return `${p.target} is no openable passkey profile`
+		return otherInvalid(w, p.target, p.variant, p.other)
 	},
 	params: (rng, w) => {
 		if (!locked(w)) return undefined
 		const target = pick(
 			rng,
-			live(w).filter((x) => x.method === "passkey"),
+			openable(w).filter((x) => x.method === "passkey"),
 		)
-		return target ? passkeyVariant(rng, w, target.ref) : undefined
+		return target ? { target: target.ref, ...passkeyVariant(rng, w, target.ref) } : undefined
 	},
 	expect: (w, p) => {
 		if (p.variant === "refuse") return refusedOn(w, p.target, "cancelled", [PROMPT_DISMISSED])
@@ -538,18 +638,38 @@ const switchProfile: ActionSpec<"switchProfile"> = {
 
 // ── recovery phrase ─────────────────────────────────────────────────────
 
+const PASSWORD_REVEALS = new Set<ParamsMap["revealPhrase"]["variant"]>(["right", "wrong"])
+
+/** A passkey profile reveals its phrase with its passkey in the password's place (P86-04). */
 const revealPhrase: ActionSpec<"revealPhrase"> = {
 	name: "revealPhrase",
 	family: "phrase",
 	weight: 2,
-	invalid: (w) => (openProfile(w)?.method === "password" ? undefined : "needs an open password profile"),
-	params: (rng, w) => (openProfile(w)?.method === "password" ? { variant: chance(rng, 0.25) ? "wrong" : "right" } : undefined),
+	invalid: (w, p) => {
+		const open = openProfile(w)
+		if (!open) return "no open session"
+		if ((open.method === "password") !== PASSWORD_REVEALS.has(p.variant))
+			return `${p.variant} reveals no ${open.method} profile's phrase`
+		return open.method === "passkey"
+			? otherInvalid(w, open.ref, p.variant as PasskeyVariant, p.other)
+			: p.other && "a password reveal names no credential"
+	},
+	params: (rng, w) => {
+		const open = openProfile(w)
+		if (!open) return undefined
+		if (open.method === "password") return { variant: chance(rng, 0.25) ? "wrong" : "right" }
+		return passkeyVariant(rng, w, open.ref)
+	},
 	expect: (w, p) => {
 		if (p.variant === "wrong") return unchanged(w, "refused", [PHRASE_EXPORT])
+		if (p.variant === "refuse") return unchanged(w, "cancelled", [REVEAL_PASSKEY, REVEAL_CANCEL, PROMPT_DISMISSED])
+		if (p.variant === "no-prf") return unchanged(w, "refused", [REVEAL_PASSKEY, PRF_REQUIRED])
+		if (p.variant === "other") return unchanged(w, "refused", [REVEAL_PASSKEY, SLOTS_BIND_PASSKEY])
 		const next = clone(w)
 		const open = openProfile(w) as ModelProfile
 		if (open.phrase && !next.knownPhrases.includes(open.phrase)) next.knownPhrases.push(open.phrase)
-		return result(next, ["committed"], [{ kind: "profile", ref: open.ref }], "unchanged", [PHRASE_EXPORT])
+		const sources = open.method === "password" ? [PHRASE_EXPORT] : [REVEAL_PASSKEY, "decision:P86-04"]
+		return result(next, ["committed"], [{ kind: "profile", ref: open.ref }], "unchanged", sources)
 	},
 }
 
@@ -609,38 +729,69 @@ const addAccount: ActionSpec<"addAccount"> = {
 
 // ── full backups ────────────────────────────────────────────────────────
 
+/** A password profile's file opens with its password; a passkey profile's with a file password of
+ *  its own, which the page asks under the wallet's rule before it encrypts anything (P86-06). */
 const exportBackup: ActionSpec<"exportBackup"> = {
 	name: "exportBackup",
 	family: "backup",
 	weight: 3,
-	invalid: (w, p) => (openProfile(w) ? freshRefs(w, { file: p.file }) : "no open session"),
-	params: (_rng, w) => (openProfile(w) ? { file: reserve(w).file() } : undefined),
+	invalid: (w, p) => {
+		const open = openProfile(w)
+		if (!open) return "no open session"
+		if (open.method === "password")
+			return p.password || p.variant ? "a password profile's file takes no file password" : freshRefs(w, { file: p.file })
+		if (!p.password) return "a passkey profile's file takes a file password"
+		return freshRefs(w, { file: p.file, secret: p.password })
+	},
+	params: (rng, w) => {
+		const open = openProfile(w)
+		if (!open) return undefined
+		const r = reserve(w)
+		if (open.method === "password") return { file: r.file() }
+		return chance(rng, 0.2) ? { file: r.file(), password: r.secret(), variant: "short" } : { file: r.file(), password: r.secret() }
+	},
 	expect: (w, p) => {
-		const next = clone(w)
 		const from = openProfile(w) as ModelProfile
+		const writes: WriteScope[] = [{ kind: "profile", ref: from.ref }]
+		if (p.variant === "short") {
+			const next = clone(w)
+			bump(next, { secret: 1 })
+			return result(next, ["refused"], writes, "unchanged", [FILE_PASSWORD_RULE, FILE_PASSWORD_BLOCKED, "decision:P86-06"])
+		}
+		const next = clone(w)
 		next.files.push({
 			ref: p.file,
 			kind: "backup",
 			from: from.ref,
 			method: from.method,
-			password: from.password,
+			password: from.method === "password" ? from.password : p.password,
 			phrase: from.phrase,
 			credential: from.credential,
 			imported: [...from.imported],
 			derived: from.derived,
 		})
-		bump(next, { file: 1 })
-		return result(next, ["committed"], [{ kind: "profile", ref: from.ref }], "unchanged", [FULL_EXPORT])
+		bump(next, from.method === "password" ? { file: 1 } : { file: 1, secret: 1 })
+		return result(
+			next,
+			["committed"],
+			writes,
+			"unchanged",
+			from.method === "password" ? [FULL_EXPORT] : [FULL_EXPORT, FILE_PASSWORD_RULE, "decision:P86-06"],
+		)
 	},
 }
 
 const backupOf = (w: World, ref: FileRef): ModelFile | undefined => w.files.find((f) => f.ref === ref && f.kind === "backup")
 
-/** A passkey restore is refused while a live profile holds its credential. */
-const credentialLive = (w: World, f: ModelFile): boolean => f.credential !== undefined && live(w).some((x) => x.credential === f.credential)
-
 const restoreWarns = (w: World, f: ModelFile, variant: ParamsMap["importBackup"]["variant"]): boolean =>
-	variant === "right" && !credentialLive(w, f) && phraseHolder(w, f.phrase) !== undefined
+	variant === "right" && phraseHolder(w, f.phrase) !== undefined
+
+const BACKUP_REFUSALS: Record<Exclude<ParamsMap["importBackup"]["variant"], "right">, string[]> = {
+	"wrong-password": [BACKUP_UNREADABLE],
+	truncated: [BACKUP_UNPARSED, BACKUP_INTEGRITY, BACKUP_UNREADABLE],
+	flipped: [BACKUP_UNPARSED, BACKUP_INTEGRITY, BACKUP_UNREADABLE],
+	"earlier-shape": [EARLIER_SHAPE, EARLIER_AT_DECRYPT, EARLIER_TITLE_SOURCE, "decision:P86-13"],
+}
 
 function importBackupParams(rng: Rng, w: World): ParamsMap["importBackup"] | undefined {
 	const file = canAddProfile(w)
@@ -655,19 +806,20 @@ function importBackupParams(rng: Rng, w: World): ParamsMap["importBackup"] | und
 	const variants =
 		file.method === "password"
 			? (["right", "right", "wrong-password", ...corruptions] as const)
-			: (["right", "right", ...corruptions] as const)
+			: (["right", "right", "wrong-password", "earlier-shape", ...corruptions] as const)
 	const variant = pick(rng, variants) as ParamsMap["importBackup"]["variant"]
 	const base = { file: file.ref, variant, ref: r.profile(), password: r.secret() }
 	return restoreWarns(w, file, variant) ? { ...base, duplicate: chance(rng, 0.75) ? "confirm" : "decline" } : base
 }
 
+/** Until the unlock choice lands, every backup restores as a password profile under the new
+ *  password the form asks, a passkey profile's included. */
 function restoredWorld(w: World, file: ModelFile, ref: ProfileRef, password: SecretRef): World {
 	const next = addProfile(w, {
 		ref,
-		method: file.method,
-		password: file.method === "password" ? password : undefined,
+		method: "password",
+		password,
 		phrase: file.phrase,
-		credential: file.credential,
 		derived: file.derived,
 		imported: [...file.imported],
 	})
@@ -682,7 +834,7 @@ const importBackup: ActionSpec<"importBackup"> = {
 	invalid: (w, p) => {
 		const file = backupOf(w, p.file)
 		if (!file) return `${p.file} is no backup`
-		if (p.variant === "wrong-password" && file.method !== "password") return "a passkey backup has no file password"
+		if (p.variant === "earlier-shape" && file.method !== "passkey") return "only a passkey profile's file is typed passkey"
 		return (
 			newProfileInvalid(w, { profile: p.ref, secret: p.password }) ?? duplicateInvalid(restoreWarns(w, file, p.variant), p.duplicate)
 		)
@@ -690,15 +842,11 @@ const importBackup: ActionSpec<"importBackup"> = {
 	params: importBackupParams,
 	expect: (w, p) => {
 		const file = backupOf(w, p.file) as ModelFile
-		if (p.variant !== "right")
-			return importNotCommitted(
-				w,
-				"refused",
-				p.variant === "wrong-password" ? [BACKUP_UNREADABLE] : [BACKUP_UNPARSED, BACKUP_INTEGRITY, BACKUP_UNREADABLE],
-			)
-		if (credentialLive(w, file)) return importNotCommitted(w, "refused", [PASSKEY_RESTORE_UNIQUE])
+		if (p.variant === "earlier-shape") return { ...importNotCommitted(w, "refused", BACKUP_REFUSALS[p.variant]), shows: EARLIER_TITLE }
+		if (p.variant !== "right") return importNotCommitted(w, "refused", BACKUP_REFUSALS[p.variant])
 		if (p.duplicate === "decline") return importNotCommitted(w, "cancelled", [DUPLICATE_WARNS])
-		const sources = [RESTORE_CLONE, RESTORE_FINALIZES, OPEN_BEARER, ...(p.duplicate ? [DUPLICATE_WARNS] : [])]
+		const sources = [RESTORE_CLONE, RESTORE_FINALIZES, RESTORE_ASKS_PASSWORD, RESTORE_TAKES_PASSWORD, OPEN_BEARER]
+		if (p.duplicate) sources.push(DUPLICATE_WARNS)
 		return result(restoredWorld(w, file, p.ref, p.password), ["committed"], created(p.ref), "home", sources)
 	},
 }
@@ -859,6 +1007,7 @@ const deleteProfile: ActionSpec<"deleteProfile"> = {
 		const next = deletedWorld(w, target.ref)
 		const settle: Settle = live(next).length ? "lock" : "register"
 		const sources = p.via === "forgot" ? [DELETE, RESET_WHILE_LOCKED, RESET_ROUTES] : [DELETE, RESET_ROUTES]
+		if (target.retired) sources.push(RETIRED_DELETE, "decision:P86-11")
 		return result(next, ["committed"], [{ kind: "delete", ref: target.ref }, { kind: "device" }], settle, sources)
 	},
 }
@@ -903,8 +1052,8 @@ const secondWindow: ActionSpec<"secondWindow"> = {
 	weight: 2,
 	invalid: (w, p, caps) => {
 		if (p.op === "lock") return openProfile(w) ? undefined : "no open session"
-		const target = selectedProfile(w)
-		if (!locked(w) || !target) return "needs a locked wallet with a known lock-screen profile"
+		const target = selectedOpenable(w)
+		if (!locked(w) || !target) return "needs a locked wallet with an openable lock-screen profile"
 		return target.method === "passkey" && !caps.ceremonyOffAnchor ? "a passkey ceremony runs only on the anchor page here" : undefined
 	},
 	params: (_rng, w, caps) => {
@@ -913,12 +1062,12 @@ const secondWindow: ActionSpec<"secondWindow"> = {
 	},
 	expect: (w, p) => {
 		if (p.op === "lock") return result(lockedWorld(w), ["committed"], [], "lock", [LOCK_CLOSES])
-		return unlockedOn(w, selectedProfile(w) as ModelProfile, "unchanged", [OPEN_BEARER])
+		return unlockedOn(w, selectedOpenable(w) as ModelProfile, "unchanged", [OPEN_BEARER])
 	},
 }
 
-const lockedOnPasskey = (w: World): boolean => locked(w) && selectedProfile(w)?.method === "passkey"
-const lockedOnPassword = (w: World): boolean => locked(w) && selectedProfile(w)?.method === "password"
+const lockedOnPasskey = (w: World): boolean => locked(w) && selectedOpenable(w)?.method === "passkey"
+const lockedOnPassword = (w: World): boolean => locked(w) && selectedOpenable(w)?.method === "password"
 
 const abandonCeremony: ActionSpec<"abandonCeremony"> = {
 	name: "abandonCeremony",
@@ -1047,6 +1196,114 @@ const restoreHeld: ActionSpec<"restoreHeld"> = {
 	},
 }
 
+// ── the first profile in the onboarding tab ─────────────────────────────
+
+/** Onboarding makes the first profile and shows its phrase for either unlock (P86-01). It runs in
+ *  the anchor's own tab, as a wallet with no profile runs it again, so its passkey outlives it. */
+const onboardingCreate: ActionSpec<"onboardingCreate"> = {
+	name: "onboardingCreate",
+	family: "create",
+	weight: 3,
+	invalid: (w, p, caps) => {
+		if (live(w).length) return "onboarding makes the first profile only"
+		if (p.method === "password")
+			return p.credential ? "a password profile has no credential" : freshRefs(w, { profile: p.ref, secret: p.password })
+		if (mintedCredentials(w) >= caps.credentialSlots) return "the authenticator holds no more credentials"
+		return p.password ? "a passkey profile has no password" : freshRefs(w, { profile: p.ref, credential: p.credential })
+	},
+	params: (rng, w, caps) => {
+		if (live(w).length) return undefined
+		const r = reserve(w)
+		const answer = chance(rng, 0.7) ? "saved" : "later"
+		const passkey = mintedCredentials(w) < caps.credentialSlots && chance(rng, 0.5)
+		return passkey
+			? { ref: r.profile(), method: "passkey", credential: r.credential(), answer }
+			: { ref: r.profile(), method: "password", password: r.secret(), answer }
+	},
+	expect: (w, p) => {
+		const phrase: PhraseRef = `W${w.next.phrase}`
+		const next = addProfile(w, {
+			ref: p.ref,
+			method: p.method,
+			name: nameFor(w, ""),
+			...(p.method === "password" ? { password: p.password } : { credential: p.credential }),
+			phrase,
+			derived: 1,
+			imported: [],
+		})
+		next.knownPhrases.push(phrase)
+		bump(next, p.method === "password" ? { profile: 1, secret: 1, phrase: 1 } : { profile: 1, credential: 1, phrase: 1 })
+		const opens = p.method === "password" ? CREATE_OPENS : PASSKEY_CREATE_OPENS
+		const answered = p.answer === "saved" ? ONBOARDING_SAVED : ONBOARDING_LATER
+		return result(next, ["committed"], created(p.ref), "home", [opens, ONBOARDING_PHRASE, answered, OPEN_BEARER, "decision:P86-01"])
+	},
+}
+
+// ── backups an earlier version made ─────────────────────────────────────
+
+/** Refused by its shape as soon as it is picked, before any other control or prompt (P86-13). */
+const importEarlierBackup: ActionSpec<"importEarlierBackup"> = {
+	name: "importEarlierBackup",
+	family: "backup",
+	weight: 1,
+	invalid: () => undefined,
+	params: () => ({}),
+	expect: (w) => ({
+		...importNotCommitted(w, "refused", [EARLIER_SHAPE, EARLIER_AT_PICK, EARLIER_TITLE_SOURCE, "decision:P86-13"]),
+		shows: EARLIER_TITLE,
+	}),
+}
+
+// ── stored rows changed under the wallet ────────────────────────────────
+
+/** What refuses each field's change once the prompt answered: the unlock reads the row after the
+ *  prompt and opens it only under the credential and input the passkey answered for. */
+const EDIT_REFUSES: Record<ParamsMap["editRowDuringUnlock"]["field"], string> = {
+	prfSalt: SLOTS_BIND_PASSKEY,
+	credentialId: PASSKEY_UNLOCK_BINDS,
+	secret: PASSKEY_SLOTS_REFUSE,
+	type: PASSKEY_KIND_GATE,
+}
+
+const editRowDuringUnlock: ActionSpec<"editRowDuringUnlock"> = {
+	name: "editRowDuringUnlock",
+	family: "tamper",
+	weight: 1,
+	invalid: (w) => (lockedOnPasskey(w) ? undefined : "needs a lock screen on an openable passkey profile"),
+	params: (rng, w) => {
+		if (!lockedOnPasskey(w)) return undefined
+		return { field: pick(rng, ["prfSalt", "credentialId", "secret", "type"] as const) as ParamsMap["editRowDuringUnlock"]["field"] }
+	},
+	expect: (w, p) => unchanged(w, "refused", [EDIT_REFUSES[p.field], "decision:D17"]),
+}
+
+/** A slot whose last byte changed never opens under the profile's own secret: its frame's tag fails. */
+const tamperedUnlock: ActionSpec<"tamperedUnlock"> = {
+	name: "tamperedUnlock",
+	family: "tamper",
+	weight: 1,
+	invalid: (w, p) => (locked(w) && openableOf(w, p.target) ? undefined : `needs a locked wallet and ${p.target} openable`),
+	params: (rng, w) => {
+		const target = locked(w) ? pick(rng, openable(w)) : undefined
+		if (!target) return undefined
+		return { target: target.ref, slot: pick(rng, ["guard", "secret", "entropy"] as const) as ParamsMap["tamperedUnlock"]["slot"] }
+	},
+	expect: (w, p) => {
+		const target = openableOf(w, p.target) as ModelProfile
+		return refusedOn(w, p.target, "refused", [target.method === "password" ? UNLOCK_REFUSES : PASSKEY_SLOTS_REFUSE])
+	},
+}
+
+/** The reveal shows nothing once its page has locked, whenever the prompt then answers. */
+const raceLockDuringReveal: ActionSpec<"raceLockDuringReveal"> = {
+	name: "raceLockDuringReveal",
+	family: "race",
+	weight: 1,
+	invalid: (w) => (openProfile(w)?.method === "passkey" ? undefined : "needs an open passkey profile"),
+	params: (_rng, w) => (openProfile(w)?.method === "passkey" ? {} : undefined),
+	expect: (w) => result(lockedWorld(w), ["cancelled"], [], "lock", [REVEAL_FENCED, LOCK_CLOSES, "decision:D17"]),
+}
+
 /** Every live profile in model order: a wrong secret refused with no write, its own secret opens it,
  *  its accounts read as recorded; then the lock screen goes back to the selection, if one is known. */
 const verifyAll: ActionSpec<"verifyAll"> = {
@@ -1056,11 +1313,15 @@ const verifyAll: ActionSpec<"verifyAll"> = {
 	invalid: (w) => (live(w).length ? undefined : "no live profile"),
 	params: (_rng, w) => (live(w).length ? {} : undefined),
 	expect: (w) => {
-		const writes: WriteScope[] = [{ kind: "device" }, ...live(w).map((x) => ({ kind: "profile" as const, ref: x.ref }))]
+		// A retired profile is probed for its refusals, which write nothing.
+		const writes: WriteScope[] = [{ kind: "device" }, ...openable(w).map((x) => ({ kind: "profile" as const, ref: x.ref }))]
 		const next = clone(w)
 		next.session = { kind: "locked" }
 		next.selected = w.selected ?? (live(w).at(-1) as ModelProfile).ref
-		return result(next, ["committed"], writes, "lock", [UNLOCK_REFUSES, PASSKEY_UNLOCK_BINDS, OPEN_BEARER])
+		const retired = live(w).some((x) => x.retired)
+			? [RETIRED_LISTED, RETIRED_UNLOCK, RETIRED_SLOTS, RETIRED_EXPORTS, "decision:P86-11"]
+			: []
+		return result(next, ["committed"], writes, "lock", [UNLOCK_REFUSES, PASSKEY_UNLOCK_BINDS, OPEN_BEARER, ...retired])
 	},
 }
 
@@ -1091,6 +1352,11 @@ export const CATALOG = [
 	dappWhileLocked,
 	dappDuringHeldUnlock,
 	restoreHeld,
+	onboardingCreate,
+	importEarlierBackup,
+	editRowDuringUnlock,
+	tamperedUnlock,
+	raceLockDuringReveal,
 	verifyAll,
 ] as const
 
@@ -1154,7 +1420,13 @@ export const familyOf = (action: ActionName): Family => ACTIONS[action].family
  *  begins with while a session is open, the lock screen being its only entry once profiles exist. */
 export type StepEnd = "session" | "background"
 
-const ENTERS_FROM_LOCK_SCREEN: ReadonlySet<ActionName> = new Set(["createPassword", "createPasskey", "importPhrase", "importBackup"])
+const ENTERS_FROM_LOCK_SCREEN: ReadonlySet<ActionName> = new Set([
+	"createPassword",
+	"createPasskey",
+	"importPhrase",
+	"importBackup",
+	"importEarlierBackup",
+])
 
 export function endsOf(step: ListedStep, before: World): StepEnd[] {
 	if (ENTERS_FROM_LOCK_SCREEN.has(step.action)) return before.session.kind === "open" ? ["session"] : []
@@ -1162,6 +1434,7 @@ export function endsOf(step: ListedStep, before: World): StepEnd[] {
 		case "lock":
 		case "deleteProfile":
 		case "raceLockDuringUnlock":
+		case "raceLockDuringReveal":
 		case "verifyAll":
 			return ["session"]
 		case "secondWindow":
@@ -1189,7 +1462,7 @@ export function coverage(completed: readonly ActionName[]): Coverage {
 	completed.forEach((action, i) => {
 		const family = familyOf(action)
 		out.families[family] = (out.families[family] ?? 0) + 1
-		if (family === "race" || family === "restore-held") out.schedules[action] = (out.schedules[action] ?? 0) + 1
+		if (family === "race" || family === "restore-held" || family === "tamper") out.schedules[action] = (out.schedules[action] ?? 0) + 1
 		if (i > 0) {
 			const pair = `${completed[i - 1]}>${action}`
 			out.transitions[pair] = (out.transitions[pair] ?? 0) + 1

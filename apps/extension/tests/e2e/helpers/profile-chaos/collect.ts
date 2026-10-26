@@ -61,8 +61,10 @@ export const SEALED_PREFIXES: readonly string[] = (Object.values(FAMILY_GROUPS) 
 	.filter((e) => e.sealed && e.ref.startsWith("root:"))
 	.map((e) => `${e.ref.slice("root:".length)}@`)
 
-/** Each profile row's sealed fields by method, a base64 frame of a fixed version byte and length:
- *  a password row's slots and DEK are `EncryptionKey` frames, a passkey row's DEK a `sealFrame`. */
+/** Each kind of profile row's sealed fields, a base64 frame of a fixed version byte and length: a
+ *  password row's slots and DEK are `EncryptionKey` frames, a passkey row's `sealFrame`s under its
+ *  unlock key, and a retired row holds only its DEK's. A passkey row is retired when it holds no
+ *  `prfSalt`, as the wallet's classifier reads it. */
 const SLOT_FRAMES: Record<string, Record<string, { version: number; length: number }>> = {
 	password: {
 		guard: { version: 0, length: 37 },
@@ -70,7 +72,13 @@ const SLOT_FRAMES: Record<string, Record<string, { version: number; length: numb
 		entropy: { version: 0, length: 61 },
 		dekSealed: { version: 0, length: 61 },
 	},
-	passkey: { dekSealed: { version: 1, length: 61 } },
+	passkey: {
+		guard: { version: 1, length: 37 },
+		secret: { version: 1, length: 61 },
+		entropy: { version: 1, length: 61 },
+		dekSealed: { version: 1, length: 61 },
+	},
+	retired: { dekSealed: { version: 1, length: 61 } },
 }
 
 /**
@@ -101,13 +109,18 @@ export async function scanStorage(
 				for (const n of needleList) if (n.value.length >= 8 && text.includes(n.value)) hits.push({ where, needle: n.name })
 				if (text.includes("prfSalt")) structure.prfSalt.push(where)
 			}
+			const kindOf = (row: Record<string, unknown>) => (row.type === "passkey" && !("prfSalt" in row) ? "retired" : String(row.type))
 			const checkProfileRow = (key: string, text: string) => {
 				const row = JSON.parse(text) as Record<string, unknown>
-				const fields = frames[String(row.type)]
-				if (!fields) structure.unframedSlots.push(`${String(row.id ?? key)}.type (${String(row.type)})`)
-				for (const [field, spec] of Object.entries(fields ?? {})) {
+				const label = String(row.id ?? key)
+				const fields = frames[kindOf(row)]
+				if (!fields) {
+					structure.unframedSlots.push(`${label}.type (${String(row.type)})`)
+					return
+				}
+				for (const [field, spec] of Object.entries(fields)) {
 					const why = notFrame(row[field], spec)
-					if (why) structure.unframedSlots.push(`${String(row.id ?? key)}.${field} (${why})`)
+					if (why) structure.unframedSlots.push(`${label}.${field} (${why})`)
 				}
 			}
 			const checkLocal = (key: string, text: string) => {
@@ -158,17 +171,22 @@ export async function readSession(probe: Page, pages: readonly RunPage[], locked
 	const row = await readSessionRow(probe)
 	const active = await callService<{ id: string } | undefined>(probe, "profile", "getActiveProfile")
 	const routes = await Promise.all(
-		pages.map(async (p) => ({
-			label: p.label,
-			anchor: p.anchor,
-			route: (await p.page.evaluate(() => location.hash)).replace(/^#/, "").split("?")[0],
-		})),
+		pages.map(async (p) => {
+			const { hash, lockScreen } = await p.page.evaluate(() => {
+				const shown = (testid: string) => !!document.querySelector(`[data-testid="${testid}"]`)
+				const onAuth = location.hash.replace(/^#/, "").split("?")[0] === "/popup/auth"
+				const lock = onAuth ? { setupAgain: shown("auth-setup-again"), unlockOffered: shown("auth-submit") } : undefined
+				return { hash: location.hash, lockScreen: lock }
+			})
+			const route = hash.replace(/^#/, "").split("?")[0]
+			return { label: p.label, anchor: p.anchor, route, ...(lockScreen ? { lockScreen } : {}) }
+		}),
 	)
 	return { row, active: active?.id, pages: routes, ...(locked ? { protectedCallRefused: await protectedCallRefused(probe) } : {}) }
 }
 
 export async function readProfiles(page: Page): Promise<ProfileReading> {
-	const listed = await callService<{ id: string; name: string; type: string }[]>(page, "profile", "getProfiles")
+	const listed = await callService<{ id: string; name: string; type: string; retired?: boolean }[]>(page, "profile", "getProfiles")
 	const rows = await page.evaluate(async () => {
 		const all = await chrome.storage.local.get(null)
 		return Object.entries(all)
@@ -184,7 +202,7 @@ export async function readProfiles(page: Page): Promise<ProfileReading> {
 				}
 			})
 	})
-	return { listed: listed.map(({ id, name, type }) => ({ id, name, type })), rows }
+	return { listed: listed.map(({ id, name, type, retired }) => ({ id, name, type, retired: retired === true })), rows }
 }
 
 // ── logs ────────────────────────────────────────────────────────────────

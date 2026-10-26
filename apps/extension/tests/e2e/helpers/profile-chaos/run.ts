@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { decryptAccountExport } from "@nulo/aztec-runtime/account"
-import { getEntropy } from "@nulo/wallet-core/utils"
+import { getEntropy, getMnemonic } from "@nulo/wallet-core/utils"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { backgroundOrigin } from "../../fixtures/browser"
 import { callService } from "../../fixtures/session"
@@ -22,6 +22,7 @@ import {
 	type Bindings,
 	checkErrors,
 	checkLeaks,
+	checkOutcome,
 	checkLogContinuity,
 	checkProfiles,
 	checkSession,
@@ -39,6 +40,7 @@ import {
 } from "./checkers"
 import { drainLogs, logErrors, readCensus, readProfiles, readSession, scanStorage } from "./collect"
 import { DRIVERS } from "./drivers"
+import { capturePrf, drainPrf } from "./prf-capture"
 import {
 	type ActionName,
 	coverage,
@@ -46,6 +48,7 @@ import {
 	endsOf,
 	type FileRef,
 	live,
+	type ModelFile,
 	type Plan,
 	type PlannedStep,
 	profileOf,
@@ -72,6 +75,8 @@ export interface StepRecord {
 export interface Verdict {
 	kind: VerdictKind
 	seed: number
+	/** What the start state's own check found, before any step; a red start runs no step. */
+	start: Violation[]
 	steps: StepRecord[]
 	coverageLine: string
 	elapsedMs: number
@@ -90,6 +95,24 @@ async function needlesOf(s: RunState): Promise<Needle[]> {
 			{ name: `${ref}/words`, value: words.join(" ") },
 			{ name: `${ref}/entropy-hex`, value: Buffer.from(entropy).toString("hex") },
 			{ name: `${ref}/entropy-b64`, value: b64(entropy) },
+		)
+	}
+	for (const [ref, id] of s.bindings.profiles) {
+		const key = `nulo:core:profiles@${id}`
+		const salt = await s.anchor
+			.evaluate(async (k: string) => {
+				const raw = (await chrome.storage.local.get(k))[k]
+				return typeof raw === "string" ? (JSON.parse(raw) as { prfSalt?: unknown }).prfSalt : undefined
+			}, key)
+			.catch(() => undefined)
+		if (typeof salt === "string") out.push({ name: `${ref}/prf-salt`, value: salt, home: `local:${key}` })
+	}
+	for (const [i, value] of [...s.prf].entries()) {
+		const bytes = Buffer.from(value, "base64")
+		out.push(
+			{ name: `prf-${i}/b64`, value },
+			{ name: `prf-${i}/hex`, value: bytes.toString("hex") },
+			{ name: `prf-${i}/b64url`, value: bytes.toString("base64url") },
 		)
 	}
 	for (const [ref, file] of s.files) {
@@ -153,7 +176,19 @@ async function readHeldFile(s: RunState, next: World, ref: FileRef, out: FileSca
 	const { body, ...check } = await opensOnlyWith(open, secretFor(s, model.password))
 	out.exports.push({ file: ref, ...check })
 	if (body?.includes("prfSalt")) out.prfSalt.push(`file:${ref}:opened`)
+	if (body && held.kind === "backup" && model.method === "passkey") await learnFromBody(s, model, body)
 	return { text, body, carried: carriedBy(model) }
+}
+
+/** A passkey profile's phrase shows only when it is revealed; its backup carries it, so the first
+ *  body opened teaches it, and the logs and files already read are searched again for it. */
+async function learnFromBody(s: RunState, model: ModelFile, body: string): Promise<void> {
+	const entropy = (JSON.parse(body) as { entropy?: unknown }).entropy
+	if (!model.phrase || typeof entropy !== "string") return
+	const words = await getMnemonic(Uint8Array.from(Buffer.from(entropy, "base64")))
+	const learnt = s.phrases.get(model.phrase)
+	if (learnt && learnt.join(" ") !== words.join(" ")) throw new Error(`${model.ref} carries another phrase than ${model.phrase}'s`)
+	s.phrases.set(model.phrase, words)
 }
 
 /** Every held file against every needle known now. A body may carry a secret by design under another
@@ -289,14 +324,14 @@ async function checkStep(
 ): Promise<StepEvidence> {
 	const next = step.expect.next
 	const out: Violation[] = []
-	if (!step.expect.outcomes.includes(driven.outcome))
-		out.push({ oracle: "O5", message: `${step.action} ended ${driven.outcome}; the model allows ${step.expect.outcomes.join(" or ")}` })
+	out.push(...checkOutcome(step.action, step.expect, driven))
 	out.push(...checkSettle(step.action, driven.settle))
 	if (out.length) {
 		const known = await needlesOf(s)
 		for (const v of out) if (v.detail) v.detail = mask(v.detail, known)
 		return { violations: out, incomplete: [] }
 	}
+	for (const page of [s.anchor, ...s.extras.map((e) => e.page)]) await drainPrf(s, page)
 	const unread = await learn(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
@@ -310,7 +345,8 @@ async function checkStep(
 			.filter((p) => p.method === "passkey")
 			.map((p) => p.ref),
 	)
-	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds))
+	const homes = new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
+	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds, homes))
 	for (const v of out) if (v.detail) v.detail = mask(v.detail, needles)
 	return { violations: out, incomplete: [...logs.incomplete, ...unread] }
 }
@@ -336,12 +372,19 @@ export function recordTarget(root: string, browser: string, seed: number): Recor
 	return { path: join(dir, `${browser}-${seed}-${Date.now().toString(36)}.json`), browser }
 }
 
-function writeRecord(out: RecordTarget, plan: Plan, s: RunState, steps: StepRecord[], kind: VerdictKind, line: string): void {
+function writeRecord(
+	out: RecordTarget,
+	plan: Plan,
+	s: RunState,
+	run: { start: Violation[]; steps: StepRecord[]; kind: VerdictKind; line: string },
+): void {
+	const { steps, kind, line } = run
 	const body = {
 		revision: revision(),
 		browser: out.browser,
 		seed: plan.seed,
 		start: plan.start,
+		startCheck: run.start,
 		caps: plan.caps,
 		verdict: kind,
 		coverage: line,
@@ -387,6 +430,7 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	const t0 = Date.now()
 	// A restart during the last step's checks or since loses lines the drain can never read.
 	if (s.origin !== undefined && origin !== s.origin) return recordOf(step, t0, { incomplete: [UNPLANNED_RESTART] })
+	await capturePrf(s.anchor)
 	let driven: Driven
 	try {
 		driven = await drive(s, step, before)
@@ -436,8 +480,9 @@ function runCoverage(s: RunState, steps: readonly StepRecord[]): string {
 	return coverageLine(coverage(completed.map((r) => r.action)), s.warns, incomplete, s.allowed, known)
 }
 
-/** Runs `plan` until `stopsRun` says it cannot go on, and writes the record. */
-export async function runPlan(s: RunState, plan: Plan, target: RecordTarget): Promise<Verdict> {
+/** Runs `plan` until `stopsRun` says it cannot go on, and writes the record. `start` is what the
+ *  start state's own check found; a violation in it runs no step. */
+export async function runPlan(s: RunState, plan: Plan, target: RecordTarget, start: Violation[] = []): Promise<Verdict> {
 	const t0 = Date.now()
 	// A background clears its ring once its config loads, so its first ids are gone before the run:
 	// the continuity check starts after the last line the run found, and step 0 reads those lines.
@@ -445,7 +490,9 @@ export async function runPlan(s: RunState, plan: Plan, target: RecordTarget): Pr
 	s.logs.lastId = s.logs.carried.at(-1)?.id ?? 0
 	const steps: StepRecord[] = []
 	let world = startWorld(plan.start)
-	for (const step of plan.steps) {
+	if (start.length)
+		console.log(`[profile-chaos] ${plan.seed} start ${plan.start}: ${start.map((v) => `${v.oracle} ${v.message}`).join(" | ")}`)
+	for (const step of start.length ? [] : plan.steps) {
 		const result = await runOne(s, step, world)
 		steps.push(result)
 		console.log(progressLine(plan.seed, step, result))
@@ -454,6 +501,14 @@ export async function runPlan(s: RunState, plan: Plan, target: RecordTarget): Pr
 	}
 	const kind = runVerdict(steps, plan.steps.length)
 	const line = runCoverage(s, steps)
-	writeRecord(target, plan, s, steps, kind, line)
-	return { kind, seed: plan.seed, steps, coverageLine: line, elapsedMs: Date.now() - t0, recordPath: target.path }
+	writeRecord(target, plan, s, { start, steps, kind, line })
+	return {
+		kind: start.length ? "red" : kind,
+		seed: plan.seed,
+		start,
+		steps,
+		coverageLine: line,
+		elapsedMs: Date.now() - t0,
+		recordPath: target.path,
+	}
 }

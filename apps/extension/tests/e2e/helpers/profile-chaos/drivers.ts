@@ -6,10 +6,10 @@
 import type { Page } from "puppeteer"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { waitForLockScreen } from "../../fixtures/auth"
-import { stopBackground } from "../../fixtures/browser"
+import { extensionUrl, gotoExtensionPage, stopBackground } from "../../fixtures/browser"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet, withholdGetPrf } from "../../fixtures/passkey"
-import { confirmProfileReset } from "../../fixtures/profiles"
+import { confirmProfileReset, readRecoveryWords } from "../../fixtures/profiles"
 import { lockFromAnotherWindow } from "../../fixtures/session"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
 import { waitForPopupClosed } from "../../fixtures/popups"
@@ -22,6 +22,7 @@ import {
 	type ModelFile,
 	type ModelProfile,
 	type ParamsMap,
+	type PhraseRef,
 	type PlannedStep,
 	profileOf,
 	type World,
@@ -51,7 +52,9 @@ import {
 	anchorAdvanced,
 } from "./ui"
 import { verifyAll } from "./verify"
-import { exportFullBackup, restoreFile } from "./backups"
+import { capturePrf, drainPrf } from "./prf-capture"
+import { exportFullBackup, pickEarlierBackup, restoreFile } from "./backups"
+import { editRowDuringUnlock as editRow, tamperedUnlock as tamperSlot } from "./tamper"
 
 type Drivers = { [N in ActionName]: (s: RunState, p: ParamsMap[N], step: PlannedStep, before: World) => Promise<Driven> }
 
@@ -130,6 +133,25 @@ const createPassword: Drivers["createPassword"] = async (s, p, _step, before) =>
 	return driven
 }
 
+/** Binds `credential` to the credential id the row of a just-created passkey profile names. */
+async function learnCredential(s: RunState, ref: ModelProfile["ref"], credential: ModelProfile["credential"]): Promise<void> {
+	const id = s.bindings.profiles.get(ref)
+	if (!id || !credential) return
+	const stored = await s.anchor.evaluate(
+		async (key: string) => (JSON.parse((await chrome.storage.local.get(key))[key] as string) as { credentialId?: string }).credentialId,
+		`nulo:core:profiles@${id}`,
+	)
+	if (stored) s.credentials.set(credential, stored)
+}
+
+/** Records the words a screen showed for `phrase`; a second reading must show the same ones. */
+function learnWords(s: RunState, phrase: PhraseRef | undefined, words: string[]): void {
+	if (!phrase) return
+	const learnt = s.phrases.get(phrase)
+	if (learnt && learnt.join(" ") !== words.join(" ")) throw new Error(`a screen shows another phrase than ${phrase}'s`)
+	s.phrases.set(phrase, words)
+}
+
 const createPasskey: Drivers["createPasskey"] = async (s, p, _step, before) => {
 	await openCreateForm(s, before)
 	const page = s.anchor
@@ -137,15 +159,50 @@ const createPasskey: Drivers["createPasskey"] = async (s, p, _step, before) => {
 	await clickByTestId(page, "register-method-passkey")
 	const driven = await submitCreate(s, p.double)
 	await bindOpened(s, p.ref)
-	const id = s.bindings.profiles.get(p.ref)
-	if (id) {
-		const credential = await page.evaluate(
-			async (key: string) =>
-				(JSON.parse((await chrome.storage.local.get(key))[key] as string) as { credentialId?: string }).credentialId,
-			`nulo:core:profiles@${id}`,
-		)
-		if (credential) s.credentials.set(p.credential, credential)
+	await learnCredential(s, p.ref, p.credential)
+	return driven
+}
+
+/** Onboarding in the anchor's own tab, as a wallet with no profile runs it again, so a passkey it
+ *  makes stays with the page that holds every other. Open wallet's own write stands in for its
+ *  press, which would close the tab. */
+const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step) => {
+	const page = s.anchor
+	const t0 = Date.now()
+	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
+	await gotoExtensionPage(page, extensionUrl(s.ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome"))
+	await page.waitForSelector('[data-testid="onboarding-welcome-create"]', { visible: true, timeout: 30_000 })
+	await capturePrf(page)
+	await clickByTestId(page, "onboarding-welcome-create")
+	await waitForRoute(page, "#/onboarding/create", 10_000)
+	await clickByTestId(page, `onboarding-method-${p.method}`)
+	if (p.method === "password") {
+		const password = secretFor(s, p.password as never)
+		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', password)
+		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', password)
 	}
+	await clickByTestId(page, "onboarding-submit-create")
+	const refusals = [...PASSKEY_REFUSAL.map((r) => ({ label: "refused", text: r.text })), { label: "refused", testid: "error-text" }]
+	const shown = await settle(
+		page,
+		[{ label: "phrase", testid: "onboarding-phrase-saved" }, ...refusals],
+		{ phrase: "committed", refused: "refused" },
+		CREATE_MS,
+	)
+	if (shown.outcome !== "committed" || !shown.settle.reached) return shown
+	learnWords(s, profileOf(nextOf(step), p.ref)?.phrase, await readRecoveryWords(page, "onboarding-phrase"))
+	await clickByTestId(page, p.answer === "saved" ? "onboarding-phrase-saved" : "onboarding-phrase-later")
+	await waitForRoute(page, "#/onboarding/done", 10_000)
+	await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
+	await drainPrf(s, page)
+	await gotoExtensionPage(page, extensionUrl(s.ctx.extensionId, "/src/popup/index.html#/popup/general"))
+	await capturePrf(page)
+	// A fresh document boots through the lock screen and advances once it finds the session.
+	const driven = await settle(page, [{ ...HOME, testid: "account-selector" }], { home: "committed" }, CREATE_MS)
+	await bindOpened(s, p.ref)
+	await learnCredential(s, p.ref, p.credential)
+	driven.settle.elapsedMs = Date.now() - t0
 	return driven
 }
 
@@ -204,38 +261,79 @@ const switchProfile: Drivers["switchProfile"] = async (s, p) => {
 
 // ── phrase ──────────────────────────────────────────────────────────────
 
+const WORDS: { label: string; testid: string } = { label: "committed", testid: "reveal-content-word" }
+
+/** The reveal's passkey failures, by the toast each one shows. */
+const REVEAL_REFUSAL = [
+	{ label: "cancelled", text: PASSKEY_COPY.notConfirmed },
+	{ label: "refused", text: PASSKEY_COPY.noPrf },
+	{ label: "refused", text: PASSKEY_COPY.revealFailed },
+]
+
+async function revealWithPassword(s: RunState, open: ModelProfile, variant: ParamsMap["revealPhrase"]["variant"]): Promise<Driven> {
+	const page = s.anchor
+	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
+	await replaceInputValue(
+		page,
+		'[data-testid="unlock-password-input"]',
+		variant === "right" ? secretFor(s, open.password as never) : wrongSecret(),
+	)
+	await clickByTestId(page, "unlock-submit-btn")
+	return settle(page, [WORDS, { label: "refused", testid: "unlock-error-text" }], { committed: "committed", refused: "refused" }, EDIT_MS)
+}
+
+/** The passkey answers as `p` says, through the same hooks as the lock screen's. */
+async function revealWithPasskey(s: RunState, p: ParamsMap["revealPhrase"]): Promise<Driven> {
+	const page = s.anchor
+	await page.waitForSelector('[data-testid="reveal-passkey-btn"]', { visible: true, timeout: 10_000 })
+	const press = async (): Promise<Driven> => {
+		await clickByTestId(page, "reveal-passkey-btn")
+		return settle(page, [WORDS, ...REVEAL_REFUSAL], { committed: "committed", cancelled: "cancelled", refused: "refused" }, UNLOCK_MS)
+	}
+	if (p.variant === "refuse") {
+		if (!s.auth) throw new Error("a refused passkey needs the run's authenticator")
+		const allow = await s.auth.refuseNextStep(page)
+		try {
+			return await press()
+		} finally {
+			await allow()
+		}
+	}
+	if (p.variant === "no-prf") await withholdGetPrf(page)
+	if (p.variant === "other") await answerWithCredential(page, s.credentials.get(p.other as never) as string)
+	return press()
+}
+
 const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 	const open = openBefore(before)
 	const page = s.anchor
 	const t0 = Date.now()
 	await openRoute(page, "#/popup/settings/security/export/seed")
 	await clickByTestId(page, "agree-continue-btn")
-	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
-	await replaceInputValue(
-		page,
-		'[data-testid="unlock-password-input"]',
-		p.variant === "right" ? secretFor(s, open.password as never) : wrongSecret(),
-	)
-	await clickByTestId(page, "unlock-submit-btn")
-	const driven = await settle(
-		page,
-		[
-			{ label: "committed", testid: "reveal-content-word" },
-			{ label: "refused", testid: "unlock-error-text" },
-		],
-		{ committed: "committed", refused: "refused" },
-		EDIT_MS,
-	)
-	if (driven.outcome === "committed" && open.phrase) {
-		const words = await page.$$eval('[data-testid="reveal-content-word"]', (els) =>
-			els.map((el) => (el.textContent ?? "").trim().replace(/^\d+\.?\s*/, "")),
-		)
-		const learnt = s.phrases.get(open.phrase)
-		if (learnt && learnt.join(" ") !== words.join(" ")) throw new Error(`the reveal shows another phrase than ${open.phrase}'s`)
-		s.phrases.set(open.phrase, words)
-	}
+	const driven = open.method === "password" ? await revealWithPassword(s, open, p.variant) : await revealWithPasskey(s, p)
+	if (driven.outcome === "committed") learnWords(s, open.phrase, await readRecoveryWords(page))
 	driven.settle.elapsedMs = Date.now() - t0
 	return driven
+}
+
+/** The reveal's passkey held at its prompt, the wallet locked from another window, then the prompt
+ *  answered: the words stay off the page whichever way the held request ends. */
+const raceLockDuringReveal: Drivers["raceLockDuringReveal"] = async (s) => {
+	const page = s.anchor
+	const t0 = Date.now()
+	await openRoute(page, "#/popup/settings/security/export/seed")
+	await clickByTestId(page, "agree-continue-btn")
+	await page.waitForSelector('[data-testid="reveal-passkey-btn"]', { visible: true, timeout: 10_000 })
+	const hold = await holdNextGet(page)
+	await clickByTestId(page, "reveal-passkey-btn")
+	await hold.reached()
+	await lockFromAnotherWindow(page)
+	await waitForLockScreen(page, LOCK_MS)
+	await hold.release()
+	// The answer the release lets through has the rest of its round trip to show words.
+	await new Promise((resolve) => setTimeout(resolve, 3_000))
+	const shown = await page.evaluate(() => !!document.querySelector('[data-testid="reveal-content-word"]'))
+	return timed(t0, UNLOCK_MS + LOCK_MS, shown ? "committed" : "cancelled")
 }
 
 /** Brings the anchor to the import page: from the register page while no profile is live, else the
@@ -315,10 +413,11 @@ const addAccount: Drivers["addAccount"] = async (s, _p, step) => {
 
 // ── backups and account files ───────────────────────────────────────────
 
-const exportBackup: Drivers["exportBackup"] = async (s, p, step, before) => {
-	const open = openBefore(before)
-	const file = nextOf(step).files.find((f) => f.ref === p.file) as ModelFile
-	return exportFullBackup(s, open, file)
+const exportBackup: Drivers["exportBackup"] = async (s, p, _step, before) => exportFullBackup(s, openBefore(before), p)
+
+const importEarlierBackup: Drivers["importEarlierBackup"] = async (s, _p, _step, before) => {
+	await openImport(s, before)
+	return pickEarlierBackup(s)
 }
 
 const importBackup: Drivers["importBackup"] = async (s, p, _step, before) => {
@@ -373,13 +472,17 @@ const rename: Drivers["rename"] = async (s, p) => {
 
 const deleteProfile: Drivers["deleteProfile"] = async (s, p, step, before) => {
 	const page = s.anchor
+	const target = deleteTarget(before, p.via) as ModelProfile
 	if (p.via === "settings") await openRoute(page, "#/popup/settings/security/reset")
 	else {
 		await openRoute(page, "#/popup/auth")
-		await clickByTestId(page, "auth-reset")
-		await clickByTestId(page, "forgot-reset-btn")
+		// A retired profile's lock screen offers Delete in the unlock's place.
+		if (target.retired) await clickByTestId(page, "auth-delete-retired")
+		else {
+			await clickByTestId(page, "auth-reset")
+			await clickByTestId(page, "forgot-reset-btn")
+		}
 	}
-	const target = deleteTarget(before, p.via) as ModelProfile
 	const tombstone = `nulo:core:profile-tombstones@${profileId(s, target.ref)}`
 	await confirmProfileReset(page, 15_000)
 	// The session closes before the purge, so the lock screen shows first; the delete is done once
@@ -423,6 +526,7 @@ const secondWindow: Drivers["secondWindow"] = async (s, p, _step, before) => {
 	const t0 = Date.now()
 	const page = await openPopup(s.ctx)
 	s.errors.watch(page, "second")
+	await capturePrf(page)
 	try {
 		if (p.op === "lock") {
 			await lockFromAnotherWindow(page)
@@ -440,6 +544,7 @@ const secondWindow: Drivers["secondWindow"] = async (s, p, _step, before) => {
 		await anchorAdvanced(s.anchor, UNLOCK_MS)
 		return timed(t0, UNLOCK_MS, "committed")
 	} finally {
+		await drainPrf(s, page)
 		await page.close().catch(() => {})
 	}
 }
@@ -449,6 +554,7 @@ const secondWindow: Drivers["secondWindow"] = async (s, p, _step, before) => {
 const abandonCeremony: Drivers["abandonCeremony"] = async (s) => {
 	const other = await openPopup(s.ctx)
 	s.errors.watch(other, "abandon")
+	await capturePrf(other)
 	try {
 		await waitForRoute(other, "#/popup/auth", 15_000)
 		await authSubmitReady(other)
@@ -456,6 +562,7 @@ const abandonCeremony: Drivers["abandonCeremony"] = async (s) => {
 		await clickByTestId(other, "auth-submit")
 		await hold.reached()
 	} finally {
+		await drainPrf(s, other)
 		await other.close().catch(() => {})
 	}
 	// Closing the page is the abandon itself: one that survived still holds the request.
@@ -540,6 +647,11 @@ export const DRIVERS: Drivers = {
 	raceLockDuringUnlock,
 	raceDoubleUnlock,
 	raceRestartDuringUnlock,
+	onboardingCreate,
+	importEarlierBackup,
+	editRowDuringUnlock: async (s, p, _step, before) => editRow(s, p, profileOf(before, before.selected as never) as ModelProfile),
+	tamperedUnlock: async (s, p, _step, before) => tamperSlot(s, p, profileOf(before, p.target) as ModelProfile),
+	raceLockDuringReveal,
 	dappWhileLocked: networkOnly,
 	dappDuringHeldUnlock: networkOnly,
 	restoreHeld: networkOnly,

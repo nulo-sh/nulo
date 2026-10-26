@@ -90,7 +90,7 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text variant="body" color="txt-danger" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="txt-danger" :class="$style.error_title" data-testid="import-full-backup-error-title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>

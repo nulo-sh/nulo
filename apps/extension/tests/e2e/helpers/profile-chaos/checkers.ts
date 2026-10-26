@@ -8,7 +8,18 @@
  * Imports nothing from Puppeteer or Vitest.
  */
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
-import { type Method, type ModelFile, type ModelProfile, type ProfileRef, type StepEnd, type World, type WriteScope, live } from "./model"
+import { cite } from "./citations"
+import {
+	type Expectation,
+	type ModelFile,
+	type ModelProfile,
+	type Outcome,
+	type ProfileRef,
+	type StepEnd,
+	type World,
+	type WriteScope,
+	live,
+} from "./model"
 
 export type OracleId = "O1" | "O2" | "O3" | "O4" | "O5" | "O6" | "O7"
 
@@ -58,8 +69,9 @@ export interface SessionReading {
 	row?: { profile: string; hasBearer: boolean; hasPasshash: boolean }
 	/** `profile.getActiveProfile`'s id. */
 	active?: string
-	/** Every open extension page's route; the anchor is the page the run drives. */
-	pages: { label: string; route: string; anchor: boolean }[]
+	/** Every open extension page's route; the anchor is the page the run drives. A page on the lock
+	 *  screen also says whether it shows Set up again and whether it offers an unlock. */
+	pages: { label: string; route: string; anchor: boolean; lockScreen?: { setupAgain: boolean; unlockOffered: boolean } }[]
 	/** While locked: whether a call that needs an open session was refused. A locked reading
 	 *  without it is a violation, so a collector that skipped the probe cannot pass. */
 	protectedCallRefused?: boolean
@@ -107,7 +119,23 @@ function checkLockedSession(w: World & { session: { kind: "locked" } }, r: Sessi
 	}
 	if (r.protectedCallRefused === undefined) out.push(violation("O1", "locked, but no call that needs an open session was tried"))
 	if (r.protectedCallRefused === false) out.push(violation("O1", "locked, but a call that needs an open session was served"))
-	return out
+	return [...out, ...checkLockScreens(w, r)]
+}
+
+/** The lock screen on a retired profile shows Set up again and offers no unlock; on any other, the
+ *  reverse. Judged on the anchor only, whose lock screen shows the model's selection. */
+function checkLockScreens(w: World, r: SessionReading): Violation[] {
+	const selected = live(w).find((p) => p.ref === w.selected)
+	const anchor = r.pages.find((p) => p.anchor && p.route === "/popup/auth")
+	if (!selected || !anchor?.lockScreen) return []
+	const { setupAgain, unlockOffered } = anchor.lockScreen
+	if (selected.retired) {
+		return [
+			...(setupAgain ? [] : [violation("O1", `the lock screen on retired ${selected.ref} does not show Set up again`)]),
+			...(unlockOffered ? [violation("O1", `the lock screen offers retired ${selected.ref} an unlock`)] : []),
+		]
+	}
+	return setupAgain ? [violation("O1", `the lock screen shows Set up again on ${selected.ref}`)] : []
 }
 
 export function checkSession(w: World, r: SessionReading, b: Bindings): Violation[] {
@@ -118,19 +146,27 @@ export function checkSession(w: World, r: SessionReading, b: Bindings): Violatio
 // ── O2: profile rows ────────────────────────────────────────────────────
 
 export interface ProfileReading {
-	/** `profile.getProfiles`. */
-	listed: { id: string; name: string; type: string }[]
+	/** `profile.getProfiles`, with whether each is listed as retired. */
+	listed: { id: string; name: string; type: string; retired: boolean }[]
 	/** Every stored profile row: its key's id and the row's id, name, type and field names. */
 	rows: { keyId: string; id: string; name: string; type: string; fields: string[] }[]
 }
 
-/** The field names each method's stored row holds; a unit test pins this to `ProfileRowSchema`. */
-export const PROFILE_ROW_FIELDS: Readonly<Record<Method, readonly string[]>> = {
-	password: ["id", "name", "pxeGeneration", "dekSealed", "walletFingerprint", "type", "guard", "secret", "entropy", "envelopeMac"],
-	passkey: ["id", "name", "pxeGeneration", "dekSealed", "walletFingerprint", "type", "credentialId"],
+export type RowKind = "password" | "passkey" | "retired"
+
+const ROW_BASE = ["id", "name", "pxeGeneration", "dekSealed", "walletFingerprint", "type"] as const
+const SEALED_FIELDS = ["guard", "secret", "entropy", "envelopeMac"] as const
+
+/** The field names each kind of stored row holds; a unit test pins this to `ProfileRowSchema`. */
+export const PROFILE_ROW_FIELDS: Readonly<Record<RowKind, readonly string[]>> = {
+	password: [...ROW_BASE, ...SEALED_FIELDS],
+	passkey: [...ROW_BASE, ...SEALED_FIELDS, "credentialId", "prfSalt"],
+	retired: [...ROW_BASE, "credentialId"],
 }
 
-export type RowFields = Readonly<Record<Method, readonly string[]>>
+export type RowFields = Readonly<Record<RowKind, readonly string[]>>
+
+const rowKind = (p: ModelProfile): RowKind => (p.retired ? "retired" : p.method)
 
 function checkLiveProfile(p: ModelProfile, r: ProfileReading, b: Bindings, fields: RowFields): Violation[] {
 	const id = idOf(b, p.ref)
@@ -143,8 +179,9 @@ function checkLiveProfile(p: ModelProfile, r: ProfileReading, b: Bindings, field
 	if (name !== undefined && (listed.name !== name || row.name !== name))
 		out.push(violation("O2", `${p.ref} does not hold the name the model gave it`, `named "${listed.name}", not "${name}"`))
 	if (listed.type !== p.method || row.type !== p.method) out.push(violation("O2", `${p.ref} is a ${row.type} profile, not ${p.method}`))
+	if (listed.retired !== !!p.retired) out.push(violation("O2", `${p.ref} is listed ${listed.retired ? "" : "not "}as retired`))
 	if (row.id !== row.keyId) out.push(violation("O2", `${p.ref}'s row names id ${row.id} under key ${row.keyId}`))
-	const want = [...fields[p.method]].sort().join(",")
+	const want = [...fields[rowKind(p)]].sort().join(",")
 	const got = [...row.fields].sort().join(",")
 	if (want !== got) out.push(violation("O2", `${p.ref}'s row holds the fields [${got}], not [${want}]`))
 	return out
@@ -421,7 +458,7 @@ export const GUARDED_NODE_REFUSAL: AllowedError = {
 	everyMessage: true,
 	// An unhandled rejection is a defect whatever it carries, and a failed restore is the user's.
 	except: /^\["(?:unhandled rejection|\[full-backup\] restore failed)/,
-	source: "code:apps/extension/tests/e2e/fixtures/node-stub.ts:12",
+	source: cite("apps/extension/tests/e2e/fixtures/node-stub.ts", 12, "const REFUSAL = JSON.stringify("),
 	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
 }
 
@@ -431,7 +468,7 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 		pattern: /^Error: Client disconnected$/,
 		kinds: ["page-error"],
 		during: "any step",
-		source: "code:apps/extension/src/wallet/logger/console-forwarding.ts:19",
+		source: cite("apps/extension/src/wallet/logger/console-forwarding.ts", 19, "if (disconnect) e.preventDefault()"),
 		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
 	},
 	GUARDED_NODE_REFUSAL,
@@ -439,7 +476,7 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 		pattern: /^\["\[full-backup\] restore failed:",\{"error":\{"name":"Error","message":"Client disconnected"\}\}\]$/,
 		kinds: ["log"],
 		during: ["background"],
-		source: "code:apps/extension/src/composables/full-backup-restore.ts:1070",
+		source: cite("apps/extension/src/composables/full-backup-restore.ts", 998, 'console.error("[full-backup] restore failed:"'),
 		reason: "a planned restart under a running restore drops the run's client, and the run reports its own failure and rolls the profile back, which the model expects",
 	},
 ]
@@ -675,17 +712,63 @@ export function checkSettle(name: string, r: SettleReading): Violation[] {
 	]
 }
 
+/** The outcome the driver saw against the ones the model allows, and the refusal's title where the
+ *  model names which refusal it is. */
+export function checkOutcome(
+	action: string,
+	expect: Pick<Expectation, "outcomes" | "shows">,
+	seen: { outcome: Outcome; shows?: string },
+): Violation[] {
+	if (!expect.outcomes.includes(seen.outcome))
+		return [violation("O5", `${action} ended ${seen.outcome}; the model allows ${expect.outcomes.join(" or ")}`)]
+	if (expect.shows !== undefined && seen.shows !== expect.shows)
+		return [violation("O5", `${action} refused under "${seen.shows ?? "no title"}"; the model names "${expect.shows}"`)]
+	return []
+}
+
 // ── O6: verifyAll ───────────────────────────────────────────────────────
 
 export interface VerifyReading {
 	ref: ProfileRef
 	wrongRefused: boolean
+	/** Keys the refused attempt changed; for a retired profile, the probe below. */
 	wrongWrote: string[]
 	opened: boolean
 	addresses: string[]
 	/** Each imported account's signing key as exported now, beside the one it was imported with.
 	 *  A password profile must show exactly the files the model says it imported. */
 	sentinels: { file: string; now: string; imported: string }[]
+	/** A retired profile's probe: what its lock screen shows, and how each call that would open or
+	 *  export it answered (`retired` for the wallet's retired refusal, else the call's own outcome). */
+	retired?: { setupAgain: boolean; unlockOffered: boolean; calls: Record<string, string> }
+}
+
+/** The profile service's calls that open, export or reseal a profile: each refuses a retired one
+ *  before it reads a secret, prompts or writes (P86-11; the refusal matrix of passkey-unlock-1). */
+export const RETIRED_REFUSALS = [
+	"getPasskeyUnlockParams",
+	"unlockProfile",
+	"unlockPasskeyProfile",
+	"exportMnemonic",
+	"exportPlain",
+	"exportImportedKeysDek",
+	"openBackupTransfer",
+	"changeProfilePassword",
+	"finalizeRestore",
+] as const
+
+function checkRetired(r: VerifyReading): Violation[] {
+	const probe = r.retired
+	if (!probe) return [violation("O6", `retired ${r.ref} was verified as an openable profile`)]
+	const out: Violation[] = []
+	if (!probe.setupAgain) out.push(violation("O6", `retired ${r.ref}'s lock screen does not show Set up again`))
+	if (probe.unlockOffered) out.push(violation("O6", `retired ${r.ref}'s lock screen offers an unlock`))
+	if (r.opened) out.push(violation("O6", `retired ${r.ref} opened`))
+	for (const call of RETIRED_REFUSALS)
+		if (probe.calls[call] !== "retired")
+			out.push(violation("O6", `retired ${r.ref}'s ${call} answered ${probe.calls[call] ?? "nothing"}, not the retired refusal`))
+	if (r.wrongWrote.length) out.push(violation("O6", `probing retired ${r.ref} wrote ${r.wrongWrote.join(", ")}`))
+	return out
 }
 
 /** Profiles that must derive the same accounts: those sharing a phrase or a credential. */
@@ -724,6 +807,8 @@ function checkSentinels(p: ModelProfile, r: VerifyReading): Violation[] {
 function checkVerifyOne(w: World, r: VerifyReading, b: Bindings): Violation[] {
 	const p = live(w).find((x) => x.ref === r.ref)
 	if (!p) return [violation("O6", `${r.ref} was verified but the model holds no such live profile`)]
+	if (p.retired) return checkRetired(r)
+	if (r.retired) return [violation("O6", `${r.ref} was probed as retired, but the model holds it openable`)]
 	const out: Violation[] = []
 	if (!r.wrongRefused) out.push(violation("O6", `${r.ref} opened with a wrong secret`))
 	if (r.wrongWrote.length) out.push(violation("O6", `${r.ref}'s refused unlock wrote ${r.wrongWrote.join(", ")}`))
@@ -746,12 +831,64 @@ export function checkVerify(w: World, readings: readonly VerifyReading[], b: Bin
 	return out
 }
 
+// ── the pre-update start ────────────────────────────────────────────────
+
+/** The profile rows the release wrote, read before the update, and the same keys after it. */
+export interface StartReading {
+	released: Record<string, string>
+	updated: Record<string, string | undefined>
+	listed: ProfileReading["listed"]
+}
+
+const PROFILE_ROOT = "nulo:core:profiles@"
+
+/**
+ * After an in-place update from the release: every profile row the release wrote is still stored,
+ * byte for byte, and listed, a retired one as retired and no other (P86-11, P86-14); the model
+ * holds exactly those profiles. Before the first step, so a dropped or rewritten row is never
+ * read as the first step's doing.
+ */
+export function checkPreUpdate(w: World, r: StartReading, b: Bindings): Violation[] {
+	const keys = Object.keys(r.released).filter((k) => k.startsWith(PROFILE_ROOT))
+	const out =
+		keys.length === live(w).length
+			? []
+			: [violation("O2", `the release wrote ${keys.length} profile row(s); the start holds ${live(w).length}`)]
+	for (const key of keys) out.push(...releaseRowKept(key, r))
+	return [...out, ...startBound(w, r, b, keys)]
+}
+
+function releaseRowKept(key: string, r: StartReading): Violation[] {
+	const after = r.updated[key]
+	if (after === undefined) return [violation("O2", `${key} the release wrote is gone after the update`)]
+	return after === r.released[key] ? [] : [violation("O3", `${key} the release wrote was rewritten by the update`)]
+}
+
+/** Each model profile is a row the release wrote, listed with its retired mark. */
+function startBound(w: World, r: StartReading, b: Bindings, keys: readonly string[]): Violation[] {
+	const out: Violation[] = []
+	for (const p of live(w)) {
+		const id = idOf(b, p.ref)
+		if (!id || !keys.includes(`${PROFILE_ROOT}${id}`)) {
+			out.push(violation("O2", `${p.ref} (${id ?? "unbound"}) is no row the release wrote`))
+			continue
+		}
+		const listed = r.listed.find((x) => x.id === id)
+		if (!listed) out.push(violation("O2", `${p.ref} (${id}) is not listed after the update`))
+		else if (listed.retired !== !!p.retired)
+			out.push(violation("O2", `${p.ref} is listed ${listed.retired ? "" : "not "}as retired after the update`))
+	}
+	return out
+}
+
 // ── O7: leaks ───────────────────────────────────────────────────────────
 
-/** A secret the run knows, in one encoding; `name` is what a message prints. */
+/** A secret the run knows, in one encoding; `name` is what a message prints. `home` names the one
+ *  place it may sit: a passkey profile's `prfSalt` in that profile's row. */
 export interface Needle {
 	name: string
 	value: string
+	home?: string
 }
 
 /** Where a needle was found: `area:key`, `log:<id>`, `file:<ref>`; never what surrounds it. */
@@ -767,7 +904,8 @@ export interface StructureReading {
 	unframedSlots: string[]
 	/** Where `prfSalt` appears: `area:key`, `log:<id>`, `file:<ref>`. */
 	prfSalt: string[]
-	/** Each password backup the run holds: whether its file password opens it and another is refused. */
+	/** Each file the run holds that a password protects: whether its own opens it and another is
+	 *  refused. A passkey profile's backup is one of them, under its file password. */
 	exports: { file: string; opensWithOwn: boolean; refusesOther: boolean }[]
 }
 
@@ -775,8 +913,13 @@ export interface StructureReading {
 const prfSaltAllowed = (where: string, passkeyIds: ReadonlySet<string>): boolean =>
 	[...passkeyIds].some((id) => where === `local:nulo:core:profiles@${id}`)
 
-export function checkLeaks(hits: readonly LeakHit[], s: StructureReading, passkeyIds: ReadonlySet<string>): Violation[] {
-	const out = hits.map((h) => violation("O7", `${h.needle} found in ${h.where}`))
+export function checkLeaks(
+	hits: readonly LeakHit[],
+	s: StructureReading,
+	passkeyIds: ReadonlySet<string>,
+	homes: ReadonlyMap<string, string> = new Map(),
+): Violation[] {
+	const out = hits.filter((h) => homes.get(h.needle) !== h.where).map((h) => violation("O7", `${h.needle} found in ${h.where}`))
 	for (const k of s.unsealedRows) out.push(violation("O7", `${k} holds a row of a sealed family outside a seal envelope`))
 	for (const k of s.unframedSlots) out.push(violation("O7", `${k} is not framed ciphertext`))
 	for (const k of s.prfSalt) if (!prfSaltAllowed(k, passkeyIds)) out.push(violation("O7", `prfSalt appears in ${k}`))

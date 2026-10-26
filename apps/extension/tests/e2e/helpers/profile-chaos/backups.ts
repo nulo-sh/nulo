@@ -3,17 +3,33 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
+import { openFullBackupText, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { clickByTestId, pickFileByTestId, replaceInputValue } from "../../fixtures/dom"
-import { downloadEncryptedBackup, downloadPlainPasskeyBackup } from "../backup-export"
+import { downloadEncryptedBackup, downloadPasskeyBackup } from "../backup-export"
+import { type PlainBackup, sealPlainBackup } from "../backup-seal"
 import { setInputs } from "../import-drivers"
 import type { ModelFile, ModelProfile, ParamsMap } from "./model"
 import { type Driven, type RunState, secretFor, wrongSecret } from "./state"
-import { answerConfirm, confirmLeft, firstSignal, HOME, openRoute, type Signal, settle, timed } from "./ui"
+import { answerConfirm, firstSignal, HOME, openRoute, type Signal, settle, timed } from "./ui"
 
 const EXPORT_MS = 240_000
+const EARLIER_BACKUP = join(import.meta.dirname, "../../../../src/composables/fixtures/earlier-passkey-backup.json")
 const RESTORE_MS = 300_000
 
-export async function exportFullBackup(s: RunState, open: ModelProfile, file: ModelFile): Promise<Driven> {
+/** Seven characters: one short of the file password rule a passkey profile's export applies. */
+const SHORT_FILE_PASSWORD = "Short12"
+
+/** True once the file password is typed and the page still refuses to encrypt with it. */
+async function refusesShortPassword(page: Page): Promise<boolean> {
+	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 })
+	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', SHORT_FILE_PASSWORD)
+	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', SHORT_FILE_PASSWORD)
+	await new Promise((resolve) => setTimeout(resolve, 500))
+	return page.$eval('[data-testid="protect-password-btn"]', (el) => (el as HTMLButtonElement).disabled)
+}
+
+/** The passkey ceremony starts on agree; a password profile types its password first. */
+export async function exportFullBackup(s: RunState, open: ModelProfile, p: ParamsMap["exportBackup"]): Promise<Driven> {
 	const page = s.anchor
 	const t0 = Date.now()
 	await openRoute(page, "#/popup/settings/security/export/full")
@@ -24,14 +40,27 @@ export async function exportFullBackup(s: RunState, open: ModelProfile, file: Mo
 		await replaceInputValue(page, '[data-testid="unlock-password-input"]', secretFor(s, open.password as never))
 		await clickByTestId(page, "unlock-submit-btn")
 		text = await downloadEncryptedBackup(page)
+	} else if (p.variant === "short") {
+		// An enabled button is pressed, as a person would, so a file the rule let through is seen.
+		if (await refusesShortPassword(page)) return timed(t0, EXPORT_MS, "refused")
+		text = await downloadPasskeyBackup(page, SHORT_FILE_PASSWORD)
 	} else {
-		text = await downloadPlainPasskeyBackup(page)
-		await confirmLeft(page)
+		text = await downloadPasskeyBackup(page, secretFor(s, p.password as never))
 	}
-	const path = join(s.dir, `${file.ref}.json`)
+	const path = join(s.dir, `${p.file}.json`)
 	writeFileSync(path, text)
-	s.files.set(file.ref, { path, kind: "backup" })
+	s.files.set(p.file, { path, kind: "backup" })
 	return timed(t0, EXPORT_MS, "committed")
+}
+
+/** The held file opened with its password, its recovery phrase field made a number, then sealed
+ *  again under the same password: the body an earlier passkey profile wrote, by its shape. */
+async function earlierShape(s: RunState, file: ModelFile, text: string): Promise<string> {
+	const password = secretFor(s, file.password as never)
+	const body = JSON.parse(await openFullBackupText(text, password)) as PlainBackup
+	if (typeof body.entropy !== "string") throw new Error(`${file.ref}'s body carries no recovery phrase field`)
+	body.entropy = 0
+	return sealFullBackupText(sealPlainBackup(body), password)
 }
 
 /** One character changed in the middle of the file's longest encoded run, its syntax kept. */
@@ -43,14 +72,24 @@ function flipOne(text: string): string {
 	return `${text.slice(0, at)}${text[at] === "A" ? "B" : "A"}${text.slice(at + 1)}`
 }
 
-function variantPath(s: RunState, file: ModelFile, variant: ParamsMap["importBackup"]["variant"]): string {
+async function variantPath(s: RunState, file: ModelFile, variant: ParamsMap["importBackup"]["variant"]): Promise<string> {
 	const held = s.files.get(file.ref)
 	if (!held) throw new Error(`${file.ref} is not on disk`)
 	if (variant === "right" || variant === "wrong-password") return held.path
 	const text = readFileSync(held.path, "utf8")
 	const path = join(s.dir, `${file.ref}-${variant}-${Date.now().toString(36)}.json`)
-	writeFileSync(path, variant === "truncated" ? text.slice(0, Math.floor(text.length * 0.6)) : flipOne(text))
+	const copy = {
+		truncated: () => text.slice(0, Math.floor(text.length * 0.6)),
+		flipped: () => flipOne(text),
+		"earlier-shape": () => earlierShape(s, file, text),
+	}
+	writeFileSync(path, await copy[variant]())
 	return path
+}
+
+/** The title the import page's refusal shows. */
+async function refusalTitle(page: Page): Promise<string | undefined> {
+	return page.$eval('[data-testid="import-full-backup-error-title"]', (el) => el.textContent?.trim()).catch(() => undefined)
 }
 
 const ERROR: Signal = { label: "refused", testid: "import-full-backup-error" }
@@ -83,6 +122,21 @@ async function decrypt(s: RunState, file: ModelFile, wrong: boolean): Promise<bo
 	const { label } = await firstSignal(page, [ERROR, { label: "form", testid: "import-full-backup-password-input" }], 60_000)
 	if (label === undefined) throw new Error("the decrypt step showed neither a refusal nor the form")
 	return label === "form"
+}
+
+/** Picks the backup a passkey profile made before 1.1, as the wallet's own tests record it, on the
+ *  import page the caller opened. */
+export async function pickEarlierBackup(s: RunState): Promise<Driven> {
+	const page = s.anchor
+	const t0 = Date.now()
+	await clickByTestId(page, "import-option-full-backup")
+	await pickFileByTestId(page, "import-full-backup-pick-file", EARLIER_BACKUP)
+	const picked = await afterPick(s)
+	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
+	// Any other screen is the file offered: a person would go on, and the model allows no commit.
+	const driven = timed(t0, RESTORE_MS, picked === "refused" ? "refused" : "committed")
+	if (picked === "refused") driven.shows = await refusalTitle(page)
+	return driven
 }
 
 /** Submits and answers a duplicate warning as asked; an errors screen's Continue goes on to Home. */
@@ -126,24 +180,27 @@ export async function continuePastErrors(page: Page): Promise<boolean> {
 export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<boolean> {
 	const page = s.anchor
 	await clickByTestId(page, "import-option-full-backup")
-	await pickFileByTestId(page, "import-full-backup-pick-file", variantPath(s, file, p.variant))
+	await pickFileByTestId(page, "import-full-backup-pick-file", await variantPath(s, file, p.variant))
 	const picked = await afterPick(s)
 	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
 	if (picked === "refused") return false
 	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
-	if (file.method === "password") {
-		const password = secretFor(s, p.password)
-		await setInputs(page, {
-			'[data-testid="import-full-backup-password-input"] input': password,
-			'[data-testid="import-full-backup-password-confirm-input"] input': password,
-		})
-	}
+	// Every backup restores under a new password the form asks, a passkey profile's included.
+	const password = secretFor(s, p.password)
+	await setInputs(page, {
+		'[data-testid="import-full-backup-password-input"] input': password,
+		'[data-testid="import-full-backup-password-confirm-input"] input': password,
+	})
 	return true
 }
 
 /** Restores `file` from the import page the caller opened, as `p` says. */
 export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<Driven> {
 	const t0 = Date.now()
-	if (!(await fillRestore(s, file, p))) return timed(t0, RESTORE_MS, "refused")
+	if (!(await fillRestore(s, file, p))) {
+		const driven = timed(t0, RESTORE_MS, "refused")
+		driven.shows = await refusalTitle(s.anchor)
+		return driven
+	}
 	return submitRestore(s, p.duplicate)
 }

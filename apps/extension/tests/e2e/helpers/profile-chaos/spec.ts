@@ -6,10 +6,13 @@
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect } from "vitest"
+import { BROWSER } from "../../fixtures/browser"
 import { chaosSeed } from "../../fixtures/chaos-seed"
-import { test } from "../../fixtures/extension"
+import { type ExtensionContext, test } from "../../fixtures/extension"
+import { inPlaceUpdate, updateBuilds } from "../../fixtures/update/in-place"
 import { evidenceGaps } from "./checkers"
-import { type Caps, describePlan, type ListedStep, plan, planFromList } from "./model"
+import { type Caps, describePlan, type ListedStep, type Plan, plan, planFromList, type StartState } from "./model"
+import { bindPreUpdate, populateRelease, type Released } from "./pre-update"
 import { recordTarget, runPlan, type Verdict } from "./run"
 import { startRun } from "./start"
 import type { NetworkRun } from "./state"
@@ -40,38 +43,74 @@ const filedMet = (verdict: Verdict): number[] => [
 	...new Set(verdict.steps.flatMap((s) => s.violations.flatMap((v) => (v.known === undefined ? [] : [v.known])))),
 ]
 
+interface SeedRun {
+	seed: number
+	plan: Plan
+	browser: string
+	caps: Caps
+	network?: NetworkRun
+	/** Set on the `pre-update` start: what the release left before the update. */
+	released?: Released
+}
+
+/** One seed on `ctx`: the run, its record and every expectation that fails it. */
+async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
+	const { seed, plan: p } = r
+	console.log(`[profile-chaos] seed ${seed} from ${p.start} on ${JSON.stringify(r.caps)}\n${describePlan(p).join("\n")}`)
+	const record = recordTarget(join(process.cwd(), ".e2e-state"), r.browser, seed)
+	const files = `${record.path}.files`
+	const run = await startRun(ctx, r.caps, files, r.network)
+	let missed: string[] = []
+	try {
+		const start = r.released ? await bindPreUpdate(run, r.released) : []
+		const verdict = await runPlan(run, p, record, start)
+		console.log(
+			`[profile-chaos] seed ${seed}: ${verdict.kind} in ${verdict.elapsedMs} ms; ${verdict.coverageLine}; needles[phrases=${run.phrases.size} prf=${run.prf.size}]; record ${verdict.recordPath}`,
+		)
+		expect(
+			verdict.start.map((v) => `${v.oracle} ${v.message}`),
+			"the start state",
+		).toEqual([])
+		expect(firstRed(verdict)).toBe("")
+		expect(evidenceGaps(verdict.steps, p.steps.length), "steps without complete evidence").toEqual([])
+		expect(filedMet(verdict), "filed findings this seed met").toEqual([])
+	} finally {
+		missed = await run.stop()
+		if (missed.length) console.log(`[profile-chaos] seed ${seed}: the local node's stand-in missed ${missed.join("; ")}`)
+		if (existsSync(files)) rmSync(files, { recursive: true, force: true })
+	}
+	expect(missed, "requests the local node's stand-in missed").toEqual([])
+}
+
 /** One test per selected seed, each on a fresh launch, skipped unless `armed`; `browser` names
- *  the records. */
+ *  the records. With `NULO_E2E_UPDATE_FROM` set, each seed starts `pre-update`: the release makes
+ *  its profiles, the candidate `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts
+ *  on the candidate. */
 export function describeProfileChaos(title: string, opts: { armed: boolean; browser: string; caps: Caps; network?: NetworkRun }): void {
 	const { armed, browser, caps, network } = opts
 	const first = armed ? chaosSeed(process.env.NULO_E2E_CHAOS_SEED) : 0
 	const runs = armed ? runCount(process.env.NULO_E2E_CHAOS_RUNS) : 0
 	const list = armed ? listed(process.env.NULO_E2E_CHAOS_ACTIONS) : undefined
 	const seeds = list ? [first] : Array.from({ length: runs }, (_, i) => first + i)
+	const start: StartState = armed && process.env.NULO_E2E_UPDATE_FROM ? "pre-update" : "empty"
+	if (start === "pre-update" && network) throw new Error("the pre-update start runs in the smoke file only")
+	const planOf = (seed: number): Plan => (list ? planFromList(list, start, caps, seed) : plan(seed, start, caps))
 	describe.skipIf(!armed)(title, () => {
 		for (const seed of seeds) {
-			test(`seed ${seed}`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async ({ freshExtensionPerTest }) => {
-				const p = list ? planFromList(list, "empty", caps, seed) : plan(seed, "empty", caps)
-				console.log(`[profile-chaos] seed ${seed} on ${JSON.stringify(caps)}\n${describePlan(p).join("\n")}`)
-				const record = recordTarget(join(process.cwd(), ".e2e-state"), browser, seed)
-				const files = `${record.path}.files`
-				const run = await startRun(freshExtensionPerTest, caps, files, network)
-				let missed: string[] = []
-				try {
-					const verdict = await runPlan(run, p, record)
-					console.log(
-						`[profile-chaos] seed ${seed}: ${verdict.kind} in ${verdict.elapsedMs} ms; ${verdict.coverageLine}; record ${verdict.recordPath}`,
-					)
-					expect(firstRed(verdict)).toBe("")
-					expect(evidenceGaps(verdict.steps, p.steps.length), "steps without complete evidence").toEqual([])
-					expect(filedMet(verdict), "filed findings this seed met").toEqual([])
-				} finally {
-					missed = await run.stop()
-					if (missed.length) console.log(`[profile-chaos] seed ${seed}: the local node's stand-in missed ${missed.join("; ")}`)
-					if (existsSync(files)) rmSync(files, { recursive: true, force: true })
-				}
-				expect(missed, "requests the local node's stand-in missed").toEqual([])
-			})
+			if (start === "pre-update")
+				test(`seed ${seed} from the release`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async () => {
+					const builds = updateBuilds(BROWSER)
+					if (!builds) throw new Error("NULO_E2E_UPDATE_FROM names no release")
+					await inPlaceUpdate({
+						builds,
+						populate: populateRelease,
+						verify: (ctx, released) => runSeed(ctx, { seed, plan: planOf(seed), browser, caps, released }),
+					})
+				})
+			else
+				test(`seed ${seed}`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async ({ freshExtensionPerTest }) => {
+					await runSeed(freshExtensionPerTest, { seed, plan: planOf(seed), browser, caps, network })
+				})
 		}
 	})
 }

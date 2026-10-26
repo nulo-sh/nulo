@@ -20,6 +20,8 @@ import {
 	GUARDED_NODE_REFUSAL,
 	checkLeaks,
 	checkLogContinuity,
+	checkOutcome,
+	checkPreUpdate,
 	checkProfiles,
 	checkSession,
 	checkSettle,
@@ -34,6 +36,7 @@ import {
 	ownerOf,
 	pageErrorText,
 	PROFILE_ROW_FIELDS,
+	RETIRED_REFUSALS,
 	type ProfileReading,
 	type SessionReading,
 	type StoredEntry,
@@ -41,12 +44,14 @@ import {
 	type Violation,
 	type WriteContext,
 } from "../../tests/e2e/helpers/profile-chaos/checkers"
+import { CITED, cite } from "../../tests/e2e/helpers/profile-chaos/citations"
 import {
 	ACTIONS,
 	type ActionName,
 	type Caps,
 	CATALOG,
 	coverage,
+	EARLIER_TITLE,
 	coverageLine,
 	endsOf,
 	type ListedStep,
@@ -90,11 +95,29 @@ describe("the planner", () => {
 		["Chrome", CHROME],
 		["Firefox", FIREFOX],
 		["the network file", NETWORK],
-	])("every planned step respects its preconditions over 1,000 seeds on %s", (_label, caps) => {
-		for (const seed of SEEDS) {
-			const p = plan(seed, "empty", caps)
-			const replayed = planFromList(listOf(p.steps), "empty", caps, seed)
-			expect(replayed.steps.map((s) => s.expect)).toEqual(p.steps.map((s) => s.expect))
+	])("every planned step respects its preconditions over 1,000 seeds on %s, from either start", { timeout: 120_000 }, (_label, caps) => {
+		for (const start of ["empty", "pre-update"] as const) {
+			for (const seed of SEEDS) {
+				const p = plan(seed, start, caps)
+				const replayed = planFromList(listOf(p.steps), start, caps, seed)
+				expect(replayed.steps.map((s) => s.expect)).toEqual(p.steps.map((s) => s.expect))
+			}
+		}
+	})
+
+	test("from the pre-update start, the retired profile is never opened, and is deleted and verified as retired", () => {
+		const steps = SEEDS.flatMap((seed) => plan(seed, "pre-update", FIREFOX).steps)
+		const opensP2 = steps.filter(({ expect: { next } }) => next.session.kind === "open" && next.session.ref === "P2")
+		expect(opensP2).toEqual([])
+		expect(steps.every((s) => s.expect.next.profiles.find((x) => x.ref === "P2")?.retired)).toBe(true)
+		const retiredClause = steps.filter((s) => s.expect.sources.includes("decision:P86-11")).map((s) => s.action)
+		expect(new Set(retiredClause)).toEqual(new Set(["deleteProfile", "verifyAll"]))
+	})
+
+	test("the same seed plans the same run from the pre-update start, and another start plans another", () => {
+		for (const seed of SEEDS.slice(0, 50)) {
+			expect(plan(seed, "pre-update", FIREFOX)).toEqual(plan(seed, "pre-update", FIREFOX))
+			expect(plan(seed, "pre-update", FIREFOX).steps).not.toEqual(plan(seed, "empty", FIREFOX).steps)
 		}
 	})
 
@@ -282,12 +305,37 @@ describe("the model's clauses", () => {
 		expect(run([passkey, restart]).session).toEqual({ kind: "locked", staleRow: "P1" })
 	})
 
-	test("a passkey restore is refused while its credential is live and runs once its profile is deleted", () => {
-		const exported = [passkey, { action: "exportBackup", params: { file: "F1" } }]
-		const restore = { action: "importBackup", params: { file: "F1", variant: "right", ref: "P2", password: "S1" } }
-		expect(planFromList([...exported, restore] as ListedStep[], "empty", CHROME).steps.at(-1)?.expect.outcomes).toEqual(["refused"])
+	test("a passkey profile's backup takes a file password and restores as a password profile on its phrase", () => {
+		const exported = [passkey, { action: "exportBackup", params: { file: "F1", password: "S1" } }]
+		const file = run(exported).files[0]
+		expect(file).toMatchObject({ method: "passkey", password: "S1", phrase: "W1" })
+		const restore = { action: "importBackup", params: { file: "F1", variant: "right", ref: "P2", password: "S2" } }
 		const after = run([...exported, { action: "deleteProfile", params: { via: "settings" } }, restore])
-		expect(after.profiles.find((x) => x.ref === "P2")).toMatchObject({ method: "passkey", credential: "K1", deleted: false })
+		expect(after.profiles.find((x) => x.ref === "P2")).toMatchObject({
+			method: "password",
+			password: "S2",
+			phrase: "W1",
+			deleted: false,
+		})
+		expect(after.profiles.find((x) => x.ref === "P2")?.credential).toBeUndefined()
+		// The live passkey profile holds the phrase, so the restore warns of a duplicate first.
+		expect(() => planFromList([...exported, restore] as ListedStep[], "empty", CHROME)).toThrow(/warning needs an answer/)
+	})
+
+	test("a passkey profile's export without a file password is refused by the list, and a short one by the page", () => {
+		expect(() => planFromList([passkey, { action: "exportBackup", params: { file: "F1" } }] as ListedStep[], "empty", CHROME)).toThrow(
+			/takes a file password/,
+		)
+		const short = planFromList(
+			[passkey, { action: "exportBackup", params: { file: "F1", password: "S1", variant: "short" } }] as ListedStep[],
+			"empty",
+			CHROME,
+		).steps[1].expect
+		expect(short.outcomes).toEqual(["refused"])
+		expect(short.next.files).toEqual([])
+		expect(() =>
+			planFromList([create, { action: "exportBackup", params: { file: "F1", password: "S9" } }] as ListedStep[], "empty", CHROME),
+		).toThrow(/takes no file password/)
 	})
 
 	test("a refused step writes nothing and leaves the world as it was", () => {
@@ -352,9 +400,9 @@ describe("the model's clauses", () => {
 
 	test("an import that does not commit leaves the session it entered through the lock screen locked", () => {
 		const second = { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K2", double: false } }
-		const restore = { action: "importBackup", params: { file: "F1", variant: "right", ref: "P3", password: "S3" } }
+		const restore = { action: "importBackup", params: { file: "F1", variant: "earlier-shape", ref: "P3", password: "S3" } }
 		const refused = planFromList(
-			[passkey, { action: "exportBackup", params: { file: "F1" } }, second, restore] as ListedStep[],
+			[passkey, { action: "exportBackup", params: { file: "F1", password: "S1" } }, second, restore] as ListedStep[],
 			"empty",
 			CHROME,
 		)
@@ -379,14 +427,36 @@ describe("the model's clauses", () => {
 	})
 
 	// A citation that no longer resolves would let a clause outlive the branch it names.
-	test("every cited file exists and holds the cited line", () => {
-		const cited = new Set(SEEDS.flatMap((seed) => plan(seed, "empty", NETWORK).steps.flatMap((s) => s.expect.sources)))
-		for (const source of [...cited].filter((c) => c.startsWith("code:"))) {
-			const [, file, line] = /^code:([^:]+)(?::(\d+))?$/.exec(source) ?? []
-			const path = join(import.meta.dirname, "../..", file)
+	test("every cited line holds the fragment its citation names", () => {
+		expect(CITED.size).toBeGreaterThan(40)
+		for (const [source, fragment] of CITED) {
+			const [, file, line] = /^code:(\S+):(\d+)$/.exec(source) ?? []
+			const path = file.startsWith("apps/")
+				? join(import.meta.dirname, "../../../..", file)
+				: join(import.meta.dirname, "../..", file)
 			expect(existsSync(path), source).toBe(true)
-			if (line) expect(readFileSync(path, "utf8").split("\n")[Number(line) - 1]?.trim(), source).toBeTruthy()
+			expect(readFileSync(path, "utf8").split("\n")[Number(line) - 1], source).toContain(fragment)
 		}
+	})
+
+	test("every code source a plan or an allowlist names is a citation with its fragment", () => {
+		const starts = ["empty", "pre-update"] as const
+		const sources = new Set([
+			...starts.flatMap((start) =>
+				[CHROME, FIREFOX, NETWORK].flatMap((caps) =>
+					SEEDS.slice(0, 300).flatMap((seed) => plan(seed, start, caps).steps.flatMap((s) => s.expect.sources)),
+				),
+			),
+			...ALLOWED_ERRORS.map((a) => a.source),
+		])
+		expect([...sources].filter((c) => c.startsWith("code:") && !CITED.has(c))).toEqual([])
+	})
+
+	test("a cited line that moved fails its citation", () => {
+		const moved = cite("src/wallet/services/profile/service.ts", 1, "public async createProfile(")
+		const line = readFileSync(join(import.meta.dirname, "../..", "src/wallet/services/profile/service.ts"), "utf8").split("\n")[0]
+		expect(line).not.toContain(CITED.get(moved))
+		CITED.delete(moved)
 	})
 
 	test("the coverage line counts completed families, transitions and schedules", () => {
@@ -491,7 +561,7 @@ describe("O2, profile rows", () => {
 	const b = bind([["P1", P1]])
 	const w = world([pw])
 	const good = (): ProfileReading => ({
-		listed: [{ id: P1, name: "Main", type: "password" }],
+		listed: [{ id: P1, name: "Main", type: "password", retired: false }],
 		rows: [{ keyId: P1, id: P1, name: "Main", type: "password", fields: [...PROFILE_ROW_FIELDS.password] }],
 	})
 
@@ -510,7 +580,8 @@ describe("O2, profile rows", () => {
 		["a passkey row for a password profile", (r: ProfileReading) => (r.rows[0].type = "passkey")],
 		["a row with an extra field", (r: ProfileReading) => r.rows[0].fields.push("prfSalt")],
 		["a row missing its MAC", (r: ProfileReading) => (r.rows[0].fields = r.rows[0].fields.filter((f) => f !== "envelopeMac"))],
-		["an extra profile listed", (r: ProfileReading) => r.listed.push({ id: P2, name: "Ghost", type: "password" })],
+		["an extra profile listed", (r: ProfileReading) => r.listed.push({ id: P2, name: "Ghost", type: "password", retired: false })],
+		["an openable profile listed as retired", (r: ProfileReading) => (r.listed[0].retired = true)],
 		["an extra row stored", (r: ProfileReading) => r.rows.push({ keyId: P2, id: P2, name: "Ghost", type: "password", fields: [] })],
 		[
 			"the profile missing",
@@ -535,9 +606,42 @@ describe("O2, profile rows", () => {
 		expect(v?.detail).toContain("hunter2")
 	})
 
-	test("the row fields are the schema's", () => {
-		const shapes = Object.fromEntries(ProfileRowSchema.options.map((o) => [o.shape.type.value, Object.keys(o.shape).sort()]))
-		expect({ password: [...PROFILE_ROW_FIELDS.password].sort(), passkey: [...PROFILE_ROW_FIELDS.passkey].sort() }).toEqual(shapes)
+	test("the row fields are the schema's, a field a variant forbids left out", () => {
+		const required = (o: (typeof ProfileRowSchema.options)[number]) =>
+			Object.entries(o.shape as Record<string, { safeParse(v: unknown): { success: boolean } }>)
+				.filter(([, field]) => !field.safeParse(undefined).success)
+				.map(([key]) => key)
+				.sort()
+		const [password, passkey, retired] = ProfileRowSchema.options.map(required)
+		expect({ password, passkey, retired }).toEqual({
+			password: [...PROFILE_ROW_FIELDS.password].sort(),
+			passkey: [...PROFILE_ROW_FIELDS.passkey].sort(),
+			retired: [...PROFILE_ROW_FIELDS.retired].sort(),
+		})
+	})
+
+	test("passes a retired profile listed as retired with its row's fields, and fails one listed openable", () => {
+		const wr = startWorld("pre-update")
+		const both = bind([
+			["P1", P1],
+			["P2", P2],
+		])
+		const r: ProfileReading = {
+			listed: [
+				{ id: P1, name: "Main", type: "password", retired: false },
+				{ id: P2, name: "Chaos 1", type: "passkey", retired: true },
+			],
+			rows: [
+				{ keyId: P1, id: P1, name: "Main", type: "password", fields: [...PROFILE_ROW_FIELDS.password] },
+				{ keyId: P2, id: P2, name: "Chaos 1", type: "passkey", fields: [...PROFILE_ROW_FIELDS.retired] },
+			],
+		}
+		expect(checkProfiles(wr, r, both)).toEqual([])
+		r.listed[1].retired = false
+		expect(shown("O2 a retired profile listed openable", checkProfiles(wr, r, both)).length).toBeGreaterThan(0)
+		r.listed[1].retired = true
+		r.rows[1].fields.push("prfSalt")
+		expect(shown("O2 a retired row given a key only a later row carries", checkProfiles(wr, r, both)).length).toBeGreaterThan(0)
 	})
 })
 
@@ -717,7 +821,7 @@ describe("O4, errors", () => {
 			source: "ui",
 			text: `["[full-backup] restore failed:",{"error":{"name":"Error","message":"${message}"}}]`,
 		})
-		const source = "code:apps/extension/src/composables/full-backup-restore.ts:1070"
+		const source = "code:apps/extension/src/composables/full-backup-restore.ts:998"
 		expect(checkErrors([failed("Client disconnected")], ["session", "background"])).toEqual({
 			violations: [],
 			warns: {},
@@ -1108,5 +1212,166 @@ describe("O7, leaks", () => {
 describe("the start state", () => {
 	test("is a fresh install under strict mode", () => {
 		expect(startWorld("empty")).toMatchObject({ device: { strict: true }, profiles: [], session: { kind: "locked" } })
+	})
+})
+
+describe("O5, the outcome and the refusal's title", () => {
+	const earlier = { outcomes: ["refused" as const], shows: EARLIER_TITLE }
+
+	test("passes the outcome the model allows under the title it names", () => {
+		expect(checkOutcome("importEarlierBackup", earlier, { outcome: "refused", shows: EARLIER_TITLE })).toEqual([])
+		expect(checkOutcome("lock", { outcomes: ["committed"] }, { outcome: "committed" })).toEqual([])
+	})
+
+	test.each([
+		["an earlier backup offered for restore", { outcome: "committed" as const, shows: undefined }],
+		["an earlier backup refused as unreadable", { outcome: "refused" as const, shows: "Wrong password or corrupted backup" }],
+		["an earlier backup refused with no title read", { outcome: "refused" as const, shows: undefined }],
+	])("fails %s", (label, seen) => {
+		expect(shown(`O5 ${label}`, checkOutcome("importEarlierBackup", earlier, seen)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("O6, a retired profile", () => {
+	const b = bind([
+		["P1", P1],
+		["P2", P2],
+	])
+	const w = startWorld("pre-update")
+	const calls = Object.fromEntries(RETIRED_REFUSALS.map((c) => [c, "retired"]))
+	const openable = { ref: "P1" as const, wrongRefused: true, wrongWrote: [], opened: true, addresses: ["0xa1"], sentinels: [] }
+	const probe = {
+		ref: "P2" as const,
+		wrongRefused: true,
+		wrongWrote: [] as string[],
+		opened: false,
+		addresses: [],
+		sentinels: [],
+		retired: { setupAgain: true, unlockOffered: false, calls },
+	}
+	b.addresses.set("P1", ["0xa1"])
+
+	test("passes a retired profile refused on every call of the matrix, with no write", () => {
+		expect(checkVerify(w, [openable, probe], b)).toEqual([])
+	})
+
+	test.each([
+		["a retired profile that opened", { ...probe, opened: true }],
+		[
+			"a half-opened retired profile, its phrase exported",
+			{ ...probe, retired: { ...probe.retired, calls: { ...calls, exportMnemonic: "answered" } } },
+		],
+		[
+			"a retired profile refused under another error",
+			{ ...probe, retired: { ...probe.retired, calls: { ...calls, unlockProfile: "refused: Invalid password" } } },
+		],
+		["a retired call never made", { ...probe, retired: { ...probe.retired, calls: { ...calls, finalizeRestore: undefined } } }],
+		["a retired lock screen offering an unlock", { ...probe, retired: { ...probe.retired, unlockOffered: true } }],
+		["a retired lock screen without Set up again", { ...probe, retired: { ...probe.retired, setupAgain: false } }],
+		["a probe that wrote", { ...probe, wrongWrote: ["nulo:core:profiles@bbbb2222"] }],
+		["a retired profile verified as openable", { ...probe, retired: undefined, opened: false }],
+	] as const)("fails %s", (label, reading) => {
+		expect(shown(`O6 ${label}`, checkVerify(w, [openable, reading as never], b)).length).toBeGreaterThan(0)
+	})
+
+	test("fails an openable profile probed as retired", () => {
+		expect(
+			shown("O6 an openable profile probed as retired", checkVerify(w, [{ ...openable, retired: probe.retired }, probe], b)).length,
+		).toBeGreaterThan(0)
+	})
+})
+
+describe("O1, the lock screen on a retired profile", () => {
+	const b = bind([
+		["P1", P1],
+		["P2", P2],
+	])
+	const w = startWorld("pre-update")
+	const on = (lockScreen: { setupAgain: boolean; unlockOffered: boolean }) =>
+		({ pages: [{ label: "anchor", route: "/popup/auth", anchor: true, lockScreen }], protectedCallRefused: true }) as SessionReading
+
+	test("passes Set up again with no unlock", () => {
+		expect(checkSession(w, on({ setupAgain: true, unlockOffered: false }), b)).toEqual([])
+	})
+
+	test.each([
+		["an unlock offered to a retired profile", { setupAgain: true, unlockOffered: true }],
+		["no Set up again on a retired profile", { setupAgain: false, unlockOffered: false }],
+	])("fails %s", (label, screen) => {
+		expect(shown(`O1 ${label}`, checkSession(w, on(screen), b)).length).toBeGreaterThan(0)
+	})
+
+	test("fails Set up again on an openable profile", () => {
+		const onP1 = { ...w, selected: "P1" as const }
+		expect(
+			shown("O1 Set up again on an openable profile", checkSession(onP1, on({ setupAgain: true, unlockOffered: true }), b)).length,
+		).toBeGreaterThan(0)
+	})
+})
+
+describe("the pre-update start", () => {
+	const b = bind([
+		["P1", P1],
+		["P2", P2],
+	])
+	const w = startWorld("pre-update")
+	const rowP1 = `{"id":"${P1}","name":"Main","type":"password"}`
+	const rowP2 = `{"id":"${P2}","name":"Chaos 1","type":"passkey"}`
+	const released = { [`nulo:core:profiles@${P1}`]: rowP1, [`nulo:core:profiles@${P2}`]: rowP2 }
+	const listed = [
+		{ id: P1, name: "Main", type: "password", retired: false },
+		{ id: P2, name: "Chaos 1", type: "passkey", retired: true },
+	]
+
+	test("passes both release rows kept byte for byte and listed, the passkey one as retired", () => {
+		expect(checkPreUpdate(w, { released, updated: { ...released }, listed }, b)).toEqual([])
+	})
+
+	test.each([
+		["a release row missing after the update", { released, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed }, b],
+		[
+			"a release row rewritten by the update",
+			{ released, updated: { ...released, [`nulo:core:profiles@${P2}`]: `${rowP2} ` }, listed },
+			b,
+		],
+		[
+			"a start with a row missing",
+			{ released: { [`nulo:core:profiles@${P1}`]: rowP1 }, updated: { [`nulo:core:profiles@${P1}`]: rowP1 }, listed },
+			b,
+		],
+		[
+			"a retired row listed as openable",
+			{ released, updated: { ...released }, listed: [listed[0], { ...listed[1], retired: false }] },
+			b,
+		],
+		["a retired row not listed", { released, updated: { ...released }, listed: [listed[0]] }, b],
+		["a profile bound to no release row", { released, updated: { ...released }, listed }, bind([["P1", P1]])],
+	] as const)("fails %s", (label, r, bindings) => {
+		expect(shown(`start ${label}`, checkPreUpdate(w, r as never, bindings)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("O7, the passkey's output and its salt", () => {
+	const clean: StructureReading = { unsealedRows: [], unframedSlots: [], prfSalt: [], exports: [] }
+	const home = new Map([["P2/prf-salt", `local:nulo:core:profiles@${P2}`]])
+
+	test("passes a profile's prfSalt value in its own row", () => {
+		expect(checkLeaks([{ where: `local:nulo:core:profiles@${P2}`, needle: "P2/prf-salt" }], clean, new Set([P2]), home)).toEqual([])
+	})
+
+	test.each([
+		["a prfSalt value under another key", [{ where: "local:nulo:core:config@x", needle: "P2/prf-salt" }]],
+		["a prfSalt value in another profile's row", [{ where: `local:nulo:core:profiles@${P1}`, needle: "P2/prf-salt" }]],
+		["the passkey's output in a log line", [{ where: "log:7", needle: "prf-0/b64" }]],
+		["the passkey's output in session storage", [{ where: "session:nulo:core:session", needle: "prf-0/hex" }]],
+	] as const)("fails %s", (label, hits) => {
+		expect(shown(`O7 ${label}`, checkLeaks(hits as never, clean, new Set([P2]), home)).length).toBeGreaterThan(0)
+	})
+
+	test.each([
+		["a passkey profile's backup that its file password does not open", { file: "F2", opensWithOwn: false, refusesOther: true }],
+		["a passkey profile's backup that another file password opens", { file: "F2", opensWithOwn: true, refusesOther: false }],
+	] as const)("fails %s", (label, e) => {
+		expect(shown(`O7 ${label}`, checkLeaks([], { ...clean, exports: [e] }, new Set([P2]))).length).toBeGreaterThan(0)
 	})
 })

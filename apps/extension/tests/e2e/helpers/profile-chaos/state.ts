@@ -68,6 +68,8 @@ export interface RunState {
 	scanned: Map<FileRef, ScannedFile>
 	/** What the last `verifyAll` read, for O6. */
 	verified: VerifyReading[]
+	/** Every PRF output a page of the run received, base64, as O7 needles. */
+	prf: Set<string>
 	/** Present on a run with a node. */
 	network?: NetworkRun
 }
@@ -84,6 +86,8 @@ export interface NetworkRun {
 /** What a driver saw: the outcome, and how its settle went. */
 export interface Driven {
 	outcome: Outcome
+	/** The title the refusal showed, read where the model names one. */
+	shows?: string
 	settle: { reached: boolean; elapsedMs: number; boundMs: number; loading?: string[]; route?: string; visible?: string[] }
 }
 
@@ -100,6 +104,7 @@ type Derived =
 	| "allowed"
 	| "scanned"
 	| "verified"
+	| "prf"
 
 export function newRunState(init: Omit<RunState, Derived>): RunState {
 	return {
@@ -116,6 +121,7 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		allowed: {},
 		scanned: new Map(),
 		verified: [],
+		prf: new Set(),
 	}
 }
 

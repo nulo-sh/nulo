@@ -3,11 +3,12 @@
  * its own, and shows its accounts; a password profile also re-exports each imported account. The
  * lock screen then goes back to the model's selection.
  */
+import { RetiredProfileError } from "@nulo/extension-messaging/errors"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
-import { lockFromAnotherWindow } from "../../fixtures/session"
+import { callService, lockFromAnotherWindow } from "../../fixtures/session"
 import { answerWithCredential } from "../../fixtures/passkey"
 import { derivedAddresses, reexportImported } from "./accounts-io"
-import type { VerifyReading } from "./checkers"
+import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
 import { readCensus } from "./collect"
 import { live, type ModelProfile, type World } from "./model"
 import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
@@ -57,7 +58,51 @@ async function rightAttempt(s: RunState, p: ModelProfile): Promise<boolean> {
 	return (await firstSignal(page, [HOME], STEP_MS)).label === "home"
 }
 
+/** Each call's arguments: a password the run never set, and no credential, so a call that skipped
+ *  the retired gate would fail on its own refusal instead, which the probe reports by name. */
+function retiredArgs(id: string): Record<(typeof RETIRED_REFUSALS)[number], unknown[]> {
+	const pw = wrongSecret()
+	return {
+		getPasskeyUnlockParams: [id],
+		unlockProfile: [id, pw],
+		unlockPasskeyProfile: [id],
+		exportMnemonic: [id, pw],
+		exportPlain: [id, pw],
+		exportImportedKeysDek: [id, pw],
+		openBackupTransfer: [id, pw],
+		changeProfilePassword: [id, pw, wrongSecret()],
+		finalizeRestore: [id, pw],
+	}
+}
+
+/** A retired profile's lock screen, then every call of the refusal matrix against it: `retired`
+ *  where the wallet answered with its retired refusal, else how the call ended. */
+async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading> {
+	const page = s.anchor
+	const id = profileId(s, p.ref)
+	await openRoute(page, "#/popup/auth")
+	await pickOnLockScreen(page, id)
+	await page.waitForSelector('[data-testid="auth-heading"]', { visible: true, timeout: 15_000 })
+	const screen = await page.evaluate(() => ({
+		setupAgain: !!document.querySelector('[data-testid="auth-setup-again"]'),
+		unlockOffered: !!document.querySelector('[data-testid="auth-submit"]'),
+	}))
+	const before = new Map((await readCensus(page)).map((e) => [e.key, e.digest]))
+	const calls: Record<string, string> = {}
+	for (const [method, params] of Object.entries(retiredArgs(id)))
+		calls[method] = await callService(page, "profile", method, params, 30_000).then(
+			() => "answered",
+			(e: Error) =>
+				e.message.includes(RetiredProfileError.MESSAGE) ? "retired" : `refused: ${e.message.split(": ").at(-1)?.slice(0, 80)}`,
+		)
+	const after = await readCensus(page)
+	const wrote = after.filter((e) => before.get(e.key) !== e.digest && !e.key.startsWith("nulo:e2e:")).map((e) => e.key)
+	for (const key of before.keys()) if (!after.some((e) => e.key === key)) wrote.push(key)
+	return { ref: p.ref, wrongRefused: true, wrongWrote: wrote, opened: false, addresses: [], sentinels: [], retired: { ...screen, calls } }
+}
+
 async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<VerifyReading> {
+	if (p.retired) return probeRetired(s, p)
 	const page = s.anchor
 	const id = profileId(s, p.ref)
 	await openRoute(page, "#/popup/auth")
