@@ -187,6 +187,9 @@ class Session {
 	/** `do` reaches a starting point: it runs from `empty` through the catalog until a command drives
 	 *  the wallet directly, and stops once a `do` ends outside the model's outcomes. */
 	private doWorld: World | undefined = startWorld("empty")
+	/** The command being served with a `do`'s drawn params, set before its driver runs, so a run that
+	 *  throws or passes its deadline records what it drew and a replay draws nothing in its place. */
+	private drawn: Command | undefined
 	private doOpen = true
 	private readonly doList: ListedStep[] = []
 	private readonly shown: Shown[] = []
@@ -327,6 +330,7 @@ class Session {
 
 	private async serveOne(n: number, cmd: Command): Promise<Result> {
 		const t0 = Date.now()
+		this.drawn = undefined
 		const tried = await this.attempt(n, cmd)
 		if ("late" in tried) return this.cutShort(n, cmd, t0, `passed its ${cmd.deadlineMs} ms deadline`, "timeout")
 		const { done, status, reason } = tried
@@ -351,7 +355,7 @@ class Session {
 		if (data !== undefined) result.data = data
 		const path = { outcome: status === "ok" ? outcomeOf(cmd, data) : undefined, after: this.after }
 		this.after = undefined
-		return this.record(n, done.resolved ?? cmd, result, { path, found: foundKeys(lines) })
+		return this.record(n, done.resolved ?? this.drawn ?? cmd, result, { path, found: foundKeys(lines) })
 	}
 
 	/** A command or its checks past their bound, or checks that threw, end the session: what the
@@ -360,7 +364,7 @@ class Session {
 		this.over = true
 		this.endReason = `command ${n} (${cmd.verb}) ${why}`
 		this.writeFindings([{ kind: "incomplete", n, verb: cmd.verb, reason: `${why}; the session ends` }])
-		return this.record(n, cmd, {
+		return this.record(n, this.drawn ?? cmd, {
 			n,
 			verb: cmd.verb,
 			status,
@@ -642,6 +646,7 @@ class Session {
 		if (!spec) throw new CommandRefused(`unknown catalog action ${cmd.action}`)
 		const params = cmd.params ?? spec.params(this.rng, before, this.s.caps)
 		if (!params) throw new CommandRefused(`${cmd.action} cannot run from where the do steps leave the wallet`)
+		this.drawn = { ...cmd, params: params as Record<string, unknown> }
 		const listed = { action: cmd.action, params } as ListedStep
 		let step: ReturnType<typeof planFromList>["steps"][number]
 		try {

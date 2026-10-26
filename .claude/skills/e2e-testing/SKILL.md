@@ -631,9 +631,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   lock.** The port client reconnects synchronously inside its own disconnect callback, so the
   shell's connected flag flips false → true in one tick; `app.vue` watches it with `flush: "sync"`
   so every reconnect starts a boot run (a batched watcher saw no change and never did). That run
-  resolves `locked` when the replacement worker restored no session — a passkey profile (its
-  record survives on disk, never silently restored) or a strict-mode password profile (bearerless
-  record dropped at boot); a lenient password session restores and the run stays `active`. Under an
+  resolves `locked` when the replacement worker restored no session — a strict-mode profile
+  (bearerless record dropped at boot) or a retired or unreadable one; a lenient session restores
+  and the run stays `active`. Under an
   auth-required popup route with a profile selected, `locked` enters the locked state through the
   same routine the lock event runs (`popup/lock-landing.ts` decides; `popup/reconcile-locked-boot.ts`
   reports `event-superseded` instead of acting when any event landed during the lookup — the boot
@@ -1120,6 +1120,14 @@ negative grep; on every file that needs it, a `beforeAll` stamp check — plus t
 `@requires-proverless` marker if the feature rides the proverless build (no other marker is
 scanned; a new build flag needs its own runner guard). The trust boundary in prod is the absent
 listener, not `chrome.storage` access.
+
+### Changing a shared driver
+
+A helper under `tests/e2e/helpers/` (the import and backup drivers above all) runs in files far
+from the change, network matrices included. Before the PR, run every file that imports it
+(`rg -l '<helper>' apps/extension/tests/e2e`) on the suite it belongs to: a form that opened on a
+new default tab broke the plain-backup driver in the network matrix's passkey row, which no local
+run had covered and CI failed (`implementations-plan/archive/passkey-unlock-1/lessons/phase-A3.md`).
 
 ### Adding a stage gate
 

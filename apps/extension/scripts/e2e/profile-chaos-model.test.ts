@@ -49,6 +49,7 @@ import {
 } from "../../tests/e2e/helpers/profile-chaos/checkers"
 import { CITED } from "../../tests/e2e/helpers/profile-chaos/citations"
 import {
+	capsOfRecord,
 	ACTIONS,
 	type ActionName,
 	type Caps,
@@ -62,6 +63,7 @@ import {
 	planFromList,
 	startWorld,
 	type World,
+	recordCaps,
 } from "../../tests/e2e/helpers/profile-chaos/model"
 
 const CHROME: Caps = { ceremonyOffAnchor: false, restartUnderOpenPage: true, network: false, restoreGate: false, credentialSlots: 3 }
@@ -186,6 +188,16 @@ describe("the planner", () => {
 })
 
 describe("a hand-trimmed list", () => {
+	test("plans the same from a record's caps as from the browser's", () => {
+		for (const caps of [CHROME, FIREFOX]) {
+			const recorded = capsOfRecord(JSON.parse(JSON.stringify(recordCaps(caps))))
+			expect(recorded).toEqual(caps)
+			const drawn = plan(1, "empty", caps)
+			const listed = drawn.steps.map((s) => ({ action: s.action, params: s.params }) as ListedStep)
+			expect(planFromList(listed, "empty", recorded, 1).steps.length).toBe(drawn.steps.length)
+		}
+	})
+
 	const create = { action: "createPassword", params: { ref: "P1", name: "Chaos 1", password: "S1", double: false } } as ListedStep
 	const passkey = { action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } } as ListedStep
 
@@ -702,6 +714,7 @@ describe("O3, writes", () => {
 			ctx([...base.slice(0, 2), entry(`nulo:core:profiles@${P2}`, "c2")], [{ kind: "profile", ref: "P2" }]),
 		],
 		["a balance refresh for the open profile", ctx([...base, entry("nulo:core:token-balances@1", "t", P1)], [])],
+		["the open profile's selection stamped by its account setup", ctx([...base, entry("nulo:ui:selectedAccount@device", "s", P1)], [])],
 		["a device write the contract names", ctx([...base, entry("nulo:ui:lastActiveProfile", "l")], [{ kind: "device" }])],
 		["the harness's own key", ctx([...base, entry("nulo:e2e:proof-gate", "g")], [])],
 		["a create that stores its row", ctx(base, [{ kind: "create", ref: "P2" }])],
@@ -722,6 +735,7 @@ describe("O3, writes", () => {
 		],
 		["a device write the contract does not name", ctx([...base, entry("nulo:config", "c")], [])],
 		["a balance write for a locked profile", ctx([...base, entry("nulo:core:token-balances@2", "t", P2)], [])],
+		["a selection stamped for a locked profile", ctx([...base, entry("nulo:ui:selectedAccount@device", "s", P2)], [])],
 		["a row for a deleted profile", ctx([...base, entry("nulo:core:tokens@9", "t", P2)], [], { deletedIds: new Set([P2]) })],
 		["a row left by a delete", ctx(base, [{ kind: "delete", ref: "P1" }])],
 		[
@@ -998,6 +1012,8 @@ describe("O4, errors", () => {
 		expect(checkErrors([deleted], []).violations[0]?.known).toBe(1135)
 		const fencedWrite = discovery("profile x is being deleted — write rejected (epoch 0 → 1)")
 		expect(checkErrors([fencedWrite], []).violations[0]?.known).toBe(1135)
+		const purged = discovery("profile x deleted")
+		expect(checkErrors([purged], []).violations[0]?.known).toBe(1135)
 		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
 		const pxe = [
 			read(
@@ -1015,6 +1031,15 @@ describe("O4, errors", () => {
 		expect(shown("O4 a PXE read failure that is not an expected refusal", otherRead)[0]?.known).toBeUndefined()
 		const unreachable = checkErrors([discovery("Error 400 from server")], []).violations
 		expect(shown("O4 a discovery failure that is not the lock's", unreachable)[0]?.known).toBeUndefined()
+		const retried = (module: string, cause = "TypeError: Failed to fetch") =>
+			read(
+				`[{"module":"${module}"},{},"Error while retrying JsonRpcClient request to <url> Error: Error fetching from host <url> ${cause}"]`,
+			)
+		expect(checkErrors([retried("foundation:retry")], []).violations[0]?.known).toBe(432)
+		const otherLogger = checkErrors([retried("pxe:service")], []).violations
+		expect(shown("O4 a retry line from another logger", otherLogger)[0]?.known).toBeUndefined()
+		const answered = checkErrors([retried("foundation:retry", "Error: 500 Internal Server Error")], []).violations
+		expect(shown("O4 a retry the node answered", answered)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {

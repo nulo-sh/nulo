@@ -9,10 +9,65 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at face80099
 trunk: dev
-status: approved; A1 in progress
+status: closed with #1142; the merge closes the plan
 issues: "#1127 (Closes, A4)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-26. Planned 2026-10-25; A1 merged 2026-10-25, A2 and A3 2026-10-26.
+- **Status:** closed with A4's PR, #1142 (`passkey-unlock-1-a4` → `dev`, `Closes #1127`), which carries this close-out. Four PRs against `dev`, not stacked. The merge closes the plan.
+- **Shipped:** the seed and every key stay encrypted in the wallet's own storage; nothing that leaves it (a backup, an export) opens with the passkey alone. Gates ran at retry 0. A mutation is a one-site edit that a named test must fail on. A flake count is consecutive runs.
+  - **A1, #1130, `0634a7954`:** A1.1 and A1.2 as planned, with D19 and D20.
+    - Gates: lint, typecheck:all, test (929 files, 15,226 tests), test:all, baseline:storage unchanged, check:plans. No e2e: nothing a person sees changed.
+    - Mutations: 59, then 71 on the final head (70 caught, 1 equivalent). Flake: 8 files 30/30, twice.
+    - Review: Codex approved three times; Opus approved.
+  - **A2, #1139, `74cf8995b`:** A2.1 to A2.4 as planned, with D21. Create, unlock, reveal and back up on the new row; retired rows and earlier passkey backups refused; stamp 0 and the passkey pinned backup re-cut. The Account row stayed hidden until A3.
+    - Gates on `c13530bab`: lint, typecheck:all, test:all (924 files, 15,194 tests), audit:vue, baseline:storage unchanged, check:plans.
+    - E2E: 9 smoke files on both browsers (`toolbar-panel` on Firefox), the update replay from v0.31.0, and the passkey execution canary prover-ON, 4/4.
+    - Mutations: 62 (62/62 after the survivors' tests), then 77 on the final head (77/77).
+    - Flake: 49 files 30/30. Smoke: Chrome 5/5; Firefox 4/5, the red in `toolbar-panel`'s unchanged file chooser under host load, then 7 green. Replay and the network matrix 5/5 per browser.
+    - CI suites within a minute of before.
+    - Review: Codex conditional approve twice, then approve; two Opus legs approved.
+  - **A3, #1143, `bd4e666b9`:** A3.1 and A3.2, with D22 to D24:
+    - the unlock choice after a phrase import or a restore (OA-2);
+    - the passkey profile's account file (OA-3c);
+    - "Use a passkey I already have" (OA-5 C);
+    - the Unlock method page (OA-6 B);
+    - strict mode for every profile (OA-10 B).
+    - Gates on `1077905bb`: lint, typecheck:all, test:all (931 files, 15,377 tests), audit:vue, baseline:storage unchanged, check:plans.
+    - E2E: 15 files on Chrome (60 tests) and 4 on Firefox (16). Canary 4/4. CI's first network run went red on a shared driver, fixed in `a63839581`.
+    - Mutations: 74, then 84 (81 caught, 3 equivalent); the last fixes 5/5. Flake: 26 files (951 tests) 30/30, the errors test 30/30, e2e 5/5 per browser.
+    - CI suites one minute slower each.
+    - Review: Codex rejected three times, the cap, with each finding fixed and tested; two Opus legs gave conditional approve.
+  - **A4, #1142:** A4.1, with D25 and D26: Terms 1.2 (material), Privacy 1.2.6 (patch), `@nulo/legal`, the listing and the README. The effective dates wait for the promote (`BEFORE-LAUNCH.md` § 4).
+    - Gates at `33d1f152d`: lint, typecheck:all, test:all, check:plans. Smoke `legal-acceptance` 5/5 per browser; `@nulo/legal` 30/30; the listing and About tests 30/30.
+    - No mutation pass: documents only.
+  - **Close-out:**
+    - Fixes from the final review (§ Review verdicts): Full Backup starts over when another window changes the profile's unlock (`3bf2cb897`, with a test and a rename control); the session docs, the listing's citation, the RP ID comment and ATTACK-SURFACE's reseal limitation (`1a09bba67`).
+    - Gates: lint, typecheck:all, test:all (931 files, 15,379 tests), `scripts/check-no-local-paths.sh`, check:plans.
+    - E2E: `passkey-backup`, `backup-roundtrip` and `own-window` on Chrome (6/6), and with `toolbar-panel` on Firefox (11/11).
+- **Release notes (P86-18 A),** kept here for the owner's release text; no commit writes them into a release: "Passkey profiles now have a recovery phrase. Your passkey unlocks Nulo on this device, and your recovery phrase brings your wallet back on any device, with a password or a passkey. A passkey profile made with an earlier version can't be opened in this version: delete it, then create or import a profile."
+- **The owner holds:**
+  - the chaos campaign's acceptance (page 87: 30 seeds per browser and one fleet wave; S1 and S2 block), which #1142's merge waits on;
+  - the promote `dev → main`, with both effective dates filled;
+  - 1.1.0 (P86-22), which release-please makes from the arcs' `feat` commits;
+  - the store submissions, with the Firefox notes (P86-19, the listing's § Release notes);
+  - the message to known passkey users before the store release (P86-21);
+  - the v1.0.0 GitHub release's notice (P86-23);
+  - #1152.
+- **Dispositions:**
+  - D19 to D26 record where the tree won. Outline B was rejected (D3, D13). The options not picked are in OWNER-ASKS.md.
+  - Privacy § 5.4's list went to the owner (#1152), since it is signed text.
+  - #614's subject, the passkey backup's check, left with A2.
+- **Lessons:**
+  - The reader-gate and zod line joins the `getAll()` entry, and the unlock change joins the profile-switch entry.
+  - The 6.0.0 oracle-major entry retired: the `aztec-update` skill owns it.
+  - The shared-driver lesson went to the `e2e-testing` skill.
+- **Known limits:** #1151.
+- **Open items:** #1152 (`owner-decision`); `BEFORE-LAUNCH.md` § 4 (the two effective dates).
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 # passkey-unlock-1: a passkey profile keeps a recovery phrase that its passkey unlocks
 
@@ -25,6 +80,8 @@ Four arcs, each one PR against `dev`, not stacked (the orchestrator's D-orch-1),
 - **A4, the words and close-out:** legal, store listing, README; `Closes #1127`. Waits for OA-8, OA-9, OA-11.
 
 Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Flows: [FLOWS.md](FLOWS.md). Consults and review rounds: [lessons/phase-0.md](lessons/phase-0.md).
+
+The plan runs over the mid target (365 lines): four arcs' ledger, review rounds and outcome, none restated.
 
 Paths are relative to `apps/extension/src/` unless they start with `packages/`, `apps/`, `legal/`, `scripts/`, `reference/`, `infra/` or a root file name. `P` = `wallet/services/profile`, `WC` = `packages/wallet-crypto/src`. Line numbers are at `face80099`.
 
@@ -111,6 +168,11 @@ The owner, 2026-10-25:
 | D22 | (A3; the tree wins) Before any prompt that would leave a new passkey, the page asks `verifyUnlockCredential` whether the current password or passkey opens the profile as the change needs it (slots, pairing, imported-keys key and its envelope MAC); a phrase import runs the import's phrase checks before its card; the full list is `lessons/phase-A3.md` § Deviations | asking the new passkey first and letting the change refuse | a refused change would leave a passkey on the authenticator that opens nothing, once per retry |
 | D23 | (A3) Import, restore, the account file and the unlock method run the passkey card in the page; on Firefox's toolbar panel the phrase import, the account file and the unlock method move to their own window first (D15); only create keeps PATH B, where "Use a passkey I already have" also runs | PATH B for every new step | D15's pattern, and one flow per window |
 | D24 | (A3, OA-10 B) Every session opened with its DEK persists a bearer unless strict mode is on, whatever the unlock; the silent restore skips a row no unlock opens (retired or unreadable) | a bearer gate by profile type | D1: a passkey profile is a password profile with the passkey in the password's place |
+| D25 | (A4) Terms 1.2 and Privacy 1.2.6 take `«FILL: effective date»` until the promote publishes them, with their `BEFORE-LAUNCH.md` § 4 entry; `launch-legal` refuses a promote into `main` while one remains | a date now | privacy 1.2.2 to 1.2.5's precedent: `dev` publishes nothing, and a patch takes effect on publication |
+| D26 | (A4) Beyond the signed text, each the shortest sentence the live behaviour needs and each an owner ask (OWNER-ASKS.md § A4 asks): privacy § 9 drops "optional", § 3's session row says "the profile's session" (true once A3 lands OA-10 B); the README banner no longer names the passkey among what restores a profile; the history rows; the listing's citations. The listing's credential-id row stays as signed | rewording signed text | the signed text is the owner's; a gap is filled, a conflict is asked |
+| D27 | (2026-10-26, the owner's answers on #1152, OWNER-ASKS.md § A4 asks) A4-1: the listing's credential-id row takes the asked text and privacy § 5.4 lists the profile's random value, an in-place edit of 1.2.6; A4-6: the Chrome form's PII entry names the passkey's name, which carries the profile name (OA-5 revised). The sentences that name the label "Nulo wallet" or keep profile names local (§ 5.4; the listing's label and profile-name rows and its Firefox declaration) stay, true at this head, until the profile-named passkey lands and the owner words them | a privacy 1.2.7 with its own history row; rewording those sentences now | 1.2.6 has not reached the trunk, so revising it is drafting, as 1.2.2 to 1.2.5 were each bumped once merged (Codex: holds); those sentences are signed text the answers did not cover |
+| D28 | (2026-10-26, the owner in chat, OWNER-ASKS.md OA-5 revised) The four sentences D27 held take the owner's words verbatim: privacy § 5.4's label clause, the listing's label and profile-names rows, its Firefox declaration; still an in-place edit of 1.2.6; the listing escapes `\<profile name\>`, which CommonMark would otherwise read as an HTML tag | keeping "Nulo wallet" until the UX PR lands; a privacy 1.2.7 | the UX follow-up names each new passkey `Nulo wallet · ` and the profile name in both WebAuthn user fields, and #1142 lands after it; 1.2.6 has not reached the trunk (D27) |
+| D29 | (2026-10-26, the owner in chat, OWNER-ASKS.md § A4 asks) Terms 1.2's first Aztec Mainnet mention adds the name Nulo shows, "Alpha V6"; privacy § 5.4 and the Chrome PII entry say "the profile's name"; the listing's citations that moved point at the merged head's lines. Terms 1.2 and privacy 1.2.6 edited in place | a Terms 1.3 or a privacy 1.2.7; "the profile name you typed"; leaving the moved citations | the network's label is not a material change, and neither version has reached the trunk (D27); the label also carries a name nobody typed, the automatic default or a restored backup's (D28's held point); a citation that names the wrong lines sends a store reviewer to the wrong code |
 
 **Outline B** (both reviews saw it): lift the unlock into `unlock: {kind: "password"} | {kind: "passkey", credentialId, prfSalt}` on every row, migrate password rows into it, and ship the code in one arc plus a docs arc. Rejected in D3 and D13.
 
@@ -230,7 +292,7 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
 
 **A3.2** ✓ e2e: `passkey-backup` restores a passkey profile's backup choosing a new passkey and lands on the same address (proves the restore's passkey path; replaces today's round trip, estimate +4 s per browser); under OA-5 C, `passkey-paths` creates a second profile with the existing passkey (proves the discovery request with a new salt; estimate +10 s per browser); under OA-6, `security` changes the method both ways (estimate +15 s per browser). Gate: those files green on both browsers.
 
-**A4.1** legal and listing per OA-11, README per OA-8d. Gate: fast layers; `bun run test:all` (`@nulo/legal`); smoke `legal-acceptance` on both browsers (the re-acceptance sheet); `bun run check:plans`.
+**A4.1** ✓ legal and listing per OA-11, README per OA-8d. Gate: fast layers; `bun run test:all` (`@nulo/legal`); smoke `legal-acceptance` on both browsers (the re-acceptance sheet); `bun run check:plans`.
 
 ## UI impact
 
@@ -281,8 +343,30 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
 - **Opus, A3 round 1 (import, discovery, account file):** conditional approve. Accepted: a phrase import runs its phrase checks before the passkey card (D22); a test for the restore at a taken input; a re-picked backup reopens on its own method; the account file's Save-on-Enter answers only `isPopupSubmitKey` (the listener stays where the password branch had it); 8-character success passwords; the own-window header and the reuse link's focus ring (`f27445217`, `9d71e56aa`). The network-switch finding was answered by Codex round 1's reset. Rejected: the create flow reusing `useNewProfilePasskey` (A2's path, with its own tests); refusing a declined duplicate before the card (needs a new RPC; OWNER-ASKS, as a known limit).
 - **Codex, A3 round 2 (resumed):** reject; round-1 fixes verified. Accepted, all four (`6786ebb9f`): Continue stops after a password check that ended for another profile; the credential check compares the whole live row with its snapshot under the lock, shared with the commit; a bearer restore rechecks strict mode after the envelope-MAC check, its last await; the network reset ends only a passkey profile's file not yet made, so a password profile's stages and a made file survive as before. Each new test fails with its fix reverted. Rejected: none.
 - **Codex, A3 round 3 (resumed):** reject; round-2 fixes verified. Accepted: a change of the profile's unlock from another window ends the account file's flow (`1077905bb`); its test fails with the fix reverted. The suggested fix kept a made file; the flow drops it too, since the made file's copy follows the unlock. Rejected: none. The loop stopped at its three-round cap with this finding fixed, not on an approve.
+- **Codex, A4 round 1 (documents against A1, A2 and A3's map):** conditional approve. Accepted: privacy § 9's "optional" dropped (every full backup leaves encrypted); the declaration note cites where the random identifier is made and handed over (`09f631930`). Held for the owner: the listing's credential-id row says "No", while each prompt hands the id and the profile's input to the browser and the authenticator (D26). Rejected: "(WebAuthn PRF)" in the README's developer-facing Status list.
+- **Opus, A4 round 1 (mechanics):** the versions, material flag, sheet, null dates, permalinks, archives and consent pin hold. Its three points were already dispositioned: the A3 wording ships after A3 (Delivery), the credential-id row and the README banner bullet are owner asks (D26). Rejected: none.
+- **Codex, A4 round 2 (resumed):** no new finding; both fixes verified. Loop converged.
+- **Codex, final fresh pass (the net diff from `face80099`, cross-arc):** reject.
+  - Accepted: Full Backup starts over on a change of the profile's unlock made elsewhere, as the account file does, with a test and a rename control (`3bf2cb897`).
+  - Accepted: `SECURITY.md` and `ARCHITECTURE.md` described a passkey session as never persisted, though A3 made every profile follow strict mode, and the RP ID comment called passkey wallets unrecoverable after an RP change (`1a09bba67`).
+  - Rejected: none.
+- **Opus, final cross-arc leg:** conditional approve; no path breaks the property.
+  - Accepted: the session docs (Codex found them too), the e2e skill's restart line, the listing's moved citation, ATTACK-SURFACE's reseal limitation that the plan said it stated, and two stale comments (`1a09bba67`).
+  - Held for the owner: privacy § 5.4's list (#1152).
+  - Known limit: a restore's passkey card runs before the service checks the backup's entropy against its master, and a declined duplicate warning keeps its passkey (#1151).
+  - Rejected: none.
+- **Codex, final round 2 (resumed):** approve, no new finding. The fixes held in both directions. Loop converged.
+- **Codex, the profile-named passkey's sentences (D28, against the UX follow-up's create call):** reject.
+  - Confirmed: both WebAuthn user fields carry `Nulo wallet · ` and the profile name, `user.id` stays random; a profile name leaves only in the export file names, the full backup's encrypted contents and the passkey label; no other sentence keeps the name local; the escaped placeholder renders.
+  - Held for the owner: "the profile name you typed" (§ 5.4) and the Chrome PII entry's "the user typed" also cover the trimmed name, the automatic default and a restored backup's name.
+  - Rejected: a 1.2.7 under `legal/README.md`'s every-change rule, settled by D27 and the owner's instruction, with no new evidence. No change; one round.
+- **Codex, the owner's words of 2026-10-26 and the merged citations (D29):** conditional approve.
+  - Accepted: two citations widened to the lines that hold what their sentence names, the connected-app row's to the session's grants (`dapp-session/spec.ts:47-70`) and the token list's to its alarm (`token-list/service.ts:143-146`).
+  - Confirmed: every other citation resolves at the merged head; the merge kept both sides of its two conflicts and this PR's 28 files; the Terms' network name and the label's two fields match the code; Chrome's two ticks agree with their entries.
+  - Held for the owner: the label keeps the name a passkey was made with, so a renamed profile, or one reusing another's passkey, has a label naming another name; the Firefox declaration omits `personallyIdentifyingInfo` and `authenticationInfo`, while Mozilla counts data handled outside the add-on and names no exception for the browser's own interface.
+  - Rejected: two more ranges for the token list's deadline rule and refresh, beyond the one range its sentence had. One round.
 
-## Seeds (draft; finalized after approval)
+## Seeds (retired)
 
 ```
 /goal Arc <N> of implementations-plan/passkey-unlock-1/plan.md is done: every phase of the arc marked ✓ with its validation gate reported passing in the transcript, LESSONS_FILE=implementations-plan/passkey-unlock-1/lessons/phase-<N>.md printed, the Codex loop converged (a resumed pass with no new material point quoted), the arc's PR open against dev with its checks green, `bun run test` and `bun run lint` exit 0.
