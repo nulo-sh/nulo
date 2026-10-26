@@ -27,12 +27,10 @@ These values are cryptographically bound. Changing any of them invalidates
 existing keys and profiles.
 
 - **KDF domain separator labels**
-  - `nulo:profile:v1` — WebAuthn PRF input label
-    (`packages/wallet-crypto/src/constants.ts:PASSKEY_PRF_LABEL`)
-  - `nulo:kdf:v1` — HKDF salt label
-    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_KDF_LABEL`)
-  - `nulo:master:v1` — HKDF info label
-    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_MASTER_LABEL`)
+  - `nulo:passkey-unlock:v1` — HKDF info label of a passkey profile's unlock key
+    (`packages/wallet-crypto/src/passkey-unlock-key.ts`)
+  - Kept as the record of passkey profiles made before 1.1: `nulo:profile:v1`
+    (WebAuthn PRF input), `nulo:kdf:v1` (HKDF salt) and `nulo:master:v1` (HKDF info)
 - **`AccountType.Nulo_v1 = 0`** — embedded in the Poseidon hash used to derive
   account secrets from the master secret. The numeric value is part of the
   hash input; renaming the enum is fine, but reassigning the numeric value
@@ -45,8 +43,7 @@ existing keys and profiles.
   binding). Changing it invalidates every existing passkey credential.
   The host is deliberately content-less: WebAuthn lets every origin whose
   registrable domain suffix-matches the RP ID assert with the credential
-  and evaluate its PRF, which is how the wallet master is derived — so the
-  RP host serves one static page with a strict CSP and no scripts, never
+  and evaluate its PRF — so the RP host serves one static page with a strict CSP and no scripts, never
   application code (`infra/passkey-rp/`: a Cloudflare Worker on a single
   custom domain, no `workers.dev` origin), every `*.passkey.nulo.sh`
   descendant stays unregistered in DNS, and the extension's own content
@@ -57,10 +54,11 @@ existing keys and profiles.
   ever challenges it) — the edge that already terminates the host's TLS,
   so no new trust root, and the page's CSP refuses any script a zone
   feature would inject; the README lists the dashboard settings to keep
-  off. The wallet holds no factor of its own: the master derives from the
-  passkey alone, which is what lets a fresh install recover the master and
-  every derived account from the passkey (imported keys come back only with
-  a full backup). Who may use the passkey for this RP ID is decided by the
+  off. A passkey profile's recovery phrase is sealed in the wallet's storage
+  under a key rebuilt from the passkey for that profile; the seed and every
+  key stay encrypted in the wallet's own storage, and nothing that leaves it
+  (a backup, an export) opens with the passkey alone. A fresh install
+  recovers from the recovery phrase or a full backup. Who may use the passkey for this RP ID is decided by the
   browser and the authenticator, not by the wallet, which adds no
   restriction beyond the measures above (known limit #597).
   - **Build-time gate** (`scripts/check-rp-id.ts`): single source
@@ -185,8 +183,8 @@ anyone who can read browser data can unlock the wallet without the password.
 ## Session secret (passkey profiles)
 
 Passkey profiles **do not persist any session material**. When the service
-worker restarts, the user must re-perform WebAuthn PRF to re-derive the
-master secret. WebAuthn PRF requires a user gesture (passkey tap), which is
+worker restarts, the user must re-perform WebAuthn PRF to open the master
+secret again. WebAuthn PRF requires a user gesture (passkey tap), which is
 impossible to satisfy silently — this is a hard API constraint, not a policy
 choice.
 

@@ -8,7 +8,7 @@ const profileBase = { id: z.string(), name: z.string(), pxeGeneration: z.string(
 const sealedFields = { guard: z.string(), secret: z.string(), entropy: z.string(), envelopeMac: z.string() }
 const PasswordRow = z.object({ ...profileBase, type: z.literal("password"), ...sealedFields })
 const PasskeyRow = z.object({ ...profileBase, type: z.literal("passkey"), ...sealedFields, credentialId: z.string(), prfSalt: z.string() })
-const absent = z.never().optional()
+const absent = z.never().describe("absent: a key only a later row carries").optional()
 // A passkey row written before 1.1, whose master came from the passkey alone and which holds no
 // recovery phrase. It forbids every key only a later row carries, by presence: a later row that
 // lost one is damaged, never this.
