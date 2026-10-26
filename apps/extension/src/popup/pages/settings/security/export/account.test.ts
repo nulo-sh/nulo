@@ -307,6 +307,24 @@ describe("a passkey profile's account file", () => {
 		expect(downloadFile).not.toHaveBeenCalled()
 	})
 
+	test("a pending file ends when the profile's unlock changes to a password, before a network switch", async () => {
+		const held = Promise.withResolvers<string>()
+		exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+		const app = useAppStore()
+		app.profile = { id: "p1", name: "Main", type: "password" } as never
+		await flushPromises()
+		app.network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		held.resolve("sealed-body")
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
 	test("a made file stays through a network switch", async () => {
 		const w = await approved()
 		await typeFilePassword(w, "12345678")

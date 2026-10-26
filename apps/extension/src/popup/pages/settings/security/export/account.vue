@@ -150,6 +150,14 @@ watch(
 		loadHeldAccounts()
 	},
 )
+// So does its unlock changed from another window: the flow's steps and its file's copy follow it.
+watch(
+	() => appStore.profile?.type,
+	() => {
+		resetFlow()
+		applyQueryPreselect()
+	},
+)
 // A passkey profile's file not made yet ends with a network switched from another window: its
 // approval and any pending export were given for the previous network. A made file is kept.
 watch(
