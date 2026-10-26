@@ -209,6 +209,27 @@ export async function pressTwice(page: Page, testid: string): Promise<void> {
  * shows is not remounted and its last error would read as this step's: the page leaves it first,
  * for Home or Settings while a session is open, for Import or the lock screen while locked.
  */
+/** Presses `testid` until it leaves the page, at most three times: a route the router replaces
+ *  within milliseconds of mounting drops a press on the copy it discards, faster than any person
+ *  could press. A control a press never removes throws. */
+export async function pressUntilGone(page: Page, testid: string): Promise<void> {
+	for (let press = 0; press < 3; press++) {
+		await clickByTestId(page, testid)
+		const gone = await page
+			.waitForFunction(
+				(t: string) => !document.querySelector(`[data-testid="${t}"]`)?.getClientRects().length,
+				{ timeout: 2_000, polling: 100 },
+				testid,
+			)
+			.then(
+				() => true,
+				() => false,
+			)
+		if (gone) return
+	}
+	throw new Error(`${testid} stayed on the page through three presses`)
+}
+
 export async function openRoute(page: Page, hash: string): Promise<void> {
 	const here = await page.evaluate(() => location.hash.split("?")[0])
 	if (here === hash) {

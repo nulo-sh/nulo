@@ -40,6 +40,7 @@ import {
 	HOME,
 	isLocked,
 	openRoute,
+	pressUntilGone,
 	pickOnLockScreen,
 	pressTwice,
 	REGISTER,
@@ -309,7 +310,7 @@ const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 	const page = s.anchor
 	const t0 = Date.now()
 	await openRoute(page, "#/popup/settings/security/export/seed")
-	await clickByTestId(page, "agree-continue-btn")
+	await pressUntilGone(page, "agree-continue-btn")
 	const driven = open.method === "password" ? await revealWithPassword(s, open, p.variant) : await revealWithPasskey(s, p)
 	if (driven.outcome === "committed") learnWords(s, open.phrase, await readRecoveryWords(page))
 	driven.settle.elapsedMs = Date.now() - t0
@@ -348,7 +349,7 @@ const raceLockDuringReveal: Drivers["raceLockDuringReveal"] = async (s) => {
 	const page = s.anchor
 	const t0 = Date.now()
 	await openRoute(page, "#/popup/settings/security/export/seed")
-	await clickByTestId(page, "agree-continue-btn")
+	await pressUntilGone(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="reveal-passkey-btn"]', { visible: true, timeout: 10_000 })
 	const hold = await holdNextGet(page)
 	const aborted = await watchPromptAbort(page)
