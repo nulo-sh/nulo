@@ -507,6 +507,35 @@ describe("another window's change, a lock and an ended session", () => {
 		expect(disabled(w, "unlock-method-use-password")).toBe(false)
 	})
 
+	describe("a change still pending when the page switches to another profile", () => {
+		async function pendingThenSwitched() {
+			const held = Promise.withResolvers<void>()
+			profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
+			const w = await atNewPassword()
+			await click(w, "unlock-method-save")
+			profile.onProfileUpdated.invoke({ id: "p1", name: "Main", type: "passkey" })
+			useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+			await flushPromises()
+			await click(w, "unlock-method-use-passkey")
+			await typePassword(w, "unlock-method-password-input", "password123")
+			return { w, held }
+		}
+
+		test("its failure leaves the new profile's typed password alone", async () => {
+			const { w, held } = await pendingThenSwitched()
+			held.reject(new Error("Invalid profile id"))
+			await flushPromises()
+			expect(nativeInput(w, "unlock-method-password-input").value).toBe("password123")
+		})
+
+		test("another window's change to the new profile still starts the page over", async () => {
+			const { w } = await pendingThenSwitched()
+			profile.onProfileUpdated.invoke({ id: "p2", name: "Other", type: "password" })
+			await flushPromises()
+			expect(has(w, "unlock-method-password-input")).toBe(false)
+		})
+	})
+
 	test("another window's change while a card is open cancels the card", async () => {
 		ceremony.run.mockImplementationOnce(() => new Promise(() => {}))
 		const w = mountPage("passkey")

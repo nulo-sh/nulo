@@ -154,17 +154,19 @@ describe("NewAccountPopup — submit re-entrancy latch", () => {
 })
 
 describe("NewAccountPopup — the account list", () => {
-	test("an account the service's event listed before the create answered is listed once", async () => {
+	test("an account the service's event listed before the create answered is listed once, and selected as listed", async () => {
 		const row = { profileId: "p1", chainId: 1, name: "Account 1", address: "0xacct" }
+		const renamed = { ...row, name: "Savings" }
 		createAccountMock.mockImplementationOnce(async () => {
-			appStoreState.accounts.push(row)
+			appStoreState.accounts.push(renamed)
 			return row
 		})
 		const w = await mountShown()
 		pressEnterOnInput()
 		await flushPromises()
 		await dispose(w)
-		expect(appStoreState.accounts).toEqual([row])
+		expect(appStoreState.accounts).toEqual([renamed])
+		expect(appStoreState.account).toEqual(renamed)
 	})
 })
 

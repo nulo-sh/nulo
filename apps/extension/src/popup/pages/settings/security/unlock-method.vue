@@ -65,12 +65,10 @@ const runs = createRunFence()
  *  profile's new-password step. Shallow: the answer itself is never made reactive. */
 const heldAnswer = shallowRef(null)
 const isNewPasswordStep = computed(() => heldAnswer.value !== null)
-/** This page's own changes still with the service. The update and the reopened session one causes
- *  arrive before its answer, and only that answer says whether the change was made. */
-let commitsInFlight = 0
-/** An update for this profile came while a change was with the service. A change that fails emits
- *  none, so after a failure it was another window's. */
-let updatedWhileCommitting = false
+/** The current run's own change still with the service. The update and the reopened session it
+ *  causes arrive before its answer, and only that answer says whether the change was made; `updated`
+ *  marks an update for this profile meanwhile, which after a failure was another window's. */
+let commit = null
 const currentLine = computed(() => {
 	if (isNewPasswordStep.value)
 		return "This profile currently unlocks with a passkey. After the change, it unlocks with the password you set here."
@@ -100,6 +98,7 @@ function clearStep() {
 }
 
 function reset() {
+	commit = null
 	runs.invalidate()
 	clearStep()
 	isBusy.value = false
@@ -109,26 +108,27 @@ function reset() {
 /** Another window changed this profile's unlock or password: the step, and what it holds, were
  *  asked of an unlock the profile no longer has. */
 function onChangedElsewhere() {
-	if (commitsInFlight === 0) reset()
-	else updatedWhileCommitting = true
+	if (commit) commit.updated = true
+	else reset()
 }
 
 /** A lock or an ended session: nothing asked under it outlives it. A change still with the service
  *  keeps its run, to report what the service answers. */
 function onSessionEnded() {
-	if (commitsInFlight > 0) clearStep()
+	if (commit) clearStep()
 	else reset()
 }
 
-const changeUnlockMethod = async (id, current, next) => {
-	if (commitsInFlight++ === 0) updatedWhileCommitting = false
+const changeUnlockMethod = async (isCurrent, id, current, next) => {
+	const mine = { updated: false }
+	commit = mine
 	try {
 		await managers.profile.changeUnlockMethod(id, current, next)
 	} catch (error) {
-		if (updatedWhileCommitting) clearStep()
+		if (mine.updated && isCurrent()) clearStep()
 		throw error
 	} finally {
-		commitsInFlight--
+		if (commit === mine) commit = null
 	}
 }
 
@@ -194,7 +194,7 @@ const handleContinue = () =>
 		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
-		await changeUnlockMethod(id, { password: typed }, { passkey: next })
+		await changeUnlockMethod(isCurrent, id, { password: typed }, { passkey: next })
 		return "Now unlocks with your passkey"
 	})
 
@@ -208,7 +208,7 @@ const handleNewPasskey = () =>
 		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
-		await changeUnlockMethod(id, { passkey: current }, { passkey: next })
+		await changeUnlockMethod(isCurrent, id, { passkey: current }, { passkey: next })
 		return "Now unlocks with your new passkey"
 	})
 
@@ -225,7 +225,7 @@ const handleUsePassword = () =>
 const handleSavePassword = () =>
 	attempt(async (isCurrent) => {
 		if (!canSaveNewPassword.value || !heldAnswer.value) return undefined
-		await changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
+		await changeUnlockMethod(isCurrent, appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
 		return isCurrent() ? "Now unlocks with your password" : undefined
 	})
 
