@@ -45,8 +45,6 @@ export type BackupSelection =
 	| { kind: "sealed"; name: string; backup: string; profileType: null }
 	| { kind: "opened"; name: string; backup: unknown; profileType: string | null }
 
-/** Read unchecked on purpose: narrowing a malformed value would change which CTAs a malformed file
- *  shows, and restore validates the whole body before it trusts any field. */
 /** A file the wallet does not read: its row keeps the name, and no other control shows. */
 export const unreadableSelection = (name: string): Extract<BackupSelection, { kind: "unreadable" }> => ({
 	kind: "unreadable",
@@ -55,6 +53,8 @@ export const unreadableSelection = (name: string): Extract<BackupSelection, { ki
 	profileType: null,
 })
 
+/** Read unchecked on purpose: narrowing a malformed value would change which CTAs a malformed file
+ *  shows, and restore validates the whole body before it trusts any field. */
 const profileTypeOf = (backup: unknown): string | null =>
 	(backup as { data?: { profile?: { type?: string } } } | null)?.data?.profile?.type ?? null
 

@@ -4,6 +4,21 @@ import { PasskeyCredential, type PasskeyCredentialData } from "./passkey-credent
 import { derivePasskeyUnlockKey } from "./passkey-unlock-key"
 import { asBase64CredentialId, asBase64SecretPrf } from "./secret-types"
 
+// Every buffer `fromBase64` decodes, so a test can check the PRF output's is wiped on a path that
+// never reaches the key import.
+const decoded = vi.hoisted(() => [] as Uint8Array[])
+vi.mock("@nulo/wallet-core/utils", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@nulo/wallet-core/utils")>()
+	return {
+		...actual,
+		fromBase64: (b64: string) => {
+			const bytes = actual.fromBase64(b64)
+			decoded.push(bytes)
+			return bytes
+		},
+	}
+})
+
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64")
 const filled = (length: number, byte: number) => new Uint8Array(length).fill(byte) as Uint8Array<ArrayBuffer>
 const SALT = b64(filled(32, 0x5a))
@@ -62,5 +77,12 @@ describe("PasskeyCredential", () => {
 		}
 		expect(seen).toHaveLength(2)
 		for (const prf of seen) expect(prf.every((byte) => byte === 0)).toBe(true)
+	})
+
+	test("wipes the decoded output when the input does not decode", async () => {
+		decoded.length = 0
+		await expect(PasskeyCredential.create(data(filled(32, 9), "!"))).rejects.toThrow()
+		expect(decoded).toHaveLength(1)
+		expect(decoded[0]?.every((byte) => byte === 0)).toBe(true)
 	})
 })

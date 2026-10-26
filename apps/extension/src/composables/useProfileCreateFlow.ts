@@ -65,8 +65,8 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		() => authMethod.value === "passkey" || isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""),
 	)
 
-	// The credential the last in-page attempt minted but could not confirm, and the name it carries
-	// as its label. Page memory only: never persisted or logged.
+	// The credential the last in-page attempt minted but could not confirm, and the profile name that
+	// attempt was for. Page memory only: never persisted or logged.
 	let unconfirmed: { name: string; credential: SavedPasskeyCredential } | null = null
 
 	// Runs the passkey create in-page, then creates the profile via the SW. In Firefox's toolbar

@@ -34,8 +34,8 @@ export class PasskeyCredential {
 	/** Throws when the output or the input is not 32 bytes. */
 	public static async create(data: PasskeyCredentialData): Promise<PasskeyCredential> {
 		const prf = fromBase64(data.prf)
-		const prfSalt = fromBase64(data.prfSalt)
 		try {
+			const prfSalt = fromBase64(data.prfSalt)
 			return new PasskeyCredential(asBase64CredentialId(data.id), toBase64(prfSalt), await derivePasskeyUnlockKey(prf, prfSalt))
 		} finally {
 			zeroize(prf)

@@ -439,10 +439,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** The key a caller's credential gives: its passkey answer, or else its password. */
+	/** The key a caller's credential gives: its passkey answer, or else its password. An empty
+	 *  password is a password: it gets each path's own wrong-password refusal. */
 	private async slotKey(password: string | undefined, credentialData: PasskeyCredentialData | undefined): Promise<SlotKey> {
 		if (credentialData) return { passkey: (await this.passkeyCoordinator.fromCredentialData(credentialData)).credential }
-		if (!password) throw new Error("Password is required")
+		if (password === undefined) throw new Error("Password is required")
 		return { password }
 	}
 
@@ -1770,6 +1771,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Any throw, a crypto-level failure included, is flattened to a plain `Error(message)`, so
 		// callers see one error shape.
 		try {
+			if (!password && !credentialData) throw new Error("Password is required")
 			const key = await this.slotKey(password, credentialData)
 			const opened = await this.openSlots(profile, key)
 			try {
