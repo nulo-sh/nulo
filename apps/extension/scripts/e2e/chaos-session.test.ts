@@ -309,7 +309,7 @@ describe("a command's deadline", () => {
 	})
 })
 
-const listed = (id: string, type: string, name = id): ProfileReading["listed"][number] => ({ id, name, type })
+const listed = (id: string, type: string, name = id): ProfileReading["listed"][number] => ({ id, name, type, retired: false })
 const row = (id: string, type: string, fields: string[], name = id): ProfileReading["rows"][number] => ({
 	keyId: id,
 	id,

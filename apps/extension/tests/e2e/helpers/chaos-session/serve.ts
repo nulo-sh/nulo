@@ -34,7 +34,7 @@ import {
 	type World,
 } from "../profile-chaos/model"
 import { RESTART_MS, replaceBackground } from "../profile-chaos/restart"
-import { checkStepLogs, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
+import { checkStepLogs, homesOf, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
 import { startRun } from "../profile-chaos/start"
 import type { Drive, RunState } from "../profile-chaos/state"
 import { backgroundServing } from "../profile-chaos/ui"
@@ -745,7 +745,7 @@ class Session {
 			...checkSessionRelation(session, profiles, strict),
 			...checkRowsAgree(profiles),
 			...logs.violations,
-			...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds),
+			...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds, homesOf(needles)),
 		]
 		for (const v of violations)
 			lines.push({ kind: "violation", n, verb, ...v, ...(v.detail ? { detail: mask(v.detail, needles) } : {}) })

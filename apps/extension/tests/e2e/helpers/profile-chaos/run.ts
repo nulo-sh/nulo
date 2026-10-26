@@ -358,7 +358,7 @@ const passkeyIdsOf = (s: RunState, w: World): Set<string> =>
 			.map((p) => p.ref),
 	)
 
-const homesOf = (needles: readonly Needle[]): Map<string, string> =>
+export const homesOf = (needles: readonly Needle[]): Map<string, string> =>
 	new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
 
 /** The start's storage before any step: every needle and the sealed-root rule, a release's own
