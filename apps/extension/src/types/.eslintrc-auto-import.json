@@ -535,6 +535,7 @@
     "journalUpdated": true,
     "knownDecimals": true,
     "landingRoute": true,
+    "leaveFor": true,
     "leavePanelFor": true,
     "legalAboutRow": true,
     "managers": true,
