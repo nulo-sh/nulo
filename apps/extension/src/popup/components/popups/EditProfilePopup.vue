@@ -74,16 +74,18 @@ const handleUpdateProfile = async () => {
 		// async; without this re-check a fast click could submit before the
 		// list arrived). Service has no server-side uniqueness check, so
 		// this is the only defense-in-depth path.
+		// The field stays editable during the read: the name checked and saved is the one submitted.
 		const currentId = appStore.profile?.id
+		const name = newName.value
 		const freshList = await profileService.getProfiles()
-		const normalized = normalizeProfileName(nameTerm.value)
+		const normalized = normalizeProfileName(name)
 		const collidesNow = freshList.some((p) => p.id !== currentId && normalizeProfileName(p.name) === normalized)
 		if (collidesNow) {
 			otherProfileNames.value = freshList.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
 			isProfileUpdateInProgress.value = false
 			return
 		}
-		appStore.profile = await profileService.changeProfileName(appStore.profile.id, newName.value)
+		appStore.profile = await profileService.changeProfileName(currentId, name)
 		emit("onClose")
 
 		openToast({ kind: "success", label: "Profile is updated" })

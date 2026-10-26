@@ -231,6 +231,28 @@ describe("useProfileCreateFlow", () => {
 		expect(flow.isCreating.value).toBe(false)
 	})
 
+	test.each(["password", "passkey"] as const)(
+		"a %s create that fails after the page left raises no notice and no toast",
+		async (method) => {
+			let reject!: (e: unknown) => void
+			const pending = () => new Promise<never>((_, r) => (reject = r))
+			if (method === "password") profileApi.createProfile.mockImplementationOnce(pending)
+			else passkeyRetry.mockImplementationOnce(pending)
+			const { flow, opts } = makeFlow()
+			flow.authMethod.value = method
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			const submitted = flow.handleCreate()
+			await flushPromises()
+			flow.dispose()
+			reject(new Error("boom"))
+			await submitted
+			expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+			expect(opts.openToast).not.toHaveBeenCalled()
+		},
+	)
+
 	test("password create failure notifies with isPasskey=false", async () => {
 		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
 		const { flow, opts } = makeFlow()

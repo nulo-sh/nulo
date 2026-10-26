@@ -6,6 +6,9 @@ const notificationStore = useNotificationStore()
 const popupStore = usePopupStore()
 
 const notification = computed(() => notificationStore.active)
+
+/** Above the popups open when it shows; one that opens later stacks above it, as its focus trap does. */
+const displaceIdx = ref(0)
 const confirmBtnType = computed(() => {
 	switch (notification.value?.type) {
 		case "info":
@@ -53,13 +56,21 @@ const initialFocus = computed(() => {
 	if (payload?.onCancel) return "[data-testid='notification-cancel']"
 	return payload?.onConfirm ? "[data-testid='notification-confirm']" : false
 })
+
+watch(
+	() => Boolean(notification.value),
+	(shown) => {
+		if (shown) displaceIdx.value = popupStore.len
+	},
+	{ immediate: true, flush: "sync" },
+)
 </script>
 
 <template>
-	<!-- Above every open popup; the lower close area mirrors Popup's upper one, so the card sits centred. -->
-	<Popup :show="Boolean(notification)" :displaceIdx="popupStore.len" :initialFocus="initialFocus" @onClose="dismiss">
+	<Popup :show="Boolean(notification)" :displaceIdx :initialFocus="initialFocus" @onClose="dismiss">
+		<!-- Fixed to the viewport, as the document under it can scroll (the onboarding tab). -->
+		<div v-if="notification" :class="$style.layer" @click.self="dismiss">
 		<Flex
-			v-if="notification"
 			align="center"
 			direction="column"
 			gap="12"
@@ -117,23 +128,24 @@ const initialFocus = computed(() => {
 				</Button>
 			</Flex>
 		</Flex>
-		<div :class="$style.close_area" @click="dismiss" />
+		</div>
 	</Popup>
 </template>
 
 <style module>
+.layer {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
 .card {
-	align-self: center;
 	background: var(--nulo-surface);
 	box-shadow: 0 0 0 1px var(--nulo-border), 0 -6px 16px rgba(10, 9, 8, 0.3);
 
 	width: 90%;
 	padding: 24px;
-}
-
-.close_area {
-	flex: 1;
-	width: 100%;
-	min-height: 40px;
 }
 </style>

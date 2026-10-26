@@ -110,8 +110,11 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	)
 
 	const passkeyCreate = passkeyProfileCreator(runCeremony)
+	let disposed = false
 
 	function reportCreateFailure(e: unknown) {
+		// A create that fails after its page left reports to nobody: the step ended with the page.
+		if (disposed) return
 		if (handleCancelOrUnconfirmed(e, opts.openToast)) return
 		// A passkey without PRF can never unlock Nulo, so the create says so as unlock does.
 		if (classifyPasskeyFailure(e) === "no-prf") {
@@ -170,6 +173,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	}
 
 	function dispose() {
+		disposed = true
 		disposeNameField()
 	}
 

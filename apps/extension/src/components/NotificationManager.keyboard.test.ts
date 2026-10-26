@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
 import { type NotificationPayload, useNotificationStore } from "@/stores/notification.store"
+import { usePopupStore } from "@/stores/popup.store"
 import Popup from "./Popup/Popup.vue"
 import NotificationManager from "./NotificationManager.vue"
 
@@ -110,10 +111,7 @@ describe("the notice", () => {
 
 	test.each([
 		["Escape", pressEscape],
-		[
-			"a tap outside",
-			async () => byTestId("notification")?.nextElementSibling?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
-		],
+		["a tap outside", async () => byTestId("notification")?.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true }))],
 	])("%s answers as Cancel, never as the confirm", async (_how, close) => {
 		const onConfirm = vi.fn()
 		const onCancel = vi.fn()
@@ -134,12 +132,28 @@ describe("the notice", () => {
 		expect(shown()).toBe(false)
 	})
 
+	test("sits above the popups open when it shows, and keeps that place when another opens over it", async () => {
+		usePopupStore().open("confirm")
+		await openNotice({ onConfirm: vi.fn() })
+		const place = () => byTestId("notification")?.parentElement?.parentElement?.style.zIndex
+		expect(place()).toBe("1000")
+		usePopupStore().open("edit_profile")
+		await settle()
+		expect(place()).toBe("1000")
+	})
+
 	test("clear closes the shown notice and drops every queued one", async () => {
 		await openNotice({ onConfirm: vi.fn() })
-		useNotificationStore().create({ type: "warning", payload: { title: "Second", description: "Queued.", onConfirm: vi.fn() } })
-		useNotificationStore().clear()
+		const notices = useNotificationStore()
+		notices.create({ type: "warning", payload: { title: "Second", description: "Queued.", onConfirm: vi.fn() } })
+		notices.clear()
 		await settle()
 		expect(shown()).toBe(false)
-		expect(useNotificationStore().active).toBeNull()
+		notices.create({ type: "warning", payload: { title: "Third", description: "Raised after.", onConfirm: vi.fn() } })
+		await settle()
+		expect(byTestId("notification")?.textContent).toContain("Third")
+		byTestId("notification-confirm")?.click()
+		await settle()
+		expect(shown()).toBe(false)
 	})
 })
