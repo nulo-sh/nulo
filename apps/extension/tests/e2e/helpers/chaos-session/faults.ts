@@ -1,7 +1,9 @@
 /**
- * The `passkey` verb's faults. Each applies to the prompts the next command starts on its page;
- * once that command has settled the page answers prompts normally again. A hold is the exception:
- * the next assertion on its page waits for `passkey release`, and a cancel still ends it.
+ * The `passkey` verb's faults. Each applies to the prompts its page starts until the next command
+ * that drives that page has settled; then the page answers prompts normally again, and a fault no
+ * prompt met is reported. `refuse` applies to a create or an assertion, `no-prf` and `other` to an
+ * assertion only. A hold is the exception: the next assertion on its page waits for
+ * `passkey release`, and a cancel still ends it.
  */
 import type { Page } from "puppeteer"
 import { prepareKeys } from "../../fixtures/browser"
@@ -38,6 +40,32 @@ async function keepCredentials(page: Page): Promise<() => Promise<void>> {
 	}
 }
 
+type HitProbe = Window & { __chaosPromptHits?: number }
+
+/** Counts the prompts the page starts from now on, through whatever shim is in place. */
+async function countPrompts(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const credentials = navigator.credentials
+		const probe = window as HitProbe
+		probe.__chaosPromptHits = 0
+		for (const key of ["create", "get"] as const) {
+			const inner = credentials[key] as (options?: unknown) => Promise<Credential | null>
+			Object.defineProperty(credentials, key, {
+				configurable: true,
+				writable: true,
+				value: (options?: unknown) => {
+					probe.__chaosPromptHits = (probe.__chaosPromptHits ?? 0) + 1
+					return inner.call(credentials, options)
+				},
+			})
+		}
+	})
+}
+
+/** How many prompts the page started since `countPrompts`, or undefined once its document is gone. */
+const promptHits = (page: Page): Promise<number | undefined> =>
+	page.isClosed() ? Promise.resolve(undefined) : page.evaluate(() => (window as HitProbe).__chaosPromptHits).catch(() => undefined)
+
 /** The stored credential id of the passkey profile named `name`. */
 async function credentialOf(s: RunState, name: string): Promise<string> {
 	const profiles = await callService<{ id: string; name: string; type: string }[]>(s.anchor, "profile", "getProfiles")
@@ -52,8 +80,8 @@ async function credentialOf(s: RunState, name: string): Promise<string> {
 }
 
 export class PasskeyFaults {
-	/** Faults armed for the next command, by page, with what lifts each. */
-	private readonly armed = new Map<PageId, () => Promise<void>>()
+	/** Faults armed on each page, with what lifts each. */
+	private readonly armed = new Map<PageId, { fault: PasskeyFault; page: Page; lift: () => Promise<void> }>()
 	private readonly holds = new Map<PageId, { page: Page; hold: Awaited<ReturnType<typeof holdNextGet>>; restore: () => Promise<void> }>()
 
 	public constructor(private readonly s: RunState) {}
@@ -83,24 +111,42 @@ export class PasskeyFaults {
 		if (fault === "refuse") {
 			const auth = this.s.auth
 			if (!auth) throw new CommandRefused("the session holds no authenticator")
-			this.armed.set(id, await auth.refuseNextStep(page))
-			return `the passkey prompt the next command starts on ${id} is refused`
+			const restore = await keepCredentials(page)
+			// Counted through the refusal, which Chrome sets in the page itself.
+			const allow = await auth.refuseNextStep(page)
+			await countPrompts(page)
+			const lift = async () => {
+				await allow().catch(() => {})
+				await restore()
+			}
+			this.armed.set(id, { fault, page, lift })
+			return `the next passkey prompt on ${id} is refused`
 		}
+		const credential = fault === "other" ? await credentialOf(this.s, profile ?? "") : undefined
 		const restore = await keepCredentials(page)
-		if (fault === "no-prf") await withholdGetPrf(page)
-		else await answerWithCredential(page, await credentialOf(this.s, profile ?? ""))
-		this.armed.set(id, restore)
+		if (credential === undefined) await withholdGetPrf(page)
+		else await answerWithCredential(page, credential)
+		await countPrompts(page)
+		this.armed.set(id, { fault, page, lift: restore })
 		return fault === "no-prf"
 			? `the next passkey assertion on ${id} carries no PRF result`
 			: `the next passkey assertion on ${id} answers with ${JSON.stringify(profile)}'s passkey`
 	}
 
-	/** Lifts every fault armed for the command that just settled; holds stay. */
-	public async lift(): Promise<void> {
-		for (const [id, lift] of this.armed) {
-			this.armed.delete(id)
-			await lift().catch(() => {})
-		}
+	/** Lifts the fault armed on `id` once a command that drove it has settled; returns why it
+	 *  applied to nothing, when no prompt met it. Holds stay. */
+	public async lift(id: PageId): Promise<string | undefined> {
+		const armed = this.armed.get(id)
+		if (!armed) return undefined
+		this.armed.delete(id)
+		const hits = await promptHits(armed.page)
+		await armed.lift().catch(() => {})
+		return hits === 0 ? `the passkey ${armed.fault} fault armed on ${id} met no prompt and was lifted` : undefined
+	}
+
+	/** Pages whose hold was never released. */
+	public unreleased(): PageId[] {
+		return [...this.holds.keys()]
 	}
 
 	/** Lets a held assertion go on, from its page brought to the front as a person answering the

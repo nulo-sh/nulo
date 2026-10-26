@@ -15,14 +15,14 @@
  * waits and reports.
  */
 import { execFileSync, spawn } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
-import { basename, dirname, join, resolve } from "node:path"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs"
+import { basename, dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { randomInt } from "node:crypto"
+import { createHash, randomInt } from "node:crypto"
 import { readStartTime } from "../../tests/e2e/owned-processes"
 import type { ActionRecord, EndState } from "../../tests/e2e/helpers/chaos-session/checks"
 import { boundValue, compareReplay, pauseBefore, replayedFile } from "../../tests/e2e/helpers/chaos-session/checks"
-import { SESSION_ENV, stillTheSame, sweepSession } from "../../tests/e2e/helpers/chaos-session/processes"
+import { isLaunchProfile, type Marks, SESSION_ENV, stillTheSame, sweepSession } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
 	ACTIONS_FILE,
 	BROWSERS,
@@ -36,12 +36,13 @@ import {
 	newSessionId,
 	parseCommandArgs,
 	publishCommand,
-	publishFile,
+	publishInto,
 	QUEUE_DIR,
 	READY_FILE,
 	readSessionInfo,
 	resFile,
 	type Result,
+	runOf,
 	type SessionBrowser,
 	type SessionInfo,
 	SESSION_FILE,
@@ -120,20 +121,64 @@ function codeDifference(a: string, b: string): string | undefined {
 
 const WITHHELD = new Set(["GH_TOKEN", "GITHUB_TOKEN"])
 
-/** The environment a runner gets: the caller's, without a GitHub token, plus the session's. */
-function runnerEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
-	return Object.fromEntries(Object.entries({ ...process.env, ...extra }).filter(([key]) => !WITHHELD.has(key)))
+/** The environment a runner gets: the caller's, without a GitHub token or any e2e switch the caller
+ *  happened to set, plus the session's. */
+export function runnerEnv(extra: Record<string, string>, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const inherited = Object.entries(base).filter(([key]) => !WITHHELD.has(key) && !key.startsWith("NULO_E2E_"))
+	return { ...Object.fromEntries(inherited), ...extra }
 }
 
-/** The armed smoke dist for `browser`, copied where only the session's runner reads it. */
-function copyDist(root: string, id: string, browser: SessionBrowser): string {
+/** A digest of the build a session loads: every file's path and bytes. */
+function distHash(ext: string): string {
+	const hash = createHash("sha256")
+	const files = (readdirSync(ext, { recursive: true, encoding: "utf8" }) as string[]).filter((f) => !f.includes("\0")).sort()
+	for (const file of files) {
+		const path = join(ext, file)
+		let bytes: Buffer
+		try {
+			bytes = readFileSync(path)
+		} catch {
+			continue
+		}
+		hash.update(`${relative(ext, path)}\0${bytes.length}\0`).update(bytes)
+	}
+	return hash.digest("hex")
+}
+
+/** The armed smoke dist for `browser`, copied where only the session's runner reads it, and its
+ *  digest. */
+function copyDist(root: string, id: string, browser: SessionBrowser): { ext: string; dist: string } {
 	const dist = join(APP_DIR, "dist", browser)
 	if (!existsSync(join(dist, "manifest.json")))
 		throw new CommandRefused(`no ${browser} build at ${dist}: build the armed smoke dist first (tests/e2e/README.md)`)
 	const ext = extCopyOf(root, id)
 	mkdirSync(dirname(ext), { recursive: true, mode: 0o700 })
 	cpSync(dist, ext, { recursive: true })
-	return ext
+	return { ext, dist: distHash(ext) }
+}
+
+/** The sessions' root, made if missing, as its real path: every path the launcher records or
+ *  compares is real. */
+function realRoot(): string {
+	const root = sessionRoot()
+	mkdirSync(root, { recursive: true, mode: 0o700 })
+	return realpathSync(root)
+}
+
+/** What marks a process as the session in `dir`: its directory, its dist copy, named by its id
+ *  rather than by anything the directory says, and its browser's profile, as the session recorded
+ *  it outside the directory. */
+function marksOf(dir: string): Marks {
+	const root = dirname(dir)
+	const id = basename(dir)
+	let userDataDir: string | undefined
+	try {
+		const recorded = (JSON.parse(readFileSync(runOf(root, id), "utf8")) as { userDataDir?: unknown }).userDataDir
+		if (typeof recorded === "string" && isLaunchProfile(recorded)) userDataDir = recorded
+	} catch {
+		// No browser started, or the session never recorded it.
+	}
+	return { dir, ext: extCopyOf(root, id), userDataDir }
 }
 
 /** Spawns `file` under vitest in its own process group, its output to the session's log (`logOf`)
@@ -184,18 +229,18 @@ interface StartOptions {
 }
 
 async function startSession(o: StartOptions): Promise<string> {
-	const root = sessionRoot()
-	mkdirSync(root, { recursive: true, mode: 0o700 })
+	const root = realRoot()
 	const id = newSessionId(o.charter)
 	const dir = join(root, id)
 	makeSessionDirs(dir)
-	const ext = copyDist(root, id, o.browser)
+	const { ext, dist } = copyDist(root, id, o.browser)
 	const createdAt = Date.now()
-	const info: SessionInfo = { id, ...o, createdAt, deadlineAt: createdAt + o.minutes * 60_000, extPath: ext, revision: revision() }
-	publishFile(join(dir, SESSION_FILE), JSON.stringify(info))
+	const deadlineAt = createdAt + o.minutes * 60_000
+	const info: SessionInfo = { id, ...o, createdAt, deadlineAt, extPath: ext, revision: revision(), dist }
+	publishInto(dir, SESSION_FILE, JSON.stringify(info))
 	const pid = spawnRunner(dir, "tests/e2e/chaos-session.test.ts", { EXTENSION_PATH: ext, NULO_E2E_BROWSER: o.browser })
 	Object.assign(info, { pid, pidStart: readStartTime(pid) })
-	publishFile(join(dir, SESSION_FILE), JSON.stringify(info))
+	publishInto(dir, SESSION_FILE, JSON.stringify(info))
 	const until = Date.now() + READY_MS
 	while (!existsSync(join(dir, READY_FILE))) {
 		if (exitCode(dir) !== undefined || !runnerAlive(info) || Date.now() > until) {
@@ -271,11 +316,19 @@ async function stopSession(dir: string): Promise<Record<string, unknown>> {
 	const until = Date.now() + STOP_WAIT_MS
 	while (runnerAlive(info) && Date.now() < until) await sleep(250)
 	const graceful = !runnerAlive(info)
-	const { left, groups } = await sweepSession(dir, info.extPath)
+	const marks = marksOf(dir)
+	const { left, groups } = await sweepSession(marks)
 	const report = { stoppedAt: Date.now(), graceful, exitCode: exitCode(dir) ?? null, left: left.map((o) => o.pid), groups }
-	if (!left.length && !groups.length) rmSync(info.extPath, { recursive: true, force: true })
-	publishFile(join(dir, STOPPED_FILE), JSON.stringify(report))
+	if (!left.length && !groups.length) removeLaunch(marks)
+	publishInto(dir, STOPPED_FILE, JSON.stringify(report))
 	return report
+}
+
+/** Removes the session's dist copy and, when its browser was stopped before it could, its profile:
+ *  only once nothing of the session runs. */
+function removeLaunch(marks: Marks): void {
+	rmSync(marks.ext, { recursive: true, force: true })
+	if (marks.userDataDir) rmSync(marks.userDataDir, { recursive: true, force: true })
 }
 
 // ── seeded ──────────────────────────────────────────────────────────────
@@ -286,11 +339,11 @@ async function seededMain(argv: readonly string[]): Promise<number> {
 	const browser = browserFlag(f.browser)
 	const seed = intFlag(f.seed, "seed", 0, 2 ** 32 - 1)
 	const runs = intFlag(f.runs, "runs", 1, 100, 1)
-	const root = sessionRoot()
+	const root = realRoot()
 	const id = newSessionId("seeded")
 	const dir = join(root, id)
 	makeSessionDirs(dir)
-	const ext = copyDist(root, id, browser)
+	const { ext, dist } = copyDist(root, id, browser)
 	const info: SessionInfo = {
 		id,
 		charter: "seeded",
@@ -301,8 +354,9 @@ async function seededMain(argv: readonly string[]): Promise<number> {
 		deadlineAt: Date.now(),
 		extPath: ext,
 		revision: revision(),
+		dist,
 	}
-	publishFile(join(dir, SESSION_FILE), JSON.stringify(info))
+	publishInto(dir, SESSION_FILE, JSON.stringify(info))
 	const pid = spawnRunner(dir, "tests/e2e/profile-chaos.test.ts", {
 		EXTENSION_PATH: ext,
 		NULO_E2E_BROWSER: browser,
@@ -310,14 +364,15 @@ async function seededMain(argv: readonly string[]): Promise<number> {
 		NULO_E2E_CHAOS_RUNS: String(runs),
 	})
 	Object.assign(info, { pid, pidStart: readStartTime(pid) })
-	publishFile(join(dir, SESSION_FILE), JSON.stringify(info))
-	const interrupt = () => void sweepSession(dir, ext).then(() => process.exit(130))
+	publishInto(dir, SESSION_FILE, JSON.stringify(info))
+	const interrupt = () => void sweepSession(marksOf(dir)).then(() => process.exit(130))
 	process.on("SIGINT", interrupt)
 	process.on("SIGTERM", interrupt)
 	while (runnerAlive(info) && exitCode(dir) === undefined) await sleep(1_000)
 	const code = exitCode(dir) ?? 1
-	const { left, groups } = await sweepSession(dir, ext)
-	if (!left.length && !groups.length) rmSync(ext, { recursive: true, force: true })
+	const marks = marksOf(dir)
+	const { left, groups } = await sweepSession(marks)
+	if (!left.length && !groups.length) removeLaunch(marks)
 	const verdicts = logTail(dir, 100_000)
 		.split("\n")
 		.filter((l) => /\[profile-chaos\] seed \d+[: ]/.test(l))
@@ -340,16 +395,30 @@ function readEnd(dir: string): EndState {
 }
 
 /** The command a recorded action replays: as sent, a bound fill taking its value from the replay's
- *  own snapshot of the same number, and a picked download or copy the replay's own of that number. */
-function replayCommand(dir: string, a: ActionRecord): Command {
+ *  own snapshot of the same number, and a picked download or copy the replay's own of that number;
+ *  or why it cannot be sent. */
+function replayCommand(dir: string, a: ActionRecord): { cmd: Command } | { missing: string } {
 	const cmd = validateCommand(a.command)
-	if (cmd.verb === "pick-file") return { ...cmd, file: replayedFile(cmd.file, (sub) => readdirSync(join(dir, sub))) }
-	if (!a.bound || cmd.verb !== "fill") return cmd
+	if (cmd.verb === "pick-file") return { cmd: { ...cmd, file: replayedFile(cmd.file, (sub) => readdirSync(join(dir, sub))) } }
+	if (!a.bound || cmd.verb !== "fill") return { cmd }
 	const snap = readResult(dir, a.bound.snapshot)?.data as { items: { testid: string; nth: number; text?: string }[] } | undefined
 	const value = snap && boundValue(a.bound, { n: a.bound.snapshot, page: a.bound.page, items: snap.items })
 	if (value === undefined)
-		throw new Error(`command ${a.n}'s value came from snapshot ${a.bound.snapshot}, which the replay's does not show`)
-	return { ...cmd, value }
+		return { missing: `command ${a.n}'s value came from snapshot ${a.bound.snapshot}, which the replay's does not show` }
+	return { cmd: { ...cmd, value } }
+}
+
+/** Sends the original's commands into the replay at `dir`, at the original's pace; returns why it
+ *  stopped short, if it did. */
+async function sendAll(dir: string, actions: readonly ActionRecord[]): Promise<string | undefined> {
+	for (const [i, a] of actions.entries()) {
+		await sleep(pauseBefore(actions[i - 1], a))
+		const next = replayCommand(dir, a)
+		if ("missing" in next) return next.missing
+		const result = await send(dir, next.cmd)
+		if (result.status === "ended") return undefined
+	}
+	return undefined
 }
 
 async function replayMain(argv: readonly string[]): Promise<number> {
@@ -365,19 +434,23 @@ async function replayMain(argv: readonly string[]): Promise<number> {
 		seed: info.seed,
 	})
 	out(`replaying ${actions.length} commands of ${info.id} in ${dir}`)
-	for (const [i, a] of actions.entries()) {
-		await sleep(pauseBefore(actions[i - 1], a))
-		const result = await send(dir, replayCommand(dir, a))
-		if (result.status === "ended") break
+	let short: string | undefined
+	let stopped: Record<string, unknown>
+	try {
+		short = await sendAll(dir, actions)
+	} finally {
+		stopped = await stopSession(dir)
 	}
-	const stopped = await stopSession(dir)
 	const differences = compareReplay({ actions, end: readEnd(original) }, { actions: readActions(dir), end: readEnd(dir) })
+	if (short) differences.push(short)
 	const replayInfo = readSessionInfo(dir)
 	const code = codeDifference(info.revision, replayInfo.revision)
 	if (code) differences.push(code)
+	if (info.dist !== replayInfo.dist) differences.push("the replay loaded another build than the original")
 	if (stopped.exitCode !== 0) differences.push(`the replay's runner exited ${String(stopped.exitCode)}`)
+	if ((stopped.left as number[]).length) differences.push(`the replay left ${(stopped.left as number[]).length} processes running`)
 	const verdict = { of: info.id, replay: replayInfo.id, same: differences.length === 0, differences }
-	publishFile(join(dir, "replay.json"), `${JSON.stringify(verdict, null, 2)}\n`)
+	publishInto(dir, "replay.json", `${JSON.stringify(verdict, null, 2)}\n`)
 	out(verdict)
 	return verdict.same ? 0 : 1
 }
@@ -403,7 +476,7 @@ async function main(argv: readonly string[]): Promise<number> {
 		case "stop": {
 			const report = await stopSession(sessionDir(sessionRoot(), rest[0] ?? ""))
 			out(report)
-			return (report.left as number[]).length ? 1 : 0
+			return (report.left as number[]).length || (report.groups as number[]).length ? 1 : 0
 		}
 		case "seeded":
 			return seededMain(rest)

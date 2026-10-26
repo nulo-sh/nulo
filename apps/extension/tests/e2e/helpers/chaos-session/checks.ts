@@ -81,7 +81,7 @@ export function checkRowsAgree(r: ProfileReading, fields: RowFields = PROFILE_RO
 	return out
 }
 
-const PASSWORD_FIELD = /(?:^|-)password(?:-confirm)?-input$/
+const PASSWORD_FIELD = /(?:^|-)password(?:-(?:confirm|repeat))?(?:-input)?$/
 const PHRASE_FIELD = /(?:^|-)(?:seed|phrase|mnemonic)-input$/
 
 /** What a filled field holds, by its testid, or by its type for a password field the list does not
@@ -113,11 +113,12 @@ export interface Binding {
 	nths: number[]
 }
 
-/** The binding of `value`, when it is the text of one item, or the run of one testid's items whose
- *  texts are its words, in the latest snapshot that shows it. */
+/** The binding of `value`, when it is exactly the text of one item, or exactly the texts of a run of
+ *  one testid's items joined by single spaces, in the latest snapshot that shows it: a replay fills
+ *  the same join of its own texts, so a value that differs from it by a byte is never bound. */
 export function bindingOf(value: string, shown: readonly Shown[]): Binding | undefined {
-	const words = value.trim().split(/\s+/).filter(Boolean)
-	if (!words.length) return undefined
+	const words = value.split(" ")
+	if (words.some((w) => w === "" || /\s/.test(w))) return undefined
 	for (const snap of [...shown].reverse()) {
 		const byTestid = new Map<string, { nth: number; text?: string }[]>()
 		for (const item of snap.items) byTestid.set(item.testid, [...(byTestid.get(item.testid) ?? []), item])
@@ -126,7 +127,7 @@ export function bindingOf(value: string, shown: readonly Shown[]): Binding | und
 			if (at !== undefined)
 				return { snapshot: snap.n, page: snap.page, testid, nths: items.slice(at, at + words.length).map((i) => i.nth) }
 		}
-		const whole = snap.items.find((i) => i.text === value.trim())
+		const whole = snap.items.find((i) => i.text === value)
 		if (whole) return { snapshot: snap.n, page: snap.page, testid: whole.testid, nths: [whole.nth] }
 	}
 	return undefined
@@ -172,13 +173,17 @@ const TRANSIENT = /^(?:snackbar|toast)-|pending|loading|spinner|progress/
 
 export const stableTestids = (ids: readonly string[]): string[] => [...new Set(ids.filter((id) => !TRANSIENT.test(id)))].sort()
 
-/** A finding as two runs can compare it: ids, addresses and numbers masked. */
-export const findingKey = (oracle: string, message: string): string =>
-	`${oracle} ${message
+/** `text` with what differs between two runs masked: addresses and generated ids. */
+export const maskIds = (text: string): string =>
+	text
 		.replace(/0x[0-9a-f]+/gi, "<hex>")
 		.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<id>")
 		.replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi, "<id>")
-		.replace(/\d+/g, "<n>")}`
+
+/** A finding as two runs can compare it: ids and addresses masked, and numbers too, but not a
+ *  symbol's (`S1000012`, `O4`, `p1`), which the same commands name the same. */
+export const findingKey = (oracle: string, message: string): string =>
+	`${oracle} ${maskIds(message).replace(/(?<![A-Za-z0-9])\d+/g, "<n>")}`
 
 /** One served command as the actions log records it. */
 export interface ActionRecord {
@@ -189,6 +194,11 @@ export interface ActionRecord {
 	bound?: Binding
 	/** A snapshot's route and stable testids. */
 	seen?: { route: string; testids: string[] }
+	/** What the command came to: its outcome where it has one (a `do`'s, a fault's, a page opened or
+	 *  closed, a file's size) and, once settled, each page's route and whether a session is open. */
+	path?: unknown
+	/** The findings and incomplete checks its checks wrote, as `findingKey`s. */
+	found?: string[]
 	/** When the command's result was recorded, and how long serving it took. */
 	at?: number
 	elapsedMs?: number
@@ -206,6 +216,8 @@ export function pauseBefore(prev: ActionRecord | undefined, a: ActionRecord): nu
 
 const PICKED = /^((?:downloads|files)\/\d+-).*$/
 
+const sortedJson = (v: readonly unknown[]): string => JSON.stringify([...v].map((x) => JSON.stringify(x)).sort())
+
 /** The command as it was sent. A bound fill's value is the replay's own, so only its binding counts;
  *  a picked download or copy is the replay's own of the same number, so only the number counts. */
 function sent(a: ActionRecord): string {
@@ -222,6 +234,10 @@ function compareCommand(a: ActionRecord, b: ActionRecord): string | undefined {
 	if (a.status !== b.status) return `command ${a.n} (${String(a.command.verb)}) ended ${b.status}, not ${a.status}`
 	if (JSON.stringify(a.seen) !== JSON.stringify(b.seen))
 		return `command ${a.n}'s snapshot saw ${JSON.stringify(b.seen)}, not ${JSON.stringify(a.seen)}`
+	if (JSON.stringify(a.path) !== JSON.stringify(b.path))
+		return `command ${a.n} (${String(a.command.verb)}) came to ${JSON.stringify(b.path)}, not ${JSON.stringify(a.path)}`
+	if (sortedJson(a.found ?? []) !== sortedJson(b.found ?? []))
+		return `command ${a.n} (${String(a.command.verb)}) found ${sortedJson(b.found ?? [])}, not ${sortedJson(a.found ?? [])}`
 	return undefined
 }
 
@@ -241,8 +257,6 @@ function comparePages(o: EndState, r: EndState): string[] {
 	for (const page of r.pages) if (!o.pages.some((p) => p.id === page.id)) out.push(`page ${page.id} is open only at the replay's end`)
 	return out
 }
-
-const sortedJson = (v: readonly unknown[]): string => JSON.stringify([...v].map((x) => JSON.stringify(x)).sort())
 
 /** Every way a replay differs from what it replays: a command sent otherwise, a status, a snapshot,
  *  the end, the findings. */

@@ -224,7 +224,7 @@ export async function checkStepLogs(
 /** Each live password profile's phrase, read once through the wallet's own export with its
  *  password, so a phrase leaked before any reveal is a needle from its first step; a phrase it
  *  cannot read leaves the leak scan short, a gap of the step. */
-async function learnPhrases(s: RunState, next: World): Promise<string[]> {
+export async function learnPhrases(s: RunState, next: World): Promise<string[]> {
 	const gaps: string[] = []
 	for (const p of live(next)) {
 		const id = s.bindings.profiles.get(p.ref)

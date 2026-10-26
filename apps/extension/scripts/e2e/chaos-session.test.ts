@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterAll, describe, expect, test } from "vitest"
@@ -15,12 +16,14 @@ import {
 	replayedFile,
 	secretFieldKind,
 } from "../../tests/e2e/helpers/chaos-session/checks"
-import { ownedBy, SESSION_ENV } from "../../tests/e2e/helpers/chaos-session/processes"
+import { isLaunchProfile, ownedBy, profileDirOf, SESSION_ENV } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
 	CommandRefused,
 	cmdFile,
 	DeadlineExceeded,
 	damaged,
+	HeldDir,
+	holdSessionDirs,
 	makeSessionDirs,
 	newSessionId,
 	parseCommandArgs,
@@ -37,6 +40,7 @@ import {
 	writeOwn,
 } from "../../tests/e2e/helpers/chaos-session/protocol"
 import { PROFILE_ROW_FIELDS, type ProfileReading, type SessionReading } from "../../tests/e2e/helpers/profile-chaos/checkers"
+import { runnerEnv } from "./chaos-session"
 
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-chaos-session-test-"))
 afterAll(() => rmSync(ROOT, { recursive: true, force: true }))
@@ -170,6 +174,8 @@ describe("the session directory", () => {
 		expect(refusal("a link as the file", () => readInside(dir, "downloads/link"))).toMatch(/cannot be opened: ELOOP/)
 		expect(refusal("a file through a linked directory", () => readInside(dir, "files/away/secret"))).toMatch(/resolves outside/)
 		expect(refusal("a directory", () => readInside(dir, "downloads"))).toMatch(/not a regular file/)
+		execFileSync("mkfifo", [path.join(dir, "files", "fifo")])
+		expect(refusal("a FIFO, which would block the read", () => readInside(dir, "files/fifo"))).toMatch(/not a regular file/)
 		// A file renamed out after the open still names its new place through the descriptor.
 		expect(
 			refusal("a file whose descriptor names a place outside", () =>
@@ -181,11 +187,26 @@ describe("the session directory", () => {
 
 	test("the session writes only new files, under names it cleaned", () => {
 		const dir = newSession()
-		expect(writeOwn(dir, "downloads", "3-../../nulo-backup.json.gz", "x")).toBe(path.join("downloads", "3-.._.._nulo-backup.json.gz"))
-		expect(() => writeOwn(dir, "downloads", "3-../../nulo-backup.json.gz", "y")).toThrow(/EEXIST/)
+		const dirs = holdSessionDirs(dir)
+		expect(writeOwn(dirs, "downloads", "3-../../nulo-backup.json.gz", "x")).toBe(path.join("downloads", "3-.._.._nulo-backup.json.gz"))
+		expect(() => writeOwn(dirs, "downloads", "3-../../nulo-backup.json.gz", "y")).toThrow(/EEXIST/)
 		symlinkSync(path.join(ROOT, "elsewhere"), path.join(dir, "screenshots", "4-p0.png"))
-		expect(() => writeOwn(dir, "screenshots", "4-p0.png", "z")).toThrow(/EEXIST/)
+		expect(() => writeOwn(dirs, "screenshots", "4-p0.png", "z")).toThrow(/EEXIST/)
 		expect(existsSync(path.join(ROOT, "elsewhere"))).toBe(false)
+		dirs.close()
+	})
+
+	test("the session writes into the directories it holds, whatever replaces them later", () => {
+		const dir = newSession()
+		const dirs = holdSessionDirs(dir)
+		const outside = mkdtempSync(path.join(ROOT, "outside-"))
+		renameSync(path.join(dir, "screenshots"), path.join(dir, "moved"))
+		symlinkSync(outside, path.join(dir, "screenshots"))
+		writeOwn(dirs, "screenshots", "5-p0.png", "png")
+		expect(readdirSync(outside)).toEqual([])
+		expect(readFileSync(path.join(dir, "moved", "5-p0.png"), "utf8")).toBe("png")
+		dirs.close()
+		expect(() => holdSessionDirs(dir)).toThrow(/ELOOP|ENOTDIR/)
 	})
 
 	test("pick-file damages its copy as asked, and refuses a flip past the end", () => {
@@ -200,42 +221,51 @@ describe("the session directory", () => {
 describe("the queue", () => {
 	test("numbers commands in publication order, each whole, and never reuses a number", () => {
 		const dir = newSession()
+		const q = holdSessionDirs(dir).q
 		const sent = [1, 2, 3].map((i) => publishCommand(dir, validateCommand({ verb: "report", text: `r${i}` })))
 		expect(sent).toEqual([1, 2, 3])
 		expect(readdirSync(path.join(dir, QUEUE_DIR)).filter((f) => f.startsWith("."))).toEqual([])
-		expect([1, 2, 3].map((n) => readCommand(dir, n))).toEqual(
+		expect([1, 2, 3].map((n) => readCommand(q, n))).toEqual(
 			[1, 2, 3].map((i) => ({ cmd: { verb: "report", text: `r${i}`, page: "p0", deadlineMs: VERB_DEADLINE_MS.report } })),
 		)
 		// Another writer took 4 first: the next publication takes 5, never replacing 4.
 		writeFileSync(path.join(dir, QUEUE_DIR, cmdFile(4)), JSON.stringify({ verb: "end" }))
 		expect(publishCommand(dir, validateCommand({ verb: "oracle" }))).toBe(5)
-		expect(readCommand(dir, 4)).toEqual({ cmd: { verb: "end", page: "p0", deadlineMs: VERB_DEADLINE_MS.end } })
-		expect(readCommand(dir, 6)).toBeUndefined()
+		expect(readCommand(q, 4)).toEqual({ cmd: { verb: "end", page: "p0", deadlineMs: VERB_DEADLINE_MS.end } })
+		expect(readCommand(q, 6)).toBeUndefined()
+		q.close()
 	})
 
-	test("the session refuses a published file that is no command, or a link", () => {
+	test("the session refuses a published file that is no command, a link, a FIFO or a huge file", () => {
 		const dir = newSession()
 		const q = path.join(dir, QUEUE_DIR)
 		writeFileSync(path.join(q, cmdFile(1)), "{not json")
 		writeFileSync(path.join(q, cmdFile(2)), JSON.stringify({ verb: "click", testid: "a", deadlineMs: 1 }))
 		writeFileSync(path.join(ROOT, "planted.json"), JSON.stringify({ verb: "end" }))
 		symlinkSync(path.join(ROOT, "planted.json"), path.join(q, cmdFile(3)))
-		const read = [1, 2, 3].map((n) => readCommand(dir, n))
+		execFileSync("mkfifo", [path.join(q, cmdFile(4))])
+		writeFileSync(path.join(q, cmdFile(5)), " ".repeat(65 * 1024))
+		const held = HeldDir.open(q)
+		const read = [1, 2, 3, 4, 5].map((n) => readCommand(held, n))
+		held.close()
 		for (const r of read) console.log(`[refused] a queued file: ${JSON.stringify(r)}`)
 		expect(read).toEqual([
 			{ refused: "the command file is not JSON" },
 			{ refused: expect.stringMatching(/deadline must be/) },
 			{ refused: "the command file is a link" },
+			{ refused: "the command file is not a regular file" },
+			{ refused: expect.stringMatching(/is larger than/) },
 		])
 	})
 
 	test("a result is published whole: a reader sees no file or the complete one", () => {
 		const dir = newSession()
-		const target = path.join(dir, QUEUE_DIR, "1.res.json")
-		publishFile(target, '{"n":1}')
+		const q = HeldDir.open(path.join(dir, QUEUE_DIR))
+		publishFile(q, "1.res.json", '{"n":1}')
 		expect(readdirSync(path.join(dir, QUEUE_DIR))).toEqual(["1.res.json"])
-		publishFile(target, '{"n":1,"again":true}')
+		publishFile(q, "1.res.json", '{"n":1,"again":true}')
 		expect(readdirSync(path.join(dir, QUEUE_DIR))).toEqual(["1.res.json"])
+		q.close()
 	})
 })
 
@@ -394,27 +424,38 @@ describe("the session's checks without a model", () => {
 describe("the session's processes", () => {
 	const env = (pairs: Record<string, string>) => () => new Map(Object.entries(pairs))
 	const noArgs = () => [] as string[]
-	test("are the processes naming its directory, and the Chrome loading exactly its dist copy", () => {
-		expect(ownedBy(1, "/c/s1", "/c/.ext/s1", env({ [SESSION_ENV]: "/c/s1" }), noArgs)).toEqual({ pid: 1, how: "environ" })
-		expect(
-			ownedBy(
-				2,
-				"/c/s1",
-				"/c/.ext/s1",
-				() => "unreadable",
-				() => ["chrome", "--load-extension=/c/.ext/s1"],
-			),
-		).toEqual({ pid: 2, how: "cmdline" })
-		expect(ownedBy(3, "/c/s1", "/c/.ext/s1", env({ [SESSION_ENV]: "/c/s10" }), noArgs)).toBeUndefined()
-		expect(
-			ownedBy(
-				4,
-				"/c/s1",
-				"/c/.ext/s1",
-				() => "gone",
-				() => ["chrome", "--load-extension=/c/.ext/s10"],
-			),
-		).toBeUndefined()
+	const args =
+		(...a: string[]) =>
+		() =>
+			a
+	const profile = "/tmp/puppeteer_dev_chrome_profile-AbC123"
+	const marks = { dir: "/c/s1", ext: "/c/.ext/s1", userDataDir: profile }
+	test("are the processes naming its directory, its dist copy, or its browser's profile exactly", () => {
+		expect(ownedBy(1, marks, env({ [SESSION_ENV]: "/c/s1" }), noArgs)).toEqual({ pid: 1, how: "environ" })
+		expect(ownedBy(2, marks, () => "unreadable", args("chrome", "--load-extension=/c/.ext/s1"))).toEqual({ pid: 2, how: "cmdline" })
+		// A renderer names no extension, only the profile its browser runs on.
+		expect(ownedBy(3, marks, () => "unreadable", args("chrome", "--type=renderer", `--user-data-dir=${profile}`))).toEqual({
+			pid: 3,
+			how: "cmdline",
+		})
+		expect(ownedBy(4, marks, env({ [SESSION_ENV]: "/c/s10" }), noArgs)).toBeUndefined()
+		expect(ownedBy(5, marks, () => "gone", args("chrome", "--load-extension=/c/.ext/s10"))).toBeUndefined()
+		expect(ownedBy(6, marks, () => "gone", args("chrome", `--user-data-dir=${profile}9`))).toBeUndefined()
+		expect(ownedBy(7, { ...marks, userDataDir: undefined }, () => "gone", args("chrome", `--user-data-dir=${profile}`))).toBeUndefined()
+	})
+
+	test("take a browser's profile only as a directory Puppeteer made for one launch", () => {
+		expect(profileDirOf(["chrome", `--user-data-dir=${profile}`], "/tmp")).toBe(profile)
+		expect(profileDirOf(["firefox", "--profile", "/tmp/puppeteer_dev_firefox_profile-x1"], "/tmp")).toBe(
+			"/tmp/puppeteer_dev_firefox_profile-x1",
+		)
+		for (const dir of ["/var/lib/chrome-profile", "/tmp/puppeteer_dev_chrome_profile-../x", "/tmp/puppeteer_dev_chrome_profile-"])
+			expect(isLaunchProfile(dir, "/tmp")).toBe(false)
+	})
+
+	test("start from the caller's environment without a GitHub token or a stray e2e switch", () => {
+		const env = runnerEnv({ NULO_E2E_CHAOS: "1" }, { PATH: "/bin", GH_TOKEN: "t", GITHUB_TOKEN: "t", NULO_E2E_CHAOS_SEED: "7" })
+		expect(env).toEqual({ PATH: "/bin", NULO_E2E_CHAOS: "1" })
 	})
 })
 
@@ -435,8 +476,20 @@ describe("a replay", () => {
 		expect(bound).toEqual({ snapshot: 4, page: "p0", testid: "phrase-grid-word", nths: [1, 2] })
 		expect(bindingOf("Main", [shown])).toEqual({ snapshot: 4, page: "p0", testid: "profile-name", nths: [0] })
 		expect(bindingOf("typed by hand", [shown])).toBeUndefined()
+		// A value that differs from the join by a byte is a literal, filled as typed.
+		for (const literal of [" Main ", "Main ", "ability  able", "ability\table", " ability able"])
+			expect(bindingOf(literal, [shown])).toBeUndefined()
 		const replayed = { ...shown, items: shown.items.map((i, k) => (k < 3 ? { ...i, text: `w${k}` } : i)) }
 		expect(boundValue(bound as NonNullable<typeof bound>, replayed)).toBe("w1 w2")
+	})
+
+	test("compares findings by what they say, keeping the symbols the same commands name", () => {
+		expect(findingKey("O7", "S1000012/password found in file:downloads/3-x.gz")).toBe(
+			"O7 S1000012/password found in file:downloads/<n>-x.gz",
+		)
+		expect(findingKey("incomplete", "the passkey refuse fault armed on p1 met no prompt")).toContain("on p1 met")
+		expect(findingKey("O2", "9e3dc5ac's row holds 4 fields")).toBe("O2 <id>'s row holds <n> fields")
+		expect(findingKey("O7", "S1000012/password")).not.toBe(findingKey("O7", "S1000013/password"))
 	})
 
 	test("keeps the original's pause before each command, bounded", () => {
@@ -511,6 +564,11 @@ describe("a replay", () => {
 			{ actions: [{ ...actions[0], seen: { route: "#/popup/auth", testids: ["x"] } }, actions[1]], end },
 		],
 		["a command it never served", { actions: [actions[0]], end }],
+		["a command that came to another outcome", { actions: [actions[0], { ...actions[1], path: { outcome: "refused" } }], end }],
+		[
+			"a command whose checks found otherwise",
+			{ actions: [actions[0], { ...actions[1], found: ["O1 locked, but p0 shows #/popup/general"] }], end },
+		],
 		["another route at the end", { actions, end: { ...end, pages: [{ ...end.pages[0], route: "#/popup/auth" }] } }],
 		["a finding the original did not meet", { actions, end: { ...end, unfiled: ["O7 S<n>/password found in log:<n>"] } }],
 		["another session at the end", { actions, end: { ...end, session: { open: false } as const } }],

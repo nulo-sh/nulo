@@ -8,8 +8,8 @@
  * does lands after the next command.
  */
 import { createHash } from "node:crypto"
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs"
-import { basename, join } from "node:path"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
 import { gunzipSync } from "node:zlib"
 import type { Page } from "puppeteer"
 import { getEntropy } from "@nulo/wallet-core/utils"
@@ -43,7 +43,7 @@ import {
 	type World,
 } from "../profile-chaos/model"
 import { RESTART_MS, replaceBackground } from "../profile-chaos/restart"
-import { checkStepLogs, mask, needlesOf } from "../profile-chaos/run"
+import { checkStepLogs, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
 import { startRun } from "../profile-chaos/start"
 import type { Drive, RunState } from "../profile-chaos/state"
 import { backgroundServing } from "../profile-chaos/ui"
@@ -55,6 +55,7 @@ import {
 	checkSessionRelation,
 	type EndState,
 	findingKey,
+	maskIds,
 	phraseWords,
 	secretFieldKind,
 	type Shown,
@@ -62,14 +63,17 @@ import {
 } from "./checks"
 import { PasskeyFaults } from "./faults"
 import { SessionPages } from "./pages"
+import { profileDirOf } from "./processes"
 import {
 	ACTIONS_FILE,
+	appendOwn,
 	type Command,
 	CommandRefused,
 	DeadlineExceeded,
 	damaged,
 	ENDED_FILE,
 	FINDINGS_FILE,
+	holdSessionDirs,
 	type PageId,
 	publishFile,
 	READ_VERBS,
@@ -79,12 +83,13 @@ import {
 	readSessionInfo,
 	resFile,
 	type Result,
+	runOf,
+	type SessionDirs,
 	type SessionInfo,
 	SUMMARY_FILE,
 	type Status,
 	takenFile,
 	withDeadline,
-	QUEUE_DIR,
 	writeOwn,
 } from "./protocol"
 
@@ -145,14 +150,31 @@ interface SavedFile {
 /** Serves the session in `dir` on the launch `ctx` until it ends; returns when serving is over. */
 export async function serveSession(ctx: ExtensionContext, dir: string): Promise<void> {
 	const info = readSessionInfo(dir)
-	const run = await startRun(ctx, CAPS, join(dir, "files"))
-	const session = new Session(dir, info, run)
+	recordBrowser(ctx, dir, info.id)
+	const dirs = holdSessionDirs(dir)
 	try {
-		await session.serve()
+		// The run writes a `do`'s exports through the held directory too.
+		const run = await startRun(ctx, CAPS, dirs.out.files.path())
+		const session = new Session(dir, dirs, info, run)
+		try {
+			await session.serve()
+		} finally {
+			await session.drainLate()
+			await session.close(await run.stop().catch(() => ["the stand-in's misses could not be read"]))
+		}
 	} finally {
-		await session.drainLate()
-		await session.close(await run.stop().catch(() => ["the stand-in's misses could not be read"]))
+		dirs.close()
 	}
+}
+
+/** Tells the launcher, outside the directory an agent reads, which profile directory the session's
+ *  browser runs on: Chrome's own processes name only that once the browser that loaded the
+ *  extension is gone. */
+function recordBrowser(ctx: ExtensionContext, dir: string, id: string): void {
+	const userDataDir = profileDirOf(ctx.browser.process()?.spawnargs ?? [])
+	const file = runOf(dirname(dir), id)
+	mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
+	writeFileSync(file, JSON.stringify({ userDataDir }), { flag: "wx", mode: 0o600 })
 }
 
 class Session {
@@ -165,6 +187,12 @@ class Session {
 	private served = 0
 	/** The command or checks that passed their bound, still running. */
 	private late: Promise<unknown> | undefined
+	/** Set when the late work still ran once the launch closed: the end can no longer be read. */
+	private lateOutlived = false
+	/** A `--now` command's work has not been settled and checked since. */
+	private unsettled = false
+	/** What the last checks saw: each page's route and whether a session is open. */
+	private after: { open: boolean; routes: [PageId, string][] } | undefined
 	/** `do` reaches a starting point: it runs from `empty` through the catalog until a command drives
 	 *  the wallet directly, and stops once a `do` ends outside the model's outcomes. */
 	private doWorld: World | undefined = startWorld("empty")
@@ -180,6 +208,7 @@ class Session {
 
 	public constructor(
 		private readonly dir: string,
+		private readonly dirs: SessionDirs,
 		private readonly info: SessionInfo,
 		private readonly s: RunState & { stop(): Promise<string[]> },
 	) {
@@ -196,14 +225,15 @@ class Session {
 		this.s.logs.carried = await drainLogs(this.s.anchor, 0)
 		this.s.logs.lastId = this.s.logs.carried.at(-1)?.id ?? 0
 		this.s.origin = await backgroundOrigin(this.s.ctx)
-		publishFile(join(this.dir, READY_FILE), JSON.stringify({ at: Date.now(), browser: await this.s.ctx.browser.version() }))
+		publishFile(this.dirs.top, READY_FILE, JSON.stringify({ at: Date.now(), browser: await this.s.ctx.browser.version() }))
 		for (let n = 1; ; n++) {
 			const got = await this.waitFor(n)
 			if (!got) {
 				this.endReason = "the session's deadline passed"
+				await this.finishAtDeadline()
 				return
 			}
-			writeFileSync(join(this.dir, QUEUE_DIR, takenFile(n)), "", { flag: "wx" })
+			writeFileSync(this.dirs.q.at(takenFile(n)), "", { flag: "wx" })
 			if ("refused" in got) this.record(n, undefined, this.refusal(n, got.refused))
 			else await this.serveOne(n, got.cmd)
 			this.served = n
@@ -219,17 +249,47 @@ class Session {
 	public async drainLate(): Promise<void> {
 		if (!this.late) return
 		let timer: ReturnType<typeof setTimeout> | undefined
-		const bound = new Promise<void>((resolve) => {
-			timer = setTimeout(resolve, LATE_MS)
+		const bound = new Promise<"outlived">((resolve) => {
+			timer = setTimeout(() => resolve("outlived"), LATE_MS)
 		})
-		await Promise.race([this.late.catch(() => {}), bound])
+		this.lateOutlived = (await Promise.race([this.late.then(noop, noop), bound])) === "outlived"
 		clearTimeout(timer)
+	}
+
+	/** The checks `end` runs too, at the session's deadline: the last `--now` work settled and
+	 *  checked, and every hold never released. */
+	private async finishAtDeadline(): Promise<void> {
+		const n = this.served
+		const work = (async () => {
+			const lines = await this.finalLines(n, "deadline")
+			this.writeFindings([...lines, ...(await this.check(n, "deadline", []))])
+		})()
+		try {
+			await withDeadline(work, CHECKS_MS)
+		} catch (err) {
+			if (err instanceof DeadlineExceeded) this.late = work
+			const why = err instanceof DeadlineExceeded ? `passed their ${CHECKS_MS} ms bound` : `threw: ${firstLine(err)}`
+			this.writeFindings([{ kind: "incomplete", n, verb: "deadline", reason: `the final checks ${why}` }])
+		}
+	}
+
+	private async finalLines(n: number, verb: string): Promise<FindingLine[]> {
+		const lines: FindingLine[] = []
+		if (this.unsettled) {
+			for (const v of checkSettle(verb, await this.settle())) lines.push({ kind: "violation", n, verb, ...v })
+			this.unsettled = false
+		}
+		for (const id of this.faults.unreleased())
+			lines.push({ kind: "incomplete", n, verb, reason: `the passkey hold on ${id} was never released` })
+		return lines
 	}
 
 	/** Writes the summary and the end of serving; the launcher records the runner's exit apart. */
 	public async close(standInMissed: string[]): Promise<void> {
 		this.pages.stop()
-		const end = await this.endState().catch((err: unknown) => ({ unreadable: String(err) }))
+		const end = this.lateOutlived
+			? { unreadable: `a command past its bound still ran ${LATE_MS} ms later` }
+			: await this.endState().catch((err: unknown) => ({ unreadable: firstLine(err) }))
 		const summary = {
 			id: this.info.id,
 			charter: this.info.charter,
@@ -242,15 +302,16 @@ class Session {
 			reports: this.reports,
 			standInMissed,
 		}
-		publishFile(join(this.dir, SUMMARY_FILE), `${JSON.stringify(summary, null, 2)}\n`)
-		publishFile(join(this.dir, ENDED_FILE), JSON.stringify({ reason: this.endReason, served: this.served, at: Date.now() }))
+		publishFile(this.dirs.top, SUMMARY_FILE, `${mask(JSON.stringify(summary, null, 2), [])}\n`)
+		publishFile(this.dirs.top, ENDED_FILE, JSON.stringify({ reason: this.endReason, served: this.served, at: Date.now() }))
 	}
 
+	/** The next command, or undefined once the session's deadline has passed, whatever is queued. */
 	private async waitFor(n: number): Promise<ReturnType<typeof readCommand>> {
 		for (;;) {
-			const got = readCommand(this.dir, n)
-			if (got) return got
 			if (Date.now() >= this.info.deadlineAt) return undefined
+			const got = readCommand(this.dirs.q, n)
+			if (got) return got
 			await sleep(POLL_MS)
 		}
 	}
@@ -280,6 +341,7 @@ class Session {
 		if ("late" in tried) return this.cutShort(n, cmd, t0, `passed its ${cmd.deadlineMs} ms deadline`, "timeout")
 		const { done, status, reason } = tried
 		if (drives(cmd, status) && cmd.verb !== "do") this.doOpen = false
+		if (done.unsettled) this.unsettled = true
 		let lines: FindingLine[] = []
 		if (!done.unsettled) {
 			const checks = this.afterCommand(n, cmd, done, status)
@@ -297,7 +359,9 @@ class Session {
 		const result: Result = { n, verb: cmd.verb, status, elapsedMs: Date.now() - t0, findings: lines.length }
 		if (reason) result.reason = reason
 		if (data !== undefined) result.data = data
-		return this.record(n, done.resolved ?? cmd, result)
+		const path = { outcome: status === "ok" ? outcomeOf(cmd, data) : undefined, after: this.after }
+		this.after = undefined
+		return this.record(n, done.resolved ?? cmd, result, { path, found: foundKeys(lines) })
 	}
 
 	/** A command or its checks past their bound, or checks that threw, end the session: what the
@@ -316,22 +380,27 @@ class Session {
 		})
 	}
 
-	/** Settles a command that drove the wallet, lifts the faults it carried, and runs the checks. */
+	/** Settles a command that drove the wallet, lifts the fault armed on the page it drove, and runs
+	 *  the checks; `end` first settles and checks the last `--now` work. */
 	private async afterCommand(n: number, cmd: Command, done: Done, status: Status): Promise<FindingLine[]> {
 		const lines: FindingLine[] = []
 		if (drives(cmd, status)) {
 			const settle = done.settle ?? (await this.settle())
 			for (const v of checkSettle(cmd.verb, settle)) lines.push({ kind: "violation", n, verb: cmd.verb, ...v })
-			if (cmd.verb !== "passkey") await this.faults.lift()
+			this.unsettled = false
+			const unmet = ACTS_ON_PAGE.has(cmd.verb) ? await this.faults.lift(cmd.page) : undefined
+			if (unmet) lines.push({ kind: "incomplete", n, verb: cmd.verb, reason: unmet })
 		}
+		if (cmd.verb === "end") lines.push(...(await this.finalLines(n, cmd.verb)))
 		if (cmd.verb === "report") lines.push({ kind: "agent", n, text: mask(cmd.text, await needlesOf(this.s)) })
 		else lines.push(...(await this.check(n, cmd.verb, done.ends ?? [])))
 		this.writeFindings(lines)
 		return lines
 	}
 
-	private record(n: number, cmd: Command | undefined, result: Result): Result {
-		publishFile(join(this.dir, QUEUE_DIR, resFile(n)), `${JSON.stringify(result)}\n`)
+	/** Publishes the result, URLs masked as everywhere an agent reads, and logs the command. */
+	private record(n: number, cmd: Command | undefined, result: Result, came?: Pick<ActionRecord, "path" | "found">): Result {
+		publishFile(this.dirs.q, resFile(n), `${mask(JSON.stringify(result), [])}\n`)
 		const entry: ActionRecord & Record<string, unknown> = {
 			n,
 			command: (cmd ?? {}) as Record<string, unknown>,
@@ -340,8 +409,9 @@ class Session {
 			elapsedMs: result.elapsedMs,
 			at: Date.now(),
 			...this.provenance(n, cmd, result),
+			...came,
 		}
-		appendFileSync(join(this.dir, ACTIONS_FILE), `${JSON.stringify(entry)}\n`)
+		appendOwn(this.dirs.top, ACTIONS_FILE, `${JSON.stringify(entry)}\n`)
 		return result
 	}
 
@@ -351,7 +421,7 @@ class Session {
 		if (cmd?.verb === "snapshot" && result.status === "ok") {
 			const data = result.data as { route: string; items: Shown["items"] }
 			this.shown.push({ n, page: cmd.page, items: data.items })
-			return { seen: { route: data.route, testids: stableTestids(data.items.map((i) => i.testid)) } }
+			return { seen: { route: maskIds(data.route), testids: stableTestids(data.items.map((i) => i.testid)) } }
 		}
 		if (cmd?.verb === "fill") {
 			const bound = bindingOf(cmd.value, this.shown)
@@ -367,7 +437,7 @@ class Session {
 				else this.filed.add(line.known)
 			} else if (line.kind === "incomplete") this.incomplete.push(findingKey("incomplete", line.reason))
 			else this.reports++
-			appendFileSync(join(this.dir, FINDINGS_FILE), `${JSON.stringify({ ...line, at: Date.now() })}\n`)
+			appendOwn(this.dirs.top, FINDINGS_FILE, `${mask(JSON.stringify({ ...line, at: Date.now() }), [])}\n`)
 		}
 	}
 
@@ -411,16 +481,27 @@ class Session {
 		}
 	}
 
-	/** A screenshot cannot mask what the page shows, so a page showing a URL is refused. */
+	/** A screenshot cannot mask what the page shows, so a page that may show a node endpoint is
+	 *  refused: the network pages, a page showing a URL, and a page with a shadow root, whose text
+	 *  the check cannot read. */
 	private async screenshot(n: number, id: PageId): Promise<string> {
 		const page = this.page(id)
-		if (await page.evaluate(showsUrl))
-			throw new CommandRefused(`${id} shows a URL, which a screenshot would carry unmasked; snapshot masks it`)
-		return writeOwn(this.dir, "screenshots", `${n}-${id}.png`, await page.screenshot())
+		const risk = await page.evaluate(screenshotRisk, NETWORK_ROUTE.source)
+		if (risk) throw new CommandRefused(`${id} ${risk}, which a screenshot would carry unmasked; snapshot masks it`)
+		return writeOwn(this.dirs, "screenshots", `${n}-${id}.png`, await page.screenshot())
+	}
+
+	/** The network pages hold node endpoints, which may carry a provider key: a session reads their
+	 *  testids but never types or presses keys there, so no endpoint is ever edited into a form
+	 *  the masking misses. */
+	private async refuseOnNetworkPages(page: Page, id: PageId, verb: string): Promise<void> {
+		const route = await page.evaluate(() => location.hash)
+		if (new RegExp(NETWORK_ROUTE.source).test(route))
+			throw new CommandRefused(`${verb} is refused on ${id}: the network pages hold node endpoints`)
 	}
 
 	private async snapshot(id: PageId): Promise<unknown> {
-		const read = await this.page(id).evaluate(readScreen)
+		const read = await this.page(id).evaluate(readScreen, NETWORK_ROUTE.source, ENDPOINT_FIELD.source)
 		return { page: id, ...read, pages: await this.routes() }
 	}
 
@@ -455,33 +536,46 @@ class Session {
 
 	private async fill(n: number, cmd: Extract<Command, { verb: "fill" }>): Promise<Done> {
 		const page = this.page(cmd.page)
+		if (new RegExp(ENDPOINT_FIELD.source, "i").test(cmd.testid))
+			throw new CommandRefused(`${cmd.testid} holds a node endpoint, which a session never edits`)
+		await this.refuseOnNetworkPages(page, cmd.page, "fill")
 		const selector = await this.target(page, cmd.testid, cmd.nth)
 		await page.waitForSelector(selector, { visible: true, timeout: elementWait(cmd.deadlineMs) })
 		const type = await page.evaluate(inputTypeOf, selector)
 		// A value typed into a secret field is a needle from now on, whatever the fill does.
-		this.learnSecret(n, secretFieldKind(cmd.testid, type), cmd.value)
+		await this.learnSecret(n, secretFieldKind(cmd.testid, type), cmd.value)
 		await replaceInputValue(page, selector, cmd.value)
 		return {}
 	}
 
-	private learnSecret(n: number, kind: "password" | "phrase" | undefined, value: string): void {
+	private async learnSecret(n: number, kind: "password" | "phrase" | undefined, value: string): Promise<void> {
 		if (!kind) return
 		const ref = 1_000_000 + n
-		const words = phraseWords(value)
-		if (kind === "phrase") {
-			try {
-				getEntropy(words)
-				this.s.phrases.set(`W${ref}`, words)
-				return
-			} catch {
-				// Not a valid phrase: what was typed is still a needle, as text.
+		if (kind === "phrase" && (await isPhrase(phraseWords(value)))) {
+			this.s.phrases.set(`W${ref}`, phraseWords(value))
+			return
+		}
+		// Not a valid phrase, or a password: what was typed is a needle as text.
+		this.s.secrets.set(`S${ref}`, value)
+	}
+
+	/** Every recovery phrase a page shows as its words, a needle from the first time it is seen, so
+	 *  the leak scan looks for it whether or not anyone typed it. */
+	private async learnShownPhrases(): Promise<void> {
+		const known = new Set([...this.s.phrases.values()].map((w) => w.join(" ")))
+		for (const { page } of this.pages.list()) {
+			const runs = await page.evaluate(shownWordRuns).catch(() => [] as string[][])
+			for (const words of runs) {
+				if (known.has(words.join(" ")) || !(await isPhrase(words))) continue
+				known.add(words.join(" "))
+				this.s.phrases.set(`W${2_000_000 + known.size}`, words)
 			}
 		}
-		this.s.secrets.set(`S${ref}`, value)
 	}
 
 	private async press(cmd: Extract<Command, { verb: "press" }>): Promise<Done> {
 		const page = this.page(cmd.page)
+		await this.refuseOnNetworkPages(page, cmd.page, "press")
 		await prepareKeys(page)
 		if (cmd.key === "Shift+Tab") {
 			await page.keyboard.down("Shift")
@@ -528,7 +622,7 @@ class Session {
 
 	private async pickFile(n: number, cmd: Extract<Command, { verb: "pick-file" }>): Promise<unknown> {
 		const copy = damaged(readInside(this.dir, cmd.file), cmd.truncate, cmd.flip)
-		const rel = writeOwn(this.dir, "files", `${n}-${basename(cmd.file)}`, copy)
+		const rel = writeOwn(this.dirs, "files", `${n}-${basename(cmd.file)}`, copy)
 		await pickFileByTestId(this.page(cmd.page), cmd.testid, join(this.dir, rel))
 		return { picked: rel, bytes: copy.length }
 	}
@@ -546,7 +640,8 @@ class Session {
 		if (!this.doOpen)
 			throw new CommandRefused("do reaches a starting point: it runs only before the first command that drives the wallet directly")
 		const before = this.doWorld
-		if (!before) throw new CommandRefused("an earlier do ended outside the model's outcomes, so where do would start is unknown")
+		if (!before)
+			throw new CommandRefused("an earlier do failed or ended outside the model's outcomes, so where do would start is unknown")
 		const spec = Object.hasOwn(ACTIONS, cmd.action) ? ACTIONS[cmd.action as ActionName] : undefined
 		if (!spec) throw new CommandRefused(`unknown catalog action ${cmd.action}`)
 		const params = cmd.params ?? spec.params(this.rng, before, CAPS)
@@ -559,10 +654,13 @@ class Session {
 			throw new CommandRefused(firstLine(err))
 		}
 		const refs = this.seedSecrets(params)
+		// Where a driver that threw left the wallet is unknown, so no later `do` starts from it.
+		this.doWorld = undefined
 		const driven = await (DRIVERS[step.action] as Drive)(this.s, step.params, step, before)
 		const allowed = step.expect.outcomes.includes(driven.outcome)
 		this.doWorld = allowed ? step.expect.next : undefined
 		if (allowed) this.doList.push(listed)
+		if (allowed) await learnPhrases(this.s, step.expect.next)
 		const secrets = Object.fromEntries(refs.map((ref) => [ref, this.s.secrets.get(ref as never)]))
 		return {
 			resolved: { ...cmd, params: params as Record<string, unknown> },
@@ -627,6 +725,7 @@ class Session {
 		const lines: FindingLine[] = []
 		const incomplete = (reason: string) => lines.push({ kind: "incomplete", n, verb, reason })
 		await this.saveDownloads(incomplete)
+		await this.learnShownPhrases()
 		const needles = await needlesOf(s)
 		let restarted = ends.includes("background")
 		const origin = await backgroundOrigin(s.ctx)
@@ -654,10 +753,13 @@ class Session {
 		for (const v of violations)
 			lines.push({ kind: "violation", n, verb, ...v, ...(v.detail ? { detail: mask(v.detail, needles) } : {}) })
 		s.origin = await backgroundOrigin(s.ctx)
+		this.after = { open: active !== undefined, routes: (await this.routes()).map(({ id, route }) => [id, maskIds(route)]) }
 		return lines
 	}
 
-	/** Keeps every download the pages captured, under a name the session chose. */
+	/** Keeps every download the pages captured, under a name the session chose. A text download is
+	 *  kept with its URLs masked, as the log export may hold a node's; a compressed one that holds a
+	 *  URL is not kept, since masking would break it. The leak scan reads what was captured. */
 	private async saveDownloads(incomplete: (reason: string) => void): Promise<void> {
 		for (const d of await this.pages.drainDownloads()) {
 			const seq = ++this.downloadSeq
@@ -669,8 +771,16 @@ class Session {
 				incomplete(`download ${seq} is larger than ${MAX_DOWNLOAD_BYTES} bytes and was not kept`)
 				continue
 			}
-			const rel = writeOwn(this.dir, "downloads", `${seq}-${basename(d.name)}`, d.bytes)
-			this.saved.push({ rel, text: readableText(d.bytes) })
+			const text = readableText(d.bytes)
+			const gzip = isGzip(d.bytes)
+			const masked = mask(text, [])
+			if (gzip && masked !== text) {
+				incomplete(`download ${seq} (${basename(d.name)}) holds a URL and was not kept`)
+				this.saved.push({ rel: `withheld:${seq}`, text })
+				continue
+			}
+			const body = !gzip && masked !== text ? masked : d.bytes
+			this.saved.push({ rel: writeOwn(this.dirs, "downloads", `${seq}-${basename(d.name)}`, body), text })
 		}
 	}
 
@@ -706,6 +816,53 @@ class Session {
 /** Whether the command acted on the wallet: a refused one never reached it. */
 const drives = (cmd: Command, status: Status): boolean => status !== "refused" && !READ_VERBS.has(cmd.verb) && cmd.verb !== "end"
 
+/** The verbs that drive the page they name, so the fault armed there has had its chance. */
+const ACTS_ON_PAGE: ReadonlySet<string> = new Set(["click", "fill", "press", "pick-file", "close", "bg-restart"])
+
+/** The network pages, where every endpoint shows, and the fields that hold one anywhere. */
+const NETWORK_ROUTE = /^#\/popup\/settings\/networks(?:[/?]|$)/
+const ENDPOINT_FIELD = /rpc|endpoint|url/
+
+const noop = (): void => {}
+
+/** What a served command came to, where its result says: a replay that reaches the same end by
+ *  another way differs here. */
+function outcomeOf(cmd: Command, data: unknown): unknown {
+	const d = data as Record<string, unknown> | undefined
+	switch (cmd.verb) {
+		case "do":
+			return d?.outcome
+		case "passkey":
+			return d?.fault
+		case "open":
+			return { page: d?.page, route: maskIds(String(d?.route)) }
+		case "close":
+			return d
+		case "pick-file":
+			return d?.bytes
+		case "downloads":
+			return (d?.files as unknown[] | undefined)?.length
+		default:
+			return undefined
+	}
+}
+
+/** The violations and incomplete checks among `lines`, as two runs compare them. */
+const foundKeys = (lines: readonly FindingLine[]): string[] =>
+	lines.flatMap((l) =>
+		l.kind === "violation" ? [findingKey(l.oracle, l.message)] : l.kind === "incomplete" ? [findingKey("incomplete", l.reason)] : [],
+	)
+
+/** Whether `words` are a recovery phrase the wallet would take. */
+async function isPhrase(words: string[]): Promise<boolean> {
+	try {
+		await getEntropy(words)
+		return true
+	} catch {
+		return false
+	}
+}
+
 const firstLine = (err: unknown): string => (err instanceof Error ? err.message : String(err)).split("\n")[0].slice(0, 300)
 
 /** An element wait inside a command's deadline, so a control that never shows is the browser's
@@ -713,8 +870,10 @@ const firstLine = (err: unknown): string => (err instanceof Error ? err.message 
 const elementWait = (deadlineMs: number): number => Math.max(Math.min(10_000, deadlineMs - 500), 100)
 
 /** A download's text for the leak scan: gunzipped when it is a gzip stream, as a full backup is. */
+const isGzip = (bytes: Uint8Array): boolean => bytes[0] === 0x1f && bytes[1] === 0x8b
+
 function readableText(bytes: Buffer): string {
-	if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+	if (isGzip(bytes)) {
 		try {
 			return gunzipSync(bytes, { maxOutputLength: 4 * MAX_DOWNLOAD_BYTES }).toString("utf8")
 		} catch {
@@ -727,9 +886,16 @@ function readableText(bytes: Buffer): string {
 // ── in the page ─────────────────────────────────────────────────────────
 
 /** Every visible testid with its index among the visible matches of its testid, its own text when
- *  it holds no other testid, an input's type and value (a password field's length only), and its
- *  state, every URL in a text or value masked. Names no hidden element. */
-function readScreen(): { route: string; title: string; items: { testid: string; nth: number; [k: string]: unknown }[] } {
+ *  it holds no other testid, an input's type and value, and its state, every URL in a text or value
+ *  masked. A password field and an endpoint field give their length only, and a network page no
+ *  text or value at all, since an endpoint edited out of a URL's form would pass the masking. Names
+ *  no hidden element. */
+function readScreen(
+	networkRoute: string,
+	endpointField: string,
+): { route: string; title: string; items: { testid: string; nth: number; [k: string]: unknown }[] } {
+	const quiet = new RegExp(networkRoute).test(location.hash)
+	const endpoint = new RegExp(endpointField, "i")
 	const isShown = (el: HTMLElement) => {
 		const style = window.getComputedStyle(el)
 		const rect = el.getBoundingClientRect()
@@ -746,6 +912,8 @@ function readScreen(): { route: string; title: string; items: { testid: string; 
 			: leaf
 				? el.querySelector<HTMLInputElement>("input, textarea")
 				: null
+	const withheld = (input: HTMLInputElement | HTMLTextAreaElement, testid: string) =>
+		quiet || input.type === "password" || endpoint.test(testid) || endpoint.test(input.name ?? "")
 	const describe = (el: HTMLElement, testid: string, nth: number) => {
 		const leaf = !el.querySelector("[data-testid]")
 		const input = inputOf(el, leaf)
@@ -754,10 +922,10 @@ function readScreen(): { route: string; title: string; items: { testid: string; 
 			testid,
 			nth,
 			tag: el.tagName.toLowerCase(),
-			text: leaf ? ownText(el) : undefined,
+			text: leaf && !quiet ? ownText(el) : undefined,
 			type: input?.type,
 			value: input
-				? input.type === "password"
+				? withheld(input, testid)
 					? `<${input.value.length} characters>`
 					: unlinked(input.value).slice(0, 200)
 				: undefined,
@@ -778,7 +946,7 @@ function readScreen(): { route: string; title: string; items: { testid: string; 
 		counts.set(testid, nth + 1)
 		items.push(describe(el, testid, nth))
 	}
-	return { route: location.hash, title: document.title, items }
+	return { route: unlinked(location.hash), title: unlinked(document.title), items }
 }
 
 /** The page's route, its visible testids with their disabled state, and the loading marks among them. */
@@ -794,19 +962,39 @@ function readQuiet(): { route: string; ids: string[]; key: string; loading: stri
 		ids.push(id)
 		keyParts.push((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true" ? `${id}!` : id)
 	}
+	const busy = [...document.querySelectorAll<HTMLElement>('[aria-busy="true"]')]
+		.filter((el) => el.getBoundingClientRect().width !== 0 && window.getComputedStyle(el).visibility !== "hidden")
+		.map((el) => `aria-busy:${el.dataset.testid ?? el.tagName.toLowerCase()}`)
 	return {
 		route: location.hash,
 		ids,
 		key: `${location.hash}|${keyParts.join(",")}`,
-		loading: ids.filter((id) => /pending|loading|spinner|progress/.test(id)),
+		loading: [...ids.filter((id) => /pending|loading|spinner|progress/.test(id)), ...busy],
 	}
 }
 
-/** Whether the page's text or any field's value holds a URL. */
-function showsUrl(): boolean {
+/** Why a screenshot of the page could carry an endpoint: a network page, a URL in its text or a
+ *  field, or a shadow root, whose text neither check reads. */
+function screenshotRisk(networkRoute: string): string | undefined {
+	if (new RegExp(networkRoute).test(location.hash)) return "is a network page"
 	const url = /\b[a-z][a-z0-9+.-]*:\/\/\S/i
-	if (url.test(document.body?.innerText ?? "")) return true
-	return [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")].some((f) => url.test(f.value))
+	if (url.test(document.body?.innerText ?? "")) return "shows a URL"
+	if ([...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")].some((f) => url.test(f.value)))
+		return "shows a URL"
+	if ([...document.querySelectorAll("*")].some((el) => el.shadowRoot)) return "holds a shadow root"
+	return undefined
+}
+
+/** The words of every recovery phrase grid in the page, shown or not, by testid in page order. */
+function shownWordRuns(): string[][] {
+	const runs = new Map<string, string[]>()
+	for (const el of document.querySelectorAll<HTMLElement>('[data-testid$="-word"]')) {
+		const word = (el.textContent ?? "").trim().toLowerCase()
+		if (!/^[a-z]{3,8}$/.test(word)) continue
+		const testid = el.dataset.testid ?? ""
+		runs.set(testid, [...(runs.get(testid) ?? []), word])
+	}
+	return [...runs.values()].filter((words) => [12, 15, 18, 21, 24].includes(words.length))
 }
 
 /** Marks the `nth` visible match of `selector` with `data-chaos-pick`; returns how many are visible. */

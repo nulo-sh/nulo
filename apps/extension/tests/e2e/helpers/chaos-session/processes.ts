@@ -1,11 +1,14 @@
 /**
  * Which processes belong to an agent session, read from `/proc`: every process that inherited the
  * session's directory in its environment (the runner, its forks, Firefox and its driver), and every
- * Chrome loading the session's own dist copy, which Chrome names on its command line since it
- * overwrites its environment. Nothing else is ever signalled: the session's directory and dist copy
- * are unique to its launch.
+ * Chrome process naming the session's own dist copy or its browser's own profile directory on its
+ * command line, since Chrome overwrites its environment and only its first process loads the
+ * extension. Nothing else is ever signalled: the directory, the dist copy and the profile are unique
+ * to the session's launch.
  */
 import { readdirSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { type EnvironReader, readEnviron, readStartTime } from "../../owned-processes"
 
 /** Set on the runner the launcher spawns and inherited by everything it starts. */
@@ -31,28 +34,52 @@ export function groupOf(pid: number): number | undefined {
 	}
 }
 
+/** What marks a process as the session's. */
+export interface Marks {
+	dir: string
+	ext: string
+	/** The profile directory Puppeteer made for the session's Chrome, when the session recorded it. */
+	userDataDir?: string
+}
+
+/** A profile directory Puppeteer makes for one launch; nothing else is taken as one. */
+export const isLaunchProfile = (path: string, tmp: string = tmpdir()): boolean =>
+	["chrome", "firefox"].some((b) => {
+		const prefix = join(tmp, `puppeteer_dev_${b}_profile-`)
+		return path.startsWith(prefix) && /^[A-Za-z0-9]{1,64}$/.test(path.slice(prefix.length))
+	})
+
+/** The profile directory a browser was launched with, from its argument list. */
+export function profileDirOf(args: readonly string[], tmp: string = tmpdir()): string | undefined {
+	for (const [i, arg] of args.entries()) {
+		const dir = arg.startsWith("--user-data-dir=")
+			? arg.slice("--user-data-dir=".length)
+			: arg === "--profile"
+				? args[i + 1]
+				: undefined
+		if (dir && isLaunchProfile(dir, tmp)) return dir
+	}
+	return undefined
+}
+
 export interface Owned {
 	pid: number
 	how: "environ" | "cmdline"
 }
 
-/** Whether `pid` is the session's: its environment names `dir`, or its command line loads `ext`. */
-export function ownedBy(
-	pid: number,
-	dir: string,
-	ext: string,
-	env: EnvironReader = readEnviron,
-	cmd: CmdlineReader = readCmdline,
-): Owned | undefined {
+/** Whether `pid` is the session's: its environment names the directory, or its command line names
+ *  the dist copy or the browser's profile exactly. */
+export function ownedBy(pid: number, marks: Marks, env: EnvironReader = readEnviron, cmd: CmdlineReader = readCmdline): Owned | undefined {
 	const environ = env(pid)
-	if (environ !== "gone" && environ !== "unreadable" && environ.get(SESSION_ENV) === dir) return { pid, how: "environ" }
-	const args = cmd(pid)
-	if (args?.some((a) => a === `--load-extension=${ext}` || a === `--disable-extensions-except=${ext}`)) return { pid, how: "cmdline" }
+	if (environ !== "gone" && environ !== "unreadable" && environ.get(SESSION_ENV) === marks.dir) return { pid, how: "environ" }
+	const named = new Set([`--load-extension=${marks.ext}`, `--disable-extensions-except=${marks.ext}`])
+	if (marks.userDataDir) named.add(`--user-data-dir=${marks.userDataDir}`)
+	if (cmd(pid)?.some((a) => named.has(a))) return { pid, how: "cmdline" }
 	return undefined
 }
 
 /** Every live process of the session, this process excepted. */
-export function sessionProcesses(dir: string, ext: string, env: EnvironReader = readEnviron, cmd: CmdlineReader = readCmdline): Owned[] {
+export function sessionProcesses(marks: Marks, env: EnvironReader = readEnviron, cmd: CmdlineReader = readCmdline): Owned[] {
 	let pids: number[]
 	try {
 		pids = readdirSync("/proc")
@@ -61,61 +88,39 @@ export function sessionProcesses(dir: string, ext: string, env: EnvironReader = 
 	} catch {
 		return []
 	}
-	return pids.filter((pid) => pid !== process.pid).flatMap((pid) => ownedBy(pid, dir, ext, env, cmd) ?? [])
+	return pids.filter((pid) => pid !== process.pid).flatMap((pid) => ownedBy(pid, marks, env, cmd) ?? [])
 }
 
 /** Whether the process `pid` started at `start` still runs: a reissued pid has another start. */
 export const stillTheSame = (pid: number | undefined, start: string | undefined): boolean =>
 	pid !== undefined && start !== undefined && readStartTime(pid) === start
 
-const groupAlive = (pgid: number): boolean => {
-	try {
-		process.kill(-pgid, 0)
-		return true
-	} catch {
-		return false
-	}
-}
-
-/** Signals one owned process after reading its ownership again: a whole Chrome leading its own group
- *  is signalled as that group, so its renderers go with it; a group the launcher itself shares is
- *  never signalled whole. */
-export function signalOwned(o: Owned, dir: string, ext: string, signal: NodeJS.Signals): number | undefined {
-	if (!ownedBy(o.pid, dir, ext)) return undefined
+/** Signals one owned process after reading its ownership again: one leading its own group is
+ *  signalled as that group, so what it started goes with it, while it still leads it; a group the
+ *  launcher itself shares is never signalled whole. A group whose leader is gone is never signalled,
+ *  since its number may be another's by then: its members are found and signalled one by one. */
+export function signalOwned(o: Owned, marks: Marks, signal: NodeJS.Signals): void {
+	if (!ownedBy(o.pid, marks)) return
 	const pgid = groupOf(o.pid)
 	const leads = pgid === o.pid && pgid !== groupOf(process.pid)
 	try {
 		process.kill(leads ? -o.pid : o.pid, signal)
-		return leads ? o.pid : undefined
 	} catch {
-		return undefined
+		// Gone between the read and the signal.
 	}
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const anyAlive = (dir: string, ext: string, groups: ReadonlySet<number>): boolean =>
-	sessionProcesses(dir, ext).length > 0 || [...groups].some(groupAlive)
-
-/** One round: `signal` to every process of the session and every group signalled before, then a
- *  wait of up to `graceMs` for all of them to go. */
-async function sweepRound(dir: string, ext: string, signal: NodeJS.Signals, groups: Set<number>, graceMs: number): Promise<void> {
-	for (const o of sessionProcesses(dir, ext)) {
-		const g = signalOwned(o, dir, ext, signal)
-		if (g !== undefined) groups.add(g)
-	}
-	if (signal === "SIGKILL") for (const g of groups) if (groupAlive(g)) process.kill(-g, "SIGKILL")
-	const until = Date.now() + graceMs
-	while (Date.now() < until && anyAlive(dir, ext, groups)) await sleep(100)
-}
-
 /** SIGTERM to every process of the session, then SIGKILL to what outlives `graceMs`; returns what
- *  is still running after both, and every group it signalled that still has a member. */
-export async function sweepSession(dir: string, ext: string, graceMs = 5_000): Promise<{ left: Owned[]; groups: number[] }> {
-	const groups = new Set<number>()
+ *  is still running after both, and the groups those processes are in. */
+export async function sweepSession(marks: Marks, graceMs = 5_000): Promise<{ left: Owned[]; groups: number[] }> {
 	for (const signal of ["SIGTERM", "SIGKILL"] as const) {
-		if (!anyAlive(dir, ext, groups)) break
-		await sweepRound(dir, ext, signal, groups, graceMs)
+		if (!sessionProcesses(marks).length) break
+		for (const o of sessionProcesses(marks)) signalOwned(o, marks, signal)
+		const until = Date.now() + graceMs
+		while (Date.now() < until && sessionProcesses(marks).length) await sleep(100)
 	}
-	return { left: sessionProcesses(dir, ext), groups: [...groups].filter(groupAlive) }
+	const left = sessionProcesses(marks)
+	return { left, groups: [...new Set(left.flatMap((o) => groupOf(o.pid) ?? []))] }
 }

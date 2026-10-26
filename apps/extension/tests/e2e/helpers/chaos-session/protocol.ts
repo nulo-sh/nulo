@@ -5,8 +5,9 @@
  *
  * A command is published once, whole, under the next free number, and served in number order; its
  * result is published the same way. Every file the session writes has a name it chose, in a
- * directory it made; the only path a command names is the file `pick-file` reads, which must open
- * as a regular file inside the session directory.
+ * directory it made and holds open; the only path a command names is the file `pick-file` reads,
+ * which must open as a regular file inside the session directory. Linux only: a held directory is
+ * reached through `/proc/self/fd`.
  */
 import {
 	constants,
@@ -37,6 +38,9 @@ export const extCopyOf = (root: string, id: string): string => join(root, ".ext"
 
 /** The runner's output sits outside it too: the browser writes page errors there unmasked. */
 export const logOf = (root: string, id: string): string => join(root, ".log", `${id}.log`)
+
+/** What the session tells the launcher about its browser, outside the directory an agent reads. */
+export const runOf = (root: string, id: string): string => join(root, ".run", `${id}.json`)
 
 export const SESSION_FILE = "session.json"
 export const READY_FILE = "ready.json"
@@ -69,6 +73,8 @@ export interface SessionInfo {
 	deadlineAt: number
 	extPath: string
 	revision: string
+	/** A digest of the build the session loads. */
+	dist?: string
 	/** The process group the launcher spawned, and its leader's start time. */
 	pid?: number
 	pidStart?: string
@@ -454,20 +460,48 @@ export function readSessionInfo(dir: string): SessionInfo {
 	return JSON.parse(readFileSync(join(dir, SESSION_FILE), "utf8")) as SessionInfo
 }
 
+/** The largest file `pick-file` reads. */
+export const MAX_PICK_BYTES = 50 * 1024 * 1024
+/** The largest command file the session reads. */
+const MAX_COMMAND_BYTES = 64 * 1024
+
+/** Opens `path` for reading without following a link at its end or waiting on a FIFO, and holds it
+ *  only as a regular file of at most `max` bytes. */
+function openRegular(path: string, what: string, max: number): { fd: number; size: number } {
+	let fd: number
+	try {
+		fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+	} catch (err) {
+		return refuse(`${what} cannot be opened: ${(err as NodeJS.ErrnoException).code ?? "error"}`)
+	}
+	const stat = fstatSync(fd)
+	const why = !stat.isFile() ? "is not a regular file" : stat.size > max ? `is larger than ${max} bytes` : undefined
+	if (why) {
+		closeSync(fd)
+		return refuse(`${what} ${why}`)
+	}
+	return { fd, size: stat.size }
+}
+
+function readAll(fd: number, size: number): Buffer {
+	const buf = Buffer.alloc(size)
+	let at = 0
+	while (at < size) {
+		const n = readSync(fd, buf, at, size - at, at)
+		if (n === 0) break
+		at += n
+	}
+	return buf.subarray(0, at)
+}
+
 /** Opens `file` (relative to `dir`) for reading without following a link at its end, and holds it
  *  only when the opened file is a regular file whose real path is inside `dir`'s: a link anywhere on
  *  the way, or a rename after the check, leaves the opened descriptor outside and is refused. */
 export function readInside(dir: string, file: string, procFd = (fd: number) => `/proc/self/fd/${fd}`): Buffer {
 	const rel = relativeInside(file)
 	const realDir = realpathSync(dir)
-	let fd: number
+	const { fd, size } = openRegular(join(realDir, rel), rel, MAX_PICK_BYTES)
 	try {
-		fd = openSync(join(realDir, rel), constants.O_RDONLY | constants.O_NOFOLLOW)
-	} catch (err) {
-		return refuse(`${rel} cannot be opened: ${(err as NodeJS.ErrnoException).code ?? "error"}`)
-	}
-	try {
-		if (!fstatSync(fd).isFile()) return refuse(`${rel} is not a regular file`)
 		let opened: string
 		try {
 			opened = realpathSync(procFd(fd))
@@ -475,36 +509,95 @@ export function readInside(dir: string, file: string, procFd = (fd: number) => `
 			return refuse(`${rel}: where the opened file lives cannot be read on this host`)
 		}
 		if (!opened.startsWith(`${realDir}${sep}`)) return refuse(`${rel} resolves outside the session directory`)
-		const size = fstatSync(fd).size
-		const buf = Buffer.alloc(size)
-		let at = 0
-		while (at < size) {
-			const n = readSync(fd, buf, at, size - at, at)
-			if (n === 0) break
-			at += n
-		}
-		return buf.subarray(0, at)
+		return readAll(fd, size)
 	} finally {
 		closeSync(fd)
 	}
 }
 
+/** A directory held open: its files are reached through the descriptor, so a directory renamed or
+ *  replaced by a link after it was opened never redirects a read or a write. */
+export class HeldDir {
+	private constructor(private readonly fd: number) {}
+
+	/** Opens `path`, refused when its last component is a link or no directory. */
+	public static open(path: string): HeldDir {
+		return new HeldDir(openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW))
+	}
+
+	/** The path of `name` in this directory, through the descriptor. */
+	public at(name: string): string {
+		if (!/^[^/\0]+$/.test(name) || name === "." || name === "..") throw new Error(`${JSON.stringify(name)} is no file name`)
+		return `${this.path()}/${name}`
+	}
+
+	/** The directory itself, through the descriptor. */
+	public path(): string {
+		return `/proc/self/fd/${this.fd}`
+	}
+
+	public sub(name: string): HeldDir {
+		return HeldDir.open(this.at(name))
+	}
+
+	public list(): string[] {
+		return readdirSync(this.path())
+	}
+
+	public close(): void {
+		closeSync(this.fd)
+	}
+}
+
+export type OutputDir = (typeof OUTPUT_DIRS)[number]
+
+/** A session directory and every directory in it, held for the session's life. */
+export interface SessionDirs {
+	top: HeldDir
+	q: HeldDir
+	out: Record<OutputDir, HeldDir>
+	close(): void
+}
+
+export function holdSessionDirs(dir: string): SessionDirs {
+	const top = HeldDir.open(realpathSync(dir))
+	const q = top.sub(QUEUE_DIR)
+	const out = Object.fromEntries(OUTPUT_DIRS.map((sub) => [sub, top.sub(sub)])) as Record<OutputDir, HeldDir>
+	return {
+		top,
+		q,
+		out,
+		close: () => {
+			for (const held of [top, q, ...Object.values(out)]) held.close()
+		},
+	}
+}
+
 /** Writes `body` as a new file the session names, in one of its own directories; refuses to replace
- *  anything. Returns the path relative to `dir`. */
-export function writeOwn(dir: string, sub: (typeof OUTPUT_DIRS)[number], name: string, body: string | Uint8Array): string {
+ *  anything. Returns the path relative to the session directory. */
+export function writeOwn(dirs: SessionDirs, sub: OutputDir, name: string, body: string | Uint8Array): string {
 	const safe =
 		name
 			.replace(/[^A-Za-z0-9._-]+/g, "_")
 			.replace(/^\.+/, "_")
 			.slice(0, 120) || "file"
-	const rel = join(sub, safe)
-	const fd = openSync(join(dir, rel), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+	const fd = openSync(dirs.out[sub].at(safe), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
 	try {
 		writeSync(fd, typeof body === "string" ? Buffer.from(body) : body)
 	} finally {
 		closeSync(fd)
 	}
-	return rel
+	return join(sub, safe)
+}
+
+/** Appends one line to the session's own log `name`, never through a link. */
+export function appendOwn(held: HeldDir, name: string, line: string): void {
+	const fd = openSync(held.at(name), constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600)
+	try {
+		writeSync(fd, line)
+	} finally {
+		closeSync(fd)
+	}
 }
 
 /** A copy of `bytes` cut to `truncate` bytes, then with the byte at `flip` inverted: the damaged
@@ -554,9 +647,9 @@ export interface Result {
 	findings: number
 }
 
-function nextNumber(qdir: string): number {
+function nextNumber(q: HeldDir): number {
 	let max = 0
-	for (const name of readdirSync(qdir)) {
+	for (const name of q.list()) {
 		const m = CMD.exec(name)
 		if (m) max = Math.max(max, Number(m[1]))
 	}
@@ -566,48 +659,65 @@ function nextNumber(qdir: string): number {
 /** Publishes `cmd` as the next command: written whole under a temporary name, then linked to the
  *  first free number, which fails rather than replaces when another writer took it. */
 export function publishCommand(dir: string, cmd: Command): number {
-	const qdir = join(dir, QUEUE_DIR)
-	const tmp = join(qdir, `.tmp-${process.pid}-${randomBytes(6).toString("hex")}`)
-	writeFileSync(tmp, JSON.stringify(cmd), { flag: "wx", mode: 0o600 })
+	const top = HeldDir.open(dir)
+	const q = top.sub(QUEUE_DIR)
+	const tmp = `.tmp-${process.pid}-${randomBytes(6).toString("hex")}`
 	try {
-		for (let attempt = 0; attempt < 1_000; attempt++) {
-			const n = nextNumber(qdir)
-			try {
-				linkSync(tmp, join(qdir, cmdFile(n)))
-				return n
-			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+		writeFileSync(q.at(tmp), JSON.stringify(cmd), { flag: "wx", mode: 0o600 })
+		try {
+			for (let attempt = 0; attempt < 1_000; attempt++) {
+				const n = nextNumber(q)
+				try {
+					linkSync(q.at(tmp), q.at(cmdFile(n)))
+					return n
+				} catch (err) {
+					if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+				}
 			}
+			throw new Error("no free command number after 1000 tries")
+		} finally {
+			unlinkSync(q.at(tmp))
 		}
-		throw new Error("no free command number after 1000 tries")
 	} finally {
-		unlinkSync(tmp)
+		q.close()
+		top.close()
 	}
 }
 
-/** Publishes a file whole: readers see the old name absent or the new content complete. */
-export function publishFile(path: string, body: string): void {
-	const tmp = `${path}.${randomBytes(6).toString("hex")}.tmp`
-	writeFileSync(tmp, body, { flag: "wx", mode: 0o600 })
-	renameSync(tmp, path)
+/** Publishes the file `name` in `held` whole: readers see it absent or complete. */
+export function publishFile(held: HeldDir, name: string, body: string): void {
+	const tmp = `${name}.${randomBytes(6).toString("hex")}.tmp`
+	writeFileSync(held.at(tmp), body, { flag: "wx", mode: 0o600 })
+	renameSync(held.at(tmp), held.at(name))
+}
+
+/** `publishFile` into the directory `dir`, held for the one write. */
+export function publishInto(dir: string, name: string, body: string): void {
+	const held = HeldDir.open(dir)
+	try {
+		publishFile(held, name, body)
+	} finally {
+		held.close()
+	}
 }
 
 /** The command numbered `n`, if published: validated again, since anything the user runs can write
  *  into the queue. A file that is not a valid command yields its refusal. */
-export function readCommand(dir: string, n: number): { cmd: Command } | { refused: string } | undefined {
+export function readCommand(q: HeldDir, n: number): { cmd: Command } | { refused: string } | undefined {
 	let raw: string
 	try {
 		// A link in the queue is never followed: a command is a file someone published there.
-		const fd = openSync(join(dir, QUEUE_DIR, cmdFile(n)), constants.O_RDONLY | constants.O_NOFOLLOW)
+		const { fd, size } = openRegular(q.at(cmdFile(n)), "the command file", MAX_COMMAND_BYTES)
 		try {
-			raw = readFileSync(fd, "utf8")
+			raw = readAll(fd, size).toString("utf8")
 		} finally {
 			closeSync(fd)
 		}
 	} catch (err) {
-		const code = (err as NodeJS.ErrnoException).code
-		if (code === "ENOENT") return undefined
-		if (code === "ELOOP") return { refused: "the command file is a link" }
+		if (err instanceof CommandRefused) {
+			if (err.message.endsWith("ENOENT")) return undefined
+			return { refused: err.message.endsWith("ELOOP") ? "the command file is a link" : err.message }
+		}
 		throw err
 	}
 	try {
@@ -617,7 +727,8 @@ export function readCommand(dir: string, n: number): { cmd: Command } | { refuse
 	}
 }
 
+/** Makes a new session directory under `root`, failing rather than reusing anything there. */
 export function makeSessionDirs(dir: string): void {
-	mkdirSync(dir, { recursive: true, mode: 0o700 })
+	mkdirSync(dir, { mode: 0o700 })
 	for (const sub of [QUEUE_DIR, ...OUTPUT_DIRS]) mkdirSync(join(dir, sub), { mode: 0o700 })
 }
