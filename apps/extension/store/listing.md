@@ -55,7 +55,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
 | Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about daily (§ 5.11) |
 | Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:11-19` | Only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above) | The file the user saves (`downloads`) |
-| Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:47-62` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
+| Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:47-70` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
 | Diagnostic logs | Memory; session storage with Developer Mode on | Only when the user exports them | The file the user saves |
 | Terms-acceptance record | Extension local storage | No | — |
 
@@ -80,7 +80,7 @@ private file system and grows with use; the default quota would evict it.
 Schedules four jobs: the token-price refresh while the wallet is unlocked and fiat display is on,
 the token list's daily refresh once the Terms are accepted, the session auto-lock timer, and the
 activity journal's upkeep, which settles operations left in flight and prunes old records
-(`wallet/index.ts:99-102`, `wallet/services/token-list/service.ts:143-145`,
+(`wallet/index.ts:99-102`, `wallet/services/token-list/service.ts:143-146`,
 `wallet/services/profile/session-manager.ts:200`, `wallet/runtime.ts:694`, `:711`).
 
 #### `offscreen`
