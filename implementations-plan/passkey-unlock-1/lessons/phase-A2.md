@@ -119,4 +119,4 @@ At `038a064ae`, 77 mutations: the 62 of the first pass, all caught again, and 15
   - That step is the contacts import's file chooser. It is unchanged since #1026, and no A2 change reaches it.
   - Headless Firefox cancels the chooser at once, but not within 10 s on that run, with the host's 5-minute load near 120.
   - The file passed the other 4 runs, then 3 more runs alone (load1 54 to 82).
-
+- **Network**, proverless, at \`c13530bab\`: \`import-handshake-note-matrix\` (both rows; CI runs the passkey row) 5/5 per browser, 155 to 215 s a run.
