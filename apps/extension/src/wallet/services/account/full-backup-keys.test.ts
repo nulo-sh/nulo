@@ -532,6 +532,27 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 	}, 30_000)
 })
 
+// The password the caller gives opens the key, never the session, so an export answers the same
+// whichever profile is unlocked.
+describe("exportAccount — an imported account's key", () => {
+	test("opens under the profile's own DEK by its password while another profile is unlocked", async () => {
+		const { api, profile, account } = await build()
+		const a = await profile.createProfile("A", PASSWORD)
+		const dek = (await profile.getProfileDek(a.id))!
+		const dekOfA = Array.from(dek)
+		await seedImported(api, a.id, ADDR_A, 0x2a, dek)
+		await profile.createProfile("B", "other-pass")
+		const actual = await vi.importActual<typeof import("@nulo/wallet-crypto")>("@nulo/wallet-crypto")
+		const keys: number[][] = []
+		vi.mocked(unsealImportedSigningKeyV2).mockImplementationOnce(async (key, ...rest) => {
+			keys.push(Array.from(key))
+			return actual.unsealImportedSigningKeyV2(key, ...rest)
+		})
+		await account.exportAccount(a.id, CHAIN, ADDR_A, PASSWORD, true).catch(() => undefined)
+		expect(keys).toEqual([dekOfA])
+	}, 30_000)
+})
+
 // A row an earlier build wrote for a passkey profile holds no slot any answer opens, so each
 // account export refuses it with the typed error before it opens a key.
 describe("account exports — a retired profile row", () => {
