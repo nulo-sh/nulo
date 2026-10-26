@@ -96,3 +96,10 @@ Reject, 7 must-fix and 1 consider; 6 accepted and fixed, 2 declined (plan.md § 
 - Firefox's `refuseNextStep` sets the session authenticator's user verification off, so it refuses every page's prompts until lifted; a page-local fault needs a page-local shim.
 - Whether a shim was spent reads best as whether it is still installed: each one puts the page's own method back on its first call.
 - Gate after round 2's fixes: a tour pair (Chrome ending on `end`, Firefox on a timeout) passed, the spent `refuse`, `no-prf` and `other` faults reported nothing, and the unspent `no-prf` (both) and the `refuse` left armed at `end` (Chrome) were reported.
+
+## Review round 3 (2026-10-26, Codex resumed, high, the last)
+
+Reject on two replay-determinism defects, both fixed without a fourth round; every round-2 fix confirmed closed and both declines accepted (plan.md § Review verdicts).
+
+- An id mask that needs a digit misses about one 8-hex id in 2,600 (`(6/16)^8`): rare per run, certain across a fleet.
+- The profile repository declares its enumeration order unspecified (`apps/extension/src/wallet/services/profile/repository.ts:51`), so a list position is no identity across runs; the order the session first saw each profile is.

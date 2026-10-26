@@ -12,6 +12,8 @@ import {
 	compareReplay,
 	type EndState,
 	findingKey,
+	maskIds,
+	noteProfiles,
 	pauseBefore,
 	replayedFile,
 	secretFieldKind,
@@ -490,6 +492,26 @@ describe("a replay", () => {
 		expect(findingKey("incomplete", "the passkey refuse fault armed on p1 met no prompt")).toContain("on p1 met")
 		expect(findingKey("O2", "9e3dc5ac's row holds 4 fields")).toBe("O2 <id>'s row holds <n> fields")
 		expect(findingKey("O7", "S1000012/password")).not.toBe(findingKey("O7", "S1000013/password"))
+		expect(maskIds("#/popup/settings/networks/abcdefab")).toBe(maskIds("#/popup/settings/networks/e2fb77f7"))
+		expect(maskIds("#/popup/settings/accounts")).toBe("#/popup/settings/accounts")
+	})
+
+	test("names profiles by the order the session first saw them, whatever order the wallet lists them in", () => {
+		const a = { id: "x1", name: "Main", type: "password" }
+		const b = { id: "y2", name: "Alt", type: "passkey" }
+		const c = { id: "z3", name: "Main", type: "passkey" }
+		const one = new Map<string, number>()
+		noteProfiles(one, [a])
+		noteProfiles(one, [b, a, c])
+		const other = new Map<string, number>()
+		noteProfiles(other, [{ ...a, id: "q9" }])
+		noteProfiles(other, [
+			{ ...c, id: "r8" },
+			{ ...a, id: "q9" },
+			{ ...b, id: "s7" },
+		])
+		expect([...one.values()]).toEqual([0, 1, 2])
+		expect([one.get("x1"), one.get("y2"), one.get("z3")]).toEqual([other.get("q9"), other.get("s7"), other.get("r8")])
 	})
 
 	test("keeps the original's pause before each command, bounded", () => {

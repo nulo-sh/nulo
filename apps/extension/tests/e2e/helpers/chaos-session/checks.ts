@@ -173,12 +173,24 @@ const TRANSIENT = /^(?:snackbar|toast)-|pending|loading|spinner|progress/
 
 export const stableTestids = (ids: readonly string[]): string[] => [...new Set(ids.filter((id) => !TRANSIENT.test(id)))].sort()
 
-/** `text` with what differs between two runs masked: addresses and generated ids. */
+/** `text` with what differs between two runs masked: addresses and generated ids, an 8-hex id
+ *  whether or not it holds a digit. */
 export const maskIds = (text: string): string =>
 	text
 		.replace(/0x[0-9a-f]+/gi, "<hex>")
 		.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<id>")
-		.replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi, "<id>")
+		.replace(/\b[0-9a-f]{8}\b/gi, "<id>")
+		.replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{9,}\b/gi, "<id>")
+
+/** Numbers each profile in the order the session first listed it, so two runs of the same commands
+ *  name the same profile alike though the wallet lists them in no set order; profiles first listed
+ *  together are taken by name and method. */
+export function noteProfiles(order: Map<string, number>, listed: readonly { id: string; name: string; type: string }[]): void {
+	const fresh = listed.filter((p) => !order.has(p.id))
+	const key = (p: { name: string; type: string }) => `${p.name}\0${p.type}`
+	fresh.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+	for (const p of fresh) order.set(p.id, order.size)
+}
 
 /** A finding as two runs can compare it: ids and addresses masked, and numbers too, but not a
  *  symbol's (`S1000012`, `O4`, `p1`), which the same commands name the same. */

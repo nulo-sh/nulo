@@ -56,6 +56,7 @@ import {
 	type EndState,
 	findingKey,
 	maskIds,
+	noteProfiles,
 	phraseWords,
 	secretFieldKind,
 	type Shown,
@@ -194,9 +195,10 @@ class Session {
 	private lateOutlived = false
 	/** A `--now` command's work has not been settled and checked since. */
 	private unsettled = false
-	/** What the last checks saw: each page's route, and the open profile by name, method and place
-	 *  in the list, which two runs share where its id differs. */
-	private after: { open: false | { name: string; type: string; at: number }; routes: [PageId, string][] } | undefined
+	/** What the last checks saw: each page's route, and the open profile by name, method and the
+	 *  order the session first saw it in, which two runs share where its id differs. */
+	private after: { open: false | { name: string; type: string; seen: number }; routes: [PageId, string][] } | undefined
+	private readonly profileOrder = new Map<string, number>()
 	/** `do` reaches a starting point: it runs from `empty` through the catalog until a command drives
 	 *  the wallet directly, and stops once a `do` ends outside the model's outcomes. */
 	private doWorld: World | undefined = startWorld("empty")
@@ -758,9 +760,10 @@ class Session {
 		for (const v of violations)
 			lines.push({ kind: "violation", n, verb, ...v, ...(v.detail ? { detail: mask(v.detail, needles) } : {}) })
 		s.origin = await backgroundOrigin(s.ctx)
-		const at = profiles.listed.findIndex((p) => p.id === active?.id)
+		noteProfiles(this.profileOrder, profiles.listed)
+		const open = profiles.listed.find((p) => p.id === active?.id)
 		this.after = {
-			open: at < 0 ? false : { name: profiles.listed[at].name, type: profiles.listed[at].type, at },
+			open: open ? { name: open.name, type: open.type, seen: this.profileOrder.get(open.id) ?? -1 } : false,
 			routes: (await this.routes()).map(({ id, route }) => [id, maskIds(route)]),
 		}
 		return lines
