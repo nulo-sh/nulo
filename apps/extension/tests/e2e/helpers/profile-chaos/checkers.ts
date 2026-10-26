@@ -591,6 +591,14 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 		kinds: ["log"],
 		source: "pxe",
 	},
+	{
+		issue: 432,
+		// A closed known limit: its entry stays while the issue does.
+		pattern:
+			/^\[\{"module":"foundation:retry"\},\{\},"Error while retrying JsonRpcClient request to \S+ .* TypeError: Failed to fetch"\]$/,
+		kinds: ["log"],
+		source: "pxe",
+	},
 ]
 
 /** The filed finding `e` is an instance of; a page error's pairing takes its forwarded line from

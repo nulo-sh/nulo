@@ -624,9 +624,12 @@ async function heldUnlockRace(s: RunState, compete: () => Promise<void>): Promis
 	await compete()
 	await hold.release()
 	await unlockAttemptEnded(page, UNLOCK_MS)
-	const seen = await raceEnd(page, UNLOCK_MS)
-	// The cleanup lock below would wipe a session the race left open behind the lock screen.
-	if (seen !== "home" && !(await isLocked(page))) throw new Error("the lock screen shows while the service holds a session")
+	// Short: a session held behind the lock screen for longer is the failure, not a slow router.
+	const seen = await raceEnd(page, 10_000)
+	// The cleanup lock below would wipe a session the race left open behind the lock screen, and
+	// would put a page that reached neither end back on it.
+	if (seen === "lock over a session") throw new Error("the lock screen shows while the service holds a session")
+	if (seen === undefined) throw new Error("the race reached neither Home nor the lock screen")
 	const outcome = seen === "home" ? "committed-then-locked" : "cancelled"
 	await lockFromAnotherWindow(s.anchor)
 	await waitForLockScreen(s.anchor, LOCK_MS)

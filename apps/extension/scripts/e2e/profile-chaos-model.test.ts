@@ -1015,6 +1015,15 @@ describe("O4, errors", () => {
 		expect(shown("O4 a PXE read failure that is not an expected refusal", otherRead)[0]?.known).toBeUndefined()
 		const unreachable = checkErrors([discovery("Error 400 from server")], []).violations
 		expect(shown("O4 a discovery failure that is not the lock's", unreachable)[0]?.known).toBeUndefined()
+		const retried = (module: string, cause = "TypeError: Failed to fetch") =>
+			read(
+				`[{"module":"${module}"},{},"Error while retrying JsonRpcClient request to <url> Error: Error fetching from host <url> ${cause}"]`,
+			)
+		expect(checkErrors([retried("foundation:retry")], []).violations[0]?.known).toBe(432)
+		const otherLogger = checkErrors([retried("pxe:service")], []).violations
+		expect(shown("O4 a retry line from another logger", otherLogger)[0]?.known).toBeUndefined()
+		const answered = checkErrors([retried("foundation:retry", "Error: 500 Internal Server Error")], []).violations
+		expect(shown("O4 a retry the node answered", answered)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {

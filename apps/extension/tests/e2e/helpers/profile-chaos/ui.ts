@@ -7,7 +7,7 @@ import { pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
-import { PollTimeoutError, pollUntil } from "../../fixtures/poll"
+import { pollUntil } from "../../fixtures/poll"
 import { callService } from "../../fixtures/session"
 import { ADVANCES_ON_OPEN } from "./checkers"
 import type { Driven } from "./state"
@@ -187,22 +187,19 @@ export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> 
 	)
 }
 
-/** Where a held unlock's race ended: Home, the lock screen with no session behind it, or, past the
- *  bound, `lock` over a session. A committed attempt holds its session before its submit goes idle
- *  and leaves the lock screen only once the router resolves Home, so that pair is read again. */
-export async function raceEnd(page: Page, boundMs: number): Promise<string | undefined> {
+/** Where a held unlock's race ended within `boundMs`. A committed attempt holds its session
+ *  before its submit goes idle and leaves the lock screen only once the router resolves Home. */
+export async function raceEnd(page: Page, boundMs: number): Promise<"home" | "lock" | "lock over a session" | undefined> {
 	const lock: Signal = { label: "lock", hash: "/popup/auth" }
-	return pollUntil(
-		async () => {
-			const { label } = await firstSignal(page, [HOME, lock], boundMs)
-			return label === "lock" && !(await isLocked(page)) ? "lock over a session" : label
-		},
-		(label) => label !== "lock over a session",
-		{ label: "the race's end", timeoutMs: boundMs, intervalMs: 200 },
-	).catch((error) => {
-		if (error instanceof PollTimeoutError) return "lock"
-		throw error
-	})
+	const deadline = Date.now() + boundMs
+	for (;;) {
+		const { label } = await firstSignal(page, [HOME, lock], Math.max(deadline - Date.now(), 1))
+		if (label !== "lock") return label === "home" ? "home" : undefined
+		if (await isLocked(page)) return "lock"
+		// A shorter read than this could time out on a screen that still shows the lock.
+		if (deadline - Date.now() < 500) return "lock over a session"
+		await new Promise((r) => setTimeout(r, 200))
+	}
 }
 
 export async function typePasswordAndSubmit(page: Page, password: string): Promise<void> {
