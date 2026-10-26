@@ -82,8 +82,10 @@ export async function readRelease(page: Page, profileId: string): Promise<Releas
 /**
  * The release `build`, a fresh install with `entries` written in and unlocked under the test
  * password, read through its own services. Every one of `dials` answers with a refusal for the
- * install's life, so the unlocked release reaches nothing a later run holds. Its own install, never
- * the one an update runs over, so the candidate meets the recorded rows as the release left them.
+ * install's life, so the unlocked release reaches nothing a later run holds; an origin its rows name
+ * that `dials` omits is refused only after the read, which the live scenario prevents by writing the
+ * dials from the rows it read. Its own install, never the one an update runs over, so the candidate
+ * meets the recorded rows as the release left them.
  */
 export async function readSealedRelease(
 	build: string,

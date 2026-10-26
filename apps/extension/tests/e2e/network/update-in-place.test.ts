@@ -407,9 +407,11 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 				builds,
 				populate: async (ctx) => {
 					const populated = await populate(ctx, cfg, accountFile, release)
-					const recording = { tag: builds.tag, browser: BROWSER, entries: populated.before, dials: populated.dials }
-					expect(recordingProblems(recording, builds.tag, release.storage)).toEqual([])
-					if (record) writeRecording(builds.tag, BROWSER, populated.before, populated.dials)
+					if (record) {
+						const recording = { tag: builds.tag, browser: BROWSER, entries: populated.before, dials: populated.dials }
+						expect(recordingProblems(recording, builds.tag, release.storage)).toEqual([])
+						writeRecording(builds.tag, BROWSER, populated.before, populated.dials)
+					}
 					return populated
 				},
 				verify,
