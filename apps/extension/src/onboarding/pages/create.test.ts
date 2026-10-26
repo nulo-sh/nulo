@@ -5,12 +5,25 @@ import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `w${i + 1}`)
+// The worker's side of the session: a create opens it, a lock or a strict restart ends it.
+const worker = vi.hoisted(() => ({
+	active: undefined as { id: string } | undefined,
+	opens<T extends { id: string }>(profile: T): T {
+		this.active = profile
+		return profile
+	},
+}))
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
-	createProfile: vi.fn(async (): Promise<unknown> => ({ id: "p1", name: "Main", type: "password" })),
+	createProfile: vi.fn(async (): Promise<unknown> => worker.opens({ id: "p1", name: "Main", type: "password" })),
 	generateProfileId: vi.fn(),
-	createPasskeyProfile: vi.fn(async (): Promise<unknown> => ({ id: "k1", name: "Main", type: "passkey" })),
+	createPasskeyProfile: vi.fn(async (): Promise<unknown> => worker.opens({ id: "k1", name: "Main", type: "passkey" })),
 	exportMnemonic: vi.fn(async (): Promise<string[]> => []),
+	getActiveProfile: vi.fn(async () => worker.active),
+	subscribeActiveProfile: undefined as unknown as ProfileServiceClient["subscribeActiveProfile"],
+	onActiveProfileChanged: undefined as unknown as EventHandler<unknown>,
+	onConnected: undefined as unknown as EventHandler<void>,
+	onDisconnected: undefined as unknown as EventHandler<void>,
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrapActiveProfile = vi.hoisted(() => vi.fn(async (): Promise<boolean> => true))
@@ -28,7 +41,7 @@ vi.mock("@/utils/browser-surface", async (original) => ({
 }))
 const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" }
 const createPasskeyProfileInPage = vi.hoisted(() =>
-	vi.fn(async () => ({ profile: { id: "k1", name: "Main", type: "passkey" }, credentialData: ANSWER })),
+	vi.fn(async () => ({ profile: worker.opens({ id: "k1", name: "Main", type: "passkey" }), credentialData: ANSWER })),
 )
 vi.mock("@/wallet/utils/create-passkey-profile", () => ({ createPasskeyProfileInPage }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
@@ -38,6 +51,8 @@ const routerPush = vi.fn()
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: routerPush }), useRoute: () => ({ meta: {} }) }))
 
 import { BrutalistTitle, Flex, Icon, Input, Text } from "@nulo/design"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { enterOn } from "../../../tests/helpers/credential-pins"
 import { pressOn } from "../../../tests/helpers/press-key"
 import { sendEvent } from "../../../tests/helpers/send-event"
@@ -84,9 +99,16 @@ async function mountCreate() {
 const page = (w: VueWrapper) => w.get('[data-testid="onboarding-create-page"]')
 const choosePassword = (w: VueWrapper) => w.get('[data-testid="onboarding-method-password"]').trigger("click")
 
+// The production subscription runs over the faked worker, snapshot and reconnect included.
+profileApi.subscribeActiveProfile = ProfileServiceClient.prototype.subscribeActiveProfile
+
 beforeEach(() => {
 	vi.clearAllMocks()
 	surface.inPage = false
+	worker.active = undefined
+	profileApi.onActiveProfileChanged = new EventHandler()
+	profileApi.onConnected = new EventHandler()
+	profileApi.onDisconnected = new EventHandler()
 	profileApi.getProfiles.mockResolvedValue([])
 	profileApi.exportMnemonic.mockResolvedValue(WORDS)
 })
@@ -476,5 +498,61 @@ describe("onboarding create — the recovery phrase step", () => {
 		const other = await mountCreate()
 		await choosePassword(other)
 		expect(other.find('[data-testid="onboarding-passkey-reuse"]').exists()).toBe(false)
+	})
+
+	const lock = () => {
+		worker.active = undefined
+		profileApi.onActiveProfileChanged.invoke(undefined)
+	}
+	const shown = (w: VueWrapper) => ({
+		words: w.findAll('[data-testid="onboarding-phrase-word"]').length,
+		copy: w.find('[data-testid="onboarding-phrase-copy"]').exists(),
+		form: w.find('[data-testid="onboarding-create-page"]').exists(),
+	})
+
+	const createPasskey = (w: VueWrapper) => w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+	const reusePasskey = (w: VueWrapper) => w.get('[data-testid="onboarding-passkey-reuse"]').trigger("click")
+
+	test.each([
+		{ name: "a password", path: "password", create: submitPassword },
+		{ name: "a new passkey", path: "passkey", create: createPasskey },
+		{ name: "an existing passkey", path: "passkey", create: reusePasskey },
+	] as const)("a lock after the words show takes them and Copy off the page, on $name wallet", async ({ path, create }) => {
+		surface.inPage = path === "passkey"
+		const w = await mountCreate()
+		await create(w)
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 24, copy: true, form: false })
+
+		lock()
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute(path))
+	})
+
+	test("a dropped worker connection, with no lock event, takes the words off the page", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(shown(w).words).toBe(24)
+
+		profileApi.onDisconnected.invoke()
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+	})
+
+	test("a lock during the last-profile write never shows the words", async () => {
+		const pending = defer<undefined>()
+		setLastActiveProfileId.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(setLastActiveProfileId).toHaveBeenCalledWith("p1")
+
+		lock()
+		pending.resolve(undefined)
+		await flushPromises()
+		expect(shown(w).words).toBe(0)
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
 	})
 })

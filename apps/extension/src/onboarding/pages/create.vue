@@ -40,8 +40,9 @@ const { bootstrapActiveProfile } = useProfileBootstrap()
 
 const maxPasswordLength = 128
 
-// The words live only in this ref, for this page's life.
-const stage = ref<"form" | "phrase">("form")
+// The words live only in this ref, for this page's life. `closed` renders nothing while the route
+// to Ready settles, so neither the words nor a second Create stand meanwhile.
+const stage = ref<"form" | "phrase" | "closed">("form")
 const words = ref<string[]>([])
 let createdId = ""
 // One generation for the page's life: a Create that settles after the person left publishes
@@ -50,6 +51,29 @@ const lifetime = createRunFence()
 const isMounted = lifetime.snapshot()
 
 const path = ref<"password" | "passkey">("password")
+
+// The words stand only while the new profile holds the session. A worker restart may come back
+// without one and emits no lock, so a dropped connection ends them too.
+let sessionLost = false
+let stopSessionWatch: (() => void) | undefined
+
+function loseSession() {
+	if (sessionLost || !isMounted()) return
+	sessionLost = true
+	if (stage.value !== "phrase") return
+	words.value = []
+	stage.value = "closed"
+	router.push(doneRoute(path.value))
+}
+
+async function watchSession(profileId: string) {
+	managers.profile.onDisconnected.add(loseSession)
+	const stop = await managers.profile.subscribeActiveProfile((active) => {
+		if (active?.id !== profileId) loseSession()
+	})
+	if (isMounted()) stopSessionWatch = stop
+	else stop()
+}
 
 async function readPhrase(
 	profile: ProfileInfo,
@@ -93,7 +117,10 @@ const {
 	// reminder stays until the phrase is saved.
 	onCreated: async (profile, credentialData) => {
 		if (!isMounted()) return
-		const phrase = await readPhrase(profile, password.value, credentialData)
+		const typed = password.value
+		await watchSession(profile.id)
+		if (!isMounted()) return
+		const phrase = await readPhrase(profile, typed, credentialData)
 		password.value = ""
 		confirm.value = ""
 		if (!isMounted()) return
@@ -101,8 +128,8 @@ const {
 		if (!isMounted()) return
 		if (active) await setLastActiveProfileId(profile.id)
 		if (!isMounted()) return
-		// The lock wins: a session locked or superseded during bootstrap shows no words.
-		if (!phrase || !active) {
+		// The lock wins: a session locked or superseded at any point since the create shows no words.
+		if (!phrase || !active || sessionLost) {
 			router.push(doneRoute(profile.type === "password" ? "password" : "passkey"))
 			return
 		}
@@ -131,6 +158,8 @@ function onPhraseLater() {
 
 onBeforeUnmount(() => {
 	lifetime.invalidate()
+	stopSessionWatch?.()
+	managers.profile.onDisconnected.remove(loseSession)
 	dispose()
 	// Defense-in-depth: zero out secret material on unmount.
 	password.value = ""
@@ -141,7 +170,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="onPhraseLater" />
-	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
+	<OnboardingPage v-else-if="stage === 'form'" data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"
 			:path="authMethod"
