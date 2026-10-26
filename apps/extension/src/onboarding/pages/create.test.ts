@@ -541,7 +541,7 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
 	})
 
-	test("a lock during the last-profile write never shows the words", async () => {
+	test("a lock during the last-profile write never shows the words, and leaves no Create to press", async () => {
 		const pending = defer<undefined>()
 		setLastActiveProfileId.mockReturnValueOnce(pending.promise)
 		const w = await mountCreate()
@@ -551,7 +551,7 @@ describe("onboarding create — the recovery phrase step", () => {
 		lock()
 		pending.resolve(undefined)
 		await flushPromises()
-		expect(shown(w).words).toBe(0)
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
 		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
 	})

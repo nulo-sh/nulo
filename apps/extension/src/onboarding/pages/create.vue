@@ -128,8 +128,11 @@ const {
 		if (!isMounted()) return
 		if (active) await setLastActiveProfileId(profile.id)
 		if (!isMounted()) return
-		// The lock wins: a session locked or superseded at any point since the create shows no words.
-		if (!phrase || !active || sessionLost) {
+		// The lock wins: a session locked or superseded at any point since the create shows no words,
+		// nor the form, whose Create would make a second profile while the route settles.
+		const lost = !active || sessionLost
+		if (lost) stage.value = "closed"
+		if (!phrase || lost) {
 			router.push(doneRoute(profile.type === "password" ? "password" : "passkey"))
 			return
 		}
