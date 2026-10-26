@@ -68,7 +68,7 @@ import { RowKeyring } from "./row-keyring"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 import { fakePasskeyAnswer, fakePasskeyCredential, freshPrfSalt } from "../../../../tests/helpers/fake-passkey"
-import { deriveMasterFromMnemonic, openPasskeySlots, openRow, sealRow } from "@nulo/wallet-crypto"
+import { asBase64CredentialId, deriveMasterFromMnemonic, openPasskeySlots, openRow, sealRow } from "@nulo/wallet-crypto"
 
 /** Recovery words for a deterministic 32-byte entropy fill (the v2 restore pairing check
  *  requires entropy whose words actually derive the master). */
@@ -417,13 +417,19 @@ describe("ProfileService integration", () => {
 			expect((await service.getPasskeyUnlockParams(profile.id)).prfSalt).toBe(passkeys.lastPrfSalt)
 		}, 30_000)
 
-		test("exportPlain refuses another credential's answer, and the same credential's at another input", async () => {
+		test("exportPlain refuses another credential's answer, even one carrying this credential's output, and the same credential's at another input", async () => {
 			const { service } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
 			const { credentialId, prfSalt } = await service.getPasskeyUnlockParams(profile.id)
-			for (const answer of [await fakePasskeyAnswer("cred-OTHER", prfSalt), await fakePasskeyAnswer(credentialId, freshPrfSalt())]) {
+			const ownOutput = await fakePasskeyAnswer(credentialId, prfSalt)
+			for (const answer of [
+				await fakePasskeyAnswer("cred-OTHER", prfSalt),
+				{ ...ownOutput, id: asBase64CredentialId("cred-OTHER") },
+				await fakePasskeyAnswer(credentialId, freshPrfSalt()),
+			]) {
 				await expect(service.exportPlain(profile.id, undefined, answer)).rejects.toThrow("Passkey did not open this profile")
 			}
+			expect(await service.exportPlain(profile.id, undefined, ownOutput)).toMatch(/\S/)
 		}, 30_000)
 
 		test("unlockPasskeyProfile rejects credentialData for a different credential", async () => {
@@ -1109,6 +1115,21 @@ describe("ProfileService integration", () => {
 			vi.spyOn(passkeys, "getKey").mockImplementation((_id, prfSalt, display) => realGetKey("cred-someone-else", prfSalt, display))
 			await expect(service.unlockPasskeyProfile(profile.id)).rejects.toThrow(/Invalid profile id/)
 			expect(passkeys.outcomes).toEqual(["done", "failed"])
+		}, 30_000)
+
+		// The slots opened from the snapshot; a row whose input changed meanwhile is another row.
+		test("unlock refuses a row whose input changed while its passkey was asked, and opens nothing", async () => {
+			const { api, service, passkeys } = await makeService()
+			const profile = await service.createPasskeyProfile("PK")
+			await service.lockActiveProfile()
+			const realGetKey = passkeys.getKey.bind(passkeys)
+			vi.spyOn(passkeys, "getKey").mockImplementation(async (id, prfSalt, display) => {
+				await writeRawRow(api, profile.id, { ...(await readRawRow(api, profile.id)), prfSalt: freshPrfSalt() })
+				return realGetKey(id, prfSalt, display)
+			})
+
+			await expect(service.unlockPasskeyProfile(profile.id)).rejects.toThrow(/Invalid profile id/)
+			expect(await service.getActiveProfile()).toBeUndefined()
 		}, 30_000)
 
 		test("unlock refuses an answer at another input and tells the window", async () => {
@@ -4343,12 +4364,27 @@ describe("ProfileService — a retired passkey profile", () => {
 	}, 30_000)
 
 	// Start-up must not depend on a retired row: a session persisted for its id is dropped silently.
-	test("a session persisted for an id whose row is now retired is not restored, and the worker starts", async () => {
+	test("a session persisted for an id whose row is now retired is dropped, not restored, and the worker starts", async () => {
 		const { api, service } = await makeService()
 		const p = await service.createProfile("P", "pass1234")
 		await writeRawRow(api, p.id, { ...retiredRow(), id: p.id })
+		const persisted = async () => (await api.storage.session.get(SESSION_STORAGE_ROOT))[SESSION_STORAGE_ROOT]
+		expect(await persisted()).toBeDefined()
 		const { service: restarted } = await makeServiceFromExistingApi(api)
 		expect(await restarted.getActiveProfile()).toBeUndefined()
+		expect(await persisted()).toBeUndefined()
 		expect((await restarted.getProfiles()).map((x) => x.retired)).toEqual([true])
+	}, 30_000)
+
+	// The opener and the row-key fill are where every open and every derivation ends: each refuses a
+	// retired row itself, so a caller that skips its own gate still reads and derives nothing.
+	test("the slot opener and the row-key fill refuse a retired row themselves", async () => {
+		const { service } = await withRetired()
+		const internals = service as unknown as {
+			openSlots(row: unknown, key: { password: string }): Promise<unknown>
+			fillRowKeysHoldingLock(row: unknown, master: Uint8Array): Promise<void>
+		}
+		await expect(internals.openSlots(retiredRow(), { password: "pass1234" })).rejects.toBeInstanceOf(RetiredProfileError)
+		await expect(internals.fillRowKeysHoldingLock(retiredRow(), new Uint8Array(32).fill(7))).rejects.toBeInstanceOf(RetiredProfileError)
 	}, 30_000)
 })
