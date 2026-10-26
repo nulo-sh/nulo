@@ -80,7 +80,8 @@ const isDownloading = ref(false)
 const filePassword = ref("")
 const repeatedFilePassword = ref("")
 /** The passkey's answer, held from "Confirm with passkey" to Save for the profile, account and network
- *  it was given for only; any reset drops it. Shallow: the answer itself is never made reactive. */
+ *  it was given for only; any reset or failed Save drops it. Shallow: the answer itself is never made
+ *  reactive. */
 const approval = shallowRef(null)
 const isApproved = computed(() => approval.value !== null)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
@@ -202,6 +203,9 @@ const handleConfirmPasskey = async () => {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
 		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
 		if (!isCurrent() || scope !== approvalScope()) return
+		// An answer that cannot open the profile is refused here, never held until Save.
+		await managers.profile.verifyExportCredential(profileId, { passkey: answer })
+		if (!isCurrent() || scope !== approvalScope()) return
 		approval.value = { answer, scope }
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
@@ -235,6 +239,8 @@ const handleSaveFile = async () => {
 	} catch (error) {
 		if (!isCurrent()) return
 		console.error("[export/account] passkey file failed:", { error })
+		// An answer a Save failed with is never reused: the page asks the passkey again.
+		dropApproval()
 		openToast({ kind: "error", label: "Failed to create the file" })
 	} finally {
 		if (isCurrent()) isBusy.value = false

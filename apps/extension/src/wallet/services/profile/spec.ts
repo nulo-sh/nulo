@@ -282,6 +282,14 @@ export type Methods = {
 	verifyUnlockCredential(id: string, credential: UnlockCredential): void
 
 	/**
+	 * Throws unless `credential` opens profile `id` as an export needs: its slots and the recovery
+	 * phrase's match with the master, never the imported-keys key, so a profile in recovery mode
+	 * still passes. `InvalidPasswordError` for a wrong password, the passkey's own refusal for
+	 * another passkey. Opens no session and writes nothing; the export checks again.
+	 */
+	verifyExportCredential(id: string, credential: UnlockCredential): void
+
+	/**
 	 * Moves profile `id` from the unlock `current` opens it with to `next`, keeping its recovery
 	 * phrase, accounts and data. Refuses a profile whose imported-keys key no longer opens or no
 	 * longer matches its record. Throws `UnlockMethodChangedError` when the change was saved, or may

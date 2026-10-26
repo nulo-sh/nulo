@@ -168,6 +168,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"changeProfileName",
 		"changeProfilePassword",
 		"verifyUnlockCredential",
+		"verifyExportCredential",
 		"changeUnlockMethod",
 		"deleteProfile",
 		"importMnemonic",
@@ -1344,6 +1345,22 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.runExclusive(async () => {
 				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
 				zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
+			})
+		} finally {
+			opened.wipe()
+		}
+	}
+
+	public async verifyExportCredential(id: string, credential: UnlockCredential): Promise<void> {
+		await this.ensureInitialized()
+		const { profile, capturedEpoch } = await this.captureRowFence(id)
+		const key = await this.unlockCredentialKey(credential)
+		const opened = await this.openSlots(profile, key)
+		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
+		try {
+			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+			await this.runExclusive(async () => {
+				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
 			})
 		} finally {
 			opened.wipe()
