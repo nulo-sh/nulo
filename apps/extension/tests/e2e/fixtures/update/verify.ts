@@ -3,6 +3,7 @@ import { LEGACY_SELECTED_ACCOUNT_KEY, SELECTED_ACCOUNT_ROOT, SELECTED_ACCOUNT_RO
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { STORES } from "@/wallet/storage/stores"
+import type { ReleaseTraits } from "./release"
 import { FIXTURE_PREFIX, shapeOfKey, unreadRows } from "./stored-rows"
 
 /** Every overlay a boot raises instead of opening the wallet, except the reset's takeover. */
@@ -25,9 +26,10 @@ export const REFUSALS: ReadonlySet<StoredShapeName> = new Set<StoredShapeName>([
 	"networkReset",
 ])
 
-/** Every key family a populated release holds, so a populate step that silently writes nothing, or
- *  a recording made before it, fails at once rather than as a check left with nothing to read. */
-export const HELD: readonly StoredShapeName[] = [
+/** Every key family a populated release holds whatever its storage, so a populate step that silently
+ *  writes nothing, or a recording made before it, fails at once rather than as a check left with
+ *  nothing to read. */
+const HELD: readonly StoredShapeName[] = [
 	"accountIntegrityVerified",
 	"accounts",
 	"activeNetwork",
@@ -49,15 +51,22 @@ export const HELD: readonly StoredShapeName[] = [
 	"tokenBalances",
 	"tokens",
 	"txs",
-	"uiActiveAccount",
 	"uiFeePicks",
 	"uiLastActiveProfile",
 	"uiPinnedTokens",
 	"uiSendFeePicks",
 ]
 
-export const missingFamilies = (entries: Record<string, unknown>): StoredShapeName[] =>
-	HELD.filter((name) => !Object.keys(entries).some((key) => shapeOfKey(key) === name))
+/** Where each kind of release keeps the account selection, and, for one that seals its networks,
+ *  the offer record an update's arrival is answered from in their place. */
+const HELD_BY_STORAGE: Readonly<Record<ReleaseTraits["storage"], readonly StoredShapeName[]>> = {
+	plaintext: ["uiActiveAccount"],
+	sealed: ["networkSeeded", "uiSelectedAccount"],
+}
+
+/** The key families a populated release of `storage` must hold that `entries` lacks. */
+export const missingFamilies = (entries: Record<string, unknown>, storage: ReleaseTraits["storage"]): StoredShapeName[] =>
+	[...HELD, ...HELD_BY_STORAGE[storage]].filter((name) => !Object.keys(entries).some((key) => shapeOfKey(key) === name))
 
 /** Roots whose rows move key when the unlock seals them, so they are counted rather than matched by key. */
 const REKEYED: ReadonlySet<string> = new Set(

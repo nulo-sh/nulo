@@ -1,4 +1,5 @@
 import type { Page } from "puppeteer"
+import { trimAddress } from "@/utils/string"
 import { clickByTestId, clickSelector, replaceInputValue } from "./dom"
 import { navigateToSettings } from "./navigation"
 import { pollUntil } from "./poll"
@@ -10,6 +11,22 @@ import { closeStuckPopup } from "./widgets"
 export async function selectedAccount(page: Page): Promise<string | undefined> {
 	const profile = await peekSession(page)
 	return profile ? callService<string | undefined>(page, "ui-preference", "getSelectedAccount", [profile.id]) : undefined
+}
+
+/** The account the popup's header shows, trimmed as it trims it: the selection the popup opened on,
+ *  which the stored selection alone does not prove. Read from a page showing the header. */
+export async function shownAccount(page: Page): Promise<string | undefined> {
+	return page.evaluate(() => document.querySelector('[data-testid="account-address-text"]')?.textContent?.trim() || undefined)
+}
+
+/** Polls the header until it shows `address` (see {@link shownAccount}). */
+export async function waitForShownAccount(page: Page, address: string, label: string, timeoutMs = 15_000): Promise<void> {
+	const trimmed = trimAddress(address, 6, 4, "...")
+	await pollUntil(
+		() => shownAccount(page),
+		(shown) => shown?.startsWith(trimmed) === true,
+		{ label, timeoutMs, intervalMs: 250 },
+	)
 }
 
 /** The active profile's selected account (see {@link selectedAccount}). */
