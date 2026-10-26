@@ -29,6 +29,7 @@ const { openToast } = useToast()
 /** Utils */
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
 import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
 
@@ -41,6 +42,9 @@ const router = useRouter()
 const maxPasswordLength = 128
 
 const isPasskey = computed(() => appStore.profile?.type === "passkey")
+/** A profile open in recovery mode has no imported-keys key, which every reseal needs: the page says
+ *  so before any prompt and offers no change, since a retry cannot succeed. */
+const cannotChange = computed(() => !!appStore.profile?.recoveryMode)
 /** "" | "enterPassword": a password profile's check before its passkey. */
 const step = ref("")
 const password = ref("")
@@ -61,6 +65,13 @@ const runs = createRunFence()
  *  profile's new-password step. Shallow: the answer itself is never made reactive. */
 const heldAnswer = shallowRef(null)
 const isNewPasswordStep = computed(() => heldAnswer.value !== null)
+const currentLine = computed(() => {
+	if (isNewPasswordStep.value)
+		return "This profile currently unlocks with a passkey. After the change, it unlocks with the password you set here."
+	if (step.value === "enterPassword")
+		return "This profile currently unlocks with a password. After the change, it unlocks with your passkey."
+	return isPasskey.value ? "This profile unlocks with a passkey." : "This profile unlocks with a password."
+})
 
 function reset() {
 	runs.invalidate()
@@ -84,7 +95,7 @@ async function currentPasskey() {
 const nextPasskey = () => newPasskey.ask({ step: "unlockMethod", profileName: appStore.profile.name })
 
 /** Runs one change; the page stays on a cancel, and reports a failure before the save as nothing
- *  changed. A change saved but not reopened ends at the lock screen. */
+ *  changed. A change made leaves for Settings, and one saved but not reopened ends at the lock screen. */
 async function attempt(run) {
 	if (isBusy.value) return
 	isBusy.value = true
@@ -95,6 +106,7 @@ async function attempt(run) {
 		newPasskey.forget()
 		reset()
 		openToast({ kind: "success", label: done })
+		leaveFor(router, "/popup/settings")
 	} catch (error) {
 		if (!isCurrent()) return
 		if (error instanceof UnlockMethodChangedError) {
@@ -174,7 +186,7 @@ watch(() => appStore.profile?.id, reset)
 // Firefox's toolbar panel closes under the passkey prompt every change runs, so the page moves to its
 // own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
+	if (closesOnFocusLoss() && !cannotChange.value) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
 })
 
 onBeforeUnmount(() => {
@@ -186,7 +198,10 @@ onBeforeUnmount(() => {
 	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" @keydown="onKeydown">
 		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'">
 			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
-				{{ isPasskey ? "This profile unlocks with a passkey." : "This profile unlocks with a password." }}
+				{{ currentLine }}
+			</Text>
+			<Text v-if="cannotChange" variant="body" height="150" color="body" data-testid="unlock-method-unavailable">
+				This profile can't change its unlock method.
 			</Text>
 		</div>
 
@@ -256,7 +271,7 @@ onBeforeUnmount(() => {
 			</Flex>
 		</div>
 
-		<template #bottom>
+		<template v-if="!cannotChange" #bottom>
 			<Button
 				v-if="isNewPasswordStep"
 				variant="cta"

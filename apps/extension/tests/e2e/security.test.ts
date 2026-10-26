@@ -79,7 +79,8 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 })
 
 // Each change is proved by the unlock that follows it, with the new method; that the old one no
-// longer opens the row is the unit layer's (`service.passkey-unlock.test.ts`).
+// longer opens the row is the unit layer's (`service.passkey-unlock.test.ts`). A change made leaves
+// the page for Settings.
 test("the unlock method changes to a passkey and back to a password", { timeout: 180_000 }, async ({ registeredExtensionPerTest }) => {
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general", 15_000)
@@ -99,6 +100,7 @@ test("the unlock method changes to a passkey and back to a password", { timeout:
 		await replaceInputValue(page, '[data-testid="unlock-method-password-input"]', ORIGINAL_PASSWORD)
 		await clickByTestId(page, "unlock-method-continue")
 		await waitForToast(page, "Now unlocks with your passkey", 60_000)
+		await waitForHash(page, "#/popup/settings", 15_000)
 		await navigateByHash(page, "#/popup/general")
 
 		await lockWallet(page)
@@ -116,6 +118,7 @@ test("the unlock method changes to a passkey and back to a password", { timeout:
 		await replaceInputValue(page, '[data-testid="unlock-method-new-password-confirm-input"]', NEW_PASSWORD)
 		await clickByTestId(page, "unlock-method-save")
 		await waitForToast(page, "Now unlocks with your password", 60_000)
+		await waitForHash(page, "#/popup/settings", 15_000)
 		await navigateByHash(page, "#/popup/general")
 
 		await lockWallet(page)

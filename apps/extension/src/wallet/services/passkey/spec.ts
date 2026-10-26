@@ -43,12 +43,16 @@ export type PasskeyDisplay = {
 	profileName?: string
 }
 
+/** A new passkey's display: its profile's name also names the passkey (`passkeyUserName`). */
+export type NewPasskeyDisplay = PasskeyDisplay & { profileName: string }
+
 /** Every prompt evaluates the PRF at `prfSalt` (base64, 32 bytes), the input of the profile it is
  *  for, and its answer reports that input back. */
 export type PasskeyRequest = PasskeyDisplay &
 	(
 		| {
 				mode: "create"
+				profileName: string
 				/** Random, per credential: it names no profile, since the profile id is allocated when the
 				 *  profile is saved. */
 				userHandle: string

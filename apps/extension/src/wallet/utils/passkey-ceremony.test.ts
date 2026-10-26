@@ -15,27 +15,30 @@ const toHex = (b: BufferSource): string => {
 }
 
 describe("buildCreateOptions", () => {
-	it("labels the credential with the wallet's name alone, in both user fields", () => {
-		const opts = buildCreateOptions(ID, SALT)
-		expect(opts.user.name).toBe("Nulo wallet")
-		expect(opts.user.displayName).toBe("Nulo wallet")
+	// The handle stays the request's random one (`create-passkey-profile.test.ts` mints a new one per
+	// attempt): the profile's name reaches the label only.
+	it("names the credential by its profile, as typed, in both user fields, and keeps the random handle", () => {
+		const opts = buildCreateOptions(ID, SALT, "Savings 2")
+		expect(opts.user.name).toBe("Nulo wallet · Savings 2")
+		expect(opts.user.displayName).toBe("Nulo wallet · Savings 2")
+		expect(toHex(opts.user.id)).toBe(ID)
 	})
 
 	it("sets user.id to the hex-decoded handle", () => {
-		expect(toHex(buildCreateOptions(ID, SALT).user.id)).toBe(ID)
+		expect(toHex(buildCreateOptions(ID, SALT, "Main").user.id)).toBe(ID)
 	})
 
 	it.each(["a3f29b1", "a3f29b1x", " a3f29b14"])("rejects the malformed handle %j instead of truncating user.id", (handle) => {
-		expect(() => buildCreateOptions(handle, SALT)).toThrow("invalid hex")
+		expect(() => buildCreateOptions(handle, SALT, "Main")).toThrow("invalid hex")
 	})
 
 	it("evaluates the PRF at the profile's own input", () => {
-		expect(toHex(buildCreateOptions(ID, SALT).extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
-		expect(toHex(buildCreateOptions(ID, OTHER_SALT).extensions?.prf?.eval?.first as BufferSource)).not.toBe(toHex(SALT_BYTES))
+		expect(toHex(buildCreateOptions(ID, SALT, "Main").extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
+		expect(toHex(buildCreateOptions(ID, OTHER_SALT, "Main").extensions?.prf?.eval?.first as BufferSource)).not.toBe(toHex(SALT_BYTES))
 	})
 
 	it("keeps rp, challenge size, credential params, and authenticator selection unchanged", () => {
-		const opts = buildCreateOptions(ID, SALT)
+		const opts = buildCreateOptions(ID, SALT, "Main")
 		expect(opts.rp).toEqual({ name: "Nulo", id: "passkey.nulo.sh" })
 		expect((opts.challenge as Uint8Array).byteLength).toBe(32)
 		expect(opts.pubKeyCredParams).toEqual([
