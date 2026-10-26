@@ -15,6 +15,32 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
 		chrome: "6352fc82598a21711ffbb5b6e32b548ad03e1f4bd4a1cbd32e41b4a5ca1fac9e",
 		firefox: "32cb5b18339e81775ee194a8c4b0d59f7dda281d29dc2fdc20e14b478eeee84e",
 	},
+	"v1.0.0": {
+		chrome: "b226ac904484577a30a0dee7c5ef80b6a48e107148d81c959c488bc2659d00a9",
+		firefox: "66d380bfe2ba002558343324f5dce4c3521b2e75fa2ce58f84c0f38d972dd8d1",
+	},
+}
+
+/**
+ * What a scenario must know of a release it updates from, reviewed once against its tag beside its
+ * digests, so no scenario infers a release's path from the rows in front of it. `storage`: whether
+ * the release keeps its profile's rows, its account selection and its preference maps as plaintext
+ * a test can parse, or `sealed` behind the worker, readable only through its services once
+ * unlocked. `connect`: whether its emoji check replaces the connect window's page or opens a window
+ * of its own.
+ */
+export type ReleaseTraits = { storage: "plaintext" | "sealed"; connect: "replaces-page" | "own-window" }
+
+export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
+	"v0.31.0": { storage: "plaintext", connect: "replaces-page" },
+	"v1.0.0": { storage: "sealed", connect: "own-window" },
+}
+
+/** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */
+export function releaseTraits(tag: string): ReleaseTraits {
+	const traits = RELEASE_TRAITS[tag]
+	if (!traits) throw new Error(`no reviewed traits for ${tag}: add them to RELEASE_TRAITS beside its digests`)
+	return traits
 }
 
 const RELEASE_REPO = "nulo-sh/nulo"
