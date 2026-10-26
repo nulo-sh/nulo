@@ -124,8 +124,8 @@ export function mintPxeGeneration(): string {
 export type Session = {
 	/** Profile id. */
 	profile: string
-	/** Random-token wrapped-secret silent-restore bearer (non-strict
-	 *  password profiles only). Replaces `passhash` — see `SessionSecretBox`.
+	/** Random-token wrapped-secret silent-restore bearer (any profile opened
+	 *  with its DEK, strict mode off). Replaces `passhash` — see `SessionSecretBox`.
 	 *  The token is random, not password-derived, so a session-store leak no
 	 *  longer exposes a password-equivalent value. */
 	bearer?: SessionWrappedSecret
@@ -274,16 +274,20 @@ export type Methods = {
 	changeProfilePassword(id: string, oldPassword: string, newPassword: string): ProfileInfo
 
 	/**
-	 * Throws `InvalidPasswordError` unless `password` opens profile `id`; opens and changes nothing
-	 * else. The method change asks the password again.
+	 * Throws unless `credential` opens profile `id` as {@link changeUnlockMethod} needs: its slots,
+	 * the recovery phrase's match with the master, and the imported-keys key and its record.
+	 * `InvalidPasswordError` for a wrong password, the change's own refusal otherwise. Opens no
+	 * session and writes nothing.
 	 */
-	verifyProfilePassword(id: string, password: string): void
+	verifyUnlockCredential(id: string, credential: UnlockCredential): void
 
 	/**
 	 * Moves profile `id` from the unlock `current` opens it with to `next`, keeping its recovery
 	 * phrase, accounts and data. Refuses a profile whose imported-keys key no longer opens or no
 	 * longer matches its record. Throws `UnlockMethodChangedError` when the change was saved, or may
-	 * have been, but the profile could not be reopened: the wallet is then locked.
+	 * have been, but the profile could not be reopened: the wallet is then locked. An account
+	 * integrity block found on the reopen returns the profile with its session closed, behind the
+	 * integrity barrier.
 	 */
 	changeUnlockMethod(id: string, current: UnlockCredential, next: UnlockCredential): ProfileInfo
 

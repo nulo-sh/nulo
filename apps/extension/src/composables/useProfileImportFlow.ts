@@ -11,7 +11,8 @@ import { FileTooLargeError, pickFile } from "@/utils"
 import { copyWithToast } from "@/utils/clipboard"
 import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { managers } from "@/utils/core"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo/wallet-core/utils"
+import { zeroize } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
@@ -186,9 +187,13 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 	}
 
 	async function importNamed(name: string, existing: boolean) {
+		// The import's own phrase checks run before the passkey card, so a phrase it refuses leaves no
+		// new passkey behind.
+		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
+		if (words.length !== 24) throw new Error("Invalid mnemonic length")
+		zeroize(await getEntropy(words))
 		const unlock = await deps.chooseUnlock({ step: "import", profileName: name }, existing)
 		if (unlock === null) return undefined
-		const words = (deps.seedPhrase.value ?? "").split(" ")
 		// A passkey answer is held across the duplicate confirm only: the next Import asks again.
 		return deps.withDuplicateConfirm(() =>
 			managers.profile.importMnemonic(name, words, unlock.password, deps.allowDuplicate.value, unlock.credentialData),
@@ -431,12 +436,11 @@ function wireBackupImport(deps: WireBackupImportDeps) {
 	// default. A name the user typed is never replaced.
 	watch(parsedBackupName, (name) => deps.nameDefault.offer(name))
 	// A backup opens the unlock choice on the method it was made with, still switchable.
-	watch(
-		() => selectedBackup.value?.profileType,
-		(made) => {
-			if (made === "password" || made === "passkey") deps.unlockMethod.value = made
-		},
-	)
+	// Watched by selection, not by type: a second backup of the same type must reopen on its method.
+	watch(selectedBackup, (backup) => {
+		const made = backup?.profileType
+		if (made === "password" || made === "passkey") deps.unlockMethod.value = made
+	})
 
 	return {
 		resetBackupState,

@@ -41,8 +41,7 @@ const router = useRouter()
 const maxPasswordLength = 128
 
 const isPasskey = computed(() => appStore.profile?.type === "passkey")
-/** "" | "enterPassword": a password profile's check before its passkey | "newPassword": a passkey
- *  profile's new password, after its passkey answered. */
+/** "" | "enterPassword": a password profile's check before its passkey. */
 const step = ref("")
 const password = ref("")
 const isPasswordHidden = ref(true)
@@ -58,8 +57,10 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 const newPasskey = useNewProfilePasskey(runCeremony)
 /** Fences every step to the profile it started for: a switch or a reset drops what it returns. */
 const runs = createRunFence()
-/** The current passkey's answer, held from its card to Save on the new-password step only. */
-let heldAnswer = null
+/** The current passkey's answer, held from its card to Save; while held, the page is a passkey
+ *  profile's new-password step. Shallow: the answer itself is never made reactive. */
+const heldAnswer = shallowRef(null)
+const isNewPasswordStep = computed(() => heldAnswer.value !== null)
 
 function reset() {
 	runs.invalidate()
@@ -69,7 +70,7 @@ function reset() {
 	newPassword.value = ""
 	repeatedNewPassword.value = ""
 	isBusy.value = false
-	heldAnswer = null
+	heldAnswer.value = null
 }
 
 /** The current passkey's card, asked at the profile's own input. */
@@ -110,13 +111,15 @@ async function attempt(run) {
 	}
 }
 
-/** Password profile, Continue: the password must open the profile before any passkey is made. */
+/** Password profile, Continue: the password must open the profile, as the change needs it, before
+ *  any passkey is made; the change then uses the password that was checked. */
 const handleContinue = () =>
 	attempt(async (isCurrent) => {
-		if (!password.value) return undefined
+		const typed = password.value
+		if (!typed) return undefined
 		const id = appStore.profile.id
 		try {
-			await managers.profile.verifyProfilePassword(id, password.value)
+			await managers.profile.verifyUnlockCredential(id, { password: typed })
 		} catch (error) {
 			if (!(error instanceof InvalidPasswordError)) throw error
 			if (isCurrent()) isWrongPassword.value = true
@@ -124,14 +127,17 @@ const handleContinue = () =>
 		}
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
-		await managers.profile.changeUnlockMethod(id, { password: password.value }, { passkey: next })
+		await managers.profile.changeUnlockMethod(id, { password: typed }, { passkey: next })
 		return "Now unlocks with your passkey"
 	})
 
+/** The current passkey must open the profile, as the change needs it, before a new one is made. */
 const handleNewPasskey = () =>
 	attempt(async (isCurrent) => {
 		const id = appStore.profile.id
 		const current = await currentPasskey()
+		if (!isCurrent()) return undefined
+		await managers.profile.verifyUnlockCredential(id, { passkey: current })
 		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
@@ -143,22 +149,23 @@ const handleUsePassword = () =>
 	attempt(async (isCurrent) => {
 		const answer = await currentPasskey()
 		if (!isCurrent()) return undefined
-		heldAnswer = answer
-		step.value = "newPassword"
+		await managers.profile.verifyUnlockCredential(appStore.profile.id, { passkey: answer })
+		if (!isCurrent()) return undefined
+		heldAnswer.value = answer
 		return undefined
 	})
 
 const handleSavePassword = () =>
 	attempt(async (isCurrent) => {
-		if (!canSaveNewPassword.value || !heldAnswer) return undefined
-		await managers.profile.changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer }, { password: newPassword.value })
+		if (!canSaveNewPassword.value || !heldAnswer.value) return undefined
+		await managers.profile.changeUnlockMethod(appStore.profile.id, { passkey: heldAnswer.value }, { password: newPassword.value })
 		return isCurrent() ? "Now unlocks with your password" : undefined
 	})
 
 const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
 	if (step.value === "enterPassword") handleContinue()
-	else if (step.value === "newPassword") handleSavePassword()
+	else if (isNewPasswordStep.value) handleSavePassword()
 }
 
 watch(() => appStore.profile?.id, reset)
@@ -176,7 +183,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<CollapsingHeroLayout heroMain="Unlock" heroSub="Method" collapsingLabel="Unlock Method" backTo="/popup/settings" @keydown="onKeydown">
-		<div :class="step ? 'export_section' : 'export_section_last'">
+		<div :class="step || isNewPasswordStep ? 'export_section' : 'export_section_last'">
 			<Text variant="body" height="150" color="body" data-testid="unlock-method-current">
 				{{ isPasskey ? "This profile unlocks with a passkey." : "This profile unlocks with a password." }}
 			</Text>
@@ -211,7 +218,7 @@ onBeforeUnmount(() => {
 			</Transition>
 		</div>
 
-		<div v-if="step === 'newPassword'" class="export_section_last">
+		<div v-if="isNewPasswordStep" class="export_section_last">
 			<span class="export_section_label type--label-section">New Password</span>
 			<Flex direction="column" gap="12">
 				<Input
@@ -250,7 +257,7 @@ onBeforeUnmount(() => {
 
 		<template #bottom>
 			<Button
-				v-if="step === 'newPassword'"
+				v-if="isNewPasswordStep"
 				variant="cta"
 				:disabled="!canSaveNewPassword || isBusy"
 				data-testid="unlock-method-save"

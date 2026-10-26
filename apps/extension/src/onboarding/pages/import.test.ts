@@ -154,7 +154,7 @@ describe("onboarding import", () => {
 		await mountImport()
 		const flow = importFlow.api!
 		flow.unlockMethod.value = "password"
-		flow.seedPhrase.value = "abandon ".repeat(24).trim()
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
 
@@ -511,7 +511,7 @@ describe("onboarding import — the CTA bar in each state", () => {
 		await flushPromises()
 		expect(onboardingCtas(w)).toEqual([IMPORT_OFF, BACK])
 
-		flow.seedPhrase.value = "abandon ".repeat(24).trim()
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
 		await flushPromises()

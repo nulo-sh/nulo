@@ -48,7 +48,7 @@ const emit = defineEmits(["click"])
 }
 
 .link:focus-visible {
-	outline: 2px dotted var(--nulo-accent);
+	outline: 2px solid var(--nulo-accent);
 	outline-offset: 2px;
 	color: var(--txt-primary);
 }

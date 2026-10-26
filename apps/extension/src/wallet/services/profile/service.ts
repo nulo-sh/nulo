@@ -167,7 +167,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"refreshSession",
 		"changeProfileName",
 		"changeProfilePassword",
-		"verifyProfilePassword",
+		"verifyUnlockCredential",
 		"changeUnlockMethod",
 		"deleteProfile",
 		"importMnemonic",
@@ -1209,16 +1209,20 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		changing: "password" | "unlock method",
 	): Promise<ImportedKeysDek> {
 		const dek = await old.openDek(profile.dekSealed)
-		if (dek && !(await this.envelopeMacValid(profile.id, profile, secret, dek))) {
-			zeroize(dek)
-			this.logger.log(this.name, LogLevel.Error, `envelope MAC does not cover the DEK slot at ${changing} change`, profile.id)
-			throw new Error(`Profile integrity check failed. Export a full backup and restore it before changing the ${changing}`)
-		}
 		if (!dek) {
 			this.logger.log(this.name, LogLevel.Error, `imported-keys DEK unrecoverable at ${changing} change — refusing`, profile.id)
 			throw new Error(DEK_UNRECOVERABLE_MESSAGE)
 		}
-		return dek
+		try {
+			if (!(await this.envelopeMacValid(profile.id, profile, secret, dek))) {
+				this.logger.log(this.name, LogLevel.Error, `envelope MAC does not cover the DEK slot at ${changing} change`, profile.id)
+				throw new Error(`Profile integrity check failed. Export a full backup and restore it before changing the ${changing}`)
+			}
+			return dek
+		} catch (error) {
+			zeroize(dek)
+			throw error
+		}
 	}
 
 	/** The trusted DEK re-keyed for the new password. Caller MUST hold the facade lock and OWNS the
@@ -1323,15 +1327,18 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	public async verifyProfilePassword(id: string, password: string): Promise<void> {
+	public async verifyUnlockCredential(id: string, credential: UnlockCredential): Promise<void> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		if (classifyProfileRow(profile).kind !== "password") throw new Error("This profile does not unlock with a password")
-		const opened = await this.openSlots(profile, { password })
-		if (!opened) throw new InvalidPasswordError()
+		const key = await this.unlockCredentialKey(credential)
+		const opened = await this.openSlots(profile, key)
+		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
 		try {
 			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
-			if (await this.runExclusive(() => this.profileFenceBroken(id, capturedEpoch))) throw new Error("Invalid profile id")
+			await this.runExclusive(async () => {
+				if (await this.profileFenceBroken(id, capturedEpoch)) throw new Error("Invalid profile id")
+				zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
+			})
 		} finally {
 			opened.wipe()
 		}
@@ -1343,14 +1350,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * profile's; one write replaces the slots, the DEK slot and the MAC, so exactly one unlock opens
 	 * the row before and after. Every refusal before that write leaves the row's bytes unchanged; a
 	 * failure after it, or a write whose outcome cannot be read back, closes the session and throws
-	 * {@link UnlockMethodChangedError}, never a refusal.
+	 * {@link UnlockMethodChangedError}, never a refusal. An integrity block on the reopen is not a
+	 * failure: the profile returns with its session closed, behind the barrier.
 	 */
 	public async changeUnlockMethod(id: string, current: UnlockCredential, next: UnlockCredential): Promise<ProfileInfo> {
 		await this.ensureInitialized()
 		if ("password" in next && !isNewPasswordValid(next.password, next.password)) {
 			throw new Error("The new password needs at least 8 characters")
 		}
-		// The prompts and the key derivations run outside the lock; the commit revalidates the row.
+		// The prompts and the password hashes run outside the lock; the commit revalidates the row
+		// before its checks and its write.
 		const { profile: snapshot, capturedEpoch } = await this.captureRowFence(id)
 		const kind = classifyProfileRow(snapshot).kind
 		if (kind !== "password" && kind !== "passkey") throw new Error("Profile storage corrupted")
@@ -1398,8 +1407,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			const replacement = await replacementRow(snapshot, await this.sealUnder(seal, old.secret, old.entropy, dek), old.secret, dek)
 			await this.assertReplacementOpens(replacement, seal, { secret: old.secret, entropy: old.entropy, dek })
 			await this.precheckBeforeRekeyHoldingLock(snapshot, old.secret)
-			// The lock's watchdog may have admitted a successor during the slow steps above.
-			if (!isCurrent() || !(await unchanged())) throw new Error("Invalid profile id")
+			// The lock's watchdog may have admitted a successor during the slow steps above or this read,
+			// so ownership is checked last, with no await before the write.
+			if (!(await unchanged()) || !isCurrent()) throw new Error("Invalid profile id")
 			if (!(await this.writeReplacementHoldingLock(snapshot, replacement))) {
 				await this.closeAfterUnlockChangeHoldingLock(id)
 				throw new UnlockMethodChangedError()

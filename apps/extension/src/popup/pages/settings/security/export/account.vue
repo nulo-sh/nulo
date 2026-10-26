@@ -29,7 +29,7 @@ import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/u
 /** Composables */
 import { createRunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 const { openToast } = useToast()
 
@@ -80,9 +80,9 @@ const isDownloading = ref(false)
 const filePassword = ref("")
 const repeatedFilePassword = ref("")
 /** The passkey's answer, held from "Confirm with passkey" to Save for the profile, account and network
- *  it was given for only; any reset drops it. Not reactive: only the step it unlocks is shown. */
-let approval = null
-const isApproved = ref(false)
+ *  it was given for only; any reset drops it. Shallow: the answer itself is never made reactive. */
+const approval = shallowRef(null)
+const isApproved = computed(() => approval.value !== null)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
 
 /** "" | "ready" | "protected" — the file stages, mirroring Full Backup's status machine. */
@@ -108,8 +108,7 @@ const resetFlow = () => {
 }
 
 function dropApproval() {
-	approval = null
-	isApproved.value = false
+	approval.value = null
 	filePassword.value = ""
 	repeatedFilePassword.value = ""
 }
@@ -151,6 +150,15 @@ watch(
 		loadHeldAccounts()
 	},
 )
+// So does a network switched from another window: the account, its file and any approval belong to
+// the previous network.
+watch(
+	() => appStore.network?.chainId,
+	() => {
+		resetFlow()
+		applyQueryPreselect()
+	},
+)
 
 const selectedAccount = computed(() => accounts.value.find((a) => a.address === selectedAddress.value))
 
@@ -185,8 +193,7 @@ const handleConfirmPasskey = async () => {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
 		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
 		if (!isCurrent() || scope !== approvalScope()) return
-		approval = { answer, scope }
-		isApproved.value = true
+		approval.value = { answer, scope }
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
 		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
@@ -197,10 +204,10 @@ const handleConfirmPasskey = async () => {
 
 /** One sealed export under the file password, approved by the held answer, then the download. */
 const handleSaveFile = async () => {
-	if (!canSaveFile.value || isBusy.value || !approval || approval.scope !== approvalScope()) return
+	if (!canSaveFile.value || isBusy.value || !approval.value || approval.value.scope !== approvalScope()) return
 	isBusy.value = true
 	const isCurrent = runs.snapshot()
-	const { answer } = approval
+	const { answer } = approval.value
 	try {
 		const body = selectedAccount.value?.held
 			? await managers.account.exportResetHeldAccount(appStore.profile.id, selectedAddress.value, filePassword.value, true, answer)
@@ -303,7 +310,7 @@ const onKeydown = (e) => {
 	if (!selectedAddress.value || fileStatus.value) return
 	if (!isAgreed.value) handleAgree()
 	else if (!isPasskeyProfile.value) handleCreate()
-	else if (isApproved.value) handleSaveFile()
+	else if (isApproved.value && isPopupSubmitKey(e)) handleSaveFile()
 }
 watch(selectedAddress, () => dropApproval())
 

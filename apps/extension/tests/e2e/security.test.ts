@@ -78,7 +78,8 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 	await page2.close()
 })
 
-// Each change is proved by the unlock that follows it, with the new method only.
+// Each change is proved by the unlock that follows it, with the new method; that the old one no
+// longer opens the row is the unit layer's (`service.passkey-unlock.test.ts`).
 test("the unlock method changes to a passkey and back to a password", { timeout: 180_000 }, async ({ registeredExtensionPerTest }) => {
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general", 15_000)

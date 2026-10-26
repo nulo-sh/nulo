@@ -14,7 +14,7 @@ import { nativeInput, typeNow } from "../../../../../tests/helpers/credential-pi
 const CURRENT = { id: "Y3VycmVudA==", prf: "Y3VyLXByZg==", prfSalt: "Y3VyLXNhbHQ=" }
 const NEXT = { id: "bmV4dA==", prf: "bmV4dC1wcmY=", prfSalt: "fresh" }
 const profile = vi.hoisted(() => ({
-	verifyProfilePassword: vi.fn(async (_id: string, _password: string): Promise<void> => undefined),
+	verifyUnlockCredential: vi.fn(async (_id: string, _credential: unknown): Promise<void> => undefined),
 	changeUnlockMethod: vi.fn(async (_id: string, _current: unknown, _next: unknown): Promise<void> => undefined),
 	getPasskeyUnlockParams: vi.fn(async (_id: string) => ({ credentialId: "Y3VycmVudA==", prfSalt: "Y3VyLXNhbHQ=" })),
 }))
@@ -43,6 +43,7 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 import { useAppStore } from "@/stores/app.store"
+import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import UnlockMethod from "./unlock-method.vue"
 
 const wrappers: VueWrapper[] = []
@@ -109,7 +110,7 @@ describe("a password profile", () => {
 	})
 
 	test("a wrong password says so, asks no passkey, and changes nothing", async () => {
-		profile.verifyProfilePassword.mockRejectedValueOnce(new InvalidPasswordError())
+		profile.verifyUnlockCredential.mockRejectedValueOnce(new InvalidPasswordError())
 		const w = await atPassword()
 		await typePassword(w, "unlock-method-password-input", "wrong-one")
 		await click(w, "unlock-method-continue")
@@ -122,7 +123,7 @@ describe("a password profile", () => {
 		const w = await atPassword()
 		await typePassword(w, "unlock-method-password-input", "password123")
 		await click(w, "unlock-method-continue")
-		expect(profile.verifyProfilePassword).toHaveBeenCalledExactlyOnceWith("p1", "password123")
+		expect(profile.verifyUnlockCredential).toHaveBeenCalledExactlyOnceWith("p1", { password: "password123" })
 		const [[request]] = ceremony.run.mock.calls
 		expect(request).toMatchObject({ mode: "create", step: "unlockMethod", profileName: "Main" })
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { password: "password123" }, { passkey: NEXT })
@@ -165,6 +166,7 @@ describe("a passkey profile", () => {
 		expect(modes()).toEqual(["get", "create"])
 		expect(ceremony.run.mock.calls[0][0]).toMatchObject({ credentialId: CURRENT.id, prfSalt: CURRENT.prfSalt, step: "unlockMethod" })
 		expect(ceremony.run.mock.calls[1][0].prfSalt).not.toBe(CURRENT.prfSalt)
+		expect(profile.verifyUnlockCredential).toHaveBeenCalledExactlyOnceWith("p1", { passkey: CURRENT })
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { passkey: CURRENT }, { passkey: NEXT })
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your new passkey" })
 	})
@@ -236,6 +238,61 @@ describe("a passkey profile", () => {
 		held.resolve()
 		await flushPromises()
 		expect(profile.changeUnlockMethod).toHaveBeenCalledOnce()
+	})
+
+	test("a new passkey saved but not confirmed is confirmed by the next try, and forgotten once the change is made", async () => {
+		const saved = { credentialId: "c2F2ZWQ=", prfSalt: "c2FsdA==" }
+		ceremony.run
+			.mockImplementationOnce(async () => CURRENT)
+			.mockImplementationOnce(async () => {
+				throw new PasskeyUnconfirmedError(saved.credentialId, saved.prfSalt, new DOMException("no", "NotAllowedError"))
+			})
+		const w = await atPasskey()
+		await click(w, "unlock-method-new-passkey")
+		expect(profile.changeUnlockMethod).not.toHaveBeenCalled()
+		await click(w, "unlock-method-new-passkey")
+		await click(w, "unlock-method-new-passkey")
+		const creates = ceremony.run.mock.calls.map(([req]) => req as { mode: string; prfSalt: string; credentialId?: string })
+		const [, second, third] = creates.filter((req) => req.mode === "create")
+		expect(second).toMatchObject(saved)
+		expect(third?.credentialId).toBeUndefined()
+		expect(third?.prfSalt).not.toBe(saved.prfSalt)
+		expect(profile.changeUnlockMethod).toHaveBeenCalledTimes(2)
+	})
+
+	test("a change that ends after a switch to another profile tells the new one nothing", async () => {
+		const held = Promise.withResolvers<void>()
+		profile.changeUnlockMethod.mockReturnValueOnce(held.promise)
+		const w = await atPasskey()
+		await click(w, "unlock-method-new-passkey")
+		useAppStore().profile = { id: "p2", name: "Other", type: "passkey" } as never
+		await flushPromises()
+		held.resolve()
+		await flushPromises()
+		expect(openToast).not.toHaveBeenCalled()
+		expect(disabled(w, "unlock-method-new-passkey")).toBe(false)
+	})
+})
+
+describe("a profile the change would refuse", () => {
+	const DEGRADED = new Error("Imported-keys key unrecoverable")
+	test.each([
+		["password", "unlock-method-continue"],
+		["passkey", "unlock-method-new-passkey"],
+		["passkey", "unlock-method-use-password"],
+	] as const)("a %s profile is refused at %s, before any new passkey or password", async (type, button) => {
+		profile.verifyUnlockCredential.mockRejectedValueOnce(DEGRADED)
+		const w = mountPage(type)
+		await flushPromises()
+		if (type === "password") {
+			await click(w, "unlock-method-use-passkey")
+			await typePassword(w, "unlock-method-password-input", "password123")
+		}
+		await click(w, button)
+		expect(modes()).not.toContain("create")
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Couldn't change the unlock method. Try again." })
+		nothingChanged()
 	})
 })
 

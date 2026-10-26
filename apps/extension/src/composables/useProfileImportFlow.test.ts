@@ -40,7 +40,8 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}, onPasske
 	return { flow, opts, stop: () => scope.stop() }
 }
 
-const SEED_24 = Array(24).fill("word").join(" ")
+/** A phrase the import accepts: 24 words on the wordlist with a valid checksum. */
+const SEED_24 = `${"abandon ".repeat(23)}art`
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 beforeEach(() => {
@@ -369,8 +370,25 @@ describe("useProfileImportFlow", () => {
 			await flow.pickBackupFile()
 			await flushPromises()
 			expect(flow.unlockMethod.value).toBe("password")
+			flow.unlockMethod.value = "passkey"
+			pick.mockResolvedValueOnce(backupFile("password"))
+			await flow.pickBackupFile()
+			await flushPromises()
+			expect(flow.unlockMethod.value, "a second backup of the same type").toBe("password")
 			flow.handleBack()
 			expect(flow.unlockMethod.value).toBe("passkey")
+		})
+
+		test.each([
+			["a word off the wordlist", `${"abandon ".repeat(23)}nulo`],
+			["a bad checksum", "abandon ".repeat(24).trim()],
+		])("a phrase the import refuses (%s) asks no passkey", async (_, phrase) => {
+			const { flow } = passkeyFlow()
+			flow.seedPhrase.value = phrase
+			await flow.handleImportSeed()
+			expect(flow.ceremonyRequest.value).toBeNull()
+			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+			expect(flow.error.value.title).toBe("Import failed")
 		})
 	})
 

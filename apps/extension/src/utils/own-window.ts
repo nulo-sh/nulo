@@ -1,8 +1,7 @@
 /**
  * An own window: Firefox's toolbar panel closes when a passkey prompt or a file picker takes focus,
- * so a page that opens either (Full Backup export and restore, a phrase import, a passkey profile's
- * recovery phrase, account file and unlock method, the contacts and account-file imports, Restore
- * again) reopens itself in a popup-sized window first. The document records once, at boot,
+ * so a page that opens either ({@link OWN_WINDOW_ROUTES}) reopens itself in a popup-sized window
+ * first. The document records once, at boot,
  * that it was opened as one; the guard, the lock screen and the import page rewrite the route later,
  * so nothing reads the current route.
  *

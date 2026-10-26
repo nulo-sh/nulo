@@ -28,12 +28,19 @@ function fakeConfig(strict: boolean): IConfig {
 	return { onUpdate: new EventHandler<ConfigProp>(), get: ((key: string) => values[key]) as IConfig["get"] }
 }
 
-/** One worker over `api`. */
-async function boot(api: FakeBrowserApi, strict = true) {
+/** One worker over `api`; `onAnswer` runs as each passkey answer reaches the worker. */
+async function boot(api: FakeBrowserApi, strict = true, onAnswer: () => Promise<void> = async () => {}) {
 	const config = fakeConfig(strict)
 	const logger = new LoggerStore(config)
 	const services = new ServiceCollection()
-	services.add(svc(PASSKEY_SERVICE_NAME, { materializeCredential: (data: PasskeyCredentialData) => PasskeyCredential.create(data) }))
+	services.add(
+		svc(PASSKEY_SERVICE_NAME, {
+			materializeCredential: async (data: PasskeyCredentialData) => {
+				await onAnswer()
+				return PasskeyCredential.create(data)
+			},
+		}),
+	)
 	const profiles = new ProfileService(config, logger, api)
 	const contacts = new ContactService(logger, api)
 	services.add(profiles)
@@ -149,14 +156,20 @@ describe("the unlock a profile chooses or changes — the real service graph", (
 
 	test("a profile deleted while its prompt was open stays deleted, and the change writes nothing", async () => {
 		const api = freshApi()
-		const worker = await boot(api)
+		let duringPrompt: (() => Promise<void>) | undefined
+		const worker = await boot(api, true, async () => duringPrompt?.())
 		const { id } = await worker.profiles.createProfile("P", PW)
 		await worker.contacts.addContact("Alice", ADDR)
-		const next = await answer("cred-late")
-		await worker.profiles.deleteProfile(id)
-		const after = JSON.stringify(await api.storage.local.get())
+		let after = ""
+		duringPrompt = async () => {
+			duringPrompt = undefined
+			await worker.profiles.deleteProfile(id)
+			after = JSON.stringify(await api.storage.local.get())
+		}
 
-		await expect(worker.profiles.changeUnlockMethod(id, { password: PW }, { passkey: next })).rejects.toThrow()
+		const next = await answer("cred-late")
+		await expect(worker.profiles.changeUnlockMethod(id, { password: PW }, { passkey: next })).rejects.toThrow(/Invalid profile id/)
+		expect(after).not.toBe("")
 		expect(JSON.stringify(await api.storage.local.get())).toBe(after)
 	}, 60_000)
 

@@ -930,7 +930,7 @@ describe("SessionManager", () => {
 	 * going through `ConfigStore`.
 	 */
 	describe("open + strictSecurityMode", () => {
-		test("strict ON: open ignores passhash presence, persisted Session has no bearer", async () => {
+		test("strict ON: open persists no bearer, even with its DEK", async () => {
 			const { api, manager } = setup(1_800_000, true) // strict ON
 			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
@@ -1028,6 +1028,27 @@ describe("SessionManager", () => {
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 			vi.useRealTimers()
+		})
+
+		test.each([
+			["on at start, then off during the unwrap", true],
+			["off at start, then on during the unwrap", false],
+		])("strict %s: a passkey bearer restores no session", async (_, strictAtStart) => {
+			const { api } = setup(1_800_000, false)
+			const bearer = await makeBearer("pid")
+			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 1_800_000, bearer })
+			const { manager: m2, config } = setupFromExistingApi(api, 1_800_000, strictAtStart)
+			const box = (m2 as unknown as { sessionSecretBox: SessionSecretBox }).sessionSecretBox
+			const unwrap = box.unwrapPair.bind(box)
+			const flipped = vi.spyOn(box, "unwrapPair").mockImplementation(async (...args) => {
+				config.setStrict(!strictAtStart)
+				return unwrap(...args)
+			})
+
+			await m2.restore(async () => passkeyProfileFor())
+
+			expect(await m2.getActive()).toBeUndefined()
+			expect(flipped).toHaveBeenCalledTimes(strictAtStart ? 0 : 1)
 		})
 	})
 

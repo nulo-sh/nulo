@@ -250,13 +250,47 @@ describe("a passkey profile's account file", () => {
 		expect(exportAccount).not.toHaveBeenCalled()
 	})
 
-	test("an approval given on another network saves nothing", async () => {
+	test("a network switch ends the flow: the approval goes with it, and switching back asks the passkey again", async () => {
 		const w = await approved()
 		await typeFilePassword(w, "12345678")
-		useAppStore().network = { id: "n2", chainId: 8 } as never
-		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		const app = useAppStore()
+		app.network = { id: "n2", chainId: 8 } as never
 		await flushPromises()
+		expect(w.find('[data-testid="account-file-save-btn"]').exists()).toBe(false)
+		app.network = { id: "n1", chainId: 7 } as never
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test.each(["answer", "file"] as const)("a passkey %s that comes back after a network switch lands nothing", async (pending) => {
+		const held = Promise.withResolvers<string>()
+		if (pending === "answer") passkey.runCeremony.mockReturnValueOnce(held.promise)
+		else exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
+		const w = await approved()
+		if (pending === "file") {
+			await typeFilePassword(w, "12345678")
+			await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+			await flushPromises()
+		}
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		held.resolve(pending === "answer" ? (ANSWER as never) : "sealed-body")
+		await flushPromises()
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
 		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	test("a profile switch drops the approval: the next file asks its passkey again", async () => {
+		const w = await approved()
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(true)
+		useAppStore().profile = { id: "p2", name: "Other", type: "passkey" } as never
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 	})
 })

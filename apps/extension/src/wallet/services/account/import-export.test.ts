@@ -364,6 +364,15 @@ describe("AccountService — a paused reset's held imported account", () => {
 		expect(await api.storage.local.get()).toEqual(before)
 	})
 
+	test("a passkey profile's answer opens the held key, and only the file password seals its file", async () => {
+		const { api, account, opens } = await build()
+		await seed(api, [await held()])
+		const sealed = await account.exportResetHeldAccount("p1", NEW, "filepass", true, ANSWER)
+		const file = parseAccountExport(await decryptAccountExport(sealed, "filepass"))
+		expect([file.signingKey.toString(), file.l1ChainId, file.claimedAddress]).toEqual([SK.toString(), L1, NEW])
+		expect(opens.mock.calls).toEqual([["exportImportedKeysDek", "p1", undefined, ANSWER]])
+	})
+
 	test("a wrong password, an unknown address, a keyless entry, no journal and a key that moved each refuse", async () => {
 		const { NuloAccount } = await import("@nulo/aztec-runtime/account")
 		const { api, account } = await build()
@@ -382,8 +391,8 @@ describe("AccountService — a passkey profile's account file", () => {
 	test("the passkey's answer opens the profile and only the file password seals the file", async () => {
 		const { account, opens } = await build()
 		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
-		const sealed = await account.exportAccount("p1", CHAIN, addrFor(SK), "file-pass", true, ANSWER)
-		expect(parseAccountExport(await decryptAccountExport(sealed, "file-pass")).signingKey.toString()).toBe(SK.toString())
+		const sealed = await account.exportAccount("p1", CHAIN, addrFor(SK), "filepass", true, ANSWER)
+		expect(parseAccountExport(await decryptAccountExport(sealed, "filepass")).signingKey.toString()).toBe(SK.toString())
 		expect(opens.mock.calls).toEqual([
 			["exportPlain", "p1", undefined, ANSWER],
 			["exportImportedKeysDek", "p1", undefined, ANSWER],

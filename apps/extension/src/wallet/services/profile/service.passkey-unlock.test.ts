@@ -53,6 +53,7 @@ async function boot(opts: { api?: FakeBrowserApi; strict?: boolean } = {}) {
 	const row = async (id: string) => JSON.parse((await raw(id)) as string) as Record<string, unknown>
 	const write = (id: string, value: Record<string, unknown>) => api.storage.local.set({ [key(id)]: JSON.stringify(value) })
 	const internals = service as unknown as {
+		secretBox: object
 		sessionManager: SessionManager
 		lock: { withLock: <T>(fn: (isCurrent: () => boolean) => Promise<T>) => Promise<T> }
 	}
@@ -117,6 +118,23 @@ describe("a phrase import and a backup restore choose their unlock", () => {
 		await expect(
 			env.service.importMnemonic("B", words, undefined, false, await fakePasskeyAnswer("cred-shared", first.prfSalt)),
 		).rejects.toThrow(/already belongs to another profile/)
+		expect(await env.api.storage.local.get(null)).toStrictEqual(before)
+	}, 30_000)
+
+	test("a restore whose answer was evaluated at another profile's input writes nothing", async () => {
+		const env = await boot()
+		const first = await newAnswer("cred-shared")
+		await env.service.createPasskeyProfile("A", first)
+		const before = await env.api.storage.local.get(null)
+		const taken = await fakePasskeyAnswer("cred-shared", first.prfSalt)
+		const restored = await env.service.restore(
+			{ id: "ignored", name: "R", type: "password" },
+			await backupBody(0x43),
+			undefined,
+			false,
+			taken,
+		)
+		expect(String("restoreError" in restored ? restored.restoreError : undefined)).toMatch(/already belongs to another profile/)
 		expect(await env.api.storage.local.get(null)).toStrictEqual(before)
 	}, 30_000)
 
@@ -312,9 +330,11 @@ describe("changeUnlockMethod", () => {
 			60_000,
 		)
 
-		test("a row changed during the unlocked derivation", async () => {
+		test("a row changed during the unlocked derivation reaches no check under the lock", async () => {
 			const env = await boot()
 			const { id, current, next } = await fromPassword(env)
+			const verifyBeforeSessionOpen = vi.fn(async () => {})
+			env.service.setIntegrityDelegate({ verifyBeforeSessionOpen } as never)
 			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
 			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
 				await env.service.changeProfileName(id, "Renamed")
@@ -323,6 +343,7 @@ describe("changeUnlockMethod", () => {
 			const before = await env.row(id)
 			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
 			expect(await env.row(id)).toStrictEqual({ ...before, name: "Renamed" })
+			expect(verifyBeforeSessionOpen).not.toHaveBeenCalled()
 		}, 30_000)
 
 		test("a row deleted during the unlocked derivation stays deleted", async () => {
@@ -351,6 +372,101 @@ describe("changeUnlockMethod", () => {
 			expect(await env.raw(id)).toBe(before)
 		}, 30_000)
 
+		test("a commit that lost the lock during its last read of the row", async () => {
+			const env = await boot()
+			const { id, current, next } = await fromPassword(env)
+			const internals = env.service as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
+			const precheck = internals.precheckBeforeRekeyHoldingLock!.bind(env.service)
+			let prechecked = false
+			let owned = true
+			vi.spyOn(internals, "precheckBeforeRekeyHoldingLock").mockImplementation(async (...args) => {
+				await precheck(...args)
+				prechecked = true
+			})
+			const get = env.api.storage.local.get.bind(env.api.storage.local)
+			vi.spyOn(env.api.storage.local, "get").mockImplementation(async (keys) => {
+				if (prechecked && keys === env.key(id)) owned = false
+				return get(keys as never)
+			})
+			const withLock = env.internals.lock.withLock.bind(env.internals.lock)
+			vi.spyOn(env.internals.lock, "withLock").mockImplementation((fn) => withLock((isCurrent) => fn(() => owned && isCurrent())))
+			const before = await env.raw(id)
+			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
+			expect(owned).toBe(false)
+			expect(await env.raw(id)).toBe(before)
+		}, 30_000)
+
+		test("a row written around the lock during the commit's slow steps", async () => {
+			const env = await boot()
+			const { id, current, next } = await fromPassword(env)
+			const internals = env.service as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
+			const precheck = internals.precheckBeforeRekeyHoldingLock!.bind(env.service)
+			vi.spyOn(internals, "precheckBeforeRekeyHoldingLock").mockImplementationOnce(async (...args) => {
+				await precheck(...args)
+				await env.write(id, { ...(await env.row(id)), name: "Elsewhere" })
+			})
+			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
+			expect((await env.row(id)).name).toBe("Elsewhere")
+			expect((await env.row(id)).type).toBe("password")
+		}, 30_000)
+
+		test("a row that lost a field during the prompt", async () => {
+			const env = await boot()
+			const { id, current, next } = await fromPassword(env)
+			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+				const { envelopeMac: _m, ...rest } = await env.row(id)
+				await env.write(id, rest)
+				return derive(password)
+			})
+			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
+			expect("envelopeMac" in (await env.row(id))).toBe(false)
+			expect((await env.row(id)).type).toBe("password")
+		}, 30_000)
+
+		test("a row deleted and put back byte for byte during the prompt", async () => {
+			const env = await boot()
+			const { id, current, next } = await fromPassword(env)
+			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+				const raw = await env.raw(id)
+				await env.service.deleteProfile(id)
+				await env.api.storage.local.set({ [env.key(id)]: raw })
+				return derive(password)
+			})
+			const before = await env.raw(id)
+			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
+			expect(await env.raw(id)).toBe(before)
+		}, 30_000)
+
+		test.each([
+			["slots", "sealWithPasshash"],
+			["DEK slot", "sealDekWithPasshash"],
+		] as const)(
+			"a reseal whose %s do not open to the profile's own is never written",
+			async (_, sealer) => {
+				const env = await boot()
+				const answer = await newAnswer("cred-old")
+				const id = (await env.service.createPasskeyProfile("K", answer)).id
+				const other = await EncryptionKey.getPasshash("another-pass")
+				const owner = (sealer === "sealWithPasshash" ? env.internals.secretBox : env.service) as unknown as Record<
+					string,
+					(passhash: unknown, ...rest: unknown[]) => Promise<unknown>
+				>
+				const seal = owner[sealer]!.bind(owner)
+				vi.spyOn(owner, sealer).mockImplementationOnce((_passhash, ...rest) =>
+					sealer === "sealWithPasshash" ? seal(other, ...rest) : seal(_passhash, new Uint8Array(32).fill(9)),
+				)
+				const before = await env.raw(id)
+				await expect(env.service.changeUnlockMethod(id, asPasskey(answer), { password: NEW_PASSWORD })).rejects.toThrow(
+					/Profile storage corrupted/,
+				)
+				expect(owner[sealer]).toHaveBeenCalled()
+				expect(await env.raw(id)).toBe(before)
+			},
+			30_000,
+		)
+
 		test("a write that rejects with nothing stored rethrows and keeps the session", async () => {
 			const env = await boot()
 			const { id, current, next } = await fromPassword(env)
@@ -365,6 +481,33 @@ describe("changeUnlockMethod", () => {
 			expect((await env.service.getActiveProfile())?.type).toBe("password")
 		}, 30_000)
 	})
+
+	test("the carried DEK and the new password's hash are wiped once the change returns", async () => {
+		const env = await boot()
+		const answer = await newAnswer("cred-old")
+		const id = (await env.service.createPasskeyProfile("K", answer)).id
+		const hashes: ArrayBuffer[] = []
+		const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+		vi.spyOn(EncryptionKey, "getPasshash").mockImplementation(async (password) => {
+			const hash = await derive(password)
+			hashes.push(hash)
+			return hash
+		})
+		const internals = env.service as unknown as Record<string, (...args: unknown[]) => Promise<Uint8Array>>
+		const trusted = internals.trustedDekForRekeyHoldingLock!.bind(env.service)
+		const deks: Uint8Array[] = []
+		vi.spyOn(internals, "trustedDekForRekeyHoldingLock").mockImplementation(async (...args) => {
+			const dek = await trusted(...args)
+			deks.push(dek)
+			return dek
+		})
+		await env.service.changeUnlockMethod(id, asPasskey(answer), { password: NEW_PASSWORD })
+		expect([hashes.length, deks.length]).toEqual([1, 1])
+		for (const bytes of [...hashes.map((hash) => new Uint8Array(hash)), ...deks]) {
+			expect(bytes).toHaveLength(32)
+			expect(bytes.every((byte) => byte === 0)).toBe(true)
+		}
+	}, 30_000)
 
 	describe("after the write, a failure is a changed method", () => {
 		test("a write that rejects after it stored is a change made", async () => {
@@ -417,24 +560,56 @@ describe("changeUnlockMethod", () => {
 	})
 })
 
-describe("verifyProfilePassword", () => {
-	test("answers the profile's own password, refuses another, and opens nothing", async () => {
+describe("verifyUnlockCredential", () => {
+	test("answers the profile's own password or passkey, refuses another, and opens nothing", async () => {
 		const env = await boot()
 		const { id } = await env.service.createProfile("P", PASSWORD)
+		const answer = await newAnswer()
+		const passkey = (await env.service.createPasskeyProfile("K", answer)).id
 		const serial = env.internals.sessionManager.peekLiveSerial()
-		await expect(env.service.verifyProfilePassword(id, PASSWORD)).resolves.toBeUndefined()
-		await expect(env.service.verifyProfilePassword(id, "wrong-pass")).rejects.toBeInstanceOf(InvalidPasswordError)
+		const before = [await env.raw(id), await env.raw(passkey)]
+		await expect(env.service.verifyUnlockCredential(id, { password: PASSWORD })).resolves.toBeUndefined()
+		await expect(env.service.verifyUnlockCredential(passkey, asPasskey(answer))).resolves.toBeUndefined()
+		await expect(env.service.verifyUnlockCredential(id, { password: "wrong-pass" })).rejects.toBeInstanceOf(InvalidPasswordError)
+		await expect(env.service.verifyUnlockCredential(passkey, { password: PASSWORD })).rejects.toBeInstanceOf(InvalidPasswordError)
+		await expect(env.service.verifyUnlockCredential(passkey, asPasskey(await newAnswer("cred-other")))).rejects.toThrow(
+			PASSKEY_DID_NOT_OPEN,
+		)
 		expect(env.internals.sessionManager.peekLiveSerial()).toBe(serial)
+		expect([await env.raw(id), await env.raw(passkey)]).toEqual(before)
 	}, 30_000)
 
-	test("a damaged pairing is not a wrong password, and a passkey row has no password", async () => {
+	test.each([
+		["a damaged pairing", "entropy", /Profile storage corrupted/],
+		["a DEK slot that does not open", "dekSealed", /Imported-keys key unrecoverable/],
+		["an envelope MAC that does not cover the DEK slot", "envelopeMac", /before changing the unlock method/],
+	] as const)(
+		"%s is the change's own refusal, not a wrong password",
+		async (_, field, refusal) => {
+			const env = await boot()
+			const { id } = await env.service.createProfile("P", PASSWORD)
+			const sibling = (await env.service.createProfile("Q", PASSWORD)).id
+			const damaged =
+				field === "entropy"
+					? (await env.row(sibling)).entropy
+					: field === "dekSealed"
+						? "AAAA"
+						: Buffer.alloc(32, 7).toString("base64")
+			await env.write(id, { ...(await env.row(id)), [field]: damaged })
+			await expect(env.service.verifyUnlockCredential(id, { password: PASSWORD })).rejects.toThrow(refusal)
+		},
+		30_000,
+	)
+
+	test("a profile deleted during the check is refused, not answered", async () => {
 		const env = await boot()
 		const { id } = await env.service.createProfile("P", PASSWORD)
-		const sibling = (await env.service.createProfile("Q", PASSWORD)).id
-		await env.write(id, { ...(await env.row(id)), entropy: (await env.row(sibling)).entropy })
-		await expect(env.service.verifyProfilePassword(id, PASSWORD)).rejects.toThrow(/Profile storage corrupted/)
-		const passkey = await env.service.createPasskeyProfile("K", await newAnswer())
-		await expect(env.service.verifyProfilePassword(passkey.id, PASSWORD)).rejects.toThrow(/does not unlock with a password/)
+		const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+		vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+			await env.service.deleteProfile(id)
+			return derive(password)
+		})
+		await expect(env.service.verifyUnlockCredential(id, { password: PASSWORD })).rejects.toThrow(/Invalid profile id/)
 	}, 30_000)
 })
 
@@ -447,13 +622,21 @@ describe("the session bearer of a passkey profile", () => {
 		expect(await (await boot({ api: lenient.api, strict: true })).service.getActiveProfile()).toBeUndefined()
 	}, 30_000)
 
-	test("a row an unlock cannot open restores no session", async () => {
-		const env = await boot({ strict: false })
-		const { id } = await env.service.createPasskeyProfile("K", await newAnswer())
-		const { guard: _g, secret: _s, entropy: _e, envelopeMac: _m, prfSalt: _p, ...retired } = await env.row(id)
-		await env.write(id, retired)
-		expect(await (await boot({ api: env.api, strict: false })).service.getActiveProfile()).toBeUndefined()
-	}, 30_000)
+	test.each([
+		["a retired row", ({ guard: _g, secret: _s, entropy: _e, envelopeMac: _m, prfSalt: _p, ...row }: Record<string, unknown>) => row],
+		// Its envelope MAC covers neither field, so only the row's kind keeps its bearer out.
+		["a row whose credential fields are gone", ({ credentialId: _c, prfSalt: _p, ...row }: Record<string, unknown>) => row],
+	])(
+		"%s an unlock cannot open restores no session",
+		async (_, damage) => {
+			const env = await boot({ strict: false })
+			const { id } = await env.service.createPasskeyProfile("K", await newAnswer())
+			expect((await (await boot({ api: env.api, strict: false })).service.getActiveProfile())?.id).toBe(id)
+			await env.write(id, damage(await env.row(id)))
+			expect(await (await boot({ api: env.api, strict: false })).service.getActiveProfile()).toBeUndefined()
+		},
+		30_000,
+	)
 })
 
 describe("generated inputs", () => {
