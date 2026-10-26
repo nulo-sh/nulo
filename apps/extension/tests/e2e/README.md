@@ -199,6 +199,55 @@ On Firefox, set `NULO_E2E_BROWSER=firefox` and pass the firefox candidate. The c
 builds into `dist/<browser>` before copying it out, so rebuild the armed smoke build before a
 source smoke run.
 
+## Chaos runs
+
+A chaos file runs only when `NULO_E2E_CHAOS=1` arms it. The network lane's chaos job arms `send-chaos.test.ts` alone, for its fixed seeds ([`CI.md`](../../../../CI.md)); no lane arms the profile chaos files.
+
+### Profile chaos
+
+`profile-chaos.test.ts` plans 24 profile actions per seed and a closing `verifyAll` from the model in `helpers/profile-chaos/model.ts`. The actions cover creates, locks and unlocks, switches, phrase reveals and imports, accounts, backups and account files, edits and deletes, strict mode, background restarts, second windows, abandoned ceremonies and three races. The run drives each one by testid, then checks seven oracles over what it left (`checkers.ts`): O1 session, O2 profile rows, O3 writes, O4 errors, O5 settle bounds, O6 `verifyAll`, O7 leaks. On the armed smoke build:
+
+```bash
+NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1 NULO_E2E_CHAOS_RUNS=5 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 \
+  bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0
+```
+
+- `NULO_E2E_CHAOS_SEED` is the first seed (random when unset, always logged). `NULO_E2E_CHAOS_RUNS` sets how many consecutive seeds run, one launch each.
+- `NULO_E2E_CHAOS_ACTIONS` replays a hand-trimmed list instead: a JSON array of `{ action, params }` or a path to one, such as a record's `plan`.
+- Each run writes its replay record to `.e2e-state/profile-chaos/<browser>-<seed>-<launch>.json`: the plan, the bindings, and each step's outcome and evidence. Every URL and secret in the record is masked.
+- A seed is **green** only when every step ran with complete evidence. A planned restart leaves its step **incomplete**: the logs of the background it stops cannot be read. A violation turns the seed **red** and stops it, unless it is an instance of a filed finding (`KNOWN_FINDINGS`): that keeps the seed red, names the issue, and lets the run go on.
+- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). Every launch is guarded, so the stand-in's refusal of a node call outside the run is accepted on both files (`GUARDED_NODE_REFUSAL`). A restore that a planned restart fails reports its failure at error; that exact line is accepted only during a step that ends the background on purpose.
+
+`network/profile-chaos.test.ts` runs the same catalog against the sandbox and the playground, plus a dApp that asks to connect while the wallet is locked or while a passkey unlock is held, and a restore held at `service-restore` or `account-state` that a lock, a restart or a delete meets. Every profile a step opens for the first time goes on Local Network first. The restore gate exists only in a proverless build:
+
+```bash
+NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1001 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 \
+  bun run e2e:agent tests/e2e/network/profile-chaos.test.ts
+```
+
+Run it from the repository root. The runner rebuilds `dist/<browser>` proverless, so rebuild the smoke dist before the next smoke chaos run.
+
+#### Start states
+
+A seed starts `empty`, on a fresh install, unless `NULO_E2E_UPDATE_FROM` names a release; then it starts `pre-update`. The release makes a password profile and then a passkey profile through its own popup, the candidate `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts on the candidate with the release's rows bound to `P1` and `P2`. Before the first step the start's own check reads every profile row the release wrote (stored byte for byte, listed, the passkey one as retired, `checkPreUpdate`), the lock screen and the session, and scans storage. A retired profile is never opened: `verifyAll` reads its lock screen and calls each method of the refusal matrix a page can call on it (`RETIRED_REFUSALS`), and a delete may remove it. The release's plaintext rows in roots sealed since stay plain until their profile next opens, so only those bytes are exempt from the envelope check, and only until a step ends with their profile open; the wallet then has 15 s to seal them. Once a step ends with the release's password profile open, the run answers what the update left for that first open before the next step, as `update-replay` does: the reset's takeover when the release's Testnet chain is no longer this build's, the Terms sheet and the Mainnet arrival. The smoke file only; the candidate is a production build, so build it from a committed head:
+
+```bash
+bash apps/extension/scripts/e2e/build-update-candidate.sh chrome
+cd apps/extension && NULO_E2E_UPDATE_FROM=v0.31.0 NULO_E2E_UPDATE_TO=$PWD/.e2e-state/update-candidate/chrome \
+  NULO_E2E_ARTIFACT_RUN=1 NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=3001 NULO_E2E_CHAOS_RUNS=5 bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0
+```
+
+#### Passkey profiles
+
+A passkey profile keeps a recovery phrase its passkey unlocks, and the catalog drives each place it shows:
+
+- Onboarding makes the first profile in the anchor's own tab, so its passkey stays with the page that holds every other, and shows the phrase stage for either unlock.
+- Reveal answers with the passkey: approved, refused, without PRF, or by another credential.
+- A full backup takes a file password of its own; a short one is refused before any file exists. O7 opens every held file with its password and refuses another. Every backup restores under a new password, chosen on the form's Password tab, as a password profile; a phrase import chooses Password too. A session of either method keeps its bearer outside strict mode and survives a restart. Choosing a passkey at import or restore, the unlock method page and a passkey profile's account file are not modelled yet.
+- The earlier passkey backup the wallet's tests pin is refused at the pick, and a held one whose phrase field was made a number is refused once it opens, each under the title `EARLIER_TITLE` names.
+- Two faults reach stored rows, each put back byte for byte after its step unless the wallet wrote the row meanwhile: a row field changed while an unlock waits at its prompt, and a slot's tag byte flipped before an unlock. A lock while a reveal waits at its prompt must end the prompt with the page.
+- O7 adds every PRF output a page of the run received (`prf-capture.ts`) and each stored `prfSalt` value, allowed only in its own row. A passkey profile's phrase is learnt where a screen shows it, or from the first backup of it the run opens; logs and files already read are searched again for it then.
+
 ## Running multiple agents in parallel
 
 Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
@@ -382,7 +431,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
 | Update scenarios' Chrome | Yes | launched over a pipe with no `--load-extension`, so the path sweep below never sees it; a pipe-launched Chrome exits when its run dies. Its profile, the release cache and the candidates live in `.e2e-state/` |
-| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
+| Chrome orphan cleanup | Yes | `pkill -f` on `chromePattern($EXTENSION_PATH)` (`sandbox-ownership.ts`): the exact path as a literal, ending at the argument's end, so `dist/chrome` never matches `dist/chrome-2`; at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |

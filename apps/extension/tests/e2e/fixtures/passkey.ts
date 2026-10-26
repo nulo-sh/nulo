@@ -183,3 +183,71 @@ export async function stallNextPasskeyCeremony(page: Page, auth: PasskeyAuthSetu
 	await auth.cleanup()
 	await holdNextCredentialGet(page)
 }
+
+/** The next `get` on `page` runs on the real authenticator and reports no PRF extension result, as
+ *  an authenticator without PRF answers; later calls run untouched. */
+export async function withholdGetPrf(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		credentials.get = async (options) => {
+			credentials.get = get
+			const credential = await get(options)
+			if (credential) Object.defineProperty(credential, "getClientExtensionResults", { value: () => ({}) })
+			return credential
+		}
+	})
+}
+
+/** The next `get` on `page` asks the authenticator for `credentialId` (base64, as a passkey row
+ *  stores it) instead of the credential the wallet named; later calls run untouched. */
+export async function answerWithCredential(page: Page, credentialId: string): Promise<void> {
+	await page.evaluate((id: string) => {
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		const b64 = id
+			.replace(/-/g, "+")
+			.replace(/_/g, "/")
+			.padEnd(Math.ceil(id.length / 4) * 4, "=")
+		const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+		credentials.get = async (options) => {
+			credentials.get = get
+			const publicKey = options?.publicKey
+			if (!publicKey) return get(options)
+			return get({ ...options, publicKey: { ...publicKey, allowCredentials: [{ type: "public-key", id: bytes }] } })
+		}
+	}, credentialId)
+}
+
+type HeldGetProbe = Window & { __heldGet?: { reached: boolean; release?: () => void } }
+
+/** Holds the next `get` on `page` until released, keeping its abort signal live so a cancel ends
+ *  it; `reached` resolves once the page is inside the request. */
+export async function holdNextGet(page: Page): Promise<{ reached: () => Promise<void>; release: () => Promise<void> }> {
+	await page.evaluate(() => {
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		const probe = window as HeldGetProbe
+		probe.__heldGet = { reached: false }
+		credentials.get = (options) => {
+			credentials.get = get
+			const held = probe.__heldGet as NonNullable<HeldGetProbe["__heldGet"]>
+			held.reached = true
+			return new Promise((resolve, reject) => {
+				const signal = options?.signal
+				signal?.addEventListener("abort", () => reject(signal.reason ?? new DOMException("aborted", "AbortError")), { once: true })
+				held.release = () => {
+					get(options).then(resolve, reject)
+				}
+			})
+		}
+	})
+	return {
+		reached: async () => {
+			await page.waitForFunction(() => (window as HeldGetProbe).__heldGet?.reached === true, { timeout: 15_000, polling: 50 })
+		},
+		release: async () => {
+			await page.evaluate(() => (window as HeldGetProbe).__heldGet?.release?.()).catch(() => {})
+		},
+	}
+}
