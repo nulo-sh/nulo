@@ -360,6 +360,11 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
   - Confirmed: both WebAuthn user fields carry `Nulo wallet · ` and the profile name, `user.id` stays random; a profile name leaves only in the export file names, the full backup's encrypted contents and the passkey label; no other sentence keeps the name local; the escaped placeholder renders.
   - Held for the owner: "the profile name you typed" (§ 5.4) and the Chrome PII entry's "the user typed" also cover the trimmed name, the automatic default and a restored backup's name.
   - Rejected: a 1.2.7 under `legal/README.md`'s every-change rule, settled by D27 and the owner's instruction, with no new evidence. No change; one round.
+- **Codex, the owner's words of 2026-10-26 and the merged citations (D29):** conditional approve.
+  - Accepted: two citations widened to the lines that hold what their sentence names, the connected-app row's to the session's grants (`dapp-session/spec.ts:47-70`) and the token list's to its alarm (`token-list/service.ts:143-146`).
+  - Confirmed: every other citation resolves at the merged head; the merge kept both sides of its two conflicts and this PR's 28 files; the Terms' network name and the label's two fields match the code; Chrome's two ticks agree with their entries.
+  - Held for the owner: the label keeps the name a passkey was made with, so a renamed profile, or one reusing another's passkey, has a label naming another name; the Firefox declaration omits `personallyIdentifyingInfo` and `authenticationInfo`, while Mozilla counts data handled outside the add-on and names no exception for the browser's own interface.
+  - Rejected: two more ranges for the token list's deadline rule and refresh, beyond the one range its sentence had. One round.
 
 ## Seeds (retired)
 
