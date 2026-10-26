@@ -149,6 +149,19 @@ footer {
 	background: rgba(245, 240, 230, 0.08);
 }
 
+/* A date, not a control: unfilled and dashed so it never reads as a button. */
+.soon {
+	display: inline-flex;
+	align-items: center;
+	color: var(--txt-primary);
+	font-family: var(--font-headline);
+	font-weight: 700;
+	font-size: 15px;
+	letter-spacing: 0.02em;
+	padding: 14px 22px;
+	border: 1px dashed var(--txt-primary);
+}
+
 .eb {
 	font-family: var(--font-mono);
 	font-size: 11px;
