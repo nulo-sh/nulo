@@ -386,8 +386,9 @@ describe("SessionManager", () => {
 
 		test("a restarted worker: deletes the persisted-only record, emits nothing, reports false", async () => {
 			// A fresh manager over a surviving record is what an explicit lock sees after an
-			// MV3 restart that restored no session (a passkey profile). The record is cleared
-			// and nothing is emitted — announcing the lock is the caller's job on `false`.
+			// MV3 restart that restored no session (strict mode, or a bearer that did not unwrap).
+			// The record is cleared and nothing is emitted — announcing the lock is the caller's
+			// job on `false`.
 			const { api } = setup()
 			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 60_000 })
 			const { emits, manager } = setupFromExistingApi(api)

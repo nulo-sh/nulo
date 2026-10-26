@@ -214,7 +214,7 @@ The value here must equal the manifest's; the test enforces it. Firefox's taxono
 `websiteActivity` / `websiteContent` (connected-app origins are stored locally and sent nowhere),
 `personallyIdentifyingInfo` (contacts and profile names stay local). One reading is contestable
 and is stated in `legal/privacy.md` § 5.4: for passkey profiles the label "Nulo wallet" and a random
-identifier are handed to the browser's passkey interface (`wallet/services/passkey/spec.ts:68-69`,
+identifier are handed to the browser's passkey interface (`wallet/services/passkey/spec.ts:74-75`,
 `wallet/utils/passkey-ceremony.ts:40-44`); the declaration treats that as the browser acting at the
 user's request, not the add-on sending data to a party of its choosing. Chrome's form covers local handling as well and so ticks more boxes; the
 two differ by design.

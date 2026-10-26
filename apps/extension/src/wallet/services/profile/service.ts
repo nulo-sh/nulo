@@ -1022,7 +1022,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			const live = this.sessionHandle()
 			if (handle !== undefined && live !== undefined && live !== handle) return
 			// An explicit lock also ends every pending restore, before the close can fail: a
-			// stashed restore secret must not outlive the user's intent to lock.
+			// stashed DEK rewrap context must not outlive the user's intent to lock.
 			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
 			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
