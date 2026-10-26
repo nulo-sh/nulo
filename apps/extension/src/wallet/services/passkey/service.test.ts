@@ -12,9 +12,13 @@ import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { PasskeyCredential } from "@nulo/wallet-crypto"
 import type { ILogger } from "@/wallet/logger"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { fakePasskeyAnswer } from "../../../../tests/helpers/fake-passkey"
 import { PasskeyService, PASSKEY_TIMEOUT } from "./service"
 
 const noopLogger = { log: () => {} } as unknown as ILogger
+const SALT = Buffer.from(new Uint8Array(32).fill(0x5a)).toString("base64")
+const OTHER_SALT = Buffer.from(new Uint8Array(32).fill(0x5b)).toString("base64")
+const CREATE = { step: "create", profileName: "Profile" } as const
 
 describe("PasskeyService PATH-B window budget", () => {
 	test("openAndAwait receives a budget covering the two-leg ceremony worst case", async () => {
@@ -26,7 +30,7 @@ describe("PasskeyService PATH-B window budget", () => {
 		const service = new PasskeyService(noopLogger, windowManager)
 		vi.spyOn(chrome.runtime, "getURL").mockReturnValue("chrome-extension://x/passkey.html")
 
-		await service.createKey("uh-1", "Profile")
+		await service.createKey("uh-1", SALT, CREATE)
 
 		expect(openAndAwait).toHaveBeenCalledTimes(1)
 		const opts = (openAndAwait.mock.calls[0] as unknown[])[0] as { timeoutMs: number }
@@ -45,7 +49,7 @@ describe("PasskeyService window placement", () => {
 		const service = new PasskeyService(noopLogger, { openAndAwait } as unknown as WindowManager)
 		vi.spyOn(chrome.runtime, "getURL").mockReturnValue("chrome-extension://x/passkey.html")
 
-		await service.createKey("uh-1", "Profile")
+		await service.createKey("uh-1", SALT, CREATE)
 
 		expect(openAndAwait).toHaveBeenCalledWith(
 			expect.objectContaining({ kind: "passkey", width: 500, height: 800, placement: "center" }),
@@ -54,8 +58,9 @@ describe("PasskeyService window placement", () => {
 })
 
 describe("PasskeyService PATH B requests", () => {
-	const data = { credentialId: "cred-1", prfOutput: "cHJm" } as never
 	const UNLOCK = { step: "unlock", profileName: "Alice" } as const
+	const realCreate = PasskeyCredential.create.bind(PasskeyCredential)
+	let data: Awaited<ReturnType<typeof fakePasskeyAnswer>>
 	let browser: FakeBrowserApi
 	let log: ReturnType<typeof vi.fn>
 	let service: PasskeyService
@@ -71,14 +76,15 @@ describe("PasskeyService PATH B requests", () => {
 		const held = new Promise<void>((resolve) => {
 			release = resolve
 		})
-		vi.mocked(PasskeyCredential.create).mockImplementationOnce(async () => {
+		vi.mocked(PasskeyCredential.create).mockImplementationOnce(async (answer) => {
 			await held
-			return { id: "cred-1" } as never
+			return realCreate(answer)
 		})
 		return release
 	}
 
-	beforeEach(() => {
+	beforeEach(async () => {
+		data = await fakePasskeyAnswer("cred-1", SALT)
 		browser = new FakeBrowserApi()
 		browser.reset()
 		log = vi.fn()
@@ -86,18 +92,25 @@ describe("PasskeyService PATH B requests", () => {
 		service = new PasskeyService(logger, new WindowManager(browser.windows, new MockClock(), logger))
 		removed = vi.spyOn(browser.windows, "remove")
 		vi.spyOn(chrome.runtime, "getURL").mockImplementation((path: string) => `chrome-extension://x/${path}`)
-		vi.spyOn(PasskeyCredential, "create").mockResolvedValue({ id: "cred-1" } as never)
+		vi.spyOn(PasskeyCredential, "create")
 	})
 
 	test("the step gets the credential, and the window stays open until the step says how it ended", async () => {
-		const owner = service.getKey("cred-1", UNLOCK)
+		const owner = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		const id = requestIdOf(0)
-		expect(await service.getPendingRequest(id)).toEqual({ mode: "get", credentialId: "cred-1", step: "unlock", profileName: "Alice" })
+		expect(await service.getPendingRequest(id)).toEqual({
+			mode: "get",
+			credentialId: "cred-1",
+			prfSalt: SALT,
+			step: "unlock",
+			profileName: "Alice",
+		})
 
 		const answered = service.resolvePasskeyRequest(id, data)
 		const { credential, finish } = await owner
-		expect(credential).toEqual({ id: "cred-1" })
+		expect(credential.id).toBe("cred-1")
+		expect(credential.unlockKeyFor(SALT)).not.toBeNull()
 		expect(removed).not.toHaveBeenCalled()
 
 		finish("done")
@@ -108,30 +121,35 @@ describe("PasskeyService PATH B requests", () => {
 	})
 
 	test("a newer request replaces the open window: the first step is told the user moved on", async () => {
-		const first = service.getKey(undefined, UNLOCK).catch((err: unknown) => err)
+		const first = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()
 		const firstId = requestIdOf(0)
-		const second = service.createKey("uh-1", "Profile")
+		const second = service.createKey("uh-1", SALT, CREATE)
 		await flush()
 
 		expect(await first).toBeInstanceOf(UserRejectedError)
 		expect(removed).toHaveBeenCalledWith(1000)
 		await expect(service.getPendingRequest(firstId)).rejects.toThrow("Invalid request id")
-		expect(await service.getPendingRequest(requestIdOf(1))).toMatchObject({ mode: "create", userHandle: "uh-1", step: "create" })
+		expect(await service.getPendingRequest(requestIdOf(1))).toMatchObject({
+			mode: "create",
+			userHandle: "uh-1",
+			prfSalt: SALT,
+			step: "create",
+		})
 
 		await service.rejectPasskeyRequest(requestIdOf(1))
 		await expect(second).rejects.toBeInstanceOf(UserRejectedError)
 	})
 
 	test("closing the window is a user cancel, not a raw string", async () => {
-		const owner = service.getKey(undefined, UNLOCK)
+		const owner = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		windows().closeByUser(1000)
 		await expect(owner).rejects.toBeInstanceOf(UserRejectedError)
 	})
 
 	test("the window's cancel rejects its step and closes the window", async () => {
-		const owner = service.getKey(undefined, UNLOCK)
+		const owner = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		await service.rejectPasskeyRequest(requestIdOf(0))
 		await expect(owner).rejects.toBeInstanceOf(UserRejectedError)
@@ -139,10 +157,10 @@ describe("PasskeyService PATH B requests", () => {
 	})
 
 	test("a late answer for a replaced request is refused and builds no credential", async () => {
-		const first = service.getKey(undefined, UNLOCK).catch((err: unknown) => err)
+		const first = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()
 		const firstId = requestIdOf(0)
-		const second = service.getKey(undefined, UNLOCK)
+		const second = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		expect(await first).toBeInstanceOf(UserRejectedError)
 
@@ -157,7 +175,7 @@ describe("PasskeyService PATH B requests", () => {
 
 	test("while the credential is built, a close still rejects the step at once and nothing is handed over", async () => {
 		const release = holdMaterialization()
-		const owner = service.getKey(undefined, UNLOCK).catch((err: unknown) => err)
+		const owner = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()
 		const answered = service.resolvePasskeyRequest(requestIdOf(0), data)
 
@@ -170,11 +188,11 @@ describe("PasskeyService PATH B requests", () => {
 
 	test("while the credential is built, a newer request still replaces it and nothing is handed over", async () => {
 		const release = holdMaterialization()
-		const owner = service.getKey(undefined, UNLOCK).catch((err: unknown) => err)
+		const owner = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()
 		const answered = service.resolvePasskeyRequest(requestIdOf(0), data)
 
-		void service.getKey(undefined, UNLOCK).catch(() => undefined)
+		void service.getKey("cred-1", SALT, UNLOCK).catch(() => undefined)
 		expect(await owner).toBeInstanceOf(UserRejectedError)
 		expect(removed).toHaveBeenCalledWith(1000)
 
@@ -184,7 +202,7 @@ describe("PasskeyService PATH B requests", () => {
 
 	test("a second answer is refused at once while the first hands over exactly once and finishes", async () => {
 		const release = holdMaterialization()
-		const owner = service.getKey(undefined, UNLOCK)
+		const owner = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		const id = requestIdOf(0)
 		const answered = service.resolvePasskeyRequest(id, data)
@@ -197,10 +215,20 @@ describe("PasskeyService PATH B requests", () => {
 		expect(PasskeyCredential.create).toHaveBeenCalledTimes(1)
 	})
 
+	// An answer evaluated at another input would key another profile's slots, or none.
+	test("an answer at another PRF input rejects the step at once, hands nothing over and closes the window", async () => {
+		const owner = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
+		await flush()
+
+		await expect(service.resolvePasskeyRequest(requestIdOf(0), await fakePasskeyAnswer("cred-1", OTHER_SALT))).resolves.toBe("failed")
+		expect(await owner).toMatchObject({ message: "Passkey answered for another request" })
+		expect(removed).toHaveBeenCalledWith(1000)
+	})
+
 	test("an answer that builds no credential rejects the step at once and closes the window", async () => {
 		const bad = new Error("bad PRF output")
 		vi.mocked(PasskeyCredential.create).mockRejectedValueOnce(bad)
-		const owner = service.getKey(undefined, UNLOCK).catch((err: unknown) => err)
+		const owner = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()
 
 		await expect(service.resolvePasskeyRequest(requestIdOf(0), data)).resolves.toBe("failed")
@@ -208,7 +236,7 @@ describe("PasskeyService PATH B requests", () => {
 		expect(removed).toHaveBeenCalledWith(1000)
 	})
 
-	test("the popup comes back after a step that finished, never after one that failed, found its profile here or was cancelled", async () => {
+	test("the popup comes back after a step that finished, never after one that failed or was cancelled", async () => {
 		const fired: string[] = []
 		let armed = 0
 		const logger = { log } as unknown as ILogger
@@ -218,30 +246,30 @@ describe("PasskeyService PATH B requests", () => {
 				fired.push(`step ${step}`)
 			}
 		})
-		for (const outcome of ["done", "failed", "exists"] as const) {
-			const owner = service.getKey("cred-1", UNLOCK)
+		for (const outcome of ["done", "failed"] as const) {
+			const owner = service.getKey("cred-1", SALT, UNLOCK)
 			await flush()
 			const answered = service.resolvePasskeyRequest(requestIdOf(armed - 1), data)
 			;(await owner).finish(outcome)
 			await expect(answered).resolves.toBe(outcome)
 		}
-		const cancelled = service.getKey("cred-1", UNLOCK)
+		const cancelled = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
-		await service.rejectPasskeyRequest(requestIdOf(3))
+		await service.rejectPasskeyRequest(requestIdOf(2))
 		await expect(cancelled).rejects.toBeInstanceOf(UserRejectedError)
 
-		expect(armed).toBe(4)
+		expect(armed).toBe(3)
 		expect(fired).toEqual(["step 1"])
 	})
 
 	test("no log line carries a request id or a credential id", async () => {
-		const resolved = service.getKey(undefined, UNLOCK)
+		const resolved = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		const resolvedId = requestIdOf(0)
 		const answered = service.resolvePasskeyRequest(resolvedId, data)
 		;(await resolved).finish("done")
 		await answered
-		const cancelled = service.getKey(undefined, UNLOCK)
+		const cancelled = service.getKey("cred-1", SALT, UNLOCK)
 		await flush()
 		const cancelledId = requestIdOf(1)
 		await service.rejectPasskeyRequest(cancelledId)

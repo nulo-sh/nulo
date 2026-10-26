@@ -4,7 +4,7 @@
  * No vue, no chrome.*, no service clients — safe to import anywhere.
  */
 
-import { EncryptionKey, PasskeyCredential, type PasskeyCredentialData, computeBackupMac, zeroize } from "@nulo/wallet-crypto"
+import { EncryptionKey, zeroize } from "@nulo/wallet-crypto"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
@@ -44,6 +44,14 @@ export type BackupSelection =
 	| { kind: "plain"; name: string; backup: unknown; profileType: string | null }
 	| { kind: "sealed"; name: string; backup: string; profileType: null }
 	| { kind: "opened"; name: string; backup: unknown; profileType: string | null }
+
+/** A file the wallet does not read: its row keeps the name, and no other control shows. */
+export const unreadableSelection = (name: string): Extract<BackupSelection, { kind: "unreadable" }> => ({
+	kind: "unreadable",
+	name,
+	backup: null,
+	profileType: null,
+})
 
 /** Read unchecked on purpose: narrowing a malformed value would change which CTAs a malformed file
  *  shows, and restore validates the whole body before it trusts any field. */
@@ -142,7 +150,7 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	// advertised ceiling before any later check sees it. Belt over the
 	// pickFile-side cap: this helper must hold its own even for callers that
 	// hand it an arbitrary File.
-	const unreadable = () => ({ kind: "unreadable", name: file.name, backup: null, profileType: null }) as const
+	const unreadable = () => unreadableSelection(file.name)
 	if (file.size > MAX_BACKUP_FILE_BYTES) {
 		return {
 			selection: unreadable(),
@@ -188,15 +196,6 @@ export interface AssembledBackup {
 	checksum: string
 }
 
-/** A passkey backup's check over its checksum. It sits beside `checksum`, outside the body the
- *  checksum hashes. */
-export const BACKUP_MAC_FIELD = "backup-mac"
-
-/** Makes the check a passkey backup carries, under the passkey the export ceremony returned. */
-export function passkeyBackupAuthenticator(credentialData: PasskeyCredentialData): (checksum: string) => Promise<string> {
-	return async (checksum) => computeBackupMac(await PasskeyCredential.create(credentialData), checksum)
-}
-
 /**
  * Assembles a full-backup artifact from an envelope and slice sources, sealed
  * from ONE serialization: the checksum hashes exactly `JSON.stringify(draft)`
@@ -207,16 +206,14 @@ export function passkeyBackupAuthenticator(credentialData: PasskeyCredentialData
  * string exactly (key insertion order survives parse → stringify).
  *
  * `onSlice` is a currency probe: consulted before every slice and before
- * sealing; returning false aborts with `AssemblyAbortedError`. `authenticate`
- * signs the checksum; its result lands in `BACKUP_MAC_FIELD`.
+ * sealing; returning false aborts with `AssemblyAbortedError`.
  */
 export async function assembleFullBackup(
 	envelope: Record<string, unknown>,
 	sources: BackupSource[],
 	onSlice?: () => boolean,
-	authenticate?: (checksum: string) => Promise<string>,
 ): Promise<AssembledBackup> {
-	if ("checksum" in envelope || BACKUP_MAC_FIELD in envelope) throw new Error("Backup envelope must not carry a checksum or its MAC")
+	if ("checksum" in envelope) throw new Error("Backup envelope must not carry a checksum")
 	const data: Record<string, unknown> = {}
 	const draft: Record<string, unknown> = { ...envelope, data }
 	for (const { name, backup } of sources) {
@@ -228,14 +225,12 @@ export async function assembleFullBackup(
 	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
 	const unsigned = JSON.stringify(draft)
 	const checksum = await EncryptionKey.getHashHex(unsigned)
-	const mac = authenticate ? await authenticate(checksum) : undefined
 	// Re-probe after the hash await too: the parse + two stringifies below are
 	// the most expensive steps at large sizes — don't spend them for an
 	// abandoned run.
 	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
 	const sealed = JSON.parse(unsigned) as Record<string, unknown>
 	sealed.checksum = checksum
-	if (mac !== undefined) sealed[BACKUP_MAC_FIELD] = mac
 	return { compact: JSON.stringify(sealed), pretty: JSON.stringify(sealed, null, 2), checksum }
 }
 

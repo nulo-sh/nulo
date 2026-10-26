@@ -20,8 +20,9 @@ import { runPasskeyCeremony } from "@/wallet/utils/passkey-ceremony"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 const runPasskeyCeremonyMock = vi.mocked(runPasskeyCeremony)
 
-const fakeRequest = { mode: "create" as const, step: "create" as const, profileName: "Test", userHandle: "uh", name: "Test" }
-const fakeData = { id: asBase64CredentialId("cred-x"), prf: asBase64SecretPrf("prf-bytes") }
+const SALT = "c2FsdA=="
+const fakeRequest = { mode: "create" as const, step: "create" as const, profileName: "Test", userHandle: "uh", prfSalt: SALT }
+const fakeData = { id: asBase64CredentialId("cred-x"), prf: asBase64SecretPrf("prf-bytes"), prfSalt: SALT }
 
 beforeEach(() => {
 	// Provide a #popup teleport target the dialog can mount into.
@@ -66,18 +67,18 @@ describe("PasskeyCeremonyDialog", () => {
 	})
 
 	test("an abort inside a created-but-unconfirmed credential is a cancel that keeps the credential", async () => {
-		const aborted = new PasskeyUnconfirmedError("cred-x", "uh", new DOMException("aborted", "AbortError"))
+		const aborted = new PasskeyUnconfirmedError("cred-x", SALT, new DOMException("aborted", "AbortError"))
 		runPasskeyCeremonyMock.mockRejectedValueOnce(aborted)
 		const w = mount(PasskeyCeremonyDialog, { props: { request: fakeRequest } })
 		await flushPromises()
 
 		const emitted = w.emitted("reject")?.[0]?.[0]
 		expect(emitted).toBeInstanceOf(PasskeyUnconfirmedError)
-		expect(emitted).toMatchObject({ credentialId: "cred-x", userHandle: "uh", cause: expect.any(UserRejectedError) })
+		expect(emitted).toMatchObject({ credentialId: "cred-x", prfSalt: SALT, cause: expect.any(UserRejectedError) })
 	})
 
 	test("a dismissal inside a created-but-unconfirmed credential is a failure, emitted as is", async () => {
-		const unconfirmed = new PasskeyUnconfirmedError("cred-x", "uh", new DOMException("not allowed", "NotAllowedError"))
+		const unconfirmed = new PasskeyUnconfirmedError("cred-x", SALT, new DOMException("not allowed", "NotAllowedError"))
 		runPasskeyCeremonyMock.mockRejectedValueOnce(unconfirmed)
 		const w = mount(PasskeyCeremonyDialog, { props: { request: fakeRequest } })
 		await flushPromises()
@@ -200,7 +201,7 @@ describe("PasskeyCeremonyDialog", () => {
 	test("the card names the request's step and profile", async () => {
 		runPasskeyCeremonyMock.mockReturnValueOnce(new Promise(() => undefined))
 		mount(PasskeyCeremonyDialog, {
-			props: { request: { mode: "get", credentialId: "cred-1", step: "unlock", profileName: "Alice" } },
+			props: { request: { mode: "get", credentialId: "cred-1", prfSalt: SALT, step: "unlock", profileName: "Alice" } },
 			attachTo: document.body,
 		})
 		await flushPromises()

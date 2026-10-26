@@ -144,7 +144,7 @@ export type Account = {
 	visible: boolean
 }
 
-/** A password profile's full-backup key material, read in one authenticated pass. */
+/** A profile's full-backup key material, read in one authenticated pass. */
 export type FullBackupKeys = {
 	/** Base64 master secret, the file's `master-key`. */
 	masterKey: string
@@ -163,22 +163,6 @@ export type FullBackupKeys = {
 	/** Imported-key rows that did not open, so travel as stored and will not restore; 0 when the
 	 *  DEK was replaced. */
 	unopenedImportedKeys: number
-}
-
-/** A passkey profile's full-backup key material and the slices it was counted over, read once. */
-export type PasskeyBackupKeys = {
-	/** The file's `master-key`. */
-	credentialId: string
-	/** The file's `imported-keys-dek-sealed`: the stored DEK, or a fresh one when it no longer opens. */
-	dekSealed: string
-	dekReplaced: boolean
-	/** Imported-key rows of `importedKeyRows` that do not open under the stored DEK; 0 when it was
-	 *  replaced. */
-	unopenedImportedKeys: number
-	/** The imported-keys slice the file carries, as stored. */
-	importedKeyRows: ImportedAccountKey[]
-	/** The account slice, read before the key rows. */
-	accounts: Account[]
 }
 
 /** Storage codec row schema — mirrors `Account` exactly. */
@@ -283,18 +267,12 @@ export type Methods = {
 	previewImportAccount(fileBody: string, password: string): string
 
 	/**
-	 * A password profile's full-backup key material from one authenticated pass: master, entropy,
-	 * the account slice, and the imported-key rows re-sealed under a fresh per-backup key. Throws
-	 * unless `fence` names the open session both before the first read and after the last seal.
+	 * A profile's full-backup key material from one authenticated pass: master, entropy, the account
+	 * slice, and the imported-key rows re-sealed under a fresh per-backup key. A password profile
+	 * authenticates with `password`, a passkey profile with the page's answer for its own `prfSalt`.
+	 * Throws unless `fence` names the open session both before the first read and after the last seal.
 	 */
-	exportFullBackupKeys(fence: RunFence, password: string): FullBackupKeys
-
-	/**
-	 * A passkey profile's full-backup key material from the in-page ceremony's `credentialData`, with
-	 * the account and imported-key slices it was counted over. Throws unless `fence` names the open
-	 * session both before the first read and after the count.
-	 */
-	exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): PasskeyBackupKeys
+	exportFullBackupKeys(fence: RunFence, password?: string, credentialData?: PasskeyCredentialData): FullBackupKeys
 
 	/** Backup the active profile's imported-account encrypted key rows (the dedicated slice). */
 	backupImportedKeys(): ImportedAccountKey[]
@@ -325,10 +303,10 @@ export const AccountMethodSchemas = {
 	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean()]),
 	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
 	previewImportAccount: z.tuple([z.string(), z.string()]),
-	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
-	exportPasskeyBackupKeys: z.tuple([
+	exportFullBackupKeys: z.tuple([
 		RunFenceParamSchema,
-		z.object({ id: z.string(), prf: z.string(), userHandle: z.string().optional() }),
+		z.string().optional(),
+		z.object({ id: z.string(), prf: z.string(), prfSalt: z.string() }).optional(),
 	]),
 	backupImportedKeys: z.tuple([]),
 	restoreImportedKeys: z.tuple([z.array(z.unknown())]),

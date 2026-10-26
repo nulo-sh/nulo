@@ -135,7 +135,7 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="askNewPassword && selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
+	<div v-if="askNewPassword && selectedBackup?.profileType && !restoreStatus" :class="$style.section">
 		<span :class="$style.section_label">New Password</span>
 		<Flex direction="column" gap="12">
 			<Input

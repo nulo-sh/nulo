@@ -140,6 +140,20 @@ describe("the password slot opener", () => {
 	)
 })
 
+describe("an empty password", () => {
+	test("gets each password path's own wrong-password refusal; exportPlain asks for a password", async () => {
+		const { service, id } = await lockedPasswordProfile()
+		for (const [path, call, refused] of PATHS) {
+			const error = await settled(call(service, id, ""))
+			expect(error, path).toBeDefined()
+			if (path === "exportPlain") expect(error).toMatchObject({ message: "Password is required" })
+			else refused(error)
+		}
+		// Success control: the profile's own password still opens.
+		await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
+	}, 60_000)
+})
+
 // Purpose AADs stop a ciphertext moving between slots, not between two rows under one password, so
 // the pairing check is what refuses another profile's authentic entropy.
 describe("the words-to-master pairing check", () => {

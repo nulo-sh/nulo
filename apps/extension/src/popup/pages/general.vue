@@ -48,7 +48,6 @@ const prestoReached = ref(undefined)
 
 const ITEM_ROUTES = {
 	phrase: "/popup/settings/security/export/seed",
-	backup: "/popup/settings/security/export",
 	presto: "/popup/settings/proving",
 }
 

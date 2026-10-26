@@ -51,10 +51,11 @@ export type AddressRegime = {
 /**
  * The canonical, byte-frozen description of NULO-ACCOUNT-KDF v2 — the preimage of `kdfDigest`.
  * Changing ANY line changes the digest and reds `address-freeze.test.ts`. The constructions
- * themselves live in `@nulo/wallet-crypto` (mnemonic-master.ts, passkey-credential.ts,
- * derive-account-seed.ts, account-derivation.ts, nulo-separators.ts) and are value-pinned by the
- * reference vectors in `reference/key-model-v2/` (mnemonic chain) and
- * `reference/key-model-v2-hardening/` (passkey master).
+ * themselves live in `@nulo/wallet-crypto` (mnemonic-master.ts, derive-account-seed.ts,
+ * account-derivation.ts, nulo-separators.ts) and are value-pinned by the reference vectors in
+ * `reference/key-model-v2/` (mnemonic chain). The `passkeyMaster` line records the master of
+ * passkey profiles made before 1.1, which this build no longer derives; every profile since takes
+ * `master` from its recovery phrase. Its retired vectors are in `reference/key-model-v2-hardening/`.
  */
 export const NULO_KDF_SPEC =
 	"nulo-account-kdf-v2\n" +

@@ -253,8 +253,12 @@ onBeforeUnmount(() => {
 				:placeholder="`Type &quot;${appStore.profile?.name}&quot; to confirm`"
 				data-testid="reset-confirm-input"
 			/>
-			<Text variant="body" color="tertiary" height="150">
-				You will be able to recover the accounts derived from your recovery phrase later if you have saved it
+			<Text variant="body" color="tertiary" height="150" data-testid="reset-recovery-note">
+				{{
+					appStore.profile?.retired
+						? "This profile has no recovery phrase. Deleting it can't be undone."
+						: "You will be able to recover the accounts created from your recovery phrase later if you have saved it"
+				}}
 			</Text>
 		</div>
 

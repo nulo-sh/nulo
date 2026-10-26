@@ -2,9 +2,9 @@
  * A passkey profile's unlock key: the key its slots and DEK are sealed under, rebuilt at every
  * unlock from the passkey's PRF output for the profile's own `prfSalt`.
  *
- * `prfSalt` is 32 random bytes per profile, stored plaintext on the row. It is both the PRF input
- * the passkey evaluates and the HKDF salt here, so two profiles never share an unlock key even on
- * one passkey. No profile or credential id enters the derivation: the random salt separates
+ * `prfSalt` is 32 random bytes each create mints, stored plaintext on the row. It is both the PRF
+ * input the passkey evaluates and the HKDF salt here, so two profiles never share an unlock key even
+ * on one passkey. No profile or credential id enters the derivation: the random salt separates
  * profiles, and the envelope MAC binds the row's id.
  */
 

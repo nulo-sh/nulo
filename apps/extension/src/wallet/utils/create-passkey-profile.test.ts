@@ -1,126 +1,56 @@
-import { ProfileIdConflictError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { describe, expect, test, vi } from "vitest"
+import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
+import type { ProfileInfo } from "@/wallet/services/profile/client"
+import { createPasskeyProfileInPage } from "./create-passkey-profile"
 
-import { createPasskeyProfileWithRetry } from "./create-passkey-profile"
+const answerTo = (req: PasskeyRequest) => ({ id: "Y3JlZA==", prf: "cHJm", prfSalt: req.prfSalt }) as PasskeyCredentialData
 
-function makeDeps(overrides?: {
-	runCeremony?: () => Promise<unknown>
-	generateProfileId?: () => Promise<string>
-	createPasskeyProfile?: (name: string, c: unknown) => Promise<unknown>
-}) {
-	let idSeq = 0
-	const generateProfileId = vi.fn(overrides?.generateProfileId ?? (async () => `id-${++idSeq}`))
-	const runCeremony = vi.fn(overrides?.runCeremony ?? (async () => ({ kind: "cred-data" })))
-	const createPasskeyProfile = vi.fn(
-		overrides?.createPasskeyProfile ?? (async (name) => ({ id: idSeq.toString(), name, type: "passkey" })),
-	)
-	return {
-		generateProfileId: generateProfileId as never,
-		runCeremony: runCeremony as never,
-		createPasskeyProfile: createPasskeyProfile as never,
-		mocks: { generateProfileId, runCeremony, createPasskeyProfile },
+function makeDeps(runCeremony: (req: PasskeyRequest) => Promise<PasskeyCredentialData> = async (req) => answerTo(req)) {
+	const deps = {
+		runCeremony: vi.fn(runCeremony),
+		createPasskeyProfile: vi.fn(async (name: string) => ({ id: "abcd1234", name, type: "passkey" }) as ProfileInfo),
 	}
+	return deps
 }
 
-describe("createPasskeyProfileWithRetry", () => {
-	test("happy path: returns profile on first attempt; only one ceremony", async () => {
+const requestOf = (deps: ReturnType<typeof makeDeps>) => deps.runCeremony.mock.calls[0][0] as Extract<PasskeyRequest, { mode: "create" }>
+
+describe("createPasskeyProfileInPage", () => {
+	test("mints a random handle and PRF input, creates the profile from the answer, and returns both", async () => {
 		const deps = makeDeps()
-		const profile = await createPasskeyProfileWithRetry("My Wallet", deps)
-		expect(profile).toMatchObject({ name: "My Wallet", type: "passkey" })
-		expect(deps.mocks.generateProfileId).toHaveBeenCalledTimes(1)
-		expect(deps.mocks.runCeremony).toHaveBeenCalledTimes(1)
-		expect(deps.mocks.createPasskeyProfile).toHaveBeenCalledTimes(1)
+		const created = await createPasskeyProfileInPage("My Wallet", deps)
+		const req = requestOf(deps)
+		expect(req).toMatchObject({ mode: "create", step: "create", profileName: "My Wallet", credentialId: undefined })
+		expect(req.userHandle).toMatch(/^[0-9a-f]{32}$/)
+		expect(Buffer.from(req.prfSalt, "base64")).toHaveLength(32)
+		expect(deps.createPasskeyProfile).toHaveBeenCalledWith("My Wallet", created.credentialData)
+		expect(created.credentialData.prfSalt).toBe(req.prfSalt)
+		expect(created.profile).toMatchObject({ name: "My Wallet", type: "passkey" })
 	})
 
-	test("conflict on attempt 1 triggers retry; second attempt uses a fresh id", async () => {
-		let attempts = 0
-		const deps = makeDeps({
-			createPasskeyProfile: async (name) => {
-				attempts++
-				if (attempts === 1) throw new ProfileIdConflictError()
-				return { id: "fresh", name, type: "passkey" }
-			},
-		})
-		const profile = await createPasskeyProfileWithRetry("Wallet", deps)
-		expect(profile.id).toBe("fresh")
-		expect(deps.mocks.generateProfileId).toHaveBeenCalledTimes(2)
-		expect(deps.mocks.runCeremony).toHaveBeenCalledTimes(2)
-		expect(deps.mocks.createPasskeyProfile).toHaveBeenCalledTimes(2)
-	})
-
-	test("conflict on both attempts re-throws the second conflict", async () => {
-		const deps = makeDeps({
-			createPasskeyProfile: async () => {
-				throw new ProfileIdConflictError()
-			},
-		})
-		await expect(createPasskeyProfileWithRetry("X", deps)).rejects.toBeInstanceOf(ProfileIdConflictError)
-		expect(deps.mocks.createPasskeyProfile).toHaveBeenCalledTimes(2)
-	})
-
-	test("non-conflict error propagates without retry (UserRejectedError)", async () => {
-		const deps = makeDeps({
-			runCeremony: async () => {
-				throw new UserRejectedError()
-			},
-		})
-		await expect(createPasskeyProfileWithRetry("X", deps)).rejects.toBeInstanceOf(UserRejectedError)
-		expect(deps.mocks.createPasskeyProfile).not.toHaveBeenCalled()
-	})
-
-	test("non-conflict error from createPasskeyProfile propagates without retry", async () => {
-		const deps = makeDeps({
-			createPasskeyProfile: async () => {
-				throw new Error("Some other failure")
-			},
-		})
-		await expect(createPasskeyProfileWithRetry("X", deps)).rejects.toThrow("Some other failure")
-		expect(deps.mocks.createPasskeyProfile).toHaveBeenCalledTimes(1)
-	})
-
-	test("runCeremony is invoked with mode=create and the generated userHandle", async () => {
-		const ids: string[] = []
-		const deps = makeDeps({
-			generateProfileId: async () => {
-				const id = `id-${ids.length + 1}`
-				ids.push(id)
-				return id
-			},
-		})
-		await createPasskeyProfileWithRetry("My Wallet", deps)
-		expect(deps.mocks.runCeremony).toHaveBeenCalledWith({
-			mode: "create",
-			userHandle: ids[0],
-			name: "My Wallet",
-			step: "create",
-			profileName: "My Wallet",
-		})
-	})
-
-	test("with a saved credential: no new id is reserved, and the ceremony confirms that credential under its own id", async () => {
+	test("each attempt mints its own input", async () => {
 		const deps = makeDeps()
-		await createPasskeyProfileWithRetry("My Wallet", deps, { credentialId: "Y3JlZA==", userHandle: "saved-id" })
-		expect(deps.mocks.generateProfileId).not.toHaveBeenCalled()
-		expect(deps.mocks.runCeremony).toHaveBeenCalledWith({
-			mode: "create",
-			userHandle: "saved-id",
-			name: "My Wallet",
-			step: "create",
-			profileName: "My Wallet",
-			credentialId: "Y3JlZA==",
-		})
+		await createPasskeyProfileInPage("A", deps)
+		await createPasskeyProfileInPage("A", deps)
+		const [first, second] = deps.runCeremony.mock.calls.map(([req]) => req as Extract<PasskeyRequest, { mode: "create" }>)
+		expect(first.prfSalt).not.toBe(second.prfSalt)
+		expect(first.userHandle).not.toBe(second.userHandle)
 	})
 
-	test("a conflict on the saved credential's id falls back to a fresh id and a fresh create", async () => {
-		let attempts = 0
-		const deps = makeDeps({
-			createPasskeyProfile: async (name) => {
-				if (++attempts === 1) throw new ProfileIdConflictError()
-				return { id: "fresh", name, type: "passkey" }
-			},
+	// A retry that asked another input would seal the profile under a key its passkey never confirmed.
+	test("a retry confirms the saved credential at the input its first attempt asked for", async () => {
+		const deps = makeDeps()
+		await createPasskeyProfileInPage("My Wallet", deps, { credentialId: "c2F2ZWQ=", prfSalt: "c2F2ZWQtc2FsdA==" })
+		expect(requestOf(deps)).toMatchObject({ credentialId: "c2F2ZWQ=", prfSalt: "c2F2ZWQtc2FsdA==" })
+	})
+
+	test("a cancelled prompt creates nothing", async () => {
+		const deps = makeDeps(async () => {
+			throw new UserRejectedError()
 		})
-		await createPasskeyProfileWithRetry("My Wallet", deps, { credentialId: "Y3JlZA==", userHandle: "saved-id" })
-		expect(deps.mocks.generateProfileId).toHaveBeenCalledTimes(1)
-		expect((deps.mocks.runCeremony.mock.calls as unknown[][])[1]?.[0]).toMatchObject({ userHandle: "id-1", credentialId: undefined })
+		await expect(createPasskeyProfileInPage("X", deps)).rejects.toBeInstanceOf(UserRejectedError)
+		expect(deps.createPasskeyProfile).not.toHaveBeenCalled()
 	})
 })

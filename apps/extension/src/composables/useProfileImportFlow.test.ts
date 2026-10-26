@@ -2,23 +2,19 @@ import { effectScope } from "vue"
 import { flushPromises } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
-import { DuplicateWalletError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 
 vi.mock("@/utils/core", () => {
 	const profileMock = {
 		getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
 		importMnemonic: vi.fn(async () => ({ id: "p1", name: "Imported", type: "password" })),
-		importPasskey: vi.fn(async () => ({ id: "p1", name: "Imported", type: "passkey" })),
 	}
 	return { managers: { profile: profileMock } }
 })
 
 vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/utils")>()), pickFile: vi.fn() }))
 
-vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
-
 import { managers } from "@/utils/core"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { pickFile } from "@/utils"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
@@ -30,7 +26,6 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}) {
 	const opts: UseProfileImportFlowOptions = {
 		completeImport: vi.fn(async () => undefined),
 		showErrorLog: vi.fn(),
-		notifyImportFailed: vi.fn(),
 		openToast: vi.fn(),
 		...overrides,
 	}
@@ -48,7 +43,6 @@ const tick = () => new Promise((r) => setTimeout(r, 0))
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
-	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	// The flow reads cacheStore/popupStore for the duplicate-phrase confirm dialog.
 	setActivePinia(createPinia())
 })
@@ -64,29 +58,6 @@ describe("useProfileImportFlow", () => {
 		expect(profileApi.importMnemonic).toHaveBeenCalledWith("MyProfile", SEED_24.split(" "), "password123", false)
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		expect(flow.isImporting.value).toBe(false)
-	})
-
-	test("passkey happy path runs the ceremony then imports + completes once", async () => {
-		const { flow, opts } = makeFlow()
-		flow.profileName.value = "MyProfile"
-		const fakeCred = { credentialId: "c1" } as never
-		const p = flow.handleImportPasskey()
-		await tick()
-		expect(flow.ceremonyRequest.value).toEqual({ mode: "get", step: "import", profileName: "MyProfile" })
-		flow.onCeremonyResolve(fakeCred)
-		await p
-		expect(profileApi.importPasskey).toHaveBeenCalledWith("MyProfile", fakeCred, false)
-		expect(opts.completeImport).toHaveBeenCalledTimes(1)
-	})
-
-	test("in Firefox's toolbar panel, passkey import runs no in-page ceremony: the background does", async () => {
-		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
-		const { flow, opts } = makeFlow()
-		flow.profileName.value = "MyProfile"
-		await flow.handleImportPasskey()
-		expect(flow.ceremonyRequest.value).toBeNull()
-		expect(profileApi.importPasskey).toHaveBeenCalledWith("MyProfile", undefined, false)
-		expect(opts.completeImport).toHaveBeenCalledTimes(1)
 	})
 
 	test("latch: two synchronous seed calls import only once", async () => {
@@ -174,40 +145,6 @@ describe("useProfileImportFlow", () => {
 		expect(flow.error.value).toEqual({ type: "unknown", title: "Import failed", tooltip: "boom" })
 		// The title is a real string, never the Error object -> no "[object Object]".
 		expect(String(flow.error.value.title)).not.toBe("[object Object]")
-	})
-
-	test("passkey user-cancel is silent (no failure notification)", async () => {
-		const { flow, opts } = makeFlow()
-		flow.profileName.value = "MyProfile"
-		const p = flow.handleImportPasskey()
-		await tick()
-		flow.onCeremonyReject(new UserRejectedError("cancelled"))
-		await p
-		expect(opts.notifyImportFailed).not.toHaveBeenCalled()
-		expect(profileApi.importPasskey).not.toHaveBeenCalled()
-		expect(flow.isImporting.value).toBe(false)
-	})
-
-	test("a passkey prompt that was not confirmed toasts one line and blames no authenticator", async () => {
-		const { flow, opts } = makeFlow()
-		flow.profileName.value = "MyProfile"
-		const p = flow.handleImportPasskey()
-		await tick()
-		flow.onCeremonyReject(new DOMException("not allowed", "NotAllowedError"))
-		await p
-		expect(opts.openToast).toHaveBeenCalledWith({ kind: "error", label: "Passkey not confirmed. Try again." })
-		expect(opts.notifyImportFailed).not.toHaveBeenCalled()
-		expect(flow.isImporting.value).toBe(false)
-	})
-
-	test("passkey generic failure notifies once", async () => {
-		const { flow, opts } = makeFlow()
-		flow.profileName.value = "MyProfile"
-		const p = flow.handleImportPasskey()
-		await tick()
-		flow.onCeremonyReject(new Error("authenticator exploded"))
-		await p
-		expect(opts.notifyImportFailed).toHaveBeenCalledTimes(1)
 	})
 
 	test("(Quirk 1) completeImport fires exactly once per import — composable never bootstraps", async () => {
@@ -312,28 +249,6 @@ describe("useProfileImportFlow", () => {
 
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(3)
 			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true)
-			expect(opts.completeImport).toHaveBeenCalledTimes(1)
-		})
-
-		test("passkey: the confirm-retry reuses the SAME credential (no second ceremony)", async () => {
-			profileApi.importPasskey
-				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
-				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "passkey" })
-			const { flow, opts } = makeFlow()
-			flow.profileName.value = "MyProfile"
-			const fakeCred = { credentialId: "c1" } as never
-
-			const p = flow.handleImportPasskey()
-			await tick()
-			flow.onCeremonyResolve(fakeCred)
-			await tick()
-			await confirmDialog()
-			await p
-
-			expect(profileApi.importPasskey).toHaveBeenCalledTimes(2)
-			// Same credential object both times — the ceremony ran exactly once.
-			expect(profileApi.importPasskey).toHaveBeenNthCalledWith(1, "MyProfile", fakeCred, false)
-			expect(profileApi.importPasskey).toHaveBeenNthCalledWith(2, "MyProfile", fakeCred, true)
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 

@@ -5,14 +5,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
 	importMnemonic: vi.fn(async () => ({ id: "p1", name: "Main", type: "password" })),
-	importPasskey: vi.fn(async () => ({ id: "p1", name: "Main", type: "passkey" })),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrap = vi.hoisted(() => ({ bootstrapActiveProfile: vi.fn(), hydrateKnownProfile: vi.fn() }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => bootstrap }))
-vi.mock("@/composables/usePasskeyCeremony", () => ({
-	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
-}))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ meta: {} }) }))
 const importFlow = vi.hoisted(() => ({
@@ -82,7 +78,6 @@ vi.mock("@/composables/useProfileImportFlow", async (importOriginal) => {
 })
 
 import { BrutalistTitle, Flex, Input, Text } from "@nulo/design"
-import { PasskeyProfileExistsError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
@@ -105,7 +100,6 @@ async function mountImport() {
 				OnboardingBackLink: true,
 				StepIndicator: true,
 				ImportMethodPicker: true,
-				PasskeyCeremonyDialog: true,
 			},
 		},
 	})
@@ -138,7 +132,7 @@ describe("onboarding import", () => {
 		expect(w.text()).toContain("Import")
 		expect(w.text()).toContain("Wallet")
 		expect(w.text()).not.toContain("Profile")
-		expect(w.text()).toContain("Restore from a recovery phrase, passkey, or full backup.")
+		expect(w.text()).toContain("Restore from a recovery phrase or a full backup.")
 	})
 
 	test("with a profile already there, the field shows prefilled Profile 2", async () => {
@@ -255,26 +249,9 @@ describe("onboarding import", () => {
 		expect(router.push).toHaveBeenCalledWith(doneRoute("import"))
 	})
 
-	test("a passkey whose profile is already here gets its own notice, not the authenticator one", async () => {
-		await mountImport()
-		const existing = new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" })
-		profileApi.importPasskey.mockRejectedValueOnce(walletErrorFromPayload(existing.toPayload()))
-
-		await importFlow.api!.handleImportPasskey()
-
-		const { useNotificationStore } = await import("@/stores/notification.store")
-		expect(useNotificationStore().create).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({ payload: expect.objectContaining({ title: "Passkey already in use" }) }),
-		)
-	})
-
-	test.each([
-		["with no check shows the way back under the file, and asks for no passkey", false],
-		["with its check goes on to the passkey prompt (control)", true],
-	])("a passkey backup %s", async (_label, withCheck) => {
+	test("an earlier passkey backup picked here shows its refusal under the file, and nothing to restore", async () => {
 		const w = await mountImport()
 		importFlow.api!.selectedImportOption.value = "full_backup"
-		const profileId = "9f2c4e1ab37d4f60"
 		const body = {
 			"wallet-version": "0.31.0",
 			"aztec-version": "6.0.0-rc.3",
@@ -282,38 +259,18 @@ describe("onboarding import", () => {
 			"backup-schema-version": 1,
 			"master-key": Buffer.from("cred-PK123").toString("base64"),
 			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
-			data: {
-				profile: { id: profileId, name: "Daily", type: "passkey" },
-				account: [],
-				token: [],
-				contact: [],
-			},
+			data: { profile: { id: "9f2c4e1ab37d4f60", name: "Daily", type: "passkey" }, account: [], token: [], contact: [] },
 		}
-		backupImport.api!.selectedBackup.value = {
-			name: "_Daily_1760000000.json",
-			kind: "plain",
-			profileType: "passkey",
-			backup: {
-				...body,
-				checksum: await EncryptionKey.getHashHex(JSON.stringify(body)),
-				...(withCheck ? { "backup-mac": "bWFjLW92ZXItdGhlLWNoZWNrc3Vt" } : {}),
-			},
-		}
+		const file = { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
+		backupImport.opts!.pickFile = vi.fn(async () => new File([JSON.stringify(file)], "_Daily_1760000000.json"))
+		await backupImport.api!.pickBackupFile()
 		await flushPromises()
 
-		await w.get('[data-testid="onboarding-submit-import"]').trigger("click")
-		const ceremony = backupImport.opts!.runCeremony as ReturnType<typeof vi.fn>
-		if (withCheck) {
-			await vi.waitFor(() => expect(ceremony).toHaveBeenCalledOnce())
-			expect(ceremony).toHaveBeenCalledWith(expect.objectContaining({ mode: "get", credentialId: body["master-key"] }))
-			return
-		}
-		await vi.waitFor(() => expect(w.find('[data-testid="import-full-backup-error"]').exists()).toBe(true))
-
 		expect(w.get('[data-testid="import-full-backup-error"]').text()).toBe(
-			"ErrorBackup cannot be restoredThis passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+			"ErrorBackup from an earlier versionThis backup was made by a passkey profile on an earlier version of Nulo, and this version can't restore it.",
 		)
-		expect(ceremony).not.toHaveBeenCalled()
+		expect(backupImport.api!.selectedBackup.value?.kind).toBe("unreadable")
+		expect(w.find('[data-testid="onboarding-submit-import"]').exists()).toBe(false)
 	})
 })
 
@@ -435,9 +392,17 @@ const ONBOARDING_CTA_STATES: Array<[string, ApisPatch, OnboardingCta[]]> = [
 		[IMPORT, BACK],
 	],
 	[
-		"decrypted passkey backup (no new password needed)",
+		"decrypted passkey backup with no new password",
 		({ backup }) => {
 			backup.selectedBackup.value = PASSKEY_BACKUP
+		},
+		[IMPORT_OFF, BACK],
+	],
+	[
+		"decrypted passkey backup with a valid new password",
+		(a) => {
+			a.backup.selectedBackup.value = PASSKEY_BACKUP
+			validPair(a)
 		},
 		[IMPORT, BACK],
 	],

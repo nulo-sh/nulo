@@ -19,11 +19,18 @@ const setLastActiveProfileId = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId }))
 const markGetStarted = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/utils/get-started", () => ({ markGetStarted }))
-// The background runs the passkey ceremony, as in Firefox's toolbar panel, so no ceremony is driven here.
+// By default the background runs the passkey ceremony, as in Firefox's toolbar panel, so no
+// ceremony is driven here; `surface.inPage` runs it in the page, through the mocked helper.
+const surface = vi.hoisted(() => ({ inPage: false }))
 vi.mock("@/utils/browser-surface", async (original) => ({
 	...(await original<typeof import("@/utils/browser-surface")>()),
-	closesOnFocusLoss: () => true,
+	closesOnFocusLoss: () => !surface.inPage,
 }))
+const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" }
+const createPasskeyProfileInPage = vi.hoisted(() =>
+	vi.fn(async () => ({ profile: { id: "k1", name: "Main", type: "passkey" }, credentialData: ANSWER })),
+)
+vi.mock("@/wallet/utils/create-passkey-profile", () => ({ createPasskeyProfileInPage }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
 }))
@@ -79,6 +86,7 @@ const choosePassword = (w: VueWrapper) => w.get('[data-testid="onboarding-method
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	surface.inPage = false
 	profileApi.getProfiles.mockResolvedValue([])
 	profileApi.exportMnemonic.mockResolvedValue(WORDS)
 })
@@ -421,7 +429,35 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).not.toHaveBeenCalled()
 	})
 
-	test("a passkey wallet has no phrase to show and goes straight to Ready", async () => {
+	test("a passkey wallet reads its words once with the answer it was made from, before bootstrap, then shows them as step 3", async () => {
+		surface.inPage = true
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(createPasskeyProfileInPage).toHaveBeenCalledTimes(1)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledTimes(1)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledWith("k1", undefined, ANSWER)
+		expect(profileApi.exportMnemonic.mock.invocationCallOrder[0]).toBeLessThan(bootstrapActiveProfile.mock.invocationCallOrder[0])
+		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "phrase", path: "passkey" })
+		expect(routerPush).not.toHaveBeenCalled()
+		await w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
+		await flushPromises()
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+	})
+
+	test("a passkey wallet whose words do not open reaches Ready, where Home keeps the reminder", async () => {
+		surface.inPage = true
+		profileApi.exportMnemonic.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+	})
+
+	test("where the background ran the passkey, the page holds no answer: no read, and Ready", async () => {
 		const w = await mountCreate()
 		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
 		await flushPromises()

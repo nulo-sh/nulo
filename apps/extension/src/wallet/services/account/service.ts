@@ -53,7 +53,6 @@ import {
 	ImportedAccountUnusableError,
 	type FullBackupKeys,
 	type ImportedAccountKey,
-	type PasskeyBackupKeys,
 	accountRowId,
 	accountRowIdOf,
 	parseAccountRowId,
@@ -119,7 +118,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		"importAccount",
 		"previewImportAccount",
 		"exportFullBackupKeys",
-		"exportPasskeyBackupKeys",
 		"backupImportedKeys",
 		"restoreImportedKeys",
 		"reconcileImportedAccounts",
@@ -1107,11 +1105,15 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * but never an account without its key. The fence is asserted again after the last seal, so a lock, switch, deletion or
 	 * worker restart during the export throws instead of returning another session's material.
 	 */
-	public async exportFullBackupKeys(fence: RunFence, password: string): Promise<FullBackupKeys> {
+	public async exportFullBackupKeys(fence: RunFence, password?: string, credentialData?: PasskeyCredentialData): Promise<FullBackupKeys> {
 		await this.ensureInitialized()
 		await this.profileService.assertRunFence(fence)
 		await this.refuseDuringReset(fence.profileId)
-		const { masterKey, entropy, sourceDek, transferKey } = await this.profileService.openBackupTransfer(fence.profileId, password)
+		const { masterKey, entropy, sourceDek, transferKey } = await this.profileService.openBackupTransfer(
+			fence.profileId,
+			password,
+			credentialData,
+		)
 		try {
 			const accounts = await this.rowsOfProfile(fence.profileId)
 			const stored = await this.importedKeys.backup(fence.profileId)
@@ -1130,29 +1132,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		} finally {
 			zeroize(sourceDek)
 			zeroize(transferKey)
-		}
-	}
-
-	/**
-	 * Accounts are read first so a concurrent import cannot export an account without its key. The
-	 * rows are counted where the DEK lives and returned as read: the file carries exactly those.
-	 */
-	public async exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): Promise<PasskeyBackupKeys> {
-		await this.ensureInitialized()
-		await this.profileService.assertRunFence(fence)
-		await this.refuseDuringReset(fence.profileId)
-		const accounts = await this.rowsOfProfile(fence.profileId)
-		const importedKeyRows = await this.importedKeys.backup(fence.profileId)
-		const material = await this.profileService.exportPasskeyBackupKeys(fence.profileId, credentialData, importedKeyRows)
-		await this.refuseDuringReset(fence.profileId)
-		await this.profileService.assertRunFence(fence)
-		return {
-			credentialId: material.credentialId,
-			dekSealed: material.dekSealed,
-			dekReplaced: material.dekReplaced,
-			unopenedImportedKeys: material.unopened,
-			importedKeyRows,
-			accounts,
 		}
 	}
 

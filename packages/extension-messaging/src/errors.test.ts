@@ -21,8 +21,7 @@ import {
 	JobCancelledError,
 	OperationNotRecordedError,
 	OwnAccountIntentRefusalError,
-	PasskeyProfileExistsError,
-	ProfileIdConflictError,
+	RetiredProfileError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
 	PxeScopeUnregisteredError,
@@ -301,13 +300,6 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		},
 		{ ctor: RestoreTornError, make: () => new RestoreTornError(), name: "RestoreTornError", code: "RESTORE_TORN", rebuild: pass },
 		{
-			ctor: ProfileIdConflictError,
-			make: () => new ProfileIdConflictError(),
-			name: "ProfileIdConflictError",
-			code: "PROFILE_ID_CONFLICT",
-			rebuild: pass,
-		},
-		{
 			ctor: DuplicateWalletError,
 			make: () => new DuplicateWalletError(),
 			name: "DuplicateWalletError",
@@ -315,10 +307,10 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			rebuild: pass,
 		},
 		{
-			ctor: PasskeyProfileExistsError,
-			make: () => new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" }),
-			name: "PasskeyProfileExistsError",
-			code: "PASSKEY_PROFILE_EXISTS",
+			ctor: RetiredProfileError,
+			make: () => new RetiredProfileError(),
+			name: "RetiredProfileError",
+			code: "RETIRED_PROFILE",
 			rebuild: pass,
 		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
@@ -403,12 +395,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			"Another first transaction initialized this account — wait for network sync, then retry.",
 		],
 		["InvalidPasswordError", () => new InvalidPasswordError(), "Invalid profile password"],
-		[
-			"ProfileIdConflictError",
-			() => new ProfileIdConflictError(),
-			"Profile id was claimed during WebAuthn prompt; retry with a new id.",
-		],
-		["PasskeyProfileExistsError", () => new PasskeyProfileExistsError(), "Passkey profile already exists"],
+		["RetiredProfileError", () => new RetiredProfileError(), "This profile was made with an earlier version and can't be opened"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})

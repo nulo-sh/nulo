@@ -9,7 +9,7 @@ import GetStartedCard from "./GetStartedCard.vue"
 /** The real rows, so a done step's missing action is the row's own inert mode, not a stub's. */
 const COMPONENTS = { Flex, Icon, Text, ItemsContainer, SettingItem }
 
-const ALL: GetStartedItem[] = ["phrase", "backup", "aztec", "feeJuice", "presto"]
+const ALL: GetStartedItem[] = ["phrase", "aztec", "feeJuice", "presto"]
 const open = (...items: GetStartedItem[]): GetStartedStep[] => items.map((item) => ({ item, done: false }))
 const steps = (items: GetStartedItem[], done: GetStartedItem[] = []): GetStartedStep[] =>
 	items.map((item) => ({ item, done: done.includes(item) }))
@@ -33,10 +33,9 @@ describe("general/GetStartedCard", () => {
 	test("each open step carries the drawn copy and a chevron", () => {
 		const w = mountCard()
 		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
-		expect(row(w, "backup").text()).toBe("2Back up this walletSync your passkey or save a backup file")
-		expect(row(w, "aztec").text()).toBe("3How Aztec works1 min")
-		expect(row(w, "feeJuice").text()).toBe("4Get Fee Juice")
-		expect(row(w, "presto").text()).toBe("5Make proofs fasterOptional")
+		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min")
+		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
+		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
 		for (const item of ALL) expect(row(w, item).findAll("svg"), item).toHaveLength(1)
 	})
 

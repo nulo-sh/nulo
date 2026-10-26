@@ -10,44 +10,34 @@
   modal). Asserts the popup lands on `/popup/general` with a valid `0x...`
   account address.
 - ✅ Lock + unlock-via-passkey within the same extension session (i.e.
-  `header-lock` → `auth-submit` → re-derive master from passkey).
-  Unblocked by the path-A in-page modal refactor — the WebAuthn ceremony
-  now runs in the popup's existing FrameTreeNode, so the credential
-  created at register persists for the unlock get.
-- ✅ Register passkey → reset profile → import via passkey discovery →
-  same address. The "I wiped my profile and want it back" UX. Same
-  popup, same FTN, same authenticator = same PRF output = same master.
+  `header-lock` → `auth-submit` → the passkey's answer at the profile's own
+  input opens the sealed master again). Unblocked by the path-A in-page
+  modal refactor — the WebAuthn ceremony now runs in the popup's existing
+  FrameTreeNode, so the credential created at register persists for the
+  unlock get.
+- ✅ A passkey profile's full backup, under its file password, restores as a
+  password profile on the same address (`passkey-backup.test.ts`). A passkey
+  restores nothing: a wallet comes back from its recovery phrase or a full
+  backup.
 
 ## Coverage NOT shipped (blocked)
 
-- ❌ Passkey IMPORT (`/popup/import` → import-option-passkey) in a FRESH
-  extension instance. `navigator.credentials.get` finds nothing because
-  the fresh authenticator is empty, and PRF state from the source
-  authenticator isn't transferable. The reset-then-import test above is
-  the closest in-FTN proxy — it exercises the same SW + UI code path,
-  just without crossing browser boundaries.
-- ❌ Cross-browser passkey-only round-trip: register passkey profile in
-  ext1 (browser 1) → import in ext2 (browser 2), assert same account
-  address. Different browser = different FTN = different authenticator
-  = no shared credential.
-- ❌ Passkey → plain-key export → re-import elsewhere. `exportPlain` for
-  passkey profiles returns the credentialId (not the master) — see
-  `profile/service.ts:1685-1691`. The credentialId alone can't reconstruct the
-  master in another extension; the master comes from PRF, which requires
-  the same authenticator instance.
+- ❌ One passkey across two extension instances: a credential registered in
+  ext1 (browser 1) and asked in ext2 (browser 2). Different browser =
+  different FTN = different authenticator = no shared credential.
 
-## Why these three are not e2e-testable today
+## Why this is not e2e-testable today
 
-The wallet's passkey master derivation chain
-(`packages/wallet-crypto/src/passkey-credential.ts:36-70`) is:
+A passkey profile's slots open under
 
 ```
-master = HKDF(prf_output, salt = SHA256("nulo:kdf:v1" || credId), info = "nulo:master:v1")
+unlockKey = HKDF(prf_output, salt = prfSalt, info = "nulo:passkey-unlock:v1")
 ```
 
-Decryption of the stored encrypted profile requires the same `master` →
-the same `prf_output` → the same authenticator-internal HMAC seed used
-for PRF derivation.
+(`packages/wallet-crypto/src/passkey-unlock-key.ts`), where `prf_output` is
+the passkey's PRF answer at the profile's own 32-byte `prfSalt`. Opening
+the stored profile requires the same `prf_output` → the same
+authenticator-internal HMAC seed used for PRF derivation.
 
 Two independent constraints make this non-replayable across CDP virtual
 authenticators:
@@ -89,7 +79,7 @@ authenticator BEFORE its session detaches and re-add them to the
 destination authenticator, `navigator.credentials.get` on the
 destination would return a working assertion (signature OK), but
 `getClientExtensionResults().prf.results.first` would be derived from a
-DIFFERENT HMAC seed → different `prf_output` → different `master` →
+DIFFERENT HMAC seed → different `prf_output` → different unlock key →
 AES-GCM decryption of the stored profile fails.
 
 ## Paths to unblock (not pursued)
@@ -101,8 +91,8 @@ Listing these for completeness only:
   on the wallet-side passkey service that lets a test inject known
   PRF bytes / credential ID directly, bypassing
   `navigator.credentials.create/get`. Gated behind a build flag or
-  `NODE_ENV` check. Makes import + round-trip + lock-unlock testable
-  but is a product-side change with security review implications.
+  `NODE_ENV` check. Makes one passkey across two extension instances
+  testable but is a product-side change with security review implications.
 
 - **B. `navigator.credentials` shim.** Override `navigator.credentials.{create,get}`
   in the popup's page context (via `Page.evaluateOnNewDocument`-equivalent)
@@ -115,22 +105,21 @@ Listing these for completeness only:
   authenticators be configurable as BrowserContext-scoped. Unlikely to
   land in time for our needs.
 
-## Manual QA checklist for the blocked paths
+## Manual QA checklist
 
-Until any of the above land, these flows must be exercised by hand
-before each release:
+These flows must be exercised by hand before each release:
 
 1. Register passkey profile in real Chrome with real platform authenticator.
-   Confirm `/popup/general` populates with a valid account address.
+   Confirm the recovery phrase shows before `/popup/general` populates with a
+   valid account address.
 2. Lock via header-lock → land on `/popup/auth` → click "Continue" →
-   passkey popup → biometric → confirm return to `/popup/general` with
+   passkey prompt → biometric → confirm return to `/popup/general` with
    the SAME account address as step 1.
-3. Export plain key from settings → back up profile → key (plain).
-4. Reset profile, navigate to import → import-option-passkey → use the
-   same passkey → confirm same account address as step 1.
-5. (Cross-device) install on a second Chrome profile, import via
-   passkey using the same authenticator → confirm same account address.
-6. In a fresh install, finish onboarding and click Open wallet: the onboarding tab closes and the
+3. Settings → Back up profile → Recovery Phrase → Reveal with passkey: the
+   words are the ones step 1 showed.
+4. Reset profile, navigate to import → Recovery Phrase → the words from
+   step 3 → confirm same account address as step 1.
+5. In a fresh install, finish onboarding and click Open wallet: the onboarding tab closes and the
    wallet's toolbar popup opens by itself. No e2e can see a toolbar popup in headless Chrome.
 
 ### Firefox on a Mac, started from the toolbar icon
@@ -145,9 +134,10 @@ started by clicking the toolbar icon.
    popup comes back by itself, unlocked.
 2. Lock screen → profile name → New profile → Passkey → create: the passkey window runs the prompt,
    and the popup comes back by itself on the new profile.
-3. Delete that new profile, then lock screen → profile name → Import profile → Passkey, choosing its
-   passkey: the passkey window runs the prompt, and the profile comes back with the same address.
-4. With that profile unlocked, Settings → Back up profile → Full Backup: the export continues in a
-   window of its own, asks for the passkey and downloads the file.
-5. Delete that profile again, then lock screen → profile name → Import profile → Full Backup: the
-   restore opens in a window of its own and brings the file from step 4 back to the same address.
+3. With that profile unlocked, Settings → Back up profile → Recovery Phrase: the reveal continues in
+   a window of its own, asks for the passkey and shows the words.
+4. Settings → Back up profile → Full Backup: the export continues in a window of its own, asks for
+   the passkey, then a file password, and downloads the file.
+5. Delete that profile, then lock screen → profile name → Import profile → Full Backup: the
+   restore opens in a window of its own, opens the file from step 4 with its password and brings it
+   back to the same address.

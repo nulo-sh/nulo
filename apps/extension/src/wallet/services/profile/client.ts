@@ -3,7 +3,6 @@ import type { MethodsSpec, Restored, ServiceSpec } from "@/wallet/base"
 import { DEFAULT_INIT_TIMEOUT_MS, ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { PROFILE_SERVICE_NAME, type ProfileInfo, type Events, type Methods, type RestoreSecret } from "./spec"
 
 export * from "./spec"
@@ -33,11 +32,10 @@ export class ProfileServiceClient extends ServiceClient<Methods, Events> impleme
 	public override restore(
 		profile: ProfileInfo,
 		secret: RestoreSecret,
-		password?: string,
-		credentialData?: PasskeyCredentialData,
+		password: string,
 		allowDuplicate?: boolean,
 	): Promise<Restored<ProfileInfo>> {
-		return this.request("restore", profile, secret, password, credentialData, allowDuplicate)
+		return this.request("restore", profile, secret, password, allowDuplicate)
 	}
 
 	/**
@@ -102,12 +100,11 @@ export class ProfileServiceClient extends ServiceClient<Methods, Events> impleme
 definePassthroughsExhaustive<Methods>()(ProfileServiceClient.prototype, [
 	"getActiveProfile",
 	"getProfiles",
-	"generateProfileId",
 	"createProfile",
 	"createPasskeyProfile",
 	"unlockProfile",
 	"unlockPasskeyProfile",
-	"getPasskeyCredentialId",
+	"getPasskeyUnlockParams",
 	"getSessionHandle",
 	"captureRunFence",
 	"assertRunFence",
@@ -117,7 +114,6 @@ definePassthroughsExhaustive<Methods>()(ProfileServiceClient.prototype, [
 	"changeProfilePassword",
 	"deleteProfile",
 	"importMnemonic",
-	"importPasskey",
 	"exportPlain",
 	"exportMnemonic",
 	"restore",

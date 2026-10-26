@@ -4,6 +4,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { AppTaggingSecret } from "@aztec-labs/stdlib/logs"
 import { Note } from "@aztec-labs/stdlib/note"
 import { NoteAndSlot } from "@aztec-labs/stdlib/tx"
+import fc from "fast-check"
 import { describe, expect, test } from "vitest"
 import { scrubHex32, trim } from "./utils"
 
@@ -41,6 +42,8 @@ describe("trim — secret key names", () => {
 		["passhash", SECRET],
 		["passphrase", SECRET],
 		["prf", SECRET],
+		["prfSalt", SECRET],
+		["prf-salt", SECRET],
 		["wrappedSecret", SECRET],
 		["envelopeMac", SECRET],
 		["bearer", SECRET],
@@ -104,6 +107,37 @@ describe("trim — secret key names", () => {
 		expect(JSON.stringify(out, (_, v) => (typeof v === "bigint" ? v.toString() : v))).not.toContain(sentinel)
 		expect(out[0][key]).toBe(`[${key}]`)
 		expect(out[0].keepMe).toBe("visible")
+	})
+
+	// A passkey's PRF input names its profile's unlock key, so no log line may carry it, however deep.
+	test("over generated trees, a PRF input under either spelling at any depth never survives", () => {
+		const sentinel = "c2VudGluZWwtcHJmLWlucHV0LTMyLWJ5dGVzLWxvbmc="
+		const step = fc.oneof(
+			fc
+				.string({ maxLength: 8 })
+				.filter((key) => key !== "__proto__")
+				.map((key) => ({ key })),
+			fc.nat({ max: 3 }).map((index) => ({ index })),
+		)
+		const tree = fc.record({
+			path: fc.array(step, { maxLength: 10 }),
+			spelling: fc.constantFrom("prfSalt", "prf-salt"),
+			siblings: fc.dictionary(fc.string({ maxLength: 6 }), fc.jsonValue({ maxDepth: 2 }), { maxKeys: 3 }),
+		})
+		fc.assert(
+			fc.property(tree, ({ path, spelling, siblings }) => {
+				let value: unknown = { ...siblings, [spelling]: sentinel }
+				for (const at of [...path].reverse()) {
+					if ("index" in at) {
+						const list: unknown[] = Array(at.index).fill("x")
+						list.push(value)
+						value = list
+					} else value = { ...siblings, [at.key]: value }
+				}
+				expect(JSON.stringify(trim(value))).not.toContain(sentinel)
+			}),
+			{ numRuns: 500 },
+		)
 	})
 
 	test("blanks a nested secret, not just a top-level one", () => {

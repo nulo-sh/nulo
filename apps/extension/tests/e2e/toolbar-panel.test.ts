@@ -32,19 +32,11 @@ import { navigateByHash, readProfileNames, readSessionRow, waitForSelectedAccoun
 import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 import { PollTimeoutError, pollUntil } from "./fixtures/poll"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
-import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
+import { downloadPasskeyBackup, FILE_PASSWORD } from "./helpers/backup-export"
 import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } from "./helpers/contacts"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { completeResetRitual } from "./helpers/crash-truth"
-import {
-	buildSyntheticPasskeyBackup,
-	readActiveAccount,
-	readRegisteredPasskey,
-	refusePasskeyRestore,
-	submitPasskeyFullBackup,
-	waitForActiveAccount,
-	writeBackupToTemp,
-} from "./helpers/import-drivers"
+import { readActiveAccount, submitEncryptedFullBackup, waitForActiveAccount, writeBackupToTemp } from "./helpers/import-drivers"
 import { HANDBACK_KEY } from "@/utils/panel-handback"
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
@@ -240,17 +232,6 @@ async function createPasskeyProfile(page: Page): Promise<string> {
 	return account as string
 }
 
-async function waitForEnabled(page: Page, testid: string, timeoutMs: number): Promise<void> {
-	await page.waitForFunction(
-		(id: string) => {
-			const button = document.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)
-			return !!button && !button.disabled
-		},
-		{ timeout: timeoutMs, polling: 250 },
-		testid,
-	)
-}
-
 const windowIdOf = (page: Page) => page.evaluate(async () => (await chrome.windows.getCurrent()).id ?? -1)
 
 /** The focused window's id, read from `control` without moving focus. */
@@ -433,61 +414,15 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 		}
 	}, 240_000)
 
-	test("import from the dying panel: a duplicate fails in the window, a deleted profile comes back", async ({
-		freshExtensionPerTest: ctx,
-	}) => {
+	test("a panel that outlives the passkey prompt unlocks in place and stays the only panel", async ({ freshExtensionPerTest: ctx }) => {
 		const { browser } = ctx
 		const auth = await sessionAuthenticator(browser)
 		try {
 			await registerProfile(ctx)
 			const control = await openPopup(ctx)
 			await waitForHash(control, "#/popup/general")
-			const address = await createPasskeyProfile(control)
-
-			// The passkey's profile still exists, so the window fails the import after its prompt.
-			await clickByTestId(control, "header-lock")
-			await waitForHash(control, "#/popup/auth", 15_000)
-			await openActionPopup(browser)
-			await panelOn(browser, "#/popup/auth")
-			for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
-			const before = new Set(browser.targets())
-			await withDyingPanel(browser, async (death) => {
-				await clickInPanel(browser, "import-option-passkey")
-				const win = await openedWindow(ctx, before, "#/windows/passkey")
-				await win.waitForSelector('[data-testid="passkey-window"][data-state="step-exists"]', { timeout: 60_000 })
-				await win.waitForSelector(sel("passkey-window-error"), { visible: true, timeout: 5_000 })
-				const record = await death.record()
-				expect(record.calls, "passkey and file prompts opened in the panel").toEqual([])
-				expect(record.windowActiveAt, "a window took focus from the panel").toBeDefined()
-				await clickByTestId(win, "passkey-window-close")
-				await waitForPopupClosed(win, 10_000)
-			})
-			await sleep(POPUP_RETURN_FOCUS_MS)
-			expect(await control.evaluate(() => chrome.extension.getViews({ type: "popup" }).length)).toBe(0)
-			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
-
-			// Deleted, it comes back from the panel with its address. The page unlocks it first: only the
-			// profile in use can be deleted.
-			await clickByTestId(control, "auth-submit")
-			await waitForHash(control, "#/popup/general", 60_000)
-			await navigateByHash(control, "#/popup/settings/security/reset")
-			await completeResetRitual(control, "#/popup/auth")
-			await openActionPopup(browser)
-			await panelOn(browser, "#/popup/auth")
-			for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
-			const restored = await stepFromDyingPanel(
-				ctx,
-				control,
-				undefined,
-				() => clickInPanel(browser, "import-option-passkey"),
-				await refuseInWindow(auth),
-			)
-			await waitForActiveAccount(control, address, 60_000)
-			expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
-			// The popup comes back by itself. It must finish booting before the page locks, or its boot
-			// sees the session close under it.
-			await panelOn(browser, "#/popup/general")
-			await closeActionPopup(browser)
+			await createPasskeyProfile(control)
+			const created = await sessionProfile(control)
 
 			// A panel that outlives the prompt, as headless Firefox's does, unlocks in place. The
 			// session is read from the page until the window is done: a read in the panel moves focus.
@@ -497,7 +432,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await panelOn(browser, "#/popup/auth")
 			await watchSessionWrites(control)
 			await clickInPanel(browser, "auth-submit")
-			expect((await sessionOpened(control, undefined)).profile).toBe(restored.profile)
+			expect((await sessionOpened(control, undefined)).profile).toBe(created)
 			await panelOn(browser, "#/popup/general", 60_000)
 			// Once the window is gone and the return has had its time, the panel is still the only one.
 			await control.waitForFunction(async () => (await chrome.windows.getAll()).every((win) => win.type !== "popup"), {
@@ -530,7 +465,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await recordCredentialGets(exportWindow)
 			await refusePasskeyStep(exportWindow, auth, "agree-continue-btn")
 			await clickByTestId(exportWindow, "agree-continue-btn")
-			await waitForEnabled(exportWindow, "download-backup-btn", 240_000)
+			await exportWindow.waitForSelector(sel("backup-encrypt-password-input"), { visible: true, timeout: 240_000 })
 			expect(await readCredentialGets(exportWindow)).toEqual([{ prf: true }])
 
 			// A file picker takes focus as a passkey prompt does, so Import contacts leaves the panel for a
@@ -688,42 +623,10 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 		}
 	}, 300_000)
 
-	test("a restore window whose passkey is refused restores on the second try", async ({ freshExtensionPerTest: ctx }) => {
-		const { browser } = ctx
-		const auth = await sessionAuthenticator(browser)
-		try {
-			await registerProfile(ctx)
-			const control = await openPopup(ctx)
-			await waitForHash(control, "#/popup/general")
-			const address = await createPasskeyProfile(control)
-			const file = writeBackupToTemp(
-				await buildSyntheticPasskeyBackup(control, await readRegisteredPasskey(control)),
-				"passkey-backup.json",
-			)
-			await navigateByHash(control, "#/popup/settings/security/reset")
-			await completeResetRitual(control, "#/popup/auth")
-
-			await openActionPopup(browser)
-			await panelOn(browser, "#/popup/auth")
-			for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
-			const restoreWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "import-option-full-backup"))
-			await restoreWindow.waitForSelector('[data-session-checked="true"]', { timeout: 60_000 })
-			await refusePasskeyRestore(restoreWindow, auth, "import-full-backup-submit-btn", file)
-			await clickByTestId(restoreWindow, "import-full-backup-submit-btn")
-			// The deletion leaves the active-account pointer on this address, so only the window's
-			// landing says the restore finished.
-			await waitForHash(restoreWindow, "#/popup/general", 120_000)
-			expect((await readRegisteredPasskey(control)).account.address).toBe(address)
-			expect((await readProfileNames(control)).sort()).toEqual(["Imported PK", "Main"])
-		} finally {
-			await auth.cleanup()
-		}
-	}, 300_000)
-
 	// The backup chain takes 96–180 s per attempt on hosted runners, so the PR lanes skip this; it runs
 	// locally and in every artifact smoke (nightly and release).
 	test.skipIf(process.env.CI === "true" && process.env.NULO_E2E_ARTIFACT_RUN !== "1")(
-		"a backup exported from the panel restores in its own window to the same address",
+		"a passkey profile's backup exported from the panel restores in its own window to the same address",
 		{ retry: 0, timeout: 600_000 },
 		async ({ freshExtensionPerTest: ctx }) => {
 			const { browser } = ctx
@@ -740,8 +643,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await waitForHash(exportWindow, EXPORT, 60_000)
 				await clickByTestId(exportWindow, "agree-continue-btn")
 				const file = writeBackupToTemp(
-					await downloadPlainPasskeyBackup(exportWindow, clickByTestId, 300_000),
-					"passkey-backup.json",
+					await downloadPasskeyBackup(exportWindow, FILE_PASSWORD, clickByTestId, 300_000),
+					"passkey-backup.txt",
 				)
 				await clickByTestId(exportWindow, "subpage-back")
 				await waitForPopupClosed(exportWindow, 10_000)
@@ -755,7 +658,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await panelOn(browser, "#/popup/auth")
 				for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
 				const restoreWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "import-option-full-backup"))
-				await submitPasskeyFullBackup(restoreWindow, file, 300_000)
+				// The file opens with its own password, and restores as a password profile.
+				await submitEncryptedFullBackup(restoreWindow, file, FILE_PASSWORD, 300_000)
 				await waitForActiveAccount(control, address, 60_000)
 				expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
 			} finally {

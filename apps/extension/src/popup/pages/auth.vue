@@ -58,6 +58,8 @@ const isAwaitingResponse = ref(false)
 let isUnmounted = false
 
 const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
+// A passkey profile made before 1.1, which no unlock opens: the screen offers only its deletion.
+const isRetired = computed(() => appStore.profile?.retired === true)
 // Opened before the service answered: the heading, its line and the form depend on the profile's
 // kind, so they keep their place hidden until it is known rather than show the wrong form.
 const isProfileKnown = computed(() => !!appStore.profile)
@@ -81,6 +83,7 @@ const handlePasswordInput = () => {
 }
 
 const isAllowedToContinue = computed(() => {
+	if (isRetired.value) return false
 	if (isPasskeyProfile.value) return true
 	if (!password.value.length) return false
 	if (isWrongPassword.value) return false
@@ -105,15 +108,15 @@ const advancePastAuth = async () => {
 	if (failure) postAuthNavClaimed = false
 }
 
-/** Path A pulls credentialId so the ceremony targets THIS profile's credential (not a discovery
- *  picker that would let the user choose any of their passkeys); Path B's background reads it from
- *  its own snapshot. `appStore.profile.id` is read at each site, as before — never captured once
+/** Path A pulls the credential and its PRF input so the ceremony targets THIS profile's credential
+ *  (not a discovery picker that would let the user choose any of their passkeys); Path B's
+ *  background reads both from its own snapshot. `appStore.profile.id` is read at each site, as before — never captured once
  *  across the awaits. */
 const unlockActiveProfile = async () => {
 	if (isPasskeyProfile.value) {
 		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
-		const credentialId = await managers.profile.getPasskeyCredentialId(appStore.profile.id)
-		const credData = await runCeremony({ mode: "get", credentialId, step: "unlock", profileName: appStore.profile.name })
+		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(appStore.profile.id)
+		const credData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "unlock", profileName: appStore.profile.name })
 		return managers.profile.unlockPasskeyProfile(appStore.profile.id, credData)
 	}
 	return managers.profile.unlockProfile(appStore.profile.id, password.value)
@@ -275,19 +278,31 @@ watch(
 			<AuthProfilePill :name="appStore.profile?.name ?? ''" @click="popupStore.open('select_profile')" />
 
 			<Flex direction="column" align="center" gap="8" :class="!isProfileKnown && $style.unknown" data-testid="auth-heading">
-				<h1 :class="$style.heading">
+				<h1 v-if="isRetired && !isBootWithheld" :class="[$style.heading, $style.centered]" data-testid="auth-setup-again">
+					Set up<br />again
+				</h1>
+				<h1 v-else :class="$style.heading">
 					{{ isBootWithheld ? 'Wallet not ready' : isPasskeyProfile ? 'Passkey required' : 'Password required' }}
 				</h1>
 				<p v-if="isBootWithheld" :class="$style.subheading" role="status" data-testid="auth-boot-failed">
 					{{ bootRetrying ? 'Retrying the wallet start-up…' : 'Your session is open, but the wallet could not finish starting up. Use RETRY above.' }}
+				</p>
+				<p v-else-if="isRetired" :class="$style.subheading" data-testid="auth-setup-again-text">
+					This profile was made with an earlier version of Nulo and can't be opened in this version. Delete it,
+					then create or import a profile. What it held stays on the network, out of this version's reach.
 				</p>
 				<p v-else :class="$style.subheading">
 					{{ isPasskeyProfile ? 'Use your passkey to continue' : 'Enter your profile password to continue' }}
 				</p>
 			</Flex>
 
+			<div v-if="!isBootWithheld && isRetired" :class="$style.form">
+				<Button variant="cta" wide data-testid="auth-delete-retired" @click="router.push('/popup/settings/security/reset')">
+					Delete profile
+				</Button>
+			</div>
 			<form
-				v-if="!isBootWithheld"
+				v-else-if="!isBootWithheld"
 				@submit.prevent="handleUnlockWallet"
 				:class="[$style.form, !isProfileKnown && $style.unknown]"
 				data-testid="auth-form"
@@ -342,7 +357,7 @@ watch(
 			</form>
 		</Flex>
 
-		<Flex v-snack-footer justify="center" :class="$style.footer">
+		<Flex v-if="!isRetired" v-snack-footer justify="center" :class="$style.footer">
 			<Tooltip side="top" position="center" textAlign="center" maxWidth="220px">
 				<button
 					@click="popupStore.open('forgot_password')"
@@ -353,7 +368,8 @@ watch(
 					Delete profile
 				</button>
 				<template #content>
-					Forgot your password? Delete this profile and re-import it with your recovery phrase.
+					{{ isPasskeyProfile ? "Lost your passkey?" : "Forgot your password?" }} Delete this profile and re-import it
+					with your recovery phrase.
 				</template>
 			</Tooltip>
 		</Flex>
@@ -403,6 +419,10 @@ watch(
 	color: var(--txt-primary);
 	margin: 0;
 	line-height: 1.2;
+}
+
+.centered {
+	text-align: center;
 }
 
 .subheading {
