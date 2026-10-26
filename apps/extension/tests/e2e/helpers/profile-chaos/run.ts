@@ -54,6 +54,7 @@ import {
 	type Plan,
 	type PlannedStep,
 	profileOf,
+	type StepEnd,
 	startWorld,
 	type World,
 } from "./model"
@@ -86,7 +87,7 @@ export interface Verdict {
 }
 
 /** Every secret the run knows, in each encoding a leak could take. */
-async function needlesOf(s: RunState): Promise<Needle[]> {
+export async function needlesOf(s: RunState): Promise<Needle[]> {
 	const out: Needle[] = []
 	const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64")
 	for (const [ref, value] of s.secrets)
@@ -131,7 +132,7 @@ const masked = (out: Violation[], needles: readonly Needle[]): Violation[] =>
 
 /** Every URL and every needle's value replaced by a name, so the record can carry an error's text:
  *  a node URL may carry a provider key. A loopback URL keeps its origin, which names a local port. */
-function mask(text: string, needles: readonly Needle[]): string {
+export function mask(text: string, needles: readonly Needle[]): string {
 	const unlinked = text.replace(URL_IN_TEXT, (url) => LOOPBACK_ORIGIN.exec(url)?.[0] ?? "<url>")
 	return needles.reduce((t, n) => (n.value.length >= MIN_NEEDLE ? t.split(n.value).join(`<${n.name}>`) : t), unlinked)
 }
@@ -243,15 +244,17 @@ function scanFiles(s: RunState, needles: readonly Needle[]): LeakHit[] {
 	return hits
 }
 
-interface StepEvidence {
+export interface StepEvidence {
 	violations: Violation[]
 	incomplete: string[]
 }
 
-async function checkStepLogs(
+/** Drains the logs since the last read and checks them with the page errors since the last mark:
+ *  O4 over what `ends` allows, the continuity of the ids, and every needle in every line, the lines
+ *  read before included for a needle learnt since. */
+export async function checkStepLogs(
 	s: RunState,
-	step: PlannedStep,
-	before: World,
+	ends: readonly StepEnd[],
 	restarted: boolean,
 	needles: readonly Needle[],
 ): Promise<StepEvidence & { hits: LeakHit[] }> {
@@ -278,7 +281,7 @@ async function checkStepLogs(
 	]
 	s.logs.seen.push(...logs.map(({ id, text }) => ({ id, text })))
 	for (const n of needles) s.logs.searched.add(n.name)
-	const errors = checkErrors([...pageErrors, ...logErrors(logs)], endsOf(step, before))
+	const errors = checkErrors([...pageErrors, ...logErrors(logs)], ends)
 	add(s.warns, errors.warns)
 	add(s.allowed, errors.allowed)
 	return { violations: errors.violations, incomplete, hits }
@@ -287,7 +290,7 @@ async function checkStepLogs(
 /** Each live password profile's phrase, read once through the wallet's own export with its
  *  password, so a phrase leaked before any reveal is a needle from its first step; a phrase it
  *  cannot read leaves the leak scan short, a gap of the step. */
-async function learnPhrases(s: RunState, next: World): Promise<string[]> {
+export async function learnPhrases(s: RunState, next: World): Promise<string[]> {
 	const gaps: string[] = []
 	for (const p of live(next)) {
 		const id = s.bindings.profiles.get(p.ref)
@@ -386,7 +389,7 @@ async function checkStep(
 	const opened = await openNewFiles(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
-	const logs = await checkStepLogs(s, step, before, restarted, needles)
+	const logs = await checkStepLogs(s, endsOf(step, before), restarted, needles)
 	const storage = await scanStorage(s.anchor, needles, s.legacyPlain)
 	const fileHits = scanFiles(s, needles)
 	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...opened.prfSalt], exports: opened.exports }
