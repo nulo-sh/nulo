@@ -470,6 +470,27 @@ export class SessionManager {
 		}
 	}
 
+	/** Closes `profileId`'s session: the one in memory, or, while no session is in memory, the
+	 *  persisted record naming it, which an earlier failed delete leaves. Caller MUST hold the
+	 *  facade lock; memory is checked again after the read in case the lock was force-released.
+	 *  Another profile's session or record is never touched; an unreadable record stays, as at
+	 *  restore. Never throws. */
+	public async closeProfile(profileId: string): Promise<void> {
+		const recorded = this.activeSession ? undefined : await this.persistedProfile()
+		if (this.isActive(profileId) || (recorded === profileId && !this.activeSession)) await this.close()
+	}
+
+	/** The profile the persisted record names, or `undefined` when there is none or it cannot be
+	 *  read. The read's error stays out of the log: a JSON parse error quotes the stored text. */
+	private async persistedProfile(): Promise<string | undefined> {
+		try {
+			return (await this.session.get())?.profile
+		} catch {
+			this.logger.log(LOG_SOURCE, LogLevel.Warn, "Persisted session unreadable; left in place")
+			return undefined
+		}
+	}
+
 	/** Resets `since` to now, extending the TTL window. No-op when no
 	 *  session is active (via the `getActive` guard). Does not emit —
 	 *  the UI already has the correct active-profile info. */
@@ -678,9 +699,7 @@ export class SessionManager {
 		}
 	}
 
-	/** `true` iff a session belongs to `profileId` right now. Used by
-	 *  the facade to decide whether a profile-mutation operation (e.g.
-	 *  `deleteProfile`) should also close the session. */
+	/** `true` iff a session belongs to `profileId` right now. */
 	public isActive(profileId: string): boolean {
 		return this.activeSession?.session.profile === profileId
 	}

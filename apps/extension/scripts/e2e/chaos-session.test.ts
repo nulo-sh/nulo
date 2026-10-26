@@ -44,6 +44,7 @@ import {
 	writeOwn,
 } from "../../tests/e2e/helpers/chaos-session/protocol"
 import { PROFILE_ROW_FIELDS, type ProfileReading, type SessionReading } from "../../tests/e2e/helpers/profile-chaos/checkers"
+import { readFace } from "../../tests/e2e/helpers/profile-chaos/page-face"
 import { runnerEnv } from "./chaos-session"
 
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-chaos-session-test-"))
@@ -477,6 +478,24 @@ describe("the session's processes", () => {
 	})
 })
 
+describe("a page read as the checks run", () => {
+	const page = (answers: (() => Promise<unknown>)[], closedAfter: boolean) => {
+		let call = 0
+		return { evaluate: () => (answers[call++] ?? answers.at(-1))?.(), isClosed: () => closedAfter } as never
+	}
+	const detached = () => Promise.reject(new Error("Attempted to use detached Frame 'F'."))
+	const face = { hash: "#/popup/general" }
+
+	test("that closed as it was read is no page to judge", async () => {
+		expect(await readFace(page([detached], true))).toBeUndefined()
+	})
+
+	test("that is still open is read again, and a second failure throws", async () => {
+		expect(await readFace(page([detached, () => Promise.resolve(face)], false))).toEqual(face)
+		await expect(readFace(page([detached, detached], false))).rejects.toThrow("detached Frame")
+	})
+})
+
 describe("a replay", () => {
 	const shown = {
 		n: 4,
@@ -600,6 +619,14 @@ describe("a replay", () => {
 			),
 		).toEqual([])
 		expect(compareReplay({ actions: [pick("downloads/1-a.gz")], end }, { actions: [pick("downloads/2-a.gz")], end })).toHaveLength(1)
+	})
+
+	test("of a session whose end was not read differs, whatever its commands did", () => {
+		const unread = { unreadable: "a command past its bound still ran 180000 ms later" }
+		expect(compareReplay({ actions, end: unread }, { actions, end })).toEqual([
+			`the original's end is unreadable: ${unread.unreadable}`,
+		])
+		expect(compareReplay({ actions, end }, { actions, end: unread })).toHaveLength(1)
 	})
 
 	test("of a session that ended at its deadline leaves out the end its launcher sends", () => {

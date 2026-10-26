@@ -9,7 +9,7 @@
  */
 import type { Page } from "puppeteer"
 import { SEALED_READ_MESSAGE, type SealedReadRow } from "@/e2e/sealed-read-message"
-import { type SealedStoreName, STORES } from "@/wallet/storage/stores"
+import type { SealedStoreName } from "@/wallet/storage/stores"
 
 export { SEALED_READ_MESSAGE, type SealedReadRow }
 
@@ -33,32 +33,19 @@ export async function readSealedRow<T = Record<string, unknown>>(
 	return (await readSealedRows<T>(page, root)).find((row) => row.naturalId === naturalId)?.row
 }
 
-/** Every row of `root` as the wallet reads it: through the seam on a build that has it, else the
- *  rows stored under the root's prefix, parsed, as a build that seals none of them keeps them (the
- *  release build an update starts from). A stored row that does not parse is skipped. */
-export async function readRowsOnAnyBuild<T = Record<string, unknown>>(page: Page, root: SealedStoreName): Promise<SealedReadRow<T>[]> {
-	const prefix = `${STORES[root].ref.root}@`
-	const { answer, stored } = await page.evaluate(
-		async (message, rootPrefix) => {
-			const answer: unknown = await chrome.runtime.sendMessage(message).catch(() => undefined)
-			if (Array.isArray(answer)) return { answer, stored: [] }
-			const all = await chrome.storage.local.get(null)
-			return { answer: undefined, stored: Object.entries(all).filter(([key]) => key.startsWith(rootPrefix)) }
-		},
-		{ type: SEALED_READ_MESSAGE, root },
-		prefix,
-	)
-	if (answer) return answer as SealedReadRow<T>[]
-	return stored.flatMap(([storageKey, value]) => {
-		try {
-			const row = JSON.parse(value as string) as T
-			const profileId = (row as { profileId?: unknown }).profileId
-			const owner = typeof profileId === "string" ? profileId : undefined
-			return [{ storageKey, naturalId: storageKey.slice(prefix.length), profileId: owner, sealed: false, row }]
-		} catch {
-			return []
-		}
+/** Every row of `root` as the wallet reads it: through the seam on a build that has it, else through
+ *  `viaService`, the build's own service read, which a release build an update starts from answers
+ *  once unlocked, whether or not it seals the root. */
+export async function readRowsOnAnyBuild<T = Record<string, unknown>>(
+	page: Page,
+	root: SealedStoreName,
+	viaService: () => Promise<T[]>,
+): Promise<T[]> {
+	const answer = await page.evaluate((message) => chrome.runtime.sendMessage(message).catch(() => undefined) as Promise<unknown>, {
+		type: SEALED_READ_MESSAGE,
+		root,
 	})
+	return Array.isArray(answer) ? (answer as SealedReadRow<T>[]).map(({ row }) => row) : viaService()
 }
 
 /** The rows of `root`, decoded, keyed by where each is stored, as `chrome.storage.local.get` keys them. */
