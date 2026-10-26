@@ -88,11 +88,33 @@ function browserFlag(raw: string | undefined): SessionBrowser {
 	return raw as SessionBrowser
 }
 
+/** Paths that change no code a session runs. */
+const DOCS = [":(exclude)*.md", ":(exclude)implementations-plan/**"]
+
+const git = (args: string[]): string => execFileSync("git", args, { cwd: APP_DIR, encoding: "utf8" }).trim()
+
+/** The commit the session runs, marked `+dirty` when the tree holds uncommitted code. */
 const revision = (): string => {
 	try {
-		return execFileSync("git", ["rev-parse", "HEAD"], { cwd: APP_DIR, encoding: "utf8" }).trim()
+		const dirty = git(["status", "--porcelain", "--", ":/", ...DOCS.map((d) => d.replace(":(exclude)", ":(exclude,top)"))]) !== ""
+		return `${git(["rev-parse", "HEAD"])}${dirty ? "+dirty" : ""}`
 	} catch {
 		return "unknown"
+	}
+}
+
+/** Why two sessions' revisions may not run the same code: either was dirty or unknown, or the two
+ *  commits differ outside the docs. */
+function codeDifference(a: string, b: string): string | undefined {
+	if (a === b && !a.endsWith("+dirty") && a !== "unknown") return undefined
+	if ([a, b].some((r) => r.endsWith("+dirty") || r === "unknown")) return `the replay ran on ${b}, the original on ${a}`
+	try {
+		const changed = git(["diff", "--name-only", a, b, "--", ":/", ...DOCS.map((d) => d.replace(":(exclude)", ":(exclude,top)"))])
+		return changed
+			? `the replay ran on ${b}, the original on ${a}, which differ in ${changed.split("\n").slice(0, 5).join(", ")}`
+			: undefined
+	} catch {
+		return `the replay ran on ${b}, the original on ${a}, which git cannot compare`
 	}
 }
 
@@ -350,8 +372,8 @@ async function replayMain(argv: readonly string[]): Promise<number> {
 	const stopped = await stopSession(dir)
 	const differences = compareReplay({ actions, end: readEnd(original) }, { actions: readActions(dir), end: readEnd(dir) })
 	const replayInfo = readSessionInfo(dir)
-	if (replayInfo.revision !== info.revision)
-		differences.push(`the replay ran on ${replayInfo.revision}, the original on ${info.revision}`)
+	const code = codeDifference(info.revision, replayInfo.revision)
+	if (code) differences.push(code)
 	if (stopped.exitCode !== 0) differences.push(`the replay's runner exited ${String(stopped.exitCode)}`)
 	const verdict = { of: info.id, replay: replayInfo.id, same: differences.length === 0, differences }
 	publishFile(join(dir, "replay.json"), `${JSON.stringify(verdict, null, 2)}\n`)

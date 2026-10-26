@@ -65,8 +65,18 @@ export interface SessionReading {
 	protectedCallRefused?: boolean
 }
 
-/** Routes a page may show while no session is open. */
-const LOCKED_ROUTES = ["/popup/auth", "/popup/register", "/popup/import", "/popup/legal", "/onboarding", "/setup"]
+/** Routes a page may show while no session is open: every popup page whose route meta sets
+ *  `isAuthRequired: false`, and the legal, onboarding and setup pages. */
+const LOCKED_ROUTES = [
+	"/popup/auth",
+	"/popup/register",
+	"/popup/import",
+	"/popup/profile/new",
+	"/popup/settings/security/reset",
+	"/popup/legal",
+	"/onboarding",
+	"/setup",
+]
 export const shownWhileLocked = (route: string): boolean => LOCKED_ROUTES.some((r) => route === r || route.startsWith(`${r}/`))
 
 /** The routes the popup leaves for Home once a profile is active; an import, legal or onboarding
