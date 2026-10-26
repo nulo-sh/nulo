@@ -108,6 +108,8 @@ The owner, 2026-10-25:
 | D20 | (A1) A row that does not classify as a password row gets each password path's wrong-password refusal before any decrypt; `P/service.open-slots.test.ts` pins it | today's: a type-edited row with intact slots opened on the export paths; a missing slot threw a `TypeError` | only rows no build writes change; one opener that classifies first is D5's design |
 | D18 | Accessibility (the owner's 2026-10-19 delegation): the import unlock choice reuses `AuthMethodTabs` (roving tablist, one Tab stop); new controls are native `Button`s with the 2 px accent ring; a disabled save button is out of the Tab path | | CLAUDE.md § Keyboard & focus order |
 | D21 | (A2, amends D9; the tree wins) The shape refusal reads only bodies typed `passkey`; the get request always names its credential; `restore` and `exportImportedKeysDek` stay password-only until A3; the full list is `lessons/phase-A2.md` § Deviations | refusing any body that carries an earlier passkey key | a password body meets its own gates whatever extra keys it carries, so no 0.31.0 password backup is refused by shape |
+| D22 | (A4) Terms 1.2 and Privacy 1.2.6 take `«FILL: effective date»` until the promote publishes them, with their `BEFORE-LAUNCH.md` § 4 entry; `launch-legal` refuses a promote into `main` while one remains | a date now | privacy 1.2.2 to 1.2.5's precedent: `dev` publishes nothing, and a patch takes effect on publication |
+| D23 | (A4) Beyond the signed text, each the shortest sentence the live behaviour needs and each an owner ask (OWNER-ASKS.md § A4 asks): privacy § 9 drops "optional", § 3's session row says "the profile's session" (true once A3 lands OA-10 B); the README banner no longer names the passkey among what restores a profile; the history rows; the listing's citations. The listing's credential-id row stays as signed | rewording signed text | the signed text is the owner's; a gap is filled, a conflict is asked |
 
 **Outline B** (both reviews saw it): lift the unlock into `unlock: {kind: "password"} | {kind: "passkey", credentialId, prfSalt}` on every row, migrate password rows into it, and ship the code in one arc plus a docs arc. Rejected in D3 and D13.
 
@@ -227,7 +229,7 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
 
 **A3.2** e2e: `passkey-backup` restores a passkey profile's backup choosing a new passkey and lands on the same address (proves the restore's passkey path; replaces today's round trip, estimate +4 s per browser); under OA-5 C, `passkey-paths` creates a second profile with the existing passkey (proves the discovery request with a new salt; estimate +10 s per browser); under OA-6, `security` changes the method both ways (estimate +15 s per browser). Gate: those files green on both browsers.
 
-**A4.1** legal and listing per OA-11, README per OA-8d. Gate: fast layers; `bun run test:all` (`@nulo/legal`); smoke `legal-acceptance` on both browsers (the re-acceptance sheet); `bun run check:plans`.
+**A4.1** ✓ legal and listing per OA-11, README per OA-8d. Gate: fast layers; `bun run test:all` (`@nulo/legal`); smoke `legal-acceptance` on both browsers (the re-acceptance sheet); `bun run check:plans`.
 
 ## UI impact
 
@@ -273,6 +275,9 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
 - **Opus, A2 round 1 (storage and backups):** approve. Accepted: the unread plain copy of the body dropped; a pick serial, so a pick a later one overtook publishes nothing (D9 claimed a pick fence the tree lacked), with Restore again's control for a current passkey body (`84eae1d90`); stale test labels and comments, ARCHITECTURE's vectors line, PRF-NON-PORTABLE's option A, a SECURITY.md clause trimmed (`84eae1d90`, `401267c0e`, `7c3e5da20`). Rejected: none.
 - **Codex, A2 round 2 (resumed):** conditional approve; round-1 fixes verified. Accepted: a pick back from its chooser while a restore runs stops there, and a restore's start advances the pick count, so a pick still reading publishes nothing over the run, in Restore and Restore again, with a test of each moment (`3750163c7`). Rejected: none.
 - **Codex, A2 round 3 (resumed):** approve; the round-2 fix verified (a Retry cannot start while a pick reads; a refused or duplicate restore leaves the count alone), no new finding. Loop converged.
+- **Codex, A4 round 1 (documents against A1, A2 and A3's map):** conditional approve. Accepted: privacy § 9's "optional" dropped (every full backup leaves encrypted); the declaration note cites where the random identifier is made and handed over (`09f631930`). Held for the owner: the listing's credential-id row says "No", while each prompt hands the id and the profile's input to the browser and the authenticator (D23). Rejected: "(WebAuthn PRF)" in the README's developer-facing Status list.
+- **Opus, A4 round 1 (mechanics):** the versions, material flag, sheet, null dates, permalinks, archives and consent pin hold. Its three points were already dispositioned: the A3 wording ships after A3 (Delivery), the credential-id row and the README banner bullet are owner asks (D23). Rejected: none.
+- **Codex, A4 round 2 (resumed):** no new finding; both fixes verified. Loop converged.
 
 ## Seeds (draft; finalized after approval)
 
