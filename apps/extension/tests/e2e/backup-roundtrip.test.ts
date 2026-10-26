@@ -3,7 +3,7 @@
  * nothing else drives (`decryptBackup` had zero unit or e2e coverage):
  *
  *   export (password profile) → Protect with Password → capture the .gz
- *   download in-page → import in a FRESH extension → wrong password rejects
+ *   download in-page → import that .gz in a FRESH extension → wrong password rejects
  *   cleanly → right password decrypts → restore succeeds → the derived
  *   account address round-trips.
  *
@@ -18,7 +18,7 @@ import { join } from "node:path"
 import { expect } from "vitest"
 import { clickByTestId, launchExtension, openPopup, replaceInputValue, test, waitForHash, pickFileByTestId } from "./fixtures/extension"
 import { ensureUnlocked, navigateByHash, reopenAndRecoverAfterImport } from "./fixtures/helpers"
-import { armDownloadCapture, readCapturedDownload } from "./helpers/download-capture"
+import { armDownloadCapture, readCapturedDownload, readCapturedFile } from "./helpers/download-capture"
 import { gotoPopupImport, readActiveAccount, TEST_PASSWORD, waitForActiveAccount } from "./helpers/import-drivers"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
@@ -64,15 +64,18 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 	await armDownloadCapture(page, { gzip: true })
 	await clickByTestId(page, "download-backup-btn")
 	const ciphertext = await readCapturedDownload(page)
+	const exported = await readCapturedFile(page)
 	await page.close()
 
 	// The capture is the DECOMPRESSED file content: the purpose tag, then the
 	// base64 frame whose AAD that tag is.
 	expect(ciphertext.trim().startsWith(`${FULL_BACKUP_V2_TAG}:`)).toBe(true)
 
+	// The import is fed the file exactly as the export named and wrote it, so the picker must list it.
+	expect(exported.name).toMatch(/^NuloEncryptedBackup_.+\.gz$/)
 	const dir = mkdtempSync(join(tmpdir(), "nulo-e2e-enc-backup-"))
-	const filePath = join(dir, "NuloEncryptedBackup_e2e.txt")
-	writeFileSync(filePath, ciphertext)
+	const filePath = join(dir, exported.name)
+	writeFileSync(filePath, exported.bytes)
 
 	// ── Import in a FRESH extension ────────────────────────────────────
 	const profileDir = mkdtempSync(join(tmpdir(), "nulo-enc-rt-"))

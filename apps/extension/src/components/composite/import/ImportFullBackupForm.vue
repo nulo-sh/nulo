@@ -72,7 +72,7 @@ watch(
 			<SettingItem
 				@click="emit('pickFile')"
 				title="Choose a backup file"
-				:description="selectedBackup ? selectedBackup.name : 'Select a .json or .txt file'"
+				:description="selectedBackup ? selectedBackup.name : 'Select a .gz, .json or .txt file'"
 				icon="package"
 				:iconBgColor="error.type === 'full_backup' ? 'red' : selectedBackup ? 'blue' : 'gray'"
 				chevron

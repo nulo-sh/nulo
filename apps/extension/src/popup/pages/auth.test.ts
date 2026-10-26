@@ -7,6 +7,7 @@ import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -37,6 +38,29 @@ vi.mock("@/composables/unlockWait", async (importOriginal) => {
 	return { ...mod, awaitProfileActivation: (...a: unknown[]) => waitHolder.mock(...(a as [])) }
 })
 
+/** Profile ids whose activation runs in this document, as the bootstrap's registry reports them. */
+const activations = vi.hoisted(() => ({ ids: undefined as unknown as Set<string> }))
+vi.mock("@/composables/useProfileBootstrap", async () => {
+	const { reactive } = await import("vue")
+	activations.ids = reactive(new Set<string>())
+	return { isAnyActivating: () => activations.ids.size > 0 }
+})
+
+/** Another window's writes of the last-active pointer, and the service's deletions, as this page hears them. */
+const elsewhere = vi.hoisted(() => {
+	const picks = new Set<(id: string | undefined) => void>()
+	const deletions = new Set<(profile: { id: string }) => void>()
+	return {
+		picks,
+		deletions,
+		pick: (id: string) => {
+			for (const listener of picks) listener(id)
+		},
+		delete: (id: string) => {
+			for (const listener of deletions) listener({ id })
+		},
+	}
+})
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
@@ -44,6 +68,10 @@ vi.mock("@/utils/core", () => ({
 			unlockPasskeyProfile: (...args: unknown[]) => unlockPasskeyProfile(...args),
 			getPasskeyUnlockParams: (...args: unknown[]) => getPasskeyUnlockParams(...args),
 			getProfiles: vi.fn(async () => []),
+			onProfileDeleted: {
+				add: (listener: (profile: { id: string }) => void) => elsewhere.deletions.add(listener),
+				remove: (listener: (profile: { id: string }) => void) => elsewhere.deletions.delete(listener),
+			},
 		},
 		account: undefined,
 	},
@@ -78,6 +106,10 @@ vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false
 vi.mock("@/utils/lastActiveProfile", () => ({
 	getLastActiveProfileId: vi.fn(async () => undefined),
 	setLastActiveProfileId: (...args: unknown[]) => setLastActiveProfileIdMock(...(args as [])),
+	onLastActiveProfileChanged: (listener: (id: string | undefined) => void) => {
+		elsewhere.picks.add(listener)
+		return () => elsewhere.picks.delete(listener)
+	},
 }))
 vi.mock("@/wallet/services/account/client", () => ({ AccountServiceClient: vi.fn() }))
 const routerPush = vi.fn()
@@ -87,6 +119,7 @@ vi.mock("vue-router", () => ({
 }))
 
 beforeEach(() => {
+	activations.ids?.clear()
 	unlockProfile.mockReset()
 	unlockPasskeyProfile.mockReset()
 	getPasskeyUnlockParams.mockReset()
@@ -404,6 +437,204 @@ describe("auth.vue — the mount's last-active lookup", () => {
 		release()
 		await flushPromises()
 		expect(appStore.profile).toBeUndefined()
+	})
+
+	test("after the last active profile was deleted, several left: none is presumed and the chooser opens", async () => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("deleted")
+		vi.mocked(managers.profile.getProfiles).mockResolvedValueOnce([B, A])
+		const { appStore } = mountAuth()
+		appStore.profile = undefined
+		await flushPromises()
+
+		expect(appStore.profile).toBeUndefined()
+		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+})
+
+describe("auth.vue — the profile it shows follows other windows", () => {
+	const A = { id: "pA", name: "A", type: "password" } as ProfileInfo
+	const B = { id: "pB", name: "B", type: "password" } as ProfileInfo
+	const C = { id: "pC", name: "C", type: "password" } as ProfileInfo
+
+	beforeEach(() => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, B, C])
+	})
+
+	test("another window's pick on its lock screen moves this one, and a later pick wins over an earlier one still loading", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		let releaseEarlier!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (releaseEarlier = () => resolve([A, B, C]))))
+		elsewhere.pick("pB")
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseEarlier()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a pick elsewhere while an unlock runs here leaves the profile that unlock reads", async () => {
+		unlockProfile.mockReturnValue(new Promise(() => {}))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		elsewhere.pick("pB")
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a selection made here while another window's pick loads stands", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([A, B, C]))))
+		elsewhere.pick("pB")
+		appStore.profile = C
+		release()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a pick or a deletion elsewhere during an unlock that fails here settles the profile once it ends", async () => {
+		const unlockThatFails = async (profile: ProfileInfo, elsewhereMeanwhile: () => void) => {
+			let fail!: () => void
+			unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+			const mounted = mountAuth()
+			mounted.appStore.profile = profile
+			await flushPromises()
+			await mounted.wrapper.find("[data-stub-input]").setValue("pass1234")
+			await mounted.wrapper.find("form").trigger("submit")
+			await flushPromises()
+			elsewhereMeanwhile()
+			await flushPromises()
+			expect(mounted.appStore.profile?.id).toBe(profile.id)
+			fail()
+			await flushPromises()
+			return mounted
+		}
+
+		const picked = await unlockThatFails(A, () => {
+			vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+			elsewhere.pick("pB")
+		})
+		expect(picked.appStore.profile?.id).toBe("pB")
+		picked.wrapper.unmount()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
+		const deleted = await unlockThatFails(A, () => {
+			vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+			elsewhere.delete("pA")
+		})
+		expect(deleted.appStore.profile).toBeUndefined()
+		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick elsewhere waits out an activation running here, and applies only if that activation leaves the page locked", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		activations.ids.add("pA")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+		activations.ids.delete("pA")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+
+		activations.ids.add("pB")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		elsewhere.pick("pC")
+		await flushPromises()
+		appStore.isLogined = true
+		activations.ids.delete("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("a profile chosen here during an unlock stands over a pick that arrived during it", async () => {
+		let fail!: () => void
+		unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		appStore.profile = C
+		fail()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		elsewhere.delete("pA")
+		await flushPromises()
+		expect(appStore.profile).toBeUndefined()
+		expect(popups.isOpened("select_profile")).toBe(true)
+
+		popups.closeAll()
+		appStore.profile = B
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C])
+		elsewhere.delete("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pC")
+		expect(popups.isOpened("select_profile")).toBe(false)
+	})
+
+	test("its selection cleared from outside while locked: the only profile left is selected, several open the chooser", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+		const selected = () => appStore.profile?.id
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBe("pB")
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBeUndefined()
+		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
+	test("a deletion of another profile changes nothing here", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, C])
+		elsewhere.delete("pB")
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pA")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
 	})
 })
 
