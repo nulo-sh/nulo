@@ -40,7 +40,7 @@ function checkLocked(r: SessionReading, p: ProfileReading): Violation[] {
 	if (r.protectedCallRefused === false) out.push(violation("O1", "locked, but a call that needs an open session was served"))
 	if (r.row) {
 		// A passkey profile's row outlives a background restart with no session behind it, and never
-		// holds a bearer (`code:apps/extension/src/wallet/services/profile/session-manager.ts:584`).
+		// holds a bearer (`code:apps/extension/src/wallet/services/profile/session-manager.ts:605`).
 		const passkey = p.listed.some((x) => x.id === r.row?.profile && x.type === "passkey")
 		if (!passkey || r.row.hasBearer || r.row.hasPasshash)
 			out.push(violation("O1", `locked, but a session row for ${r.row.profile} remains${r.row.hasBearer ? " with a bearer" : ""}`))
