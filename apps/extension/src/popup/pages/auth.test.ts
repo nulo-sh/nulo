@@ -605,6 +605,24 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(popups.isOpened("select_profile")).toBe(false)
 	})
 
+	test("its selection cleared from outside while locked: the only profile left is selected, several open the chooser", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(appStore.profile).toBeUndefined()
+		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
 	test("a deletion of another profile changes nothing here", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A

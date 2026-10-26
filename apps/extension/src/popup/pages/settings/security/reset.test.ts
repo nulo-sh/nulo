@@ -27,6 +27,8 @@ const client = vi.hoisted(() => {
 	}
 })
 vi.mock("@/wallet/services/profile/client", () => ({ deleteProfileClient: () => client }))
+const activation = vi.hoisted(() => ({ running: false }))
+vi.mock("@/composables/useProfileBootstrap", () => ({ isAnyActivating: () => activation.running }))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 const openToast = vi.hoisted(() => vi.fn())
@@ -83,6 +85,7 @@ async function mountReady(app: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	activation.running = false
 	installChromeStorage({ [getStartedPhraseSavedKey(main.id)]: true }, { persist: false })
 	reads.getNetworks.mockResolvedValue([])
 	reads.getAccounts.mockResolvedValue([])
@@ -130,6 +133,36 @@ describe("Delete Profile's client", () => {
 		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
 		expect(router.push).not.toHaveBeenCalled()
 		expect(client.disconnect).toHaveBeenCalledTimes(1)
+	})
+
+	test("a profile opening while the deletion runs keeps what it set; one only selected on the lock screen stands, and the deleted profile's state is cleared", async () => {
+		for (const opening of [true, false]) {
+			client.deleteProfile.mockReset()
+			const call = client.pending()
+			const { w, app } = await mountReady()
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			await flushPromises()
+			w.unmount()
+			const network = { id: "n1", chainId: 1 } as never
+			const account = { address: `0x${"1".repeat(64)}` } as never
+			app.profile = other
+			app.network = network
+			app.accounts = [account]
+			app.account = account
+			activation.running = opening
+
+			call.resolve(main)
+			await flushPromises()
+			expect(app.profile).toEqual(other)
+			if (opening) {
+				expect([app.network, app.accounts, app.account]).toEqual([network, [account], account])
+				expect(router.push).not.toHaveBeenCalled()
+			} else {
+				expect([app.network, app.accounts, app.account]).toEqual([null, [], null])
+				expect(router.push).toHaveBeenCalledWith("/popup/auth")
+			}
+			vi.clearAllMocks()
+		}
 	})
 
 	test("a page left with no deletion running lets go of its client at once", async () => {

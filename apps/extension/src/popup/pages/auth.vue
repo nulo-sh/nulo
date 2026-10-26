@@ -288,6 +288,14 @@ onUnmounted(() => {
 	stopFollowingPicks()
 	managers.profile.onProfileDeleted.remove(onProfileDeleted)
 })
+// Delete Profile clears the selection when its purge returns, which can be after this screen
+// settled, so a cleared selection settles again. An open chooser means this screen cleared it.
+watch(
+	() => appStore.profile,
+	(profile) => {
+		if (!profile && !appStore.isLogined && !popupStore.isOpened("select_profile") && !heldBack()) void settleProfile()
+	},
+)
 watch(selectionHeld, (held) => {
 	if (held || !missedWhileHeld) return
 	missedWhileHeld = false

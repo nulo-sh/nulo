@@ -21,6 +21,7 @@ import { importedKey, readImportedAccounts } from "./imported-accounts"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
+import { isAnyActivating } from "@/composables/useProfileBootstrap"
 import { readGetStarted } from "@/utils/get-started"
 const { openToast } = useToast()
 const { requestConfirm } = useConfirm()
@@ -182,13 +183,13 @@ const runDeletion = async (deletedId) => {
 
 	appStore.profiles = appStore.profiles.filter((p) => p.id !== deletedId)
 	// The lock this deletion causes lets another profile be unlocked before a long purge returns;
-	// that profile's session and route stand.
-	if (appStore.profile && appStore.profile.id !== deletedId) {
+	// that profile's session and route stand. One the lock screen only selected has neither.
+	if (appStore.profile && appStore.profile.id !== deletedId && (appStore.isLogined || isAnyActivating())) {
 		openToast({ kind: "success", label: "Profile deleted" })
 		return
 	}
-	// The lock screen picks the profile it opens on, never a list position.
-	appStore.profile = undefined
+	// The lock screen picks the profile it opens on, never a list position, and may have already.
+	if (appStore.profile?.id === deletedId) appStore.profile = undefined
 	appStore.networks = []
 	appStore.network = null
 	appStore.accounts = []
