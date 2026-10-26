@@ -506,7 +506,8 @@ interface ImportRefs {
 	accountStateRetry: ShallowRef<AccountStateRetryContext | null>
 	/** The context a running Retry replays; a Retry whose context was dropped writes nothing. */
 	retryingAccountState: ShallowRef<AccountStateRetryContext | null>
-	/** Counts picks back from the chooser; one a later pick overtook while it read publishes nothing. */
+	/** Advanced by each pick back from its chooser and by each run start: a pick the count passed
+	 *  while it read publishes nothing. */
 	picks: Ref<number>
 }
 
@@ -530,12 +531,15 @@ async function completeAfterRestore(opts: UseFullBackupImportOptions, profile: u
 	}
 }
 
+const restoring = (state: ImportRefs) => state.restoreStatus.value === "progress"
+
 async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOptions) {
-	if (state.restoreStatus.value === "progress") return
+	if (restoring(state)) return
 	let pick: number | undefined
 	const overtaken = () => pick !== undefined && pick !== state.picks.value
 	try {
 		const file = await opts.pickFile()
+		if (restoring(state)) return
 		pick = ++state.picks.value
 		// A Retry belongs to the import of the selection a new pick replaces.
 		dropAccountStateRetry(state)
@@ -629,6 +633,8 @@ async function runRestoreBackup(
 	opts.clearError()
 	dropAccountStateRetry(state)
 	state.restoreStatus.value = "progress"
+	// A pick still reading publishes nothing over the run.
+	state.picks.value++
 	state.restoreStage.value = "restoring:profile"
 
 	const sel = state.selectedBackup.value as BackupSelection

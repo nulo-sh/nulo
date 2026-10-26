@@ -305,6 +305,41 @@ describe("useRestoreAgain: refusals change nothing", () => {
 			expect(opts.fillError).not.toHaveBeenCalled()
 		})
 
+		test.each([
+			["while its chooser is open", "chooser"],
+			["while its read runs", "read"],
+		] as const)("a pick a restore overtook %s publishes nothing over the run", async (_label, moment) => {
+			const { page, opts, original } = await open()
+			const restoring = page.selectedBackup.value
+			const held = Promise.withResolvers<unknown>()
+			accountStateClient.restore.mockImplementationOnce(() => held.promise)
+			const chooser = Promise.withResolvers<File>()
+			const read = Promise.withResolvers<string>()
+			let reading = false
+			const later = Object.assign(new File(["{}"], "later.json"), {
+				text: () => {
+					reading = true
+					return read.promise
+				},
+			})
+			opts.pickFile.mockReturnValueOnce(chooser.promise as never)
+			const pick = page.pickBackupFile()
+			if (moment === "read") {
+				chooser.resolve(later)
+				await vi.waitFor(() => expect(reading).toBe(true))
+			}
+			const run = page.restoreBackup()
+			await vi.waitFor(() => expect(accountStateClient.restore).toHaveBeenCalled())
+			if (moment === "chooser") chooser.resolve(later)
+			read.resolve(JSON.stringify(await buildBackup({ data: { profile: { id: "src", name: "Other", type: "password" } } })))
+			await pick
+			expect([page.selectedBackup.value, page.restoreStatus.value]).toEqual([restoring, "progress"])
+			held.resolve(answered("N1"))
+			await run
+			expect(page.selectedBackup.value?.backup).toEqual(original)
+			expect(opts.fillError).not.toHaveBeenCalled()
+		})
+
 		test("is refused when its file password opens it, and never offered", async () => {
 			const { body, opts, page, before } = await armed()
 			const sealed = await sealFullBackupText(JSON.stringify(body), "pass1234")

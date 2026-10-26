@@ -2187,6 +2187,46 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 		expect(opts.fillError).not.toHaveBeenCalled()
 	})
 
+	it.each([
+		["while its chooser is open", "chooser"],
+		["while its read runs", "read"],
+	] as const)("a pick a restore overtook %s publishes nothing over the run", async (_label, moment) => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const backup = await passkeyBody()
+		const restoring = { name: "x.json", backup, kind: "plain", profileType: "passkey" } as const
+		c.selectedBackup.value = restoring
+		mockCleanRestore()
+		const held = Promise.withResolvers<unknown>()
+		profileClient.restore.mockReturnValueOnce(held.promise)
+		const chooser = Promise.withResolvers<File>()
+		const read = Promise.withResolvers<string>()
+		let reading = false
+		const later = Object.assign(new File(["{}"], "later.json"), {
+			text: () => {
+				reading = true
+				return read.promise
+			},
+		})
+		opts.pickFile.mockReturnValueOnce(chooser.promise)
+		const pick = c.pickBackupFile()
+		if (moment === "read") {
+			chooser.resolve(later)
+			await vi.waitFor(() => expect(reading).toBe(true))
+		}
+		const run = c.restoreBackup()
+		await vi.waitFor(() => expect(profileClient.restore).toHaveBeenCalledOnce())
+		if (moment === "chooser") chooser.resolve(later)
+		read.resolve(JSON.stringify(await earlierBody(true)))
+		await pick
+		expect([c.selectedBackup.value, c.restoreStatus.value, opts.password.value]).toEqual([restoring, "progress", "pass1234"])
+		held.resolve({ id: "new-id", name: "PK", type: "password" })
+		await run
+		expect(c.restoreStatus.value).toBe("finished")
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(opts.fillError).not.toHaveBeenCalled()
+	})
+
 	// A real file: a fresh passkey profile's backup as a candidate of `dev` wrote it before 1.1.
 	it("the recorded backup of an earlier passkey profile is refused at the pick, before it is offered", async () => {
 		const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/earlier-passkey-backup.json"), "utf8")

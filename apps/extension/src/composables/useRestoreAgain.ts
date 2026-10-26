@@ -10,7 +10,13 @@ import {
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
 import { type Outcome, showSnack, type Snack } from "@/utils/snack"
-import { type BackupSelection, openSelection, readBackupFile, unreadableSelection } from "@/utils/full-backup-helpers"
+import {
+	type BackupSelection,
+	openSelection,
+	type ProcessBackupResult,
+	readBackupFile,
+	unreadableSelection,
+} from "@/utils/full-backup-helpers"
 import { admitRestoreOutcome, readRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import type { Network } from "@/wallet/services/network/spec"
 import type { RunFence } from "@/wallet/services/profile/client"
@@ -76,7 +82,8 @@ interface AgainRefs {
 	retryFailedAgain: Ref<boolean>
 	/** Set once the page leaves or unmounts: nothing that settles afterwards shows or routes. */
 	ended: Ref<boolean>
-	/** Counts picks back from the chooser; one a later pick overtook while it read publishes nothing. */
+	/** Advanced by each pick back from its chooser and by each run start: a pick the count passed
+	 *  while it read publishes nothing. */
 	picks: Ref<number>
 }
 
@@ -144,12 +151,26 @@ async function runStart(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	state.record.value = record
 }
 
+function showPicked(state: AgainRefs, opts: UseRestoreAgainOptions, { selection, parseError }: ProcessBackupResult, refused: boolean) {
+	if (refused) {
+		state.selectedBackup.value = unreadableSelection(selection.name)
+		return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
+	}
+	state.selectedBackup.value = selection
+	if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
+	if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
+		return opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
+	}
+	opts.clearError()
+}
+
 async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	if (busy(state) || state.ended.value) return
 	let pick: number | undefined
 	const overtaken = () => pick !== undefined && pick !== state.picks.value
 	try {
 		const file = await opts.pickFile()
+		if (busy(state) || state.ended.value) return
 		pick = ++state.picks.value
 		dropRun(state)
 		state.restoreStatus.value = null
@@ -159,19 +180,9 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 			state.selectedBackup.value = null
 			return
 		}
-		const { selection, parseError } = await readBackupFile(file)
-		const refused = selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))
-		if (overtaken()) return
-		if (refused) {
-			state.selectedBackup.value = unreadableSelection(selection.name)
-			return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
-		}
-		state.selectedBackup.value = selection
-		if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
-		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
-			return opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
-		}
-		opts.clearError()
+		const read = await readBackupFile(file)
+		const refused = read.selection.kind === "plain" && (await refusedAsEarlierPasskey(read.selection.backup))
+		if (!overtaken()) showPicked(state, opts, read, refused)
 	} catch (error) {
 		if (error instanceof FilePickCanceledError || overtaken()) return
 		opts.fillError("full_backup", "Failed to read the backup file")
@@ -254,6 +265,8 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	opts.clearError()
 	dropRun(state)
 	state.restoreStatus.value = "progress"
+	// A pick still reading publishes nothing over the run.
+	state.picks.value++
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
