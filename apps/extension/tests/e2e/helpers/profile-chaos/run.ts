@@ -14,7 +14,6 @@ import { openFullBackupText } from "@/utils/full-backup-helpers"
 import { backgroundOrigin } from "../../fixtures/browser"
 import { derivedAddresses } from "./accounts-io"
 import {
-	allowedFor,
 	runVerdict,
 	type RunVerdict,
 	stopsRun,
@@ -35,9 +34,10 @@ import {
 	type StoredEntry,
 	type StructureReading,
 	type Violation,
+	carriedBy,
 } from "./checkers"
 import { drainLogs, logErrors, readCensus, readProfiles, readSession, scanStorage } from "./collect"
-import { DRIVERS, type Drive } from "./drivers"
+import { DRIVERS } from "./drivers"
 import {
 	type ActionName,
 	coverage,
@@ -50,7 +50,7 @@ import {
 	startWorld,
 	type World,
 } from "./model"
-import { type Driven, type RunState, secretFor, wrongSecret } from "./state"
+import { type Drive, type Driven, type RunState, secretFor, wrongSecret } from "./state"
 import { dismissNotices, isLocked, whereStuck } from "./ui"
 
 export type VerdictKind = RunVerdict
@@ -152,7 +152,8 @@ async function scanFile(s: RunState, next: World, ref: string, needles: readonly
 	const { body, ...check } = await opensOnlyWith(open, secretFor(s, model.password))
 	out.exports.push({ file: ref, ...check })
 	if (body === undefined) return
-	const own = needles.filter((n) => !(held.kind === "account" && n.name.startsWith(`${ref}/signing-key`)))
+	const carried = carriedBy(model)
+	const own = needles.filter((n) => !carried(n.name))
 	out.hits.push(...findNeedles(body, own).map((needle) => ({ where: `file:${ref}:opened`, needle })))
 	if (body.includes("prfSalt")) out.prfSalt.push(`file:${ref}:opened`)
 }
@@ -195,7 +196,7 @@ async function checkStepLogs(
 	const pageErrors = s.errors.since(s.errorMark)
 	s.errorMark += pageErrors.length
 	const hits = logs.flatMap((l) => findNeedles(l.text, needles).map((needle) => ({ where: `log:${l.id}`, needle })))
-	const errors = checkErrors([...pageErrors, ...logErrors(logs)], endsOf(step, before), allowedFor(s.caps))
+	const errors = checkErrors([...pageErrors, ...logErrors(logs)], endsOf(step, before))
 	add(s.warns, errors.warns)
 	add(s.allowed, errors.allowed)
 	return { violations: errors.violations, incomplete, hits }
@@ -328,6 +329,17 @@ const callSite = (err: unknown): string => {
 	return at ? ` (from ${at})` : ""
 }
 
+/** Runs the step's driver, the network file's own where it binds one; on a run with a node, a
+ *  profile the step opened for the first time goes on the node's network before any check. */
+async function drive(s: RunState, step: PlannedStep, before: World): Promise<Driven> {
+	const run = (s.network?.drivers[step.action] ?? DRIVERS[step.action]) as Drive
+	const driven = await run(s, step.params, step, before)
+	const next = step.expect.next.session
+	const opened = next.kind === "open" && !live(before).some((p) => p.ref === next.ref)
+	if (s.network && opened && driven.outcome === "committed") await s.network.placeOpened(s)
+	return driven
+}
+
 async function runOne(s: RunState, step: PlannedStep, before: World): Promise<StepRecord> {
 	await dismissNotices(s.anchor)
 	const census = await readCensus(s.anchor)
@@ -335,7 +347,7 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 	const t0 = Date.now()
 	let driven: Driven
 	try {
-		driven = await (DRIVERS[step.action] as Drive)(s, step.params, step, before)
+		driven = await drive(s, step, before)
 	} catch (err) {
 		const text = `${err instanceof Error ? err.message : String(err)}${callSite(err)} ${await whereStuck(s.anchor)}`
 		const detail = mask(text, await needlesOf(s))

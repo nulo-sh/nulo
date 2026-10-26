@@ -6,14 +6,19 @@ import { setupPasskeyVirtualAuth } from "../../fixtures/passkey"
 import { openPopup } from "../../fixtures/wallet-pages"
 import { ErrorCollector } from "./collect"
 import type { Caps } from "./model"
-import { newRunState, type RunState } from "./state"
+import { type NetworkRun, newRunState, type RunState } from "./state"
 
 /** A run's state on a fresh launch: the anchor open on the popup with a PRF-capable authenticator
  *  added on it, and the error collector watching every extension page from now on. Without a node,
  *  the Local Network seed gets the launch's stand-in too, so its calls are refused like every other
  *  node's and never reach whatever another run serves on that loopback port. `stop()` resolves to
  *  the requests that stand-in failed to hold. */
-export async function startRun(ctx: ExtensionContext, caps: Caps, dir: string): Promise<RunState & { stop(): Promise<string[]> }> {
+export async function startRun(
+	ctx: ExtensionContext,
+	caps: Caps,
+	dir: string,
+	network?: NetworkRun,
+): Promise<RunState & { stop(): Promise<string[]> }> {
 	mkdirSync(dir, { recursive: true })
 	const local = caps.network ? undefined : await holdNodeStub(ctx.browser, ctx.extensionId, LOCAL_NETWORK_RPC_URL)
 	const errors = new ErrorCollector(ctx.browser)
@@ -21,7 +26,7 @@ export async function startRun(ctx: ExtensionContext, caps: Caps, dir: string): 
 	const anchor = await openPopup(ctx)
 	errors.watch(anchor, "anchor")
 	const auth = await setupPasskeyVirtualAuth(ctx.browser, anchor)
-	const state = newRunState({ ctx, caps, anchor, auth, errors, dir })
+	const state = newRunState({ ctx, caps, anchor, auth, errors, dir, network })
 	return Object.assign(state, {
 		async stop() {
 			errors.stop()

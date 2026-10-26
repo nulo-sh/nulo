@@ -107,15 +107,15 @@ async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["
 	return settle(page, [HOME, ERROR], { home: "committed", refused: "refused" }, 1_000)
 }
 
-/** Restores `file` from the import page the caller opened, as `p` says. */
-export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<Driven> {
+/** Picks `file` on the import page the caller opened and fills the form up to its submit; false
+ *  when the wallet refused the file on the way. */
+export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<boolean> {
 	const page = s.anchor
-	const t0 = Date.now()
 	await clickByTestId(page, "import-option-full-backup")
 	await pickFileByTestId(page, "import-full-backup-pick-file", variantPath(s, file, p.variant))
 	const picked = await afterPick(s)
-	if (picked === "refused" || picked === undefined) return timed(t0, RESTORE_MS, "refused")
-	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return timed(t0, RESTORE_MS, "refused")
+	if (picked === "refused" || picked === undefined) return false
+	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
 	if (file.method === "password") {
 		const password = secretFor(s, p.password)
 		await setInputs(page, {
@@ -123,5 +123,12 @@ export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["im
 			'[data-testid="import-full-backup-password-confirm-input"] input': password,
 		})
 	}
+	return true
+}
+
+/** Restores `file` from the import page the caller opened, as `p` says. */
+export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<Driven> {
+	const t0 = Date.now()
+	if (!(await fillRestore(s, file, p))) return timed(t0, RESTORE_MS, "refused")
 	return submitRestore(s, p.duplicate)
 }

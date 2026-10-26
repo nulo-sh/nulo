@@ -6,8 +6,9 @@ import { ProfileRowSchema, STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
 	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
-	allowedFor,
+	bindProfile,
 	type Bindings,
+	carriedBy,
 	checkErrors,
 	evidenceGaps,
 	RESTART_LOG_GAP,
@@ -654,8 +655,8 @@ describe("O4, errors", () => {
 			'["[READ] getLatestBlockNumber failed",{"error":{"message":"Error 400 from server <url> no node answers a guarded e2e run"}}]',
 		)
 
-		test("passes at any step of a run with no node, and counts what it let through", () => {
-			expect(checkErrors([refused, refused], [], allowedFor({ network: false }))).toEqual({
+		test("passes at any step, and counts what it let through", () => {
+			expect(checkErrors([refused, refused], [])).toEqual({
 				violations: [],
 				warns: {},
 				allowed: { [GUARDED_NODE_REFUSAL.source]: 2 },
@@ -663,15 +664,10 @@ describe("O4, errors", () => {
 		})
 
 		test.each([
-			["on a run a node answers", [refused], { network: true }],
-			[
-				"for an error log without the stand-in's text",
-				[refusal('["Failed to fetch node info",{"message":"fetch failed"}]')],
-				{ network: false },
-			],
-			["for a page error carrying the stand-in's text", [page("Error: no node answers a guarded e2e run")], { network: false }],
-		] as const)("fails %s", (label, entries, caps) => {
-			const verdict = checkErrors(entries as unknown as ErrorEntry[], [], allowedFor(caps))
+			["for an error log without the stand-in's text", [refusal('["Failed to fetch node info",{"message":"fetch failed"}]')]],
+			["for a page error carrying the stand-in's text", [page("Error: no node answers a guarded e2e run")]],
+		] as const)("fails %s", (label, entries) => {
+			const verdict = checkErrors(entries as unknown as ErrorEntry[], [])
 			expect(shown(`O4 the refusal allowance ${label}`, verdict.violations).length).toBeGreaterThan(0)
 		})
 	})
@@ -704,7 +700,7 @@ describe("O4, errors", () => {
 	})
 
 	test("every allowed error names its reason and a source line that exists", () => {
-		for (const a of [...ALLOWED_ERRORS, GUARDED_NODE_REFUSAL]) {
+		for (const a of ALLOWED_ERRORS) {
 			const [, file, line] = /^code:(\S+):(\d+)$/.exec(a.source) ?? []
 			expect(file, a.source).toBeTruthy()
 			const path = join(import.meta.dirname, "../../../..", file)
@@ -751,10 +747,22 @@ describe("O4, errors", () => {
 				text: '["unhandled rejection",{"error":{"name":"Error","message":"Wallet locked"}}]',
 			},
 			{ kind: "page-error" as const, page: "anchor", text: "Error: Wallet locked" },
+			{ kind: "page-error" as const, page: "second", text: "Error: Profile locked" },
 		]
-		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133])
+		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133, 1133])
 		const otherRefusal = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked while x" }], []).violations
 		expect(shown("O4 a refusal beside a filed one's text", otherRefusal)[0]?.known).toBeUndefined()
+		const discovery = (message: string) => ({
+			kind: "log" as const,
+			level: "error" as const,
+			source: "fpc",
+			text: `["Failed to discover FPC 0x${"ab".repeat(32)}",{"name":"PxeStoreKeyMissingError","message":"${message}"}]`,
+		})
+		expect(checkErrors([discovery("PXE_STORE_KEY_MISSING: no store key provisioned for profile x")], []).violations[0]?.known).toBe(
+			1135,
+		)
+		const unreachable = checkErrors([discovery("Error 400 from server")], []).violations
+		expect(shown("O4 a discovery failure that is not the lock's", unreachable)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {
@@ -764,6 +772,18 @@ describe("O4, errors", () => {
 		console.log(`[break] O4 a log-id gap: ${gap.reason}`)
 		expect(gap.complete).toBe(false)
 		expect(checkLogContinuity(10, [11, 13]).complete).toBe(false)
+	})
+})
+
+describe("bindings", () => {
+	test("a restored profile takes over a deleted symbol's id, and no live one's", () => {
+		const b = emptyBindings()
+		bindProfile(b, "P1", "aaaa1111")
+		bindProfile(b, "P2", "bbbb2222")
+		bindProfile(b, "P3", "aaaa1111", new Set(["P1"]))
+		expect(Object.fromEntries(b.profiles)).toEqual({ P2: "bbbb2222", P3: "aaaa1111" })
+		expect(() => bindProfile(b, "P4", "bbbb2222", new Set(["P1"]))).toThrow("bbbb2222 is already P2")
+		expect(() => bindProfile(b, "P3", "cccc3333")).toThrow("P3 is bound to aaaa1111")
 	})
 })
 
@@ -913,6 +933,16 @@ describe("O7, leaks", () => {
 		prfSalt: [],
 		exports: [{ file: "F1", opensWithOwn: true, refusesOther: true }],
 	}
+
+	test("an opened file excepts only what it carries by design", () => {
+		const backup = carriedBy({ ref: "F2", kind: "backup", phrase: "W2", imported: ["F1"] })
+		expect(["W2/entropy-b64", "W2/words", "F1/signing-key"].filter(backup)).toEqual(["W2/entropy-b64", "W2/words", "F1/signing-key"])
+		const leaked = ["W1/entropy-b64", "S2/password", "F3/signing-key", "F2/signing-key"].filter((n) => !backup(n))
+		console.log(`[break] O7 needles a backup does not carry: ${leaked.join(", ")}`)
+		expect(leaked).toHaveLength(4)
+		const account = carriedBy({ ref: "F1", kind: "account", phrase: "W1", imported: [] })
+		expect(["F1/signing-key", "F1/signing-key-b64", "W1/entropy-b64"].filter(account)).toEqual(["F1/signing-key", "F1/signing-key-b64"])
+	})
 
 	test("passes a clean store, and prfSalt in a passkey row", () => {
 		expect(checkLeaks([], clean, new Set())).toEqual([])

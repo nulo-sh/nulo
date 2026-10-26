@@ -27,7 +27,8 @@ import {
 	live,
 } from "./model"
 import { restartBackground } from "./restart"
-import { bindProfile, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
+import { bindProfile } from "./checkers"
+import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
 	activeProfileId,
 	answerConfirm,
@@ -36,7 +37,6 @@ import {
 	firstSignal,
 	HOME,
 	isLocked,
-	LOCKED,
 	openRoute,
 	pickOnLockScreen,
 	pressTwice,
@@ -51,7 +51,6 @@ import {
 import { verifyAll } from "./verify"
 import { exportFullBackup, restoreFile } from "./backups"
 
-export type Drive = (s: RunState, params: unknown, step: PlannedStep, before: World) => Promise<Driven>
 type Drivers = { [N in ActionName]: (s: RunState, p: ParamsMap[N], step: PlannedStep, before: World) => Promise<Driven> }
 
 const CREATE_MS = 90_000
@@ -109,9 +108,10 @@ async function submitCreate(s: RunState, double: boolean): Promise<Driven> {
 	return settle(s.anchor, [HOME, ...refusals], { home: "committed", refused: "refused" }, CREATE_MS)
 }
 
-async function bindOpened(s: RunState, ref: ModelProfile["ref"]): Promise<void> {
+async function bindOpened(s: RunState, ref: ModelProfile["ref"], before?: World): Promise<void> {
 	const id = await activeProfileId(s.anchor)
-	if (id) bindProfile(s, ref, id)
+	const deleted = new Set(before?.profiles.filter((p) => p.deleted).map((p) => p.ref))
+	if (id) bindProfile(s.bindings, ref, id, deleted)
 }
 
 const createPassword: Drivers["createPassword"] = async (s, p, _step, before) => {
@@ -236,7 +236,7 @@ const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 
 /** Brings the anchor to the import page: from the register page while no profile is live, else the
  *  lock screen's Import. */
-async function openImport(s: RunState, before: World): Promise<void> {
+export async function openImport(s: RunState, before: World): Promise<void> {
 	const page = s.anchor
 	if (!live(before).length) {
 		await openRoute(page, "#/popup/register")
@@ -321,7 +321,7 @@ const importBackup: Drivers["importBackup"] = async (s, p, _step, before) => {
 	const file = before.files.find((f) => f.ref === p.file) as ModelFile
 	await openImport(s, before)
 	const driven = await restoreFile(s, file, p)
-	if (driven.outcome === "committed") await bindOpened(s, p.ref)
+	if (driven.outcome === "committed") await bindOpened(s, p.ref, before)
 	return driven
 }
 
@@ -379,8 +379,8 @@ const deleteProfile: Drivers["deleteProfile"] = async (s, p, step, before) => {
 	const tombstone = `nulo:core:profile-tombstones@${profileId(s, target.ref)}`
 	await confirmProfileReset(page, 15_000)
 	// The session closes before the purge, so the lock screen shows first; the delete is done once
-	// its tombstone clears.
-	const end = { ...(live(nextOf(step)).length ? LOCKED : REGISTER), noLocalKey: tombstone }
+	// its tombstone clears. Another passkey profile's row a restart left may stay, which O1 judges.
+	const end = { ...(live(nextOf(step)).length ? { label: "lock", hash: "/popup/auth" } : REGISTER), noLocalKey: tombstone }
 	return settle(page, [end], { [end.label]: "committed" }, LOCK_MS)
 }
 

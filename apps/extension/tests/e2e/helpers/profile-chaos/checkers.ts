@@ -8,7 +8,7 @@
  * Imports nothing from Puppeteer or Vitest.
  */
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
-import { type Caps, type Method, type ModelProfile, type ProfileRef, type StepEnd, type World, type WriteScope, live } from "./model"
+import { type Method, type ModelFile, type ModelProfile, type ProfileRef, type StepEnd, type World, type WriteScope, live } from "./model"
 
 export type OracleId = "O1" | "O2" | "O3" | "O4" | "O5" | "O6" | "O7"
 
@@ -34,6 +34,20 @@ export interface Bindings {
 }
 
 export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map() })
+
+/** Binds `ref` to `id`. A full-backup restore keeps the backed-up profile's id, so a deleted
+ *  profile's id comes back under the ref that restored it: `deleted` names the refs whose id a new
+ *  ref may take over. */
+export function bindProfile(b: Bindings, ref: ProfileRef, id: string, deleted: ReadonlySet<ProfileRef> = new Set()): void {
+	const bound = b.profiles.get(ref)
+	if (bound && bound !== id) throw new Error(`${ref} is bound to ${bound}, now seen as ${id}`)
+	for (const [other, otherId] of b.profiles) {
+		if (otherId !== id || other === ref) continue
+		if (!deleted.has(other)) throw new Error(`${id} is already ${other}`)
+		b.profiles.delete(other)
+	}
+	b.profiles.set(ref, id)
+}
 
 const idOf = (b: Bindings, ref: ProfileRef | undefined): string | undefined => (ref === undefined ? undefined : b.profiles.get(ref))
 
@@ -383,18 +397,8 @@ export interface AllowedError {
 }
 
 /** The reviewed allowlist. */
-export const ALLOWED_ERRORS: readonly AllowedError[] = [
-	{
-		pattern: /^Error: Client disconnected$/,
-		kinds: ["page-error"],
-		during: "any step",
-		source: "code:apps/extension/src/wallet/logger/console-forwarding.ts:19",
-		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
-	},
-]
-
-/** A run with no node behind it reaches only the guarded launch's stand-in. The entry needs the
- *  stand-in's own refusal text, so an error from anything else still fails the run. */
+/** Every guarded launch, a sandbox run's included, holds a stand-in for each seeded remote node.
+ *  The entry needs the stand-in's own refusal text, so an error from anything else still fails. */
 export const GUARDED_NODE_REFUSAL: AllowedError = {
 	pattern: /no node answers a guarded e2e run/,
 	kinds: ["log"],
@@ -403,9 +407,16 @@ export const GUARDED_NODE_REFUSAL: AllowedError = {
 	reason: "the stand-in refuses every node call, and the wallet logs each refused node call as an error",
 }
 
-/** The allowlist a run checks against: the stand-in's refusal only where no node answers. */
-export const allowedFor = (caps: Pick<Caps, "network">): readonly AllowedError[] =>
-	caps.network ? ALLOWED_ERRORS : [...ALLOWED_ERRORS, GUARDED_NODE_REFUSAL]
+export const ALLOWED_ERRORS: readonly AllowedError[] = [
+	{
+		pattern: /^Error: Client disconnected$/,
+		kinds: ["page-error"],
+		during: "any step",
+		source: "code:apps/extension/src/wallet/logger/console-forwarding.ts:19",
+		reason: "the popup prevents every disconnect rejection and logs it at debug, but neither browser's capture sees the prevention; a disconnect the wallet logs at error still fails the run",
+	},
+	GUARDED_NODE_REFUSAL,
+]
 
 /** A filed product finding the runs keep meeting. Its error line keeps the seed red, but the run
  *  goes on, so the steps after it are still checked; only an error line qualifies, never a state. */
@@ -427,9 +438,11 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
 	{
 		issue: 1133,
-		pattern: /^(?:\["unhandled rejection",\{"error":\{"name":"Error","message":"Wallet locked"\}\}\]|Error: Wallet locked)$/,
+		pattern:
+			/^(?:\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]|Error: (?:Wallet|Profile) locked)$/,
 		kinds: ["log", "page-error"],
 	},
+	{ issue: 1135, pattern: /^\["Failed to discover FPC 0x[0-9a-f]{64}",.*PXE_STORE_KEY_MISSING/, kinds: ["log"], source: "fpc" },
 ]
 
 const isInstance = (k: KnownFinding, e: ErrorEntry): boolean =>
@@ -446,6 +459,14 @@ export function pageErrorText(error: unknown): string {
 	const message = error.message.replace(UNCAUGHT, "")
 	if (error.name !== "Error") return `${error.name}: ${message}`
 	return CLASSED.test(message) ? message : `Error: ${message}`
+}
+
+/** What an opened file carries by design, which the scan of its body excepts: an account file's own
+ *  signing key; a backup's phrase and the signing keys of the account files its profile had
+ *  imported. Any other needle in an opened body is a leak. */
+export function carriedBy(file: Pick<ModelFile, "ref" | "kind" | "phrase" | "imported">): (needle: string) => boolean {
+	const own = file.kind === "account" ? [file.ref] : [...(file.phrase ? [file.phrase] : []), ...file.imported]
+	return (needle) => own.some((ref) => needle.startsWith(`${ref}/`))
 }
 
 /** An error's class for a shareable message: its leading `Error` or `SomethingError`, else

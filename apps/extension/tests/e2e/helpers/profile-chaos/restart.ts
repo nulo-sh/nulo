@@ -1,9 +1,9 @@
 import { backgroundOrigin, EXTENSION_SCHEME, stopBackground } from "../../fixtures/browser"
 import { pollUntil } from "../../fixtures/poll"
 import { openPopup } from "../../fixtures/wallet-pages"
-import type { World } from "./model"
+import { live, type World } from "./model"
 import type { Driven, RunState } from "./state"
-import { backgroundServing, HOME, settle } from "./ui"
+import { backgroundServing, HOME, REGISTER, type Signal, settle } from "./ui"
 
 const RESTART_MS = 90_000
 
@@ -30,8 +30,12 @@ export async function restartBackground(s: RunState, next: World): Promise<Drive
 	)
 	const t0 = Date.now()
 	await backgroundServing(s.anchor, RESTART_MS)
-	const want = next.session.kind === "open" ? HOME : { label: "lock", hash: "/popup/auth" }
-	const driven = await settle(s.anchor, [want], { [want.label]: "committed" }, RESTART_MS)
+	const locked: Signal = live(next).length ? { label: "lock", hash: "/popup/auth" } : REGISTER
+	// An open session keeps the page where it stood, Settings included, so any page showing the
+	// account selector reads as open.
+	const open: Signal[] = [HOME, { label: "open", testid: "account-selector" }]
+	const wants = next.session.kind === "open" ? open : [locked]
+	const driven = await settle(s.anchor, wants, Object.fromEntries(wants.map((w) => [w.label, "committed"])), RESTART_MS)
 	driven.settle.elapsedMs = Date.now() - t0
 	return driven
 }

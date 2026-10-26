@@ -8,7 +8,7 @@ import type { ExtensionContext } from "../../fixtures/extension"
 import type { PasskeyAuthSetup } from "../../fixtures/passkey"
 import { type Bindings, emptyBindings, type VerifyReading } from "./checkers"
 import type { DrainedLog, ErrorCollector, RunPage } from "./collect"
-import type { Caps, CredentialRef, FileRef, Outcome, PhraseRef, ProfileRef, SecretRef } from "./model"
+import type { ActionName, Caps, CredentialRef, FileRef, Outcome, PhraseRef, PlannedStep, ProfileRef, SecretRef, World } from "./model"
 
 /** A file the run holds on disk: an exported backup or account file, and what opens it. */
 export interface HeldFile {
@@ -48,6 +48,17 @@ export interface RunState {
 	scanned: Set<FileRef>
 	/** What the last `verifyAll` read, for O6. */
 	verified: VerifyReading[]
+	/** Present on a run with a node. */
+	network?: NetworkRun
+}
+
+export type Drive = (s: RunState, params: unknown, step: PlannedStep, before: World) => Promise<Driven>
+
+/** What a run with a node adds: the network file's own drivers, and the move that puts a profile a
+ *  step opened for the first time on the node's network, before the step's checks read it. */
+export interface NetworkRun {
+	drivers: Partial<Record<ActionName, Drive>>
+	placeOpened(s: RunState): Promise<void>
 }
 
 /** What a driver saw: the outcome, and how its settle went. */
@@ -104,11 +115,4 @@ export function profileId(s: RunState, ref: ProfileRef): string {
 	const id = s.bindings.profiles.get(ref)
 	if (!id) throw new Error(`${ref} is not bound to a profile yet`)
 	return id
-}
-
-export function bindProfile(s: RunState, ref: ProfileRef, id: string): void {
-	const bound = s.bindings.profiles.get(ref)
-	if (bound && bound !== id) throw new Error(`${ref} is bound to ${bound}, now seen as ${id}`)
-	for (const [other, otherId] of s.bindings.profiles) if (otherId === id && other !== ref) throw new Error(`${id} is already ${other}`)
-	s.bindings.profiles.set(ref, id)
 }
