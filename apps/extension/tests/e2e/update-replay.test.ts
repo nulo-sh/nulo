@@ -14,7 +14,11 @@
  * key's seal binds the chain it was sealed on), so that reset names the account unmovable, which
  * the bump's own reset does not.
  *
- * The first case also exports the updated profile's full backup, encrypted, and the third registers
+ * The third registers a passkey profile on the release and updates it. Failure mode: the candidate
+ * offers that row an unlock, or rewrites it, instead of Set up again; only a real update carries a
+ * row the release itself wrote.
+ *
+ * The first case also exports the updated profile's full backup, encrypted, and the fourth registers
  * a passkey profile on the candidate and exports its backup under a file password. Failure mode: a
  * backup the candidate writes drops rows or does not import into it. The stored-shape guard's R5
  * reads only the pinned files; only here does a real export, and a real passkey ceremony, make one.
@@ -496,6 +500,34 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 				const page = await openUpdated(ctx, before)
 				await seedStaleNetwork(page, "network-reset")
 				await throughTheReset(ctx, page, recording, PREVIOUS_TESTNET_CHAIN_ID, false)
+				await page.close()
+			},
+		})
+	})
+
+	test("a passkey profile the release made opens, after the update, on Set up again and nothing else", {
+		timeout: 300_000,
+		retry: 0,
+	}, async () => {
+		await inPlaceUpdate({
+			builds: builds(),
+			populate: async (ctx) => {
+				const page = await openPopup(ctx)
+				await setupPasskeyVirtualAuth(ctx.browser, page)
+				await registerPasskeyProfile(page)
+				await page.close()
+				return await readLocalStorage(ctx)
+			},
+			verify: async (ctx, before) => {
+				const after = await readLocalStorage(ctx)
+				expect(await updateProblems(before, after)).toEqual([])
+				const profiles = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
+				expect(profiles(after)).toEqual(profiles(before))
+				const page = await openPopup(ctx)
+				await waitForHash(page, "#/popup/auth", 30_000)
+				await page.waitForSelector('[data-testid="auth-setup-again"]', { visible: true, timeout: 30_000 })
+				expect(await page.$('[data-testid="auth-submit"]')).toBeNull()
+				expect(await shownOverlays(page)).toEqual([])
 				await page.close()
 			},
 		})
