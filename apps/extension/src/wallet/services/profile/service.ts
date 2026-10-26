@@ -1790,8 +1790,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.writeTombstoneHoldingLock(id, snapshot, epoch)
 			await this.repo.delete(id)
 			// Close the session BEFORE the emit (a subscriber reacting to the emit
-			// must not observe a still-open session for a deleted profile). A record a
-			// restart kept with no session in memory goes too: a deleted profile leaves none.
+			// must not observe a still-open session for a deleted profile). A record an
+			// earlier failed delete left with no session in memory goes too.
 			await this.sessionManager.closeProfile(id)
 			// Deleting a profile mid-restore must drop + zeroize its rewrap context (its
 			// buffers aren't aged yet, so the TTL sweep wouldn't reap them).

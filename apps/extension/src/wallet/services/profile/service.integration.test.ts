@@ -2107,6 +2107,18 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 			},
 			30_000,
 		)
+
+		test("an unreadable record stays and the delete completes", async () => {
+			const { api, service } = await makeService({ strict: true })
+			const pk = await service.createPasskeyProfile("PK")
+			await service.lockActiveProfile()
+			await api.storage.session.set({ [SESSION_STORAGE_ROOT]: "{not json" })
+
+			await service.deleteProfile(pk.id)
+
+			expect(await service.getProfiles()).toEqual([])
+			expect((await api.storage.session.get(SESSION_STORAGE_ROOT))[SESSION_STORAGE_ROOT]).toBe("{not json")
+		}, 30_000)
 	})
 
 	describe("a delete that arrives before the coordinator has started", () => {

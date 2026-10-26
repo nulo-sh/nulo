@@ -471,7 +471,8 @@ export class SessionManager {
 	}
 
 	/** Closes `profileId`'s session: the one in memory, or, while no session is in memory, the
-	 *  persisted record naming it, which a restart keeps when its restore could not delete it.
+	 *  persisted record naming it, which an earlier failed delete leaves. Caller MUST hold the
+	 *  facade lock; memory is checked again after the read in case the lock was force-released.
 	 *  Another profile's session or record is never touched; an unreadable record stays, as at
 	 *  restore. Never throws. */
 	public async closeProfile(profileId: string): Promise<void> {
@@ -698,9 +699,7 @@ export class SessionManager {
 		}
 	}
 
-	/** `true` iff a session belongs to `profileId` right now. Used by
-	 *  the facade to decide whether a profile-mutation operation (e.g.
-	 *  `lockProfileIfActive`) should also close the session. */
+	/** `true` iff a session belongs to `profileId` right now. */
 	public isActive(profileId: string): boolean {
 		return this.activeSession?.session.profile === profileId
 	}
