@@ -602,6 +602,14 @@ describe("a replay", () => {
 		expect(compareReplay({ actions: [pick("downloads/1-a.gz")], end }, { actions: [pick("downloads/2-a.gz")], end })).toHaveLength(1)
 	})
 
+	test("of a session whose end was not read differs, whatever its commands did", () => {
+		const unread = { unreadable: "a command past its bound still ran 180000 ms later" }
+		expect(compareReplay({ actions, end: unread }, { actions, end })).toEqual([
+			`the original's end is unreadable: ${unread.unreadable}`,
+		])
+		expect(compareReplay({ actions, end }, { actions, end: unread })).toHaveLength(1)
+	})
+
 	test("of a session that ended at its deadline leaves out the end its launcher sends", () => {
 		const launcherEnd: ActionRecord = { n: 3, command: { verb: "end", page: "p0", deadlineMs: 60_000 }, status: "ok" }
 		expect(compareReplay({ actions, end }, { actions: [...actions, launcherEnd], end })).toEqual([])

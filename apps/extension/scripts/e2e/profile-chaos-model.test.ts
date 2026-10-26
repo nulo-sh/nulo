@@ -49,6 +49,7 @@ import {
 } from "../../tests/e2e/helpers/profile-chaos/checkers"
 import { CITED } from "../../tests/e2e/helpers/profile-chaos/citations"
 import {
+	capsOfRecord,
 	ACTIONS,
 	type ActionName,
 	type Caps,
@@ -62,6 +63,7 @@ import {
 	planFromList,
 	startWorld,
 	type World,
+	recordCaps,
 } from "../../tests/e2e/helpers/profile-chaos/model"
 
 const CHROME: Caps = { ceremonyOffAnchor: false, restartUnderOpenPage: true, network: false, restoreGate: false, credentialSlots: 3 }
@@ -186,6 +188,16 @@ describe("the planner", () => {
 })
 
 describe("a hand-trimmed list", () => {
+	test("plans the same from a record's caps as from the browser's", () => {
+		for (const caps of [CHROME, FIREFOX]) {
+			const recorded = capsOfRecord(JSON.parse(JSON.stringify(recordCaps(caps))))
+			expect(recorded).toEqual(caps)
+			const drawn = plan(1, "empty", caps)
+			const listed = drawn.steps.map((s) => ({ action: s.action, params: s.params }) as ListedStep)
+			expect(planFromList(listed, "empty", recorded, 1).steps.length).toBe(drawn.steps.length)
+		}
+	})
+
 	const create = { action: "createPassword", params: { ref: "P1", name: "Chaos 1", password: "S1", double: false } } as ListedStep
 	const passkey = { action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } } as ListedStep
 

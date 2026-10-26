@@ -54,6 +54,7 @@ import {
 	type Plan,
 	type PlannedStep,
 	profileOf,
+	recordCaps,
 	type StepEnd,
 	startWorld,
 	type World,
@@ -408,10 +409,20 @@ const revision = (): string => {
 	}
 }
 
-/** Where a run's replay record goes, and the browser it names. */
+/** Where a run's replay record goes, the browser it names, and what loaded besides the checkout. */
 export interface RecordTarget {
 	path: string
 	browser: string
+	provenance?: RecordProvenance
+}
+
+/** What a replay must load again: the browser's version, the extension's, and for a `pre-update`
+ *  start the release tag and the commit its candidate was built from. */
+export interface RecordProvenance {
+	browserVersion: string
+	extensionVersion: string
+	release?: { tag: string; candidateCommit?: string }
+	flags: { actionList: boolean; proverless: boolean; network: boolean }
 }
 
 /** The replay record's path: per browser, seed and launch, so two runs never share one. */
@@ -434,7 +445,8 @@ function writeRecord(
 		seed: plan.seed,
 		start: plan.start,
 		startCheck: run.start,
-		caps: plan.caps,
+		caps: recordCaps(plan.caps),
+		...(out.provenance ? { provenance: out.provenance } : {}),
 		verdict: kind,
 		coverage: line,
 		bindings: Object.fromEntries(s.bindings.profiles),

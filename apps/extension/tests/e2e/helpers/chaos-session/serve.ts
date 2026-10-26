@@ -93,6 +93,8 @@ const QUIET_MS = 800
 /** The checks after a command; past it the session can no longer vouch for what it saw, and ends. */
 const CHECKS_MS = 120_000
 const POLL_MS = 100
+/** A capture's share of its command's deadline is all but this, so it fails before the command does. */
+const SHOT_MARGIN_MS = 5_000
 /** A download larger than this is recorded, not kept. */
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 /** How long the launch waits, once serving ended past a bound, for the late work to stop: a launch
@@ -187,6 +189,9 @@ class Session {
 	/** `do` reaches a starting point: it runs from `empty` through the catalog until a command drives
 	 *  the wallet directly, and stops once a `do` ends outside the model's outcomes. */
 	private doWorld: World | undefined = startWorld("empty")
+	/** The command being served with a `do`'s drawn params, set before its driver runs, so a run that
+	 *  throws or passes its deadline records what it drew and a replay draws nothing in its place. */
+	private drawn: Command | undefined
 	private doOpen = true
 	private readonly doList: ListedStep[] = []
 	private readonly shown: Shown[] = []
@@ -327,6 +332,7 @@ class Session {
 
 	private async serveOne(n: number, cmd: Command): Promise<Result> {
 		const t0 = Date.now()
+		this.drawn = undefined
 		const tried = await this.attempt(n, cmd)
 		if ("late" in tried) return this.cutShort(n, cmd, t0, `passed its ${cmd.deadlineMs} ms deadline`, "timeout")
 		const { done, status, reason } = tried
@@ -351,7 +357,7 @@ class Session {
 		if (data !== undefined) result.data = data
 		const path = { outcome: status === "ok" ? outcomeOf(cmd, data) : undefined, after: this.after }
 		this.after = undefined
-		return this.record(n, done.resolved ?? cmd, result, { path, found: foundKeys(lines) })
+		return this.record(n, done.resolved ?? this.drawn ?? cmd, result, { path, found: foundKeys(lines) })
 	}
 
 	/** A command or its checks past their bound, or checks that threw, end the session: what the
@@ -360,7 +366,7 @@ class Session {
 		this.over = true
 		this.endReason = `command ${n} (${cmd.verb}) ${why}`
 		this.writeFindings([{ kind: "incomplete", n, verb: cmd.verb, reason: `${why}; the session ends` }])
-		return this.record(n, cmd, {
+		return this.record(n, this.drawn ?? cmd, {
 			n,
 			verb: cmd.verb,
 			status,
@@ -456,7 +462,7 @@ class Session {
 			case "close":
 				return { data: await this.closePage(cmd.page) }
 			case "screenshot":
-				return { data: { file: await this.screenshot(n, cmd.page) } }
+				return { data: { file: await this.screenshot(n, cmd.page, Math.max(cmd.deadlineMs - SHOT_MARGIN_MS, 1_000)) } }
 			case "pick-file":
 				return this.pickFile(n, cmd)
 			case "downloads":
@@ -475,11 +481,17 @@ class Session {
 	/** A screenshot cannot mask what the page shows, so a page that may show a node endpoint is
 	 *  refused: the network pages, a page showing a URL, and a page with a shadow root, whose text
 	 *  the check cannot read. */
-	private async screenshot(n: number, id: PageId): Promise<string> {
+	private async screenshot(n: number, id: PageId, ms: number): Promise<string> {
 		const page = this.page(id)
 		const risk = await page.evaluate(screenshotRisk, NETWORK_ROUTE.source)
 		if (risk) throw new CommandRefused(`${id} ${risk}, which a screenshot would carry unmasked; snapshot masks it`)
-		return writeOwn(this.dirs, "screenshots", `${n}-${id}.png`, await page.screenshot())
+		// A window that renders no frame never answers a capture; that fails the command, not the
+		// session, since a capture changes nothing the session vouches for.
+		const shot = await withDeadline(page.screenshot(), ms).catch((err: unknown) => {
+			if (err instanceof DeadlineExceeded) throw new Error(`${id} rendered no frame within ${ms} ms; snapshot reads it without one`)
+			throw err
+		})
+		return writeOwn(this.dirs, "screenshots", `${n}-${id}.png`, shot)
 	}
 
 	/** The network pages hold node endpoints, which may carry a provider key: a session reads their
@@ -642,6 +654,7 @@ class Session {
 		if (!spec) throw new CommandRefused(`unknown catalog action ${cmd.action}`)
 		const params = cmd.params ?? spec.params(this.rng, before, this.s.caps)
 		if (!params) throw new CommandRefused(`${cmd.action} cannot run from where the do steps leave the wallet`)
+		this.drawn = { ...cmd, params: params as Record<string, unknown> }
 		const listed = { action: cmd.action, params } as ListedStep
 		let step: ReturnType<typeof planFromList>["steps"][number]
 		try {

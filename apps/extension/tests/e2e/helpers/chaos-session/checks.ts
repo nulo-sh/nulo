@@ -157,6 +157,9 @@ export function replayedFile(recorded: string, listing: (sub: string) => readonl
 /** What a session ends on: each page's route and stable testids, the listed profiles, the session,
  *  its findings not yet filed and its incomplete checks, each by what it says with ids masked. Filed
  *  findings are kept apart, since they recur by chance. */
+/** A session's end as its summary holds it: read, or why it could not be. */
+export type SessionEnd = EndState | { unreadable: string }
+
 export interface EndState {
 	pages: { id: string; route: string; testids: string[] }[]
 	profiles: { name: string; type: string }[]
@@ -282,8 +285,8 @@ function withoutLauncherEnd(original: readonly ActionRecord[], replay: readonly 
 /** Every way a replay differs from what it replays: a command sent otherwise, a status, a snapshot,
  *  the end, the findings. */
 export function compareReplay(
-	original: { actions: readonly ActionRecord[]; end: EndState },
-	replay: { actions: readonly ActionRecord[]; end: EndState },
+	original: { actions: readonly ActionRecord[]; end: SessionEnd },
+	replay: { actions: readonly ActionRecord[]; end: SessionEnd },
 ): string[] {
 	const out: string[] = []
 	const actions = withoutLauncherEnd(original.actions, replay.actions)
@@ -295,6 +298,11 @@ export function compareReplay(
 	})
 	const o = original.end
 	const r = replay.end
+	if ("unreadable" in o || "unreadable" in r) {
+		if ("unreadable" in o) out.push(`the original's end is unreadable: ${o.unreadable}`)
+		if ("unreadable" in r) out.push(`the replay's end is unreadable: ${r.unreadable}`)
+		return out
+	}
 	out.push(...comparePages(o, r))
 	if (sortedJson(o.profiles) !== sortedJson(r.profiles))
 		out.push(`the profiles end as ${sortedJson(r.profiles)}, not ${sortedJson(o.profiles)}`)

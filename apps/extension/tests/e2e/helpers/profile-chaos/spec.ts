@@ -51,6 +51,14 @@ interface SeedRun {
 	network?: NetworkRun
 	/** Set on the `pre-update` start: what the release left before the update. */
 	released?: Released
+	/** Set on the `pre-update` start: the release tag and the candidate's directory. */
+	update?: { tag: string; to: string }
+}
+
+/** The candidate's own record of the commit it was built from, when it has one. */
+function candidateCommit(to: string): string | undefined {
+	const file = join(to, "update-candidate.json")
+	return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { commit?: string }).commit : undefined
 }
 
 /** One seed on `ctx`: the run, its record and every expectation that fails it. */
@@ -62,6 +70,12 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 	const record = recordTarget(records, r.browser, seed)
 	const files = `${record.path}.files`
 	const run = await startRun(ctx, r.caps, files, r.network)
+	record.provenance = {
+		browserVersion: await ctx.browser.version(),
+		extensionVersion: await run.anchor.evaluate(() => chrome.runtime.getManifest().version),
+		...(r.update ? { release: { tag: r.update.tag, candidateCommit: candidateCommit(r.update.to) } } : {}),
+		flags: { actionList: !!process.env.NULO_E2E_CHAOS_ACTIONS, proverless: !!process.env.NULO_E2E_PROVERLESS, network: !!r.network },
+	}
 	let missed: string[] = []
 	try {
 		const start = r.released ? [...(await bindPreUpdate(run, r.released)), ...(await checkStartStorage(run, startWorld(p.start)))] : []
@@ -109,7 +123,8 @@ export function describeProfileChaos(
 					await inPlaceUpdate({
 						builds,
 						populate: populateRelease,
-						verify: (ctx, released) => runSeed(ctx, { seed, plan: planOf(seed), browser, caps, released }),
+						verify: (ctx, released) =>
+							runSeed(ctx, { seed, plan: planOf(seed), browser, caps, released, update: { tag: builds.tag, to: builds.to } }),
 					})
 				})
 			else
