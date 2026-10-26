@@ -84,6 +84,11 @@ export function isActivating(profileId: string): boolean {
 	return activating.has(profileId)
 }
 
+/** Whether any event-driven activation is still running. Reactive. */
+export function isAnyActivating(): boolean {
+	return activating.size > 0
+}
+
 /** Whether an event-driven activation of a profile other than `profileId` is still running. */
 export function isActivatingOtherThan(profileId: string): boolean {
 	for (const id of activating.keys()) if (id !== profileId) return true

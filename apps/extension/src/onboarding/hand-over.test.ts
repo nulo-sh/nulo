@@ -40,10 +40,12 @@ describe("startOnboarding", () => {
 })
 
 describe("isOnboardingDone", () => {
-	test("a migration still running reads as not done at once, so the tab mounts its migration barrier", async () => {
-		installChromeStorage({ [SCHEMA_RUNNING_KEY]: 2, [ONBOARDING_COMPLETED_KEY]: true })
+	test("a migration running reads as not done at once, so the tab mounts its migration barrier, and one read decides", async () => {
+		const migrating = installChromeStorage({ [SCHEMA_RUNNING_KEY]: 2, [ONBOARDING_COMPLETED_KEY]: true })
 		expect(await isOnboardingDone()).toBe(false)
-		installChromeStorage({ [ONBOARDING_COMPLETED_KEY]: true })
+		expect(migrating.get).toHaveBeenCalledTimes(1)
+		const idle = installChromeStorage({ [ONBOARDING_COMPLETED_KEY]: true })
 		expect(await isOnboardingDone()).toBe(true)
+		expect(idle.get).toHaveBeenCalledTimes(1)
 	})
 })

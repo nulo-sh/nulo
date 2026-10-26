@@ -28,14 +28,10 @@
  */
 import { SCHEMA_RUNNING_KEY } from "@nulo/wallet-core/migration"
 
-/** Whether a migration is running now, read once without waiting for it to end. */
-export async function isMigrationRunning(): Promise<boolean> {
-	return SCHEMA_RUNNING_KEY in (await chrome.storage.local.get(SCHEMA_RUNNING_KEY))
-}
-
 /** Resolves once no migration is running. Fast path: one read, no listener. */
 export async function migrationIdle(): Promise<void> {
-	if (!(await isMigrationRunning())) return
+	const flag = await chrome.storage.local.get(SCHEMA_RUNNING_KEY)
+	if (!(SCHEMA_RUNNING_KEY in flag)) return
 	await new Promise<void>((resolve, reject) => {
 		const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
 			if (area !== "local" || !(SCHEMA_RUNNING_KEY in changes)) return
@@ -72,6 +68,13 @@ export async function migrationIdle(): Promise<void> {
 export async function storageLocalGet(keys?: string | string[] | null): Promise<Record<string, unknown>> {
 	await migrationIdle()
 	return chrome.storage.local.get(keys ?? undefined)
+}
+
+/** `keys` and the migration marker in one read that never waits: `undefined` while a migration runs,
+ *  for a caller that must not block on one. */
+export async function storageLocalGetUnlessMigrating(keys: string[]): Promise<Record<string, unknown> | undefined> {
+	const read = await chrome.storage.local.get([SCHEMA_RUNNING_KEY, ...keys])
+	return SCHEMA_RUNNING_KEY in read ? undefined : read
 }
 
 /**

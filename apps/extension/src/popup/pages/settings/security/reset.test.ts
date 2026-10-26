@@ -46,6 +46,7 @@ vi.mock("@/utils/core", () => ({
 
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 import { getStartedPhraseSavedKey, profileImportedKey } from "@/utils/profile-ui-keys"
 import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
@@ -191,6 +192,17 @@ describe("Delete Profile asks first when the recovery phrase was never revealed"
 			expect(useCacheStore().confirm).toEqual({})
 			expect(client.deleteProfile).not.toHaveBeenCalled()
 		}
+	})
+
+	test("a second press while the first one's flag read runs asks nothing more", async () => {
+		const storage = installChromeStorage({}, { persist: false })
+		const { w } = await mountReady()
+		const held = storage.deferNextGet()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		held.release()
+		await flushPromises()
+		expect(vi.mocked(usePopupStore().open).mock.calls.filter(([name]) => name === "confirm")).toHaveLength(1)
 	})
 
 	test("a Yes after the page's profile moved deletes nothing", async () => {

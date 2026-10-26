@@ -94,7 +94,13 @@ import { useAppStore } from "@/stores/app.store"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { createLockedState } from "@/popup/locked-state"
 import { createPopupGuard } from "@/popup/route-guard"
-import { isActivating, isActivatingOtherThan, supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
+import {
+	isActivating,
+	isActivatingOtherThan,
+	isAnyActivating,
+	supersedeProfileActivations,
+	useProfileBootstrap,
+} from "./useProfileBootstrap"
 
 // app.store references `managers` as an auto-imported global at runtime
 // (vite auto-import via src/utils/). In vitest the auto-import only covers
@@ -429,11 +435,13 @@ describe("useProfileBootstrap", () => {
 		const answers = deferredReads()
 		const { bootstrapActiveProfile } = useProfileBootstrap()
 		const seen: boolean[] = []
+		const seenAny: boolean[] = []
 		const stop = watch(
 			() => isActivating("prof-1"),
 			(now) => seen.push(now),
 			{ flush: "sync" },
 		)
+		const stopAny = watch(isAnyActivating, (now) => seenAny.push(now), { flush: "sync" })
 		const activation = bootstrapActiveProfile(fakeProfile)
 		expect(isActivatingOtherThan("created")).toBe(true)
 		expect(isActivatingOtherThan("prof-1")).toBe(false)
@@ -443,8 +451,10 @@ describe("useProfileBootstrap", () => {
 		answers[0](fakeProfile)
 		await activation
 		stop()
+		stopAny()
 		expect(isActivatingOtherThan("created")).toBe(false)
 		expect(seen).toEqual([true, false])
+		expect(seenAny).toEqual([true, false])
 	})
 
 	test("an activation superseded before it fails resolves false; one not superseded reports its failure", async () => {

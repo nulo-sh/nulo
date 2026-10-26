@@ -127,10 +127,14 @@ const phraseNeverRevealed = async (profile) => {
  *  page left meanwhile asks and deletes nothing. */
 const stillOffers = (profileId) => !isUnmounted && isReadyToReset.value && !isResetting.value && appStore.profile?.id === profileId
 
+let isReadingFlags = false
 const handleReset = async () => {
-	if (!isReadyToReset.value || isResetting.value) return
+	if (!isReadyToReset.value || isResetting.value || isReadingFlags) return
 	const profileId = appStore.profile.id
-	const warn = await phraseNeverRevealed(appStore.profile)
+	isReadingFlags = true
+	const warn = await phraseNeverRevealed(appStore.profile).finally(() => {
+		isReadingFlags = false
+	})
 	if (!stillOffers(profileId)) return
 	if (!warn) return runDeletion(profileId)
 	requestConfirm({

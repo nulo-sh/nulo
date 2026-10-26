@@ -15,6 +15,7 @@ import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityT
 
 /** Composables */
 import { awaitProfileActivation, BootstrapFailedError, UnlockTimeoutError } from "@/composables/unlockWait"
+import { isAnyActivating } from "@/composables/useProfileBootstrap"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
@@ -195,10 +196,6 @@ const handleUnlockWallet = async () => {
 			return
 		} finally {
 			isAwaitingResponse.value = false
-			if (missedDuringUnlock) {
-				missedDuringUnlock = false
-				if (!appStore.isLogined) void settleProfile()
-			}
 		}
 
 		// IMMEDIATE post-wait identity check — the wait can resolve for this
@@ -237,7 +234,7 @@ const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
 	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	const profiles = await managers.profile.getProfiles().catch(() => undefined)
-	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart) return
+	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
 	if (profile) {
 		appStore.profile = profile
@@ -248,12 +245,17 @@ const settleProfile = async () => {
 	}
 }
 
-/** A pick or a deletion elsewhere waits out an unlock here, whose steps read the selected profile;
- *  one that leaves the page locked settles the profile again. */
-let missedDuringUnlock = false
-const unlockRunning = () => {
-	if (isAwaitingResponse.value) missedDuringUnlock = true
-	return isAwaitingResponse.value
+/** An unlock here, or any profile's activation, holds the selection: the unlock's steps read it, and
+ *  an activation opens its session beside whatever is selected when it ends. A pick, a deletion or a
+ *  settle meanwhile replays once neither runs, unless the selection moved since. */
+const selectionHeld = () => isAwaitingResponse.value || isAnyActivating()
+let missedWhileHeld = false
+let selectedWhenMissed
+const heldBack = () => {
+	if (!selectionHeld()) return false
+	if (!missedWhileHeld) selectedWhenMissed = appStore.profile?.id
+	missedWhileHeld = true
+	return true
 }
 
 /** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
@@ -262,15 +264,16 @@ let follows = 0
 const followPick = async (id) => {
 	const follow = ++follows
 	const selectedAtStart = appStore.profile?.id
-	if (!id || id === selectedAtStart || appStore.isLogined || unlockRunning()) return
+	if (!id || id === selectedAtStart || appStore.isLogined || heldBack()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
-	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart) return
-	if (!unlockRunning()) appStore.profile = profile
+	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack())
+		return
+	appStore.profile = profile
 }
 const stopFollowingPicks = onLastActiveProfileChanged(followPick)
 
 const onProfileDeleted = (deleted) => {
-	if (deleted?.id === appStore.profile?.id && !unlockRunning()) void settleProfile()
+	if (deleted?.id === appStore.profile?.id && !heldBack()) void settleProfile()
 }
 managers.profile.onProfileDeleted.add(onProfileDeleted)
 
@@ -284,6 +287,11 @@ onUnmounted(() => {
 	isUnmounted = true
 	stopFollowingPicks()
 	managers.profile.onProfileDeleted.remove(onProfileDeleted)
+})
+watch(selectionHeld, (held) => {
+	if (held || !missedWhileHeld) return
+	missedWhileHeld = false
+	if (!appStore.isLogined && appStore.profile?.id === selectedWhenMissed) void settleProfile()
 })
 watch(
 	() => appStore.profile?.id,

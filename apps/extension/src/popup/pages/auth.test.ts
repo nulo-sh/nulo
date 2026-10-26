@@ -38,6 +38,14 @@ vi.mock("@/composables/unlockWait", async (importOriginal) => {
 	return { ...mod, awaitProfileActivation: (...a: unknown[]) => waitHolder.mock(...(a as [])) }
 })
 
+/** Profile ids whose activation runs in this document, as the bootstrap's registry reports them. */
+const activations = vi.hoisted(() => ({ ids: undefined as unknown as Set<string> }))
+vi.mock("@/composables/useProfileBootstrap", async () => {
+	const { reactive } = await import("vue")
+	activations.ids = reactive(new Set<string>())
+	return { isAnyActivating: () => activations.ids.size > 0 }
+})
+
 /** Another window's writes of the last-active pointer, and the service's deletions, as this page hears them. */
 const elsewhere = vi.hoisted(() => {
 	const picks = new Set<(id: string | undefined) => void>()
@@ -111,6 +119,7 @@ vi.mock("vue-router", () => ({
 }))
 
 beforeEach(() => {
+	activations.ids?.clear()
 	unlockProfile.mockReset()
 	unlockPasskeyProfile.mockReset()
 	getPasskeyUnlockParams.mockReset()
@@ -530,6 +539,49 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		})
 		expect(deleted.appStore.profile).toBeUndefined()
 		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick elsewhere waits out an activation running here, and applies only if that activation leaves the page locked", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		activations.ids.add("pA")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+		activations.ids.delete("pA")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+
+		activations.ids.add("pB")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		elsewhere.pick("pC")
+		await flushPromises()
+		appStore.isLogined = true
+		activations.ids.delete("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("a profile chosen here during an unlock stands over a pick that arrived during it", async () => {
+		let fail!: () => void
+		unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		appStore.profile = C
+		fail()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
 	})
 
 	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
