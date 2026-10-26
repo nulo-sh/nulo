@@ -212,3 +212,14 @@ describe("change password — the profile's unlock changed in another window", (
 		expect(profileClient.changeProfilePassword).not.toHaveBeenCalled()
 	})
 })
+
+test("change password — a lock leaves no typed password on the page", async () => {
+	const w = await mountWithValidFields()
+	const app = useAppStore()
+	app.isLogined = true
+	await flushPromises()
+	app.isLogined = false
+	await flushPromises()
+	for (const id of ["current-password-input", "new-password-input", "new-password-repeat-input"])
+		expect((w.get(`[data-testid="${id}"] input`).element as HTMLInputElement).value).toBe("")
+})

@@ -1,6 +1,7 @@
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import { type Account, AccountType } from "@/wallet/services/account/client"
-import { type AccountRowTarget, applyAccountRow, listOwnAccountRow } from "./account-rows"
+import { type AccountRowTarget, applyAccountRow, followAccountRows, listOwnAccountRow } from "./account-rows"
 
 const row = (address: string, fields: Partial<Account> = {}): Account => ({
 	profileId: "p1",
@@ -62,4 +63,16 @@ describe("the answer of a window's own create or import", () => {
 		listOwnAccountRow(w, { ...IMPORTED, address: `0x${"04".repeat(32)}`, chainId: 8 })
 		expect(w.accounts).toHaveLength(3)
 	})
+})
+
+test("a window follows the rows its client reports added or edited, until it stops", () => {
+	const client = { onAccountAdded: new EventHandler<Account>(), onAccountUpdated: new EventHandler<Account>() }
+	const w = window()
+	const stop = followAccountRows(client, w)
+	client.onAccountAdded.invoke(IMPORTED)
+	client.onAccountUpdated.invoke({ ...FIRST, name: "Renamed" })
+	expect(w.accounts).toEqual([{ ...FIRST, name: "Renamed" }, SECOND, IMPORTED])
+	stop()
+	client.onAccountUpdated.invoke({ ...FIRST, name: "Later" })
+	expect(w.accounts[0].name).toBe("Renamed")
 })

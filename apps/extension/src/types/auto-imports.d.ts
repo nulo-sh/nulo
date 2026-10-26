@@ -298,6 +298,7 @@ declare global {
   const leaveFor: typeof import('../utils/page-back').leaveFor
   const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
+  const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
@@ -1150,6 +1151,7 @@ declare module 'vue' {
     readonly leaveFor: UnwrapRef<typeof import('../utils/page-back')['leaveFor']>
     readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
+    readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>

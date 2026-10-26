@@ -468,12 +468,13 @@ describe("another window's change, a lock and an ended session", () => {
 		nothingChanged()
 	})
 
-	test("an update to this profile from elsewhere, a new passkey of the same kind, drops the answer; another profile's does not", async () => {
+	test("a new passkey made elsewhere, an update of the same kind, drops the answer; a rename or another profile's does not", async () => {
 		const w = await atNewPassword()
 		profile.onProfileUpdated.invoke({ id: "p2", name: "Other", type: "passkey" })
+		profile.onProfileUpdated.invoke({ id: "p1", name: "Renamed", type: "passkey" })
 		await flushPromises()
 		expect(has(w, "unlock-method-new-password-input")).toBe(true)
-		profile.onProfileUpdated.invoke({ id: "p1", name: "Main", type: "passkey" })
+		profile.onProfileUpdated.invoke({ id: "p1", name: "Renamed", type: "passkey" })
 		await flushPromises()
 		expect(has(w, "unlock-method-new-password-input")).toBe(false)
 		nothingChanged()

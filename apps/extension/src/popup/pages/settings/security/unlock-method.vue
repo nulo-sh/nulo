@@ -79,9 +79,15 @@ const currentLine = computed(() => {
 	return isPasskey.value ? "This profile unlocks with a passkey." : "This profile unlocks with a password."
 })
 
+/** The profile's name as this page last heard it. No write renames a profile and changes its unlock,
+ *  so an update that renames it changes nothing the page holds. */
+let heardName = appStore.profile?.name
 managers.profile.onProfileUpdated.add(onProfileUpdated)
 function onProfileUpdated(profile) {
-	if (profile?.id === appStore.profile?.id) onChangedElsewhere()
+	if (profile?.id !== appStore.profile?.id) return
+	const renamed = profile.name !== heardName
+	heardName = profile.name
+	if (!renamed) onChangedElsewhere()
 }
 
 function clearStep() {
@@ -229,7 +235,13 @@ const onKeydown = (e) => {
 	else if (isNewPasswordStep.value) handleSavePassword()
 }
 
-watch(() => appStore.profile?.id, reset)
+watch(
+	() => appStore.profile?.id,
+	() => {
+		heardName = appStore.profile?.name
+		reset()
+	},
+)
 watch(() => appStore.profile?.type, onChangedElsewhere)
 watch(
 	() => appStore.isLogined,

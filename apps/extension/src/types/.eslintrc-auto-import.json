@@ -540,6 +540,7 @@
     "leaveFor": true,
     "leavePanelFor": true,
     "legalAboutRow": true,
+    "listOwnAccountRow": true,
     "managers": true,
     "markGetStarted": true,
     "markRaw": true,

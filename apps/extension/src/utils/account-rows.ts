@@ -1,3 +1,4 @@
+import type { IEventHandler } from "@nulo/wallet-core/utils"
 import type { Account } from "@/wallet/services/account/client"
 
 /** The part of a window's state an account row lands in. */
@@ -21,6 +22,20 @@ export function applyAccountRow(target: AccountRowTarget, row: Account): void {
 	if (at === -1) target.accounts.push(row)
 	else target.accounts[at] = row
 	if (target.account?.address === row.address) target.account = row
+}
+
+/** Keeps `target`'s lists on every row `client` reports added or edited; returns the unsubscribe. */
+export function followAccountRows(
+	client: { onAccountAdded: IEventHandler<Account>; onAccountUpdated: IEventHandler<Account> },
+	target: AccountRowTarget,
+): () => void {
+	const onRow = (row: Account) => applyAccountRow(target, row)
+	client.onAccountAdded.add(onRow)
+	client.onAccountUpdated.add(onRow)
+	return () => {
+		client.onAccountAdded.remove(onRow)
+		client.onAccountUpdated.remove(onRow)
+	}
 }
 
 /** Lists the row this window's own create or import answered with, unless the service's event

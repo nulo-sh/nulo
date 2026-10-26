@@ -90,6 +90,18 @@ const onKeydown = (e) => {
 	handleChangePassword()
 }
 
+// Passwords typed under a session never outlive it.
+watch(
+	() => appStore.isLogined,
+	(logged) => {
+		if (logged) return
+		currentPassword.value = ""
+		newPassword.value = ""
+		repeatedNewPassword.value = ""
+		handlePasswordInput()
+	},
+)
+
 // A passkey profile has no password to change; the route guard sends one away on arrival, and a
 // change of unlock method made in another window sends this page the same way.
 watch(
