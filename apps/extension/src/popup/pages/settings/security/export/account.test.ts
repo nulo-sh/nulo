@@ -294,6 +294,7 @@ describe("a passkey profile's account file", () => {
 		expect(w.find('[data-testid="account-file-save-btn"]').exists()).toBe(false)
 		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 		expect(downloadFile).not.toHaveBeenCalled()
+		expect(document.activeElement).toBe(w.get('[data-testid="account-file-confirm-passkey-btn"]').element)
 		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
 		await flushPromises()
 		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)

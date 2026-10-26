@@ -860,7 +860,7 @@ describe("popup import — the CTA predicates read only what each branch reaches
 				...UNFINISHED_LADDER_TAIL,
 				"restoreStatus", // back blocked
 				"isRetryingAccountState",
-				"restoreStatus", // the restore label, rendered inside the Button: it names the field, not the backup
+				"restoreStatus", // the restore label, rendered inside the Button, which reads the name field
 			],
 		],
 		[

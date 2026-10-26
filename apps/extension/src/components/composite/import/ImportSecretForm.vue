@@ -3,7 +3,7 @@
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { newPasswordHint } from "@/utils/password"
-import { phraseHint } from "@/utils/recovery-phrase"
+import { PHRASE_WORD_COUNT, phraseHint } from "@/utils/recovery-phrase"
 /**
  * Section labels carry the visual heading; individual Inputs run
  * label-less to avoid duplicating the heading text. Hints (strength,
@@ -30,9 +30,11 @@ const hideCredentials = ref(true)
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const seedHint = computed(() => phraseHint(props.phraseVerdict))
+/** A count still short of 24 is progress; anything else Import refuses reads as an error. */
 const seedHintColor = computed(() => {
-	if (props.phraseVerdict.kind === "valid") return "primary"
-	return props.phraseVerdict.kind === "count" ? "tertiary" : "txt-danger"
+	const verdict = props.phraseVerdict
+	if (verdict.kind === "valid") return "primary"
+	return verdict.kind === "count" && verdict.count < PHRASE_WORD_COUNT ? "tertiary" : "txt-danger"
 })
 </script>
 

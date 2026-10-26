@@ -12,7 +12,7 @@ import ImportSecretForm from "./ImportSecretForm.vue"
 
 const stubs = {
 	Flex: { template: "<div><slot /></div>" },
-	Text: { template: "<span><slot /></span>" },
+	Text: { props: ["color"], template: "<span :data-color='color'><slot /></span>" },
 	Icon: { props: ["name"], template: '<i :data-name="name"></i>' },
 	Tooltip: { template: "<div data-tooltip><slot /><slot name='content' /></div>" },
 	Transition: { template: "<div><slot /></div>" },
@@ -101,13 +101,16 @@ describe("ImportSecretForm", () => {
 	})
 
 	it.each([
-		[{ kind: "valid" }, "Correct", true],
-		[{ kind: "count", count: 23 }, "23 of 24 words", false],
-		[{ kind: "word", position: 5 }, "Word 5 is not in the word list.", false],
-		[{ kind: "checksum" }, "A word is wrong or out of order.", false],
-	])("the phrase's verdict %o reads %j under the field, with the check only when valid", (phraseVerdict, line, checked) => {
+		[{ kind: "valid" }, "Correct", true, "primary"],
+		[{ kind: "count", count: 23 }, "23 of 24 words", false, "tertiary"],
+		[{ kind: "count", count: 25 }, "25 words. A phrase has 24.", false, "txt-danger"],
+		[{ kind: "word", position: 5 }, "Word 5 is not in the word list.", false, "txt-danger"],
+		[{ kind: "checksum" }, "A word is wrong or out of order.", false, "txt-danger"],
+	])("the phrase's verdict %o reads %j under the field, with the check only when valid", (phraseVerdict, line, checked, color) => {
 		const wrapper = mount(ImportSecretForm, { props: baseProps({ method: "seed", phraseVerdict }), global: { stubs } })
-		expect(wrapper.get("[data-testid=import-seed-hint]").text()).toBe(line)
+		const hint = wrapper.get("[data-testid=import-seed-hint]")
+		expect(hint.text()).toBe(line)
+		expect(hint.get("span").attributes("data-color")).toBe(color)
 		expect(wrapper.find('[data-name="square-check"]').exists()).toBe(checked)
 	})
 

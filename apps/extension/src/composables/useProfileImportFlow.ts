@@ -14,7 +14,7 @@ import { managers } from "@/utils/core"
 import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo/wallet-core/utils"
 import { zeroize } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
-import { type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
+import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -191,7 +191,7 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 		// The import's own phrase checks run before the passkey card, so a phrase it refuses leaves no
 		// new passkey behind.
 		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
-		if (words.length !== 24) throw new Error("Invalid mnemonic length")
+		if (words.length !== PHRASE_WORD_COUNT) throw new Error("Invalid mnemonic length")
 		zeroize(await getEntropy(words))
 		const unlock = await deps.chooseUnlock({ step: "import", profileName: name }, existing)
 		if (unlock === null) return undefined

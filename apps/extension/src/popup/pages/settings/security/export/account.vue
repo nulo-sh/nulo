@@ -71,6 +71,7 @@ const accounts = computed(() => {
 	return [...live, ...heldAccounts.value.filter((h) => !live.some((a) => a.address === h.address))]
 })
 
+const confirmPasskeyButton = useTemplateRef("confirmPasskeyButton")
 const selectedAddress = ref("")
 const isAgreed = ref(false)
 const password = ref()
@@ -239,9 +240,11 @@ const handleSaveFile = async () => {
 	} catch (error) {
 		if (!isCurrent()) return
 		console.error("[export/account] passkey file failed:", { error })
-		// An answer a Save failed with is never reused: the page asks the passkey again.
+		// An answer a Save failed with is never reused: the page asks the passkey again, and the
+		// keyboard lands on that ask, as the removed Save took focus with it.
 		dropApproval()
 		openToast({ kind: "error", label: "Failed to create the file" })
+		void nextTick(() => confirmPasskeyButton.value?.$el?.focus())
 	} finally {
 		if (isCurrent()) isBusy.value = false
 	}
@@ -455,6 +458,7 @@ onBeforeUnmount(() => {
 
 			<Button
 				v-else-if="isPasskeyProfile && !fileStatus && !isApproved"
+				ref="confirmPasskeyButton"
 				@click="handleConfirmPasskey"
 				@keydown.enter="refuseRepeatEnter"
 				:disabled="isBusy"
