@@ -13,8 +13,9 @@ export const PASSKEY_TIMEOUT = 60_000 * 3 // 3 minutes
  * fails the build on drift.
  *
  * If a fork repurposes this extension under a different domain, change
- * BOTH this constant and the manifest entry, and accept that ALL
- * existing passkey wallets become unrecoverable.
+ * BOTH this constant and the manifest entry, and accept that no existing
+ * passkey unlocks its profile again: such a profile comes back only from
+ * its recovery phrase or a full backup.
  *
  * A dedicated content-less host: WebAuthn lets any origin whose registrable
  * domain suffix-matches the RP ID assert with the credential and evaluate its

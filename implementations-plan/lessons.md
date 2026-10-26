@@ -18,16 +18,16 @@
 - A `pull_request` run builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent; a PR conflicting with `dev` gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/connect-split-1/lessons/phase-3.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
-- `gh stack` runs the plans gate on each arc head (no forward links); after a squash merge, `dev` into the old head is add/add; parallel arcs need disjoint decision ids; their index lines auto-merge as two (`check:plans` after a `dev` merge). [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger), [more](archive/owner-feedback-1/lessons/phase-8.md)
+- `gh stack` runs the plans gate on each arc head (no forward links); after a squash merge, `dev` into the old head is add/add; parallel arcs need disjoint decision ids; index lines auto-merge as two: `check:plans` after a `dev` merge. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger)
 
 ## Extension runtime
 
 - A popup call waits for the worker's Ready and fails 60 s after it began unless its client sets `requestTimeoutMs`, so one awaiting a proof fails as the send lands; a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
-- `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
+- `PopupManager` mounts every popup at start for good: gate setup on `show` or `v-if`. A profile switch or unlock change elsewhere updates open pages in place: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/passkey-unlock-1/plan.md)
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
-- `getAll()` hides undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
+- `getAll()` hides undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. Gate a row on its reader's fields, not its writer schema; zod 4.6.7 strips unknown keys: a legacy variant forbids newer ones. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows), [more](archive/passkey-unlock-1/lessons/phase-A1.md)
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
@@ -42,8 +42,8 @@
 - Blocks above the proven tip can be pruned and a symbolic tag can name another fork per call: pin reads to one block hash; reconcile records above the tip. [Evidence](archive/incoming-public-transfers/plan.md#pruning)
 - The node client retries a failed POST but not a 4xx refusal, so a refused retry can hide a send that landed (6.0.0-rc.1). [Evidence](archive/failed-send-check/plan.md#node-retries)
 - HandshakeRegistry (6.0.0-rc.1): a pair's first send uses it for every token; the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-same-token-concurrent-sends/plan.md#note-index)
-- Half of field elements are no Aztec address and `0x${"a".repeat(64)}` exceeds the modulus: check fixtures with `isValidAztecAddress`. `schemas.Fr.safeParse` throws on `""` or `"abc"` (6.0.0-rc.1). [Evidence](archive/hd-behaviour-alignment/plan.md#fixture-addresses), [more](archive/dapp-ingress-grants/lessons/phase-3.md)
-- PXE `getNotes` syncs first and swallows a failed sync, so it can answer from a stale anchor: trust a read only when the synced block hash before and after it is the node's tip (6.0.0-rc.1). [Evidence](archive/incoming-transfers/lessons/phase-3.md), [more](archive/incoming-transfers/lessons/phase-2.md)
+- Half of field elements are no Aztec address and `0x${"a".repeat(64)}` exceeds the modulus: check fixtures with `isValidAztecAddress`. `schemas.Fr.safeParse` throws on `""` or `"abc"` (6.0.0-rc.1). [Evidence](archive/hd-behaviour-alignment/plan.md#fixture-addresses)
+- PXE `getNotes` syncs first and swallows a failed sync, so it can answer from a stale anchor: trust a read only when the synced block hash before and after it is the node's tip (6.0.0-rc.1). [Evidence](archive/incoming-transfers/lessons/phase-3.md)
 
 ## Agent tooling
 

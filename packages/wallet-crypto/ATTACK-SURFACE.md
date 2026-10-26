@@ -140,6 +140,8 @@ strength of the profile's password; see the known limit below for older files.
   a planted grant; a planted transaction row that names no profile is shown to every profile until
   one that alone holds its account adopts it). The envelope's profile id, the row ids and each
   row's size stay visible, and an incoming key also shows its profile and network.
+- **A password or unlock-method change reseals the stored row only.** A copy of the row taken
+  before the change still opens with the password or passkey it was sealed under.
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for
