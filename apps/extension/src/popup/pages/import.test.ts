@@ -2,7 +2,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
-import { createApp, customRef, h, ref } from "vue"
+import { computed, createApp, customRef, h, ref } from "vue"
 
 const holder = vi.hoisted(() => ({
 	flow: undefined as unknown as ReturnType<typeof makeFlow>,
@@ -55,12 +55,14 @@ import { completeImportWithRecovery } from "@/composables/completeImportWithReco
 import { useAppStore } from "@/stores/app.store"
 import ImportPage from "./import.vue"
 
-/** The flow's surface with a decrypted password-profile backup chosen and a valid new password. */
+/** The flow's surface with a decrypted password-profile backup chosen, its name in the field, and a
+ *  valid new password. */
 function makeFlow() {
+	const profileName = ref("Main")
 	return {
 		nameFieldState: ref("hidden"),
-		profileName: ref(""),
-		trimmedName: ref(""),
+		profileName,
+		trimmedName: computed(() => profileName.value.trim()),
 		holdsOwnName: vi.fn(() => false),
 		nameError: ref(""),
 		shakeName: ref(false),
@@ -655,6 +657,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 		"seed, not allowed",
 		(f) => {
 			f.selectedImportOption.value = "seed"
+			f.profileName.value = ""
 		},
 		[["Import Profile", "import-seed-submit-btn", true, null, "cta"], BACK],
 	],
@@ -662,6 +665,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 		"seed, allowed",
 		(f) => {
 			f.selectedImportOption.value = "seed"
+			f.profileName.value = ""
 			f.isAllowedToImportBySeedPhrase.value = true
 		},
 		[["Import Profile", "import-seed-submit-btn", false, null, "cta"], BACK],
@@ -670,6 +674,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 		"seed, importing (the popup's seed CTA has no importing gate)",
 		(f) => {
 			f.selectedImportOption.value = "seed"
+			f.profileName.value = ""
 			f.isAllowedToImportBySeedPhrase.value = true
 			Object.assign(f, { isImporting: ref(true) })
 		},
@@ -680,7 +685,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 		(f) => {
 			f.selectedImportOption.value = "seed"
 			f.unlockMethod.value = "passkey"
-			f.trimmedName.value = "Savings"
+			f.profileName.value = "Savings"
 		},
 		[["Import Savings", "import-seed-submit-btn", true, null, "cta"], REUSE("import-seed-passkey-reuse", true), BACK],
 	],
@@ -720,6 +725,18 @@ describe("popup import — the CTA bar in each state", () => {
 		expect(holder.flow[handler]).toHaveBeenCalledOnce()
 		expect(holder.flow.handleImportSeed).not.toHaveBeenCalled()
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
+	})
+})
+
+describe("popup import — the full backup's button names the profile the field holds", () => {
+	test.each([
+		["the backup's name, suffixed where taken", "Main 1", "Import Main 1"],
+		["a name typed over it", "Osprey", "Import Osprey"],
+		["an emptied field", "", "Import Profile"],
+	])("%s", async (_, field, label) => {
+		holder.flow.profileName.value = field
+		const w = await mountImport()
+		expect(w.get('[data-testid="import-full-backup-submit-btn"]').text()).toBe(label)
 	})
 })
 
@@ -843,8 +860,7 @@ describe("popup import — the CTA predicates read only what each branch reaches
 				...UNFINISHED_LADDER_TAIL,
 				"restoreStatus", // back blocked
 				"isRetryingAccountState",
-				"restoreStatus", // the restore label, rendered inside the Button
-				"selectedBackup",
+				"restoreStatus", // the restore label, rendered inside the Button: it names the field, not the backup
 			],
 		],
 		[

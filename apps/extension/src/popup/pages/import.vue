@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
 							data-testid="import-full-backup-submit-btn"
 							variant="cta"
 						>
-							{{ restoreStatus === "progress" ? "Importing…" : `Import ${selectedBackup?.backup?.data?.profile?.name ?? "Profile"}` }}
+							{{ restoreStatus === "progress" ? "Importing…" : `Import ${trimmedName || "Profile"}` }}
 						</Button>
 						<PasskeyReuseLink
 							v-if="unlockMethod === 'passkey'"
