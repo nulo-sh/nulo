@@ -456,7 +456,7 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{
 		issue: 1131,
 		pattern:
-			/^\["Failed to get (?:public|private) FeeJuice balance",.*(?:has no current incarnation|"message":"Wallet locked"|PXE_STORE_KEY_MISSING)/,
+			/^\["Failed to get (?:public|private) FeeJuice balance",.*(?:has no current incarnation|"message":"(?:Wallet|Profile) locked"|PXE_STORE_KEY_MISSING)/,
 		kinds: ["log"],
 		source: "execution",
 	},

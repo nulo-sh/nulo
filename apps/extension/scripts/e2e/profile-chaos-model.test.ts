@@ -756,7 +756,13 @@ describe("O4, errors", () => {
 				text: '["Failed to get public FeeJuice balance",{"message":"PXE_STORE_KEY_MISSING: no store key provisioned for profile x"}]',
 			},
 		]
-		expect(checkErrors(afterLock, []).violations.map((v) => v.known)).toEqual([1131, 1131])
+		afterLock.push({
+			...fenced("private"),
+			text: '["Failed to get private FeeJuice balance",{"name":"Error","message":"Profile locked"}]',
+		})
+		expect(checkErrors(afterLock, []).violations.map((v) => v.known)).toEqual([1131, 1131, 1131])
+		const elsewhere1131 = checkErrors([{ ...afterLock[0], source: "token" }], []).violations
+		expect(shown("O4 the gas-balance text from another source", elsewhere1131)[0]?.known).toBeUndefined()
 		const other = checkErrors([{ ...fenced("public"), text: '["Failed to get public FeeJuice balance",{"message":"boom"}]' }], [])
 		expect(shown("O4 an error line beside a filed one's text", other.violations)[0]?.known).toBeUndefined()
 		const disconnect = {

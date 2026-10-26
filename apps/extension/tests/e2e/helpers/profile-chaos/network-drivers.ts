@@ -27,6 +27,7 @@ const UNLOCK_MS = 60_000
 const HELD_MS = 60_000
 const COMPETE_MS = 2_000
 const RESTORE_MS = 300_000
+const QUIET_MS = 5_000
 /** A finished restore still activates its profile before Home, or shows its errors screen, so
  *  `finished` alone does not end it. */
 const ENDED_STAGES = ["failed", "rolled-back", "rollback-failed"]
@@ -175,6 +176,25 @@ async function restoreSettled(page: Page): Promise<{ reached: boolean; elapsedMs
 	return { reached, elapsedMs: Date.now() - t0 }
 }
 
+/** Waits until the listed profiles and the open session hold still for `QUIET_MS`: a restore's last
+ *  stages run on after its page leaves the import route, so a lock any earlier would race them. */
+async function restoreQuiet(page: Page): Promise<void> {
+	const read = async () => {
+		const active = await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile")
+		const listed = await callService<{ id: string }[]>(page, "profile", "getProfiles")
+		return JSON.stringify([active?.id ?? null, listed.map((p) => p.id).sort()])
+	}
+	let last = await read()
+	let since = Date.now()
+	const deadline = Date.now() + RESTORE_MS
+	while (Date.now() - since < QUIET_MS) {
+		if (Date.now() > deadline) throw new Error("the profiles or the session kept changing after the restore")
+		await new Promise((resolve) => setTimeout(resolve, 500))
+		const now = await read()
+		if (now !== last) [last, since] = [now, Date.now()]
+	}
+}
+
 async function runHeld(s: RunState, p: ParamsMap["restoreHeld"], step: PlannedStep, before: World): Promise<Driven> {
 	const page = s.anchor
 	const deleted = new Set(before.profiles.filter((x) => x.deleted).map((x) => x.ref))
@@ -188,6 +208,7 @@ async function runHeld(s: RunState, p: ParamsMap["restoreHeld"], step: PlannedSt
 	await competing.done
 	const settled = await restoreSettled(page)
 	await continuePastErrors(page)
+	await restoreQuiet(page)
 	const kept = s.bindings.profiles.has(p.ref) ? undefined : await unboundProfileId(s, deleted)
 	if (kept) bindProfile(s.bindings, p.ref, kept, deleted)
 	await toLockScreen(page)
