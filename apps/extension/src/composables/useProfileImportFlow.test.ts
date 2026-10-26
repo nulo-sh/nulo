@@ -1,6 +1,6 @@
 import { effectScope } from "vue"
 import { flushPromises } from "@vue/test-utils"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
 import { DuplicateWalletError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
@@ -44,6 +44,14 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}, onPasske
 const SEED_24 = `${"abandon ".repeat(23)}art`
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
+/** Types a phrase and waits for its verdict, as a person sees the hint before pressing Import. */
+async function typePhrase(flow: ReturnType<typeof useProfileImportFlow>, phrase: string) {
+	flow.seedPhrase.value = phrase
+	await vi.waitFor(() => expect(flow.phraseVerdict.value.kind).not.toBe("pending"))
+}
+
+afterEach(() => vi.restoreAllMocks())
+
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileApi.getProfiles.mockResolvedValue([])
@@ -57,7 +65,7 @@ describe("useProfileImportFlow", () => {
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(profileApi.importMnemonic).toHaveBeenCalledWith("MyProfile", SEED_24.split(" "), "password123", false, undefined)
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
@@ -69,7 +77,7 @@ describe("useProfileImportFlow", () => {
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await Promise.all([flow.handleImportSeed(), flow.handleImportSeed()])
 		expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
@@ -81,7 +89,7 @@ describe("useProfileImportFlow", () => {
 		expect(flow.nameFieldState.value).toBe("hidden")
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(profileApi.importMnemonic).toHaveBeenCalledWith("Main", SEED_24.split(" "), "password123", false, undefined)
 	})
@@ -117,7 +125,7 @@ describe("useProfileImportFlow", () => {
 		flow.profileName.value = ""
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(profileApi.importMnemonic).not.toHaveBeenCalled()
 		expect(opts.completeImport).not.toHaveBeenCalled()
@@ -131,7 +139,7 @@ describe("useProfileImportFlow", () => {
 		flow.profileName.value = "Taken"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(profileApi.importMnemonic).not.toHaveBeenCalled()
 		expect(opts.completeImport).not.toHaveBeenCalled()
@@ -144,7 +152,7 @@ describe("useProfileImportFlow", () => {
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(flow.error.value).toEqual({ type: "unknown", title: "Import failed", tooltip: "boom" })
 		// The title is a real string, never the Error object -> no "[object Object]".
@@ -160,7 +168,7 @@ describe("useProfileImportFlow", () => {
 		flow.selectedImportOption.value = "seed"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		flow.seedPhrase.value = SEED_24
+		await typePhrase(flow, SEED_24)
 		await flow.handleImportSeed()
 		expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		expect(opts.completeImport).toHaveBeenCalledWith({ id: "p1", name: "Imported", type: "password" })
@@ -195,7 +203,7 @@ describe("useProfileImportFlow", () => {
 			flow.profileName.value = "MyProfile"
 			flow.password.value = "password123"
 			flow.repeatedPassword.value = "password123"
-			flow.seedPhrase.value = SEED_24
+			await typePhrase(flow, SEED_24)
 
 			const p = flow.handleImportSeed()
 			await tick()
@@ -215,7 +223,7 @@ describe("useProfileImportFlow", () => {
 			flow.profileName.value = "MyProfile"
 			flow.password.value = "password123"
 			flow.repeatedPassword.value = "password123"
-			flow.seedPhrase.value = SEED_24
+			await typePhrase(flow, SEED_24)
 
 			const p = flow.handleImportSeed()
 			await tick()
@@ -236,7 +244,7 @@ describe("useProfileImportFlow", () => {
 			flow.profileName.value = "MyProfile"
 			flow.password.value = "password123"
 			flow.repeatedPassword.value = "password123"
-			flow.seedPhrase.value = SEED_24
+			await typePhrase(flow, SEED_24)
 
 			const first = flow.handleImportSeed()
 			await tick()
@@ -262,7 +270,7 @@ describe("useProfileImportFlow", () => {
 			flow.profileName.value = "MyProfile"
 			flow.password.value = "password123"
 			flow.repeatedPassword.value = "password123"
-			flow.seedPhrase.value = SEED_24
+			await typePhrase(flow, SEED_24)
 			await flow.handleImportSeed()
 			expect(flow.error.value.tooltip).toBe("boom")
 			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
@@ -272,15 +280,15 @@ describe("useProfileImportFlow", () => {
 	describe("a phrase imported under a passkey", () => {
 		const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
 		/** A flow on the Passkey tab with a 24-word phrase and a name, and no password typed. */
-		function passkeyFlow() {
+		async function passkeyFlow() {
 			const made = makeFlow({}, true)
 			made.flow.profileName.value = "MyProfile"
-			made.flow.seedPhrase.value = SEED_24
+			await typePhrase(made.flow, SEED_24)
 			return made
 		}
 
 		test("a phrase opens on Passkey; Import asks a new passkey for the profile, then imports under its answer", async () => {
-			const { flow, opts } = passkeyFlow()
+			const { flow, opts } = await passkeyFlow()
 			expect(flow.unlockMethod.value).toBe("passkey")
 			expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true)
 			const run = flow.handleImportSeed()
@@ -295,7 +303,7 @@ describe("useProfileImportFlow", () => {
 		})
 
 		test("with a passkey the person already has, the card asks a discovery; on the Password tab nothing runs", async () => {
-			const { flow } = passkeyFlow()
+			const { flow } = await passkeyFlow()
 			const run = flow.handleImportSeedWithExistingPasskey()
 			await vi.waitFor(() => expect(flow.ceremonyRequest.value?.mode).toBe("discover"))
 			flow.onCeremonyResolve(ANSWER)
@@ -309,7 +317,7 @@ describe("useProfileImportFlow", () => {
 		})
 
 		test("a cancelled card imports nothing, reports nothing, and leaves the form filled", async () => {
-			const { flow, opts } = passkeyFlow()
+			const { flow, opts } = await passkeyFlow()
 			const run = flow.handleImportSeed()
 			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
 			flow.onCeremonyReject(new UserRejectedError())
@@ -326,7 +334,7 @@ describe("useProfileImportFlow", () => {
 		})
 
 		test("a failed card reports and imports nothing", async () => {
-			const { flow } = passkeyFlow()
+			const { flow } = await passkeyFlow()
 			const run = flow.handleImportSeed()
 			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
 			flow.onCeremonyReject(new Error("authenticator broke"))
@@ -339,7 +347,7 @@ describe("useProfileImportFlow", () => {
 			profileApi.importMnemonic
 				.mockRejectedValueOnce(new DuplicateWalletError(undefined, { existingProfileName: "Main" }))
 				.mockResolvedValueOnce({ id: "p2", name: "Dup", type: "passkey" })
-			const { flow } = passkeyFlow()
+			const { flow } = await passkeyFlow()
 			const run = flow.handleImportSeed()
 			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
 			flow.onCeremonyResolve(ANSWER)
@@ -353,7 +361,7 @@ describe("useProfileImportFlow", () => {
 		})
 
 		test("a backup opens the choice on the method it was made with; a cleared form opens on Passkey again", async () => {
-			const { flow } = passkeyFlow()
+			const { flow } = await passkeyFlow()
 			const pick = pickFile as unknown as ReturnType<typeof vi.fn>
 			const backupFile = (type: string) =>
 				new File([JSON.stringify({ data: { profile: { type, name: "B" } } })], "b.json", { type: "application/json" })
@@ -382,13 +390,62 @@ describe("useProfileImportFlow", () => {
 		test.each([
 			["a word off the wordlist", `${"abandon ".repeat(23)}nulo`],
 			["a bad checksum", "abandon ".repeat(24).trim()],
-		])("a phrase the import refuses (%s) asks no passkey", async (_, phrase) => {
-			const { flow } = passkeyFlow()
-			flow.seedPhrase.value = phrase
+		])("a phrase the import refuses (%s) keeps Import closed and asks no passkey", async (_, phrase) => {
+			const { flow } = await passkeyFlow()
+			await typePhrase(flow, phrase)
+			expect(flow.isAllowedToImportBySeedPhrase.value).toBe(false)
 			await flow.handleImportSeed()
 			expect(flow.ceremonyRequest.value).toBeNull()
 			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
-			expect(flow.error.value.title).toBe("Import failed")
+		})
+	})
+
+	describe("the phrase's verdict", () => {
+		/** A Password-tab flow with a valid new password, so only the phrase gates Import. */
+		function passwordFlow() {
+			const made = makeFlow()
+			made.flow.password.value = "password123"
+			made.flow.repeatedPassword.value = "password123"
+			return made
+		}
+
+		test("a bad checksum keeps Import closed with its own verdict; the valid phrase padded and double-spaced opens it", async () => {
+			const { flow } = passwordFlow()
+			await typePhrase(flow, "abandon ".repeat(24).trim())
+			expect([flow.phraseVerdict.value, flow.isAllowedToImportBySeedPhrase.value]).toEqual([{ kind: "checksum" }, false])
+			await typePhrase(flow, `  ${SEED_24.replaceAll(" ", "  ")} `)
+			expect([flow.phraseVerdict.value, flow.isAllowedToImportBySeedPhrase.value]).toEqual([{ kind: "valid" }, true])
+			await flow.handleImportSeed()
+			expect(profileApi.importMnemonic).toHaveBeenCalledWith("Main", SEED_24.split(" "), "password123", false, undefined)
+		})
+
+		test("an edit closes Import at once, and a valid verdict it overtook never comes back", async () => {
+			const { flow } = passwordFlow()
+			await typePhrase(flow, SEED_24)
+			expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true)
+			const digest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle)
+			const held = Promise.withResolvers<void>()
+			vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementationOnce(async (...args) => {
+				await held.promise
+				return digest(...args)
+			})
+			flow.seedPhrase.value = `${SEED_24} `
+			expect([flow.phraseVerdict.value.kind, flow.isAllowedToImportBySeedPhrase.value]).toEqual(["pending", false])
+			await flow.handleImportSeed()
+			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+			await typePhrase(flow, SEED_24.split(" ").slice(1).join(" "))
+			held.resolve()
+			await flushPromises()
+			expect([flow.phraseVerdict.value, flow.isAllowedToImportBySeedPhrase.value]).toEqual([{ kind: "count", count: 23 }, false])
+		})
+
+		test("a verdict that cannot be read keeps Import closed", async () => {
+			const { flow } = passwordFlow()
+			vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValueOnce(new Error("digest unavailable"))
+			flow.seedPhrase.value = SEED_24
+			await flushPromises()
+			await tick()
+			expect([flow.phraseVerdict.value.kind, flow.isAllowedToImportBySeedPhrase.value]).toEqual(["pending", false])
 		})
 	})
 

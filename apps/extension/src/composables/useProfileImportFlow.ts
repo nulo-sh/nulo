@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import { computed, type Ref, ref, watch } from "vue"
+import { computed, type Ref, readonly, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
@@ -14,6 +14,7 @@ import { managers } from "@/utils/core"
 import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo/wallet-core/utils"
 import { zeroize } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
+import { type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -270,6 +271,28 @@ function nameFieldSurface(nameField: ReturnType<typeof useProfileNameField>, nam
 	}
 }
 
+/** The typed phrase and its one verdict, read by its hint and by Import alike: `pending` from the
+ *  edit itself (a synchronous watcher, so no press in between reads the last edit's verdict) until
+ *  that edit's own verdict lands, and kept there when the read fails. */
+function usePhraseVerdict() {
+	const seedPhrase = ref<string | undefined>(undefined)
+	const verdict = ref<PhraseVerdict>({ kind: "empty" })
+	watch(
+		seedPhrase,
+		(value) => {
+			verdict.value = { kind: "pending" }
+			readPhraseVerdict(value).then(
+				(read) => {
+					if (seedPhrase.value === value) verdict.value = read
+				},
+				() => {},
+			)
+		},
+		{ immediate: true, flush: "sync" },
+	)
+	return { seedPhrase, phraseVerdict: verdict }
+}
+
 export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	const nameField = useProfileNameField()
 	const nameDefault = useProfileNameDefault(nameField, listProfileNames)
@@ -279,7 +302,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		useImportErrorState(opts.openToast)
 
 	const selectedImportOption = ref<string | null>(null)
-	const seedPhrase = ref<string | undefined>(undefined)
+	const { seedPhrase, phraseVerdict } = usePhraseVerdict()
 	const password = ref("")
 	const repeatedPassword = ref("")
 	const maxPasswordLength = 128
@@ -298,7 +321,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	const isAllowedToContinue = computed(
 		() => unlockMethod.value === "passkey" || isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""),
 	)
-	const isAllowedToImportBySeedPhrase = computed(() => isAllowedToContinue.value && seedPhrase.value?.split(" ").length === 24)
+	const isAllowedToImportBySeedPhrase = computed(() => isAllowedToContinue.value && phraseVerdict.value.kind === "valid")
 
 	const { handleImportSeed, handleImportSeedWithExistingPasskey } = createImportHandlers({
 		isImporting,
@@ -360,6 +383,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		onCeremonyResolve,
 		onCeremonyReject,
 		// per-method gates
+		phraseVerdict: readonly(phraseVerdict),
 		isAllowedToImportBySeedPhrase,
 		// full backup (surface from the wiring sub-composable, verbatim keys)
 		...backup.surface,

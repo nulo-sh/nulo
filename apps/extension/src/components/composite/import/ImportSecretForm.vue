@@ -3,6 +3,7 @@
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { newPasswordHint } from "@/utils/password"
+import { phraseHint } from "@/utils/recovery-phrase"
 /**
  * Section labels carry the visual heading; individual Inputs run
  * label-less to avoid duplicating the heading text. Hints (strength,
@@ -12,6 +13,8 @@ import { newPasswordHint } from "@/utils/password"
 const props = defineProps({
 	method: { type: String, required: true }, // 'seed'
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
+	/** The flow's verdict on the typed phrase, the same one its Import button follows. */
+	phraseVerdict: { type: Object, default: () => ({ kind: "empty" }) },
 	maxPasswordLength: { type: Number, default: 128 },
 })
 
@@ -26,6 +29,11 @@ const isPasswordType = ref(true)
 const hideCredentials = ref(true)
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
+const seedHint = computed(() => phraseHint(props.phraseVerdict))
+const seedHintColor = computed(() => {
+	if (props.phraseVerdict.kind === "valid") return "primary"
+	return props.phraseVerdict.kind === "count" ? "tertiary" : "txt-danger"
+})
 </script>
 
 <template>
@@ -52,10 +60,10 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 					@toggle="hideCredentials = !hideCredentials"
 				/>
 			</template>
-			<template v-if="seedPhrase?.split(' ').length === 24" #bottom>
-				<Flex align="center" gap="4" :class="$style.hint_row">
-					<Icon name="square-check" size="12" color="green" />
-					<Text variant="body" color="primary">Correct</Text>
+			<template v-if="seedHint" #bottom>
+				<Flex align="center" gap="4" :class="$style.hint_row" data-testid="import-seed-hint">
+					<Icon v-if="phraseVerdict.kind === 'valid'" name="square-check" size="12" color="green" />
+					<Text variant="body" :color="seedHintColor">{{ seedHint }}</Text>
 				</Flex>
 			</template>
 		</Input>
@@ -101,7 +109,10 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 
 		<Flex v-if="error.type === 'unknown'" align="center" gap="8" :class="$style.unknown_error">
 			<span :class="$style.error_tag">Error</span>
-			<Text variant="body" color="secondary">{{ error.title }}</Text>
+			<Flex direction="column" gap="2">
+				<Text variant="body" color="secondary">{{ error.title }}</Text>
+				<Text v-if="error.tooltip" variant="body" color="secondary" data-testid="import-seed-error-cause">{{ error.tooltip }}</Text>
+			</Flex>
 		</Flex>
 	</div>
 </template>

@@ -2113,6 +2113,9 @@ export const canonicalizeMnemonic = (input: string | string[]): string[] => {
 	return normalized.length === 0 ? [] : normalized.split(/\s+/)
 }
 
+/** Whether a canonical word is one of the BIP-39 English list's 2048. */
+export const isMnemonicWord = (word: string): boolean => bip39Words.includes(word)
+
 export const getEntropy = async (mnemonic: string[]): Promise<Uint8Array<ArrayBuffer>> => {
 	if (!mnemonic?.length || mnemonic.length % 3 > 0) {
 		throw new Error("Invalid mnemonic length")

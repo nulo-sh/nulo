@@ -72,6 +72,7 @@ const {
 	ceremonyRequest,
 	onCeremonyResolve,
 	onCeremonyReject,
+	phraseVerdict,
 	isAllowedToImportBySeedPhrase,
 	selectedBackup,
 	decryptionPassword,
@@ -183,6 +184,7 @@ onBeforeUnmount(() => {
 			v-model:unlockMethod="unlockMethod"
 			:method="selectedImportOption"
 			:error="error"
+			:phraseVerdict="phraseVerdict"
 			:maxPasswordLength="maxPasswordLength"
 			@secretInput="handleSecretInput"
 			@passwordInput="handlePasswordInput"
