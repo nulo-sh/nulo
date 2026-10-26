@@ -58,7 +58,7 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
-import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, type SessionManager } from "./session-manager"
+import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
 import type { ProfileRepository } from "./repository"
 import { pinnedTokensKey, profileImportedKey, profileNotFirstKey, profileUiKeys } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
@@ -169,6 +169,18 @@ class FakePasskeyService extends Service<Record<string, never>> {
 		this.lastDisplay = display
 		this.lastPrfSalt = prfSalt
 		return this.handOver(await fakePasskeyCredential(credentialId, this.answerAt ?? prfSalt))
+	}
+
+	/** The credential a discovery get finds on the device. */
+	public held = "cred-held"
+
+	/** Every PRF input a PATH B discovery get asked at, in order. */
+	public readonly discovered: string[] = []
+
+	public async discoverKey(prfSalt: string, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+		this.lastDisplay = display
+		this.discovered.push(prfSalt)
+		return this.handOver(await fakePasskeyCredential(this.held, this.answerAt ?? prfSalt))
 	}
 
 	public async materializeCredential(data: PasskeyCredentialData): Promise<PasskeyCredential> {
@@ -740,6 +752,26 @@ describe("ProfileService integration", () => {
 				expect(await service.getProfileDek(a.id)).toBeUndefined()
 				expect(await service.exportPlain(a.id, undefined, answer)).toBe(masterB)
 			}, 60_000)
+
+			test("a profile on the passkey already held asks a discovery get at its own fresh input", async () => {
+				const { api, service, passkeys, a, saltA } = await sharedCredential()
+				passkeys.held = "cred-shared"
+				const c = await service.createPasskeyProfile("C", undefined, true)
+				const [asked] = passkeys.discovered
+				expect(passkeys.lastDisplay).toEqual({ step: "create", profileName: "C" })
+				expect([asked, (await readRow(api, c.id)).prfSalt]).toEqual([asked, asked])
+				expect(asked).not.toBe(saltA)
+				await expect(service.unlockPasskeyProfile(a.id, await fakePasskeyAnswer("cred-shared", asked as string))).rejects.toThrow(
+					"Passkey did not open this profile",
+				)
+				const before = await api.storage.local.get(null)
+				passkeys.answerAt = saltA
+				await expect(service.createPasskeyProfile("D", undefined, true)).rejects.toThrow("Passkey answered for another request")
+				await expect(service.createPasskeyProfile("D", await fakePasskeyAnswer("cred-shared", saltA))).rejects.toThrow(
+					"Passkey input already belongs to another profile",
+				)
+				expect(await api.storage.local.get(null)).toStrictEqual(before)
+			}, 60_000)
 		})
 
 		test("blinding the plaintext walletFingerprint is caught at unlock + password change", async () => {
@@ -822,11 +854,11 @@ describe("ProfileService integration", () => {
 			expect(events).toEqual([undefined])
 		}, 30_000)
 
-		test("after a restart that restored no session (passkey): the record is deleted and the lock is announced", async () => {
+		test("after a restart that restored no session: the record is deleted and the lock is announced", async () => {
 			const { api, service } = await makeService()
 			await service.createPasskeyProfile("PK")
-			// A restarted worker never silently restores a passkey session: the persisted
-			// record survives, memory is empty (`restore()` returns before `open`).
+			// The persisted record survives a restart whose restore left memory empty.
+			vi.spyOn(SessionManager.prototype, "restore").mockResolvedValueOnce(undefined)
 			const { service: rebooted } = await makeServiceFromExistingApi(api)
 			expect(await rebooted.getActiveProfile()).toBeUndefined()
 			expect(SESSION_STORAGE_ROOT in (await api.storage.session.get(SESSION_STORAGE_ROOT))).toBe(true)
@@ -2970,6 +3002,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 		test("a restarted worker whose lock cannot be saved announces the lock, then restarts", async () => {
 			const { api, service } = await makeService()
 			await service.createPasskeyProfile("PK")
+			vi.spyOn(SessionManager.prototype, "restore").mockResolvedValueOnce(undefined)
 			const { service: rebooted } = await makeServiceFromExistingApi(api)
 			expect(await rebooted.getActiveProfile()).toBeUndefined()
 			const events: unknown[] = []

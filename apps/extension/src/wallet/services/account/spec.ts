@@ -237,18 +237,33 @@ export type Methods = {
 
 	/**
 	 * Export one account as a portable file body (the NULO-ACCOUNT-EXPORT v1 envelope). Requires
-	 * the profile password (service-side auth — the caller cannot bypass it from a compromised
-	 * popup). `encrypt` picks the password-encrypted variant (default) vs the plaintext one.
+	 * the profile password, or for a passkey profile its passkey answer (service-side auth — the
+	 * caller cannot bypass it from a compromised popup). `encrypt` picks the password-encrypted
+	 * variant (default) vs the plaintext one. With `credentialData`, `password` is the file's own
+	 * password: refused below 8 characters, and the file is always encrypted.
 	 * @returns the file's string body (encrypted base64, or the plaintext JSON).
 	 */
-	exportAccount(profileId: string, chainId: number, address: string, password: string, encrypt: boolean): string
+	exportAccount(
+		profileId: string,
+		chainId: number,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): string
 
 	/**
 	 * Export an imported account a paused network reset holds only in its journal, by the address
-	 * the reset moves it to. Same password check and file as `exportAccount`; reads only.
+	 * the reset moves it to. Same credential check and file as `exportAccount`; reads only.
 	 * @returns the file's string body (encrypted base64, or the plaintext JSON).
 	 */
-	exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): string
+	exportResetHeldAccount(
+		profileId: string,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): string
 
 	/**
 	 * Import an account from a NULO-ACCOUNT-EXPORT file body into `(profileId, chainId)`. Validates
@@ -285,6 +300,7 @@ export type Methods = {
 }
 
 const RunFenceParamSchema = z.object({ profileId: z.string(), epoch: z.number(), session: z.number(), incarnation: z.string() })
+const PasskeyCredentialDataSchema = z.object({ id: z.string(), prf: z.string(), prfSalt: z.string() })
 
 /**
  * The argument tuple of every account RPC, checked at the port before the method runs. A trailing
@@ -299,15 +315,11 @@ export const AccountMethodSchemas = {
 	ensureDefaultAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
 	changeAccountName: z.tuple([z.string(), z.number(), z.string(), z.string()]),
 	changeAccountVisibility: z.tuple([z.string(), z.number(), z.string(), z.boolean()]),
-	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean()]),
-	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean()]),
+	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean(), PasskeyCredentialDataSchema.optional()]),
+	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean(), PasskeyCredentialDataSchema.optional()]),
 	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
 	previewImportAccount: z.tuple([z.string(), z.string()]),
-	exportFullBackupKeys: z.tuple([
-		RunFenceParamSchema,
-		z.string().optional(),
-		z.object({ id: z.string(), prf: z.string(), prfSalt: z.string() }).optional(),
-	]),
+	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string().optional(), PasskeyCredentialDataSchema.optional()]),
 	backupImportedKeys: z.tuple([]),
 	restoreImportedKeys: z.tuple([z.array(z.unknown())]),
 	reconcileImportedAccounts: z.tuple([z.string()]),

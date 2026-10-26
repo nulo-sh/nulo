@@ -658,8 +658,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				await panelOn(browser, "#/popup/auth")
 				for (const testid of IMPORT_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
 				const restoreWindow = await toOwnWindow(ctx, control, () => clickInPanel(browser, "import-option-full-backup"))
-				// The file opens with its own password, and restores as a password profile.
-				await submitEncryptedFullBackup(restoreWindow, file, FILE_PASSWORD, 300_000)
+				// The file opens with its own password, and restores under a new passkey in that window.
+				await submitEncryptedFullBackup(restoreWindow, file, FILE_PASSWORD, 300_000, "passkey")
 				await waitForActiveAccount(control, address, 60_000)
 				expect((await readProfileNames(control)).sort()).toEqual(["Main", "Profile 2"])
 			} finally {

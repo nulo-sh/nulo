@@ -7,7 +7,11 @@ import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { classifyPasskeyFailure, handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
-import { createPasskeyProfileInPage, type SavedPasskeyCredential } from "@/wallet/utils/create-passkey-profile"
+import {
+	type CreatePasskeyProfileDeps,
+	createPasskeyProfileInPage,
+	type SavedPasskeyCredential,
+} from "@/wallet/utils/create-passkey-profile"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
@@ -43,6 +47,46 @@ async function listProfileNames(): Promise<string[]> {
 	return (await managers.profile.getProfiles()).map((p) => p.name)
 }
 
+/**
+ * A passkey profile's create, with the memory of the credential the last in-page attempt minted but
+ * could not confirm, and the profile name that attempt was for. Page memory only: never persisted
+ * or logged.
+ */
+function passkeyProfileCreator(runCeremony: CreatePasskeyProfileDeps["runCeremony"]) {
+	let unconfirmed: { name: string; credential: SavedPasskeyCredential } | null = null
+
+	// Runs the passkey create (or, with `existing`, the discovery get of a passkey the person already
+	// has) in-page, then creates the profile via the SW. In Firefox's toolbar panel the background
+	// mints the input and runs the prompt in its own window.
+	async function create(name: string, existing: boolean): Promise<{ profile: ProfileInfo; credentialData?: PasskeyCredentialData }> {
+		if (closesOnFocusLoss()) return { profile: await managers.profile.createPasskeyProfile(name, undefined, existing) }
+		return createPasskeyProfileInPage(
+			name,
+			{ runCeremony, createPasskeyProfile: (n, c) => managers.profile.createPasskeyProfile(n, c) },
+			!existing && unconfirmed?.name === name ? unconfirmed.credential : undefined,
+			existing,
+		)
+	}
+
+	/** A retry confirms the credential a failed attempt minted, at the input that attempt asked for,
+	 *  as the passkey window's Try again does, unless the name changed (the retry belongs to that
+	 *  attempt) or the authenticator gave no PRF (it can never confirm; a fresh create lets the
+	 *  person pick another). */
+	function remember(e: unknown, name: string) {
+		if (!(e instanceof PasskeyUnconfirmedError)) return
+		unconfirmed =
+			classifyPasskeyFailure(e) === "no-prf" ? null : { name, credential: { credentialId: e.credentialId, prfSalt: e.prfSalt } }
+	}
+
+	return {
+		create,
+		remember,
+		forget: () => {
+			unconfirmed = null
+		},
+	}
+}
+
 export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	const nameField = useProfileNameField()
 	const { profileName, nameError, shakeName, nameInputRef, handleInput: handleNameInput, dispose: disposeNameField } = nameField
@@ -65,30 +109,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		() => authMethod.value === "passkey" || isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""),
 	)
 
-	// The credential the last in-page attempt minted but could not confirm, and the profile name that
-	// attempt was for. Page memory only: never persisted or logged.
-	let unconfirmed: { name: string; credential: SavedPasskeyCredential } | null = null
-
-	// Runs the passkey create in-page, then creates the profile via the SW. In Firefox's toolbar
-	// panel the background mints the input and runs the ceremony in its own window.
-	async function createPasskeyProfile(name: string): Promise<{ profile: ProfileInfo; credentialData?: PasskeyCredentialData }> {
-		if (closesOnFocusLoss()) return { profile: await managers.profile.createPasskeyProfile(name) }
-		return createPasskeyProfileInPage(
-			name,
-			{ runCeremony, createPasskeyProfile: (n, c) => managers.profile.createPasskeyProfile(n, c) },
-			unconfirmed?.name === name ? unconfirmed.credential : undefined,
-		)
-	}
-
-	/** A retry confirms the credential a failed attempt minted, at the input that attempt asked for,
-	 *  as the passkey window's Try again does, unless the name changed (the retry belongs to that
-	 *  attempt) or the authenticator gave no PRF (it can never confirm; a fresh create lets the
-	 *  person pick another). */
-	function rememberUnconfirmed(e: unknown, name: string) {
-		if (!(e instanceof PasskeyUnconfirmedError)) return
-		unconfirmed =
-			classifyPasskeyFailure(e) === "no-prf" ? null : { name, credential: { credentialId: e.credentialId, prfSalt: e.prfSalt } }
-	}
+	const passkeyCreate = passkeyProfileCreator(runCeremony)
 
 	function reportCreateFailure(e: unknown) {
 		if (handleCancelOrUnconfirmed(e, opts.openToast)) return
@@ -96,7 +117,8 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		console.error("Failed to create profile:", e)
 	}
 
-	const handleCreate = async () => {
+	/** `existing`: the profile takes a passkey the person already has. */
+	async function submit(existing: boolean) {
 		if (isCreating.value) return
 		if (!isAllowedToContinue.value) return
 		// Latch FIRST, before the async getProfiles() fetch, so two rapid clicks
@@ -113,15 +135,15 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 			}
 			created =
 				authMethod.value === "passkey"
-					? await createPasskeyProfile(name)
+					? await passkeyCreate.create(name, existing)
 					: { profile: await managers.profile.createProfile(name, password.value) }
 		} catch (e) {
-			if (name !== null) rememberUnconfirmed(e, name)
+			if (name !== null) passkeyCreate.remember(e, name)
 			reportCreateFailure(e)
 			isCreating.value = false
 			return
 		}
-		unconfirmed = null
+		passkeyCreate.forget()
 
 		// Activation + routing live in the shell-injected callback. isCreating
 		// stays true through it (the button reads "Creating…") and resets after.
@@ -134,6 +156,12 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 			return
 		}
 		isCreating.value = false
+	}
+
+	// Two handlers rather than a flag: a click handler receives the click event as its argument.
+	const handleCreate = () => submit(false)
+	const handleCreateWithExistingPasskey = () => {
+		if (authMethod.value === "passkey") return submit(true)
 	}
 
 	function dispose() {
@@ -157,6 +185,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		strengthHint,
 		isAllowedToContinue,
 		handleCreate,
+		handleCreateWithExistingPasskey,
 		dispose,
 	}
 }

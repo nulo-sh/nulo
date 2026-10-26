@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { newPasswordHint } from "@/utils/password"
 /**
  * Section labels carry the visual heading; individual Inputs run
@@ -19,6 +20,7 @@ const emit = defineEmits(["secretInput", "passwordInput"])
 const seedPhrase = defineModel("seedPhrase", { default: undefined })
 const password = defineModel("password", { default: "" })
 const repeatedPassword = defineModel("repeatedPassword", { default: "" })
+const unlockMethod = defineModel("unlockMethod", { default: "passkey" })
 
 const isPasswordType = ref(true)
 const hideCredentials = ref(true)
@@ -60,41 +62,42 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 	</div>
 
 	<div :class="$style.section_last">
-		<span :class="$style.section_label">New Password</span>
-		<Flex direction="column" gap="12">
-			<Input
-				v-model="password"
-				data-testid="import-password-input"
-				:type="isPasswordType ? 'password' : 'text'"
-				@input="emit('passwordInput')"
-				:maxLength="maxPasswordLength"
-				placeholder="Enter new password"
-				autocomplete="new-password"
-			>
-				<template #suffix>
-					<PasswordVisibilityToggle
-						:hidden="isPasswordType"
-						data-testid="import-password-input-visibility-toggle"
-						@toggle="isPasswordType = !isPasswordType"
-					/>
-				</template>
-				<template #bottom>
-					<Flex align="center" gap="6" :class="$style.hint_row">
-						<Icon name="lock" :size="12" color="tertiary" />
-						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-					</Flex>
-				</template>
-			</Input>
-			<Input
-				v-model="repeatedPassword"
-				data-testid="import-password-confirm-input"
-				:type="isPasswordType ? 'password' : 'text'"
-				@input="emit('passwordInput')"
-				:maxLength="maxPasswordLength"
-				placeholder="Repeat password"
-				autocomplete="new-password"
-			/>
-		</Flex>
+		<UnlockMethodChoice v-model="unlockMethod" passwordTestid="import-method-password" passkeyTestid="import-method-passkey">
+			<Flex direction="column" gap="12">
+				<Input
+					v-model="password"
+					data-testid="import-password-input"
+					:type="isPasswordType ? 'password' : 'text'"
+					@input="emit('passwordInput')"
+					:maxLength="maxPasswordLength"
+					placeholder="Enter new password"
+					autocomplete="new-password"
+				>
+					<template #suffix>
+						<PasswordVisibilityToggle
+							:hidden="isPasswordType"
+							data-testid="import-password-input-visibility-toggle"
+							@toggle="isPasswordType = !isPasswordType"
+						/>
+					</template>
+					<template #bottom>
+						<Flex align="center" gap="6" :class="$style.hint_row">
+							<Icon name="lock" :size="12" color="tertiary" />
+							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
+						</Flex>
+					</template>
+				</Input>
+				<Input
+					v-model="repeatedPassword"
+					data-testid="import-password-confirm-input"
+					:type="isPasswordType ? 'password' : 'text'"
+					@input="emit('passwordInput')"
+					:maxLength="maxPasswordLength"
+					placeholder="Repeat password"
+					autocomplete="new-password"
+				/>
+				</Flex>
+		</UnlockMethodChoice>
 
 		<Flex v-if="error.type === 'unknown'" align="center" gap="8" :class="$style.unknown_error">
 			<span :class="$style.error_tag">Error</span>

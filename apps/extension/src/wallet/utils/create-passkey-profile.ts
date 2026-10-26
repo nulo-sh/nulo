@@ -1,6 +1,6 @@
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
-import { newCreateInput, type PasskeyRequest } from "@/wallet/services/passkey/spec"
+import { newCreateInput, type PasskeyDisplay, type PasskeyRequest } from "@/wallet/services/passkey/spec"
 
 /**
  * The page's two steps of an in-page passkey create, injected so the helper is testable apart
@@ -23,9 +23,28 @@ export interface SavedPasskeyCredential {
 export type CreatedPasskeyProfile = { profile: ProfileInfo; credentialData: PasskeyCredentialData }
 
 /**
- * Creates a passkey profile from the page: mints the PRF input, runs the create, and hands the
- * answer to the background, which allocates the id and seals the new phrase under it. With `saved`,
- * it confirms that credential at its own input instead of minting another.
+ * The prompt a new profile's passkey step runs, at a PRF input minted here for that profile: a create
+ * (or, with `saved`, the confirmation of the credential an earlier attempt minted, at that attempt's
+ * input), or with `existing` a discovery get any Nulo passkey on the device may answer.
+ */
+export function newProfilePasskeyRequest(
+	display: PasskeyDisplay,
+	opts: { existing?: boolean; saved?: SavedPasskeyCredential } = {},
+): PasskeyRequest {
+	const input = newCreateInput()
+	if (opts.existing) return { mode: "discover", prfSalt: input.prfSalt, ...display }
+	return {
+		mode: "create",
+		userHandle: input.userHandle,
+		prfSalt: opts.saved?.prfSalt ?? input.prfSalt,
+		credentialId: opts.saved?.credentialId,
+		...display,
+	}
+}
+
+/**
+ * Creates a passkey profile from the page: runs {@link newProfilePasskeyRequest}'s prompt and hands
+ * the answer to the background, which allocates the id and seals the new phrase under it.
  *
  * @throws UserRejectedError if the ceremony was cancelled before a passkey was created; a later
  *   cancel arrives as `PasskeyUnconfirmedError` with that cause.
@@ -35,15 +54,8 @@ export async function createPasskeyProfileInPage(
 	name: string,
 	deps: CreatePasskeyProfileDeps,
 	saved?: SavedPasskeyCredential,
+	existing = false,
 ): Promise<CreatedPasskeyProfile> {
-	const input = newCreateInput()
-	const credentialData = await deps.runCeremony({
-		mode: "create",
-		userHandle: input.userHandle,
-		prfSalt: saved?.prfSalt ?? input.prfSalt,
-		credentialId: saved?.credentialId,
-		step: "create",
-		profileName: name,
-	})
+	const credentialData = await deps.runCeremony(newProfilePasskeyRequest({ step: "create", profileName: name }, { existing, saved }))
 	return { profile: await deps.createPasskeyProfile(name, credentialData), credentialData }
 }

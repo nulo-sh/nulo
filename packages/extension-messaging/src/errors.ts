@@ -562,6 +562,21 @@ export class RetiredProfileError extends WalletError {
 }
 
 /**
+ * A profile's change of unlock method was saved, or may have been, and the session could not be
+ * reopened over it: the wallet locked, and the next unlock uses whatever method the profile now
+ * stores. Consumers `instanceof` it so a saved change never reads as "nothing changed". NEVER
+ * surfaced verbatim to dApps.
+ */
+export class UnlockMethodChangedError extends WalletError {
+	public static readonly CODE = "UNLOCK_METHOD_CHANGED"
+	public static readonly MESSAGE = "The unlock method changed. Unlock again to continue"
+
+	public constructor(message: string = UnlockMethodChangedError.MESSAGE, details?: unknown) {
+		super(UnlockMethodChangedError.CODE, message, details, "UnlockMethodChangedError")
+	}
+}
+
+/**
  * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
  * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
  * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
@@ -610,6 +625,7 @@ const REBUILT_AS = [
 	RestoreTornError,
 	RecoveryModeError,
 	RetiredProfileError,
+	UnlockMethodChangedError,
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,

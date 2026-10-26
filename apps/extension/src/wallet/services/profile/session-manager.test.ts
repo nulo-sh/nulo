@@ -32,6 +32,18 @@ import { deferred, EventHandler, Lock } from "@nulo/wallet-core/utils"
 import type { ActiveSession, Profile, ProfileInfo, Session } from "./spec"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
 
+const macCheck = vi.hoisted(() => ({ before: null as null | (() => void) }))
+vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@nulo/wallet-crypto")>()
+	return {
+		...real,
+		verifyEnvelopeMacV3: (...args: Parameters<typeof real.verifyEnvelopeMacV3>) => {
+			macCheck.before?.()
+			return real.verifyEnvelopeMacV3(...args)
+		},
+	}
+})
+
 /** Minimal `IConfig` stand-in. Tests drive `sessionTtl` /
  *  `strictSecurityMode` updates by invoking `onUpdate` directly; avoids
  *  `ConfigStore`'s `chrome.storage` dependency.
@@ -119,7 +131,20 @@ const bearerBox = new SessionSecretBox()
 /** Password profile whose envelopeMac genuinely verifies against `secret` + `dek` — the bearer
  *  path checks the v3 MAC over (id, 4 sealed slots, fingerprint) before committing a restore. */
 async function passwordProfileFor(id = "pid", secret = secretBuffer(), dek = dekBuffer()): Promise<Profile & { type: "password" }> {
-	const profile = passwordProfile(id)
+	return withMac(passwordProfile(id), secret, dek)
+}
+
+/** {@link passwordProfileFor} for a passkey row. */
+async function passkeyProfileFor(id = "pid", secret = secretBuffer(), dek = dekBuffer()): Promise<Profile & { type: "passkey" }> {
+	return withMac(passkeyProfile(id), secret, dek)
+}
+
+async function withMac<P extends Profile & { guard: string; secret: string; entropy: string }>(
+	profile: P,
+	secret: MasterSecretBytes,
+	dek: ImportedKeysDek,
+): Promise<P> {
+	const id = profile.id
 	profile.envelopeMac = await computeEnvelopeMacV3(id, secret, dek, {
 		guard: profile.guard,
 		secret: profile.secret,
@@ -188,7 +213,7 @@ describe("SessionManager", () => {
 			const profile = passwordProfile()
 			const setSpy = vi.spyOn(api.storage.session, "set").mockRejectedValueOnce(new Error("QUOTA_BYTES exceeded"))
 
-			await manager.open(profile, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(profile, secretBuffer(), dekBuffer())
 
 			expect(setSpy).toHaveBeenCalled()
 			// Contract: the in-memory secret is usable despite the write failure.
@@ -199,7 +224,7 @@ describe("SessionManager", () => {
 		test("close(): memory is locked before the delete settles, and a rejected delete is attempted once more", async () => {
 			const { api, emits, manager } = setup()
 			const profile = await passwordProfileFor("pid")
-			await manager.open(profile, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(profile, secretBuffer(), dekBuffer())
 			const dek = (manager as unknown as { activeSession: ActiveSession }).activeSession.dek
 			if (!dek) throw new Error("setup: the opened session holds no DEK")
 			const gate = deferred()
@@ -225,7 +250,7 @@ describe("SessionManager", () => {
 
 		test("close(): a delete that keeps failing is attempted twice and the record reported kept; memory stays locked and the lock alarm is cleared", async () => {
 			const { api, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const { fakeBrowser } = await import("@webext-core/fake-browser")
 			expect(await fakeBrowser.alarms.get(SESSION_TTL_ALARM_NAME)).toBeDefined()
 			const remove = vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("storage remove failed"))
@@ -247,9 +272,9 @@ describe("SessionManager", () => {
 			// lifetime, but a restart must NOT resurrect the stale A record — the
 			// failed write clears the persisted record so restore() finds nothing.
 			const { api, manager } = setup()
-			await manager.open(passwordProfile("A"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("A"), secretBuffer(), dekBuffer())
 			vi.spyOn(api.storage.session, "set").mockRejectedValueOnce(new Error("QUOTA_BYTES exceeded"))
-			await manager.open(passwordProfile("B"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("B"), secretBuffer(), dekBuffer())
 			expect(manager.isActive("B")).toBe(true)
 
 			// SW restart: a fresh manager over the same storage restores from disk.
@@ -266,11 +291,11 @@ describe("SessionManager", () => {
 			// post-open check surfaces the failure. (The stale prior record we
 			// couldn't delete is left on disk; that residual is unavoidable.)
 			const { api, manager } = setup()
-			await manager.open(passwordProfile("A"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("A"), secretBuffer(), dekBuffer())
 			vi.spyOn(api.storage.session, "set").mockRejectedValueOnce(new Error("set down"))
 			vi.spyOn(api.storage.session, "remove").mockRejectedValue(new Error("remove down"))
 
-			await manager.open(passwordProfile("B"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("B"), secretBuffer(), dekBuffer())
 
 			// This SW lifetime must NOT report B as unlocked (no false success).
 			expect(manager.isActive("B")).toBe(false)
@@ -283,7 +308,7 @@ describe("SessionManager", () => {
 			const { api, emits, manager } = setup()
 			const profile = passwordProfile()
 
-			await manager.open(profile, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(profile, secretBuffer(), dekBuffer())
 
 			const active = await manager.getActive()
 			expect(active).toBeDefined()
@@ -303,7 +328,7 @@ describe("SessionManager", () => {
 
 		test("getDek hands out a fresh copy per call, so a caller's wipe never reaches the session's DEK", async () => {
 			const { manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const first = await manager.getDek("pid")
 			const second = await manager.getDek("pid")
 			expect(first).not.toBe(second)
@@ -317,19 +342,24 @@ describe("SessionManager", () => {
 			await expect(manager.getActive()).resolves.toBeUndefined()
 		})
 
-		test("passkey profile open does not persist a bearer", async () => {
+		test.each([
+			["password", passwordProfile],
+			["passkey", passkeyProfile],
+		] as const)("a %s profile's open persists a bearer with its DEK and none without", async (_, profile) => {
 			const { api, manager } = setup()
-			await manager.open(passkeyProfile(), secretBuffer())
-			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
-			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
-			expect(persisted.bearer).toBeUndefined()
+			const persisted = async () =>
+				JSON.parse((await api.storage.session.get(SESSION_STORAGE_ROOT))[SESSION_STORAGE_ROOT] as string) as Session
+			await manager.open(profile(), secretBuffer(), dekBuffer())
+			expect((await persisted()).bearer?.v).toBe(2)
+			await manager.open(profile(), secretBuffer())
+			expect((await persisted()).bearer).toBeUndefined()
 		})
 	})
 
 	describe("close", () => {
 		test("clears in-memory + persisted state and emits undefined", async () => {
 			const { api, emits, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			emits.length = 0
 
 			await manager.close()
@@ -348,7 +378,7 @@ describe("SessionManager", () => {
 
 		test("reports whether it emitted: true over an in-memory session", async () => {
 			const { emits, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			emits.length = 0
 			await expect(manager.close()).resolves.toEqual({ emitted: true, recordKept: false })
 			expect(emits).toEqual([undefined])
@@ -371,7 +401,7 @@ describe("SessionManager", () => {
 	describe("refresh", () => {
 		test("extends the session.since timestamp", async () => {
 			const { api, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 
 			const raw1 = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const session1: Session = JSON.parse(raw1[SESSION_STORAGE_ROOT] as string)
@@ -395,7 +425,7 @@ describe("SessionManager", () => {
 	describe("TTL expiry", () => {
 		test("getActive silently closes an expired session", async () => {
 			const { emits, manager } = setup(50)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			emits.length = 0
 
 			await new Promise((r) => setTimeout(r, 60))
@@ -405,7 +435,7 @@ describe("SessionManager", () => {
 
 		test("sessionTtl === 0 means sessions never expire", async () => {
 			const { manager } = setup(0)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			// Artificially age the in-memory session far past any non-zero ttl
 			const active = await manager.getActive()
 			if (active) {
@@ -416,7 +446,7 @@ describe("SessionManager", () => {
 
 		test("config update to sessionTtl takes effect for the next check", async () => {
 			const { config, manager } = setup(1_800_000)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 
 			config.setTtl(1)
 			await new Promise((r) => setTimeout(r, 5))
@@ -428,7 +458,7 @@ describe("SessionManager", () => {
 	describe("getSecret", () => {
 		test("returns the master secret for the active profile id", async () => {
 			const { manager } = setup()
-			await manager.open(passwordProfile("abc"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("abc"), secretBuffer(), dekBuffer())
 
 			const secret = await manager.getSecret("abc")
 			expect(secret).toBeInstanceOf(Fr)
@@ -436,7 +466,7 @@ describe("SessionManager", () => {
 
 		test("throws 'Profile locked' when the id doesn't match", async () => {
 			const { manager } = setup()
-			await manager.open(passwordProfile("abc"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("abc"), secretBuffer(), dekBuffer())
 
 			await expect(manager.getSecret("other")).rejects.toThrow(/Profile locked/)
 		})
@@ -451,7 +481,7 @@ describe("SessionManager", () => {
 		test("patchActiveProfile updates in-memory profile ref", async () => {
 			const { manager } = setup()
 			const p = passwordProfile("abc")
-			await manager.open(p, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(p, secretBuffer(), dekBuffer())
 
 			const renamed: Profile = { ...p, name: "New Name" }
 			manager.patchActiveProfile("abc", renamed)
@@ -463,7 +493,7 @@ describe("SessionManager", () => {
 		test("patchActiveProfile is a no-op for non-active ids", async () => {
 			const { manager } = setup()
 			const p = passwordProfile("abc")
-			await manager.open(p, secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(p, secretBuffer(), dekBuffer())
 
 			manager.patchActiveProfile("other", { ...p, id: "other", name: "Nope" })
 
@@ -475,7 +505,7 @@ describe("SessionManager", () => {
 		test("isActive reflects the current session", async () => {
 			const { manager } = setup()
 			expect(manager.isActive("abc")).toBe(false)
-			await manager.open(passwordProfile("abc"), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile("abc"), secretBuffer(), dekBuffer())
 			expect(manager.isActive("abc")).toBe(true)
 			expect(manager.isActive("other")).toBe(false)
 			await manager.close()
@@ -484,8 +514,7 @@ describe("SessionManager", () => {
 	})
 
 	describe("session serial", () => {
-		const unlock = (manager: SessionManager, id: string) =>
-			manager.open(passwordProfile(id), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+		const unlock = (manager: SessionManager, id: string) => manager.open(passwordProfile(id), secretBuffer(), dekBuffer())
 
 		test("every open publishes a fresh serial that peekLiveSerial and getActive agree on — a re-unlock too", async () => {
 			const { manager } = setup()
@@ -671,23 +700,25 @@ describe("SessionManager", () => {
 			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 		})
 
-		test("passkey profile: leaves persisted record, does not activate, no emit", async () => {
-			const { api, emits, manager } = setup()
-			await seedSession(api, { profile: "abc", since: Date.now() })
+		test("passkey profile: its bearer restores the session, as a password profile's does", async () => {
+			const { api, manager } = setup()
+			await seedSession(api, { profile: "abc", since: Date.now(), lockedAt: Date.now() + 60_000, bearer: await makeBearer("abc") })
 
-			await manager.restore(async () => passkeyProfile("abc"))
+			await manager.restore(async () => passkeyProfileFor("abc"))
 
-			expect(emits).toEqual([])
-			await expect(manager.getActive()).resolves.toBeUndefined()
-			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
-			expect(SESSION_STORAGE_ROOT in raw).toBe(true)
+			const active = await manager.getActive()
+			expect(active?.profile.id).toBe("abc")
+			expect(Array.from((await manager.getDek("abc")) ?? [])).toEqual(Array.from(dekBuffer()))
 		})
 
-		test("password session missing bearer → silent close", async () => {
+		test.each([
+			["password", passwordProfile],
+			["passkey", passkeyProfile],
+		] as const)("%s session missing bearer → silent close", async (_, profile) => {
 			const { api, emits, manager } = setup()
 			await seedSession(api, { profile: "abc", since: Date.now() })
 
-			await manager.restore(async () => passwordProfile("abc"))
+			await manager.restore(async () => profile("abc"))
 
 			expect(emits).toEqual([])
 			await expect(manager.getActive()).resolves.toBeUndefined()
@@ -706,7 +737,7 @@ describe("SessionManager", () => {
 	describe("storage key + shape invariants", () => {
 		test("writes under the frozen 'nulo:core:session' root", async () => {
 			const { api, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(null)
 			expect(SESSION_STORAGE_ROOT in raw).toBe(true)
 			expect(SESSION_STORAGE_ROOT).toBe("nulo:core:session")
@@ -714,7 +745,7 @@ describe("SessionManager", () => {
 
 		test("persisted Session shape is { profile, bearer?, since, lockedAt? }", async () => {
 			const { api, manager } = setup()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
 			// `lockedAt` is an additive optional field (schema still v1).
@@ -727,7 +758,7 @@ describe("SessionManager", () => {
 
 		test("persisted Session omits lockedAt when sessionTtl=0", async () => {
 			const { api, manager } = setup(0)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
 			// `lockedAt: undefined` is dropped by JSON.stringify.
@@ -762,7 +793,7 @@ describe("SessionManager", () => {
 			vi.useFakeTimers()
 			vi.setSystemTime(new Date(946_720_800_000))
 			const since = Date.now()
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const alarm = await getAlarm(api)
 			expect(alarm).toBeDefined()
 			expect(alarm?.scheduledTime).toBe(since + ttl)
@@ -771,14 +802,14 @@ describe("SessionManager", () => {
 
 		test("open(ttl=0) does not schedule an alarm", async () => {
 			const { api, manager } = setup(0)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const alarm = await getAlarm(api)
 			expect(alarm).toBeUndefined()
 		})
 
 		test("close() cancels the scheduled alarm", async () => {
 			const { api, manager } = setup(60_000)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			expect(await getAlarm(api)).toBeDefined()
 			await manager.close()
 			expect(await getAlarm(api)).toBeUndefined()
@@ -789,7 +820,7 @@ describe("SessionManager", () => {
 			const { api, manager } = setup(ttl)
 			vi.useFakeTimers()
 			vi.setSystemTime(new Date(946_720_800_000))
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const firstAlarm = await getAlarm(api)
 			expect(firstAlarm?.scheduledTime).toBe(Date.now() + ttl)
 
@@ -805,7 +836,7 @@ describe("SessionManager", () => {
 		test("alarm fire at the persisted lockedAt closes the session + emits onChange(undefined)", async () => {
 			const ttl = 60_000
 			const { emits, manager } = setup(ttl)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const lockedAt = (await manager.getActive())?.session.lockedAt
 			expect(lockedAt).toBeDefined()
 			emits.length = 0 // discard the open() emit
@@ -822,7 +853,7 @@ describe("SessionManager", () => {
 		test("STALE alarm fire (different scheduledTime) is ignored — session stays open", async () => {
 			const ttl = 60_000
 			const { manager } = setup(ttl)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 
 			// A late delivery from a hypothetical old alarm arrives with a
 			// scheduledTime that no longer matches the current
@@ -839,7 +870,7 @@ describe("SessionManager", () => {
 
 		test("config TTL change to 0 clears alarm + persists lockedAt removal", async () => {
 			const { api, config, manager } = setup(60_000)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			expect(await getAlarm(api)).toBeDefined()
 
 			config.setTtl(0)
@@ -856,7 +887,7 @@ describe("SessionManager", () => {
 			const { emits, manager, config } = setup(ttl)
 			vi.useFakeTimers()
 			vi.setSystemTime(new Date(946_720_800_000))
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			emits.length = 0
 
 			// 40s pass.
@@ -911,9 +942,9 @@ describe("SessionManager", () => {
 	 * going through `ConfigStore`.
 	 */
 	describe("open + strictSecurityMode", () => {
-		test("strict ON: open ignores passhash presence, persisted Session has no bearer", async () => {
+		test("strict ON: open persists no bearer, even with its DEK", async () => {
 			const { api, manager } = setup(1_800_000, true) // strict ON
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
 			expect(persisted.profile).toBe("pid")
@@ -925,7 +956,7 @@ describe("SessionManager", () => {
 
 		test("strict OFF: open persists a random-token bearer", async () => {
 			const { api, manager } = setup(1_800_000, false) // strict OFF
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
 			expect(persisted.bearer?.v).toBe(2)
@@ -937,9 +968,9 @@ describe("SessionManager", () => {
 			expect(active?.session.bearer?.v).toBe(2)
 		})
 
-		test("strict ON + passkey-style open (no passhash arg) — no bearer regardless", async () => {
+		test("strict ON + passkey open with its DEK — no bearer", async () => {
 			const { api, manager } = setup(1_800_000, true)
-			await manager.open(passkeyProfile(), secretBuffer())
+			await manager.open(passkeyProfile(), secretBuffer(), dekBuffer())
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
 			const persisted: Session = JSON.parse(raw[SESSION_STORAGE_ROOT] as string)
 			expect(persisted.bearer).toBeUndefined()
@@ -994,26 +1025,62 @@ describe("SessionManager", () => {
 			vi.useRealTimers()
 		})
 
-		test("strict ON + passkey session (no bearer) → unchanged short-circuit (no silentClose)", async () => {
+		test("strict ON + passkey bearer → silentClose + no in-memory session", async () => {
 			const { api } = setup(1_800_000, false)
+			const bearer = await makeBearer("pid")
 			vi.useFakeTimers()
 			vi.setSystemTime(new Date(946_720_800_000))
 
-			await seedSession(api, {
-				profile: "pid",
-				since: Date.now(),
-				lockedAt: Date.now() + 1_800_000,
-				// no bearer — passkey-style record
-			})
+			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 1_800_000, bearer })
 
 			const { manager: m2 } = setupFromExistingApi(api, 1_800_000, true)
-			await m2.restore(async () => passkeyProfile())
+			await m2.restore(async () => passkeyProfileFor())
 
-			// Passkey branch leaves the persisted record alone (popup will prompt).
+			expect(await m2.getActive()).toBeUndefined()
 			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
-			expect(SESSION_STORAGE_ROOT in raw).toBe(true)
-			expect(await m2.getActive()).toBeUndefined() // not restored — needs user gesture
+			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 			vi.useRealTimers()
+		})
+
+		test.each([
+			["on at start, then off during the unwrap", true],
+			["off at start, then on during the unwrap", false],
+		])("strict %s: a passkey bearer restores no session", async (_, strictAtStart) => {
+			const { api } = setup(1_800_000, false)
+			const bearer = await makeBearer("pid")
+			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 1_800_000, bearer })
+			const { manager: m2, config } = setupFromExistingApi(api, 1_800_000, strictAtStart)
+			const box = (m2 as unknown as { sessionSecretBox: SessionSecretBox }).sessionSecretBox
+			const unwrap = box.unwrapPair.bind(box)
+			const flipped = vi.spyOn(box, "unwrapPair").mockImplementation(async (...args) => {
+				config.setStrict(!strictAtStart)
+				return unwrap(...args)
+			})
+
+			await m2.restore(async () => passkeyProfileFor())
+
+			expect(await m2.getActive()).toBeUndefined()
+			expect(flipped).toHaveBeenCalledTimes(strictAtStart ? 0 : 1)
+		})
+
+		test("strict turned on during the envelope check: a passkey bearer restores no session and none stays stored", async () => {
+			const { api } = setup(1_800_000, false)
+			const bearer = await makeBearer("pid")
+			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 1_800_000, bearer })
+			const { manager: m2, config } = setupFromExistingApi(api, 1_800_000, false)
+			const profile = await passkeyProfileFor()
+			const flip = vi.fn(() => config.setStrict(true))
+			macCheck.before = flip
+			try {
+				await m2.restore(async () => profile)
+			} finally {
+				macCheck.before = null
+			}
+
+			expect(flip).toHaveBeenCalledOnce()
+			expect(await m2.getActive()).toBeUndefined()
+			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
+			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 		})
 	})
 
@@ -1025,7 +1092,7 @@ describe("SessionManager", () => {
 			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 		})
 
-		test("no-op when persisted session has no bearer (passkey)", async () => {
+		test("no-op when persisted session has no bearer (a dek-less open)", async () => {
 			const { api, manager } = setup(1_800_000, false)
 			await manager.open(passkeyProfile(), secretBuffer())
 			const beforeRaw = await api.storage.session.get(SESSION_STORAGE_ROOT)
@@ -1036,7 +1103,7 @@ describe("SessionManager", () => {
 
 		test("drops persisted bearer AND in-memory activeSession.session.bearer", async () => {
 			const { api, manager } = setup(1_800_000, false)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			// Sanity: bearer present.
 			const before = JSON.parse((await api.storage.session.get(SESSION_STORAGE_ROOT))[SESSION_STORAGE_ROOT] as string) as Session
 			expect(before.bearer?.v).toBe(2)
@@ -1054,7 +1121,7 @@ describe("SessionManager", () => {
 
 		test("refresh() after clearBearer does NOT re-persist the bearer", async () => {
 			const { api, manager } = setup(1_800_000, false)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			await manager.clearBearer()
 
 			// refresh() reads activeSession.session and re-persists. If the
@@ -1068,7 +1135,7 @@ describe("SessionManager", () => {
 
 		test("idempotent: calling twice succeeds without error", async () => {
 			const { manager } = setup(1_800_000, false)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			await manager.clearBearer()
 			await expect(manager.clearBearer()).resolves.toBeUndefined()
 		})
@@ -1077,7 +1144,7 @@ describe("SessionManager", () => {
 	describe("onConfigUpdated strictSecurityMode toggle", () => {
 		test("toggle ON during unlocked password session → bearer cleared from storage + memory", async () => {
 			const { api, config, manager } = setup(1_800_000, false)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			expect((await manager.getActive())?.session.bearer?.v).toBe(2)
 
 			config.setStrict(true)
@@ -1095,7 +1162,7 @@ describe("SessionManager", () => {
 
 		test("toggle OFF during unlocked strict session → no immediate effect (no backfill)", async () => {
 			const { api, config, manager } = setup(1_800_000, true)
-			await manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+			await manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 			expect((await manager.getActive())?.session.bearer).toBeUndefined()
 
 			config.setStrict(false)
@@ -1109,9 +1176,9 @@ describe("SessionManager", () => {
 			expect((await manager.getActive())?.session.bearer).toBeUndefined()
 		})
 
-		test("toggle ON during passkey session → no-op (no bearer to clear)", async () => {
+		test("toggle ON during a passkey session drops its bearer and keeps the session", async () => {
 			const { api, config, manager } = setup(1_800_000, false)
-			await manager.open(passkeyProfile(), secretBuffer())
+			await manager.open(passkeyProfile(), secretBuffer(), dekBuffer())
 			config.setStrict(true)
 			await Promise.resolve()
 			await Promise.resolve()
@@ -1200,7 +1267,7 @@ describe("SessionManager expiry deferral", () => {
 		const harness = setup(ttl, false, runExclusive)
 		const deferral = controllableCheck()
 		harness.manager.setExpiryDeferral(deferral.check)
-		await harness.manager.open(passwordProfile(), secretBuffer(), asPasshash(new ArrayBuffer(8)), dekBuffer())
+		await harness.manager.open(passwordProfile(), secretBuffer(), dekBuffer())
 		return { ...harness, deferral }
 	}
 

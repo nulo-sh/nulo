@@ -33,7 +33,7 @@ export const RP_ID = "passkey.nulo.sh"
 export type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** The wallet step a passkey prompt serves. Display only: it names the step on the passkey screen. */
-export type PasskeyStep = "unlock" | "create" | "reveal" | "export"
+export type PasskeyStep = "unlock" | "create" | "import" | "restore" | "reveal" | "export" | "accountFile" | "unlockMethod"
 
 /** What the passkey screen names: the step and the profile it is for. Shown, never logged, never
  *  part of a decision. */
@@ -59,6 +59,12 @@ export type PasskeyRequest = PasskeyDisplay &
 		| {
 				mode: "get"
 				credentialId: string
+				prfSalt: string
+		  }
+		| {
+				/** A `get` any Nulo passkey on the device may answer: a passkey the person already has,
+				 *  evaluated at a new profile's own fresh input, never another profile's. */
+				mode: "discover"
 				prfSalt: string
 		  }
 	)
