@@ -6,9 +6,9 @@
  *   - `PasskeyCredential`  — a passkey's PRF answer → the profile's unlock key.
  *
  * Every chain is locked by test vectors at
- * `apps/extension/src/wallet/crypto/key-vectors.test.ts`. Those
- * vectors run as an extension integration test and MUST pass
- * byte-identically after any change here.
+ * `apps/extension/src/wallet/crypto/key-vectors.test.ts`, the passkey
+ * unlock key's at `src/passkey-unlock-key.test.ts`. Those vectors MUST
+ * pass byte-identically after any change here.
  *
  * No Chrome APIs, no Vue, no Node-specific I/O — only Web Crypto
  * (available in both browsers and jsdom), `@aztec-labs/foundation` math

@@ -1771,6 +1771,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Any throw, a crypto-level failure included, is flattened to a plain `Error(message)`, so
 		// callers see one error shape.
 		try {
+			// An export asks for its credential again, so an empty one is a missing one here.
 			if (!password && !credentialData) throw new Error("Password is required")
 			const key = await this.slotKey(password, credentialData)
 			const opened = await this.openSlots(profile, key)

@@ -215,7 +215,7 @@ Service startup is **phase-ordered**, not parallel: `ServiceCollection.start()` 
 - `deriveRowKeys` (`row-seal.ts`) — `HKDF(master, profileId ‖ pxeGeneration)`: the AES-GCM key every sealed row (§5) is sealed under, its AAD binding root, storage key and profile, and the HMAC index key behind every keyed id and the account-integrity digest (`keyedSegment`).
 - `derivePasskeyUnlockKey` (`passkey-unlock-key.ts`) and `PasskeyCredential` — a passkey's PRF answer at the profile's own `prfSalt` → HKDF → the non-extractable key a passkey profile's slots are sealed under. The e2e suite cannot carry a passkey across extension instances (see `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`).
 
-All derivation chains are **vector-locked** by `apps/extension/src/wallet/crypto/key-vectors.test.ts`. Any change to wallet-crypto must keep those vectors passing byte-identically. The KDF rev-key (`ENCRYPTION_GUARD`) is a frozen constant: changing it bricks every existing wallet.
+All derivation chains are **vector-locked** by `apps/extension/src/wallet/crypto/key-vectors.test.ts`, the passkey unlock key by `packages/wallet-crypto/src/passkey-unlock-key.test.ts`. Any change to wallet-crypto must keep those vectors passing byte-identically. The KDF rev-key (`ENCRYPTION_GUARD`) is a frozen constant: changing it bricks every existing wallet.
 
 Buffer ownership is explicit. Secret material is allocated as `Uint8Array<ArrayBuffer>` (never `Buffer`), zeroed on drop via the `zeroize()` helper.
 

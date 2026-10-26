@@ -91,8 +91,8 @@ Listing these for completeness only:
   on the wallet-side passkey service that lets a test inject known
   PRF bytes / credential ID directly, bypassing
   `navigator.credentials.create/get`. Gated behind a build flag or
-  `NODE_ENV` check. Makes import + round-trip + lock-unlock testable
-  but is a product-side change with security review implications.
+  `NODE_ENV` check. Makes one passkey across two extension instances
+  testable but is a product-side change with security review implications.
 
 - **B. `navigator.credentials` shim.** Override `navigator.credentials.{create,get}`
   in the popup's page context (via `Page.evaluateOnNewDocument`-equivalent)

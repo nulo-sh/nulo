@@ -42,8 +42,8 @@ existing keys and profiles.
   WebAuthn `get` (both literals must match — they're the same crypto
   binding). Changing it invalidates every existing passkey credential.
   The host is deliberately content-less: WebAuthn lets every origin whose
-  registrable domain suffix-matches the RP ID assert with the credential
-  and evaluate its PRF — so the RP host serves one static page with a strict CSP and no scripts, never
+  registrable domain suffix-matches the RP ID assert with the credential —
+  so the RP host serves one static page with a strict CSP and no scripts, never
   application code (`infra/passkey-rp/`: a Cloudflare Worker on a single
   custom domain, no `workers.dev` origin), every `*.passkey.nulo.sh`
   descendant stays unregistered in DNS, and the extension's own content
