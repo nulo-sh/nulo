@@ -47,14 +47,14 @@ destination the user chooses (the node) or installs (the local prover) is still 
 |---|---|---|---|
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
 | Passkey credential id and the random value it is used with | Extension local storage | Only to the browser and the user's authenticator, during a passkey prompt; never in a backup or an account file | The browser and the user's authenticator |
-| Passkey label ("Nulo wallet") | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:40-44` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
+| Passkey label ("Nulo wallet · \<profile name\>") | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:40-44` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
 | Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
 | Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
 | Proving inputs (witnesses) | Process memory | Only with the optional local prover installed | `127.0.0.1` (`legal/privacy.md` § 5.8) |
 | Public proving parameters | Browser cache | Downloaded, never uploaded | `crs.aztec-cdn.foundation`, fallback `crs.aztec-labs.com` (§ 5.9) |
 | Token prices | Extension local storage (cache) | A request naming the tokens, no address | CoinGecko, unless fiat display is off (§ 5.2) |
 | Token list (default tokens, their price ids) | Extension local storage, device-wide, outside every backup | Downloaded, never uploaded; the request carries no address, cookie or referrer | `tokens.nulo.sh`, once the Terms are accepted, then about daily (§ 5.11) |
-| Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:10-18` | Only when the user exports contacts, a backup file, or an account file, whose file name carries the profile name | The file the user saves (`downloads`) |
+| Contacts (name, address), profile names | Extension local storage, `wallet/services/contact/spec.ts:10-18` | Only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above) | The file the user saves (`downloads`) |
 | Connected-app origins, names, icons, URLs, grants | Extension local storage, `wallet/services/dapp-session/spec.ts:36-51` | Only an app's name, which each transaction it sent records, in a backup file the user exports; app names and origins can also appear in diagnostic logs the user exports | The file the user saves (`downloads`) |
 | Diagnostic logs | Memory; session storage with Developer Mode on | Only when the user exports them | The file the user saves |
 | Terms-acceptance record | Extension local storage | No | — |
@@ -213,8 +213,9 @@ The value here must equal the manifest's; the test enforces it. Firefox's taxono
 **transmitted**, so the other categories were assessed against outbound flows and left out:
 `authenticationInfo` (passwords and keys never leave the device), `browsingActivity` /
 `websiteActivity` / `websiteContent` (connected-app origins are stored locally and sent nowhere),
-`personallyIdentifyingInfo` (contacts and profile names stay local). One reading is contestable
-and is stated in `legal/privacy.md` § 5.4: for passkey profiles the label "Nulo wallet" and a random
+`personallyIdentifyingInfo` (contacts stay local; a passkey profile's name is part of its passkey
+label (§ 5.4)). One reading is contestable and is stated in `legal/privacy.md` § 5.4: for passkey
+profiles the label "Nulo wallet · \<profile name\>" and a random
 identifier are handed to the browser's passkey interface (`wallet/services/passkey/spec.ts:74-75`,
 `wallet/utils/passkey-ceremony.ts:40-44`); the declaration treats that as the browser acting at the
 user's request, not the add-on sending data to a party of its choosing. Chrome's form covers local handling as well and so ticks more boxes; the

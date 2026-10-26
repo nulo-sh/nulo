@@ -171,7 +171,7 @@ services may perform their own communications under their providers' policies.
 
 Your browser and selected authenticator process the credential identifier, a random identifier Nulo
 generates for the passkey, the profile's random value the passkey is used with, and the credential
-label "Nulo wallet". Depending on your provider,
+label, "Nulo wallet · " followed by the profile name you typed. Depending on your provider,
 passkey credentials and related metadata may be synchronised under that provider's own policies.
 
 If you or a browser visit the domain directly, the hosting provider processes that request like any
