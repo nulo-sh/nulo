@@ -36,13 +36,14 @@ export type ProtocolAddresses = { sponsored: string; private: string }
 /** Stored shape strips the in-memory `isProtocol` decoration. */
 type StoredFpc = Omit<FpcInfo, "isProtocol">
 
-/** What a row write is fenced against: the session and the profile's deletion epoch, and the
- *  network's reservations since the liveness mark `since`. */
+/** What a row write is fenced against: the profile's deletion epoch, the network's reservations
+ *  since the liveness mark `since`, and for a write no user action asked for, the session. */
 type WriteScope = {
 	fence: ExecutionFence
 	deletion: ReturnType<ProfileService["getDeletionState"]>
 	networkId: string
 	since: number
+	background: boolean
 }
 
 const hasRow = (rows: readonly StoredFpc[], type: FpcType, address: string) => rows.some((f) => f.type === type && f.address === address)
@@ -180,7 +181,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const network = await resolveNetworkByChainId(this.networkService, chainId)
 		const since = await this.networkService.captureLiveness(network.id)
 		if (since === undefined) return
-		const scope: WriteScope = { fence, deletion, networkId: network.id, since }
+		const scope: WriteScope = { fence, deletion, networkId: network.id, since, background: true }
 		const pxe = this.pxeService.getPXE(networkInfoFrom(network))
 		for (const item of await this.collectMissingProtocolInstances(hasSponsoredFpc, hasPrivateFpc)) {
 			try {
@@ -239,13 +240,13 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	}
 
 	/** Caller holds the lock the sweeps take, so a row lands before a sweep or is refused: the
-	 *  epoch covers a profile deletion, the mark a network delete or reset since it was taken, and
-	 *  the session a lock or a switch, which leave the profile's row keys in the worker. */
+	 *  epoch covers a profile deletion, the mark a network delete or reset since it was taken,
+	 *  and a background write's session a lock or a switch, which leave the row keys in the worker. */
 	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
 		const { fence, deletion } = scope
 		const assertLive = () => {
 			deletion.assertCurrent(fence.profileId, fence.epoch)
-			if (!this.profileService.isFenceLive(fence)) throw new SessionEndedError()
+			if (scope.background && !this.profileService.isFenceLive(fence)) throw new SessionEndedError()
 		}
 		assertLive()
 		const write = await this.storage.prepare(fpc.id, fpc)
@@ -319,7 +320,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 				address,
 				name,
 			}
-			await this.writeFencedRow(fpc, { fence, deletion, networkId, since })
+			await this.writeFencedRow(fpc, { fence, deletion, networkId, since, background: false })
 			const decorated = this.decorate(fpc, protocols)
 			this.emit("onFpcAdded", decorated)
 			return decorated
