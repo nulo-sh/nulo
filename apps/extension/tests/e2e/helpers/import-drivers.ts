@@ -242,6 +242,11 @@ export async function submitFullBackupImport(page: Page, filePath: string, passw
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
 
 	await page.waitForSelector(`[data-testid="${shell.submitTestId("full-backup")}"]`, { visible: true, timeout: 10_000 })
+	// A passkey profile's backup opens on Passkey; this driver restores under a password.
+	if (await page.$('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]')) {
+		await clickByTestId(page, "import-full-backup-method-password")
+		await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
+	}
 	await setInputs(page, {
 		'[data-testid="import-full-backup-password-input"] input': password,
 		'[data-testid="import-full-backup-password-confirm-input"] input': password,
