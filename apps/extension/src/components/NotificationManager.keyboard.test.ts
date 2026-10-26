@@ -111,7 +111,10 @@ describe("the notice", () => {
 
 	test.each([
 		["Escape", pressEscape],
-		["a tap outside", async () => byTestId("notification")?.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true }))],
+		[
+			"a tap outside",
+			async () => byTestId("notification")?.nextElementSibling?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+		],
 	])("%s answers as Cancel, never as the confirm", async (_how, close) => {
 		const onConfirm = vi.fn()
 		const onCancel = vi.fn()
@@ -121,6 +124,16 @@ describe("the notice", () => {
 		expect(onCancel).toHaveBeenCalledOnce()
 		expect(onConfirm).not.toHaveBeenCalled()
 		expect(shown()).toBe(false)
+	})
+
+	test("a press on the card released off it, a click on their common ancestor, closes nothing", async () => {
+		const onCancel = vi.fn()
+		await openNotice({ onConfirm: vi.fn(), onCancel })
+		byTestId("notification")?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, detail: 1 }))
+		byTestId("notification")?.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+		await settle()
+		expect(onCancel).not.toHaveBeenCalled()
+		expect(shown()).toBe(true)
 	})
 
 	test("control: OK answers as the confirm", async () => {

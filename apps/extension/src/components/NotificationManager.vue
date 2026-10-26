@@ -68,8 +68,10 @@ watch(
 
 <template>
 	<Popup :show="Boolean(notification)" :displaceIdx :initialFocus="initialFocus" @onClose="dismiss">
-		<!-- Fixed to the viewport, as the document under it can scroll (the onboarding tab). -->
-		<div v-if="notification" :class="$style.layer" @click.self="dismiss">
+		<!-- Fixed to the viewport, as the document under it can scroll (the onboarding tab). The close
+			areas are the card's siblings, as Popup's is, so a press on the card released off it closes nothing. -->
+		<div v-if="notification" :class="$style.layer">
+		<div :class="$style.close_area" @click="dismiss" />
 		<Flex
 			align="center"
 			direction="column"
@@ -128,6 +130,7 @@ watch(
 				</Button>
 			</Flex>
 		</Flex>
+		<div :class="$style.close_area" @click="dismiss" />
 		</div>
 	</Popup>
 </template>
@@ -137,8 +140,13 @@ watch(
 	position: fixed;
 	inset: 0;
 	display: flex;
-	justify-content: center;
+	flex-direction: column;
 	align-items: center;
+}
+
+.close_area {
+	flex: 1;
+	align-self: stretch;
 }
 
 .card {
