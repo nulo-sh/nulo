@@ -610,16 +610,17 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		appStore.profile = A
 		await flushPromises()
 		const popups = usePopupStore()
+		const selected = () => appStore.profile?.id
 
 		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B])
 		appStore.profile = undefined
 		await flushPromises()
-		expect(appStore.profile?.id).toBe("pB")
+		expect(selected()).toBe("pB")
 
 		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
 		appStore.profile = undefined
 		await flushPromises()
-		expect(appStore.profile).toBeUndefined()
+		expect(selected()).toBeUndefined()
 		expect(popups.isOpened("select_profile")).toBe(true)
 	})
 
