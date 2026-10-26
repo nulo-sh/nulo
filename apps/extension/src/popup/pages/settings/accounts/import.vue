@@ -76,8 +76,12 @@ const pickRefusal = (body) => {
 	return "This is not an account file, or it is damaged."
 }
 
-const heldOnChain = (address) =>
-	appStore.accounts.some((a) => a.chainId === appStore.network?.chainId && sameFieldAddress(a.address, address))
+/** Only rows of the current profile and chain count: the store can still hold the previous scope's
+ *  list while a switch loads, and a row it misses falls back to the service's own refusal. */
+const heldInScope = (address) =>
+	appStore.accounts.some(
+		(a) => a.profileId === appStore.profile?.id && a.chainId === appStore.network?.chainId && sameFieldAddress(a.address, address),
+	)
 
 // Coarse pre-read byte gate (×4 headroom over the service's authoritative
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
@@ -125,7 +129,7 @@ const handlePreview = async () => {
 	try {
 		const address = await managers.account.previewImportAccount(fileBody.value.trim(), password.value)
 		if (gen !== generation) return
-		previewHeld.value = heldOnChain(address)
+		previewHeld.value = heldInScope(address)
 		previewAddress.value = address
 	} catch (err) {
 		if (gen !== generation) return

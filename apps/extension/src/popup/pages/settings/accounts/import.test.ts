@@ -11,7 +11,7 @@ const ADDRESS = `0x${"0b".repeat(32)}`
 const SEALED = toBase64(new Uint8Array(29))
 const account = vi.hoisted(() => ({
 	previewImportAccount: vi.fn(async () => `0x${"0b".repeat(32)}`),
-	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, chainId: 7, name: "Imported" })),
+	importAccount: vi.fn(async () => ({ address: `0x${"0b".repeat(32)}`, profileId: "p1", chainId: 7, name: "Imported" })),
 }))
 const uiPreference = vi.hoisted(() => ({ setSelectedAccount: vi.fn(async () => true) }))
 vi.mock("@/utils/core", () => ({ managers: { account, uiPreference } }))
@@ -62,8 +62,8 @@ function mountImport({ realInput = false, extraAccounts = [] as Array<Record<str
 							profile: { id: "p1" },
 							network: { id: "n1", chainId: 7 },
 							accounts: [
-								{ address: `0x${"01".repeat(32)}`, chainId: 7, name: "Account 1" },
-								{ address: `0x${"02".repeat(32)}`, chainId: 7, name: "Savings", hidden: true },
+								{ address: `0x${"01".repeat(32)}`, profileId: "p1", chainId: 7, name: "Account 1" },
+								{ address: `0x${"02".repeat(32)}`, profileId: "p1", chainId: 7, name: "Savings", hidden: true },
 								...extraAccounts,
 							],
 						},
@@ -242,9 +242,9 @@ describe("settings/accounts/import — an account the wallet already holds", () 
 		await flushPromises()
 		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(true)
 
-		const appStore = useAppStore()
-		appStore.profile = { id: "p2" } as never
-		appStore.accounts = []
+		// The switch publishes the profile before its account list: the previous profile's rows are
+		// still in the store when the preview below resolves.
+		useAppStore().profile = { id: "p2" } as never
 		await flushPromises()
 		expect(w.find('[data-testid="import-account-preview"]').exists()).toBe(false)
 		expect(w.find('[data-testid="import-account-held"]').exists()).toBe(false)
@@ -256,9 +256,12 @@ describe("settings/accounts/import — an account the wallet already holds", () 
 		expect(w.text()).toContain(COVERAGE)
 	})
 
-	test("the same address on another chain is not held", async () => {
+	test.each([
+		["another chain", { profileId: "p1", chainId: 8 }],
+		["another profile", { profileId: "p0", chainId: 7 }],
+	])("the same address on %s is not held", async (_case, scope) => {
 		account.previewImportAccount.mockResolvedValueOnce(`0x${"03".repeat(32)}`)
-		const w = mountImport({ extraAccounts: [{ address: `0x${"03".repeat(32)}`, chainId: 8, name: "Elsewhere" }] })
+		const w = mountImport({ extraAccounts: [{ address: `0x${"03".repeat(32)}`, ...scope, name: "Elsewhere" }] })
 		await w.get('[data-testid="import-account-pick-file"]').trigger("click")
 		await flushPromises()
 		await w.get('[data-testid="import-account-submit"]').trigger("click")
