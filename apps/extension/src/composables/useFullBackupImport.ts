@@ -506,6 +506,8 @@ interface ImportRefs {
 	accountStateRetry: ShallowRef<AccountStateRetryContext | null>
 	/** The context a running Retry replays; a Retry whose context was dropped writes nothing. */
 	retryingAccountState: ShallowRef<AccountStateRetryContext | null>
+	/** Counts picks back from the chooser; one a later pick overtook while it read publishes nothing. */
+	picks: Ref<number>
 }
 
 function dropAccountStateRetry(state: ImportRefs) {
@@ -530,8 +532,11 @@ async function completeAfterRestore(opts: UseFullBackupImportOptions, profile: u
 
 async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOptions) {
 	if (state.restoreStatus.value === "progress") return
+	let pick: number | undefined
+	const overtaken = () => pick !== undefined && pick !== state.picks.value
 	try {
 		const file = await opts.pickFile()
+		pick = ++state.picks.value
 		// A Retry belongs to the import of the selection a new pick replaces.
 		dropAccountStateRetry(state)
 		// A pick that yields no file (the capped wrapper's too-large path)
@@ -544,9 +549,11 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			return
 		}
 		const { selection, parseError } = await readBackupFile(file)
+		const refused = selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))
+		if (overtaken()) return
 		// Every selection replaces the previous one's name, a nameless one included.
 		state.parsedBackupName.value = null
-		if (selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))) {
+		if (refused) {
 			state.selectedBackup.value = unreadableSelection(selection.name)
 			opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
 			return
@@ -571,7 +578,7 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 		opts.clearError()
 	} catch (err) {
 		// A closed chooser keeps the chosen backup, its name and its Retry.
-		if (err instanceof FilePickCanceledError) return
+		if (err instanceof FilePickCanceledError || overtaken()) return
 		opts.fillError("full_backup", "Failed to read the backup file")
 		console.error("Failed to read backup file:", { error: err })
 	}
@@ -780,6 +787,7 @@ function createImportRefs(): ImportRefs {
 		retryFailedAgain: ref(false),
 		accountStateRetry: shallowRef<AccountStateRetryContext | null>(null),
 		retryingAccountState: shallowRef<AccountStateRetryContext | null>(null),
+		picks: ref(0),
 	}
 }
 

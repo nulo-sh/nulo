@@ -85,6 +85,8 @@ async function buildBackup(overrides: Record<string, unknown> = {}) {
 	return { ...backup, checksum: await EncryptionKey.getHashHex(JSON.stringify(backup)) }
 }
 
+const fileOf = (body: unknown) => new File([JSON.stringify(body)], "b.json", { type: "application/json" }) as never
+
 let store: Map<string, unknown>
 
 function stubStorage() {
@@ -260,12 +262,47 @@ describe("useRestoreAgain: refusals change nothing", () => {
 
 		test("is refused at the pick and never offered", async () => {
 			const { body, opts, page, before } = await armed()
-			opts.pickFile.mockResolvedValue(new File([JSON.stringify(body)], "b.json", { type: "application/json" }) as never)
+			opts.pickFile.mockResolvedValue(fileOf(body))
 			await page.pickBackupFile()
 			expect(page.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "b.json", backup: null, profileType: null })
 			expect(opts.fillError).toHaveBeenCalledExactlyOnceWith(...EARLIER)
 			expect(opts.clearError).not.toHaveBeenCalled()
 			expect(store.get(KEY)).toEqual(before)
+		})
+
+		test("a passkey body that carries its recovery phrase is offered at the pick and restored (control)", async () => {
+			const body = await buildBackup({ entropy: "ZW50cm9weQ==", data: { profile: { id: "src", name: "Daily", type: "passkey" } } })
+			await armRestoreOutcome("p1", body.checksum, ["N1", "N2"])
+			const { opts } = makeOpts()
+			const page = useRestoreAgain(opts)
+			await page.start()
+			opts.pickFile.mockResolvedValue(fileOf(body))
+			await page.pickBackupFile()
+			expect(page.selectedBackup.value).toMatchObject({ kind: "plain", name: "b.json", profileType: "passkey" })
+			await page.restoreBackup()
+			expect(opts.fillError).not.toHaveBeenCalled()
+			expect(accountStateClient.restore).toHaveBeenCalled()
+		})
+
+		// The refusal hashes and migrates the whole body before the pick publishes, so a large file's
+		// read can still run when a later pick has published.
+		test.each([
+			["refuses its body", "resolve"],
+			["fails", "reject"],
+		] as const)("a pick a later pick overtook while it read publishes nothing, when its read %s", async (_label, outcome) => {
+			const { body, opts, page } = await armed()
+			const read = Promise.withResolvers<string>()
+			const slow = Object.assign(new File(["{}"], "slow.json"), { text: () => read.promise })
+			const later = await buildBackup()
+			opts.pickFile.mockResolvedValueOnce(slow as never).mockResolvedValueOnce(fileOf(later))
+			const first = page.pickBackupFile()
+			await vi.waitFor(() => expect(opts.pickFile).toHaveBeenCalledOnce())
+			await page.pickBackupFile()
+			if (outcome === "resolve") read.resolve(JSON.stringify(body))
+			else read.reject(new Error("read failed"))
+			await first
+			expect(page.selectedBackup.value).toMatchObject({ kind: "plain", name: "b.json", backup: later })
+			expect(opts.fillError).not.toHaveBeenCalled()
 		})
 
 		test("is refused when its file password opens it, and never offered", async () => {

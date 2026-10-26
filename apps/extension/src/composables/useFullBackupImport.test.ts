@@ -2089,7 +2089,7 @@ describe("useFullBackupImport — failure branches", () => {
 	})
 })
 
-// ── Passkey ceremony branch (Path A handoff) ─────────────────────────────────
+// ── A passkey profile's backup ───────────────────────────────────────────────
 
 describe("useFullBackupImport — a passkey profile's backup", () => {
 	const PASSKEY_PROFILE = { id: "src-profile-id", name: "PK", type: "passkey" }
@@ -2165,6 +2165,28 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 		expectNothingWritten()
 	})
 
+	// The refusal hashes and migrates the whole body before the pick publishes, so a large file's
+	// read can still run when a later pick has published.
+	it.each([
+		["refuses its body", "resolve"],
+		["fails", "reject"],
+	] as const)("a pick a later pick overtook while it read publishes nothing, when its read %s", async (_label, outcome) => {
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		const read = Promise.withResolvers<string>()
+		const slow = Object.assign(new File(["{}"], "slow.json"), { text: () => read.promise })
+		const later = await passkeyBody()
+		opts.pickFile.mockResolvedValueOnce(slow).mockResolvedValueOnce(fileOf(later))
+		const first = c.pickBackupFile()
+		await vi.waitFor(() => expect(opts.pickFile).toHaveBeenCalledOnce())
+		await c.pickBackupFile()
+		if (outcome === "resolve") read.resolve(JSON.stringify(await earlierBody(true)))
+		else read.reject(new Error("read failed"))
+		await first
+		expect(c.selectedBackup.value).toMatchObject({ kind: "plain", name: "_Daily_1760000000.json", backup: later })
+		expect(opts.fillError).not.toHaveBeenCalled()
+	})
+
 	// A real file: a fresh passkey profile's backup as a candidate of `dev` wrote it before 1.1.
 	it("the recorded backup of an earlier passkey profile is refused at the pick, before it is offered", async () => {
 		const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/earlier-passkey-backup.json"), "utf8")
@@ -2208,7 +2230,7 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 		expect(r).toMatchObject({ kind: "rejected", title })
 	})
 
-	it("a new passkey body selected some other way is still refused at Import, before anything is written", async () => {
+	it("an earlier passkey body selected some other way is still refused at Import, before anything is written", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
 		c.selectedBackup.value = { name: "x.json", backup: await earlierBody(false), kind: "plain", profileType: "passkey" }

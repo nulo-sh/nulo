@@ -76,6 +76,8 @@ interface AgainRefs {
 	retryFailedAgain: Ref<boolean>
 	/** Set once the page leaves or unmounts: nothing that settles afterwards shows or routes. */
 	ended: Ref<boolean>
+	/** Counts picks back from the chooser; one a later pick overtook while it read publishes nothing. */
+	picks: Ref<number>
 }
 
 type LogWriters = ReturnType<typeof errorLogWriters>
@@ -94,6 +96,7 @@ function createRefs(): AgainRefs {
 		retrying: shallowRef(null),
 		retryFailedAgain: ref(false),
 		ended: ref(false),
+		picks: ref(0),
 	}
 }
 
@@ -143,8 +146,11 @@ async function runStart(state: AgainRefs, opts: UseRestoreAgainOptions) {
 
 async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	if (busy(state) || state.ended.value) return
+	let pick: number | undefined
+	const overtaken = () => pick !== undefined && pick !== state.picks.value
 	try {
 		const file = await opts.pickFile()
+		pick = ++state.picks.value
 		dropRun(state)
 		state.restoreStatus.value = null
 		state.decryptionPassword.value = ""
@@ -154,7 +160,9 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 			return
 		}
 		const { selection, parseError } = await readBackupFile(file)
-		if (selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))) {
+		const refused = selection.kind === "plain" && (await refusedAsEarlierPasskey(selection.backup))
+		if (overtaken()) return
+		if (refused) {
 			state.selectedBackup.value = unreadableSelection(selection.name)
 			return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
 		}
@@ -165,7 +173,7 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 		}
 		opts.clearError()
 	} catch (error) {
-		if (error instanceof FilePickCanceledError) return
+		if (error instanceof FilePickCanceledError || overtaken()) return
 		opts.fillError("full_backup", "Failed to read the backup file")
 		console.warn("[restore-again] the backup file could not be read", { error })
 	}

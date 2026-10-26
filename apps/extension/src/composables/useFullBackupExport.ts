@@ -81,10 +81,9 @@ interface ExportState {
 interface ExportCtx {
 	state: ExportState
 	// Sealed artifact strings, published only by a completed run — never a mutable draft object.
-	// `pretty` is the plain download body, `compact` the encryption input (both derive from the SAME
-	// sealed snapshot inside `assembleFullBackup`, so the embedded checksum covers exactly these
-	// bytes), `sealed` the encrypted file.
-	artifacts: { pretty: string | null; compact: string | null; sealed: string | null }
+	// `compact` is the encryption input (the snapshot `assembleFullBackup` checksummed, so the
+	// embedded checksum covers exactly these bytes), `sealed` the encrypted file.
+	artifacts: { compact: string | null; sealed: string | null }
 	// The one fence: `discardRun` invalidates it and runs only snapshot it, so a superseded run can
 	// neither publish state nor resurrect scrubbed secrets.
 	runs: RunFence
@@ -336,7 +335,6 @@ async function runBackup(ctx: ExportCtx) {
 		if (!isCurrent() || rejectOversizedBackup(ctx, result.pretty)) return
 
 		ctx.artifacts.compact = result.compact
-		ctx.artifacts.pretty = result.pretty
 		state.backupStatus.value = "finished"
 		state.showRecommendation.value = true
 	} catch (err) {
@@ -435,7 +433,6 @@ function discardRun(ctx: ExportCtx) {
 		disconnectAll(active.clients ?? [])
 		ctx.activeRun = null
 	}
-	ctx.artifacts.pretty = null
 	ctx.artifacts.compact = null
 	ctx.artifacts.sealed = null
 	ctx.state.password.value = null
@@ -488,7 +485,7 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 	const isPasskeyProfile = computed(() => profile().type === "passkey")
 	const ctx: ExportCtx = {
 		state,
-		artifacts: { pretty: null, compact: null, sealed: null },
+		artifacts: { compact: null, sealed: null },
 		runs: createRunFence(),
 		activeRun: null,
 		disposed: false,
