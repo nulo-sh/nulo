@@ -57,7 +57,9 @@ interface SeedRun {
 async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
 	const { seed, plan: p } = r
 	console.log(`[profile-chaos] seed ${seed} from ${p.start} on ${JSON.stringify(r.caps)}\n${describePlan(p).join("\n")}`)
-	const record = recordTarget(join(process.cwd(), ".e2e-state"), r.browser, seed)
+	// A run the session launcher started keeps its records in that session's directory.
+	const records = process.env.NULO_E2E_CHAOS_SESSION ?? join(process.cwd(), ".e2e-state")
+	const record = recordTarget(records, r.browser, seed)
 	const files = `${record.path}.files`
 	const run = await startRun(ctx, r.caps, files, r.network)
 	let missed: string[] = []

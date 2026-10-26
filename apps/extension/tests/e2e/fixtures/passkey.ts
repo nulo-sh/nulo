@@ -222,8 +222,11 @@ export async function answerWithCredential(page: Page, credentialId: string): Pr
 type HeldGetProbe = Window & { __heldGet?: { reached: boolean; release?: () => void } }
 
 /** Holds the next `get` on `page` until released, keeping its abort signal live so a cancel ends
- *  it; `reached` resolves once the page is inside the request. */
-export async function holdNextGet(page: Page): Promise<{ reached: () => Promise<void>; release: () => Promise<void> }> {
+ *  it; `reached` resolves once the page is inside the request, and `isReached` says whether it is
+ *  yet. */
+export async function holdNextGet(
+	page: Page,
+): Promise<{ reached: () => Promise<void>; isReached: () => Promise<boolean>; release: () => Promise<void> }> {
 	await page.evaluate(() => {
 		const credentials = navigator.credentials
 		const get = credentials.get.bind(credentials)
@@ -246,6 +249,7 @@ export async function holdNextGet(page: Page): Promise<{ reached: () => Promise<
 		reached: async () => {
 			await page.waitForFunction(() => (window as HeldGetProbe).__heldGet?.reached === true, { timeout: 15_000, polling: 50 })
 		},
+		isReached: () => page.evaluate(() => (window as HeldGetProbe).__heldGet?.reached === true).catch(() => false),
 		release: async () => {
 			await page.evaluate(() => (window as HeldGetProbe).__heldGet?.release?.()).catch(() => {})
 		},
