@@ -88,6 +88,11 @@ export class PasskeyService extends Service<Methods> implements ServiceSpec<Meth
 		return await this.openWindowAndWait({ mode: "get", credentialId, prfSalt, ...display })
 	}
 
+	/** PATH B discovery get: any of the device's passkeys may answer, at `prfSalt`. */
+	public async discoverKey(prfSalt: string, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "discover", prfSalt, ...display })
+	}
+
 	/**
 	 * PATH A — wrap a `PasskeyCredentialData` (collected by the popup-side
 	 * in-page modal) into a `PasskeyCredential`. SW-internal collaborator

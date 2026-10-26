@@ -248,4 +248,14 @@ describe("runPasskeyCeremony in get mode", () => {
 		expect(b64(opts.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
 		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
 	})
+
+	it("in discover mode lets any of the device's passkeys answer, at the new profile's input", async () => {
+		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)))
+		const data = await runPasskeyCeremony({ mode: "discover", step: "create", prfSalt: SALT })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), prfSalt: SALT })
+		const opts = get.mock.calls[0][0].publicKey
+		expect(opts.allowCredentials).toBeUndefined()
+		expect(opts.userVerification).toBe("required")
+		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
+	})
 })

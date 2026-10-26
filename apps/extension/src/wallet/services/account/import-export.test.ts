@@ -26,7 +26,7 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => {
 })
 
 import { buildAccountExport, decryptAccountExport, parseAccountExport, serializeAccountExport } from "@nulo/aztec-runtime/account"
-import { asImportedKeysDek, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { asImportedKeysDek, type PasskeyCredentialData, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -50,10 +50,16 @@ const MASTER_B64 = Buffer.from(new Uint8Array(32).fill(9)).toString("base64")
 const dekOf = (fill: number) => asImportedKeysDek(new Uint8Array(32).fill(fill) as Uint8Array<ArrayBuffer>)
 const CHAIN = 0
 const L1 = 31337
+/** The answer the profile stub's passkey row opens under. */
+const ANSWER = { id: "cred", prf: "answer-prf", prfSalt: "salt" } as unknown as PasskeyCredentialData
+/** The profile stub's own check of a credential: its password, or its passkey's answer. */
+const authorized = (password?: string, credentialData?: PasskeyCredentialData) =>
+	credentialData ? credentialData === ANSWER && password === undefined : password === "correct-pass"
 
 async function build(withBalances = false) {
 	const api = new FakeBrowserApi()
 	api.reset()
+	const opens = vi.fn()
 	const services = new ServiceCollection()
 	// The profile's CURRENT session dek — consumeDekRewrapContext rotates it (mirrors production:
 	// after a restore, the session dek IS the freshly-minted destination dek).
@@ -72,13 +78,15 @@ async function build(withBalances = false) {
 			// getProfileDek → session-gated imported-keys DEK COPY (the v2 root; never the master).
 			getProfileDek: async () => dekOf(currentDekFill),
 			// exportPlain(id, password) → base64 master iff the password is right (service-side auth).
-			exportPlain: async (_id: string, password?: string) => {
-				if (password !== "correct-pass") throw new Error("Invalid password")
+			exportPlain: async (id: string, password?: string, credentialData?: PasskeyCredentialData) => {
+				opens("exportPlain", id, password, credentialData)
+				if (!authorized(password, credentialData)) throw new Error("Invalid password")
 				return MASTER_B64
 			},
 			// exportImportedKeysDek(id, password) → fresh-auth DEK for the account-export path.
-			exportImportedKeysDek: async (_id: string, password?: string) => {
-				if (password !== "correct-pass") throw new Error("Invalid password")
+			exportImportedKeysDek: async (id: string, password?: string, credentialData?: PasskeyCredentialData) => {
+				opens("exportImportedKeysDek", id, password, credentialData)
+				if (!authorized(password, credentialData)) throw new Error("Invalid password")
 				return dekOf(currentDekFill)
 			},
 			// Restore rewrap context: source = the dek the backup rows were sealed under (the
@@ -115,7 +123,7 @@ async function build(withBalances = false) {
 		services.add(new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { subscribe: () => ({ cancel: () => {} }) } as never))
 	}
 	await services.start()
-	return { api, account }
+	return { api, account, opens }
 }
 
 const BAL_TOKEN = { id: 1, profileId: "p1", chainId: CHAIN, contract: "0xc1", name: "T", symbol: "T", decimals: 18 }
@@ -368,4 +376,34 @@ describe("AccountService — a paused reset's held imported account", () => {
 		vi.mocked(NuloAccount.fromSigningKey).mockResolvedValueOnce({ address: { toString: () => "0xROTATED" } } as never)
 		await expect(account.exportResetHeldAccount("p1", NEW, "correct-pass", false)).rejects.toBeInstanceOf(ImportedAccountUnusableError)
 	})
+})
+
+describe("AccountService — a passkey profile's account file", () => {
+	test("the passkey's answer opens the profile and only the file password seals the file", async () => {
+		const { account, opens } = await build()
+		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
+		const sealed = await account.exportAccount("p1", CHAIN, addrFor(SK), "file-pass", true, ANSWER)
+		expect(parseAccountExport(await decryptAccountExport(sealed, "file-pass")).signingKey.toString()).toBe(SK.toString())
+		expect(opens.mock.calls).toEqual([
+			["exportPlain", "p1", undefined, ANSWER],
+			["exportImportedKeysDek", "p1", undefined, ANSWER],
+		])
+	})
+
+	const exports = {
+		exportAccount: (a: AccountService, password: string, encrypt: boolean) =>
+			a.exportAccount("p1", CHAIN, addrFor(SK), password, encrypt, ANSWER),
+		exportResetHeldAccount: (a: AccountService, password: string, encrypt: boolean) =>
+			a.exportResetHeldAccount("p1", addrFor(SK), password, encrypt, ANSWER),
+	}
+	test.each(Object.keys(exports) as (keyof typeof exports)[])(
+		"%s refuses a file password under 8 characters or a plain file before the profile opens",
+		async (name) => {
+			const { account, opens } = await build()
+			const run = exports[name]
+			await expect(run(account, "1234567", true)).rejects.toThrow(/at least 8 characters/)
+			await expect(run(account, "12345678", false)).rejects.toThrow(/always encrypted/)
+			expect(opens).not.toHaveBeenCalled()
+		},
+	)
 })

@@ -131,3 +131,43 @@ export async function newPasskeyRow(
 		prfSalt: fields.prfSalt,
 	}
 }
+
+/** A row for what it is sealed under: {@link newPasswordRow} or {@link newPasskeyRow}. */
+export function newRowFor(
+	fields: Omit<EnvelopeFields, "slots"> & {
+		name: string
+		slots: SealedSlots
+		unlock: { type: "password" } | { type: "passkey"; credentialId: string; prfSalt: string }
+	},
+	master: MasterSecretBytes,
+	dek: ImportedKeysDek,
+): Promise<Profile> {
+	const { unlock, ...rest } = fields
+	return unlock.type === "password"
+		? newPasswordRow(rest, master, dek)
+		: newPasskeyRow({ ...rest, credentialId: unlock.credentialId, prfSalt: unlock.prfSalt }, master, dek)
+}
+
+/** `live` resealed under another unlock: the same id, name, generation and fingerprint, so the
+ *  PXE store and every row key stay the profile's. A password unlock drops the credential fields. */
+export async function replacementRow(
+	live: Profile,
+	sealed: {
+		slots: SealedSlots
+		dekSealed: string
+		unlock: { type: "password" } | { type: "passkey"; credentialId: string; prfSalt: string }
+	},
+	master: MasterSecretBytes,
+	dek: ImportedKeysDek,
+): Promise<Profile> {
+	const row = await newRowFor({ id: live.id, name: live.name, walletFingerprint: live.walletFingerprint, ...sealed }, master, dek)
+	return { ...row, pxeGeneration: live.pxeGeneration }
+}
+
+/** Whether two decoded rows hold the same fields with the same values, whatever their key order. */
+export function sameStoredRow(a: Profile, b: Profile): boolean {
+	const left = a as Record<string, unknown>
+	const right = b as Record<string, unknown>
+	const keys = Object.keys(left)
+	return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && left[key] === right[key])
+}

@@ -43,6 +43,11 @@ export class PasskeyRecoveryCoordinator {
 		return this.passkeys.getKey(credentialId, prfSalt, display)
 	}
 
+	/** PATH B discovery get: a passkey the person already has, evaluating the PRF at `prfSalt`. */
+	public discoverInWindow(prfSalt: string, display: PasskeyDisplay): Promise<PasskeyAnswer> {
+		return this.passkeys.discoverKey(prfSalt, display)
+	}
+
 	/** PATH A: the page's answer, materialized here. Throws when the output or its input is not
 	 *  32 bytes. */
 	public async fromCredentialData(data: PasskeyCredentialData): Promise<PasskeyAnswer> {
