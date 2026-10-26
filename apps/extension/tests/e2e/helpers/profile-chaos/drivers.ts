@@ -229,6 +229,8 @@ const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 		const words = await page.$$eval('[data-testid="reveal-content-word"]', (els) =>
 			els.map((el) => (el.textContent ?? "").trim().replace(/^\d+\.?\s*/, "")),
 		)
+		const learnt = s.phrases.get(open.phrase)
+		if (learnt && learnt.join(" ") !== words.join(" ")) throw new Error(`the reveal shows another phrase than ${open.phrase}'s`)
 		s.phrases.set(open.phrase, words)
 	}
 	driven.settle.elapsedMs = Date.now() - t0
@@ -455,6 +457,8 @@ const abandonCeremony: Drivers["abandonCeremony"] = async (s) => {
 	} finally {
 		await other.close().catch(() => {})
 	}
+	// Closing the page is the abandon itself: one that survived still holds the request.
+	if (!other.isClosed()) throw new Error("the page holding the passkey request did not close")
 	await openRoute(s.anchor, "#/popup/auth")
 	return settle(s.anchor, [{ label: "cancelled", testid: "auth-submit", hash: "/popup/auth" }], { cancelled: "cancelled" }, EDIT_MS)
 }

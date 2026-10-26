@@ -4,6 +4,7 @@
  * meets. They need the playground and a proverless build's restore gate.
  */
 import type { Page } from "puppeteer"
+import { prepareClick } from "../../fixtures/browser"
 import { clickByTestId } from "../../fixtures/dom"
 import { switchToLocalNetwork } from "../../fixtures/networks"
 import { holdNextGet } from "../../fixtures/passkey"
@@ -110,7 +111,11 @@ const dappDuringHeldUnlock: Drive = async (s) => {
 		await hold.release()
 		throw err
 	})
-	return connectAcrossUnlock(s, ask, t0, () => hold.release())
+	// A person goes back to the popup to answer the prompt; Firefox refuses one from an unfocused window.
+	return connectAcrossUnlock(s, ask, t0, async () => {
+		await prepareClick(page)
+		await hold.release()
+	})
 }
 
 // ── a held restore ──────────────────────────────────────────────────────

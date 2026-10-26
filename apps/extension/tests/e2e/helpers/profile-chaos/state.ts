@@ -52,6 +52,8 @@ export interface RunState {
 		seen: { id: number; text: string }[]
 		/** The needles `seen` was already searched for. */
 		searched: Set<string>
+		/** Evidence a driver could not read inside its step, reported as that step's gaps. */
+		gaps: string[]
 	}
 	/** The background serving the run when the last step's checks ended. */
 	origin?: number
@@ -108,7 +110,7 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		phrases: new Map(),
 		credentials: new Map(),
 		files: new Map(),
-		logs: { lastId: 0, carried: [], seen: [], searched: new Set() },
+		logs: { lastId: 0, carried: [], seen: [], searched: new Set(), gaps: [] },
 		errorMark: 0,
 		warns: {},
 		allowed: {},

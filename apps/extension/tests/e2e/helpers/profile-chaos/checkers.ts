@@ -405,8 +405,8 @@ export interface AllowedError {
 	during: readonly StepEnd[] | "any step"
 	source: string
 	reason: string
-	/** Every error message the entry carries must match, so one that also carries another error
-	 *  still fails. */
+	/** Every string the entry carries past its description, error class names aside, must match, so
+	 *  one that also carries another error, in any shape, still fails. */
 	everyMessage?: true
 	/** Entries this one never covers, whatever they carry. */
 	except?: RegExp
@@ -445,9 +445,10 @@ export interface KnownFinding {
 	kinds: readonly ErrorEntry["kind"][]
 	/** A log line's source, when the finding names one. */
 	source?: string
-	/** A page error counts only beside a log line of the same step matching this, from `source`
-	 *  of that line: the page cannot name its producer, the forwarder's line can. */
-	alongside?: { source: string; pattern: RegExp }
+	/** A page error counts only when the same step holds the forwarder's line for that very
+	 *  rejection, `text(pageError)` from `source`, one line per page error: the page cannot name
+	 *  its producer, the forwarder's line can. */
+	alongside?: { source: string; text: (pageError: string) => string }
 }
 
 const UNHANDLED_LOCKED = /^\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]$/
@@ -466,7 +467,10 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 		issue: 1133,
 		pattern: /^Error: (?:Wallet|Profile) locked$/,
 		kinds: ["page-error"],
-		alongside: { source: "ui", pattern: UNHANDLED_LOCKED },
+		alongside: {
+			source: "ui",
+			text: (pageError) => `["unhandled rejection",{"error":{"name":"Error","message":"${pageError.replace(/^Error: /, "")}"}}]`,
+		},
 	},
 	{
 		issue: 1135,
@@ -484,17 +488,40 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	},
 ]
 
-const isInstance = (k: KnownFinding, e: ErrorEntry, step: readonly ErrorEntry[]): boolean =>
-	k.kinds.includes(e.kind) &&
-	(k.source === undefined || (e.kind === "log" && e.source === k.source)) &&
-	k.pattern.test(e.text) &&
-	(k.alongside === undefined ||
-		step.some((o) => o.kind === "log" && o.source === k.alongside?.source && k.alongside.pattern.test(o.text)))
+/** The filed finding `e` is an instance of; a page error's pairing takes its forwarded line from
+ *  `free`, so one line never vouches for two page errors. */
+function instanceOf(e: ErrorEntry, known: readonly KnownFinding[], free: ErrorEntry[]): KnownFinding | undefined {
+	return known.find((k) => {
+		if (!k.kinds.includes(e.kind) || !k.pattern.test(e.text)) return false
+		if (k.source !== undefined && !(e.kind === "log" && e.source === k.source)) return false
+		if (k.alongside === undefined) return true
+		const want = k.alongside
+		const i = free.findIndex((o) => o.kind === "log" && o.source === want.source && o.text === want.text(e.text))
+		if (i < 0) return false
+		free.splice(i, 1)
+		return true
+	})
+}
 
-/** The `message` values a logged entry carries, or the whole text when it names none. */
-function messagesOf(text: string): string[] {
-	const found = [...text.matchAll(/"message":"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1] as string)
-	return found.length ? found : [text]
+/** Every string an entry carries past its leading description, error class names aside; undefined
+ *  when the entry is no JSON. */
+function carriedStrings(text: string): string[] | undefined {
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(text)
+	} catch {
+		return undefined
+	}
+	const body = Array.isArray(parsed) && typeof parsed[0] === "string" ? parsed.slice(1) : parsed
+	return stringsIn(body)
+}
+
+/** Every string under `v`, an error class name aside. */
+function stringsIn(v: unknown, key?: string): string[] {
+	if (typeof v === "string") return key === "name" ? [] : [v]
+	if (Array.isArray(v)) return v.flatMap((x) => stringsIn(x))
+	if (v && typeof v === "object") return Object.entries(v).flatMap(([k, x]) => stringsIn(x, k))
+	return []
 }
 
 const UNCAUGHT = /^Uncaught (?:\(in promise\) )?/
@@ -533,7 +560,12 @@ const allows = (a: AllowedError, e: ErrorEntry, ends: readonly StepEnd[]): boole
 	a.kinds.includes(e.kind) &&
 	(a.during === "any step" || a.during.some((d) => ends.includes(d))) &&
 	!a.except?.test(e.text) &&
-	(a.everyMessage ? messagesOf(e.text).every((m) => a.pattern.test(m)) : a.pattern.test(e.text))
+	(a.everyMessage ? everyCarried(e.text, a.pattern) : a.pattern.test(e.text))
+
+const everyCarried = (text: string, pattern: RegExp): boolean => {
+	const strings = carriedStrings(text)
+	return strings !== undefined && strings.length > 0 && strings.every((m) => pattern.test(m))
+}
 
 export function checkErrors(
 	entries: readonly ErrorEntry[],
@@ -544,6 +576,7 @@ export function checkErrors(
 	const warns: Record<string, number> = {}
 	const accepted: Record<string, number> = {}
 	const violations: Violation[] = []
+	const free = [...entries]
 	for (const e of entries) {
 		if (e.kind === "log" && e.level === "warn") {
 			warns[e.source] = (warns[e.source] ?? 0) + 1
@@ -555,7 +588,7 @@ export function checkErrors(
 			continue
 		}
 		const where = e.kind === "log" ? `error log from ${e.source}` : `${e.kind} on ${e.page}`
-		const finding = known.find((k) => isInstance(k, e, entries))
+		const finding = instanceOf(e, known, free)
 		violations.push({ ...violation("O4", `${where}: ${errorClass(e.text)}`, e.text), ...(finding ? { known: finding.issue } : {}) })
 	}
 	return { violations, warns, allowed: accepted }

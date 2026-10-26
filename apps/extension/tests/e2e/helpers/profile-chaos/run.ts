@@ -199,6 +199,7 @@ async function checkStepLogs(
 		)
 		if (!continuity.complete) incomplete.push(`logs: ${continuity.reason}`)
 	}
+	incomplete.push(...s.logs.gaps.splice(0))
 	if (drained.length) s.logs.lastId = drained[drained.length - 1].id
 	const logs = [...s.logs.carried, ...drained]
 	s.logs.carried = []
@@ -218,27 +219,31 @@ async function checkStepLogs(
 }
 
 /** Each live password profile's phrase, read once through the wallet's own export with its
- *  password, so a phrase leaked before any reveal is a needle from its first step. */
-async function learnPhrases(s: RunState, next: World): Promise<void> {
+ *  password, so a phrase leaked before any reveal is a needle from its first step; a phrase it
+ *  cannot read leaves the leak scan short, a gap of the step. */
+async function learnPhrases(s: RunState, next: World): Promise<string[]> {
+	const gaps: string[] = []
 	for (const p of live(next)) {
 		const id = s.bindings.profiles.get(p.ref)
 		if (p.method !== "password" || !p.phrase || !p.password || !id || s.phrases.has(p.phrase)) continue
-		// A refusal is O2's and verifyAll's to judge; the phrase is learnt at the next step instead.
 		const words = await callService<string[]>(s.anchor, "profile", "exportMnemonic", [id, secretFor(s, p.password)]).catch(
 			() => undefined,
 		)
 		if (words) s.phrases.set(p.phrase, words)
+		else gaps.push(`leaks: ${p.ref}'s phrase could not be read with its password`)
 	}
+	return gaps
 }
 
 /** Learns what the step showed for the first time: each password profile's phrase, a restored
- *  profile's name, and each derived address of the open profile at its first sighting. */
-async function learn(s: RunState, next: World): Promise<void> {
-	await learnPhrases(s, next)
+ *  profile's name, and each derived address of the open profile at its first sighting; returns
+ *  what it could not read. */
+async function learn(s: RunState, next: World): Promise<string[]> {
+	const gaps = await learnPhrases(s, next)
 	const ref = next.session.kind === "open" ? next.session.ref : undefined
 	const id = ref && s.bindings.profiles.get(ref)
 	// The session oracle reports a wallet that holds no session where the model expects one.
-	if (!ref || !id || (await isLocked(s.anchor))) return
+	if (!ref || !id || (await isLocked(s.anchor))) return gaps
 	if (profileOf(next, ref)?.name === undefined && !s.bindings.names.has(ref)) {
 		const listed = (await readProfiles(s.anchor)).listed.find((p) => p.id === id)
 		if (listed) s.bindings.names.set(ref, listed.name)
@@ -246,6 +251,7 @@ async function learn(s: RunState, next: World): Promise<void> {
 	const seen = s.bindings.addresses.get(ref) ?? []
 	const now = await derivedAddresses(s.anchor, id)
 	s.bindings.addresses.set(ref, [...seen, ...now.slice(seen.length)])
+	return gaps
 }
 
 async function checkState(s: RunState, step: PlannedStep, before: World, census: StoredEntry[]): Promise<Violation[]> {
@@ -291,7 +297,7 @@ async function checkStep(
 		for (const v of out) if (v.detail) v.detail = mask(v.detail, known)
 		return { violations: out, incomplete: [] }
 	}
-	await learn(s, next)
+	const unread = await learn(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
 	const logs = await checkStepLogs(s, step, before, restarted, needles)
@@ -306,7 +312,7 @@ async function checkStep(
 	)
 	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds))
 	for (const v of out) if (v.detail) v.detail = mask(v.detail, needles)
-	return { violations: out, incomplete: logs.incomplete }
+	return { violations: out, incomplete: [...logs.incomplete, ...unread] }
 }
 
 const revision = (): string => {
@@ -390,13 +396,15 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 		return recordOf(step, t0, { violations: [{ oracle: "O5", message: `${step.action}'s driver could not finish the step`, detail }] })
 	}
 	const restarted = endsOf(step, before).includes("background")
-	if (!restarted && (await backgroundOrigin(s.ctx)) !== origin)
-		return recordOf(step, t0, { outcome: driven.outcome, incomplete: [UNPLANNED_RESTART] })
+	const served = await backgroundOrigin(s.ctx)
+	if (!restarted && served !== origin) return recordOf(step, t0, { outcome: driven.outcome, incomplete: [UNPLANNED_RESTART] })
 	if (restarted) s.logs.lastId = 0
 	try {
 		const evidence = await checkStep(s, step, before, census, driven, restarted)
 		s.origin = await backgroundOrigin(s.ctx)
-		return recordOf(step, t0, { outcome: driven.outcome, ...evidence })
+		// A restart during the checks loses lines a later drain cannot tell apart from none.
+		const lost = s.origin === served ? [] : [UNPLANNED_RESTART]
+		return recordOf(step, t0, { outcome: driven.outcome, ...evidence, incomplete: [...evidence.incomplete, ...lost] })
 	} catch (err) {
 		const crashed = mask(`${err instanceof Error ? err.message : String(err)}${callSite(err)}`, await needlesOf(s))
 		return recordOf(step, t0, { outcome: driven.outcome, crashed })

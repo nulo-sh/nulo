@@ -164,14 +164,20 @@ export async function authSubmitReady(page: Page): Promise<void> {
 	)
 }
 
-/** Waits for the lock screen's unlock attempt to end: Home, or the submit no longer busy and no
- *  passkey prompt shown. The route cannot tell, since a pending attempt stays on it. */
+/** Waits for the lock screen's unlock attempt to end: Home, or the submit shown and idle with no
+ *  passkey prompt. The route cannot tell, since a pending attempt stays on it, and a page that shows
+ *  neither control is still between states. */
 export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> {
 	await page.waitForFunction(
-		() =>
-			location.hash.includes("/popup/general") ||
-			(!document.querySelector('[data-testid="auth-submit"][aria-busy="true"]') &&
-				!document.querySelector('[data-testid="passkey-ceremony-dialog"]')),
+		() => {
+			if (location.hash.includes("/popup/general")) return true
+			const submit = document.querySelector('[data-testid="auth-submit"]')
+			return (
+				!!submit &&
+				submit.getAttribute("aria-busy") !== "true" &&
+				!document.querySelector('[data-testid="passkey-ceremony-dialog"]')
+			)
+		},
 		{ timeout: ms, polling: 100 },
 	)
 }

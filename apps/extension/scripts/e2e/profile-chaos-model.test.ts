@@ -684,6 +684,14 @@ describe("O4, errors", () => {
 				],
 			],
 			[
+				"for an entry that also carries a bare error string",
+				[
+					refusal(
+						'["Failed to sync",{"message":"Error 400 from server <url> no node answers a guarded e2e run"},"TypeError: invalid recovery state"]',
+					),
+				],
+			],
+			[
 				"for an unhandled rejection carrying it",
 				[refusal('["unhandled rejection",{"error":{"message":"Error 400 from server <url> no node answers a guarded e2e run"}}]')],
 			],
@@ -784,7 +792,11 @@ describe("O4, errors", () => {
 			{ kind: "page-error" as const, page: "anchor", text: "Error: Wallet locked" },
 			{ kind: "page-error" as const, page: "second", text: "Error: Profile locked" },
 		]
-		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133, 1133])
+		// The second page's rejection has no forwarded line of its own, so nothing vouches for it.
+		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133, undefined])
+		const lockedPage = (page: string): ErrorEntry => ({ kind: "page-error", page, text: "Error: Wallet locked" })
+		const twice = checkErrors([refused[0] as ErrorEntry, lockedPage("anchor"), lockedPage("second")], []).violations
+		expect(shown("O4 two page errors beside one forwarded rejection", twice).map((v) => v.known)).toEqual([1133, 1133, undefined])
 		const unpaired = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked" }], []).violations
 		expect(shown("O4 a locked page error with no forwarded rejection beside it", unpaired)[0]?.known).toBeUndefined()
 		const otherRefusal = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked while x" }], []).violations
@@ -997,8 +1009,9 @@ describe("O6, a restore of a deleted profile's backup", () => {
 		["P2", P2],
 		["P3", P1],
 	])
+	// P3's own first read is the wrong wallet, so only its deleted source's accounts can catch it.
 	b.addresses.set("P1", ["0xa1"])
-	b.addresses.set("P3", ["0xa1"])
+	b.addresses.set("P3", ["0xf9"])
 	const reading = (ref: "P2" | "P3", addresses: string[]) => ({
 		ref,
 		wrongRefused: true,
@@ -1009,7 +1022,13 @@ describe("O6, a restore of a deleted profile's backup", () => {
 	})
 
 	test("passes a restore deriving its deleted source's accounts", () => {
-		expect(checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xa1"])], b)).toEqual([])
+		const right = bind([
+			["P2", P2],
+			["P3", P1],
+		])
+		right.addresses.set("P1", ["0xa1"])
+		right.addresses.set("P3", ["0xa1"])
+		expect(checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xa1"])], right)).toEqual([])
 	})
 
 	test("fails a restore deriving another wallet's accounts", () => {

@@ -1,6 +1,7 @@
 import { backgroundOrigin, EXTENSION_SCHEME, stopBackground } from "../../fixtures/browser"
 import { pollUntil } from "../../fixtures/poll"
 import { openPopup } from "../../fixtures/wallet-pages"
+import { checkLogContinuity } from "./checkers"
 import { type DrainedLog, drainLogs } from "./collect"
 import { live, type World } from "./model"
 import type { Driven, RunState } from "./state"
@@ -14,9 +15,21 @@ const RESTART_MS = 90_000
  * authenticator there is the session's, so the run's passkeys survive.
  */
 /** Reads the background's lines right before it stops, so the step checks them with its successor's:
- *  only what it logs between this read and the stop stays unread. */
+ *  only what it logs between this read and the stop stays unread. A failed read or a gap in it is
+ *  the step's own gap, apart from the restart's. */
 export async function drainBeforeStop(s: RunState): Promise<void> {
-	const lines = await drainLogs(s.anchor, s.logs.lastId).catch(() => [])
+	let lines: DrainedLog[]
+	try {
+		lines = await drainLogs(s.anchor, s.logs.lastId)
+	} catch {
+		s.logs.gaps.push("logs: the read right before the planned stop failed")
+		return
+	}
+	const continuity = checkLogContinuity(
+		s.logs.lastId,
+		lines.map((l) => l.id),
+	)
+	if (!continuity.complete) s.logs.gaps.push(`logs: ${continuity.reason}`)
 	s.logs.carried.push(...lines)
 	if (lines.length) s.logs.lastId = (lines.at(-1) as DrainedLog).id
 }
