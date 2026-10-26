@@ -39,7 +39,9 @@ const handleFillFieldsWithDefaultValues = () => {
 	isStartedEditing.value = false
 }
 
-const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === nameTerm.value.toLowerCase() && isStartedEditing.value)
+/** The name a save stores: a profile name never keeps outer spaces. */
+const newName = computed(() => nameTerm.value.trim())
+const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === newName.value.toLowerCase() && isStartedEditing.value)
 const isCollision = computed(() => {
 	if (!nameTerm.value || !isStartedEditing.value) return false
 	const normalized = normalizeProfileName(nameTerm.value)
@@ -53,7 +55,7 @@ const isAvailableToUpdateProfile = computed(() => {
 	// gate a pre-edit Enter would submit the unchanged name.
 	if (isProfileUpdateInProgress.value) return
 	if (!isStartedEditing.value) return
-	if (!nameTerm.value?.length) return
+	if (!newName.value.length) return
 	if (isUnchanged.value) return
 	if (isCollision.value) return
 
@@ -81,7 +83,7 @@ const handleUpdateProfile = async () => {
 			isProfileUpdateInProgress.value = false
 			return
 		}
-		appStore.profile = await profileService.changeProfileName(appStore.profile.id, nameTerm.value)
+		appStore.profile = await profileService.changeProfileName(appStore.profile.id, newName.value)
 		emit("onClose")
 
 		openToast({ kind: "success", label: "Profile is updated" })

@@ -1,11 +1,12 @@
 export const FIRST_PROFILE_NAME = "Main"
 
 /**
- * The form under which two profile names collide. NFKC + locale lower-case folds stylistic
- * variants ("ﬂ"/"fl", "K"/"K"); it does not fold cross-script homoglyphs (Cyrillic "А").
+ * The form under which two profile names collide. Outer spaces drop, and NFKC + locale lower-case
+ * folds stylistic variants ("ﬂ"/"fl", "K"/"K"); it does not fold cross-script homoglyphs
+ * (Cyrillic "А").
  */
 export function normalizeProfileName(name: string): string {
-	return name.normalize("NFKC").toLocaleLowerCase()
+	return name.normalize("NFKC").trim().toLocaleLowerCase()
 }
 
 /**
