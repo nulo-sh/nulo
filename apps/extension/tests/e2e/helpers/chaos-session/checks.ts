@@ -23,9 +23,8 @@ function checkOpen(r: SessionReading, p: ProfileReading, active: string, strict:
 	if (r.row?.profile !== active)
 		out.push(violation("O1", `the session row names ${r.row?.profile ?? "nothing"}, not the active profile ${active}`))
 	if (r.row?.hasPasshash) out.push(violation("O1", "the session row holds a legacy passhash"))
-	// A passkey session never persists a bearer, and strict mode drops one at once
-	// (`code:apps/extension/src/wallet/services/profile/session-manager.ts:493`).
-	if (r.row?.hasBearer && listed?.type === "passkey") out.push(violation("O1", "a passkey profile's session row holds a bearer"))
+	// A session of either method persists a bearer only while strict mode is off, and strict mode
+	// drops one at once (`code:apps/extension/src/wallet/services/profile/session-manager.ts:299`).
 	if (r.row?.hasBearer && strict) out.push(violation("O1", "the session row holds a bearer with strict mode on"))
 	for (const page of r.pages)
 		if (page.anchor && (ADVANCES_ON_OPEN as readonly string[]).includes(page.route))
@@ -50,8 +49,7 @@ function checkLocked(r: SessionReading, p: ProfileReading): Violation[] {
 }
 
 /** O1 without a model: with an active profile, it is listed, the row names it, holds a bearer only
- *  for a password profile with strict mode off, and the anchor has left the lock and register
- *  pages; with none, every page shows a locked route, a protected call is refused, and only a
+ *  with strict mode off, and the anchor has left the lock and register pages; with none, every page shows a locked route, a protected call is refused, and only a
  *  passkey profile's bare row may remain. */
 export function checkSessionRelation(r: SessionReading, profiles: ProfileReading, strict: boolean): Violation[] {
 	return r.active === undefined ? checkLocked(r, profiles) : checkOpen(r, profiles, r.active, strict)

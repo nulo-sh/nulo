@@ -347,12 +347,6 @@ describe("the session's checks without a model", () => {
 			/z is not listed/,
 		],
 		[
-			"a passkey session with a bearer",
-			open({ active: "b", row: { profile: "b", hasBearer: true, hasPasshash: false } }),
-			false,
-			/passkey profile's session row holds a bearer/,
-		],
-		[
 			"a bearer under strict mode",
 			open({ row: { profile: "a", hasBearer: true, hasPasshash: false } }),
 			true,
@@ -390,8 +384,13 @@ describe("the session's checks without a model", () => {
 		expect(found.map((v) => v.message).join(" | ")).toMatch(why)
 	})
 
-	test("O1 passes an open password session with a bearer while strict is off, and a passkey row outliving a restart", () => {
+	test("O1 passes an open session of either method with a bearer while strict is off, and a passkey row outliving a restart", () => {
 		expect(checkSessionRelation(open({ row: { profile: "a", hasBearer: true, hasPasshash: false } }), profiles, false)).toEqual([])
+		const passkey = open({ active: "b", row: { profile: "b", hasBearer: true, hasPasshash: false } })
+		expect(checkSessionRelation(passkey, profiles, false)).toEqual([])
+		expect(checkSessionRelation(passkey, profiles, true).map((v) => v.message)).toEqual([
+			"the session row holds a bearer with strict mode on",
+		])
 		expect(checkSessionRelation(locked({ row: { profile: "b", hasBearer: false, hasPasshash: false } }), profiles, true)).toEqual([])
 	})
 

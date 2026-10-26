@@ -447,6 +447,8 @@ async function replayMain(argv: readonly string[]): Promise<number> {
 	const code = codeDifference(info.revision, replayInfo.revision)
 	if (code) differences.push(code)
 	if (info.dist !== replayInfo.dist) differences.push("the replay loaded another build than the original")
+	const originalExit = exitCode(original) ?? null
+	if (originalExit !== 0) differences.push(`the original's runner exited ${String(originalExit)}`)
 	if (stopped.exitCode !== 0) differences.push(`the replay's runner exited ${String(stopped.exitCode)}`)
 	if ((stopped.left as number[]).length) differences.push(`the replay left ${(stopped.left as number[]).length} processes running`)
 	const verdict = { of: info.id, replay: replayInfo.id, same: differences.length === 0, differences }
