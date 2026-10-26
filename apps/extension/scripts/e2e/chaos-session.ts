@@ -16,7 +16,7 @@
  */
 import { execFileSync, spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { randomInt } from "node:crypto"
 import { readStartTime } from "../../tests/e2e/owned-processes"
@@ -30,7 +30,7 @@ import {
 	CommandRefused,
 	ENDED_FILE,
 	extCopyOf,
-	LOG_FILE,
+	logOf,
 	MAX_SESSION_MINUTES,
 	makeSessionDirs,
 	newSessionId,
@@ -114,11 +114,13 @@ function copyDist(root: string, id: string, browser: SessionBrowser): string {
 	return ext
 }
 
-/** Spawns `file` under vitest in its own process group, its output to the session's log and its
- *  exit status to `exit.code` when it ends. */
+/** Spawns `file` under vitest in its own process group, its output to the session's log (`logOf`)
+ *  and its exit status to `exit.code` when it ends. */
 function spawnRunner(dir: string, file: string, env: Record<string, string>): number {
 	const script = 'cd "$1" && bun run test:e2e -- "$2" --retry=0 > "$3" 2>&1; echo $? > "$4"'
-	const child = spawn("sh", ["-c", script, "sh", APP_DIR, file, join(dir, LOG_FILE), join(dir, EXIT_FILE)], {
+	const log = logOf(sessionRoot(), basename(dir))
+	mkdirSync(dirname(log), { recursive: true, mode: 0o700 })
+	const child = spawn("sh", ["-c", script, "sh", APP_DIR, file, log, join(dir, EXIT_FILE)], {
 		detached: true,
 		stdio: "ignore",
 		env: runnerEnv({ ...env, [SESSION_ENV]: dir, NULO_E2E_CHAOS: "1", NULO_E2E_MIGRATION_FIXTURE: "1", NULO_E2E_CSP_REPORT: "1" }),
@@ -141,7 +143,10 @@ function exitCode(dir: string): number | undefined {
 
 function logTail(dir: string, lines = 30): string {
 	try {
-		return readFileSync(join(dir, LOG_FILE), "utf8").split("\n").slice(-lines).join("\n")
+		return readFileSync(logOf(sessionRoot(), basename(dir)), "utf8")
+			.split("\n")
+			.slice(-lines)
+			.join("\n")
 	} catch {
 		return "(no log)"
 	}

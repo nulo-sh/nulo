@@ -395,7 +395,7 @@ class Session {
 			case "close":
 				return { data: await this.closePage(cmd.page) }
 			case "screenshot":
-				return { data: { file: writeOwn(this.dir, "screenshots", `${n}-${cmd.page}.png`, await this.page(cmd.page).screenshot()) } }
+				return { data: { file: await this.screenshot(n, cmd.page) } }
 			case "pick-file":
 				return { data: await this.pickFile(n, cmd) }
 			case "downloads":
@@ -409,6 +409,14 @@ class Session {
 			default:
 				return {}
 		}
+	}
+
+	/** A screenshot cannot mask what the page shows, so a page showing a URL is refused. */
+	private async screenshot(n: number, id: PageId): Promise<string> {
+		const page = this.page(id)
+		if (await page.evaluate(showsUrl))
+			throw new CommandRefused(`${id} shows a URL, which a screenshot would carry unmasked; snapshot masks it`)
+		return writeOwn(this.dir, "screenshots", `${n}-${id}.png`, await page.screenshot())
 	}
 
 	private async snapshot(id: PageId): Promise<unknown> {
@@ -720,14 +728,17 @@ function readableText(bytes: Buffer): string {
 
 /** Every visible testid with its index among the visible matches of its testid, its own text when
  *  it holds no other testid, an input's type and value (a password field's length only), and its
- *  state. Names no hidden element. */
+ *  state, every URL in a text or value masked. Names no hidden element. */
 function readScreen(): { route: string; title: string; items: { testid: string; nth: number; [k: string]: unknown }[] } {
 	const isShown = (el: HTMLElement) => {
 		const style = window.getComputedStyle(el)
 		const rect = el.getBoundingClientRect()
 		return style.display !== "none" && style.visibility !== "hidden" && rect.width !== 0 && rect.height !== 0
 	}
-	const ownText = (el: HTMLElement) => (el.innerText ?? el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200) || undefined
+	// A node URL may carry a provider key, so no URL leaves the page as text.
+	const unlinked = (text: string) => text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'\\<>]+/gi, "<url>")
+	const ownText = (el: HTMLElement) =>
+		unlinked((el.innerText ?? el.textContent ?? "").replace(/\s+/g, " ").trim()).slice(0, 200) || undefined
 	// A field's own input, or the one inside a wrapper that holds no other testid.
 	const inputOf = (el: HTMLElement, leaf: boolean) =>
 		el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
@@ -745,7 +756,11 @@ function readScreen(): { route: string; title: string; items: { testid: string; 
 			tag: el.tagName.toLowerCase(),
 			text: leaf ? ownText(el) : undefined,
 			type: input?.type,
-			value: input ? (input.type === "password" ? `<${input.value.length} characters>` : input.value.slice(0, 200)) : undefined,
+			value: input
+				? input.type === "password"
+					? `<${input.value.length} characters>`
+					: unlinked(input.value).slice(0, 200)
+				: undefined,
 			disabled: (el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true" || undefined,
 			checked: checked === null ? undefined : checked === "true",
 			focused: document.activeElement === el || (!!input && document.activeElement === input) || undefined,
@@ -785,6 +800,13 @@ function readQuiet(): { route: string; ids: string[]; key: string; loading: stri
 		key: `${location.hash}|${keyParts.join(",")}`,
 		loading: ids.filter((id) => /pending|loading|spinner|progress/.test(id)),
 	}
+}
+
+/** Whether the page's text or any field's value holds a URL. */
+function showsUrl(): boolean {
+	const url = /\b[a-z][a-z0-9+.-]*:\/\/\S/i
+	if (url.test(document.body?.innerText ?? "")) return true
+	return [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")].some((f) => url.test(f.value))
 }
 
 /** Marks the `nth` visible match of `selector` with `data-chaos-pick`; returns how many are visible. */

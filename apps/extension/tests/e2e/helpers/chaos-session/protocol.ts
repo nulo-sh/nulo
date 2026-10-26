@@ -35,6 +35,9 @@ export const sessionRoot = (home: string = homedir()): string => join(home, ".ca
  *  reads the build. */
 export const extCopyOf = (root: string, id: string): string => join(root, ".ext", id)
 
+/** The runner's output sits outside it too: the browser writes page errors there unmasked. */
+export const logOf = (root: string, id: string): string => join(root, ".log", `${id}.log`)
+
 export const SESSION_FILE = "session.json"
 export const READY_FILE = "ready.json"
 export const ENDED_FILE = "ended.json"
@@ -42,7 +45,6 @@ export const STOPPED_FILE = "stopped.json"
 export const ACTIONS_FILE = "actions.jsonl"
 export const FINDINGS_FILE = "findings.jsonl"
 export const SUMMARY_FILE = "summary.json"
-export const LOG_FILE = "session.log"
 export const QUEUE_DIR = "q"
 /** The directories the session writes into, each made by the session at start. */
 export const OUTPUT_DIRS = ["screenshots", "downloads", "files"] as const

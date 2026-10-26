@@ -227,6 +227,40 @@ NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1001 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--d
 
 Run it from the repository root. The runner rebuilds `dist/<browser>` proverless, so rebuild the smoke dist before the next smoke chaos run.
 
+### Agent sessions
+
+`scripts/e2e/chaos-session.ts` gives an agent, or a person, one isolated and instrumented wallet to drive by testid. `start` copies the armed smoke dist (`dist/<browser>`), spawns `chaos-session.test.ts` on it in its own process group and prints the session's directory once the wallet serves; `cmd` sends one command and prints its result; `stop` ends the session. From the repository root:
+
+```bash
+D=$(bun apps/extension/scripts/e2e/chaos-session.ts start --browser firefox --charter CH3 --minutes 30 [--seed <n>])
+bun apps/extension/scripts/e2e/chaos-session.ts cmd "$D" snapshot
+bun apps/extension/scripts/e2e/chaos-session.ts cmd "$D" fill auth-password-input 'Some-Password-1'
+bun apps/extension/scripts/e2e/chaos-session.ts stop "$D"
+bun apps/extension/scripts/e2e/chaos-session.ts replay "$D"
+bun apps/extension/scripts/e2e/chaos-session.ts seeded --browser chrome --seed 7 [--runs 3]
+```
+
+**The directory** is `~/.cache/nulo-chaos/<charter>-<time>-<8 hex>/`, mode 0700: `session.json` (browser, seed, deadline, commit), `q/` (the queue), `actions.jsonl` (every served command as resolved, with its status), `findings.jsonl`, `screenshots/`, `downloads/`, `files/` (each file `pick-file` handed the wallet), `summary.json` (the end state), `ended.json`, `exit.code` and `stopped.json`. Two things sit outside it, so whoever may read the directory reads neither: the dist copy, in `~/.cache/nulo-chaos/.ext/<id>/`, which `stop` deletes once nothing of the session runs, and the runner's output, `~/.cache/nulo-chaos/.log/<id>.log`, where the browser writes page errors unmasked. Nothing the session hands back carries a URL: `snapshot` masks every one in a text or a value, and `screenshot` refuses a page that shows one.
+
+**The queue.** `cmd` publishes `q/<n>.cmd.json` as the next free number with an exclusive link, and the session serves the numbers in order, one at a time, writing `q/<n>.taken`, then `q/<n>.res.json` by rename. A command is refused before it is queued when it carries an unknown field, a testid, page, key or route outside its pattern, a deadline outside its verb's range, or a file path that is absolute or leaves the directory; the session refuses a command file that is a link. `cmd` exits 0 when the command was served, 2 when it was refused, 1 otherwise. Every verb has a deadline (`--deadline <ms>`, from 250 ms to its default); a command past it, or a command whose checks pass their 120 s bound, **ends the session**: nothing more is served, the late work gets up to three minutes to stop, then the launch closes.
+
+| Verb | What it does |
+|---|---|
+| `snapshot` | the page's route, its open pages, and every visible testid with its index, own text, input type and value (a password field's length only), disabled, checked and focused state |
+| `click <testid>`, `fill <testid> <value>`, `press <key>` | by the `--nth` visible match, else the last; `--now` returns before the page settles, to drive a race |
+| `open popup\|onboarding [route]`, `close` | a new page and the route the wallet shows once it loads (the popup starts behind its lock and sends an open session Home); `close` on Chrome refuses the anchor, `p0`, which holds every passkey |
+| `screenshot`, `downloads`, `pick-file <testid> <file>` | the three file verbs read and write inside the directory only; `pick-file` takes `--truncate <n>` and `--flip <byte>` |
+| `passkey refuse\|no-prf\|other <profile>\|hold\|release` | a fault on the prompts the next driving command starts on that page, lifted once it settles; a hold keeps the next assertion until `release`, which brings its page to the front first |
+| `bg-restart` | stops the background and waits for its successor |
+| `do <action> [params]` | a catalog action (`helpers/profile-chaos/model.ts`), only before the first command that drives the wallet directly, so the model knows where it starts; params left out are drawn from the session's seed, and the secrets it types come back in the result |
+| `oracle`, `report <text>`, `end` | the checks' findings now; an agent's own finding into `findings.jsonl`; the end of serving |
+
+A command acts on the anchor, `p0`, unless `--page pN` names another page; a page the wallet opens gets the next id. **After every command that drives the wallet** the session waits until every page's route, visible testids and disabled controls hold still for 800 ms with no loading mark showing (bound 30 s, O5), then runs the checks that need no model: O1's relation between the stored row, the active session and the pages, O2's field sets, O4 over the pages' errors and the drained logs, and O7 over storage, logs, downloads and `do` files. The needles are the values filled into password and phrase fields and the secrets `do` typed. Each finding is a line in `findings.jsonl`: a `violation` (with `known` naming its issue when filed), an `incomplete` check, or an `agent` report. A finding never fails the test: the runner exits 0 on any orderly end.
+
+**Isolation.** A session owns its directory, its dist copy, its process group and its browser, and every launch is behind the egress guard. `stop` asks the session to end, waits up to five minutes for the runner, then signals by pid or process group only what is the session's: every process whose environment names the directory (the runner, Firefox and its driver), and every Chrome whose command line loads the session's own dist copy. `stopped.json` records whether the end was graceful, the runner's exit code and anything left. Sessions run side by side from one worktree.
+
+**Replay.** `replay <dir>` starts a session with the same browser and seed, sends every served command again (a fill whose value was read from a snapshot takes the replay's own, and a picked download or copy the replay's own of the same number), stops it, and compares the two: each command, its status and each snapshot's route and stable testids; the pages, profiles and session at the end; the unfiled findings and incomplete checks with ids masked; the commit; and the runner's exit. It writes `<replay dir>/replay.json` and exits 0 when they match. `seeded` runs `profile-chaos.test.ts` in the same isolation and prints its verdict lines.
+
 ## Running multiple agents in parallel
 
 Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
