@@ -761,6 +761,23 @@ describe("O4, errors", () => {
 		expect(checkErrors([discovery("PXE_STORE_KEY_MISSING: no store key provisioned for profile x")], []).violations[0]?.known).toBe(
 			1135,
 		)
+		const deleted = discovery("pxe op rejected: profile x has no current incarnation (deleted or tombstoned)")
+		expect(checkErrors([deleted], []).violations[0]?.known).toBe(1135)
+		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
+		const pxe = [
+			read(
+				'["[READ] getSyncedBlockHeader failed after 4ms",{"error":{"name":"Error","message":"Trying to get block header with a not-yet-synchronized PXE - this should never happen"}}]',
+			),
+			read(
+				'["[READ] getRegisteredAccounts failed after 207ms",{"error":{"name":"Error","message":"getRegisteredAccounts: chain was purged mid-operation — refusing to re-create its runtime/store"}}]',
+			),
+		]
+		expect(checkErrors(pxe, []).violations.map((v) => v.known)).toEqual([1136, 1136])
+		const otherRead = checkErrors(
+			[read('["[READ] getSyncedBlockHeader failed after 4ms",{"error":{"message":"boom"}}]')],
+			[],
+		).violations
+		expect(shown("O4 a PXE read failure that is not an expected refusal", otherRead)[0]?.known).toBeUndefined()
 		const unreachable = checkErrors([discovery("Error 400 from server")], []).violations
 		expect(shown("O4 a discovery failure that is not the lock's", unreachable)[0]?.known).toBeUndefined()
 	})

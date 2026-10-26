@@ -74,6 +74,13 @@ Product findings:
 
 - #1133 (new, S4): a lock during a held passkey unlock leaves the bootstrap's `Wallet locked` refusal unhandled, logged at error. 3 of 3 on Firefox with a three-step list, 0 of 2 on Chrome. A temporary diagnostic build, reverted and rebuilt before any further run, named the refused call, `getOrInitNetworks`; the cause stated in the issue (`runActivation` awaits `getProfiles()` before it attaches to the core's promise) is inferred from the code.
 - #1131 widened by a comment: the same gas-balance retry logs `Wallet locked` and `PXE_STORE_KEY_MISSING` when a lock, not a delete, ends the session inside its window (Firefox seed 2, `verifyAll`).
-- Unreproduced, filed nowhere: `Failed to discover FPC … PxeStoreKeyMissingError` at seed 2's `verifyAll` (0 of 3 replays of its prefix); `Profile locked` unhandled in a second window that a lock met (seed 2 step 22; 0 of 3 with a two-step list, and the one prefix replay that reached step 22 passed it).
+- #1135 (new, S4): protocol FPC discovery that a lock interrupts logs `Failed to discover FPC … PXE_STORE_KEY_MISSING` at error, once per FPC. No replay met it (0 of 3 replays of seed 2's prefix, 0 of 7 `verifyAll` steps in one list that repeats it), but five Firefox seeds did (2, 1005, 1008, 1010 and 1018), always at `verifyAll`, which locks each profile it opened: the window is one registration long. Filed on that recurrence, with the replay counts in the issue.
+- #1133 widened by a comment: a second window that locks while its own bootstrap runs leaves the same refusal unhandled, as `Wallet locked` (3 of 8 locks in one repeated list) or `Profile locked` (seeds 2 and 1003; 0 of 3 replays of 1003's prefix). Both texts come from the one bootstrap core, whichever call the lock meets first; the `Profile locked` call is inferred from the code (D37).
 
 Facts checked on Firefox: one run minted four passkeys with no refusal (D27's unbounded slots); I2 holds (a hold on a second page acknowledged after 100 ms with no session open); I4 holds (`verifyAll`'s attempts with another profile's credential refused, every Firefox seed).
+
+## C1.3 network spec and baseline (2026-10-26)
+
+- The model test imported `bindProfile` from `state.ts`, which type-imports the browser fixtures, so `tsconfig.scripts.json` compiled the whole e2e graph without its `ProvidedContext` augmentation and `typecheck:all` failed with 18 errors in files the change never touched. `bindProfile` now takes the pure `Bindings` and lives in `checkers.ts`; keep every import of `scripts/e2e/profile-chaos-model.test.ts` on the pure modules (`model`, `checkers`).
+- `bun run e2e:agent` exists only at the repository root (`package.json`); from `apps/extension` it is "Script not found".
+

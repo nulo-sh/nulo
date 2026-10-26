@@ -316,13 +316,21 @@ export interface WriteContext {
 	deletedIds: ReadonlySet<string>
 }
 
-function changedEntries(before: readonly StoredEntry[], after: readonly StoredEntry[]): { key: string; entry: StoredEntry }[] {
+type Change = "added" | "changed" | "removed"
+
+function changedEntries(
+	before: readonly StoredEntry[],
+	after: readonly StoredEntry[],
+): { key: string; entry: StoredEntry; change: Change }[] {
 	const old = new Map(before.map((e) => [e.key, e]))
 	const now = new Map(after.map((e) => [e.key, e]))
 	const keys = new Set([...old.keys(), ...now.keys()])
 	return [...keys]
 		.filter((k) => old.get(k)?.digest !== now.get(k)?.digest)
-		.map((key) => ({ key, entry: (now.get(key) ?? old.get(key)) as StoredEntry }))
+		.map((key) => {
+			const change: Change = !old.has(key) ? "added" : now.has(key) ? "changed" : "removed"
+			return { key, entry: (now.get(key) ?? old.get(key)) as StoredEntry, change }
+		})
 }
 
 function allowedOwner(contract: readonly WriteScope[], b: Bindings, owner: string): boolean {
@@ -375,7 +383,10 @@ function checkLifecycle(ctx: WriteContext): Violation[] {
 }
 
 export function checkWrites(ctx: WriteContext): Violation[] {
-	const changes = changedEntries(ctx.before, ctx.after).flatMap(({ key, entry }) => checkChange(key, entry, ctx) ?? [])
+	const changes = changedEntries(ctx.before, ctx.after).flatMap(({ key, entry, change }) => {
+		const v = checkChange(key, entry, ctx)
+		return v ? [{ ...v, detail: change }] : []
+	})
 	return [...changes, ...checkLifecycle(ctx)]
 }
 
@@ -442,7 +453,19 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 			/^(?:\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]|Error: (?:Wallet|Profile) locked)$/,
 		kinds: ["log", "page-error"],
 	},
-	{ issue: 1135, pattern: /^\["Failed to discover FPC 0x[0-9a-f]{64}",.*PXE_STORE_KEY_MISSING/, kinds: ["log"], source: "fpc" },
+	{
+		issue: 1135,
+		pattern: /^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation)/,
+		kinds: ["log"],
+		source: "fpc",
+	},
+	{
+		issue: 1136,
+		pattern:
+			/^\["\[READ\] (?:getSyncedBlockHeader failed after \d+ms",.*not-yet-synchronized PXE|\w+ failed after \d+ms",.*chain was purged mid-operation)/,
+		kinds: ["log"],
+		source: "pxe",
+	},
 ]
 
 const isInstance = (k: KnownFinding, e: ErrorEntry): boolean =>
