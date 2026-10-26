@@ -123,7 +123,12 @@ export async function isLocked(page: Page): Promise<boolean> {
  *  the lock screen from wherever a locked page stands, Import or Register included. */
 export async function toLockScreen(page: Page): Promise<void> {
 	if (await isLocked(page)) {
-		await navigateByHash(page, "#/popup/auth", 15_000)
+		await navigateByHash(page, "#/popup/auth", 15_000).catch(async (error) => {
+			// The router keeps a page that believes a session is open off the lock screen.
+			if ((await isLocked(page)) && page.url().includes("#/popup/general"))
+				throw new Error("the popup holds Home while the worker holds no session")
+			throw error
+		})
 		return
 	}
 	await navigateByHash(page, "#/popup/general", 15_000)

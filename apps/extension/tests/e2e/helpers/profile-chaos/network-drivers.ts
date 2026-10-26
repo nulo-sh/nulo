@@ -4,7 +4,7 @@
  * meets. They need the playground and a proverless build's restore gate.
  */
 import type { Page } from "puppeteer"
-import { prepareClick } from "../../fixtures/browser"
+import { backgroundOrigin, prepareClick } from "../../fixtures/browser"
 import { clickByTestId } from "../../fixtures/dom"
 import { switchToLocalNetwork } from "../../fixtures/networks"
 import { holdNextGet } from "../../fixtures/passkey"
@@ -28,11 +28,8 @@ const UNLOCK_MS = 60_000
 const HELD_MS = 60_000
 const COMPETE_MS = 2_000
 const RESTORE_MS = 300_000
-const QUIET_MS = 5_000
-/** A finished restore still activates its profile before Home, or shows its errors screen, so
- *  `finished` alone does not end it. */
-const ENDED_STAGES = ["failed", "rolled-back", "rollback-failed"]
 const DRAINED_QUEUED = /^\["Processing queued discovery: request /
+const RESTORE_ENDED = /^\["\[full-backup\] restore run ended",/
 
 interface Ask {
 	dapp: Page
@@ -160,62 +157,54 @@ async function compete(
 	return { done: call }
 }
 
-/** Waits for the import page's restore to end: a failed or rolled-back stage, its errors screen, or
- *  the page leaving the import route. */
-async function restoreSettled(page: Page): Promise<{ reached: boolean; elapsedMs: number }> {
-	const t0 = Date.now()
-	const reached = await page
-		.waitForFunction(
-			(ended: string[]) => {
-				const stage = document.querySelector("[data-restore-stage]")?.getAttribute("data-restore-stage") ?? ""
-				const errors = !!document.querySelector('[data-testid="import-full-backup-continue-btn"]')
-				return ended.includes(stage) || errors || !location.hash.startsWith("#/popup/import")
-			},
-			{ timeout: RESTORE_MS, polling: 250 },
-			ENDED_STAGES,
-		)
-		.then(
-			() => true,
-			() => false,
-		)
-	return { reached, elapsedMs: Date.now() - t0 }
+/** The newest log id the background holds now: lines after it belong to what follows. */
+async function logCursor(s: RunState): Promise<number> {
+	return (await drainLogs(s.anchor, s.logs.lastId)).at(-1)?.id ?? s.logs.lastId
 }
 
-/** Waits until the listed profiles and the open session hold still for `QUIET_MS`: a restore's last
- *  stages run on after its page leaves the import route, so a lock any earlier would race them. */
-async function restoreQuiet(page: Page): Promise<void> {
-	const read = async () => {
-		const active = await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile")
-		const listed = await callService<{ id: string }[]>(page, "profile", "getProfiles")
-		return JSON.stringify([active?.id ?? null, listed.map((p) => p.id).sort()])
-	}
-	let last = await read()
-	let since = Date.now()
-	const deadline = Date.now() + RESTORE_MS
-	while (Date.now() - since < QUIET_MS) {
-		if (Date.now() > deadline) throw new Error("the profiles or the session kept changing after the restore")
-		await new Promise((resolve) => setTimeout(resolve, 500))
-		const now = await read()
-		if (now !== last) [last, since] = [now, Date.now()]
-	}
+/** Waits for the import run's own end line after `from`. The run outlives its page once a lock
+ *  routes the page away, so no page state proves it ended; one that never ends fails the step
+ *  before the cleanup lock could hide it. */
+async function restoreEnded(s: RunState, from: number): Promise<{ reached: boolean; elapsedMs: number }> {
+	const t0 = Date.now()
+	await pollUntil(
+		() => drainLogs(s.anchor, from),
+		(lines) => lines.some((l) => l.source === "ui" && RESTORE_ENDED.test(l.text)),
+		{ label: "the restore run's end", timeoutMs: RESTORE_MS, intervalMs: 500 },
+	)
+	return { reached: true, elapsedMs: Date.now() - t0 }
+}
+
+/** The cleanup lock ends any session, so the one the restore left is judged first: only the
+ *  restored profile, while it is listed, may hold it. */
+async function assertRestoredSession(page: Page, restoredId: string | undefined): Promise<void> {
+	const active = await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile")
+	if (!active) return
+	const listed = await callService<{ id: string }[]>(page, "profile", "getProfiles")
+	if (active.id !== restoredId || !listed.some((x) => x.id === active.id))
+		throw new Error("the restore left a session open on a profile it did not keep")
 }
 
 async function runHeld(s: RunState, p: ParamsMap["restoreHeld"], step: PlannedStep, before: World): Promise<Driven> {
 	const page = s.anchor
 	const deleted = new Set(before.profiles.filter((x) => x.deleted).map((x) => x.ref))
+	const origin = await backgroundOrigin(s.ctx)
+	let from = await logCursor(s)
 	await clickByTestId(page, "import-full-backup-submit-btn")
 	await waitForRestoreGateHeld(page, p.stage, HELD_MS)
 	await assertHeld(page, p.stage, "before")
 	const competing = await compete(s, p, step.expect.next, deleted)
 	await assertHeld(page, p.stage, "after")
+	// A successor background numbers its lines afresh.
+	if ((await backgroundOrigin(s.ctx)) !== origin) from = 0
 	await clearRestoreGate(page)
 	// The competing step's own refusal fails the step: the cleanup lock below would hide it.
 	await competing.done
-	const settled = await restoreSettled(page)
+	const settled = await restoreEnded(s, from)
 	await continuePastErrors(page)
-	await restoreQuiet(page)
 	const kept = s.bindings.profiles.has(p.ref) ? undefined : await unboundProfileId(s, deleted)
 	if (kept) bindProfile(s.bindings, p.ref, kept, deleted)
+	await assertRestoredSession(page, s.bindings.profiles.get(p.ref))
 	await toLockScreen(page)
 	const id = s.bindings.profiles.get(p.ref)
 	const listed = await callService<{ id: string }[]>(page, "profile", "getProfiles")

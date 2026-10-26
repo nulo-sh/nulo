@@ -679,6 +679,8 @@ async function runRestoreBackup(
 	} finally {
 		profileService.disconnect()
 		networkService.disconnect()
+		// A lock routes the page away while the run goes on, so nothing on screen marks where it ended.
+		console.debug("[full-backup] restore run ended", { stage: state.restoreStage.value, status: state.restoreStatus.value })
 	}
 }
 

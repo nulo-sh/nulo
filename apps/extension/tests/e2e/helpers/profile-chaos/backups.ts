@@ -110,13 +110,14 @@ async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["
 }
 
 /** Presses an errors screen's Continue, as a person keeping the restored profile would, and waits
- *  for Home; false when the page shows none. */
+ *  for Home, or for the lock screen a profile with no session lands on; false when the page shows
+ *  none. The session oracle judges which. */
 export async function continuePastErrors(page: Page): Promise<boolean> {
 	const shown = await page.evaluate(() => !!document.querySelector('[data-testid="import-full-backup-continue-btn"]'))
 	if (!shown) return false
 	await clickByTestId(page, "import-full-backup-continue-btn")
-	const home = await settle(page, [HOME], { home: "committed" }, RESTORE_MS)
-	if (!home.settle.reached) throw new Error("the errors screen's Continue never reached Home")
+	const landed = await settle(page, [HOME, { label: "lock", hash: "/popup/auth" }], { home: "committed", lock: "committed" }, RESTORE_MS)
+	if (!landed.settle.reached) throw new Error("the errors screen's Continue never left the import page")
 	return true
 }
 

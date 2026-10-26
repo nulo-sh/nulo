@@ -12,6 +12,7 @@ import { answerWithCredential, holdNextGet, withholdGetPrf } from "../../fixture
 import { confirmProfileReset } from "../../fixtures/profiles"
 import { lockFromAnotherWindow } from "../../fixtures/session"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
+import { waitForPopupClosed } from "../../fixtures/popups"
 import { openPopup, waitForServiceReady } from "../../fixtures/wallet-pages"
 import { setInputs } from "../import-drivers"
 import { exportAccount, importAccountFile } from "./accounts-io"
@@ -458,7 +459,9 @@ const abandonCeremony: Drivers["abandonCeremony"] = async (s) => {
 		await other.close().catch(() => {})
 	}
 	// Closing the page is the abandon itself: one that survived still holds the request.
-	if (!other.isClosed()) throw new Error("the page holding the passkey request did not close")
+	await waitForPopupClosed(other).catch(() => {
+		throw new Error("the page holding the passkey request did not close")
+	})
 	await openRoute(s.anchor, "#/popup/auth")
 	return settle(s.anchor, [{ label: "cancelled", testid: "auth-submit", hash: "/popup/auth" }], { cancelled: "cancelled" }, EDIT_MS)
 }
