@@ -910,7 +910,9 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			const missed = Symbol("runtime-miss")
 			const chainKey = this.chainKey(network.profileId, network.chainId)
 			const purgeEpochAtEntry = this.lifecycle.current(chainKey)
-			// The runtime whose store read as corrupt under READ: purged under WRITE below, once per op.
+			// One store purge per op, whether the corruption meets the read or the reopen; the runtime
+			// whose store read as corrupt under READ is purged under WRITE below.
+			const recovery = { spent: false }
 			let corrupt: ChainRuntime | undefined
 			for (let attempt = 0; attempt < PxeService.MAX_RUNTIME_BIND_ATTEMPTS; attempt++) {
 				let used: ChainRuntime | undefined
@@ -926,7 +928,8 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 						})
 					})
 				} catch (err) {
-					if (corrupt || !(err instanceof SqliteCorruptionError)) throw err
+					if (recovery.spent || !isStoreCorruption(err)) throw err
+					recovery.spent = true
 					corrupt = used
 					result = missed
 				}
@@ -948,7 +951,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 						if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
 							await this.purgeCorruptStore(network)
 						}
-						await this.reopeningCorruptStore(network, () =>
+						await this.reopeningCorruptStore(network, recovery, () =>
 							this.registry.ensure(network, this.storeKeys.get(network.profileId)),
 						)
 					})
@@ -999,7 +1002,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					// NOT resurrect the purged chain by re-creating its runtime + a fresh OPFS store
 					// (the read path fenced this but the write path called ensure directly). Same epoch check as withPxeRead — now the shared fence.
 					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-					return this.reopeningCorruptStore(network, async () => {
+					return this.reopeningCorruptStore(network, { spent: false }, async () => {
 						// Already under the chain WRITE guard — `ensure` may rebind here.
 						const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
 						this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
@@ -1017,14 +1020,15 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 
 	/**
 	 * Runs `op` under the chain WRITE guard; a store that reads as corrupt is purged and `op` runs once
-	 * more on a fresh one. No key recovers a corrupt image (`SqliteCorruptionError`), so the only exit
-	 * is a fresh store, which the PXE syncs again from the node; a second corruption is rethrown.
+	 * more on a fresh one, unless the op's one purge is `spent`. No key recovers a corrupt image, so
+	 * the only exit is a fresh store, which the PXE syncs again from the node.
 	 */
-	private async reopeningCorruptStore<T>(network: NetworkInfo, op: () => Promise<T>): Promise<T> {
+	private async reopeningCorruptStore<T>(network: NetworkInfo, recovery: { spent: boolean }, op: () => Promise<T>): Promise<T> {
 		try {
 			return await op()
 		} catch (err) {
-			if (!(err instanceof SqliteCorruptionError)) throw err
+			if (recovery.spent || !isStoreCorruption(err)) throw err
+			recovery.spent = true
 			await this.purgeCorruptStore(network)
 			return op()
 		}
@@ -1037,4 +1041,13 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		await removeChainStoreDir({ profileId, chainId })
 		this.logWarn("PXE chain store read as corrupt: purged for a fresh sync", { chainId })
 	}
+}
+
+/** Whether `err` is, or carries through `cause` or `AggregateError.errors`, a store that reads as
+ *  corrupt: the PXE re-wraps store errors (a simulation's root cause, its init's concurrent writes). */
+function isStoreCorruption(err: unknown, depth = 0): boolean {
+	if (err instanceof SqliteCorruptionError) return true
+	if (!(err instanceof Error) || depth > 8) return false
+	if (err instanceof AggregateError && err.errors.some((inner) => isStoreCorruption(inner, depth + 1))) return true
+	return isStoreCorruption(err.cause, depth + 1)
 }

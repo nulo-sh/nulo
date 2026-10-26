@@ -34,48 +34,53 @@ const siblings: NetworkInfo[] = [
 const address = "0x000000000000000000000000000000000000000000000000000000000000ab12" as unknown as AztecAddress
 const PURGED = "PXE chain store read as corrupt: purged for a fresh sync"
 
-type Image = { state: "sound" | "corrupt" | "broken"; reads: number; gate?: Promise<void> }
+const corruption = () => new SqliteCorruptionError("SQLITE_CORRUPT: sqlite3 result code 11: database disk image is malformed")
+/** How the PXE hands a store's error on: bare, from its init's concurrent writes, or as a
+ *  simulation's root cause. */
+const ERRORS = {
+	corrupt: corruption,
+	aggregate: () => new AggregateError([corruption(), corruption()], "2 of 3 concurrent operations failed"),
+	wrapped: () => new Error("Simulation error", { cause: new Error("oracle failed", { cause: corruption() }) }),
+	other: () => new Error("node unreachable"),
+}
 
-/** One image per store dir; a store opened over a corrupt image fails where `breaks` says. Unlinking
- *  a dir drops its image, so the next open creates a sound one, unless `sticky` keeps it corrupt. */
-function fakeDisk(breaks: "open" | "read", sticky = false) {
+type Fault = { at: "open" | "read"; error: keyof typeof ERRORS }
+type Image = { fault?: Fault; reads: number; gate?: Promise<void> }
+
+/** One image per store dir, failing as its fault says. Unlinking a dir drops its image; the next
+ *  open creates one with the next of `fresh`'s faults, or a sound one. */
+function fakeDisk(...fresh: Fault[]) {
 	const images = new Map<string, Image>()
 	const events: string[] = []
 	removeChainStoreDir.mockImplementation(async (coords) => {
 		events.push(`unlink ${chainDataDir(coords)}`)
-		if (!sticky) images.delete(chainDataDir(coords))
+		images.delete(chainDataDir(coords))
 	})
+	const imageOf = (n: NetworkInfo): Image => {
+		const image = images.get(chainDataDir(n)) ?? { fault: fresh.shift(), reads: 0 }
+		images.set(chainDataDir(n), image)
+		return image
+	}
+	const fail = (image: Image, at: Fault["at"]) => {
+		if (image.fault?.at === at) throw ERRORS[image.fault.error]()
+	}
 	const factory: PxeFactory = {
 		createChainRuntime: async (n) => {
 			const dir = chainDataDir(n)
-			const image = images.get(dir) ?? { state: "sound", reads: 0 }
-			images.set(dir, image)
+			const image = imageOf(n)
 			events.push(`open ${dir}`)
-			if (image.state === "corrupt" && breaks === "open") throw corruption()
+			fail(image, "open")
 			const read = async () => {
 				image.reads++
 				await image.gate
-				if (image.state === "corrupt") throw corruption()
-				if (image.state === "broken") throw new Error("node unreachable")
+				fail(image, "read")
 			}
-			const pxe = {
-				getContractInstance: async () => read(),
-				registerTaggingSecretSource: async () => read(),
-			} as unknown as PXE
+			const pxe = { getContractInstance: read, registerTaggingSecretSource: read } as unknown as PXE
 			const store = { close: async () => void events.push(`close ${dir}`) } as unknown as AztecSQLiteOPFSStore
 			return new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl, store)
 		},
 	}
-	const imageOf = (n: NetworkInfo): Image => {
-		const image = images.get(chainDataDir(n)) ?? { state: "sound", reads: 0 }
-		images.set(chainDataDir(n), image)
-		return image
-	}
 	return { factory, events, imageOf }
-}
-
-function corruption(): SqliteCorruptionError {
-	return new SqliteCorruptionError("SQLITE_CORRUPT: sqlite3 result code 11: database disk image is malformed")
 }
 
 function loggedService(factory: PxeFactory) {
@@ -92,6 +97,7 @@ const OPS = {
 	read: (service: PxeService) => service.getContractInstance(network, address, { pxeOnly: true }),
 	write: (service: PxeService) => service.registerSender(network, address),
 }
+const dir = chainDataDir(network)
 
 beforeEach(() => {
 	removeChainStoreDir.mockReset()
@@ -103,21 +109,22 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe("a PXE chain store that reads as corrupt is purged and reopened", () => {
 	test.each([
-		{ breaks: "open", op: "read" },
-		{ breaks: "open", op: "write" },
-		{ breaks: "read", op: "read" },
-		{ breaks: "read", op: "write" },
-	] as const)("corrupt at $breaks, met by a $op: one store purged, reopened, the op served", async ({ breaks, op }) => {
-		const disk = fakeDisk(breaks)
+		{ at: "open", error: "corrupt", op: "read" },
+		{ at: "open", error: "corrupt", op: "write" },
+		{ at: "read", error: "corrupt", op: "read" },
+		{ at: "read", error: "corrupt", op: "write" },
+		{ at: "open", error: "aggregate", op: "read" },
+		{ at: "read", error: "wrapped", op: "write" },
+	] as const)("$error at $at, met by a $op: one store purged, reopened, the op served", async ({ at, error, op }) => {
+		const disk = fakeDisk()
 		const { service, warnings, errors } = loggedService(disk.factory)
 		for (const sibling of siblings) await service.getContractInstance(sibling, address, { pxeOnly: true })
-		disk.imageOf(network).state = "corrupt"
+		disk.imageOf(network).fault = { at, error }
 		disk.events.length = 0
 
 		await OPS[op](service)
 
-		const dir = chainDataDir(network)
-		const closed = breaks === "read" ? [`close ${dir}`] : []
+		const closed = at === "read" ? [`close ${dir}`] : []
 		expect(disk.events).toEqual([`open ${dir}`, ...closed, `unlink ${dir}`, `open ${dir}`])
 		expect(warnings()).toEqual([[PURGED, { chainId: network.chainId }]])
 		expect(errors()).toEqual([])
@@ -129,7 +136,7 @@ describe("a PXE chain store that reads as corrupt is purged and reopened", () =>
 	})
 
 	test("two reads that meet the same corrupt store purge it once; the second is served by the fresh one", async () => {
-		const disk = fakeDisk("read")
+		const disk = fakeDisk()
 		const { service, warnings } = loggedService(disk.factory)
 		await OPS.read(service)
 		const image = disk.imageOf(network)
@@ -137,7 +144,7 @@ describe("a PXE chain store that reads as corrupt is purged and reopened", () =>
 		image.gate = new Promise((resolve) => {
 			release = resolve
 		})
-		image.state = "corrupt"
+		image.fault = { at: "read", error: "corrupt" }
 		disk.events.length = 0
 
 		const reads = [OPS.read(service), OPS.read(service)]
@@ -145,33 +152,37 @@ describe("a PXE chain store that reads as corrupt is purged and reopened", () =>
 		release()
 
 		await expect(Promise.all(reads)).resolves.toHaveLength(2)
-		const dir = chainDataDir(network)
 		expect(disk.events).toEqual([`close ${dir}`, `unlink ${dir}`, `open ${dir}`])
 		expect(warnings()).toHaveLength(1)
 	})
 
-	test("a store still corrupt after its purge fails the op instead of purging again", async () => {
-		const disk = fakeDisk("open", true)
-		const { service, warnings, errors } = loggedService(disk.factory)
-		disk.imageOf(network).state = "corrupt"
+	test.each([
+		{ first: "open", second: "open", op: "read" },
+		{ first: "open", second: "read", op: "read" },
+		{ first: "read", second: "open", op: "read" },
+		{ first: "read", second: "read", op: "write" },
+	] as const)(
+		"a store corrupt at $first, then at $second after its purge, fails the $op with one purge",
+		async ({ first, second, op }) => {
+			const disk = fakeDisk({ at: first, error: "corrupt" }, { at: second, error: "corrupt" })
+			const { service, warnings, errors } = loggedService(disk.factory)
 
-		await expect(OPS.read(service)).rejects.toBeInstanceOf(SqliteCorruptionError)
+			await expect(OPS[op](service)).rejects.toBeInstanceOf(SqliteCorruptionError)
 
-		const dir = chainDataDir(network)
-		expect(disk.events).toEqual([`open ${dir}`, `unlink ${dir}`, `open ${dir}`])
-		expect(warnings()).toHaveLength(1)
-		expect(errors()).toHaveLength(1)
-	})
+			expect(disk.events.filter((e) => e.startsWith("unlink"))).toEqual([`unlink ${dir}`])
+			expect(warnings()).toHaveLength(1)
+			expect(errors()).toHaveLength(1)
+		},
+	)
 
 	test("any other store failure still rethrows and purges nothing", async () => {
-		const disk = fakeDisk("read")
+		const disk = fakeDisk({ at: "read", error: "other" })
 		const { service, warnings, errors } = loggedService(disk.factory)
-		disk.imageOf(network).state = "broken"
 
 		await expect(OPS.read(service)).rejects.toThrow("node unreachable")
 		await expect(OPS.write(service)).rejects.toThrow("node unreachable")
 
-		expect(disk.events).toEqual([`open ${chainDataDir(network)}`])
+		expect(disk.events).toEqual([`open ${dir}`])
 		expect(removeChainStoreDir).not.toHaveBeenCalled()
 		expect(warnings()).toEqual([])
 		expect(errors()).toHaveLength(2)
