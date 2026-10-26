@@ -115,6 +115,8 @@ After this change a passkey no longer brings a wallet back by itself. A2 removes
 
 **Revised, 2026-10-26 (owner, chat):** the passkey is named by its profile; the reuse link stays.
 
+**Revised, 2026-10-26 (owner, chat):** "Approve all four": privacy § 5.4's label clause, "…and the credential label, "Nulo wallet · " followed by the profile name you typed."; the listing's label row, "Passkey label ("Nulo wallet · \<profile name\>")"; its contacts and profile-names row, profile names leave the wallet "only when the user exports contacts, a backup file or an account file, whose file name carries the profile name, and, for a passkey profile, in its passkey label (the row above)"; its Firefox declaration, "contacts stay local; a passkey profile's name is part of its passkey label (§ 5.4)", with the label example "Nulo wallet · \<profile name\>". Built in #1142, an in-place edit of the unreleased 1.2.6.
+
 **Today.** Each passkey profile creates its own passkey. Your password manager lists it as `nulo-{profile name}-{8-character id}`, for example `nulo-main-3f9a2c71`; the site shows as "Nulo". The name is synced to your password manager's cloud.
 
 - **A:** keep today's naming and one passkey per profile.

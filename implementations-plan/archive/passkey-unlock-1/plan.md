@@ -171,6 +171,7 @@ The owner, 2026-10-25:
 | D25 | (A4) Terms 1.2 and Privacy 1.2.6 take `«FILL: effective date»` until the promote publishes them, with their `BEFORE-LAUNCH.md` § 4 entry; `launch-legal` refuses a promote into `main` while one remains | a date now | privacy 1.2.2 to 1.2.5's precedent: `dev` publishes nothing, and a patch takes effect on publication |
 | D26 | (A4) Beyond the signed text, each the shortest sentence the live behaviour needs and each an owner ask (OWNER-ASKS.md § A4 asks): privacy § 9 drops "optional", § 3's session row says "the profile's session" (true once A3 lands OA-10 B); the README banner no longer names the passkey among what restores a profile; the history rows; the listing's citations. The listing's credential-id row stays as signed | rewording signed text | the signed text is the owner's; a gap is filled, a conflict is asked |
 | D27 | (2026-10-26, the owner's answers on #1152, OWNER-ASKS.md § A4 asks) A4-1: the listing's credential-id row takes the asked text and privacy § 5.4 lists the profile's random value, an in-place edit of 1.2.6; A4-6: the Chrome form's PII entry names the passkey's name, which carries the profile name (OA-5 revised). The sentences that name the label "Nulo wallet" or keep profile names local (§ 5.4; the listing's label and profile-name rows and its Firefox declaration) stay, true at this head, until the profile-named passkey lands and the owner words them | a privacy 1.2.7 with its own history row; rewording those sentences now | 1.2.6 has not reached the trunk, so revising it is drafting, as 1.2.2 to 1.2.5 were each bumped once merged (Codex: holds); those sentences are signed text the answers did not cover |
+| D28 | (2026-10-26, the owner in chat, OWNER-ASKS.md OA-5 revised) The four sentences D27 held take the owner's words verbatim: privacy § 5.4's label clause, the listing's label and profile-names rows, its Firefox declaration; still an in-place edit of 1.2.6; the listing escapes `\<profile name\>`, which CommonMark would otherwise read as an HTML tag | keeping "Nulo wallet" until the UX PR lands; a privacy 1.2.7 | the UX follow-up names each new passkey `Nulo wallet · ` and the profile name in both WebAuthn user fields, and #1142 lands after it; 1.2.6 has not reached the trunk (D27) |
 
 **Outline B** (both reviews saw it): lift the unlock into `unlock: {kind: "password"} | {kind: "passkey", credentialId, prfSalt}` on every row, migrate password rows into it, and ship the code in one arc plus a docs arc. Rejected in D3 and D13.
 
@@ -354,6 +355,10 @@ Gate: every file green on both browsers; the PR gives each suite's wall-clock be
   - Known limit: a restore's passkey card runs before the service checks the backup's entropy against its master, and a declined duplicate warning keeps its passkey (#1151).
   - Rejected: none.
 - **Codex, final round 2 (resumed):** approve, no new finding. The fixes held in both directions. Loop converged.
+- **Codex, the profile-named passkey's sentences (D28, against the UX follow-up's create call):** reject.
+  - Confirmed: both WebAuthn user fields carry `Nulo wallet · ` and the profile name, `user.id` stays random; a profile name leaves only in the export file names, the full backup's encrypted contents and the passkey label; no other sentence keeps the name local; the escaped placeholder renders.
+  - Held for the owner: "the profile name you typed" (§ 5.4) and the Chrome PII entry's "the user typed" also cover the trimmed name, the automatic default and a restored backup's name.
+  - Rejected: a 1.2.7 under `legal/README.md`'s every-change rule, settled by D27 and the owner's instruction, with no new evidence. No change; one round.
 
 ## Seeds (retired)
 
