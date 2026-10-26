@@ -46,7 +46,7 @@ destination the user chooses (the node) or installs (the local prover) is still 
 | Data | Where it lives | Leaves the device | Destination |
 |---|---|---|---|
 | Recovery entropy, master secret, signing keys | Extension local storage, encrypted | Only when the user exports a backup file, or an account file (one account's signing key) | The file the user saves (`downloads`) |
-| Passkey credential id and the random value it is used with | Extension local storage | No | — |
+| Passkey credential id and the random value it is used with | Extension local storage | Only to the browser and the user's authenticator, during a passkey prompt; never in a backup or an account file | The browser and the user's authenticator |
 | Passkey label ("Nulo wallet") | Handed to WebAuthn at creation, `wallet/utils/passkey-ceremony.ts:40-44` | Yes | The browser and the user's authenticator; the authenticator's provider may sync it (`legal/privacy.md` § 5.4) |
 | Account addresses | Extension local storage, encrypted | Yes | The configured Aztec node (queries name the address); approved applications; the files the user exports |
 | Balances, transactions, proofs | Extension local storage; private state in the browser's OPFS, encrypted | Yes | The configured Aztec node; approved applications for what the user confirms; a backup file the user exports (balances and transactions) |
