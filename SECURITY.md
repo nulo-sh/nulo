@@ -114,13 +114,11 @@ When a user unlocks a password profile under strict mode (the default):
    interaction shows the lock screen and the user re-authenticates (paying
    ~1s PBKDF2 again).
 
-This matches passkey profile behavior (which always requires fresh auth on
-SW death — see below): in strict mode both profile types behave the same way
-on SW death.
+Passkey profiles follow the same rules (see below).
 
 **Opt-out: lenient mode** — Settings → Lock → "Strict security mode" →
-toggle OFF (with a confirm dialog). A password-profile session opened from
-then on also persists a silent-restore bearer (`SessionSecretBox`,
+toggle OFF (with a confirm dialog). A session opened from then on, under
+either unlock, also persists a silent-restore bearer (`SessionSecretBox`,
 `packages/wallet-crypto/src/session-secret-box.ts`):
 
 1. The master secret and the profile's imported-keys key are wrapped together
@@ -143,7 +141,8 @@ browser keeps the bearer only for its session, but a copy taken during that
 time exposes both secrets for good: locking, expiry, turning strict mode on
 and changing the password do not rotate them. It reveals nothing about the
 password, because its token is random. The disable-confirm dialog warns that
-anyone who can read browser data can unlock the wallet without the password.
+anyone who can read browser data can unlock the wallet without the password
+or passkey.
 
 ### Threat model
 
@@ -165,9 +164,9 @@ anyone who can read browser data can unlock the wallet without the password.
   while a restarting worker is restoring the session. A bearer left behind
   stays readable until the session record is rewritten without it or deleted,
   or the browser exits, and `restore()` refuses it while strict mode is on.
-- **Toggle OFF mid-session**: no immediate effect. The next password-profile
-  session open writes the bearer: an unlock, a profile creation or import, or
-  a password change on the active profile.
+- **Toggle OFF mid-session**: no immediate effect. The next session open
+  writes the bearer: an unlock, a profile creation or import, or a change of
+  the active profile's password or unlock method.
 - **Stale bearer**: a session record left by a lenient session is untrusted by
   `restore()` while strict mode is ON — silentClose + lock screen on the next
   SW restart. A record left by the retired design (a non-empty `passhash`) is
@@ -182,15 +181,11 @@ anyone who can read browser data can unlock the wallet without the password.
 
 ## Session secret (passkey profiles)
 
-Passkey profiles **do not persist any session material**. When the service
-worker restarts, the user must re-perform WebAuthn PRF to open the master
-secret again. WebAuthn PRF requires a user gesture (passkey tap), which is
-impossible to satisfy silently — this is a hard API constraint, not a policy
-choice.
-
-**Passkey symmetry**: under strict-mode-ON (default), password profiles
-follow the same pattern. Under strict-mode-OFF the asymmetry returns and is
-documented above.
+A passkey profile's unlock opens its slots under the key its passkey rebuilds
+in place of the PBKDF2 key, and nothing derived from the passkey is persisted.
+Its session follows the rules above: under strict mode a worker restart asks
+for the passkey again; under lenient mode the bearer holds its master and
+imported-keys key.
 
 ## Content script injection
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.5 — effective 25 October 2026**
+**Version 1.2.6 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -63,8 +63,8 @@ described in § 5.
 
 | What | Where | Protection |
 |---|---|---|
-| Password-profile recovery entropy and master secret | Extension local storage | AES-GCM encryption under password-derived protection |
-| Passkey profile | Credential identifier and sealed supporting key material in extension local storage | Master secret re-derived from the credential's PRF output; **no recovery phrase exists** |
+| Recovery phrase and the keys it produces | Extension local storage | Encrypted under a key made from your password or your passkey |
+| Passkey profile | The credential identifier and a random value the passkey needs, in extension local storage | Opens nothing on its own; used with your passkey to unlock the profile |
 | Separately imported signing keys | Extension local storage | Encrypted using profile-specific key material |
 | Contacts, account names and addresses | Extension local storage | Encrypted with a key derived from the profile's master secret, readable only after unlock |
 | Profile names and settings | Extension local storage | Stored without application-level encryption |
@@ -75,7 +75,7 @@ described in § 5.
 | Private execution database (notes, proving state) | Browser Origin Private File System, using SQLite | Encrypted with a profile-specific database key |
 | Public proving-parameter cache | Browser cache / IndexedDB | Public parameters; not wallet-secret storage |
 | Terms acceptance record (version accepted, time, which screen) and the Privacy Policy version shown | Extension local storage; never transmitted, not included in backups | Stored without application-level encryption |
-| Session state | Extension session storage and process memory | Strict mode requires fresh authentication after worker loss; disabling it permits a locally stored credential capable of restoring the password-profile session |
+| Session state | Extension session storage and process memory | Strict mode requires fresh authentication after worker loss; disabling it permits a locally stored credential capable of restoring the profile's session |
 | Diagnostic logs | In memory; written to session storage only if you turn on Developer Mode | See § 8 |
 
 A profile's data is converted to this form the first time it is unlocked after the update.
@@ -169,10 +169,10 @@ WebAuthn API with `passkey.nulo.sh` as the relying-party identifier; it does not
 to that domain or send the passkey secret or PRF output to its web server. Browser and authenticator
 services may perform their own communications under their providers' policies.
 
-Your browser and selected authenticator process the credential identifier, a Nulo-generated profile
-identifier used as the WebAuthn user handle, and a credential label containing that identifier and a
-normalised form of your profile name. Depending on your provider, passkey credentials and related
-metadata may be synchronised under that provider's own policies.
+Your browser and selected authenticator process the credential identifier, a random identifier Nulo
+generates for the passkey, the profile's random value the passkey is used with, and the credential
+label, "Nulo wallet · " followed by the profile's name. Depending on your provider,
+passkey credentials and related metadata may be synchronised under that provider's own policies.
 
 If you or a browser visit the domain directly, the hosting provider processes that request like any
 website request. I do not run analytics on that host.
@@ -344,13 +344,13 @@ Nulo keeps a rolling in-memory log to help diagnose problems, capped in size.
 
 Nulo supports both unencrypted and password-encrypted exports.
 
-- For **password-profile** full backups, optional file encryption uses the profile password entered
-  during export.
+- For **password-profile** full backups, file encryption uses the profile password entered during
+  export.
 - For **passkey-profile** full backups, you choose a file-encryption password.
 - **Unencrypted** password-profile and account exports may contain material sufficient to spend
   funds.
-- A passkey-profile backup still requires the original passkey credential for restoration, even when
-  the file is encrypted.
+- A passkey-profile backup is always encrypted with the password you choose, and restores with that
+  password alone.
 
 Protect every export, and verify which format you saved. Nulo does not automatically send the
 Developer copies of your exports, and the Developer cannot revoke an exported copy.
@@ -460,3 +460,4 @@ described in § 5.
 | 1.2.3 | 25 October 2026 | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
 | 1.2.4 | 25 October 2026 | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
 | 1.2.5 | 25 October 2026 | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
+| 1.2.6 | «FILL: effective date» | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
