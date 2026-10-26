@@ -14,16 +14,7 @@ import { gunzipSync } from "node:zlib"
 import type { Page } from "puppeteer"
 import { getEntropy } from "@nulo/wallet-core/utils"
 import { prng } from "../../fixtures/chaos-seed"
-import {
-	backgroundOrigin,
-	credentialOutlivesPage,
-	extensionUrl,
-	gotoExtensionPage,
-	newPage,
-	prepareKeys,
-	residentCredentialSlots,
-	stopsBackgroundUnderOpenPage,
-} from "../../fixtures/browser"
+import { backgroundOrigin, extensionUrl, gotoExtensionPage, newPage, prepareKeys } from "../../fixtures/browser"
 import { clickSelector, patchPagePolling, pickFileByTestId, replaceInputValue } from "../../fixtures/dom"
 import type { ExtensionContext } from "../../fixtures/extension"
 import { callService } from "../../fixtures/session"
@@ -120,14 +111,6 @@ export function sessionTimeoutMs(dir: string): number {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-const CAPS: Caps = {
-	ceremonyOffAnchor: credentialOutlivesPage,
-	restartUnderOpenPage: stopsBackgroundUnderOpenPage,
-	network: false,
-	restoreGate: false,
-	credentialSlots: residentCredentialSlots,
-}
-
 /** What a verb hands back: its data for the agent, the command as resolved (a `do`'s drawn params),
  *  and what it ended on purpose. */
 interface Done {
@@ -152,14 +135,15 @@ interface SavedFile {
 	text: string
 }
 
-/** Serves the session in `dir` on the launch `ctx` until it ends; returns when serving is over. */
-export async function serveSession(ctx: ExtensionContext, dir: string): Promise<void> {
+/** Serves the session in `dir` on the launch `ctx`, whose browser can do what `caps` says, until it
+ *  ends; returns when serving is over. */
+export async function serveSession(ctx: ExtensionContext, dir: string, caps: Caps): Promise<void> {
 	const info = readSessionInfo(dir)
 	recordBrowser(ctx, dir, info.id)
 	const dirs = holdSessionDirs(dir)
 	try {
 		// A `do`'s exports stay outside the directory: the browser reads them back by path.
-		const run = await startRun(ctx, CAPS, doDirOf(dirname(dir), info.id))
+		const run = await startRun(ctx, caps, doDirOf(dirname(dir), info.id))
 		const session = new Session(dir, dirs, info, run)
 		try {
 			await session.serve()
@@ -656,12 +640,12 @@ class Session {
 			throw new CommandRefused("an earlier do failed or ended outside the model's outcomes, so where do would start is unknown")
 		const spec = Object.hasOwn(ACTIONS, cmd.action) ? ACTIONS[cmd.action as ActionName] : undefined
 		if (!spec) throw new CommandRefused(`unknown catalog action ${cmd.action}`)
-		const params = cmd.params ?? spec.params(this.rng, before, CAPS)
+		const params = cmd.params ?? spec.params(this.rng, before, this.s.caps)
 		if (!params) throw new CommandRefused(`${cmd.action} cannot run from where the do steps leave the wallet`)
 		const listed = { action: cmd.action, params } as ListedStep
 		let step: ReturnType<typeof planFromList>["steps"][number]
 		try {
-			step = planFromList([...this.doList, listed], "empty", CAPS).steps.at(-1) as typeof step
+			step = planFromList([...this.doList, listed], "empty", this.s.caps).steps.at(-1) as typeof step
 		} catch (err) {
 			throw new CommandRefused(firstLine(err))
 		}
