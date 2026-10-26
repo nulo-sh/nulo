@@ -198,6 +198,7 @@ declare global {
   const fitHero: typeof import('../utils/hero-fit').fitHero
   const flaggedKeysOf: typeof import('../utils/token-flag').flaggedKeysOf
   const foldLabel: typeof import('../utils/token-fold').foldLabel
+  const followAccountRows: typeof import('../utils/account-rows').followAccountRows
   const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
@@ -1051,6 +1052,7 @@ declare module 'vue' {
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
     readonly flaggedKeysOf: UnwrapRef<typeof import('../utils/token-flag')['flaggedKeysOf']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
+    readonly followAccountRows: UnwrapRef<typeof import('../utils/account-rows')['followAccountRows']>
     readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>

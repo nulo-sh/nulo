@@ -440,6 +440,7 @@
     "fitHero": true,
     "flaggedKeysOf": true,
     "foldLabel": true,
+    "followAccountRows": true,
     "followOwnRoute": true,
     "forChain": true,
     "formatBaseUnits": true,
