@@ -71,6 +71,7 @@ declare global {
   const MAX_DECIMALS: typeof import('../utils/token-amount').MAX_DECIMALS
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
   const NETWORK_ARRIVAL_KEY: typeof import('../composables/useNetworkArrival').NETWORK_ARRIVAL_KEY
+  const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
   const PINNED_TOKENS_MAX: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX
@@ -246,9 +247,11 @@ declare global {
   const initTransactionService: typeof import('../utils/core').initTransactionService
   const inject: typeof import('vue').inject
   const inputRoom: typeof import('../utils/hero-ruler').inputRoom
+  const isActivating: typeof import('../composables/useProfileBootstrap').isActivating
   const isActivatingOtherThan: typeof import('../composables/useProfileBootstrap').isActivatingOtherThan
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
+  const isAnyActivating: typeof import('../composables/useProfileBootstrap').isAnyActivating
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
   const isBlank: typeof import('../utils/string').isBlank
   const isCardWindow: typeof import('../utils/own-window').isCardWindow
@@ -319,6 +322,7 @@ declare global {
   const onBeforeUpdate: typeof import('vue').onBeforeUpdate
   const onDeactivated: typeof import('vue').onDeactivated
   const onErrorCaptured: typeof import('vue').onErrorCaptured
+  const onLastActiveProfileChanged: typeof import('../utils/lastActiveProfile').onLastActiveProfileChanged
   const onMounted: typeof import('vue').onMounted
   const onRenderTracked: typeof import('vue').onRenderTracked
   const onRenderTriggered: typeof import('vue').onRenderTriggered
@@ -457,6 +461,7 @@ declare global {
   const stepFailedTitle: typeof import('../utils/passkey-copy').stepFailedTitle
   const stillAsShown: typeof import('../utils/contact-import-rows').stillAsShown
   const storageLocalGet: typeof import('../utils/storage').storageLocalGet
+  const storageLocalGetUnlessMigrating: typeof import('../utils/storage').storageLocalGetUnlessMigrating
   const storageLocalRemove: typeof import('../utils/storage').storageLocalRemove
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
   const storedNameKey: typeof import('../utils/account-name').storedNameKey
@@ -918,6 +923,7 @@ declare module 'vue' {
     readonly MAX_DECIMALS: UnwrapRef<typeof import('../utils/token-amount')['MAX_DECIMALS']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
     readonly NETWORK_ARRIVAL_KEY: UnwrapRef<typeof import('../composables/useNetworkArrival')['NETWORK_ARRIVAL_KEY']>
+    readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX']>
@@ -1093,9 +1099,11 @@ declare module 'vue' {
     readonly initTransactionService: UnwrapRef<typeof import('../utils/core')['initTransactionService']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
     readonly inputRoom: UnwrapRef<typeof import('../utils/hero-ruler')['inputRoom']>
+    readonly isActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivating']>
     readonly isActivatingOtherThan: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivatingOtherThan']>
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
+    readonly isAnyActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isAnyActivating']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
     readonly isBlank: UnwrapRef<typeof import('../utils/string')['isBlank']>
     readonly isCardWindow: UnwrapRef<typeof import('../utils/own-window')['isCardWindow']>
@@ -1166,6 +1174,7 @@ declare module 'vue' {
     readonly onBeforeUpdate: UnwrapRef<typeof import('vue')['onBeforeUpdate']>
     readonly onDeactivated: UnwrapRef<typeof import('vue')['onDeactivated']>
     readonly onErrorCaptured: UnwrapRef<typeof import('vue')['onErrorCaptured']>
+    readonly onLastActiveProfileChanged: UnwrapRef<typeof import('../utils/lastActiveProfile')['onLastActiveProfileChanged']>
     readonly onMounted: UnwrapRef<typeof import('vue')['onMounted']>
     readonly onRenderTracked: UnwrapRef<typeof import('vue')['onRenderTracked']>
     readonly onRenderTriggered: UnwrapRef<typeof import('vue')['onRenderTriggered']>
@@ -1304,6 +1313,7 @@ declare module 'vue' {
     readonly stepFailedTitle: UnwrapRef<typeof import('../utils/passkey-copy')['stepFailedTitle']>
     readonly stillAsShown: UnwrapRef<typeof import('../utils/contact-import-rows')['stillAsShown']>
     readonly storageLocalGet: UnwrapRef<typeof import('../utils/storage')['storageLocalGet']>
+    readonly storageLocalGetUnlessMigrating: UnwrapRef<typeof import('../utils/storage')['storageLocalGetUnlessMigrating']>
     readonly storageLocalRemove: UnwrapRef<typeof import('../utils/storage')['storageLocalRemove']>
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>
     readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
