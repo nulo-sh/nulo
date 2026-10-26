@@ -482,6 +482,22 @@ describe("changeUnlockMethod", () => {
 		}, 30_000)
 	})
 
+	test("a DEK its record does not cover is wiped before the refusal", async () => {
+		const env = await boot()
+		const id = (await env.service.createProfile("P", PASSWORD)).id
+		const internals = env.service as unknown as Record<string, (...args: unknown[]) => Promise<boolean>>
+		let checked: Uint8Array | undefined
+		vi.spyOn(internals, "envelopeMacValid").mockImplementationOnce(async (...args) => {
+			checked = args[3] as Uint8Array
+			return false
+		})
+		await expect(env.service.changeUnlockMethod(id, { password: PASSWORD }, asPasskey(await newAnswer()))).rejects.toThrow(
+			/before changing the unlock method/,
+		)
+		expect(checked).toHaveLength(32)
+		expect(checked?.every((byte) => byte === 0)).toBe(true)
+	}, 30_000)
+
 	test("the carried DEK and the new password's hash are wiped once the change returns", async () => {
 		const env = await boot()
 		const answer = await newAnswer("cred-old")

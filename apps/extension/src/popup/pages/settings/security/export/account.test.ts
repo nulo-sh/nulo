@@ -242,6 +242,18 @@ describe("a passkey profile's account file", () => {
 		)
 	})
 
+	test("Enter in the file password saves, but not while a composition is open", async () => {
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		const field = w.get('[data-testid="file-password"]').element
+		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }))
+		await flushPromises()
+		expect(exportAccount).not.toHaveBeenCalled()
+		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+		await flushPromises()
+		expect(exportAccount).toHaveBeenCalledOnce()
+	})
+
 	test("a cancelled passkey leaves the page at its button and exports nothing", async () => {
 		passkey.runCeremony.mockRejectedValueOnce(new UserRejectedError("cancelled"))
 		const w = await approved()

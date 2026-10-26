@@ -131,6 +131,17 @@ describe("a password profile", () => {
 		expect(has(w, "unlock-method-password-input")).toBe(false)
 	})
 
+	test("the change uses the password that was checked, whatever the field holds once the card answers", async () => {
+		const w = await atPassword()
+		await typePassword(w, "unlock-method-password-input", "password123")
+		ceremony.run.mockImplementationOnce(async () => {
+			typeNow(nativeInput(w, "unlock-method-password-input"), "edited-meanwhile")
+			return NEXT
+		})
+		await click(w, "unlock-method-continue")
+		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { password: "password123" }, { passkey: NEXT })
+	})
+
 	test("Enter in the password field continues", async () => {
 		const w = await atPassword()
 		await typePassword(w, "unlock-method-password-input", "password123")
