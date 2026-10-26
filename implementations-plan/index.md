@@ -3,3 +3,4 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [passkey-chaos-1](passkey-chaos-1/plan.md) — approved; C1 in progress — seeded model-based chaos e2e, agent chaos sessions and a campaign over every profile flow around the passkey change
+- [passkey-unlock-1](passkey-unlock-1/plan.md) — planned (awaiting approval) — passkey profiles keep a recovery phrase their passkey unlocks; four arcs, closes #1127
