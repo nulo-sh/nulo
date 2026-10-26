@@ -20,6 +20,9 @@
  *    test's backup object so we hit the integrity branch only when we
  *    intentionally corrupt it.
  */
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { type Ref, ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import fc from "fast-check"
@@ -2158,6 +2161,19 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 		})
 		expect(opts.fillError).toHaveBeenCalledExactlyOnceWith("full_backup", ...EARLIER)
 		expect(c.isAllowedToImportBackup.value).toBe(false)
+		await c.restoreBackup()
+		expectNothingWritten()
+	})
+
+	// A real file: a fresh passkey profile's backup as a candidate of `dev` wrote it before 1.1.
+	it("the recorded backup of an earlier passkey profile is refused at the pick, before it is offered", async () => {
+		const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/earlier-passkey-backup.json"), "utf8")
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		opts.pickFile.mockResolvedValue(new File([text], "NuloBackup_PK.json", { type: "application/json" }))
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toStrictEqual({ kind: "unreadable", name: "NuloBackup_PK.json", backup: null, profileType: null })
+		expect(opts.fillError).toHaveBeenCalledExactlyOnceWith("full_backup", ...EARLIER)
 		await c.restoreBackup()
 		expectNothingWritten()
 	})

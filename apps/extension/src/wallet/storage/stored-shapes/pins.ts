@@ -14,12 +14,13 @@ export const PINNED_STAMPS: readonly Pin[] = [
 ]
 
 /**
- * The SHA-256 of each file in `backups/`: a full backup's content as a candidate of `dev` wrote it
- * at the freeze (`wallet-version` 0.31.0-update.1, Aztec 6.0.0-rc.3), recorded by the update replay
- * (`NULO_E2E_BACKUP_RECORD=1`). `password.txt` is the updated 0.31.0 profile's, encrypted under the
- * e2e test password; `passkey.json` a fresh passkey profile's, with its passkey check. Never edited.
+ * The SHA-256 of each file in `backups/`: a full backup's content as a candidate of `dev` wrote it,
+ * recorded by the update replay (`NULO_E2E_BACKUP_RECORD=1`), each encrypted under the e2e test
+ * password. `password.txt` is the updated 0.31.0 profile's, from the first freeze (`wallet-version`
+ * 0.31.0-update.1, Aztec 6.0.0-rc.3); `passkey.txt` a fresh passkey profile's, from the second
+ * (`wallet-version` 1.0.0-update.1). Never edited.
  */
 export const PINNED_BACKUPS: Readonly<Record<string, string>> = {
 	"password.txt": "e30a64f3db7ac0ab210a2d78927525f22401b5e19c53651ad3cdba1f059c8d76",
-	"passkey.json": "3f82563c7987d6a9a865a39ff45303b78041688d7f2ec07739198f33e7366aea",
+	"passkey.txt": "1d2d4a45235642c82b3caa65af50d6646268ce4611aba6a093f135696618c1f6",
 }
