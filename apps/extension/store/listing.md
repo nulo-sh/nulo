@@ -156,7 +156,8 @@ match them.
   - *Authentication information* — passwords and keys (local, encrypted); the passkey label handed
     to the authenticator.
   - *Personally identifiable information* — contact names and addresses, profile names (local); the
-    passkey label above.
+    passkey's name, which carries the profile name the user typed and which the user's password
+    manager may sync.
   - *Web history* — the origins and URLs of connected applications (local only).
 - **Certifications:** all three — not sold to third parties; not used or transferred for purposes
   unrelated to the item's single purpose; not used or transferred to determine creditworthiness or
