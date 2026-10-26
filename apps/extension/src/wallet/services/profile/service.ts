@@ -528,6 +528,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return !(await this.repo.get(id)) || this.deletionState.isReserved(id) || !this.deletionState.isCurrent(id, capturedEpoch)
 	}
 
+	/** The row still holds the snapshot's bytes, and no delete or same-id restore ran since its capture. */
+	private async rowUnchangedHoldingLock(snapshot: Profile, capturedEpoch: number): Promise<boolean> {
+		const live = await this.repo.get(snapshot.id)
+		return !!live && sameStoredRow(live, snapshot) && !(await this.profileFenceBroken(snapshot.id, capturedEpoch))
+	}
+
 	private async snapshotForUnlock(id: string, expect: "password"): Promise<Extract<Profile, { type: "password" }>>
 	private async snapshotForUnlock(id: string, expect: "passkey"): Promise<Extract<Profile, { type: "passkey" }>>
 	/** Phase-1 snapshot for the two unlock flows: fetch + tombstone gate + retired gate + type gate
@@ -1336,7 +1342,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			await this.assertEntropyMasterPair(opened.secret, opened.entropy)
 			await this.runExclusive(async () => {
-				if (await this.profileFenceBroken(id, capturedEpoch)) throw new Error("Invalid profile id")
+				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
 				zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
 			})
 		} finally {
@@ -1395,10 +1401,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}): Promise<ProfileInfo> {
 		const { snapshot, capturedEpoch, old, seal, isCurrent } = change
 		const id = snapshot.id
-		const unchanged = async () => {
-			const live = await this.repo.get(id)
-			return !!live && sameStoredRow(live, snapshot) && !(await this.profileFenceBroken(id, capturedEpoch))
-		}
+		const unchanged = () => this.rowUnchangedHoldingLock(snapshot, capturedEpoch)
 		if (!(await unchanged())) throw new Error("Invalid profile id")
 		await this.assertEntropyMasterPair(old.secret, old.entropy)
 		const dek = await this.trustedDekForRekeyHoldingLock(snapshot, old.secret, old, "unlock method")

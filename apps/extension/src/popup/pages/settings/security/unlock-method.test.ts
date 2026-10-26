@@ -142,6 +142,20 @@ describe("a password profile", () => {
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { password: "password123" }, { passkey: NEXT })
 	})
 
+	test("a password check that ends after a switch to another profile asks no passkey", async () => {
+		const held = Promise.withResolvers<void>()
+		profile.verifyUnlockCredential.mockReturnValueOnce(held.promise)
+		const w = await atPassword()
+		await typePassword(w, "unlock-method-password-input", "password123")
+		await click(w, "unlock-method-continue")
+		useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+		await flushPromises()
+		held.resolve()
+		await flushPromises()
+		expect(ceremony.run).not.toHaveBeenCalled()
+		nothingChanged()
+	})
+
 	test("Enter in the password field continues", async () => {
 		const w = await atPassword()
 		await typePassword(w, "unlock-method-password-input", "password123")

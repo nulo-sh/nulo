@@ -125,6 +125,7 @@ const handleContinue = () =>
 			if (isCurrent()) isWrongPassword.value = true
 			return undefined
 		}
+		if (!isCurrent()) return undefined
 		const next = await nextPasskey()
 		if (!isCurrent()) return undefined
 		await managers.profile.changeUnlockMethod(id, { password: typed }, { passkey: next })

@@ -156,6 +156,17 @@ describe("account file export", () => {
 		})
 	})
 
+	test.each(["ready", "protected"] as const)("a network switch keeps a password profile's %s file", async (stage) => {
+		const w = await readyStage()
+		if (stage === "protected") {
+			await w.get('[data-testid="account-protect-btn"]').trigger("click")
+			await flushPromises()
+		}
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(w.find(`[data-testid="account-file-${stage}-banner"]`).exists()).toBe(true)
+	})
+
 	test("a paused reset's held account is listed, exported from the journal at Create and Protect, and warned as imported", async () => {
 		route.query = {}
 		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
@@ -294,6 +305,16 @@ describe("a passkey profile's account file", () => {
 		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
 		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	test("a made file stays through a network switch", async () => {
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
 	})
 
 	test("a profile switch drops the approval: the next file asks its passkey again", async () => {

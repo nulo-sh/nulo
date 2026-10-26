@@ -594,15 +594,6 @@ export class SessionManager {
 				await this.silentClose()
 				return
 			}
-			// Race: re-check strict AFTER the async unwrap, immediately
-			// before committing `activeSession`. A strict-toggle ON that landed
-			// mid-restore already cleared storage; do not resurrect an in-memory
-			// bearer session past it.
-			if (this.strictSecurityMode) {
-				this.logger.log(LOG_SOURCE, LogLevel.Debug, "Strict toggled ON mid-restore → silentClose")
-				await this.silentClose()
-				return
-			}
 			// Envelope-MAC v3 check: this passwordless path can never decrypt the sealed fields to
 			// run the words↔master pairing check, so it verifies the HKDF(master‖dek)-keyed MAC
 			// over the WHOLE envelope — row id first (a whole-envelope swap between same-password
@@ -623,6 +614,14 @@ export class SessionManager {
 			)
 			if (!envelopeIntact) {
 				this.logger.log(LOG_SOURCE, LogLevel.Error, "Sealed-envelope MAC mismatch → silentClose (password unlock will verify)")
+				await this.silentClose()
+				return
+			}
+			// Re-checked after the last await, with none before `activeSession` is committed: a
+			// strict toggle ON that landed mid-restore already cleared storage, and no bearer
+			// session may outlive it in memory.
+			if (this.strictSecurityMode) {
+				this.logger.log(LOG_SOURCE, LogLevel.Debug, "Strict toggled ON mid-restore → silentClose")
 				await this.silentClose()
 				return
 			}

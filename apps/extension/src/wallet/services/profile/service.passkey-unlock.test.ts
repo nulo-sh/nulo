@@ -627,6 +627,22 @@ describe("verifyUnlockCredential", () => {
 		})
 		await expect(env.service.verifyUnlockCredential(id, { password: PASSWORD })).rejects.toThrow(/Invalid profile id/)
 	}, 30_000)
+
+	test.each(["a password change", "a damaged envelope MAC"] as const)(
+		"%s during the check is refused, not answered from the old row",
+		async (change) => {
+			const env = await boot()
+			const { id } = await env.service.createProfile("P", PASSWORD)
+			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+				if (change === "a password change") await env.service.changeProfilePassword(id, PASSWORD, "another-pass-1")
+				else await env.write(id, { ...(await env.row(id)), envelopeMac: Buffer.alloc(32, 7).toString("base64") })
+				return derive(password)
+			})
+			await expect(env.service.verifyUnlockCredential(id, { password: PASSWORD })).rejects.toThrow(/Invalid profile id/)
+		},
+		30_000,
+	)
 })
 
 describe("the session bearer of a passkey profile", () => {

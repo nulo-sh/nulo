@@ -150,11 +150,12 @@ watch(
 		loadHeldAccounts()
 	},
 )
-// So does a network switched from another window: the account, its file and any approval belong to
-// the previous network.
+// A passkey profile's file not made yet ends with a network switched from another window: its
+// approval and any pending export were given for the previous network. A made file is kept.
 watch(
 	() => appStore.network?.chainId,
 	() => {
+		if (!isPasskeyProfile.value || fileStatus.value) return
 		resetFlow()
 		applyQueryPreselect()
 	},

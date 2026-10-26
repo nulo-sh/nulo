@@ -32,6 +32,18 @@ import { deferred, EventHandler, Lock } from "@nulo/wallet-core/utils"
 import type { ActiveSession, Profile, ProfileInfo, Session } from "./spec"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
 
+const macCheck = vi.hoisted(() => ({ before: null as null | (() => void) }))
+vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@nulo/wallet-crypto")>()
+	return {
+		...real,
+		verifyEnvelopeMacV3: (...args: Parameters<typeof real.verifyEnvelopeMacV3>) => {
+			macCheck.before?.()
+			return real.verifyEnvelopeMacV3(...args)
+		},
+	}
+})
+
 /** Minimal `IConfig` stand-in. Tests drive `sessionTtl` /
  *  `strictSecurityMode` updates by invoking `onUpdate` directly; avoids
  *  `ConfigStore`'s `chrome.storage` dependency.
@@ -1049,6 +1061,26 @@ describe("SessionManager", () => {
 
 			expect(await m2.getActive()).toBeUndefined()
 			expect(flipped).toHaveBeenCalledTimes(strictAtStart ? 0 : 1)
+		})
+
+		test("strict turned on during the envelope check: a passkey bearer restores no session and none stays stored", async () => {
+			const { api } = setup(1_800_000, false)
+			const bearer = await makeBearer("pid")
+			await seedSession(api, { profile: "pid", since: Date.now(), lockedAt: Date.now() + 1_800_000, bearer })
+			const { manager: m2, config } = setupFromExistingApi(api, 1_800_000, false)
+			const profile = await passkeyProfileFor()
+			const flip = vi.fn(() => config.setStrict(true))
+			macCheck.before = flip
+			try {
+				await m2.restore(async () => profile)
+			} finally {
+				macCheck.before = null
+			}
+
+			expect(flip).toHaveBeenCalledOnce()
+			expect(await m2.getActive()).toBeUndefined()
+			const raw = await api.storage.session.get(SESSION_STORAGE_ROOT)
+			expect(SESSION_STORAGE_ROOT in raw).toBe(false)
 		})
 	})
 
