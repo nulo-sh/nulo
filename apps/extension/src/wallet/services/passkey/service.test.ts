@@ -120,6 +120,17 @@ describe("PasskeyService PATH B requests", () => {
 		await expect(service.getPendingRequest(id)).rejects.toThrow("Invalid request id")
 	})
 
+	test("a discovery asks the window for any passkey at the given input, naming no credential", async () => {
+		const owner = service.discoverKey(SALT, CREATE)
+		await flush()
+		const id = requestIdOf(0)
+		expect(await service.getPendingRequest(id)).toEqual({ mode: "discover", prfSalt: SALT, step: "create", profileName: "Profile" })
+		void service.resolvePasskeyRequest(id, data)
+		const { credential, finish } = await owner
+		expect(credential.unlockKeyFor(SALT)).not.toBeNull()
+		finish("done")
+	})
+
 	test("a newer request replaces the open window: the first step is told the user moved on", async () => {
 		const first = service.getKey("cred-1", SALT, UNLOCK).catch((err: unknown) => err)
 		await flush()

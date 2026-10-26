@@ -60,6 +60,7 @@ function makeFlow() {
 	return {
 		nameFieldState: ref("hidden"),
 		profileName: ref(""),
+		trimmedName: ref(""),
 		holdsOwnName: vi.fn(() => false),
 		nameError: ref(""),
 		shakeName: ref(false),
@@ -72,6 +73,7 @@ function makeFlow() {
 		seedPhrase: ref(undefined),
 		password: ref("password123"),
 		repeatedPassword: ref("password123"),
+		unlockMethod: ref("password"),
 		maxPasswordLength: 128,
 		error: ref({ type: "", title: "", tooltip: "" }),
 		isCopied: ref(false),
@@ -98,8 +100,10 @@ function makeFlow() {
 		pickBackupFile: vi.fn(),
 		decryptBackup: vi.fn(),
 		restoreBackup: vi.fn(),
+		restoreBackupWithExistingPasskey: vi.fn(),
 		showRestoreErrorLog: vi.fn(),
 		handleImportSeed: vi.fn(),
+		handleImportSeedWithExistingPasskey: vi.fn(),
 		handleImportPasskey: vi.fn(),
 		handlePasswordInput: vi.fn(),
 		handleSecretInput: vi.fn(),
@@ -337,6 +341,16 @@ describe("popup import — Full Backup from Firefox's toolbar panel", () => {
 		expect(holder.flow.selectedImportOption.value).toBe("full_backup")
 	})
 
+	test("a phrase moves to its own window too, since its passkey prompt would close the panel", async () => {
+		holder.flow.selectedImportOption.value = null
+		surface.needsOwnWindow.mockReturnValue(true)
+		const w = await mountImport()
+		w.findComponent(ImportMethodPicker).vm.$emit("select", "seed")
+		await flushPromises()
+		expect(surface.move).toHaveBeenCalledWith("/popup/import?option=seed&type=import&from=%2Fpopup%2Fregister")
+		expect(holder.flow.selectedImportOption.value).toBeNull()
+	})
+
 	test("outside the panel, Full Backup opens in place", async () => {
 		holder.flow.selectedImportOption.value = null
 		const w = await mountImport()
@@ -532,6 +546,7 @@ const IMPORT_MAIN_OFF: PopupCta = ["Import Main", "import-full-backup-submit-btn
 const IMPORTING: PopupCta = ["Importing…", "import-full-backup-submit-btn", true, null, "cta"]
 const CONTINUE: PopupCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta"]
 const VIEW_ERRORS: PopupCta = ["View Errors", "import-full-backup-view-errors-btn", false, null, "cta_outline"]
+const REUSE = (testid: string, disabled = false): PopupCta => ["Use a passkey I already have", testid, disabled, null, null]
 
 type Flow = ReturnType<typeof makeFlow>
 type FlowPatch = (f: Flow) => void
@@ -641,7 +656,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 		(f) => {
 			f.selectedImportOption.value = "seed"
 		},
-		[["Use Recovery Phrase", "import-seed-submit-btn", true, null, "cta"], BACK],
+		[["Import Profile", "import-seed-submit-btn", true, null, "cta"], BACK],
 	],
 	[
 		"seed, allowed",
@@ -649,7 +664,7 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 			f.selectedImportOption.value = "seed"
 			f.isAllowedToImportBySeedPhrase.value = true
 		},
-		[["Use Recovery Phrase", "import-seed-submit-btn", false, null, "cta"], BACK],
+		[["Import Profile", "import-seed-submit-btn", false, null, "cta"], BACK],
 	],
 	[
 		"seed, importing (the popup's seed CTA has no importing gate)",
@@ -658,7 +673,31 @@ const POPUP_CTA_STATES: Array<[string, FlowPatch, PopupCta[]]> = [
 			f.isAllowedToImportBySeedPhrase.value = true
 			Object.assign(f, { isImporting: ref(true) })
 		},
-		[["Use Recovery Phrase", "import-seed-submit-btn", false, null, "cta"], BACK],
+		[["Import Profile", "import-seed-submit-btn", false, null, "cta"], BACK],
+	],
+	[
+		"seed on Passkey, named: the button names the profile and the link sits under it",
+		(f) => {
+			f.selectedImportOption.value = "seed"
+			f.unlockMethod.value = "passkey"
+			f.trimmedName.value = "Savings"
+		},
+		[["Import Savings", "import-seed-submit-btn", true, null, "cta"], REUSE("import-seed-passkey-reuse", true), BACK],
+	],
+	[
+		"a backup restored on Passkey",
+		(f) => {
+			f.unlockMethod.value = "passkey"
+		},
+		[IMPORT_MAIN, REUSE("import-full-backup-passkey-reuse"), BACK],
+	],
+	[
+		"a backup restored on Passkey, in progress",
+		(f) => {
+			f.unlockMethod.value = "passkey"
+			f.restoreStatus.value = "progress"
+		},
+		[IMPORTING, REUSE("import-full-backup-passkey-reuse", true), BACK_OFF],
 	],
 ]
 
@@ -667,6 +706,20 @@ describe("popup import — the CTA bar in each state", () => {
 		patch(holder.flow)
 		const w = await mountImport()
 		expect(popupCtas(w)).toEqual(expected)
+	})
+
+	test.each([
+		["seed", "import-seed-passkey-reuse", "handleImportSeedWithExistingPasskey"],
+		["full_backup", "import-full-backup-passkey-reuse", "restoreBackupWithExistingPasskey"],
+	] as const)("on %s, the link asks a passkey the person already has", async (option, testid, handler) => {
+		holder.flow.selectedImportOption.value = option
+		holder.flow.unlockMethod.value = "passkey"
+		holder.flow.isAllowedToImportBySeedPhrase.value = true
+		const w = await mountImport()
+		await w.get(`[data-testid="${testid}"]`).trigger("click")
+		expect(holder.flow[handler]).toHaveBeenCalledOnce()
+		expect(holder.flow.handleImportSeed).not.toHaveBeenCalled()
+		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 	})
 })
 

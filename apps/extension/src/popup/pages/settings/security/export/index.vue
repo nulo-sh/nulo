@@ -22,13 +22,7 @@ const appStore = useAppStore()
 		<ItemsContainer title="Choose backup mode">
 			<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
 			<SettingItem title="Recovery Phrase" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
-			<!-- The account file takes the profile password; a passkey profile has none to give it. -->
-			<SettingItem
-				v-if="appStore.profile.type === 'password'"
-				title="Account"
-				to="/popup/settings/security/export/account"
-				data-testid="account-backup-link-btn"
-			/>
+			<SettingItem title="Account" to="/popup/settings/security/export/account" data-testid="account-backup-link-btn" />
 		</ItemsContainer>
 
 		<ItemsContainer

@@ -40,6 +40,11 @@ export type RestoreSecret = {
  *  open under. */
 export type PasskeyUnlockParams = { credentialId: string; prfSalt: string }
 
+/** A profile's unlock as a method change takes it: a password, or a passkey's answer. The current one
+ *  must open the profile (a passkey answer for its own `prfSalt`); a new one is a password of at
+ *  least 8 characters, or a new passkey answer at a fresh `prfSalt`. */
+export type UnlockCredential = { password: string } | { passkey: PasskeyCredentialData }
+
 export type ProfileInfo = {
 	/** Randomly generated id. */
 	id: string
@@ -119,8 +124,8 @@ export function mintPxeGeneration(): string {
 export type Session = {
 	/** Profile id. */
 	profile: string
-	/** Random-token wrapped-secret silent-restore bearer (non-strict
-	 *  password profiles only). Replaces `passhash` — see `SessionSecretBox`.
+	/** Random-token wrapped-secret silent-restore bearer (any profile opened
+	 *  with its DEK, strict mode off). Replaces `passhash` — see `SessionSecretBox`.
 	 *  The token is random, not password-derived, so a session-store leak no
 	 *  longer exposes a password-equivalent value. */
 	bearer?: SessionWrappedSecret
@@ -192,11 +197,14 @@ export type Methods = {
 	 * answer rebuilds for the profile's own `prfSalt`, then signs in.
 	 *
 	 * @param name Display name.
-	 * @param credentialData PATH A: the page ran the create (`runPasskeyCeremony`) with a
-	 *   `prfSalt` it minted, which the answer reports and the row stores. Absent: PATH B, the
-	 *   background mints the input and the passkey window runs the create.
+	 * @param credentialData PATH A: the page ran the create (`runPasskeyCeremony`), or the
+	 *   discovery get of a passkey the person already has, with a `prfSalt` it minted, which the
+	 *   answer reports and the row stores. Absent: PATH B, the background mints the input and the
+	 *   passkey window runs the step.
+	 * @param existing PATH B only: the window asks for a passkey the person already has instead of
+	 *   creating one.
 	 */
-	createPasskeyProfile(name: string, credentialData?: PasskeyCredentialData): ProfileInfo
+	createPasskeyProfile(name: string, credentialData?: PasskeyCredentialData, existing?: boolean): ProfileInfo
 
 	/**
 	 * Unlocks a profile with the specified id.
@@ -266,6 +274,24 @@ export type Methods = {
 	changeProfilePassword(id: string, oldPassword: string, newPassword: string): ProfileInfo
 
 	/**
+	 * Throws unless `credential` opens profile `id` as {@link changeUnlockMethod} needs: its slots,
+	 * the recovery phrase's match with the master, and the imported-keys key and its record.
+	 * `InvalidPasswordError` for a wrong password, the change's own refusal otherwise. Opens no
+	 * session and writes nothing.
+	 */
+	verifyUnlockCredential(id: string, credential: UnlockCredential): void
+
+	/**
+	 * Moves profile `id` from the unlock `current` opens it with to `next`, keeping its recovery
+	 * phrase, accounts and data. Refuses a profile whose imported-keys key no longer opens or no
+	 * longer matches its record. Throws `UnlockMethodChangedError` when the change was saved, or may
+	 * have been, but the profile could not be reopened: the wallet is then locked. An account
+	 * integrity block found on the reopen returns the profile with its session closed, behind the
+	 * integrity barrier.
+	 */
+	changeUnlockMethod(id: string, current: UnlockCredential, next: UnlockCredential): ProfileInfo
+
+	/**
 	 * Deletes a profile and returns the deleted profile.
 	 * @param id Profile id.
 	 */
@@ -281,10 +307,18 @@ export type Methods = {
 	 * (warn-and-confirm, never a hard block; owner policy).
 	 * @param name Display name.
 	 * @param mnemonic 24-word recovery phrase.
-	 * @param password Password to encrypt the secrets.
+	 * @param password Password to encrypt the secrets, for a password profile.
 	 * @param allowDuplicate Confirmed duplicate override from the warn dialog.
+	 * @param credentialData For a passkey profile: the page's answer from a new passkey, or from one
+	 *   the person already has, at a fresh `prfSalt` the row then stores.
 	 */
-	importMnemonic(name: string, mnemonic: string[], password: string, allowDuplicate?: boolean): ProfileInfo
+	importMnemonic(
+		name: string,
+		mnemonic: string[],
+		password?: string,
+		allowDuplicate?: boolean,
+		credentialData?: PasskeyCredentialData,
+	): ProfileInfo
 
 	/**
 	 * Returns the profile's master (base64), after the unlock opens its slots and the words↔master
@@ -308,22 +342,30 @@ export type Methods = {
 	exportMnemonic(id: string, password?: string, credentialData?: PasskeyCredentialData): string[]
 
 	/**
-	 * Restores a profile from a full-backup payload as a password profile. Writes the profile to
-	 * storage and emits `onProfileAdded`. Does NOT open a session — that's deferred to
+	 * Restores a profile from a full-backup payload as a password or passkey profile. Writes the
+	 * profile to storage and emits `onProfileAdded`. Does NOT open a session — that's deferred to
 	 * `finalizeRestore` so the caller can finish restoring networks / accounts / etc. before
 	 * `onActiveProfileChanged` fires.
 	 *
 	 * @param profile Source profile descriptor (id, name, type) from the backup; its `type`
 	 *   describes the source and selects nothing.
 	 * @param secret The backup's secret body.
-	 * @param password New password.
+	 * @param password New password, for a password profile.
 	 * @param allowDuplicate Confirmed duplicate override from the warn dialog.
+	 * @param credentialData For a passkey profile: the page's answer at a fresh `prfSalt`, as for
+	 *   `importMnemonic`; `finalizeRestore` takes the same answer.
 	 */
-	restore(profile: ProfileInfo, secret: RestoreSecret, password: string, allowDuplicate?: boolean): Restored<ProfileInfo>
+	restore(
+		profile: ProfileInfo,
+		secret: RestoreSecret,
+		password?: string,
+		allowDuplicate?: boolean,
+		credentialData?: PasskeyCredentialData,
+	): Restored<ProfileInfo>
 
 	/**
-	 * Opens the session for a profile previously created by `restore()`, re-deriving from the SAME
-	 * password supplied to `restore` (one PBKDF2).
+	 * Opens the session for a profile previously created by `restore()`, with the SAME password
+	 * (one PBKDF2) or passkey answer supplied to `restore`.
 	 *
 	 * Emits `onActiveProfileChanged` once the session is up. Idempotent: if
 	 * the session is already active for `id`, returns without re-opening.
@@ -331,9 +373,10 @@ export type Methods = {
 	 * name this restore's profile, never a same-id successor.
 	 *
 	 * @param id Profile id (from the `restore` return value).
-	 * @param password The password `restore` sealed under.
+	 * @param password The password `restore` sealed under, for a password profile.
+	 * @param credentialData The passkey answer `restore` sealed under, for a passkey profile.
 	 */
-	finalizeRestore(id: string, password: string): FinalizedRestore
+	finalizeRestore(id: string, password?: string, credentialData?: PasskeyCredentialData): FinalizedRestore
 }
 
 export type Events = {

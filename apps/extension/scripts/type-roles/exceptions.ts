@@ -174,6 +174,15 @@ export const OVERRIDES: Override[] = [
 		why: "the selected method tab takes segment's active weight",
 	},
 	{
+		file: "apps/extension/src/components/composite/import/UnlockMethodChoice.vue",
+		selector: ".tab.tabActive",
+		scope: '[data-testid^="import-method-"][aria-selected="true"], [data-testid^="import-full-backup-method-"][aria-selected="true"]',
+		property: "font-weight",
+		value: "700",
+		role: "segment",
+		why: "the selected unlock tab on the import forms takes segment's active weight",
+	},
+	{
 		file: "apps/extension/src/popup/components/modules/settings/new-profile/NewProfileMethodTabs.vue",
 		selector: ".tab.tab_active",
 		scope: '[data-testid^="register-method-"][aria-selected="true"]',

@@ -59,12 +59,16 @@ export function buildCreateOptions(userHandle: string, prfSalt: string): PublicK
 }
 
 export function buildGetOptions(credentialId: string, prfSalt: string): PublicKeyCredentialRequestOptions {
+	return { ...buildDiscoverOptions(prfSalt), allowCredentials: [{ id: fromBase64(credentialId), type: "public-key" }] }
+}
+
+/** A `get` with no `allowCredentials`: the device offers every passkey it holds for the RP. */
+export function buildDiscoverOptions(prfSalt: string): PublicKeyCredentialRequestOptions {
 	return {
 		challenge: crypto.getRandomValues(new Uint8Array(32)),
 		rpId: RP_ID,
 		userVerification: "required",
 		timeout: PASSKEY_TIMEOUT,
-		allowCredentials: [{ id: fromBase64(credentialId), type: "public-key" }],
 		extensions: prfEval(prfSalt),
 	}
 }
@@ -105,8 +109,9 @@ export async function confirmMinted(credentialId: string, prfSalt: string, signa
 	}
 }
 
-async function runGet(credentialId: string, prfSalt: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
-	const publicKey = buildGetOptions(credentialId, prfSalt)
+/** `credentialId` undefined: a discovery get, which any of the device's passkeys may answer. */
+async function runGet(credentialId: string | undefined, prfSalt: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
+	const publicKey = credentialId === undefined ? buildDiscoverOptions(prfSalt) : buildGetOptions(credentialId, prfSalt)
 	const assertion = await navigator.credentials.get({ publicKey, signal })
 	if (!assertion) throw new Error("Failed to get passkey assertion")
 	if (!(assertion instanceof PublicKeyCredential)) throw new Error("Unexpected assertion type")
@@ -133,5 +138,5 @@ export async function runPasskeyCeremony(request: PasskeyRequest, signal?: Abort
 		if (request.credentialId) return await confirmMinted(request.credentialId, request.prfSalt, signal)
 		return await runCreate(request.userHandle, request.prfSalt, signal)
 	}
-	return await runGet(request.credentialId, request.prfSalt, signal)
+	return await runGet(request.mode === "get" ? request.credentialId : undefined, request.prfSalt, signal)
 }

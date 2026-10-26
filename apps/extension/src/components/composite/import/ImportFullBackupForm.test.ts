@@ -96,7 +96,7 @@ describe("ImportFullBackupForm", () => {
 			}),
 			global: { stubs },
 		})
-		expect(wrapper.text()).toContain("New Password")
+		expect(wrapper.text()).toContain("How you'll unlock Nulo")
 	})
 
 	it("hides the new-password section once restore is finished", () => {
@@ -107,7 +107,7 @@ describe("ImportFullBackupForm", () => {
 			}),
 			global: { stubs },
 		})
-		expect(wrapper.text()).not.toContain("New Password")
+		expect(wrapper.text()).not.toContain("How you'll unlock Nulo")
 	})
 
 	it("shows the restore-with-errors warning when restoreStatus='finished' and isRestoreHasErrors", () => {
@@ -133,11 +133,26 @@ describe("ImportFullBackupForm", () => {
 		expect(sentence?.classes()).not.toContain("color--yellow")
 	})
 
+	it("a passkey-made backup opens on Passkey, switchable to the password fields", async () => {
+		const props = baseProps({
+			selectedBackup: { name: "x.txt", backup: "blob", kind: "sealed", profileType: "passkey" },
+			unlockMethod: "passkey",
+		})
+		const wrapper = mount(ImportFullBackupForm, { props, global: { stubs } })
+		expect(wrapper.get("[data-testid=import-full-backup-method-passkey]").attributes("aria-selected")).toBe("true")
+		expect(wrapper.find("[data-testid=unlock-method-passkey-note]").exists()).toBe(true)
+		expect(wrapper.find("[data-testid=import-full-backup-password-input]").exists()).toBe(false)
+		await wrapper.get("[data-testid=import-full-backup-method-password]").trigger("click")
+		expect(wrapper.emitted("update:unlockMethod")).toEqual([["password"]])
+		await wrapper.setProps({ unlockMethod: "password" })
+		expect(wrapper.find("[data-testid=import-full-backup-password-input]").exists()).toBe(true)
+	})
+
 	it("a page restoring into the open profile asks for no new password", () => {
 		const props = baseProps({ selectedBackup: { name: "x.json", backup: {}, kind: "plain", profileType: "password" } })
-		expect(mount(ImportFullBackupForm, { props, global: { stubs } }).text()).toContain("New Password")
+		expect(mount(ImportFullBackupForm, { props, global: { stubs } }).text()).toContain("How you'll unlock Nulo")
 		const own = mount(ImportFullBackupForm, { props: { ...props, askNewPassword: false }, global: { stubs } })
-		expect(own.text()).not.toContain("New Password")
+		expect(own.text()).not.toContain("How you'll unlock Nulo")
 		expect(own.find("[data-testid=import-full-backup-password-input]").exists()).toBe(false)
 	})
 
