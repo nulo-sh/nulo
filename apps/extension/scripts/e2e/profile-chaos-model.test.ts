@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
-import { ProfileRowSchema, STORED_SHAPES } from "@/wallet/storage/stored-shapes"
+import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
+import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
 	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
