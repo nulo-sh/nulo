@@ -15,7 +15,7 @@ import {
 	PasskeyCredential,
 	type PasskeyCredentialData,
 } from "@nulo/wallet-crypto"
-import { InvalidPasswordError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { InvalidPasswordError, RetiredProfileError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { fakePasskeyAnswer, freshPrfSalt } from "../../../../tests/helpers/fake-passkey"
 import { validateAndMigrateBackup } from "@/composables/useFullBackupImport"
 import { ServiceCollection } from "@/wallet/base"
@@ -529,4 +529,75 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 		})
 		await expect(account.backup()).rejects.toThrow(/^ERR_RESET_PENDING/)
 	}, 30_000)
+})
+
+// A row an earlier build wrote for a passkey profile holds no slot any answer opens, so each
+// account export refuses it with the typed error before it opens a key.
+describe("account exports — a retired profile row", () => {
+	type Ctx = Awaited<ReturnType<typeof withImported>>
+	async function withImported() {
+		const built = await build()
+		const a = await built.profile.createProfile("A", PASSWORD)
+		const row = await seedImported(built.api, a.id, ADDR_A, 0x2a, (await built.profile.getProfileDek(a.id))!)
+		return { ...built, id: a.id, row, fence: await built.profile.captureRunFence() }
+	}
+	const heldInReset = ({ api, id, row }: Ctx) =>
+		api.storage.local.set({
+			[`nulo:core:network-reset@${id}`]: JSON.stringify({
+				profileId: id,
+				networkId: "n1",
+				fromChainId: 1,
+				toChainId: CHAIN,
+				l1ChainId: L1,
+				cause: { networkReset: true, addressesMoved: false },
+				purged: true,
+				switchToSeedNode: false,
+				probedEndpoint: null,
+				accounts: [
+					{
+						type: AccountType.Imported,
+						index: 0,
+						name: "Imp",
+						visible: true,
+						oldAddress: "0xOLD",
+						newAddress: ADDR_A,
+						encryptedSigningKey: row.encryptedSigningKey,
+						done: true,
+					},
+				],
+			}),
+		})
+	const retire = async ({ api, id }: Ctx) => {
+		const key = `nulo:core:profiles@${id}`
+		const {
+			guard: _g,
+			secret: _s,
+			entropy: _e,
+			envelopeMac: _m,
+			...rest
+		} = JSON.parse((await api.storage.local.get(key))[key] as string)
+		await api.storage.local.set({ [key]: JSON.stringify({ ...rest, type: "passkey", credentialId: "Y3JlZA==" }) })
+	}
+
+	test.each<[string, (ctx: Ctx) => Promise<unknown>, (ctx: Ctx) => Promise<unknown>]>([
+		["exportAccount", async () => {}, (c) => c.account.exportAccount(c.id, CHAIN, ADDR_A, PASSWORD, true)],
+		["exportResetHeldAccount", heldInReset, (c) => c.account.exportResetHeldAccount(c.id, ADDR_A, PASSWORD, true)],
+		["exportFullBackupKeys", async () => {}, (c) => c.account.exportFullBackupKeys(c.fence, PASSWORD)],
+	])(
+		"%s opens the key of a password row, and refuses the same row retired before it opens one or writes",
+		async (_label, arrange, call) => {
+			const ctx = await withImported()
+			await arrange(ctx)
+			await call(ctx).catch(() => undefined)
+			expect(unsealImportedSigningKeyV2).toHaveBeenCalled()
+			vi.mocked(unsealImportedSigningKeyV2).mockClear()
+
+			await retire(ctx)
+			const before = await ctx.api.storage.local.get(null)
+			await expect(call(ctx)).rejects.toBeInstanceOf(RetiredProfileError)
+			expect(unsealImportedSigningKeyV2).not.toHaveBeenCalled()
+			expect(await ctx.api.storage.local.get(null)).toStrictEqual(before)
+		},
+		60_000,
+	)
 })

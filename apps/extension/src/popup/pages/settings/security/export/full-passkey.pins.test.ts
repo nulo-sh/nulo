@@ -327,7 +327,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.text()).not.toContain("Imported keys are not in this backup")
 	})
 
-	it("a failed discriminated export on a password profile flags wrong-password, no toast/navigation", async () => {
+	it("a failed export on a password profile flags wrong-password, no toast/navigation", async () => {
 		exportFullBackupKeys.mockRejectedValueOnce(new Error("Invalid profile old password"))
 		const wrapper = mountPage("password")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
