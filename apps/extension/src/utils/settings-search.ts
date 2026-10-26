@@ -139,6 +139,15 @@ export const SETTINGS_ROWS = {
 		to: "/popup/settings/security/change-password",
 		visible: (context) => !context.passkey,
 	},
+	"hub-unlock-method": {
+		page: HUB,
+		section: "Safety",
+		title: "Unlock method",
+		description: (context) => (context.passkey ? "Passkey" : "Password"),
+		synonyms: ["passkey", "password", "unlock"],
+		testid: "setting-nav-unlock-method",
+		to: "/popup/settings/security/unlock-method",
+	},
 	"hub-privacy": {
 		page: HUB,
 		section: "Preferences",
@@ -205,10 +214,9 @@ export const SETTINGS_ROWS = {
 		page: "/popup/settings/lock",
 		section: "Lock",
 		title: "Strict security mode",
-		description: "More secure, asks for your password more often. Recommended.",
-		synonyms: ["password", "security"],
+		description: "More secure, asks you to unlock more often. Recommended.",
+		synonyms: ["password", "passkey", "security"],
 		testid: "setting-strict-security-mode",
-		visible: (context) => !context.passkey,
 	},
 	"lock-auto-lock": {
 		page: "/popup/settings/lock",

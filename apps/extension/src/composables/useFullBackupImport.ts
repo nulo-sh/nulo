@@ -59,6 +59,8 @@ export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
+import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
+import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { HeldAccount } from "@/components/composite/import/restore-warning"
 
 // Beside the checksum, outside the body it covers, in the backups of passkey profiles made before 1.1.
@@ -223,6 +225,14 @@ export async function refusedAsEarlierPasskey(backup: unknown): Promise<boolean>
 export interface UseFullBackupImportOptions {
 	password: Ref<string>
 	repeatedPassword: Ref<string>
+	/** The unlock picked on the form; a passkey asks no new password. Absent: a password. */
+	unlockMethod?: Ref<UnlockMethod>
+	/**
+	 * What the restored profile is sealed under, asked once its name is known: the new password, or a
+	 * passkey answer (`existing`: one the person already has). Resolves `null` when the passkey step
+	 * was cancelled, which stops the restore quietly. Absent: the new password.
+	 */
+	chooseUnlock?: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	fillError: (type: string, title: string, tooltip?: string) => void
 	clearError: () => void
 	pickFile: () => Promise<File | null | undefined>
@@ -302,6 +312,8 @@ export interface UseFullBackupImportResult {
 	pickBackupFile: () => Promise<void>
 	decryptBackup: () => Promise<void>
 	restoreBackup: () => Promise<void>
+	/** {@link restoreBackup} with a passkey the person already has. */
+	restoreBackupWithExistingPasskey: () => Promise<void>
 	showRestoreErrorLog: () => void
 	resetBackupState: () => void
 	/** Drops a running Retry, so one that settles after the page unmounted changes nothing. */
@@ -346,13 +358,15 @@ async function restoreProfileStep(
 	profile: BackupProfile,
 	name: string,
 	restoreSecret: RestoreSecret,
-	deps: { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions },
+	deps: RestoreDeps,
 	io: RestoreIo,
 ): Promise<{ id: string; restoreError?: unknown } | null> {
-	const { profileService, opts } = deps
-	// The service judges the id's shape; every backup restores as a password profile.
+	const { profileService, opts, unlock } = deps
+	// The service judges the id's shape; the profile takes the unlock chosen on the form, whatever
+	// the backup's was.
 	const profileForRestore = { ...profile, name } as ProfileInfo
-	const runRestore = () => profileService.restore(profileForRestore, restoreSecret, opts.password.value, opts.allowDuplicate?.value)
+	const runRestore = () =>
+		profileService.restore(profileForRestore, restoreSecret, unlock.password, opts.allowDuplicate?.value, unlock.credentialData)
 	const newProfile = opts.confirmDuplicate ? await opts.confirmDuplicate(runRestore) : await runRestore()
 	if (!newProfile) {
 		io.setStatus("")
@@ -365,20 +379,19 @@ async function restoreProfileStep(
 	return newProfile
 }
 
+/** The restore's clients, its options, and the unlock the new profile is sealed under. */
+type RestoreDeps = { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions; unlock: NewProfileUnlock }
+
 /** Arming is best effort: a failure costs only the reminder. The tail runs under the fence
  *  finalize returns. */
-async function finalizeWithReminder(
-	validated: ValidatedBackup,
-	profileId: string,
-	deps: { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions },
-): Promise<RestoreRun> {
+async function finalizeWithReminder(validated: ValidatedBackup, profileId: string, deps: RestoreDeps): Promise<RestoreRun> {
 	let run: string | undefined
 	try {
 		run = await armRestoreOutcome(profileId, validated.checksum, accountStateNetworkIds(validated.data))
 	} catch (error) {
 		console.warn("[restore-outcome] the reminder could not be armed", { error })
 	}
-	const { fence } = await deps.profileService.finalizeRestore(profileId, deps.opts.password.value)
+	const { fence } = await deps.profileService.finalizeRestore(profileId, deps.unlock.password, deps.unlock.credentialData)
 	return { fence, run }
 }
 
@@ -393,7 +406,12 @@ async function executeRestore(
 	validated: ValidatedBackup,
 	scratch: RestoreScratch,
 	io: RestoreIo,
-	deps: { profileService: ProfileServiceClient; networkService: NetworkServiceClient; opts: UseFullBackupImportOptions },
+	deps: {
+		profileService: ProfileServiceClient
+		networkService: NetworkServiceClient
+		opts: UseFullBackupImportOptions
+		existing: boolean
+	},
 ): Promise<{
 	profile: { id: string; restoreError?: unknown }
 	networks: RestoredNetwork[]
@@ -415,7 +433,16 @@ async function executeRestore(
 		applyOutcome(io, secretOut)
 		return null
 	}
-	const newProfile = await restoreProfileStep(profile, name, secretOut.restoreSecret, deps, io)
+	// Held for this run only: restore seals under it and finalize opens with it.
+	const unlock = opts.chooseUnlock
+		? await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)
+		: { password: opts.password.value }
+	if (unlock === null) {
+		io.setStatus("")
+		return null
+	}
+	const stepDeps: RestoreDeps = { profileService, opts, unlock }
+	const newProfile = await restoreProfileStep(profile, name, secretOut.restoreSecret, stepDeps, io)
 	if (!newProfile) return null
 	scratch.createdProfileId = newProfile.id
 
@@ -471,7 +498,7 @@ async function executeRestore(
 	io.setStage("finalizing")
 	let restoreRun: RestoreRun
 	try {
-		restoreRun = await finalizeWithReminder(validated, newProfile.id, deps)
+		restoreRun = await finalizeWithReminder(validated, newProfile.id, stepDeps)
 	} catch (err) {
 		applyOutcome(io, {
 			kind: "fail",
@@ -622,6 +649,7 @@ async function runRestoreBackup(
 	state: ImportRefs,
 	opts: UseFullBackupImportOptions,
 	guards: { isAllowed: () => boolean; hasErrors: () => boolean; recordRestoreErrors: (serviceName: string, data: unknown) => unknown[] },
+	existing: boolean,
 ) {
 	// Re-entrancy guard: a second concurrent run (double-click, or the popup's
 	// document-level Enter handler firing again mid-flight) would create a second
@@ -676,7 +704,7 @@ async function runRestoreBackup(
 		state.restoreErrorLog.value = {}
 		state.restoredNetworks.value = []
 		state.heldAccounts.value = []
-		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts })
+		const restored = await executeRestore(validated, scratch, io, { profileService, networkService, opts, existing })
 		if (!restored) return
 
 		state.restoreStatus.value = "finished"
@@ -823,7 +851,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 	const isAllowedToImportBackup = computed(
 		() =>
 			Boolean(selectedBackup.value?.profileType && selectedBackup.value.backup) &&
-			isNewPasswordValid(opts.password.value ?? "", opts.repeatedPassword.value ?? ""),
+			(opts.unlockMethod?.value === "passkey" || isNewPasswordValid(opts.password.value ?? "", opts.repeatedPassword.value ?? "")),
 	)
 
 	const { recordRestoreErrors, replaceRestoreErrors } = errorLogWriters(restoreErrorLog)
@@ -831,12 +859,15 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 	const { unrestoredNetworkNames, hasOtherRestoreErrors } = retryWarningRefs(state)
 	const pickBackupFile = () => runPickBackupFile(state, opts)
 	const decryptBackup = () => runDecryptBackup(state, opts)
-	const restoreBackup = () =>
-		runRestoreBackup(state, opts, {
-			isAllowed: () => isAllowedToImportBackup.value,
-			hasErrors: () => isRestoreHasErrors.value,
-			recordRestoreErrors,
-		})
+	const restoreGuards = {
+		isAllowed: () => isAllowedToImportBackup.value,
+		hasErrors: () => isRestoreHasErrors.value,
+		recordRestoreErrors,
+	}
+	const restoreBackup = () => runRestoreBackup(state, opts, restoreGuards, false)
+	const restoreBackupWithExistingPasskey = async () => {
+		if (opts.unlockMethod?.value === "passkey") await runRestoreBackup(state, opts, restoreGuards, true)
+	}
 	const retryAccountState = () => runRetryAccountState(state, opts, { hasErrors: () => isRestoreHasErrors.value, replaceRestoreErrors })
 	async function continueImport() {
 		if (!importedProfile.value) return
@@ -887,6 +918,7 @@ export function useFullBackupImport(opts: UseFullBackupImportOptions): UseFullBa
 		pickBackupFile,
 		decryptBackup,
 		restoreBackup,
+		restoreBackupWithExistingPasskey,
 		showRestoreErrorLog,
 		resetBackupState,
 		dispose: () => dropAccountStateRetry(state),

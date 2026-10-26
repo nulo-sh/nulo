@@ -30,6 +30,7 @@ import { useNotificationStore } from "@/stores/notification.store"
 	shell declares too. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
 import OnboardingPhraseStep from "../components/OnboardingPhraseStep.vue"
 
 const router = useRouter()
@@ -83,6 +84,7 @@ const {
 	strengthHint: passwordStrengthHint,
 	isAllowedToContinue,
 	handleCreate: handleSubmit,
+	handleCreateWithExistingPasskey,
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
@@ -220,6 +222,13 @@ onBeforeUnmount(() => {
 			>
 				{{ submitLabel }}
 			</Button>
+			<PasskeyReuseLink
+				v-if="authMethod === 'passkey'"
+				testid="onboarding-passkey-reuse"
+				:disabled="isCreating"
+				:class="$style.reuse"
+				@click="handleCreateWithExistingPasskey"
+			/>
 		</form>
 
 		<PasskeyCeremonyDialog
@@ -285,6 +294,10 @@ onBeforeUnmount(() => {
 .tabActive:focus-visible {
 	outline: 2px solid var(--app-bg);
 	outline-offset: -5px;
+}
+
+.reuse {
+	margin-top: -12px;
 }
 
 .passkeyInfo {

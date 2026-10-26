@@ -11,8 +11,8 @@
  * Coverage:
  *   1. Export full backup as a passkey profile: modal appears, virtual authenticator completes,
  *      the file password is asked (a short one keeps Protect off), the file is encrypted under it,
- *      holds the recovery phrase and no passkey input, and its body restores as a password profile
- *      on the same address after the profile is deleted.
+ *      holds the recovery phrase and no passkey input, and its body restores under a new passkey,
+ *      at an input of its own, on the same address after the profile is deleted.
  *   2. Export cancel UX — Escape during the modal is marked handled and
  *      returns the user to the agreement gate (`isAgreed = false`), NOT a
  *      dead form or a toast+bounce.
@@ -22,14 +22,14 @@ import type { Page } from "puppeteer"
 import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { clickByTestId, openPopup, replaceInputValue, waitForHash, test, waitForServiceReady } from "./fixtures/extension"
-import { confirmProfileReset } from "./fixtures/helpers"
+import { confirmProfileReset, lockWallet } from "./fixtures/helpers"
 import { holdNextPasskeyRequest, registerPasskeyProfile, setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
 import { shotSend } from "./fixtures/send-page"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { FILE_PASSWORD, openEncryptedBackup } from "./helpers/backup-export"
 import { sealPlainBackup } from "./helpers/backup-seal"
 import { armDownloadCapture, readCapturedDownload } from "./helpers/download-capture"
-import { importFullBackup, POPUP_IMPORT_SHELL, readActiveAccount, writeBackupToTemp } from "./helpers/import-drivers"
+import { POPUP_IMPORT_SHELL, readActiveAccount, restoreFullBackupWithPasskey, writeBackupToTemp } from "./helpers/import-drivers"
 import { pressEscape } from "./helpers/pointer-probes"
 
 /** Reset the wallet via the in-app reset flow (Settings → Delete profile).
@@ -46,6 +46,26 @@ async function resetWallet(page: Page): Promise<void> {
 	await confirmProfileReset(page, 5_000)
 	await waitForHash(page, "#/popup/register", 10_000)
 	await waitForServiceReady(page, 15_000)
+}
+
+/** Every stored profile row's type and PRF input. */
+const readProfileRows = (page: Page) =>
+	page.evaluate(async () => {
+		const all = await chrome.storage.local.get(null)
+		return Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:core:profiles@"))
+			.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw) as { type?: string; prfSalt?: string })
+	})
+
+/** From the lock screen, the passkey's unlock back to Home. */
+async function unlockWithPasskey(page: Page): Promise<void> {
+	await page.waitForFunction(() => document.querySelector<HTMLButtonElement>('[data-testid="auth-submit"]')?.disabled === false, {
+		timeout: 15_000,
+		polling: 200,
+	})
+	expect(await page.$('[data-testid="auth-password-input"]'), "a passkey profile's lock screen asks a password").toBeNull()
+	await clickByTestId(page, "auth-submit")
+	await waitForHash(page, "#/popup/general", 60_000)
 }
 
 /** The progress card a run shows: its text, and whether the Download CTA must read a disabled
@@ -83,7 +103,7 @@ async function armProgressObserver(page: Page, expected: ProgressCard): Promise<
 
 const progressSeen = (page: Page) => page.evaluate(() => (window as unknown as { __backupProgressSeen?: boolean }).__backupProgressSeen)
 
-test("passkey full-backup export: modal, status card, a file password of its own, and a password restore on the same address", {
+test("passkey full-backup export: modal, status card, a file password of its own, and a passkey restore on the same address", {
 	timeout: 360_000,
 }, async ({ freshExtensionPerTest }) => {
 	const page = await openPopup(freshExtensionPerTest)
@@ -165,9 +185,10 @@ test("passkey full-backup export: modal, status card, a file password of its own
 		expect(typeof backup.entropy).toBe("string")
 		expect(JSON.stringify(backup)).not.toMatch(/prfSalt|prf-salt|backup-mac/)
 
-		// The body restores as a password profile on the same address. Public-chain state stays out,
-		// so the smoke import dials no RPC.
+		// The body restores under a new passkey, the method it was made with, on the same address.
+		// Public-chain state stays out, so the smoke import dials no RPC.
 		const addressBefore = await readActiveAccount(page)
+		const [original] = await readProfileRows(page)
 		const { "account-state": _chainState, ...data } = backup.data
 		const plainPath = writeBackupToTemp(sealPlainBackup({ ...backup, data }), "passkey-profile-backup.json")
 		await clickByTestId(page, "backup-close-btn")
@@ -176,15 +197,16 @@ test("passkey full-backup export: modal, status card, a file password of its own
 			window.location.hash = "#/popup/import"
 		})
 		await waitForHash(page, "#/popup/import", 5_000)
-		await importFullBackup(page, plainPath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
+		await restoreFullBackupWithPasskey(page, plainPath, POPUP_IMPORT_SHELL)
 		expect(await readActiveAccount(page)).toBe(addressBefore)
-		const types = await page.evaluate(async () => {
-			const all = await chrome.storage.local.get(null)
-			return Object.entries(all)
-				.filter(([key]) => key.startsWith("nulo:core:profiles@"))
-				.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw)?.type)
-		})
-		expect(types).toEqual(["password"])
+		const [restored, ...others] = await readProfileRows(page)
+		expect([restored?.type, others.length]).toEqual(["passkey", 0])
+		expect(restored?.prfSalt !== original?.prfSalt, "the restore sealed at the deleted profile's input").toBe(true)
+
+		// The restored row opens with its passkey.
+		await lockWallet(page)
+		await unlockWithPasskey(page)
+		expect(await readActiveAccount(page)).toBe(addressBefore)
 
 		// Filter the benign "Client disconnected" cascade that can fire when
 		// the export's loop disconnects each backup service client.

@@ -19,6 +19,7 @@ import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
+import { isNewPasswordValid } from "@/utils/password"
 import {
 	buildAccountExport,
 	decryptAccountExport,
@@ -94,6 +95,17 @@ async function unsealImportedScalar(dek: ImportedKeysDek, chainId: number, addre
 		if (skBytes) zeroize(skBytes)
 		if (skCopy) zeroize(skCopy)
 	}
+}
+
+/**
+ * A passkey answer opens the profile but must open nothing that leaves the wallet, so its account
+ * file always travels encrypted under a file password of its own, which the new-password rule
+ * accepts. Runs before anything is opened.
+ */
+function assertPasskeyFilePassword(credentialData: PasskeyCredentialData | undefined, filePassword: string, encrypt: boolean): void {
+	if (!credentialData) return
+	if (!encrypt) throw new Error("A passkey profile's account file is always encrypted")
+	if (!isNewPasswordValid(filePassword ?? "", filePassword ?? "")) throw new Error("The file password needs at least 8 characters")
 }
 
 function accountFileBody(signingKey: GrumpkinScalar, l1ChainId: number, address: string, password: string, encrypt: boolean) {
@@ -644,12 +656,23 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Export one account as a NULO-ACCOUNT-EXPORT file body. Service-side auth: the profile
-	 * password must unseal the master (a compromised popup can't bypass it). The exported secret
-	 * is the account's Schnorr signing key — for a DERIVED account we re-derive it; for an
-	 * IMPORTED account we decrypt the stored one. `secretKey` is never exported (derivable).
+	 * password, or a passkey answer for the profile's own input, must unseal the master (a
+	 * compromised popup can't bypass it). With a passkey answer, `password` is the file's own
+	 * password. The exported secret is the account's Schnorr signing key — for a DERIVED account we
+	 * re-derive it; for an IMPORTED account we decrypt the stored one. `secretKey` is never exported
+	 * (derivable).
 	 */
-	public async exportAccount(profileId: string, chainId: number, address: string, password: string, encrypt: boolean): Promise<string> {
+	public async exportAccount(
+		profileId: string,
+		chainId: number,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): Promise<string> {
 		await this.ensureInitialized()
+		assertPasskeyFilePassword(credentialData, password, encrypt)
+		const unlock = credentialData ? undefined : password
 		const account = await this.storage.get(accountRowId(profileId, chainId, address))
 		if (!rowMatchesKey(account, profileId, chainId, address)) {
 			throw new Error("unknown account address")
@@ -657,16 +680,16 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// Service-side authentication: unseal via the profile password (throws on wrong password).
 		// exportMnemonic-style — the master returned by getProfileSecret is session-gated, so we
 		// additionally require the password here to gate the SECRET export behind a fresh check.
-		const master = await this.profileService.exportPlain(profileId, password)
+		const master = await this.profileService.exportPlain(profileId, unlock, credentialData)
 		if (typeof master !== "string" || master.length === 0) throw new Error("unauthorized")
 
 		let signingKey: GrumpkinScalar
 		if (account.type === AccountType.Imported) {
 			const keyRow = await this.importedKeys.get(profileId, chainId, address)
 			if (!keyRow) throw ImportedAccountUnusableError.because("signing key missing")
-			// Fresh auth: the DEK unseals under the SUPPLIED password directly —
+			// Fresh auth: the DEK unseals under the SUPPLIED credential directly —
 			// session-independent, deletion-guarded — never via SessionManager.
-			const dek = await this.profileService.exportImportedKeysDek(profileId, password)
+			const dek = await this.profileService.exportImportedKeysDek(profileId, unlock, credentialData)
 			signingKey = await unsealImportedScalar(dek, chainId, address, keyRow.encryptedSigningKey)
 		} else if (account.type === AccountType.Nulo_v1) {
 			const masterCopy = fromBase64Lenient(master)
@@ -696,12 +719,19 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * password opens the DEK through a full unseal, the service-side check; the key must derive the
 	 * journal's address under this build, so the file names the address the person picked. Reads only.
 	 */
-	public async exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): Promise<string> {
+	public async exportResetHeldAccount(
+		profileId: string,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): Promise<string> {
 		await this.ensureInitialized()
+		assertPasskeyFilePassword(credentialData, password, encrypt)
 		const journal = await this.staleNetworks.getJournal(profileId)
 		const entry = journal?.accounts.find((a) => a.type === AccountType.Imported && a.newAddress === address)
 		if (!journal || !entry?.encryptedSigningKey) throw new Error("unknown account address")
-		const dek = await this.profileService.exportImportedKeysDek(profileId, password)
+		const dek = await this.profileService.exportImportedKeysDek(profileId, credentialData ? undefined : password, credentialData)
 		const signingKey = await unsealImportedScalar(dek, journal.toChainId, address, entry.encryptedSigningKey)
 		if ((await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString() !== address) {
 			throw ImportedAccountUnusableError.because("address mismatch")

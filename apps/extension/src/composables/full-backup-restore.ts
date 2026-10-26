@@ -3,7 +3,7 @@
  * callbacks, never a captured error-log object: the log's ref value is replaced at restore start.
  */
 
-import { asBase64MasterSecret } from "@nulo/wallet-crypto"
+import { asBase64MasterSecret, type PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChain } from "@/utils/full-backup-helpers"
@@ -117,10 +117,11 @@ export interface ProfileRestoreClient {
 	restore(
 		profile: unknown,
 		secret: RestoreSecret,
-		password: string,
+		password: string | undefined,
 		allowDuplicate: boolean | undefined,
+		credentialData?: PasskeyCredentialData,
 	): Promise<{ id: string; restoreError?: unknown } | undefined>
-	finalizeRestore(profileId: string, password: string): Promise<{ fence: RunFence }>
+	finalizeRestore(profileId: string, password?: string, credentialData?: PasskeyCredentialData): Promise<{ fence: RunFence }>
 	deleteProfile(profileId: string): Promise<unknown>
 	disconnect(): void
 }
