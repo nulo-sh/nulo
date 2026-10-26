@@ -29,3 +29,5 @@
 - 2026-10-26 · A4.1 targeted gates: `@nulo/legal` 60 passed, landing 80, the eight legal and listing extension files 77; lint 0, typecheck:all 0, test:all 0 (extension 924 files, 15194 tests).
 - 2026-10-26 · A4 review loop: Codex round 1 conditional approve, round 2 no new finding (converged); Opus round 1 mechanics sound; fixes `09f631930`; owner asks A4-1 to A4-6 (OWNER-ASKS.md).
 - 2026-10-26 · A4 screens, Chrome, light and dark: 2 frames, each matching its signed picture but for data, and the onboarding stepper's "Phrase" step from A2.
+- 2026-10-26 · A4 flake checks at retry 0 at `33d1f152d`: `@nulo/legal` 30/30; `store-listing.test.ts` with `legal-about.test.ts` 30/30; smoke `legal-acceptance` Chrome 5/5 (126–141 s), Firefox 5/5 (193–210 s), 14 tests each run.
+- 2026-10-26 · A4 final gates at `33d1f152d`: lint 0, typecheck:all 0, test:all 0 (extension 924 files, 15194 tests), check:plans 0. PR opened as a draft.

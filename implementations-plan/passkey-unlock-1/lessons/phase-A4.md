@@ -13,3 +13,7 @@ Codex round 1 conditional approve, round 2 no new finding (converged); Opus roun
 ## 2026-10-26 · Screens
 
 Chrome, light and dark: the re-acceptance sheet for an install that accepted 1.1 (popup 360×600@2x) matches its signed picture but for the account address; the onboarding Terms gate (720×900@2x) matches but for the stepper's fourth step, "Phrase", which A2 added under P86-01 after the picture was made.
+
+## 2026-10-26 · Flake checks
+
+At `33d1f152d`, retry 0: the `@nulo/legal` test files 30/30; `scripts/store-listing.test.ts` with `src/utils/legal-about.test.ts` 30/30; smoke `legal-acceptance` 5/5 on Chrome (126–141 s a run) and 5/5 on Firefox (193–210 s), 14 tests each. The patch-only Privacy notice in Settings → About is proven by `legal-about.test.ts`; no smoke scenario reaches it, and none was added.
