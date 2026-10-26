@@ -36,8 +36,12 @@ export const PASSKEY_COPY = {
 const STEP_LABEL: Record<PasskeyStep, string> = {
 	unlock: "Unlock",
 	create: "New profile",
+	import: "Import",
+	restore: "Restore",
 	reveal: "Recovery phrase",
 	export: "Backup",
+	accountFile: "Account file",
+	unlockMethod: "Unlock method",
 }
 
 /** The steps the passkey window runs to their end; the others finish in the page that asked. */

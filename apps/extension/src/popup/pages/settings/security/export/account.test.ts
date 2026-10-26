@@ -21,7 +21,22 @@ const networkReset = vi.hoisted(() => ({
 	getPendingReset: vi.fn(async (): Promise<{ networkId: string; running: boolean } | null> => null),
 	getStaleNetwork: vi.fn(async (_networkId: string): Promise<unknown> => null),
 }))
-vi.mock("@/utils/core", () => ({ managers: { account: { exportAccount, exportResetHeldAccount }, networkReset } }))
+const ANSWER = { id: "cred", prf: "prf", prfSalt: "salt" }
+const passkey = vi.hoisted(() => ({
+	getPasskeyUnlockParams: vi.fn(async () => ({ credentialId: "cred", prfSalt: "salt" })),
+	runCeremony: vi.fn(async (_request: unknown): Promise<unknown> => ({ id: "cred", prf: "prf", prfSalt: "salt" })),
+}))
+vi.mock("@/utils/core", () => ({
+	managers: {
+		account: { exportAccount, exportResetHeldAccount },
+		networkReset,
+		profile: { getPasskeyUnlockParams: passkey.getPasskeyUnlockParams },
+	},
+}))
+vi.mock("@/composables/usePasskeyCeremony", async () => {
+	const { ref } = await import("vue")
+	return { usePasskeyCeremony: () => ({ request: ref(null), runCeremony: passkey.runCeremony, onResolve: vi.fn(), onReject: vi.fn() }) }
+})
 const downloadFile = vi.hoisted(() => vi.fn(async (_opts: { data: string; filename: string }) => undefined))
 vi.mock("@/utils", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils")>()),
@@ -37,6 +52,7 @@ vi.mock("vue-router", () => ({
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
 import { Icon } from "@nulo/design"
+import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { useAppStore } from "@/stores/app.store"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
@@ -61,6 +77,13 @@ function mountPage(profileType = "password") {
 			],
 			components: { SubPageHeader, Icon },
 			stubs: {
+				FilePasswordSection: {
+					props: ["password", "repeatedPassword", "testid"],
+					emits: ["update:password", "update:repeatedPassword"],
+					template:
+						"<div><input data-testid='file-password' @input=\"$emit('update:password', $event.target.value)\" />" +
+						"<input data-testid='file-password-repeat' @input=\"$emit('update:repeatedPassword', $event.target.value)\" /></div>",
+				},
 				SecretUnlockSection: {
 					props: ["modelValue", "error"],
 					emits: ["update:modelValue", "clearError"],
@@ -133,6 +156,17 @@ describe("account file export", () => {
 		})
 	})
 
+	test.each(["ready", "protected"] as const)("a network switch keeps a password profile's %s file", async (stage) => {
+		const w = await readyStage()
+		if (stage === "protected") {
+			await w.get('[data-testid="account-protect-btn"]').trigger("click")
+			await flushPromises()
+		}
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(w.find(`[data-testid="account-file-${stage}-banner"]`).exists()).toBe(true)
+	})
+
 	test("a paused reset's held account is listed, exported from the journal at Create and Protect, and warned as imported", async () => {
 		route.query = {}
 		networkReset.getPendingReset.mockResolvedValueOnce({ networkId: "tn", running: false })
@@ -174,10 +208,140 @@ describe("account file export", () => {
 		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(false)
 		expect(networkReset.getPendingReset).toHaveBeenCalledTimes(2)
 	})
+})
 
-	test("a passkey profile is sent back to the export choices", async () => {
-		mountPage("passkey")
+describe("a passkey profile's account file", () => {
+	async function approved() {
+		const w = mountPage("passkey")
 		await flushPromises()
-		expect(router.replace).toHaveBeenCalledWith("/popup/settings/security/export")
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="unlock-password-input"]').exists()).toBe(false)
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		await flushPromises()
+		return w
+	}
+	const save = (w: VueWrapper) => w.get('[data-testid="account-file-save-btn"]').element as HTMLButtonElement
+	async function typeFilePassword(w: VueWrapper, password: string, repeat = password) {
+		await w.get('[data-testid="file-password"]').setValue(password)
+		await w.get('[data-testid="file-password-repeat"]').setValue(repeat)
+	}
+
+	test("its passkey approves, then one sealed export under the file password downloads", async () => {
+		const w = await approved()
+		expect(passkey.runCeremony).toHaveBeenCalledExactlyOnceWith({
+			mode: "get",
+			credentialId: "cred",
+			prfSalt: "salt",
+			step: "accountFile",
+			profileName: "Main",
+		})
+		await typeFilePassword(w, "1234567")
+		expect(save(w).disabled).toBe(true)
+		await typeFilePassword(w, "12345678", "12345679")
+		expect(save(w).disabled).toBe(true)
+		await typeFilePassword(w, "12345678")
+		expect(save(w).disabled).toBe(false)
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+		expect(exportAccount).toHaveBeenCalledExactlyOnceWith("p1", 7, ADDRESS, "12345678", true, ANSWER)
+		expect(downloadFile).toHaveBeenCalledExactlyOnceWith({
+			data: "sealed-body",
+			filename: `NuloEncryptedAccount_Main_${ADDRESS.slice(0, 10)}.txt`,
+		})
+		expect(w.get('[data-testid="account-file-protected-banner"]').text()).toContain(
+			"This password will be required to import this account.",
+		)
+	})
+
+	test("Enter in the file password saves, but not while a composition is open", async () => {
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		const field = w.get('[data-testid="file-password"]').element
+		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }))
+		await flushPromises()
+		expect(exportAccount).not.toHaveBeenCalled()
+		field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+		await flushPromises()
+		expect(exportAccount).toHaveBeenCalledOnce()
+	})
+
+	test("a cancelled passkey leaves the page at its button and exports nothing", async () => {
+		passkey.runCeremony.mockRejectedValueOnce(new UserRejectedError("cancelled"))
+		const w = await approved()
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test("a network switch ends the flow: the approval goes with it, and switching back asks the passkey again", async () => {
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		const app = useAppStore()
+		app.network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-save-btn"]').exists()).toBe(false)
+		app.network = { id: "n1", chainId: 7 } as never
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(exportAccount).not.toHaveBeenCalled()
+	})
+
+	test.each(["answer", "file"] as const)("a passkey %s that comes back after a network switch lands nothing", async (pending) => {
+		const held = Promise.withResolvers<string>()
+		if (pending === "answer") passkey.runCeremony.mockReturnValueOnce(held.promise)
+		else exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
+		const w = await approved()
+		if (pending === "file") {
+			await typeFilePassword(w, "12345678")
+			await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+			await flushPromises()
+		}
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		held.resolve(pending === "answer" ? (ANSWER as never) : "sealed-body")
+		await flushPromises()
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	test("a pending file ends when the profile's unlock changes to a password, before a network switch", async () => {
+		const held = Promise.withResolvers<string>()
+		exportAccount.mockReturnValueOnce(held.promise as Promise<"sealed-body">)
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+		const app = useAppStore()
+		app.profile = { id: "p1", name: "Main", type: "password" } as never
+		await flushPromises()
+		app.network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		held.resolve("sealed-body")
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	test("a made file stays through a network switch", async () => {
+		const w = await approved()
+		await typeFilePassword(w, "12345678")
+		await w.get('[data-testid="account-file-save-btn"]').trigger("click")
+		await flushPromises()
+		useAppStore().network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
+	})
+
+	test("a profile switch drops the approval: the next file asks its passkey again", async () => {
+		const w = await approved()
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(true)
+		useAppStore().profile = { id: "p2", name: "Other", type: "passkey" } as never
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="account-file-confirm-passkey-btn"]').exists()).toBe(true)
+		expect(w.find('[data-testid="file-password"]').exists()).toBe(false)
 	})
 })

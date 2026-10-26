@@ -13,7 +13,7 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
-import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import FilePasswordSection from "@/components/composite/FilePasswordSection.vue"
 import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
@@ -25,7 +25,6 @@ import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { goBack } from "@/utils/page-back"
 import { backupNotice } from "@/components/stale-network/copy"
-import { newPasswordHint } from "@/utils/password"
 
 /** Composables */
 import { useFullBackupExport } from "@/composables/useFullBackupExport"
@@ -66,8 +65,6 @@ const {
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
 
 const maxPasswordLength = 128
-const isFilePasswordHidden = ref(true)
-const filePasswordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 
 const addedNetworksText = computed(() => {
 	const { accounts, networks } = importsOnAddedNetworks.value
@@ -303,42 +300,13 @@ onBeforeUnmount(() => {
 					</Banner>
 				</div>
 
-				<div v-if="isPasskeyProfile && backupStatus === 'finished'" class="export_section_last">
-					<span class="export_section_label type--label-section">File password</span>
-					<Flex direction="column" gap="12">
-						<Input
-							v-model="password"
-							:type="isFilePasswordHidden ? 'password' : 'text'"
-							:maxLength="maxPasswordLength"
-							placeholder="Enter password"
-							autocomplete="new-password"
-							autofocus
-							data-testid="backup-encrypt-password-input"
-						>
-							<template #suffix>
-								<PasswordVisibilityToggle
-									:hidden="isFilePasswordHidden"
-									data-testid="backup-encrypt-password-input-visibility-toggle"
-									@toggle="isFilePasswordHidden = !isFilePasswordHidden"
-								/>
-							</template>
-							<template #bottom>
-								<Flex align="center" gap="6" :class="$style.hint_row">
-									<Icon name="lock" :size="12" color="tertiary" />
-									<Text variant="body" color="tertiary" data-testid="backup-encrypt-password-hint">{{ filePasswordHint }}</Text>
-								</Flex>
-							</template>
-						</Input>
-						<Input
-							v-model="repeatedPassword"
-							:type="isFilePasswordHidden ? 'password' : 'text'"
-							:maxLength="maxPasswordLength"
-							placeholder="Repeat password"
-							autocomplete="new-password"
-							data-testid="backup-encrypt-password-confirm-input"
-						/>
-					</Flex>
-				</div>
+				<FilePasswordSection
+					v-if="isPasskeyProfile && backupStatus === 'finished'"
+					v-model:password="password"
+					v-model:repeatedPassword="repeatedPassword"
+					testid="backup-encrypt-password"
+					:maxLength="maxPasswordLength"
+				/>
 			</template>
 		</template>
 
@@ -411,10 +379,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.hint_row {
-	margin-top: 4px;
-}
-
 .agreement_blocked {
 	opacity: 0.38;
 }

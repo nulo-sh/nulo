@@ -36,6 +36,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 import LockPage from "./lock.vue"
@@ -86,14 +87,22 @@ describe("settings/lock", () => {
 		expect(w.get('[data-testid="lock-now-btn"]').text()).toContain("Locks Nulo until you unlock it again")
 	})
 
-	test.each([
-		["password", true],
-		["passkey", false],
-	] as const)("a %s profile sees strict mode: %s; both see the auto-lock field", async (type, strict) => {
-		const w = await mountLock(type)
-		expect(w.find('[data-testid="setting-strict-security-mode"]').exists()).toBe(strict)
-		expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
-	})
+	test.each(["password", "passkey"] as const)(
+		"a %s profile sees strict mode, worded for either unlock, and the auto-lock field",
+		async (type) => {
+			const w = await mountLock(type)
+			const strict = w.get('[data-testid="setting-strict-security-mode"]')
+			expect(strict.text()).toContain("More secure, asks you to unlock more often. Recommended.")
+			expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
+			;(w.getComponent('[data-testid="strict-security-toggle"]') as VueWrapper).vm.$emit("update:modelValue", false)
+			expect(useCacheStore().confirm).toMatchObject({
+				title: "Disable strict security?",
+				description:
+					"Stay unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
+					"Anyone who can read browser data can unlock the wallet without your password or passkey.",
+			})
+		},
+	)
 
 	test("Lock now runs the shared lock on the popup's long-lived profile client", async () => {
 		const w = await mountLock()

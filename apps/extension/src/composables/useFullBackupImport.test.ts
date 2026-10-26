@@ -27,6 +27,7 @@ import { type Ref, ref, watch } from "vue"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import fc from "fast-check"
 import { EncryptionKey } from "@nulo/wallet-crypto"
+import type { NewProfileUnlock } from "@/composables/useNewProfilePasskey"
 import { RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import {
 	AS_SENDER,
@@ -675,7 +676,7 @@ describe("useFullBackupImport — restoreBackup happy path", () => {
 		await c.restoreBackup()
 
 		expect(profileClient.restore).toHaveBeenCalledOnce()
-		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234", undefined)
 		expect(opts.completeImport).toHaveBeenCalledOnce()
 		expect(c.restoreStatus.value).toBe("finished")
 		expect(c.isRestoreHasErrors.value).toBe(false)
@@ -911,7 +912,7 @@ describe("useFullBackupImport — guards before any writes", () => {
 		await c.restoreBackup()
 
 		expect(profileClient.restore).toHaveBeenCalledOnce()
-		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234", undefined)
 		expect(c.restoreStatus.value).toBe("finished")
 	})
 
@@ -2140,9 +2141,105 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 			{ masterKey: backup["master-key"], entropy: backup.entropy, importedKeysDek: backup["imported-keys-dek"] },
 			opts.password.value,
 			undefined,
+			undefined,
 		)
-		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", opts.password.value)
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", opts.password.value, undefined)
 		expect(c.restoreStatus.value).toBe("finished")
+	})
+
+	describe("restored under a passkey", () => {
+		const CRED = { id: "cred-new", prf: "prf-new", prfSalt: "salt-new" } as never
+		function passkeyOpts() {
+			const unlockMethod = ref<"passkey" | "password">("passkey")
+			const chooseUnlock = vi.fn(
+				async (_display: unknown, _existing: boolean): Promise<NewProfileUnlock | null> => ({ credentialData: CRED }),
+			)
+			const opts = { ...makeOpts({ password: "", repeatedPassword: "" }), unlockMethod, chooseUnlock } as never as ReturnType<
+				typeof makeOpts
+			> & { unlockMethod: Ref<"passkey" | "password">; chooseUnlock: typeof chooseUnlock }
+			return opts
+		}
+
+		it("asks the passkey once the name is known, then seals and opens under its answer, with no password", async () => {
+			const opts = passkeyOpts()
+			const c = useFullBackupImport(opts)
+			const backup = await passkeyBody()
+			c.selectedBackup.value = { name: "x.json", backup, kind: "plain", profileType: "passkey" }
+			mockCleanRestore()
+			expect(c.isAllowedToImportBackup.value).toBe(true)
+			await c.restoreBackup()
+			expect(opts.chooseUnlock).toHaveBeenCalledExactlyOnceWith({ step: "restore", profileName: "PK" }, false)
+			expect(profileClient.restore).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({ type: "passkey", name: "PK" }),
+				expect.anything(),
+				undefined,
+				undefined,
+				CRED,
+			)
+			expect(profileClient.finalizeRestore).toHaveBeenCalledExactlyOnceWith("new-id", undefined, CRED)
+			expect(c.restoreStatus.value).toBe("finished")
+		})
+
+		it("with a passkey the person already has, the ask is a discovery; on the Password tab it does nothing", async () => {
+			const opts = passkeyOpts()
+			const c = useFullBackupImport(opts)
+			c.selectedBackup.value = { name: "x.json", backup: await passkeyBody(), kind: "plain", profileType: "passkey" }
+			mockCleanRestore()
+			opts.unlockMethod.value = "password"
+			await c.restoreBackupWithExistingPasskey()
+			expect(opts.chooseUnlock).not.toHaveBeenCalled()
+			opts.unlockMethod.value = "passkey"
+			await c.restoreBackupWithExistingPasskey()
+			expect(opts.chooseUnlock).toHaveBeenCalledExactlyOnceWith({ step: "restore", profileName: "PK" }, true)
+			expect(profileClient.finalizeRestore).toHaveBeenCalledExactlyOnceWith("new-id", undefined, CRED)
+		})
+
+		it("a cancelled passkey stops the restore quietly, before any write, and the form stays as it was", async () => {
+			const opts = passkeyOpts()
+			opts.chooseUnlock.mockResolvedValueOnce(null)
+			const c = useFullBackupImport(opts)
+			const restoring = { name: "x.json", backup: await passkeyBody(), kind: "plain", profileType: "passkey" } as const
+			c.selectedBackup.value = restoring
+			mockCleanRestore()
+			await c.restoreBackup()
+			expectNothingWritten()
+			expect(opts.fillError).not.toHaveBeenCalled()
+			expect([c.selectedBackup.value, c.restoreStatus.value, opts.unlockMethod.value]).toEqual([restoring, "", "passkey"])
+		})
+
+		it("a failed passkey reports and writes nothing", async () => {
+			const opts = passkeyOpts()
+			opts.chooseUnlock.mockRejectedValueOnce(new Error("Passkey failed"))
+			const c = useFullBackupImport(opts)
+			c.selectedBackup.value = { name: "x.json", backup: await passkeyBody(), kind: "plain", profileType: "passkey" }
+			mockCleanRestore()
+			await c.restoreBackup()
+			expectNothingWritten()
+			expect(opts.fillError).toHaveBeenCalled()
+			expect(c.restoreStatus.value).not.toBe("finished")
+		})
+
+		it("a backup the restore refuses asks no passkey", async () => {
+			const opts = passkeyOpts()
+			const c = useFullBackupImport(opts)
+			const { checksum: _c, ...broken } = await passkeyBody()
+			c.selectedBackup.value = { name: "x.json", backup: { ...broken, checksum: "00" }, kind: "plain", profileType: "passkey" }
+			await c.restoreBackup()
+			expect(opts.chooseUnlock).not.toHaveBeenCalled()
+			expectNothingWritten()
+		})
+
+		it("the Password tab still needs a valid new password; the Passkey tab needs none", () => {
+			const opts = passkeyOpts()
+			const c = useFullBackupImport(opts)
+			c.selectedBackup.value = { name: "x.json", backup: {}, kind: "plain", profileType: "password" }
+			expect(c.isAllowedToImportBackup.value).toBe(true)
+			opts.unlockMethod.value = "password"
+			expect(c.isAllowedToImportBackup.value).toBe(false)
+			opts.password.value = "pass1234"
+			opts.repeatedPassword.value = "pass1234"
+			expect(c.isAllowedToImportBackup.value).toBe(true)
+		})
 	})
 
 	it.each([
@@ -2223,7 +2320,7 @@ describe("useFullBackupImport — a passkey profile's backup", () => {
 		held.resolve({ id: "new-id", name: "PK", type: "password" })
 		await run
 		expect(c.restoreStatus.value).toBe("finished")
-		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234")
+		expect(profileClient.finalizeRestore).toHaveBeenCalledWith("new-id", "pass1234", undefined)
 		expect(opts.fillError).not.toHaveBeenCalled()
 	})
 

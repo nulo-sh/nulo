@@ -118,6 +118,15 @@
 			"suite": "smoke"
 		},
 		{
+			"id": "popup-settings-security-unlock-method",
+			"name": "Unlock method",
+			"kind": "route",
+			"source": "apps/extension/src/popup/pages/settings/security/unlock-method.vue",
+			"reach": "#/popup/settings/security/unlock-method",
+			"states": ["default", "enter password", "new password"],
+			"suite": "smoke"
+		},
+		{
 			"id": "popup-settings-profile",
 			"name": "Profile",
 			"kind": "route",

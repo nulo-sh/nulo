@@ -91,10 +91,44 @@ describe("useProfileCreateFlow", () => {
 		flow.authMethod.value = "passkey"
 		await flow.handleCreate()
 		expect(profileApi.createPasskeyProfile).toHaveBeenCalledTimes(1)
-		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("MyProfile")
+		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("MyProfile", undefined, false)
 		expect(profileApi.generateProfileId).not.toHaveBeenCalled()
 		expect(passkeyRetry).not.toHaveBeenCalled()
 		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith({ id: "p1", name: "Created", type: "passkey" }, undefined)
+	})
+
+	describe("with a passkey the person already has", () => {
+		test("the page asks a discovery and confirms no credential an earlier create saved", async () => {
+			const { flow, opts } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(
+				new PasskeyUnconfirmedError("Y3JlZA==", "c2F2ZWQ=", new DOMException("no", "NotAllowedError")),
+			)
+			flow.profileName.value = "MyProfile"
+			await flow.handleCreate()
+			await flow.handleCreateWithExistingPasskey()
+			expect(passkeyRetry.mock.calls.at(-1)).toEqual(["MyProfile", expect.anything(), undefined, true])
+			expect(opts.onCreated).toHaveBeenCalledOnce()
+		})
+
+		test("in Firefox's toolbar panel the background asks it", async () => {
+			vi.mocked(closesOnFocusLoss).mockReturnValue(true)
+			const { flow } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			await flow.handleCreateWithExistingPasskey()
+			expect(profileApi.createPasskeyProfile).toHaveBeenCalledExactlyOnceWith("MyProfile", undefined, true)
+		})
+
+		test("on the Password tab it does nothing", async () => {
+			const { flow, opts } = makeFlow()
+			flow.authMethod.value = "password"
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await flow.handleCreateWithExistingPasskey()
+			expect(profileApi.createProfile).not.toHaveBeenCalled()
+			expect(passkeyRetry).not.toHaveBeenCalled()
+			expect(opts.onCreated).not.toHaveBeenCalled()
+		})
 	})
 
 	test("latch: two synchronous submits create only once", async () => {
