@@ -18,27 +18,7 @@ import {
 	setupPasskeyVirtualAuth,
 	withholdCreatePrf,
 } from "./fixtures/passkey"
-import { completeResetRitual } from "./helpers/crash-truth"
-import {
-	buildSyntheticPasskeyBackup,
-	ONBOARDING_IMPORT_SHELL,
-	POPUP_IMPORT_SHELL,
-	readActiveAccount,
-	readRegisteredPasskey,
-	refusePasskeyRestore,
-	writeBackupToTemp,
-} from "./helpers/import-drivers"
-
-/** Registers a passkey profile in `page`, keeps a backup of it, and deletes it. Chrome's virtual
- *  authenticator lives in this page, so every later passkey step runs in it too. */
-async function backUpAndDeletePasskeyProfile(page: Page): Promise<{ file: string; address: string }> {
-	await registerPasskeyProfile(page)
-	const passkey = await readRegisteredPasskey(page)
-	const file = writeBackupToTemp(await buildSyntheticPasskeyBackup(page, passkey), "passkey-backup.json")
-	await navigateByHash(page, "#/popup/settings/security/reset")
-	await completeResetRitual(page, "#/popup/register")
-	return { file, address: passkey.account.address }
-}
+import { readActiveAccount } from "./helpers/import-drivers"
 
 /** Onboarding in the same tab: a wallet with no profile runs it again. */
 async function onboardingInPage(ctx: ExtensionContext, page: Page, cta: "create" | "import"): Promise<void> {
@@ -63,9 +43,6 @@ async function retryWithTheToastGone(page: Page, control: string): Promise<void>
 	}
 	await release()
 }
-
-const toPopupImport = (_ctx: ExtensionContext, page: Page) => navigateByHash(page, "#/popup/import")
-const toOnboardingImport = (ctx: ExtensionContext, page: Page) => onboardingInPage(ctx, page, "import")
 
 interface Step {
 	where: string
@@ -95,7 +72,8 @@ const STEPS: Step[] = [
 			return undefined
 		},
 		control: "onboarding-submit-create",
-		finished: (page) => waitForHash(page, "#/onboarding/done", 60_000),
+		// A passkey wallet shows its recovery phrase before Ready.
+		finished: (page) => page.waitForSelector('[data-testid="onboarding-phrase-page"]', { visible: true, timeout: 60_000 }),
 	},
 	{
 		where: "the popup's unlock",
@@ -116,28 +94,9 @@ const STEPS: Step[] = [
 			return undefined
 		},
 		control: "agree-continue-btn",
-		// The backup's card shows before the prompt; Download is enabled only once the backup is made.
-		finished: (page) =>
-			page.waitForFunction(
-				() => document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')?.disabled === false,
-				{ timeout: 180_000, polling: 250 },
-			),
+		// The backup's card shows before the prompt; the file password is asked once the backup is made.
+		finished: (page) => page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 }),
 	},
-	...[
-		{ where: "the popup's passkey import", to: toPopupImport, landing: "#/popup/general" },
-		{ where: "onboarding's passkey import", to: toOnboardingImport, landing: "#/onboarding/done" },
-	].map(
-		({ where, to, landing }): Step => ({
-			where,
-			reach: async (ctx, page) => {
-				const { address } = await backUpAndDeletePasskeyProfile(page)
-				await to(ctx, page)
-				return address
-			},
-			control: "import-option-passkey",
-			finished: (page) => waitForHash(page, landing, 60_000),
-		}),
-	),
 ]
 
 for (const { where, reach, control, finished } of STEPS) {
@@ -150,7 +109,7 @@ for (const { where, reach, control, finished } of STEPS) {
 			await retryWithTheToastGone(page, control)
 			await finished(page)
 			await waitForToastGone(page, PASSKEY_COPY.notConfirmed, 1_000)
-			if (account) expect((await readRegisteredPasskey(page)).account.address).toBe(account)
+			if (account) expect(await readActiveAccount(page)).toBe(account)
 		} finally {
 			await auth.cleanup()
 		}
@@ -171,31 +130,14 @@ test("the popup's new passkey profile: a passkey created but not confirmed is co
 		await retryWithTheToastGone(page, "register-submit-btn")
 		await waitForHash(page, "#/popup/general", 60_000)
 		expect(await creates()).toBe(1)
+		// The retry sealed the profile at the input its first try asked; the unlock asks that input again.
+		const address = await readActiveAccount(page)
+		await clickByTestId(page, "header-lock")
+		await waitForHash(page, "#/popup/auth", 15_000)
+		await clickByTestId(page, "auth-submit")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await readActiveAccount(page)).toBe(address)
 	} finally {
 		await auth.cleanup()
 	}
 }, 240_000)
-
-for (const { where, shell, to } of [
-	{ where: "the popup's full-backup restore", shell: POPUP_IMPORT_SHELL, to: toPopupImport },
-	{ where: "onboarding's full-backup restore", shell: ONBOARDING_IMPORT_SHELL, to: toOnboardingImport },
-]) {
-	test(`${where}: a refused passkey keeps the backup chosen, and the second try restores`, async ({ freshExtensionPerTest: ctx }) => {
-		const page = await openPopup(ctx)
-		const auth = await setupPasskeyVirtualAuth(ctx.browser, page)
-		try {
-			const { file, address } = await backUpAndDeletePasskeyProfile(page)
-			await to(ctx, page)
-			await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 10_000 })
-			await clickByTestId(page, "import-option-full-backup")
-			const submit = shell.submitTestId("full-backup")
-			await refusePasskeyRestore(page, auth, submit, file)
-			await retryWithTheToastGone(page, submit)
-			await waitForHash(page, shell.successHash, 120_000)
-			await waitForToastGone(page, PASSKEY_COPY.notConfirmed, 1_000)
-			expect((await readRegisteredPasskey(page)).account.address).toBe(address)
-		} finally {
-			await auth.cleanup()
-		}
-	}, 240_000)
-}

@@ -53,12 +53,13 @@ import { readSealedRows } from "../fixtures/sealed-rows"
 import {
 	accountChainId,
 	downloadEncryptedBackup,
-	downloadPlainPasskeyBackup,
+	downloadPasskeyBackup,
+	FILE_PASSWORD,
 	keepChainAccountState,
 	openEncryptedBackup,
 } from "./backup-export"
-import { passkeyBackupVerifies, type PlainBackup, sealPasskeyBackup, sealPlainBackup } from "./backup-seal"
-import { importFullBackup, POPUP_IMPORT_SHELL, readPasskeyPrf, submitPasskeyFullBackup } from "./import-drivers"
+import { type PlainBackup, sealPlainBackup } from "./backup-seal"
+import { importFullBackup, POPUP_IMPORT_SHELL } from "./import-drivers"
 
 const AMOUNT = 25n * 10n ** 18n
 const OTHER_PASSWORD = "OtherProfilePw123!"
@@ -104,8 +105,7 @@ export async function runHandshakeImport(ctx: ExtensionContext, aztecConfig: Azt
 
 		await holdAccountRegistration(page, receiver)
 		await navigateByHash(page, "#/popup/import")
-		if (row.credential === "passkey") await importPasskeyFullBackup(page, file)
-		else await importFullBackup(page, file, TEST_PASSWORD, POPUP_IMPORT_SHELL)
+		await importFullBackup(page, file, TEST_PASSWORD, POPUP_IMPORT_SHELL)
 		await switchToLocalNetwork(page)
 		expect(await getAccountAddress(page)).not.toBe(receiver)
 
@@ -185,30 +185,25 @@ async function unlock(page: Page, credential: Credential, profileId: string): Pr
 }
 
 /**
- * The unlocked profile's full backup, kept to the sandbox chain so the import dials no public RPC.
- * A passkey backup is checked as the wallet made it, then re-sealed under the same passkey, read on
- * `page`, whose virtual authenticator holds it.
+ * The unlocked profile's full backup, kept to the sandbox chain so the import dials no public RPC,
+ * opened and sealed again as a plain file. A passkey profile's file is protected with a file
+ * password of its own, and restores as a password profile.
  */
 export async function exportBackup(page: Page, credential: Credential, account: string, token: string, dir: string): Promise<string> {
 	await navigateByHash(page, "#/popup/settings/security/export/full")
 	await clickByTestId(page, "agree-continue-btn")
 	const file = join(dir, "backup.json")
+	let backup: PlainBackup
 	if (credential === "password") {
 		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 		await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 		await clickByTestId(page, "unlock-submit-btn")
-		const backup = await openEncryptedBackup(await downloadEncryptedBackup(page, clickByTestId, 180_000))
-		keepChainAccountState(backup.data, accountChainId(backup, account), token)
-		writeFileSync(file, sealPlainBackup(backup))
+		backup = await openEncryptedBackup(await downloadEncryptedBackup(page, clickByTestId, 180_000))
 	} else {
-		const backup = JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup
-		const id = backup["master-key"]
-		if (typeof id !== "string") throw new Error("the passkey backup names no credential in its master-key")
-		const passkey = { id, prf: await readPasskeyPrf(page, id) }
-		expect(await passkeyBackupVerifies(backup, passkey), "the wallet's passkey backup fails its own checksum or MAC").toBe(true)
-		keepChainAccountState(backup.data, accountChainId(backup, account), token)
-		writeFileSync(file, await sealPasskeyBackup(backup, passkey))
+		backup = await openEncryptedBackup(await downloadPasskeyBackup(page, FILE_PASSWORD, clickByTestId, 180_000), FILE_PASSWORD)
 	}
+	keepChainAccountState(backup.data, accountChainId(backup, account), token)
+	writeFileSync(file, sealPlainBackup(backup))
 	await navigateByHash(page, "#/popup/general")
 	return file
 }
@@ -222,13 +217,6 @@ export async function deleteProfile(page: Page, from: DeleteFrom): Promise<void>
 	await clickByTestId(page, "forgot-reset-btn")
 	await waitForHash(page, "#/popup/settings/security/reset", 10_000)
 	await resetProfile(page)
-}
-
-/** A passkey backup asks for no password: its keys are sealed to the credential. */
-async function importPasskeyFullBackup(page: Page, file: string): Promise<void> {
-	await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 15_000 })
-	await clickByTestId(page, "import-option-full-backup")
-	await submitPasskeyFullBackup(page, file, 300_000)
 }
 
 /** The gate's acknowledgement: from here on the token is registered and the receiver is not. */

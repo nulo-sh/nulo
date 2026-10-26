@@ -308,8 +308,8 @@ export class SessionManager {
 			// the in-memory secret usable for this SW lifetime (degraded success:
 			// not persisted, but usable).
 			// Named + wiped in a finally: `Fr.fromBuffer` copies, so an anonymous `Buffer.from(...)`
-			// here would leave a second master-equivalent buffer alive until GC (same class of leak
-			// as the passkey OKM copy) — and an out-of-range throw must not skip the wipe.
+			// here would leave a second master-equivalent buffer alive until GC — and an out-of-range
+			// throw must not skip the wipe.
 			const secretCopy = Buffer.from(secretBuffer)
 			let secret: Fr
 			try {

@@ -13,6 +13,7 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
@@ -24,6 +25,7 @@ import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { goBack } from "@/utils/page-back"
 import { backupNotice } from "@/components/stale-network/copy"
+import { newPasswordHint } from "@/utils/password"
 
 /** Composables */
 import { useFullBackupExport } from "@/composables/useFullBackupExport"
@@ -49,21 +51,23 @@ const {
 	isDownloading,
 	showRecommendation,
 	isWrongPassword,
-	isPasswordMismatch,
 	dekReplaced,
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
-	savedPlain,
 	isPasskeyProfile,
 	canDownload,
+	canEncrypt,
 	handleBackup,
 	handleEncrypt,
 	downloadBackup,
-	handleDownloadClick,
 	reset,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
+
+const maxPasswordLength = 128
+const isFilePasswordHidden = ref(true)
+const filePasswordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 
 const addedNetworksText = computed(() => {
 	const { accounts, networks } = importsOnAddedNetworks.value
@@ -107,7 +111,7 @@ const onKeydown = (e) => {
 			handleEncrypt()
 			break
 		case "encrypted":
-			downloadBackup(true)
+			downloadBackup()
 			break
 		default:
 			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
@@ -226,15 +230,8 @@ onBeforeUnmount(() => {
 						<template #description>
 							<Text color="secondary" height="140">
 								This profile's imported-keys key could not be recovered, so the file carries a fresh one:
-								any imported account must be imported again after the restore.
-								<template v-if="isPasskeyProfile">
-									To repair: keep this file and your passkey, delete this profile from the wallet, then
-									restore the file with that passkey.
-								</template>
-								<template v-else>
-									To repair: restore this file (or your recovery phrase) into a new profile, then delete
-									this one.
-								</template>
+								any imported account must be imported again after the restore. To repair: restore this
+								file (or your recovery phrase) into a new profile, then delete this one.
 							</Text>
 						</template>
 					</Banner>
@@ -278,8 +275,7 @@ onBeforeUnmount(() => {
 						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
 						<template #description>
 							<Text v-if="isPasskeyProfile" height="140">
-								Protect it with a password before you download it. Without a password, the file is saved in
-								plain text.
+								Choose a password for this file. You'll need it to restore the backup.
 							</Text>
 							<Text v-else height="140">
 								Encrypt the file with your profile password before you download it. Without a password, anyone
@@ -288,18 +284,16 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<!-- Banner always lays out its description, so a lone title sits on one row, where the empty
-					     description takes no height. -->
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"
-						:direction="savedPlain ? 'horizontal' : 'vertical'"
+						direction="vertical"
 						data-testid="backup-done-banner"
 					>
 						<template #title>
 							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
 						</template>
-						<template v-if="!savedPlain" #description>
+						<template #description>
 							<Text color="secondary" height="140">
 								Don't forget your
 								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>
@@ -309,51 +303,40 @@ onBeforeUnmount(() => {
 					</Banner>
 				</div>
 
-				<!-- Encryption password fields (passkey profiles) -->
-				<div
-					v-if="!showRecommendation && isPasskeyProfile && backupStatus === 'finished'"
-					class="export_section_last"
-				>
-					<span class="export_section_label type--label-section">Encrypt with password</span>
+				<div v-if="isPasskeyProfile && backupStatus === 'finished'" class="export_section_last">
+					<span class="export_section_label type--label-section">File password</span>
 					<Flex direction="column" gap="12">
-						<div :class="[isPasswordMismatch && $style.shake]">
-							<Input
-								v-model="password"
-								:error="isPasswordMismatch"
-								:ariaInvalid="isPasswordMismatch"
-								@click="isPasswordMismatch = false"
-								@input="isPasswordMismatch = false"
-								type="password"
-								label="Password"
-								placeholder="Enter password"
-								autocomplete="new-password"
-								autofocus
-								:disabled="backupStatus === 'encrypting'"
-								data-testid="backup-encrypt-password-input"
-							/>
-						</div>
+						<Input
+							v-model="password"
+							:type="isFilePasswordHidden ? 'password' : 'text'"
+							:maxLength="maxPasswordLength"
+							placeholder="Enter password"
+							autocomplete="new-password"
+							autofocus
+							data-testid="backup-encrypt-password-input"
+						>
+							<template #suffix>
+								<PasswordVisibilityToggle
+									:hidden="isFilePasswordHidden"
+									data-testid="backup-encrypt-password-input-visibility-toggle"
+									@toggle="isFilePasswordHidden = !isFilePasswordHidden"
+								/>
+							</template>
+							<template #bottom>
+								<Flex align="center" gap="6" :class="$style.hint_row">
+									<Icon name="lock" :size="12" color="tertiary" />
+									<Text variant="body" color="tertiary" data-testid="backup-encrypt-password-hint">{{ filePasswordHint }}</Text>
+								</Flex>
+							</template>
+						</Input>
 						<Input
 							v-model="repeatedPassword"
-							:error="isPasswordMismatch"
-							:ariaInvalid="isPasswordMismatch"
-							@click="isPasswordMismatch = false"
-							@input="isPasswordMismatch = false"
-							type="password"
+							:type="isFilePasswordHidden ? 'password' : 'text'"
+							:maxLength="maxPasswordLength"
 							placeholder="Repeat password"
 							autocomplete="new-password"
-							:disabled="backupStatus === 'encrypting'"
 							data-testid="backup-encrypt-password-confirm-input"
 						/>
-						<Transition name="fade">
-							<span
-								v-if="isPasswordMismatch"
-								:class="$style.error_text"
-								role="alert"
-								data-testid="backup-encrypt-error-text"
-							>
-								Passwords don't match
-							</span>
-						</Transition>
 					</Flex>
 				</div>
 			</template>
@@ -385,7 +368,7 @@ onBeforeUnmount(() => {
 					v-if="backupStatus === 'finished' || backupStatus === 'encrypting'"
 					@click="handleEncrypt()"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="backupStatus === 'encrypting' || isDownloading"
+					:disabled="backupStatus === 'encrypting' || isDownloading || !canEncrypt"
 					variant="cta"
 					data-testid="protect-password-btn"
 				>
@@ -403,7 +386,7 @@ onBeforeUnmount(() => {
 				</Button>
 				<Button
 					v-else
-					@click="handleDownloadClick"
+					@click="downloadBackup()"
 					@keydown.enter="refuseRepeatEnter"
 					:disabled="!canDownload || isDownloading"
 					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
@@ -428,15 +411,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.error_text {
-	composes: type--body from global;
-	color: var(--txt-danger);
+.hint_row {
 	margin-top: 4px;
-	display: block;
-}
-
-.shake {
-	composes: shake_password from "../../../../../components/composite/shake.module.css";
 }
 
 .agreement_blocked {

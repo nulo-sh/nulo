@@ -19,18 +19,18 @@ describe("StepIndicator", () => {
 		expect(texts("terms", "password")).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
 	})
 
-	test("a passkey wallet's path has three cells, numbered with no gap where the phrase would be", () => {
-		expect(texts("ready", "passkey")).toEqual(["01Terms", "02Create", "03Ready"])
+	test("a passkey wallet's path has the password path's four cells, the phrase third", () => {
+		expect(texts("ready", "passkey")).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
 	})
 
 	test("an import's path has three cells, and its second reads Import", () => {
 		expect(texts("wallet", "import")).toEqual(["01Terms", "02Import", "03Ready"])
 	})
 
-	test("the count follows the path, so choosing Password grows the row by the phrase cell", async () => {
-		const wrapper = row("wallet", "passkey")
+	test("the count follows the path, so leaving Import for Create grows the row by the phrase cell", async () => {
+		const wrapper = row("wallet", "import")
 		expect(wrapper.findAll("nav > div")).toHaveLength(3)
-		await wrapper.setProps({ path: "password" })
+		await wrapper.setProps({ path: "passkey" })
 		expect(wrapper.findAll("nav > div").map((cell) => cell.text())).toEqual(["01Terms", "02Create", "03Phrase", "04Ready"])
 	})
 

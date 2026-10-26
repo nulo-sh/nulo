@@ -3,7 +3,8 @@ import { describe, expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
 import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
 import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { readProfileNames, readRecoveryWords, revealSeedPhrase } from "./fixtures/helpers"
+import { readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
+import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
@@ -126,6 +127,51 @@ describe("onboarding tab", () => {
 		// The step showed the wallet's own words: Settings reveals the same ones.
 		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)
 	})
+
+	test("create + passkey shows the phrase stage, and the passkey unlocks the same wallet after a lock", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		// Chrome keeps a virtual credential for the life of the page it was added on, so the onboarding
+		// and the popup run in this one page.
+		const page = await openPopup(extension)
+		const auth = await setupPasskeyVirtualAuth(extension.browser, page)
+		try {
+			await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
+			await gotoExtensionPage(page, extensionUrl(extension.extensionId, "/src/onboarding/index.html#/onboarding/welcome"))
+			await clickByTestId(page, "onboarding-welcome-create")
+			await waitForHash(page, "#/onboarding/create", 10_000)
+			await clickByTestId(page, "onboarding-method-passkey")
+			await clickByTestId(page, "onboarding-submit-create")
+
+			await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 60_000 })
+			expect(await readRecoveryWords(page, "onboarding-phrase")).toHaveLength(24)
+			await clickByTestId(page, "onboarding-phrase-saved")
+			await waitForHash(page, "#/onboarding/done", 10_000)
+			expect(await phraseSavedFlags(page)).toEqual([true])
+
+			// Open wallet's own write, without the tab close that would take the credential with it.
+			await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
+			await gotoExtensionPage(page, extensionUrl(extension.extensionId, "/src/popup/index.html#/popup/general"))
+			await waitForHash(page, "#/popup/general", 15_000)
+			const address = (await selectedAccount(page)) as string
+			expect(address).toMatch(/^0x[0-9a-f]+$/)
+
+			await clickByTestId(page, "header-lock")
+			await waitForHash(page, "#/popup/auth", 15_000)
+			await page.waitForFunction(
+				() => {
+					const submit = document.querySelector<HTMLButtonElement>('[data-testid="auth-submit"]')
+					return !!submit && !submit.disabled
+				},
+				{ timeout: 15_000 },
+			)
+			await clickByTestId(page, "auth-submit")
+			await waitForHash(page, "#/popup/general", 60_000)
+			expect(await selectedAccount(page)).toBe(address)
+		} finally {
+			await auth.cleanup()
+		}
+	}, 120_000)
 
 	test("Open wallet keeps a tab that is its window's last, and opens the popup over it", async ({ freshExtensionPerTest: extension }) => {
 		const control = await openScratchPage(extension.browser, extension.extensionId)

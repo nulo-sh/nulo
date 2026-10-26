@@ -9,19 +9,24 @@ import { useToast } from "@/composables/toast"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { usePasskeyCeremony } from "./usePasskeyCeremony"
 
-const fakeData = (id = "cred-x"): PasskeyCredentialData => ({ id: asBase64CredentialId(id), prf: asBase64SecretPrf("prf-bytes-base64") })
+const SALT = "c2FsdA=="
+const fakeData = (id = "cred-x"): PasskeyCredentialData => ({
+	id: asBase64CredentialId(id),
+	prf: asBase64SecretPrf("prf-bytes-base64"),
+	prfSalt: SALT,
+})
 
 describe("usePasskeyCeremony", () => {
 	test("opens the dialog (sets request) when runCeremony is called", () => {
 		const { request, runCeremony } = usePasskeyCeremony()
 		expect(request.value).toBeNull()
-		runCeremony({ mode: "get", step: "unlock", credentialId: "abc" })
-		expect(request.value).toEqual({ mode: "get", step: "unlock", credentialId: "abc" })
+		runCeremony({ mode: "get", step: "unlock", credentialId: "abc", prfSalt: SALT })
+		expect(request.value).toEqual({ mode: "get", step: "unlock", credentialId: "abc", prfSalt: SALT })
 	})
 
 	test("onResolve clears the dialog and resolves the awaiting Promise", async () => {
 		const { request, runCeremony, onResolve } = usePasskeyCeremony()
-		const promise = runCeremony({ mode: "create", step: "create", userHandle: "uh", name: "Test" })
+		const promise = runCeremony({ mode: "create", step: "create", userHandle: "uh", prfSalt: SALT, profileName: "Test" })
 
 		const data = fakeData()
 		onResolve(data)
@@ -32,7 +37,7 @@ describe("usePasskeyCeremony", () => {
 
 	test("onReject clears the dialog and rejects the awaiting Promise", async () => {
 		const { request, runCeremony, onReject } = usePasskeyCeremony()
-		const promise = runCeremony({ mode: "get", step: "unlock", credentialId: "abc" })
+		const promise = runCeremony({ mode: "get", step: "unlock", credentialId: "abc", prfSalt: SALT })
 
 		const err = new Error("user cancelled")
 		onReject(err)
@@ -43,8 +48,8 @@ describe("usePasskeyCeremony", () => {
 
 	test("rejects a second concurrent runCeremony call", async () => {
 		const { runCeremony, onResolve } = usePasskeyCeremony()
-		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", name: "Test" })
-		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", name: "Test" })
+		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", prfSalt: SALT, profileName: "Test" })
+		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", prfSalt: SALT, profileName: "Test" })
 		await expect(second).rejects.toThrow(/already in flight/)
 		// First still resolvable cleanly.
 		onResolve(fakeData())
@@ -53,22 +58,22 @@ describe("usePasskeyCeremony", () => {
 
 	test("after resolve, a NEW ceremony can run", async () => {
 		const { runCeremony, onResolve } = usePasskeyCeremony()
-		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", name: "Test" })
+		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", prfSalt: SALT, profileName: "Test" })
 		onResolve(fakeData("cred-1"))
 		await first
 
-		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", name: "Test" })
+		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", prfSalt: SALT, profileName: "Test" })
 		onResolve(fakeData("cred-2"))
 		await expect(second).resolves.toMatchObject({ id: "cred-2" })
 	})
 
 	test("after reject, a NEW ceremony can run", async () => {
 		const { runCeremony, onResolve, onReject } = usePasskeyCeremony()
-		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", name: "Test" })
+		const first = runCeremony({ mode: "create", step: "create", userHandle: "uh", prfSalt: SALT, profileName: "Test" })
 		onReject(new Error("first cancelled"))
 		await expect(first).rejects.toThrow(/first cancelled/)
 
-		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", name: "Test" })
+		const second = runCeremony({ mode: "create", step: "create", userHandle: "uh2", prfSalt: SALT, profileName: "Test" })
 		onResolve(fakeData("cred-2"))
 		await expect(second).resolves.toMatchObject({ id: "cred-2" })
 	})
@@ -87,21 +92,21 @@ describe("usePasskeyCeremony", () => {
 
 	test("request.value mirrors the latest active request", () => {
 		const { runCeremony, request, onResolve } = usePasskeyCeremony()
-		const req1 = { mode: "get", step: "unlock", credentialId: "a" } as const
+		const req1 = { mode: "get", step: "unlock", credentialId: "a", prfSalt: SALT } as const
 		runCeremony(req1)
 		expect(request.value).toEqual(req1)
 
 		onResolve(fakeData())
 		expect(request.value).toBeNull()
 
-		const req2 = { mode: "create", step: "create", userHandle: "uh", name: "Test" } as const
+		const req2 = { mode: "create", step: "create", userHandle: "uh", prfSalt: SALT, profileName: "Test" } as const
 		runCeremony(req2)
 		expect(request.value).toEqual(req2)
 	})
 
 	test("Promise propagates the resolved data verbatim (not a copy)", async () => {
 		const { runCeremony, onResolve } = usePasskeyCeremony()
-		const promise = runCeremony({ mode: "get", step: "unlock", credentialId: "x" })
+		const promise = runCeremony({ mode: "get", step: "unlock", credentialId: "x", prfSalt: SALT })
 		const data = fakeData("identity-check")
 		onResolve(data)
 		await expect(promise).resolves.toBe(data) // strict equality
@@ -110,7 +115,7 @@ describe("usePasskeyCeremony", () => {
 
 describe("usePasskeyCeremony and the not-confirmed line", () => {
 	const { toast, openToast, closeToast } = useToast()
-	const unlock = { mode: "get", step: "unlock", credentialId: "abc" } as const
+	const unlock = { mode: "get", step: "unlock", credentialId: "abc", prfSalt: SALT } as const
 	afterEach(() => closeToast())
 
 	test("a new attempt closes the line before the passkey is asked, so a success leaves nothing", async () => {

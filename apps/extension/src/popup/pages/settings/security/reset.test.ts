@@ -161,7 +161,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 
 	test("the sentence promises back only the accounts the phrase derives", async () => {
 		const { w } = await mountReady()
-		expect(w.text()).toContain("You will be able to recover the accounts derived from your recovery phrase later if you have saved it")
+		expect(w.text()).toContain("You will be able to recover the accounts created from your recovery phrase later if you have saved it")
 	})
 
 	test("unlocked, it lists each chain's imported accounts and sends Export first to the full backup", async () => {

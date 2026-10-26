@@ -15,6 +15,7 @@ import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 /** Services */
 import { managers } from "@/utils/core"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
@@ -47,9 +48,18 @@ let createdId = ""
 const lifetime = createRunFence()
 const isMounted = lifetime.snapshot()
 
-async function readPhrase(id: string, typed: string): Promise<string[] | undefined> {
+const path = ref<"password" | "passkey">("password")
+
+async function readPhrase(
+	profile: ProfileInfo,
+	typed: string,
+	credentialData: PasskeyCredentialData | undefined,
+): Promise<string[] | undefined> {
+	if (profile.type === "passkey" && !credentialData) return undefined
 	try {
-		return await managers.profile.exportMnemonic(id, typed)
+		return profile.type === "password"
+			? await managers.profile.exportMnemonic(profile.id, typed)
+			: await managers.profile.exportMnemonic(profile.id, undefined, credentialData)
 	} catch (error) {
 		console.debug("onboarding phrase read failed", { error })
 		return undefined
@@ -76,12 +86,12 @@ const {
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
-	// Reading the words needs the typed password, so they are read before it is cleared; a failed
-	// read still reaches Ready, where Home's reminder stays until the phrase is saved.
-	onCreated: async (created) => {
+	// The words open with the typed password, or with the passkey answer the create was made from,
+	// so they are read before either is dropped; a failed read still reaches Ready, where Home's
+	// reminder stays until the phrase is saved.
+	onCreated: async (profile, credentialData) => {
 		if (!isMounted()) return
-		const profile = created as ProfileInfo
-		const phrase = profile.type === "password" ? await readPhrase(profile.id, password.value) : undefined
+		const phrase = await readPhrase(profile, password.value, credentialData)
 		password.value = ""
 		confirm.value = ""
 		if (!isMounted()) return
@@ -95,6 +105,7 @@ const {
 			return
 		}
 		createdId = profile.id
+		path.value = profile.type
 		words.value = phrase
 		stage.value = "phrase"
 	},
@@ -109,11 +120,11 @@ const submitLabel = computed(() => {
 
 async function onPhraseSaved() {
 	await markGetStarted(createdId, "phraseSaved")
-	if (isMounted()) router.push(doneRoute("password"))
+	if (isMounted()) router.push(doneRoute(path.value))
 }
 
 function onPhraseLater() {
-	router.push(doneRoute("password"))
+	router.push(doneRoute(path.value))
 }
 
 onBeforeUnmount(() => {
@@ -127,7 +138,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" @saved="onPhraseSaved" @later="onPhraseLater" />
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="onPhraseLater" />
 	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"

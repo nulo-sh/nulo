@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { buildCreateOptions, confirmCreatedCredential, runPasskeyCeremony } from "./passkey-ceremony"
+import { buildCreateOptions, buildGetOptions, confirmMinted, runPasskeyCeremony } from "./passkey-ceremony"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "./passkey-errors"
 
 const ID = "a3f29b14"
+const SALT_BYTES = new Uint8Array(32).fill(0x5a)
+const SALT = Buffer.from(SALT_BYTES).toString("base64")
+const OTHER_SALT = Buffer.from(new Uint8Array(32).fill(0x5b)).toString("base64")
 const toHex = (b: BufferSource): string => {
 	const u =
 		b instanceof ArrayBuffer
@@ -12,41 +15,27 @@ const toHex = (b: BufferSource): string => {
 }
 
 describe("buildCreateOptions", () => {
-	it("sets user.name and user.displayName to the branded nulo-{name}-{id} label", async () => {
-		const opts = await buildCreateOptions(ID, "Alice")
-		expect(opts.user.name).toBe("nulo-alice-a3f29b14")
-		expect(opts.user.displayName).toBe("nulo-alice-a3f29b14")
+	it("labels the credential with the wallet's name alone, in both user fields", () => {
+		const opts = buildCreateOptions(ID, SALT)
+		expect(opts.user.name).toBe("Nulo wallet")
+		expect(opts.user.displayName).toBe("Nulo wallet")
 	})
 
-	it("uses the name-free fallback when the profile name has no slugifiable characters", async () => {
-		const opts = await buildCreateOptions(ID, "山田")
-		expect(opts.user.name).toBe("nulo-profile-a3f29b14")
-		expect(opts.user.displayName).toBe("nulo-profile-a3f29b14")
+	it("sets user.id to the hex-decoded handle", () => {
+		expect(toHex(buildCreateOptions(ID, SALT).user.id)).toBe(ID)
 	})
 
-	// Regression guard: changing the label must NOT disturb any crypto-adjacent
-	// field. user.id, the PRF eval input, the challenge size, rp, and the
-	// credential params are what the key-derivation + relying-party binding
-	// depend on — they stay byte-identical to the pre-change shape.
-	it("leaves user.id as the hex-decoded handle (independent of the label)", async () => {
-		const opts = await buildCreateOptions(ID, "Alice")
-		expect(toHex(opts.user.id)).toBe(ID)
+	it.each(["a3f29b1", "a3f29b1x", " a3f29b14"])("rejects the malformed handle %j instead of truncating user.id", (handle) => {
+		expect(() => buildCreateOptions(handle, SALT)).toThrow("invalid hex")
 	})
 
-	it.each(["a3f29b1", "a3f29b1x", " a3f29b14"])("rejects the malformed handle %j instead of truncating user.id", async (handle) => {
-		await expect(buildCreateOptions(handle, "Alice")).rejects.toThrow("invalid hex")
+	it("evaluates the PRF at the profile's own input", () => {
+		expect(toHex(buildCreateOptions(ID, SALT).extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
+		expect(toHex(buildCreateOptions(ID, OTHER_SALT).extensions?.prf?.eval?.first as BufferSource)).not.toBe(toHex(SALT_BYTES))
 	})
 
-	it("keeps the PRF eval input = SHA-256('nulo:profile:v1')", async () => {
-		const opts = await buildCreateOptions(ID, "Alice")
-		const first = opts.extensions?.prf?.eval?.first
-		expect(first).toBeDefined()
-		const expected = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("nulo:profile:v1")))
-		expect(toHex(first as BufferSource)).toBe(Buffer.from(expected).toString("hex"))
-	})
-
-	it("keeps rp, challenge size, credential params, and authenticator selection unchanged", async () => {
-		const opts = await buildCreateOptions(ID, "Alice")
+	it("keeps rp, challenge size, credential params, and authenticator selection unchanged", () => {
+		const opts = buildCreateOptions(ID, SALT)
 		expect(opts.rp).toEqual({ name: "Nulo", id: "passkey.nulo.sh" })
 		expect((opts.challenge as Uint8Array).byteLength).toBe(32)
 		expect(opts.pubKeyCredParams).toEqual([
@@ -58,6 +47,17 @@ describe("buildCreateOptions", () => {
 			userVerification: "required",
 			requireResidentKey: true,
 		})
+	})
+})
+
+describe("buildGetOptions", () => {
+	it("asks only the profile's credential, with user verification, at the profile's input", () => {
+		const opts = buildGetOptions(b64(RAW_ID), SALT)
+		expect(opts.rpId).toBe("passkey.nulo.sh")
+		expect(opts.userVerification).toBe("required")
+		expect(opts.allowCredentials).toHaveLength(1)
+		expect(b64(opts.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
+		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
 	})
 })
 
@@ -84,7 +84,7 @@ const OTHER_RAW_ID = new Uint8Array([9, 8, 7, 6])
 const PRF_AT_CREATE = new Uint8Array(32).fill(7)
 const PRF_AT_GET = new Uint8Array(32).fill(9)
 const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64")
-const CREATE_REQUEST = { mode: "create", step: "create", userHandle: ID, name: "Alice" } as const
+const CREATE_REQUEST = { mode: "create", step: "create", userHandle: ID, prfSalt: SALT, profileName: "Alice" } as const
 
 describe("runPasskeyCeremony in create mode", () => {
 	const create = vi.fn<(o: CreateArgs) => Promise<unknown>>()
@@ -106,17 +106,16 @@ describe("runPasskeyCeremony in create mode", () => {
 	it("returns the create-time PRF without a second ceremony", async () => {
 		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true, results: { first: PRF_AT_CREATE } } }))
 		const data = await runPasskeyCeremony(CREATE_REQUEST)
-		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_CREATE), userHandle: ID })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_CREATE), prfSalt: SALT })
 		expect(get).not.toHaveBeenCalled()
 	})
 
-	// Firefox's shape: `enabled` without output. The assertion also omits `userHandle`, which is
-	// legal once `allowCredentials` pins the request — the minted handle has to survive it.
-	it("falls back to a get pinned to the new credential and keeps the minted handle", async () => {
+	// Firefox's shape: `enabled` without output.
+	it("falls back to a get pinned to the new credential at the same input", async () => {
 		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
 		get.mockResolvedValue(withPrfOnGet())
 		const data = await runPasskeyCeremony(CREATE_REQUEST)
-		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), prfSalt: SALT })
 		expect(get).toHaveBeenCalledTimes(1)
 		const opts = get.mock.calls[0][0].publicKey
 		expect(opts.allowCredentials).toHaveLength(1)
@@ -124,8 +123,7 @@ describe("runPasskeyCeremony in create mode", () => {
 		// The mock accepts invalid options, so check the fallback's security and derivation inputs.
 		expect(opts.rpId).toBe("passkey.nulo.sh")
 		expect(opts.userVerification).toBe("required")
-		const prfLabel = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("nulo:profile:v1")))
-		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(Buffer.from(prfLabel).toString("hex"))
+		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
 	})
 
 	/** The created-but-unconfirmed error `runPasskeyCeremony` rejects with. */
@@ -135,13 +133,13 @@ describe("runPasskeyCeremony in create mode", () => {
 		return err as PasskeyUnconfirmedError
 	}
 
-	it("a failed confirmation keeps the new credential: its id, the registration handle and the cause", async () => {
+	it("a failed confirmation keeps the new credential: its id, the input it was asked for and the cause", async () => {
 		const dismissed = new DOMException("not allowed", "NotAllowedError")
 		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
 		get.mockRejectedValue(dismissed)
 		const err = await unconfirmed()
 		expect(err.credentialId).toBe(b64(RAW_ID))
-		expect(err.userHandle).toBe(ID)
+		expect(err.prfSalt).toBe(SALT)
 		expect(err.cause).toBe(dismissed)
 	})
 
@@ -157,7 +155,7 @@ describe("runPasskeyCeremony in create mode", () => {
 		create.mockResolvedValue(new StubCredential(RAW_ID, {}))
 		const err = await unconfirmed()
 		expect(err.credentialId).toBe(b64(RAW_ID))
-		expect(err.userHandle).toBe(ID)
+		expect(err.prfSalt).toBe(SALT)
 		expect(err.cause).toBeInstanceOf(PasskeyPrfError)
 		expect((err.cause as Error).message).toBe("Passkey PRF not available")
 		expect(get).not.toHaveBeenCalled()
@@ -177,13 +175,14 @@ describe("runPasskeyCeremony in create mode", () => {
 		const err = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) }).catch((e: unknown) => e)
 		expect(create).not.toHaveBeenCalled()
 		expect(err).toBeInstanceOf(PasskeyUnconfirmedError)
-		expect(err).toMatchObject({ credentialId: b64(RAW_ID), userHandle: ID, cause: dismissed })
+		expect(err).toMatchObject({ credentialId: b64(RAW_ID), prfSalt: SALT, cause: dismissed })
 	})
 
-	it("with a saved credential: the confirmation returns its PRF under the registration handle", async () => {
+	it("with a saved credential: the confirmation evaluates the input the first attempt asked for", async () => {
 		get.mockResolvedValue(withPrfOnGet())
 		const data = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) })
-		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), prfSalt: SALT })
+		expect(toHex(get.mock.calls[0][0].publicKey.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
 		expect(create).not.toHaveBeenCalled()
 	})
 
@@ -197,7 +196,7 @@ describe("runPasskeyCeremony in create mode", () => {
 	})
 })
 
-describe("confirmCreatedCredential", () => {
+describe("confirmMinted", () => {
 	const get = vi.fn<(o: GetArgs) => Promise<unknown>>()
 
 	beforeEach(() => {
@@ -211,10 +210,9 @@ describe("confirmCreatedCredential", () => {
 		vi.unstubAllGlobals()
 	})
 
-	it("pins the assertion to the credential and restores the handle the assertion omitted", async () => {
+	it("pins the assertion to the credential and reports the input it evaluated", async () => {
 		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)))
-		const data = await confirmCreatedCredential(b64(RAW_ID), ID)
-		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(await confirmMinted(b64(RAW_ID), SALT)).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), prfSalt: SALT })
 		expect(b64(get.mock.calls[0][0].publicKey.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
 	})
 
@@ -222,13 +220,14 @@ describe("confirmCreatedCredential", () => {
 		get.mockResolvedValue(
 			new StubCredential(OTHER_RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)),
 		)
-		await expect(confirmCreatedCredential(b64(RAW_ID), ID)).rejects.toThrow("Passkey PRF fallback returned a different credential")
+		const err = await confirmMinted(b64(RAW_ID), SALT).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(PasskeyUnconfirmedError)
+		expect(((err as PasskeyUnconfirmedError).cause as Error).message).toBe("Passkey PRF fallback returned a different credential")
 	})
 })
 
 describe("runPasskeyCeremony in get mode", () => {
 	const get = vi.fn<(o: GetArgs) => Promise<unknown>>()
-	const HANDLE = new Uint8Array([0xa3, 0xf2, 0x9b, 0x14])
 
 	beforeEach(() => {
 		get.mockReset()
@@ -241,13 +240,12 @@ describe("runPasskeyCeremony in get mode", () => {
 		vi.unstubAllGlobals()
 	})
 
-	// The DOM hands `userHandle` over as an ArrayBuffer; the Uint8Array row covers a view.
-	it.each([
-		["ArrayBuffer", () => HANDLE.slice().buffer],
-		["Uint8Array", () => HANDLE.slice()],
-	])("returns the assertion's %s user handle as lowercase hex", async (_label, handle) => {
-		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(handle())))
-		const data = await runPasskeyCeremony({ mode: "get", step: "unlock" })
-		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: "a3f29b14" })
+	it("asks the profile's credential at its input and reports that input with the answer", async () => {
+		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)))
+		const data = await runPasskeyCeremony({ mode: "get", step: "unlock", credentialId: b64(RAW_ID), prfSalt: SALT })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), prfSalt: SALT })
+		const opts = get.mock.calls[0][0].publicKey
+		expect(b64(opts.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
+		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(toHex(SALT_BYTES))
 	})
 })

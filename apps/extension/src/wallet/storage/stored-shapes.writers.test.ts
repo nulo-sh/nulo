@@ -87,6 +87,7 @@ import {
 import { isSealedText } from "./sealed-entity-storage"
 import { sealedEntityStorage } from "./stores"
 import { rowKeysForEveryProfile } from "./sealed-entity-storage.testing"
+import { fakePasskeyCredential } from "../../../tests/helpers/fake-passkey"
 
 const bootMigrations = vi.hoisted((): Migration[] => [])
 vi.mock("./migrations", async (importOriginal) => ({
@@ -106,6 +107,8 @@ type DeepReadonly<T> = T extends (infer E)[]
 		? { readonly [K in keyof T]: DeepReadonly<T[K]> }
 		: T
 type Variant<T, K extends string> = Extract<T, { type: K }>
+/** The passkey row a build writes now; the registry also reads the retired one, which none writes. */
+type WrittenPasskey<T> = Extract<T, { type: "passkey"; prfSalt: string }>
 
 /** The stored value as the registry says it is encoded, parsed by its schema back to itself. */
 function expectDescribed(name: StoredShapeName, raw: unknown): void {
@@ -149,7 +152,7 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Out<typeof SeedMarkersSchema>, SeedMarkerState>,
 			Equivalent<Out<typeof RegistrationCountsSchema>, RegistrationCounts>,
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "password">, Variant<Profile, "password">>,
-			Equivalent<Variant<Out<typeof ProfileRowSchema>, "passkey">, Variant<Profile, "passkey">>,
+			Equivalent<WrittenPasskey<Out<typeof ProfileRowSchema>>, Variant<Profile, "passkey">>,
 			Equivalent<DeepReadonly<Registered<"legalAccepted">>, LegalAcceptanceRecord>,
 			Equivalent<Out<typeof PinMapSchema>, PinMap>,
 			Equivalent<Out<typeof AppPicksSchema>, Record<string, AppPick>>,
@@ -359,14 +362,8 @@ describe("what each writer stores parses back to itself", () => {
 		api.reset()
 		const log = logger()
 		const passkeys = svc(PASSKEY_SERVICE_NAME, {
-			createKey: async (userHandle: string) => ({
-				credential: {
-					id: `cred-${userHandle}`,
-					userHandle,
-					deriveMasterSecret: async () => new Uint8Array(32).fill(7),
-					deriveDekWrapKey: async () =>
-						crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]),
-				},
+			createKey: async (userHandle: string, prfSalt: string) => ({
+				credential: await fakePasskeyCredential(`cred-${userHandle}`, prfSalt),
 				finish: () => {},
 			}),
 		})

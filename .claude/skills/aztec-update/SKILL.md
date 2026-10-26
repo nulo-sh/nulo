@@ -164,7 +164,7 @@ skipped, vanished or never ran reds the job. That is the authoritative gate; the
 pre-flight. The frozen canary proves the regime's frozen account bytecode still simulates, proves natively,
 and is accepted by the bumped node/toolchain across the full arc (frozen-ctor multicall deploy →
 init-nullifier flip → authwit consume → background-restart re-derive + tx); the passkey canary proves
-the same for a PRF-derived account (in-page ceremony → frozen ctor → authwit consume →
+the same for a passkey profile's account (in-page ceremony → frozen ctor → authwit consume →
 background-restart ceremony re-unlock + tx). The address KAT cannot see execution breakage — these
 canaries are the only gate that does. **A red canary on either browser BLOCKS the bump** (read the
 Firefox lane's canary job on the bump PR by hand — advisory means it cannot block a merge, not that it

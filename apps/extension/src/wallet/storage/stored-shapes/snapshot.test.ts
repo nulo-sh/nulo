@@ -101,7 +101,7 @@ describe("R2 · every stamp is justified by the one before it", () => {
 
 describe("R4 · the stamps are append-only once pinned", () => {
 	test("the baseline is frozen, and every stamp has its pin and matches it", async () => {
-		expect(PINNED_STAMPS.length, "the baseline is frozen from 1.0.0: a pin is never removed").toBeGreaterThan(0)
+		expect(PINNED_STAMPS.length, "the baseline is frozen: a pin is removed only on the owner's recorded decision").toBeGreaterThan(0)
 		expect(snapshot.stamps.length, "a stamp with no pin, or a pin with no stamp: add the pin the generator printed").toBe(
 			PINNED_STAMPS.length,
 		)
@@ -115,7 +115,7 @@ describe("R4 · the stamps are append-only once pinned", () => {
 
 describe("R5 · the full backups pinned at the freeze still validate, migrate and read", () => {
 	const dir = join(dirname(fileURLToPath(import.meta.url)), "backups")
-	/** The e2e test profile's password (`tests/e2e/fixtures/constants.ts`), which seals `password.txt`. */
+	/** The e2e test profile's password (`tests/e2e/fixtures/constants.ts`), which seals every file here. */
 	const PASSWORD = "TestPassword123!"
 
 	test("every file in backups/ is pinned, and every pin names a file", () => {
@@ -125,7 +125,7 @@ describe("R5 · the full backups pinned at the freeze still validate, migrate an
 	test.each(Object.keys(PINNED_BACKUPS))("%s, unchanged, opens, validates, migrates and every restored row reads", async (name) => {
 		const text = readFileSync(join(dir, name), "utf8")
 		expect(createHash("sha256").update(text).digest("hex"), `${name} changed after its pin`).toBe(PINNED_BACKUPS[name])
-		const envelope = JSON.parse(name === "password.txt" ? await openFullBackupText(text, PASSWORD) : text) as Record<string, unknown>
+		const envelope = JSON.parse(await openFullBackupText(text, PASSWORD)) as Record<string, unknown>
 		const problems = await backupProblems(envelope, GOLDEN_NOW)
 		const block = acknowledgedBlock(Number(envelope[BACKUP_SCHEMA_VERSION_FIELD]), realMigrations)
 		if (block === undefined) {

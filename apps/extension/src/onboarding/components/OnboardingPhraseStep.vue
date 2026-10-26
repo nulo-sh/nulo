@@ -11,8 +11,13 @@ import RecoveryPhraseGrid from "@/components/composite/RecoveryPhraseGrid.vue"
 /** Utils */
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 
-const props = defineProps<{ words: readonly string[] }>()
+const props = defineProps<{ words: readonly string[]; path: "password" | "passkey" }>()
 const emit = defineEmits<{ saved: []; later: [] }>()
+
+const body = computed(
+	() =>
+		`Write these 24 words on paper and keep them offline. They bring your wallet back if you ${props.path === "password" ? "forget your password" : "lose your passkey"}.`,
+)
 
 const { openToast } = useToast()
 const { isCopied, copySecret } = useSecretClipboardCopy({ toastLabel: "Recovery phrase copied", openToast })
@@ -32,7 +37,7 @@ onMounted(() => {
 		<OnboardingStepHeader
 			ref="title"
 			current="phrase"
-			path="password"
+			:path="props.path"
 			main="Your recovery"
 			sub="Phrase"
 			tabindex="-1"
@@ -40,7 +45,7 @@ onMounted(() => {
 		/>
 
 		<Text variant="body" color="secondary" height="150">
-			Write these 24 words on paper and keep them offline. They bring your wallet back if you forget your password.
+			{{ body }}
 		</Text>
 
 		<RecoveryPhraseGrid :words="props.words" :columns="4" testId="onboarding-phrase" />

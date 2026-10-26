@@ -25,7 +25,7 @@ import {
 import { ensureUnlocked, lockWallet, navigateByHash, readRecoveryWords, waitForLockScreen, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { exportAccountBody, FIRST_ACCOUNT_NAME } from "./helpers/account-io"
-import { downloadEncryptedBackup, downloadPlainPasskeyBackup, openEncryptedBackup } from "./helpers/backup-export"
+import { downloadEncryptedBackup, downloadPasskeyBackup, FILE_PASSWORD, openEncryptedBackup } from "./helpers/backup-export"
 import { CANONICAL_SEED_24, importSeed, ONBOARDING_IMPORT_SHELL, readActiveAccount, TEST_PASSWORD } from "./helpers/import-drivers"
 import {
 	acceptOnboardingTerms,
@@ -152,16 +152,16 @@ async function revealSeedPhrase(page: Page): Promise<string> {
 }
 
 /**
- * Assemble a full backup through the page flow and download it. A password profile unlocks first
- * and downloads only the encrypted file; a passkey profile's agreement starts its WebAuthn ceremony
- * in the page itself, which is exactly what an overlay would break, and its plain download passes
- * a confirmation. Returns the file's content.
+ * Assemble a full backup through the page flow and download it, encrypted. A password profile
+ * unlocks first; a passkey profile's agreement starts its WebAuthn ceremony in the page itself,
+ * which is exactly what an overlay would break, and its file takes a password of its own. Returns
+ * the file's content.
  */
 async function downloadFullBackup(page: Page, password?: string): Promise<Record<string, unknown>> {
 	await navigateByHash(page, "#/popup/settings/security/export", 15_000)
 	await navigateByHash(page, "#/popup/settings/security/export/full", 15_000)
 	await pointerClick(page, "agree-continue-btn")
-	if (!password) return JSON.parse(await downloadPlainPasskeyBackup(page, pointerClick)) as Record<string, unknown>
+	if (!password) return await openEncryptedBackup(await downloadPasskeyBackup(page, FILE_PASSWORD, pointerClick), FILE_PASSWORD)
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', password)
 	await pointerClick(page, "unlock-submit-btn")

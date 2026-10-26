@@ -1,77 +1,49 @@
-import { ProfileIdConflictError } from "@nulo/extension-messaging/errors"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
-import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
+import { newCreateInput, type PasskeyRequest } from "@/wallet/services/passkey/spec"
 
 /**
- * Dependencies for creating a passkey-typed profile with the
- * ProfileIdConflictError retry handshake. All three are injected
- * explicitly so the helper is fully testable and decoupled from the
- * `managers.*` global proxy.
- *
- *   - runCeremony: hand off to the page's PasskeyCeremonyDialog (mode:
- *     "create" with the pre-reserved userHandle).
- *   - generateProfileId: ask the SW to reserve a fresh profile id.
- *   - createPasskeyProfile: persist the new profile with the collected
- *     credential.
+ * The page's two steps of an in-page passkey create, injected so the helper is testable apart
+ * from the `managers.*` proxy: the page's `PasskeyCeremonyDialog`, then the background's create.
  */
 export interface CreatePasskeyProfileDeps {
 	runCeremony: (req: PasskeyRequest) => Promise<PasskeyCredentialData>
-	generateProfileId: () => Promise<string>
 	createPasskeyProfile: (name: string, credData: PasskeyCredentialData) => Promise<ProfileInfo>
 }
 
-/** A credential an earlier attempt minted under `userHandle` (its profile id) but could not confirm. */
+/** A credential an earlier attempt minted but could not confirm, and the PRF input that attempt
+ *  asked for. */
 export interface SavedPasskeyCredential {
 	credentialId: string
-	userHandle: string
+	prfSalt: string
 }
 
+/** The new profile, and the passkey answer it was made from: the phrase stage opens the profile's
+ *  recovery phrase with it once, with no second prompt, then drops it. */
+export type CreatedPasskeyProfile = { profile: ProfileInfo; credentialData: PasskeyCredentialData }
+
 /**
- * Create a passkey-typed profile with a single retry on
- * `ProfileIdConflictError`. With `saved`, the first attempt confirms that credential under its own
- * id instead of minting another; a conflict on that id falls back to a fresh id and a fresh create.
+ * Creates a passkey profile from the page: mints the PRF input, runs the create, and hands the
+ * answer to the background, which allocates the id and seals the new phrase under it. With `saved`,
+ * it confirms that credential at its own input instead of minting another.
  *
- * The pre-reserved id can be claimed by another flow during the
- * WebAuthn prompt. On conflict, we re-run the entire ceremony with a
- * fresh id (and therefore a fresh credential) to keep the credential's
- * userHandle in sync with the persisted profile id.
- *
- * Scope is bounded to (a) reserve an id, (b) run the ceremony,
- * (c) call createPasskeyProfile, (d) retry once on conflict. The caller
- * owns ALL post-create side effects — `chrome.storage.local` writes,
- * bootstrap orchestration, routing, etc.
- *
- * @throws ProfileIdConflictError if both attempts hit the conflict.
  * @throws UserRejectedError if the ceremony was cancelled before a passkey was created; a later
  *   cancel arrives as `PasskeyUnconfirmedError` with that cause.
  * @throws Other Error from the service-client.
  */
-export async function createPasskeyProfileWithRetry(
+export async function createPasskeyProfileInPage(
 	name: string,
 	deps: CreatePasskeyProfileDeps,
 	saved?: SavedPasskeyCredential,
-): Promise<ProfileInfo> {
-	const MAX_RETRIES = 1
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-		const pinned = attempt === 0 ? saved : undefined
-		const profileId = pinned?.userHandle ?? (await deps.generateProfileId())
-		const credData = await deps.runCeremony({
-			mode: "create",
-			userHandle: profileId,
-			name,
-			step: "create",
-			profileName: name,
-			credentialId: pinned?.credentialId,
-		})
-		try {
-			return await deps.createPasskeyProfile(name, credData)
-		} catch (e) {
-			if (e instanceof ProfileIdConflictError && attempt < MAX_RETRIES) {
-				continue
-			}
-			throw e
-		}
-	}
-	throw new Error("createPasskeyProfile retried beyond MAX_RETRIES")
+): Promise<CreatedPasskeyProfile> {
+	const input = newCreateInput()
+	const credentialData = await deps.runCeremony({
+		mode: "create",
+		userHandle: input.userHandle,
+		prfSalt: saved?.prfSalt ?? input.prfSalt,
+		credentialId: saved?.credentialId,
+		step: "create",
+		profileName: name,
+	})
+	return { profile: await deps.createPasskeyProfile(name, credentialData), credentialData }
 }

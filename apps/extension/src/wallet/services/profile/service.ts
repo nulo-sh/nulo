@@ -12,10 +12,9 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
-	PasskeyProfileExistsError,
-	ProfileIdConflictError,
 	RecoveryModeError,
 	RestoreTornError,
+	RetiredProfileError,
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import { fromBase64Lenient, Lock } from "@/wallet/utils"
@@ -35,17 +34,21 @@ import {
 	IMPORTED_KEYS_DEK_LEN,
 	type ImportedKeysDek,
 	type MasterSecretBytes,
+	openPasskeySlots,
 	type Passhash,
+	type PasskeyCredential,
 	PasswordSecretBox,
 	type RowKeys,
 	type Sealed,
 	sealDekUnderWrapKey,
+	sealPasskeySlots,
 	unsealDekUnderWrapKey,
 	verifyEnvelopeMacV3,
 	zeroize,
 } from "@nulo/wallet-crypto"
 import { PasskeyService } from "@/wallet/services/passkey/service"
-import { PasskeyRecoveryCoordinator, type PasskeyRecovery } from "./passkey-recovery-coordinator"
+import { newCreateInput } from "@/wallet/services/passkey/spec"
+import { PasskeyRecoveryCoordinator, type PasskeyAnswer } from "./passkey-recovery-coordinator"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { SessionManager } from "./session-manager"
 import { RowKeyring } from "./row-keyring"
@@ -55,16 +58,14 @@ import {
 	PROFILE_SERVICE_NAME,
 	type ProfileInfo,
 	type Profile,
-	type ProfileType,
 	type Events,
 	type FinalizedRestore,
 	type Methods,
-	type PasskeyBackupMaterial,
+	type PasskeyUnlockParams,
 	type RestoreSecret,
 	type RunFence,
 	toProfileInfo,
 } from "./spec"
-import { probeDekAndCount, type SealedImportedKey } from "./imported-key-count"
 import { decodeRestoreMaterial, type RestoreMaterial } from "./restore-material"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
@@ -77,11 +78,10 @@ import { StaleNetworkRepository } from "../stale-network/repository"
 
 export * from "./spec"
 
-/** Out-params for `restore`'s locked commit bodies: allocations made under the lock are
- *  reported back so the branch's single post-lock-release `finally` owns every buffer wipe. */
+/** Out-params for `restore`'s locked commit body: allocations made under the lock are reported
+ *  back so the single post-lock-release `finally` owns every buffer wipe. */
 type PasswordRestoreScratch = { passhash?: Passhash; destinationDek?: ImportedKeysDek; storedContext: boolean }
-type PasskeyRestoreScratch = { stashDek?: ImportedKeysDek; storedPending: boolean; storedContext: boolean }
-/** Inputs of the locked commit bodies. The buffers travel by reference: a copy outside a stash
+/** Inputs of the locked commit body. The buffers travel by reference: a copy outside a stash
  *  would escape the caller's wipe. */
 type PasswordRestoreCommit = Readonly<{
 	profile: ProfileInfo
@@ -90,43 +90,55 @@ type PasswordRestoreCommit = Readonly<{
 	material: RestoreMaterial
 	allowDuplicate: boolean
 }>
-type PasskeyRestoreCommit = Readonly<{
-	name: string
-	recovery: PasskeyRecovery
-	sourceDek: ImportedKeysDek | undefined
-	destinationDek: ImportedKeysDek
-	dekSealed: string
-	initialId: string | undefined
-	allowDuplicate: boolean
-}>
 
-/** A password row's slots opened under its password, from {@link ProfileService.openSlots}. The
- *  caller owns the buffers and calls `wipe()` on every path. */
+/** What opens a row's slots: its password, or a passkey answer, which opens a passkey row only for
+ *  the row's own credential and `prfSalt`. */
+type SlotKey = { password: string } | { passkey: PasskeyCredential }
+
+/** A row's slots opened under its unlock, from {@link ProfileService.openSlots}. The caller owns the
+ *  buffers and calls `wipe()` on every path. */
 type OpenedSlots = {
 	secret: MasterSecretBytes
 	entropy: Uint8Array<ArrayBuffer>
-	/** The password's hash: the session's bearer signal. */
-	passhash: Passhash
-	/** Opens a DEK slot under the same password; `null` when it does not open. */
+	/** The password's hash, a password unlock's bearer signal; absent for a passkey unlock, which
+	 *  persists no bearer. */
+	passhash?: Passhash
+	/** Opens a DEK slot under the same key; `null` when it does not open. */
 	openDek(dekSealed: string): Promise<ImportedKeysDek | null>
 	wipe(): void
 }
+
+/** A passkey answer that opens no slot of the row it was asked for: another passkey, or a slot
+ *  changed in storage. */
+const PASSKEY_DID_NOT_OPEN = "Passkey did not open this profile"
 
 /** The refusal at password change once the DEK slot no longer unseals: the DEK keys the PXE store
  *  and every dApp-session tag, so the only non-destructive repair is export + restore. */
 const DEK_UNRECOVERABLE_MESSAGE =
 	"Imported-keys key unrecoverable. Imported keys and local chain state are lost. Export a full backup (or the recovery phrase) and restore it to repair."
 
+/** The unlock-type gate of `snapshotForUnlock`: a retired row first, then the other stored type by
+ *  name; only the passkey arm requires the row to classify as passkey. */
+function assertUnlockKind(row: Profile, expect: "password" | "passkey"): void {
+	const kind = classifyProfileRow(row).kind
+	if (kind === "retired") throw new RetiredProfileError()
+	if (expect === "password") {
+		if (row.type === "passkey") throw new Error("Profile requires passkey")
+		return
+	}
+	if (row.type === "password") throw new Error("Profile requires password")
+	if (kind !== "passkey") throw new Error("Profile storage corrupted")
+}
+
 export class ProfileService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getActiveProfile",
 		"getProfiles",
-		"generateProfileId",
 		"createProfile",
 		"createPasskeyProfile",
 		"unlockProfile",
 		"unlockPasskeyProfile",
-		"getPasskeyCredentialId",
+		"getPasskeyUnlockParams",
 		"getSessionHandle",
 		"captureRunFence",
 		"assertRunFence",
@@ -135,7 +147,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"changeProfileName",
 		"changeProfilePassword",
 		"deleteProfile",
-		"importPasskey",
 		"importMnemonic",
 		"exportPlain",
 		"exportMnemonic",
@@ -157,52 +168,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private passkeys: PasskeyService = null!
 	private passkeyCoordinator: PasskeyRecoveryCoordinator = null!
 
-	/** An abandoned backup restore (row written, never finalized/deleted)
-	 *  would otherwise park a raw master secret in `pendingRestoreSecrets` for the
-	 *  SW lifetime. Sweep entries older than this, zeroizing them, at the entry of
-	 *  every op that touches the map (restore/finalizeRestore/deleteProfile). The
-	 *  window comfortably exceeds a slow multi-service backup import; a legitimate
-	 *  import that runs longer can be expired by a later trigger — accepted. NEVER
-	 *  the id currently being finalized (finalizeRestore removes it from the map
-	 *  before its await). */
+	/** An abandoned restore's rewrap context would otherwise hold two DEKs for the SW lifetime.
+	 *  Entries older than this are swept, zeroized, at the entry of every op that touches the map
+	 *  (restore/finalizeRestore/deleteProfile). The window comfortably exceeds a slow multi-service
+	 *  backup import; a legitimate import that runs longer can be expired by a later trigger —
+	 *  accepted. NEVER the id currently being finalized. */
 	private static readonly PENDING_RESTORE_TTL_MS = 30 * 60 * 1000
-
-	/**
-	 * Holds the recovered passkey secret between `restore()` (which writes the
-	 * profile to storage) and `finalizeRestore()` (which opens the session).
-	 *
-	 * Why the split: `restore()` runs at the START of a full-backup import
-	 * flow, but `useFullBackupImport` then restores backup networks/accounts.
-	 * If `restore()` opened the session up-front, `onActiveProfileChanged`
-	 * would fire and `app.vue` would call `getOrInitNetworks()` /
-	 * `ensureDefaultAccount()` — racing duplicate networks/accounts into the
-	 * same storage that the import is about to populate. Late activation
-	 * defers the emit until after the import has written everything.
-	 *
-	 * For password profiles, finalize re-derives the secret from the new
-	 * password (a second PBKDF2). For passkey profiles, re-prompting WebAuthn
-	 * to get the same secret would be a UX regression — we cache the recovery
-	 * secret here in memory only, never persisted, cleared on SW restart.
-	 */
-	private readonly pendingRestoreSecrets = new ExpiringStash<{
-		secret: MasterSecretBytes
-		dek: ImportedKeysDek
-		capturedAt: number
-		/** The security-bearing row fields as restore() wrote them. Finalize compares the
-		 *  live row against this snapshot before a clean open — an A1 writer editing
-		 *  `dekSealed`/`credentialId`/`pxeGeneration` between restore and finalize must not
-		 *  get a clean session carrying the stashed master (the fingerprint binding alone
-		 *  would miss those fields). */
-		expected: { type: ProfileType; credentialId: string; dekSealed: string; pxeGeneration: string; walletFingerprint: string }
-	}>(ProfileService.PENDING_RESTORE_TTL_MS, (entry) => {
-		zeroize(entry.secret)
-		zeroize(entry.dek)
-	})
 
 	/**
 	 * TTL-bound, memory-only source→destination DEK rewrap context.
 	 * `restore()` runs BEFORE the imported-keys slice arrives, so the SOURCE DEK cannot be
-	 * consumed inside restore itself: it is stashed here — both profile types — and
+	 * consumed inside restore itself: it is stashed here and
 	 * `AccountService.restoreImportedKeys` consumes it atomically (rewraps every backup key row
 	 * source→destination, zeroizes the source immediately). `finalizeRestore` zeroizes any
 	 * LEFTOVER context for its id (the empty-slice case); the shared TTL sweep covers abandoned
@@ -232,11 +208,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  remains is documented at the reap site. */
 	public static readonly TORN_IMPORT_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-	/** Zeroize + drop stale pending-restore secrets. MUST be called under the
-	 *  facade lock (`runExclusive`) so it can't zeroize an entry another op holds
-	 *  a live reference to. Optionally skips `exceptId` (the id being finalized). */
+	/** Zeroize + drop stale rewrap contexts. MUST be called under the facade lock (`runExclusive`)
+	 *  so it can't zeroize an entry another op holds a live reference to. Optionally skips
+	 *  `exceptId` (the id being finalized). */
 	private sweepStalePendingRestore(now: number, exceptId?: string): void {
-		this.pendingRestoreSecrets.sweep(now, exceptId)
 		this.pendingDekRewraps.sweep(now, exceptId)
 	}
 
@@ -371,6 +346,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  of it ran during the derivation. Caller MUST hold the facade lock; the master stays
 	 *  caller-owned. */
 	private async fillRowKeysHoldingLock(profile: Profile, master: MasterSecretBytes): Promise<void> {
+		if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 		const epoch = this.deletionState.capture(profile.id)
 		if (this.deletionState.isReserved(profile.id)) return
 		const filled = await this.rowKeyring.fill(profile.id, profile.pxeGeneration, master)
@@ -396,20 +372,30 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** The only reader of a password row's sealed slots: the master and entropy behind `password`,
-	 *  or `null` when the row does not classify as a password row or the password does not open its
-	 *  slots (wrong, or a slot corrupted), which each caller maps to its own refusal. The DEK opens
-	 *  through the result, so it opens only after the guard. */
-	private async openSlots(row: Extract<Profile, { type: "password" }>, password: string): Promise<OpenedSlots | null> {
+	/** The only reader of a row's sealed slots: the master and entropy `key` opens, or `null` when
+	 *  the row does not classify as the unlock `key` is for, or `key` does not open its slots (wrong,
+	 *  or a slot corrupted), which each caller maps to its own refusal. A passkey row opens only
+	 *  under its own credential and its own `prfSalt`. Refuses a retired row before anything else.
+	 *  The DEK opens through the result, so it opens only after the guard. */
+	private async openSlots(row: Profile, key: SlotKey): Promise<OpenedSlots | null> {
 		const classified = classifyProfileRow(row)
-		if (classified.kind !== "password") return null
+		if (classified.kind === "retired") throw new RetiredProfileError()
+		if (classified.kind === "password" && "password" in key) return this.openPasswordSlots(classified.slots, key.password)
+		if (classified.kind === "passkey" && "passkey" in key) return this.openPasskeyRowSlots(classified, key.passkey)
+		return null
+	}
+
+	private async openPasswordSlots(
+		slots: { guard: string; secret: string; entropy: string },
+		password: string,
+	): Promise<OpenedSlots | null> {
 		const passhash = await EncryptionKey.getPasshash(password)
 		let opened: Awaited<ReturnType<PasswordSecretBox["unsealWithPasshash"]>> = null
 		try {
 			opened = await this.secretBox.unsealWithPasshash(passhash, {
-				guard: asBase64Ciphertext(classified.slots.guard),
-				secret: asBase64Ciphertext(classified.slots.secret),
-				entropy: asBase64Ciphertext(classified.slots.entropy),
+				guard: asBase64Ciphertext(slots.guard),
+				secret: asBase64Ciphertext(slots.secret),
+				entropy: asBase64Ciphertext(slots.entropy),
 			})
 		} finally {
 			if (!opened) zeroize(passhash)
@@ -427,6 +413,44 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				zeroize(passhash)
 			},
 		}
+	}
+
+	private async openPasskeyRowSlots(
+		row: Extract<ReturnType<typeof classifyProfileRow>, { kind: "passkey" }>,
+		credential: PasskeyCredential,
+	): Promise<OpenedSlots | null> {
+		const unlockKey = credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null
+		if (!unlockKey) return null
+		const opened = await openPasskeySlots(unlockKey, {
+			guard: asBase64Ciphertext(row.slots.guard),
+			secret: asBase64Ciphertext(row.slots.secret),
+			entropy: asBase64Ciphertext(row.slots.entropy),
+		})
+		if (!opened) return null
+		const { secret, entropy } = opened
+		return {
+			secret,
+			entropy,
+			openDek: (dekSealed) => unsealDekUnderWrapKey(unlockKey, dekSealed).catch(() => null),
+			wipe: () => {
+				zeroize(secret)
+				zeroize(entropy)
+			},
+		}
+	}
+
+	/** The key a caller's credential gives: its passkey answer, or else its password. An empty
+	 *  password is a password: it gets each path's own wrong-password refusal. */
+	private async slotKey(password: string | undefined, credentialData: PasskeyCredentialData | undefined): Promise<SlotKey> {
+		if (credentialData) return { passkey: (await this.passkeyCoordinator.fromCredentialData(credentialData)).credential }
+		if (password === undefined) throw new Error("Password is required")
+		return { password }
+	}
+
+	/** What a path throws when `key` did not open the row: its own wrong-password refusal, or the
+	 *  passkey's, which no screen may read as a wrong password. */
+	private notOpened(key: SlotKey, passwordRefusal: () => Error): Error {
+		return "passkey" in key ? new Error(PASSKEY_DID_NOT_OPEN) : passwordRefusal()
 	}
 
 	/** Caller MUST already hold the facade lock (`Lock` is non-reentrant). Checks row
@@ -452,6 +476,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.deletionState.isReserved(id)) {
 				throw new Error("Invalid profile id")
 			}
+			// Before any field is read: a retired row has nothing to export.
+			if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 			return { profile, capturedEpoch: this.deletionState.capture(id) }
 		})
 	}
@@ -466,10 +492,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	private async snapshotForUnlock(id: string, expect: "password"): Promise<Extract<Profile, { type: "password" }>>
 	private async snapshotForUnlock(id: string, expect: "passkey"): Promise<Extract<Profile, { type: "passkey" }>>
-	/** Phase-1 snapshot for the two unlock flows: fetch + tombstone gate + type gate in
-	 *  ONE critical section. The type arms are asymmetric on purpose — each rejects the
-	 *  OTHER stored type by name (a hypothetical third type passes both, preserved
-	 *  verbatim), and only the passkey arm requires `credentialId`. */
+	/** Phase-1 snapshot for the two unlock flows: fetch + tombstone gate + retired gate + type gate
+	 *  in ONE critical section. The type arms are asymmetric on purpose — each rejects the OTHER
+	 *  stored type by name (a hypothetical third type passes the password arm and is refused by its
+	 *  opener), and only the passkey arm requires the row to classify as passkey. */
 	private async snapshotForUnlock(id: string, expect: "password" | "passkey"): Promise<Profile> {
 		return this.runExclusive(async () => {
 			const fetched = await this.getProfileOrThrowHoldingLock(id)
@@ -479,32 +505,20 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.deletionState.isReserved(id)) {
 				throw new Error("Invalid profile id")
 			}
-			if (expect === "password") {
-				if (fetched.type === "passkey") {
-					throw new Error("Profile requires passkey")
-				}
-			} else {
-				if (fetched.type === "password") {
-					throw new Error("Profile requires password")
-				}
-				if (!fetched.credentialId) {
-					throw new Error("Missing credentialId")
-				}
-			}
+			assertUnlockKind(fetched, expect)
 			return fetched
 		})
 	}
 
-	/** The password-side DEK trust gate at session open: unseal the slot, then prove the
-	 *  envelope MAC still covers this exact record — verified against the REQUESTED id,
-	 *  never the row's self-claimed one (belt-and-suspenders on EntityStorage's id/key
-	 *  guard). `null`, never a throw, on unseal/MAC failure: the caller opens
-	 *  derived-only (degradation state machine, rule 2) and emits the visible warning.
-	 *  Caller MUST hold the facade lock and OWNS the returned dek; on an internal throw
-	 *  after the unseal, the local dek is zeroized here before the rethrow. */
+	/** The DEK trust gate at session open: unseal the slot, then prove the envelope MAC still covers
+	 *  this exact record — verified against the REQUESTED id, never the row's self-claimed one
+	 *  (belt-and-suspenders on EntityStorage's id/key guard). `null`, never a throw, on unseal/MAC
+	 *  failure: the caller opens derived-only (degradation state machine, rule 2) and emits the
+	 *  visible warning. Caller MUST hold the facade lock and OWNS the returned dek; on an internal
+	 *  throw after the unseal, the local dek is zeroized here before the rethrow. */
 	private async unsealTrustedDekHoldingLock(
 		id: string,
-		row: Extract<Profile, { type: "password" }>,
+		row: Profile,
 		opened: OpenedSlots,
 		logContext: string,
 	): Promise<ImportedKeysDek | null> {
@@ -528,42 +542,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return dek
 	}
 
-	/** The passkey-side DEK trust gate: rows carry no envelope MAC (nothing
-	 *  password-sealed to cover), so the plaintext fingerprint is bound by RECOMPUTING
-	 *  it from the ceremony's freshly derived master — a same-credential ceremony always
-	 *  reproduces the same master, so a mismatch means the stored row was edited; treated
-	 *  exactly like a failed envelope MAC on the password side (derived-only, visible
-	 *  warning). Caller MUST hold the facade lock and owns the returned dek. */
-	private async unsealPasskeyDekHoldingLock(
-		id: string,
-		current: Extract<Profile, { type: "passkey" }>,
-		recovery: PasskeyRecovery,
-	): Promise<ImportedKeysDek | null> {
-		const expectedFingerprint = await computeWalletFingerprint(recovery.secret)
-		let dek: ImportedKeysDek | null = null
-		try {
-			if (current.walletFingerprint === expectedFingerprint) {
-				dek = await unsealDekUnderWrapKey(recovery.dekWrapKey, current.dekSealed)
-			}
-		} catch {
-			dek = null
-		}
-		if (!dek) {
-			this.logger.log(
-				this.name,
-				LogLevel.Error,
-				current.walletFingerprint !== expectedFingerprint
-					? "passkey wallet fingerprint mismatch — opening derived-only"
-					: "imported-keys DEK failed at passkey unlock — opening derived-only",
-				id,
-			)
-		}
-		return dek
-	}
-
 	/** Open the session, then raise the visible warning when it opened derived-only. `dek` must
-	 *  come from a trust gate (`unsealTrustedDekHoldingLock`, `unsealPasskeyDekHoldingLock`, or
-	 *  finalize's snapshot compare); `null` opens without it. Allocates and wipes nothing, so
+	 *  come from the trust gate (`unsealTrustedDekHoldingLock`); `null` opens without it. Allocates and wipes nothing, so
 	 *  callers must `return await` it inside their `try`: a bare return lets their `finally`
 	 *  zeroize the buffers before the open copies them. Caller MUST hold the facade lock. */
 	private async openAndWarnIfDegradedHoldingLock(
@@ -581,7 +561,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	protected async init(services: ServiceCollection) {
 		this.passkeys = services.get(PasskeyService.name)
-		this.passkeyCoordinator = new PasskeyRecoveryCoordinator(this.passkeys, this.logger)
+		this.passkeyCoordinator = new PasskeyRecoveryCoordinator(this.passkeys)
 
 		// Seed the reserved-id set from the durable tombstone RAW keys BEFORE the
 		// session is restored / any profile becomes visible — a tombstoned id must
@@ -607,7 +587,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.sessionManager.restore(async (id) => {
 			if (this.deletionState.isReserved(id)) return undefined
 			const profile = await this.repo.get(id)
-			if (!profile) return undefined
+			// A retired row is skipped, never thrown on: start-up must not depend on it.
+			if (!profile || classifyProfileRow(profile).kind === "retired") return undefined
 			// Torn-restore gate on the SILENT path too: rehydrating a marked
 			// profile would bypass the unlock chokepoint. Return undefined (silent
 			// close) — throwing here would abort service init.
@@ -788,7 +769,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 		// Phase 2 — crypto UNLOCKED. Caller pays ~1s PBKDF2 but the rest of
 		// the RPC surface stays responsive.
-		const opened = await this.openSlots(snapshot, password)
+		const opened = await this.openSlots(snapshot, { password })
 		if (!opened) {
 			// Can't tell wrong-password from storage corruption from this single
 			// null, but GUARD catches wrong-password first in practice. Auth UI
@@ -842,215 +823,145 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/**
-	 * Returns a freshly-generated profile id that is not currently in
-	 * storage. See `Methods.generateProfileId` for the contract.
-	 */
-	public async generateProfileId(): Promise<string> {
-		await this.ensureInitialized()
-		return await this.nextUnreservedId()
-	}
-
 	public async createPasskeyProfile(name: string, credentialData?: PasskeyCredentialData): Promise<ProfileInfo> {
 		await this.ensureInitialized()
-		// PATH A: caller (popup) collected the credential via in-page modal;
-		// `credentialData.userHandle` is the profile id the caller pre-reserved
-		// (the popup got it from `repo.generateUniqueId()` over RPC before the
-		// modal opened).
-		// PATH B (Firefox's toolbar panel): no credentialData → the passkey window
-		// runs the create ceremony for an id chosen here.
-		// Generate the id BEFORE entering the lock so the passkey UI
-		// prompt below doesn't hold the facade lock for minutes.
-		const id = credentialData?.userHandle ?? (await this.nextUnreservedId())
-		const recovery = await this.acquireRecovery({ ceremony: "create", userHandle: id, name }, credentialData)
-		// Fresh imported-keys DEK, sealed under the PRF-derived wrap key while the ceremony's
-		// credential material is in hand.
+		// PATH A: the page minted the new profile's PRF input and ran the create; the answer reports
+		// it. PATH B (Firefox's toolbar panel): it is minted here and the passkey window runs the
+		// create. No id is reserved across the prompt: the id is allocated when the row is saved.
+		const minted = credentialData ? undefined : newCreateInput()
+		const answer = minted
+			? await this.passkeyCoordinator.createInWindow(minted.userHandle, minted.prfSalt, { step: "create", profileName: name })
+			: await this.passkeyCoordinator.fromCredentialData(credentialData as PasskeyCredentialData)
+		return await this.reportToPasskeyWindow(answer, async () => {
+			const prfSalt = minted?.prfSalt ?? answer.credential.prfSalt
+			const unlockKey = answer.credential.unlockKeyFor(prfSalt)
+			if (!unlockKey) throw new Error("Passkey answered for another request")
+			return await this.runExclusive(() => this.createPasskeyRowHoldingLock(name, answer.credential, prfSalt, unlockKey))
+		})
+	}
+
+	/** A passkey create's commit: a fresh recovery phrase, as `createProfile` mints one, sealed under
+	 *  the unlock key the answer gave for `prfSalt`. Caller MUST hold the facade lock. */
+	private async createPasskeyRowHoldingLock(
+		name: string,
+		credential: PasskeyCredential,
+		prfSalt: string,
+		unlockKey: CryptoKey,
+	): Promise<ProfileInfo> {
+		const entropy = crypto.getRandomValues(new Uint8Array(32)) as Uint8Array<ArrayBuffer>
+		const secret = await deriveMasterFromMnemonic(await getMnemonic(entropy))
 		const dek = generateImportedKeysDek()
-
 		try {
-			return await this.reportToPasskeyWindow(recovery, async () => {
-				// The credential must name the profile it creates: a passkey import later derives the
-				// profile id from this handle.
-				if (recovery.userHandle !== id) {
-					throw new Error("Passkey user handle does not match the new profile")
-				}
-				const dekSealed = await sealDekUnderWrapKey(recovery.dekWrapKey, dek)
-				return await this.runExclusive(async () => {
-					// Re-verify under the lock: another writer could have claimed
-					// the id during the WebAuthn prompt. If so, throw a retryable
-					// `ProfileIdConflictError` — the previous behavior silently
-					// regenerated `id` here, which left the WebAuthn credential's
-					// `userHandle` (= the OLD id) out of sync with the persisted
-					// profile id. Caller is responsible for re-running the entire
-					// flow with a fresh id (and a fresh WebAuthn ceremony).
-					if ((await this.repo.contains(id)) || this.deletionState.isReserved(id)) {
-						throw new ProfileIdConflictError()
-					}
-					// Invariant assertion (fresh credential ⇒ fresh PRF ⇒ fresh master).
-					const walletFingerprint = await this.assertNotDuplicateWallet(recovery.secret, false)
-
-					const profile = newPasskeyRow({ id, name, dekSealed, walletFingerprint, credentialId: recovery.credentialId })
-					await this.persistCreatedProfileHoldingLock(profile)
-
-					await this.openSessionVerified(profile, recovery.secret, undefined, dek)
-
-					return this.getProfileInfo(profile)
-				})
-			})
+			const slots = await sealPasskeySlots(unlockKey, secret, entropy)
+			const dekSealed = await sealDekUnderWrapKey(unlockKey, dek)
+			// Invariant assertion on fresh CSPRNG entropy, kept uniform with the password create.
+			const walletFingerprint = await this.assertNotDuplicateWallet(secret, false)
+			const id = await this.nextUnreservedId()
+			const profile = await newPasskeyRow(
+				{ id, name, slots, dekSealed, walletFingerprint, credentialId: credential.id, prfSalt },
+				secret,
+				dek,
+			)
+			await this.persistCreatedProfileHoldingLock(profile)
+			await this.openSessionVerified(profile, secret, undefined, dek)
+			return this.getProfileInfo(profile)
 		} finally {
-			// zero recovery secret + dek after sessionManager copied them.
-			zeroize(recovery.secret)
+			// After sessionManager copied them; a thrown open or write is wiped too.
+			zeroize(secret)
+			zeroize(entropy)
 			zeroize(dek)
 		}
 	}
 
-	/** Unlock a passkey profile. Three phases so the WebAuthn prompt (3 min
-	 *  max) never holds the facade-wide lock:
-	 *   1. Locked read + guard checks — snapshot credentialId.
-	 *   2. Unlocked WebAuthn prompt — user touches authenticator.
-	 *   3. Locked revalidate + open session — rejects the stale case where
-	 *      the profile was deleted or the credential rotated under us. */
-	public async getPasskeyCredentialId(id: string): Promise<string> {
+	public async getPasskeyUnlockParams(id: string): Promise<PasskeyUnlockParams> {
 		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const fetched = await this.repo.get(id)
-			if (!fetched) throw new Error("Invalid profile id")
-			if (this.deletionState.isReserved(id)) throw new Error("Invalid profile id")
-			if (fetched.type !== "passkey") throw new Error("Profile requires password")
-			if (!fetched.credentialId) throw new Error("Missing credentialId")
-			return fetched.credentialId
-		})
+		const row = await this.snapshotForUnlock(id, "passkey")
+		return { credentialId: row.credentialId, prfSalt: row.prfSalt }
 	}
 
+	/** Unlock a passkey profile. Three phases so the WebAuthn prompt (3 min max) never holds the
+	 *  facade-wide lock:
+	 *   1. Locked read + guard checks — snapshot the row.
+	 *   2. Unlocked prompt, then the slots open under the answer's key for the row's own `prfSalt`.
+	 *   3. Locked revalidate + open session — rejects the stale case where the profile was deleted,
+	 *      or its credential, input or slots changed, under us. */
 	public async unlockPasskeyProfile(id: string, credentialData?: PasskeyCredentialData): Promise<ProfileInfo> {
 		await this.ensureInitialized()
 
-		// Phase 1 — snapshot profile under lock.
 		const snapshot = await this.snapshotForUnlock(id, "passkey")
 		// PATH B refuses an unfinished restore before its window opens, while the page that asked can
 		// still say why; `openSessionVerified` stays the authoritative check and owns the purge.
 		if (!credentialData && (await this.restoreState(snapshot)) === "torn") {
 			throw new RestoreTornError(undefined, { profileId: id })
 		}
-
-		// Phase 2 — WebAuthn prompt, UNLOCKED.
-		// PATH A: caller already ran the ceremony; we just materialize the
-		// credential here. Note: the popup is responsible for using the
-		// credentialId from the snapshot when calling the modal so the WebAuthn
-		// `get` is bound to the right credential.
-		// PATH B (Firefox's toolbar panel): the passkey window runs the ceremony, bound to the
-		// snapshot's credentialId. Other profile ops can run during the user's authenticator
-		// interaction regardless of path.
-		const recovery = await this.acquireRecovery(
-			{ ceremony: "getById", credentialId: snapshot.credentialId, profileName: snapshot.name },
-			credentialData,
-		)
-
-		// Phase 3 — re-enter lock, revalidate credentialId, open session.
-		try {
-			return await this.reportToPasskeyWindow(recovery, async () => {
-				// Bind the recovered credential to the target profile.
-				// Mirrors the check in exportPlain + restore(). Without it, a
-				// popup-supplied PasskeyCredentialData for credential B could unlock
-				// profile A using a session derived from credential B's master secret.
-				// The check lives INSIDE this try so the `finally` below zeroizes
-				// `recovery.secret` even when the credential mismatches (previously the
-				// throw preceded the try, leaking the recovered master secret).
-				if (recovery.credentialId !== snapshot.credentialId) {
-					throw new Error("Invalid profile id")
-				}
-				return await this.runExclusive(() => this.openUnlockedPasskeySessionHoldingLock(id, snapshot.credentialId, recovery))
-			})
-		} finally {
-			// zero recovery secret after sessionManager copied it.
-			zeroize(recovery.secret)
-		}
+		// PATH B (Firefox's toolbar panel): the passkey window runs the prompt, bound to the snapshot's
+		// credential and input. PATH A: the page did, from `getPasskeyUnlockParams`.
+		const answer = credentialData
+			? await this.passkeyCoordinator.fromCredentialData(credentialData)
+			: await this.passkeyCoordinator.getInWindow(snapshot.credentialId, snapshot.prfSalt, {
+					step: "unlock",
+					profileName: snapshot.name,
+				})
+		return await this.reportToPasskeyWindow(answer, async () => {
+			if (answer.credential.id !== snapshot.credentialId) {
+				throw new Error("Invalid profile id")
+			}
+			const opened = await this.openSlots(snapshot, { passkey: answer.credential })
+			if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)
+			let dek: ImportedKeysDek | null = null
+			try {
+				// The pairing check runs at every unlock: the stored words must still derive the stored
+				// master (CORE material — this failure BLOCKS; the DEK/MAC checks below degrade instead).
+				await this.assertEntropyMasterPair(opened.secret, opened.entropy)
+				return await this.runExclusive(async () => {
+					const current = await this.revalidatePasskeyRowHoldingLock(id, snapshot)
+					dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "passkey unlock")
+					return await this.openAndWarnIfDegradedHoldingLock(current, opened.secret, undefined, dek)
+				})
+			} finally {
+				opened.wipe()
+				zeroize(dek)
+			}
+		})
 	}
 
-	/** Phase 3 of a passkey unlock. Caller MUST hold the facade lock: the row is revalidated
-	 *  against the credential the prompt answered for before the session opens. */
-	private async openUnlockedPasskeySessionHoldingLock(id: string, credentialId: string, recovery: PasskeyRecovery): Promise<ProfileInfo> {
+	/** Phase 3 of a passkey unlock: the live row, refused unless it is the row whose slots the prompt
+	 *  opened. Caller MUST hold the facade lock. */
+	private async revalidatePasskeyRowHoldingLock(
+		id: string,
+		snapshot: Extract<Profile, { type: "passkey" }>,
+	): Promise<Extract<Profile, { type: "passkey" }>> {
 		const current = await this.repo.get(id)
-		if (!current) {
-			throw new Error("Invalid profile id")
-		}
-		// A deletion that began during the (lock-free) WebAuthn prompt must
-		// abort the unlock — the id is now reserved even if the row lingers.
-		if (this.deletionState.isReserved(id)) {
+		// A deletion that began during the (lock-free) prompt aborts the unlock — the id is now
+		// reserved even if the row lingers.
+		if (!current || this.deletionState.isReserved(id)) {
 			throw new Error("Invalid profile id")
 		}
 		if (current.type !== "passkey") {
 			throw new Error("Profile requires password")
 		}
-		if (current.credentialId !== credentialId) {
-			// Credential rotated (delete + reimport with different passkey) during
-			// prompt. Refuse rather than open a session bound to the old id.
+		const unchanged =
+			current.credentialId === snapshot.credentialId &&
+			current.prfSalt === snapshot.prfSalt &&
+			current.pxeGeneration === snapshot.pxeGeneration &&
+			current.guard === snapshot.guard &&
+			current.secret === snapshot.secret &&
+			current.entropy === snapshot.entropy
+		if (!unchanged) {
 			throw new Error("Invalid profile id")
 		}
-		const dek = await this.unsealPasskeyDekHoldingLock(id, current, recovery)
-		try {
-			return await this.openAndWarnIfDegradedHoldingLock(current, recovery.secret, undefined, dek)
-		} finally {
-			zeroize(dek)
-		}
-	}
-
-	public async importPasskey(name: string, credentialData?: PasskeyCredentialData, allowDuplicate = false): Promise<ProfileInfo> {
-		await this.ensureInitialized()
-		// PATH A: caller already ran a discovery `get` ceremony in the modal;
-		// `credentialData.userHandle` is whatever the user-selected credential
-		// reports (the wallet uses this as the new profile id, mirroring the
-		// existing import-passkey contract).
-		// PATH B (Firefox's toolbar panel): the passkey window runs a discovery `get`.
-		const recovery = await this.acquireRecovery({ ceremony: "getAny", profileName: name }, credentialData)
-		return await this.reportToPasskeyWindow(recovery, () =>
-			this.importPasskeyProfile(
-				name,
-				recovery.credentialId,
-				recovery.secret,
-				recovery.dekWrapKey,
-				recovery.userHandle,
-				allowDuplicate,
-			),
-		)
-	}
-
-	/**
-	 * Single ceremony entry point. Routes between PATH A (caller-supplied
-	 * credential data — no window opened) and PATH B (SW opens a window via
-	 * the coordinator). Keeps the dual-transport contract on a single line
-	 * so the public methods stay focused on their post-ceremony storage
-	 * logic.
-	 */
-	private async acquireRecovery(
-		opts:
-			| { ceremony: "create"; userHandle: string; name: string }
-			| { ceremony: "getById"; credentialId: string; profileName: string }
-			| { ceremony: "getAny"; profileName: string },
-		credentialData: PasskeyCredentialData | undefined,
-	): Promise<PasskeyRecovery> {
-		if (credentialData) {
-			return await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
-		}
-		switch (opts.ceremony) {
-			case "create":
-				return await this.passkeyCoordinator.createForNewProfile(opts.userHandle, opts.name)
-			case "getById":
-				return await this.passkeyCoordinator.recoverByCredentialId(opts.credentialId, opts.profileName)
-			case "getAny":
-				return await this.passkeyCoordinator.recoverUnknown(opts.profileName)
-		}
+		return current
 	}
 
 	/** Runs what follows a passkey step's prompt and reports how it ended on every path: a PATH B
 	 *  window waits on that report, and PATH A has no window to tell. */
-	private async reportToPasskeyWindow<T>(recovery: Pick<PasskeyRecovery, "finish">, step: () => Promise<T>): Promise<T> {
+	private async reportToPasskeyWindow<T>(answer: Pick<PasskeyAnswer, "finish">, step: () => Promise<T>): Promise<T> {
 		try {
 			const result = await step()
-			recovery.finish?.("done")
+			answer.finish?.("done")
 			return result
 		} catch (err) {
-			recovery.finish?.(err instanceof PasskeyProfileExistsError ? "exists" : "failed")
+			answer.finish?.("failed")
 			throw err
 		}
 	}
@@ -1247,7 +1158,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  rethrow. */
 	private async rekeyedDekForPasswordChangeHoldingLock(
 		id: string,
-		profile: Extract<Profile, { type: "password" }>,
+		profile: Profile,
 		secret: MasterSecretBytes,
 		old: OpenedSlots,
 		newPasshash: Passhash,
@@ -1304,11 +1215,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
 			const profile = await this.getProfileOrThrowHoldingLock(id)
+			if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 			if (profile.type === "passkey") {
 				throw new Error("Operation not supported for passkey profile")
 			}
 
-			const old = await this.openSlots(profile, oldPassword)
+			const old = await this.openSlots(profile, { password: oldPassword })
 			if (!old) {
 				throw new Error("Invalid profile old password")
 			}
@@ -1584,9 +1496,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		if (notFirst) await this.markProfileFlagHoldingLock(profileNotFirstKey(profile.id))
 	}
 
-	/** A restore that keeps its backup's id and a passkey import that takes its `userHandle` adopt
-	 *  an id used before; a key written under it since its purge belongs to no profile yet. A
-	 *  rejected removal fails the commit before anything is written. */
+	/** A restore that keeps its backup's id adopts an id used before; a key written under it since
+	 *  its purge belongs to no profile yet. A rejected removal fails the commit before anything is
+	 *  written. */
 	private async dropUiKeysBeforeAdoption(id: string): Promise<void> {
 		await this.local.remove(profileUiKeys(id))
 	}
@@ -1661,8 +1573,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.sessionManager.isActive(id)) {
 				await this.sessionManager.close()
 			}
-			this.pendingRestoreSecrets.drop(id)
-			// Deleting a profile mid-restore must also drop + zeroize its rewrap context (its
+			// Deleting a profile mid-restore must drop + zeroize its rewrap context (its
 			// buffers aren't aged yet, so the TTL sweep wouldn't reap them).
 			this.pendingDekRewraps.drop(id)
 			// A deleted profile's integrity records must not outlive it: a stale blocking record
@@ -1857,21 +1768,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public async exportPlain(id: string, password?: string, credentialData?: PasskeyCredentialData): Promise<string> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
-
-		if (profile.type === "passkey") {
-			return (await this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData)).credentialId
-		}
-
-		if (!password) {
-			throw new Error("Password is required")
-		}
 		// Any throw, a crypto-level failure included, is flattened to a plain `Error(message)`, so
 		// callers see one error shape.
 		try {
-			const opened = await this.openSlots(profile, password)
+			// An export asks for its credential again, so an empty one is a missing one here.
+			if (!password && !credentialData) throw new Error("Password is required")
+			const key = await this.slotKey(password, credentialData)
+			const opened = await this.openSlots(profile, key)
 			try {
 				if (!opened) {
-					throw new InvalidPasswordError()
+					throw this.notOpened(key, () => new InvalidPasswordError())
 				}
 				// Revalidate AFTER the slow unseal: a delete that completed DURING
 				// derivation — even fully (row gone, reservation released) — must
@@ -1898,102 +1804,28 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * The passkey arm of `exportPlain` / `exportPasskeyBackupKeys`: the credentialId plus the
-	 * sealed DEK blob the backup carries, and with `rows` how many of them do not open. The popup
-	 * ran the in-page WebAuthn ceremony and hands over the credential data; it is materialized
-	 * SW-side and bound to THIS profile's credentialId — without that check a popup bug could
-	 * supply data for a different key and the wrong credential would be exported.
-	 */
-	private async exportPasskeyCredential(
-		id: string,
-		profile: Extract<Profile, { type: "passkey" }>,
-		capturedEpoch: number,
-		credentialData?: PasskeyCredentialData,
-		rows?: readonly SealedImportedKey[],
-	): Promise<PasskeyBackupMaterial> {
-		if (!credentialData) {
-			throw new Error("credentialData is required for passkey profile")
-		}
-		const recovery = await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
-		let dekSealed = profile.dekSealed
-		let dekReplaced = false
-		let unopened = 0
-		try {
-			if (recovery.credentialId !== profile.credentialId) {
-				throw new Error("Invalid profile id")
-			}
-			// Same fingerprint binding the unlock path enforces: a stored row edited after
-			// creation must not produce a backup that looks complete.
-			if (profile.walletFingerprint !== (await computeWalletFingerprint(recovery.secret))) {
-				throw new Error("Profile integrity check failed — this profile cannot produce a trustworthy backup")
-			}
-			// A passkey full backup carries `dekSealed` VERBATIM (the ceremony's wrap key opens
-			// it at restore), so nothing downstream ever proves it opens. Prove it here, where
-			// the wrap key is already in hand. An unopenable slot is carried as a FRESH DEK sealed
-			// under that same key: a passkey profile has no recovery phrase, so this backup IS its
-			// repair path in recovery mode. The stored row is never touched; the caller names the
-			// loss (imported keys, local chain state).
-			const probed = await probeDekAndCount(recovery.dekWrapKey, profile.dekSealed, rows)
-			unopened = probed.unopened
-			if (!probed.opens) {
-				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at passkey export — exporting a fresh one", id)
-				const fresh = generateImportedKeysDek()
-				try {
-					dekSealed = await sealDekUnderWrapKey(recovery.dekWrapKey, fresh)
-				} finally {
-					zeroize(fresh)
-				}
-				dekReplaced = true
-			}
-		} finally {
-			// Export doesn't need the derived master — security
-			// minimization. The credentialId is the actual return.
-			zeroize(recovery.secret)
-		}
-		// Refetch + credentialId-rotation check: a concurrent delete+
-		// reimport during the (unlocked) WebAuthn prompt could have
-		// rotated `credentialId` under us. Without this, the post-confirm
-		// return would hand back a stale credentialId.
-		const current = await this.repo.get(id)
-		if (!current) {
-			throw new Error("Invalid profile id")
-		}
-		// A delete that completed during the (unlocked) WebAuthn prompt must not
-		// still return the credentialId.
-		if (
-			this.deletionState.isReserved(id) ||
-			!this.deletionState.isCurrent(id, capturedEpoch) ||
-			current.type !== "passkey" ||
-			current.credentialId !== profile.credentialId
-		) {
-			throw new Error("Invalid profile id")
-		}
-		return { credentialId: current.credentialId, dekSealed, dekReplaced, unopened }
-	}
-
-	/**
-	 * A password profile's full-backup secrets from ONE unseal, so master and entropy can never
-	 * come from different row states, plus a fresh per-backup transfer key. The caller re-seals the
-	 * imported-key rows from `sourceDek` to `transferKey` and the file carries only the transfer
-	 * key: the long-lived DEK would open every key imported after the export too, and a password
-	 * change rewraps it rather than rotating it. `sourceDek` is null when the stored slot no longer
-	 * opens. In-process only. From the return on the caller owns and zeroizes both keys.
+	 * A profile's full-backup secrets from ONE unseal, so master and entropy can never come from
+	 * different row states, plus a fresh per-backup transfer key. The same body for both unlocks:
+	 * nothing in it is keyed by the unlock, so the file opens with its own password alone. The caller
+	 * re-seals the imported-key rows from `sourceDek` to `transferKey` and the file carries only the
+	 * transfer key: the long-lived DEK would open every key imported after the export too, and a
+	 * password change rewraps it rather than rotating it. `sourceDek` is null when the stored slot no
+	 * longer opens. In-process only. From the return on the caller owns and zeroizes both keys.
 	 */
 	public async openBackupTransfer(
 		id: string,
-		password: string,
+		password?: string,
+		credentialData?: PasskeyCredentialData,
 	): Promise<{ masterKey: string; entropy: string; sourceDek: ImportedKeysDek | null; transferKey: ImportedKeysDek }> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		if (profile.type === "passkey") {
-			throw new Error("Operation not supported for passkey profile")
-		}
-		const opened = await this.openSlots(profile, password)
+		const key = await this.slotKey(password, credentialData)
+		const opened = await this.openSlots(profile, key)
 		let sourceDek: ImportedKeysDek | null = null
 		let handedOver = false
 		try {
 			if (!opened) {
-				throw new InvalidPasswordError()
+				throw this.notOpened(key, () => new InvalidPasswordError())
 			}
 			if (await this.profileFenceBroken(id, capturedEpoch)) {
 				throw new Error("Invalid profile id")
@@ -2023,28 +1855,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/**
-	 * A passkey profile's full-backup material, proven as `exportPlain`'s passkey arm proves it, plus
-	 * how many of `rows` do not open under the stored DEK. That DEK is opened with the credential's
-	 * wrap key, never the session's, and never leaves this service. In-process only: `AccountService`
-	 * reads the rows the file carries and asserts the run's fence around this call.
-	 */
-	public async exportPasskeyBackupKeys(
-		id: string,
-		credentialData: PasskeyCredentialData,
-		rows: readonly SealedImportedKey[],
-	): Promise<PasskeyBackupMaterial> {
-		await this.ensureInitialized()
-		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		if (profile.type !== "passkey") {
-			throw new Error("Operation not supported for password profile")
-		}
-		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData, rows)
-	}
-
 	/** Fresh-auth DEK unseal for the account-export path (mirrors `exportPlain`'s posture:
-	 *  password-gated, session-independent, epoch-revalidated). Password profiles only — the
-	 *  passkey account-export limitation matches `exportAccount`'s existing contract. */
+	 *  password-gated, session-independent, epoch-revalidated). Password profiles only, as
+	 *  `exportAccount` is. */
 	public async exportImportedKeysDek(id: string, password: string): Promise<ImportedKeysDek> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
@@ -2052,7 +1865,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error("Operation not supported for passkey profile")
 		}
 		// Authenticate via the guard round-trip (full unseal), THEN open the DEK slot.
-		const opened = await this.openSlots(profile, password)
+		const opened = await this.openSlots(profile, { password })
 		try {
 			if (!opened) {
 				throw new InvalidPasswordError()
@@ -2085,19 +1898,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	public async exportMnemonic(id: string, password: string): Promise<string[]> {
+	public async exportMnemonic(id: string, password?: string, credentialData?: PasskeyCredentialData): Promise<string[]> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		if (profile.type === "passkey") {
-			throw new Error("Operation not supported for passkey profile")
-		}
-		const opened = await this.openSlots(profile, password)
+		const key = await this.slotKey(password, credentialData)
+		const opened = await this.openSlots(profile, key)
 		try {
 			if (!opened) {
 				// Legacy identity-stable message, pinned by the integration suite — kept in
 				// lockstep with changeProfilePassword's, whose exact string the
 				// change-password UI matches for its wrong-password branch.
-				throw new Error("Invalid profile old password")
+				throw this.notOpened(key, () => new Error("Invalid profile old password"))
 			}
 			// The recovery words come from the STORED ENTROPY (the master derives one-way from
 			// them and cannot be reversed). Pairing check before the words are ever revealed:
@@ -2207,22 +2018,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return fingerprint
 	}
 
-	/**
-	 * Same-credential passkey duplicate is a HARD reject (the
-	 * userHandle check alone is not structural — WebAuthn may omit the userHandle, and restore
-	 * mints a fresh id then). Same credential ⇒ same PRF ⇒ same master: a pure footgun with no
-	 * legitimate use, unlike the warned same-phrase case. Typed, and runs before the id check:
-	 * only a live, readable row can be chosen from the profile list, so only it is named.
-	 */
-	private async assertNotDuplicateCredential(credentialId: string): Promise<void> {
-		const clash = (await this.repo.getAll()).find(
-			(p) => !this.deletionState.isReserved(p.id) && p.type === "passkey" && p.credentialId === credentialId,
-		)
-		if (clash) {
-			throw new PasskeyProfileExistsError(undefined, { existingProfileName: clash.name })
-		}
-	}
-
 	public async getProfileSecret(id: string): Promise<Fr> {
 		await this.ensureInitialized()
 		return this.runExclusive(() => {
@@ -2282,55 +2077,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/**
-	 * takes ownership of `secret` from the recovery coordinator.
-	 * Zeroes in finally.
-	 */
-	private async importPasskeyProfile(
-		name: string,
-		credentialId: string,
-		secret: MasterSecretBytes,
-		dekWrapKey: CryptoKey,
-		userHandle?: string,
-		allowDuplicate = false,
-	): Promise<ProfileInfo> {
-		const dek = generateImportedKeysDek()
-		try {
-			const dekSealed = await sealDekUnderWrapKey(dekWrapKey, dek)
-			return await this.runExclusive(async () => {
-				// Same-credential duplicate is a HARD reject regardless of userHandle presence
-				// (the userHandle check below is not structural — WebAuthn may omit it).
-				await this.assertNotDuplicateCredential(credentialId)
-				// A reserved or unreadable row, or another credential under this id: refused, untyped.
-				if (userHandle && ((await this.repo.contains(userHandle)) || this.deletionState.isReserved(userHandle))) {
-					throw new Error("Passkey profile already exists")
-				}
-				// Same-phrase-class (same-master) duplicate is the WARNED path.
-				const walletFingerprint = await this.assertNotDuplicateWallet(secret, allowDuplicate)
-
-				// It is unclear if this case is possible, this is a fallback:
-				if (!userHandle) {
-					// MUST exclude reserved ids — this userHandle becomes the profile id,
-					// and generateUniqueId only checks storage (a tombstoned profile's row
-					// is already deleted, so its reserved id would otherwise be reused →
-					// the resumed purge clobbers the new profile).
-					userHandle = await this.nextUnreservedId()
-				}
-
-				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
-				await this.persistNewProfileHoldingLock(profile)
-				await this.markProfileFlagHoldingLock(profileImportedKey(userHandle))
-				await this.openSessionVerified(profile, secret, undefined, dek)
-				return this.getProfileInfo(profile)
-			})
-		} finally {
-			zeroize(secret)
-			zeroize(dek)
-		}
-	}
-
 	private getProfileInfo(profile: Profile): ProfileInfo {
-		return toProfileInfo(profile, this.sessionManager.isRecoveryMode(profile.id))
+		return toProfileInfo(profile, this.sessionManager.isRecoveryMode(profile.id), classifyProfileRow(profile).kind === "retired")
 	}
 
 	/** The persisted identity only: `recoveryMode` is a live-session projection and never travels. */
@@ -2342,22 +2090,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public async restore(
 		profile: ProfileInfo,
 		secret: RestoreSecret,
-		password?: string,
-		credentialData?: PasskeyCredentialData,
+		password: string,
 		allowDuplicate = false,
 	): Promise<Restored<ProfileInfo>> {
 		await this.ensureInitialized()
 
-		// The split's core invariant: the secret discriminant MUST match the profile
-		// type — prevents a password master key reaching a passkey profile (or vice
-		// versa), the swap the old polymorphic `masterKey: string` slot allowed.
-		if (secret.type !== profile.type) {
-			throw new Error("Restore secret type does not match profile type")
-		}
-
-		const rawSecret = secret.type === "password" ? secret.masterKey : secret.credentialId
-		if (!rawSecret) {
+		if (!secret?.masterKey) {
 			throw new Error("Master key is required to restore profile")
+		}
+		if (!password) {
+			throw new Error("Password is required for password profile")
 		}
 
 		const profileNames = (await this.repo.getAll()).map((p) => p.name)
@@ -2368,20 +2110,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			name = `${base} ${counter}`
 			counter++
 		}
-
-		switch (secret.type) {
-			case "password": {
-				if (!password) {
-					throw new Error("Password is required for password profile")
-				}
-				return this.restorePasswordProfile(profile, secret, name, password, allowDuplicate)
-			}
-			case "passkey":
-				return this.restorePasskeyProfile(profile, secret, name, credentialData, allowDuplicate)
-
-			default:
-				throw new Error("Unknown profile type")
-		}
+		return this.restorePasswordProfile(profile, secret, name, password, allowDuplicate)
 	}
 
 	/** The password branch of `restore`: decode + validate the backup material
@@ -2390,7 +2119,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  `scratch` so a throw at ANY point still reaches this one cleanup site. */
 	private async restorePasswordProfile(
 		profile: ProfileInfo,
-		secret: Extract<RestoreSecret, { type: "password" }>,
+		secret: RestoreSecret,
 		name: string,
 		password: string,
 		allowDuplicate: boolean,
@@ -2488,162 +2217,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** The passkey branch of `restore`: ceremony + credential binding run UNLOCKED —
-	 *  their early throws must not reach a lock release — and only the storage tail is
-	 *  locked. The catch converting to `restoreError` therefore sits OUTSIDE the lock,
-	 *  covering the unlocked prologue too (the password branch's sits inside, for
-	 *  toRestoreError-before-release). */
-	private async restorePasskeyProfile(
-		profile: ProfileInfo,
-		secret: Extract<RestoreSecret, { type: "passkey" }>,
-		name: string,
-		credentialData: PasskeyCredentialData | undefined,
-		allowDuplicate: boolean,
-	): Promise<Restored<ProfileInfo>> {
-		let recoverySecret: Uint8Array<ArrayBuffer> | undefined
-		let sourceDek: ImportedKeysDek | undefined
-		let destinationDek: ImportedKeysDek | undefined
-		const scratch: PasskeyRestoreScratch = { storedPending: false, storedContext: false }
-		try {
-			// Path A only: caller (popup) ran the in-page modal
-			// against the backup's credentialId. No SW-window
-			// fallback — the previous Path B path is removed.
-			if (!credentialData) {
-				throw new Error("credentialData is required for passkey profile")
-			}
-			const recovery = await this.passkeyCoordinator.recoverFromCredentialData(credentialData)
-			// Bind the modal-supplied credential to the credentialId
-			// recorded in the backup file. Without this a popup bug
-			// could stash a secret derived from the WRONG key, then
-			// finalizeRestore would open a session bound to a master
-			// that doesn't match the imported account address.
-			if (recovery.credentialId !== secret.credentialId) {
-				zeroize(recovery.secret)
-				throw new Error("credentialId mismatch")
-			}
-			recoverySecret = recovery.secret
-			// The SOURCE DEK travels as the sealed blob (passkey backups carry no plaintext
-			// secrets); the ceremony's wrap key — same credential ⇒ same key — opens it here,
-			// feeding the rewrap context only. An unopenable blob does not block the restore: the
-			// row mints its fresh DEK below and the imported-key rows, with no rewrap context, fall
-			// into the orphan taxonomy — a visible outcome, and the only way a passkey profile
-			// whose slot was corrupt can be repaired.
-			sourceDek = await unsealDekUnderWrapKey(recovery.dekWrapKey, secret.dekSealed ?? "").catch(() => undefined)
-			if (!sourceDek) {
-				this.logger.log(this.name, LogLevel.Warn, "passkey restore: source imported-keys DEK unopenable — no rewrap context")
-			}
-			// CLONE DIVERGENCE: fresh destination DEK for the restored row (see the
-			// password branch). Local consts so the narrowed types survive into the
-			// locked closure below.
-			destinationDek = generateImportedKeysDek()
-			const sourceDekLocal = sourceDek
-			const destDekLocal = destinationDek
-			const dekSealed = await sealDekUnderWrapKey(recovery.dekWrapKey, destinationDek)
-			// The restored profile id is the (hex) userHandle when the credential
-			// carried one, else a freshly generated id — a plain profile-id string
-			// either way, so widen off the `HexUserHandle` brand here.
-			const initialId: string | undefined = recovery.userHandle
-
-			return await this.runExclusive(() =>
-				this.commitRestoredPasskeyProfileHoldingLock(
-					{
-						name,
-						recovery,
-						sourceDek: sourceDekLocal,
-						destinationDek: destDekLocal,
-						dekSealed,
-						initialId,
-						allowDuplicate,
-					},
-					scratch,
-				),
-			)
-		} catch (err) {
-			// The duplicate verdict must reach the UI typed (confirm-retry with the SAME
-			// credentialData — no second ceremony), never a dead-end restoreError.
-			if (err instanceof DuplicateWalletError) throw err
-			return {
-				...profile,
-				restoreError: toRestoreError(err),
-			}
-		} finally {
-			// Zero whatever never made it into a map (early throws). Stashed buffers are
-			// owned by their maps (finalize / restoreImportedKeys / TTL sweep).
-			if (!scratch.storedPending) {
-				zeroize(recoverySecret)
-				zeroize(scratch.stashDek)
-			}
-			if (!scratch.storedContext) {
-				zeroize(sourceDek)
-				zeroize(destinationDek)
-			}
-		}
-	}
-
-	/** The locked commit of a passkey restore. Reports the stash back through `scratch`
-	 *  — the CALLER's post-release finally does every wipe. Caller MUST hold the facade
-	 *  lock. */
-	private async commitRestoredPasskeyProfileHoldingLock(
-		input: PasskeyRestoreCommit,
-		scratch: PasskeyRestoreScratch,
-	): Promise<ProfileInfo> {
-		const { name, recovery, sourceDek, destinationDek, dekSealed, initialId, allowDuplicate } = input
-		let id = initialId
-		// Same-credential duplicate is a HARD reject even when the userHandle is
-		// absent (restore would otherwise mint a fresh id for the same credential).
-		await this.assertNotDuplicateCredential(recovery.credentialId)
-		if (id && ((await this.repo.contains(id)) || this.deletionState.isReserved(id))) {
-			throw new Error("Passkey profile already exists")
-		}
-		// Same-master duplicate (theoretical cross-type case) is the WARNED path.
-		const walletFingerprint = await this.assertNotDuplicateWallet(recovery.secret, allowDuplicate)
-
-		// It is unclear if this case is possible, this is a fallback:
-		if (!id) {
-			// Exclude reserved ids (see importPasskeyProfile) — generateUniqueId
-			// only checks storage, so a tombstoned id could be reused here.
-			id = await this.nextUnreservedId()
-		}
-
-		const newProfile = newPasskeyRow({ id, name, dekSealed, walletFingerprint, credentialId: recovery.credentialId })
-		// Same marker-before-row bracket as the password branch (a torn passkey
-		// import must not escape detection).
-		await this.writeMarkerThenRowHoldingLock(id, newProfile)
-		// Before any slice is written: every slice restore of a sealed root seals under them.
-		await this.fillRowKeysHoldingLock(newProfile, recovery.secret)
-		await this.markProfileFlagHoldingLock(profileImportedKey(id))
-
-		this.emit("onProfileAdded", this.getProfileInfo(newProfile))
-
-		// Late activation: stash the recovery secret + the DESTINATION DEK so
-		// finalize can open a non-degraded session without re-prompting WebAuthn
-		// (a master-only stash would leave the first post-restore session dek-less,
-		// quarantining every restored imported account). The maps take ownership —
-		// DO NOT zero the stashed buffers in finally.
-		this.sweepStalePendingRestore(Date.now(), id)
-		const stashDek = asImportedKeysDek(new Uint8Array(destinationDek))
-		scratch.stashDek = stashDek
-		this.pendingRestoreSecrets.set(id, {
-			secret: recovery.secret,
-			dek: stashDek,
-			capturedAt: Date.now(),
-			expected: {
-				type: newProfile.type,
-				credentialId: newProfile.credentialId,
-				dekSealed: newProfile.dekSealed,
-				pxeGeneration: newProfile.pxeGeneration,
-				walletFingerprint: newProfile.walletFingerprint,
-			},
-		})
-		scratch.storedPending = true
-		if (sourceDek) {
-			this.pendingDekRewraps.set(id, { sourceDek, destinationDek, capturedAt: Date.now() })
-			scratch.storedContext = true
-		}
-
-		return this.getProfileInfo(newProfile)
-	}
-
 	/**
 	 * Late-activation step for the full-backup import flow. Opens the session
 	 * for a profile previously created by `restore()`. Splitting restore +
@@ -2652,19 +2225,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * `app.vue`'s handler would call `getOrInitNetworks` + `ensureDefaultAccount`
 	 * in parallel with the import and race the imported data.
 	 *
-	 * Password profiles: re-derives the passhash from `password` (PBKDF2 cost
-	 * paid again — acceptable for a one-time import flow).
-	 *
-	 * Passkey profiles: consumes the recovery secret stashed by `restore()`
-	 * in `pendingRestoreSecrets`. NO second WebAuthn prompt. If no pending
-	 * secret exists (SW restarted, finalize already ran, profile created via
-	 * a non-restore path), throws — caller can fall back to the regular
-	 * unlock flow.
+	 * Re-derives the passhash from `password` (PBKDF2 cost paid again — acceptable for a one-time
+	 * import flow).
 	 *
 	 * Idempotent in spirit: if the session is already active for this profile,
 	 * skips the re-open (the no-op case after a second `finalizeRestore` call).
 	 */
-	public async finalizeRestore(id: string, password?: string): Promise<FinalizedRestore> {
+	public async finalizeRestore(id: string, password: string): Promise<FinalizedRestore> {
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
@@ -2675,12 +2242,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		})
 	}
 
-	private async finalizeRestoreHoldingLock(id: string, password: string | undefined): Promise<ProfileInfo> {
-		// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
-		// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
-		// identity checks spare entries a later restore stashed after the lock's hold watchdog
+	private async finalizeRestoreHoldingLock(id: string, password: string): Promise<ProfileInfo> {
+		// Finalize is the last reader of the restore's rewrap context for its id, so every path wipes
+		// what it did not take: a leftover context is the empty-slice case (nothing consumed it). The
+		// identity check spares an entry a later restore stashed after the lock's hold watchdog
 		// released this call.
-		const seen = this.pendingRestoreSecrets.get(id)
 		const seenRewrap = this.pendingDekRewraps.get(id)
 		try {
 			// Sweep stale entries but never the id being finalized here.
@@ -2695,13 +2261,14 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.deletionState.isReserved(id)) {
 				throw new Error("Invalid profile id")
 			}
+			if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()
 
 			// Clear the restore-in-progress marker at ENTRY: being called at all
 			// proves the storage-slice phase completed (the import flow only
 			// finalizes after every slice restore). Clearing on entry — not on
-			// session-open success — keeps finalize-throw survivors (wrong
-			// password, lost passkey pending-secret) on their documented
-			// unlock-later recovery instead of branding them torn.
+			// session-open success — keeps finalize-throw survivors (a wrong
+			// password) on their documented unlock-later recovery instead of
+			// branding them torn.
 			await this.restorePending.delete(id)
 
 			// If the session is already active for this profile, treat as
@@ -2709,15 +2276,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (this.sessionManager.isActive(id)) {
 				return this.getProfileInfo(profile)
 			}
-
-			if (profile.type === "password") {
-				return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
+			// `restore` writes only password rows: any other type was edited in between.
+			if (profile.type !== "password") {
+				throw new Error("Profile type changed between restore and finalizeRestore")
 			}
-			// This dispatch falls through to the passkey branch for ANY non-password
-			// type — an edited `type` field must not select it; the branch re-checks.
-			return await this.finalizePasskeyRestoreHoldingLock(id, profile)
+			return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
 		} finally {
-			if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
 			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
 		}
 	}
@@ -2731,12 +2295,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private async finalizePasswordRestoreHoldingLock(
 		id: string,
 		profile: Extract<Profile, { type: "password" }>,
-		password?: string,
+		password: string,
 	): Promise<ProfileInfo> {
 		if (!password) {
 			throw new Error("Password is required for password profile")
 		}
-		const opened = await this.openSlots(profile, password)
+		const opened = await this.openSlots(profile, { password })
 		if (!opened) {
 			throw new InvalidPasswordError()
 		}
@@ -2751,55 +2315,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		} finally {
 			// zero buffers after sessionManager has copied.
 			opened.wipe()
-			zeroize(dek)
-		}
-	}
-
-	/** Passkey-side finalize: consume the stashed recovery secret + destination DEK.
-	 *  Removed from the map BEFORE the await so no concurrent sweep can zeroize
-	 *  the buffers while `openSessionVerified` is copying them; zeroized in finally.
-	 *  Same binding every other passkey open enforces: a tamper between `restore()` and
-	 *  this finalize (the row sat unlocked in storage the whole time) must not yield a
-	 *  clean session — the live row's security fields are compared against the
-	 *  restore-time snapshot AND the fingerprint is recomputed from the stashed master;
-	 *  degrades exactly like the password side on any mismatch. Caller MUST hold the
-	 *  facade lock. */
-	private async finalizePasskeyRestoreHoldingLock(id: string, profile: Profile): Promise<ProfileInfo> {
-		if (!this.pendingRestoreSecrets.get(id)) {
-			throw new Error("No pending restore secret for passkey profile")
-		}
-		if (profile.type !== "passkey") {
-			throw new Error("Profile type changed between restore and finalizeRestore")
-		}
-		const pending = this.pendingRestoreSecrets.take(id, Date.now())
-		if (!pending) {
-			this.pendingDekRewraps.drop(id)
-			throw new Error("No pending restore secret for passkey profile")
-		}
-		let dek: ImportedKeysDek | null = pending.dek
-		try {
-			const intact =
-				profile.type === pending.expected.type &&
-				profile.credentialId === pending.expected.credentialId &&
-				profile.dekSealed === pending.expected.dekSealed &&
-				profile.pxeGeneration === pending.expected.pxeGeneration &&
-				profile.walletFingerprint === pending.expected.walletFingerprint &&
-				profile.walletFingerprint === (await computeWalletFingerprint(pending.secret))
-			if (!intact) {
-				zeroize(pending.dek)
-				dek = null
-			}
-		} catch {
-			zeroize(pending.dek)
-			dek = null
-		}
-		if (!dek) {
-			this.logger.log(this.name, LogLevel.Error, "passkey row changed between restore and finalizeRestore — opening derived-only", id)
-		}
-		try {
-			return await this.openAndWarnIfDegradedHoldingLock(profile, pending.secret, undefined, dek)
-		} finally {
-			zeroize(pending.secret)
 			zeroize(dek)
 		}
 	}
