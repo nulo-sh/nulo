@@ -17,7 +17,7 @@ import { isNewPasswordValid } from "@/utils/password"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
-import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
+import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 
 /**
  * Shared orchestration for the profile-IMPORT flow, consumed by both the
@@ -154,7 +154,7 @@ interface ImportHandlerDeps {
 	resolveName: () => Promise<string | null>
 	seedPhrase: Ref<string | undefined>
 	unlockMethod: Ref<UnlockMethod>
-	chooseUnlock: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
+	chooseUnlock: (display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	allowDuplicate: Ref<boolean>
 	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
 	fillUnknownImportError: (err: unknown) => void
@@ -234,7 +234,7 @@ function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>,
 
 	/** The new password, or the passkey answer the page's card returns; `null` when the card was
 	 *  cancelled, which leaves the form as it was. */
-	async function chooseUnlock(display: PasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
+	async function chooseUnlock(display: NewPasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
 		if (unlockMethod.value === "password") return { password: password.value }
 		try {
 			return { credentialData: await newPasskey.ask(display, existing) }
@@ -378,7 +378,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 
 interface WireBackupImportDeps {
 	unlockMethod: Ref<UnlockMethod>
-	chooseUnlock: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
+	chooseUnlock: (display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	password: Ref<string>
 	repeatedPassword: Ref<string>
 	fillError: (type?: string, title?: string, tooltip?: string) => void

@@ -5,7 +5,7 @@
 > **A self-custody wallet for the Aztec network, for Chrome and Firefox. You use it at your own risk.**
 >
 > - **No independent security audit.** The code has been reviewed internally and with automated tools, not by an external security firm.
-> - **Aztec Mainnet is the default network.** Its assets may carry real value. The Aztec Testnet is built in for testing. A network you add yourself may carry real value too.
+> - **Aztec Alpha V6 is the default network.** Its assets may carry real value. The Aztec Testnet is built in for testing. A network you add yourself may carry real value too.
 > - **Keep your way back.** From 1.0, a change to how the wallet stores data ships with a migration, but a Testnet reset still clears that network's history. Your recovery phrase, your passkey or a full backup is the only way to restore a lost profile.
 > - **Used a preview build?** If you used 0.31.x or any earlier preview build, start fresh in 1.0: create a new profile with a new recovery phrase or a new passkey, then move any funds to it.
 > - **Install only from the official listings**, linked from [nulo.sh](https://nulo.sh).

@@ -34,6 +34,7 @@ import { markGetStarted } from "@/utils/get-started"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow } from "@/utils/own-window"
+import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 
 /** Store */
@@ -43,6 +44,7 @@ const appStore = useAppStore()
 const router = useRouter()
 
 const AUTO_CLOSE_MS = 60_000 * 5
+const BACKUP_MENU = "/popup/settings/security/export"
 
 const isStarted = ref(false)
 const isUnlocked = ref(false)
@@ -59,7 +61,7 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 const handleClose = async () => {
 	words.value = []
 	if (await closeOwnWindow()) return
-	router.push("/popup/settings/security/export")
+	leaveFor(router, BACKUP_MENU)
 }
 
 const countdown = useSecretCountdown({ autoCloseMs: AUTO_CLOSE_MS, onTimeout: handleClose })
@@ -142,7 +144,7 @@ onBeforeUnmount(() => {
 		heroMain="Recovery"
 		heroSub="Phrase"
 		collapsingLabel="Recovery Phrase"
-		backTo="/popup/settings/security/export"
+		:backTo="BACKUP_MENU"
 		@keydown="onKeydown"
 	>
 		<!-- Agreement gate -->
@@ -164,8 +166,12 @@ onBeforeUnmount(() => {
 			</div>
 		</template>
 
-		<!-- Password gate; a passkey profile's gate is its button alone -->
-		<template v-else-if="isStarted && !isUnlocked && isPasskeyProfile" />
+		<!-- Password gate; a passkey profile's gate is its button, under one sentence -->
+		<div v-else-if="isStarted && !isUnlocked && isPasskeyProfile" class="export_section_last">
+			<Text variant="body" height="150" color="body" data-testid="reveal-passkey-note">
+				Your passkey confirms it's you before the phrase shows.
+			</Text>
+		</div>
 		<SecretUnlockSection
 			v-else-if="isStarted && !isUnlocked"
 			v-model="password"

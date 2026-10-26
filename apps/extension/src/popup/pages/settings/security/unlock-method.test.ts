@@ -1,7 +1,7 @@
 /**
  * The Unlock method page changes how a profile unlocks only after the current method answered; any
- * cancel or failure before the save leaves it as it was, and a change saved but not reopened ends
- * at the lock screen.
+ * cancel or failure before the save leaves it as it was and the page where it is, a change made
+ * leaves for Settings, and a change saved but not reopened ends at the lock screen.
  */
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, Icon, Input, Text } from "@nulo/design"
@@ -33,7 +33,7 @@ vi.mock("@/composables/usePasskeyCeremony", async () => {
 })
 const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast }) }))
-const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
+const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ meta: {}, query: {} }) }))
 const surface = vi.hoisted(() => ({ panel: false, move: vi.fn(async (_route: string) => true) }))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.panel }))
@@ -48,11 +48,16 @@ import UnlockMethod from "./unlock-method.vue"
 
 const wrappers: VueWrapper[] = []
 
-function mountPage(type: "password" | "passkey") {
+function mountPage(type: "password" | "passkey", recoveryMode?: true) {
 	const w = mount(UnlockMethod, {
 		attachTo: document.body,
 		global: {
-			plugins: [createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: { id: "p1", name: "Main", type } } } })],
+			plugins: [
+				createTestingPinia({
+					createSpy: vi.fn,
+					initialState: { app: { profile: { id: "p1", name: "Main", type, recoveryMode } } },
+				}),
+			],
 			components: { Flex, Icon, Input, Text },
 			stubs: {
 				CollapsingHeroLayout: { template: "<div><slot /><slot name='bottom' /></div>" },
@@ -73,10 +78,18 @@ const click = async (w: VueWrapper, id: string) => {
 const has = (w: VueWrapper, id: string) => w.find(`[data-testid="${id}"]`).exists()
 const disabled = (w: VueWrapper, id: string) => (w.get(`[data-testid="${id}"]`).element as HTMLButtonElement).disabled
 const modes = () => ceremony.run.mock.calls.map(([req]) => req.mode)
+const current = (w: VueWrapper) => w.get('[data-testid="unlock-method-current"]').text()
+const stayed = () => {
+	expect(router.replace).not.toHaveBeenCalled()
+	expect(router.back).not.toHaveBeenCalled()
+}
 const nothingChanged = () => {
 	expect(profile.changeUnlockMethod).not.toHaveBeenCalled()
 	expect(openToast).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "success" }))
+	stayed()
 }
+/** No entry is behind the page here, so Settings takes its place (`leaveFor`, `page-back.test.ts`). */
+const leftForSettings = () => expect(router.replace).toHaveBeenCalledExactlyOnceWith("/popup/settings")
 
 async function typePassword(w: VueWrapper, id: string, value: string) {
 	typeNow(nativeInput(w, id), value)
@@ -97,8 +110,9 @@ describe("a password profile", () => {
 	async function atPassword() {
 		const w = mountPage("password")
 		await flushPromises()
-		expect(w.get('[data-testid="unlock-method-current"]').text()).toBe("This profile unlocks with a password.")
+		expect(current(w)).toBe("This profile unlocks with a password.")
 		await click(w, "unlock-method-use-passkey")
+		expect(current(w)).toBe("This profile currently unlocks with a password. After the change, it unlocks with your passkey.")
 		return w
 	}
 
@@ -128,6 +142,7 @@ describe("a password profile", () => {
 		expect(request).toMatchObject({ mode: "create", step: "unlockMethod", profileName: "Main" })
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { password: "password123" }, { passkey: NEXT })
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your passkey" })
+		leftForSettings()
 		expect(has(w, "unlock-method-password-input")).toBe(false)
 	})
 
@@ -181,7 +196,7 @@ describe("a passkey profile", () => {
 	async function atPasskey() {
 		const w = mountPage("passkey")
 		await flushPromises()
-		expect(w.get('[data-testid="unlock-method-current"]').text()).toBe("This profile unlocks with a passkey.")
+		expect(current(w)).toBe("This profile unlocks with a passkey.")
 		return w
 	}
 
@@ -194,6 +209,7 @@ describe("a passkey profile", () => {
 		expect(profile.verifyUnlockCredential).toHaveBeenCalledExactlyOnceWith("p1", { passkey: CURRENT })
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { passkey: CURRENT }, { passkey: NEXT })
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your new passkey" })
+		leftForSettings()
 	})
 
 	test.each([
@@ -218,6 +234,9 @@ describe("a passkey profile", () => {
 		await click(w, "unlock-method-use-password")
 		expect(modes()).toEqual(["get"])
 		expect(has(w, "unlock-method-new-password-input")).toBe(true)
+		expect(current(w)).toBe(
+			"This profile currently unlocks with a passkey. After the change, it unlocks with the password you set here.",
+		)
 		expect(profile.changeUnlockMethod).not.toHaveBeenCalled()
 		expect(disabled(w, "unlock-method-save")).toBe(true)
 		await typePassword(w, "unlock-method-new-password-input", "1234567")
@@ -231,6 +250,7 @@ describe("a passkey profile", () => {
 		expect(ceremony.run).toHaveBeenCalledOnce()
 		expect(profile.changeUnlockMethod).toHaveBeenCalledExactlyOnceWith("p1", { passkey: CURRENT }, { password: "new-password" })
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your password" })
+		leftForSettings()
 		expect(has(w, "unlock-method-new-password-input")).toBe(false)
 	})
 
@@ -295,6 +315,7 @@ describe("a passkey profile", () => {
 		held.resolve()
 		await flushPromises()
 		expect(openToast).not.toHaveBeenCalled()
+		stayed()
 		expect(disabled(w, "unlock-method-new-passkey")).toBe(false)
 	})
 })
@@ -321,6 +342,26 @@ describe("a profile the change would refuse", () => {
 	})
 })
 
+describe("a profile open in recovery mode", () => {
+	test.each(["password", "passkey"] as const)("a %s profile is told it can't change, and no change is offered or asked", async (type) => {
+		surface.panel = true
+		const w = mountPage(type, true)
+		await flushPromises()
+		expect(w.get('[data-testid="unlock-method-unavailable"]').text()).toBe("This profile can't change its unlock method.")
+		expect(w.findAll("button")).toEqual([])
+		expect(surface.move).not.toHaveBeenCalled()
+		expect(ceremony.run).not.toHaveBeenCalled()
+		expect(profile.verifyUnlockCredential).not.toHaveBeenCalled()
+	})
+
+	test("(control) a profile open with its keys has no such line", async () => {
+		const w = mountPage("passkey")
+		await flushPromises()
+		expect(has(w, "unlock-method-unavailable")).toBe(false)
+		expect(has(w, "unlock-method-new-passkey")).toBe(true)
+	})
+})
+
 describe("how a change ends", () => {
 	test("a failure before the save says nothing changed, and the page stays", async () => {
 		profile.changeUnlockMethod.mockRejectedValueOnce(new Error("Profile storage corrupted"))
@@ -328,7 +369,7 @@ describe("how a change ends", () => {
 		await flushPromises()
 		await click(w, "unlock-method-new-passkey")
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Couldn't change the unlock method. Try again." })
-		expect(router.replace).not.toHaveBeenCalled()
+		stayed()
 		expect(disabled(w, "unlock-method-new-passkey")).toBe(false)
 	})
 

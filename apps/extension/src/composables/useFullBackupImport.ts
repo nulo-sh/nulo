@@ -60,7 +60,7 @@ import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid } from "@/utils/password"
 import type { NewProfileUnlock, UnlockMethod } from "@/composables/useNewProfilePasskey"
-import type { PasskeyDisplay } from "@/wallet/services/passkey/spec"
+import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 import type { HeldAccount } from "@/components/composite/import/restore-warning"
 
 // Beside the checksum, outside the body it covers, in the backups of passkey profiles made before 1.1.
@@ -232,7 +232,7 @@ export interface UseFullBackupImportOptions {
 	 * passkey answer (`existing`: one the person already has). Resolves `null` when the passkey step
 	 * was cancelled, which stops the restore quietly. Absent: the new password.
 	 */
-	chooseUnlock?: (display: PasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
+	chooseUnlock?: (display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	fillError: (type: string, title: string, tooltip?: string) => void
 	clearError: () => void
 	pickFile: () => Promise<File | null | undefined>
