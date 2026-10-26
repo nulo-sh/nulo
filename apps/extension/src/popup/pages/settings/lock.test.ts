@@ -144,6 +144,21 @@ describe("settings/lock", () => {
 		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
 	})
 
+	test.each([-5, 1.5, 1441])("an auto-lock of %s minutes is never written; the stated maximum is", async (minutes) => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
+
+		field().vm.$emit("update:modelValue", minutes)
+		await debounced()
+		expect(fakes.config.setValue).not.toHaveBeenCalled()
+
+		field().vm.$emit("update:modelValue", 1440)
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 86_400_000)
+	})
+
 	test("a failure that lands after a newer edit leaves that edit, which is then written", async () => {
 		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
 		let fail: (e: Error) => void = () => {}
