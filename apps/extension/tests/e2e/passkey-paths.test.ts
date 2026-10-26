@@ -8,6 +8,9 @@
  *      profile's own PRF input. Unblocked by path A: the modal runs in the popup's existing
  *      FrameTreeNode, so the credential created at register persists across the lock/unlock
  *      cycle on the SAME virtual authenticator.
+ *   3. A second profile on the passkey already held: "Use a passkey I already have" asks a
+ *      discovery get naming no credential, at an input of the new profile's own, and that profile
+ *      then unlocks with it.
  *
  * Each step also proves it stayed in the page on both browsers: the passkey card mounted and no
  * window opened. Only Firefox's toolbar panel hands it to a window (`toolbar-panel.test.ts`).
@@ -113,6 +116,75 @@ test("lock + unlock via passkey: header-lock → auth-submit returns to /popup/g
 		await page.close()
 	}
 }, 90_000)
+
+/** Every stored passkey row's credential and PRF input. */
+const readPasskeyRows = (page: Page) =>
+	page.evaluate(async () => {
+		const all = await chrome.storage.local.get(null)
+		return Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:core:profiles@"))
+			.map(
+				([, raw]) =>
+					(typeof raw === "string" ? JSON.parse(raw) : raw) as { type?: string; credentialId?: string; prfSalt?: string },
+			)
+			.filter((row) => row.type === "passkey")
+	})
+
+type CredentialProbe = Window & { __namedCredentials?: number[] }
+
+test("a second profile on the passkey already held: a discovery at an input of its own, then its unlock", async ({
+	freshExtensionPerTest,
+}) => {
+	const page = await openPopup(freshExtensionPerTest)
+	const auth = await setupPasskeyVirtualAuth(freshExtensionPerTest.browser, page)
+
+	try {
+		await registerPasskeyProfile(page)
+		await clickByTestId(page, "header-lock")
+		await page.waitForSelector('[data-testid="auth-profile"]', { visible: true, timeout: 15_000 })
+		await clickByTestId(page, "auth-profile")
+		await page.waitForSelector('[data-testid="select-profile-new-btn"]', { visible: true, timeout: 10_000 })
+		await clickByTestId(page, "select-profile-new-btn")
+		await page.waitForSelector('[data-testid="register-passkey-reuse"]', { visible: true, timeout: 10_000 })
+
+		// Records how many credentials each get names: a discovery names none.
+		await page.evaluate(() => {
+			const probe = window as CredentialProbe
+			probe.__namedCredentials = []
+			const get = navigator.credentials.get.bind(navigator.credentials)
+			navigator.credentials.get = (options) => {
+				probe.__namedCredentials?.push(options?.publicKey?.allowCredentials?.length ?? 0)
+				return get(options)
+			}
+		})
+		await watchPasskeySurface(page)
+		await clickByTestId(page, "register-passkey-reuse")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await readPasskeySurface(page)).toEqual(IN_PAGE)
+		expect(await page.evaluate(() => (window as CredentialProbe).__namedCredentials)).toEqual([0])
+
+		const [first, second, ...rest] = await readPasskeyRows(page)
+		expect(rest).toEqual([])
+		expect(second?.credentialId).toBe(first?.credentialId)
+		expect(second?.prfSalt !== first?.prfSalt, "the second profile was sealed at the first one's input").toBe(true)
+		const address = await readActiveAccount(page)
+
+		await clickByTestId(page, "header-lock")
+		await waitForHash(page, "#/popup/auth", 10_000)
+		await page.waitForFunction(() => document.querySelector<HTMLButtonElement>('[data-testid="auth-submit"]')?.disabled === false, {
+			timeout: 10_000,
+		})
+		await clickByTestId(page, "auth-submit")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await readActiveAccount(page)).toBe(address)
+
+		const nonBenignErrors = freshExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))
+		expect(nonBenignErrors).toEqual([])
+	} finally {
+		await auth.cleanup()
+		await page.close()
+	}
+}, 120_000)
 
 // NOTE: a cross-browser passkey round-trip stays blocked: a different `puppeteer.launch()` is a
 // different authenticator, so no shared credential. See

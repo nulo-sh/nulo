@@ -136,6 +136,7 @@ onBeforeUnmount(() => {
 			<PasskeyReuseLink
 				v-if="type === 'passkey'"
 				testid="register-passkey-reuse"
+				compact
 				:disabled="isCreating"
 				:class="$style.reuse"
 				@click="handleCreateWithExistingPasskey"

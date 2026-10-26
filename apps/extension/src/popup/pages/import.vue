@@ -277,6 +277,7 @@ onBeforeUnmount(() => {
 						<PasskeyReuseLink
 							v-if="unlockMethod === 'passkey'"
 							testid="import-full-backup-passkey-reuse"
+							compact
 							:disabled="restoreCtaBlocked(fullBackupCta)"
 							@click="restoreBackupWithExistingPasskey"
 						/>
@@ -346,6 +347,7 @@ onBeforeUnmount(() => {
 				<PasskeyReuseLink
 					v-if="selectedImportOption === 'seed' && unlockMethod === 'passkey'"
 					testid="import-seed-passkey-reuse"
+					compact
 					:disabled="!isAllowedToImportBySeedPhrase"
 					@click="handleImportSeedWithExistingPasskey"
 				/>

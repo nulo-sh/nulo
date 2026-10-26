@@ -7,12 +7,20 @@
 defineProps({
 	testid: { type: String, required: true },
 	disabled: { type: Boolean, default: false },
+	/** The popup's tighter spacing and its secondary ink. */
+	compact: { type: Boolean, default: false },
 })
 const emit = defineEmits(["click"])
 </script>
 
 <template>
-	<button type="button" :class="$style.link" :disabled="disabled" :data-testid="testid" @click="emit('click')">
+	<button
+		type="button"
+		:class="[$style.link, compact && $style.compact]"
+		:disabled="disabled"
+		:data-testid="testid"
+		@click="emit('click')"
+	>
 		Use a passkey I already have
 	</button>
 </template>
@@ -27,6 +35,12 @@ const emit = defineEmits(["click"])
 	cursor: pointer;
 	padding: 6px 12px;
 	transition: color 0.15s var(--bezier);
+}
+
+.compact {
+	color: var(--nulo-secondary);
+	padding: 4px 0;
+	border-bottom: 1px solid transparent;
 }
 
 .link:hover:not(:disabled) {

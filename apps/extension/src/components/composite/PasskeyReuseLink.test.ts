@@ -68,6 +68,13 @@ describe("PasskeyReuseLink", () => {
 		expect(w.emitted("click")).toHaveLength(1)
 	})
 
+	it("compact takes the popup's style on top of its own", () => {
+		const loose = mountLink().get("button").classes()
+		const tight = mountLink({ compact: true }).get("button").classes()
+		expect(tight).toEqual(expect.arrayContaining(loose))
+		expect(tight.length).toBe(loose.length + 1)
+	})
+
 	it("passes a page's class to its root", () => {
 		const w = mount(PasskeyReuseLink, { props: { testid: "r" }, attrs: { class: "page-x" } })
 		expect(w.get("button").classes()).toContain("page-x")

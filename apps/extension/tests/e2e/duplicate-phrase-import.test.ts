@@ -39,6 +39,8 @@ async function submitSeedImport(page: Page, phrase: string): Promise<void> {
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 15_000 })
 	await replaceInputValue(page, '[data-testid="import-seed-input"] input', phrase)
+	await clickByTestId(page, "import-method-password")
+	await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 15_000 })
 	await replaceInputValue(page, '[data-testid="import-password-input"] input', TEST_PASSWORD)
 	await replaceInputValue(page, '[data-testid="import-password-confirm-input"] input', TEST_PASSWORD)
 	await page.waitForFunction(

@@ -40,6 +40,7 @@ declare module 'vue' {
     DropdownTrigger: typeof import('./../components/ui/Dropdown/DropdownTrigger.vue')['default']
     EmojiGrid: typeof import('./../components/composite/general/EmojiGrid.vue')['default']
     FeeAmount: typeof import('./../components/composite/FeeAmount.vue')['default']
+    FilePasswordSection: typeof import('./../components/composite/FilePasswordSection.vue')['default']
     Flex: typeof import('@nulo/design')['Flex']
     FormPopup: typeof import('./../components/composite/FormPopup.vue')['default']
     HandoffCard: typeof import('./../components/composite/HandoffCard.vue')['default']
@@ -69,6 +70,7 @@ declare module 'vue' {
     OnboardingSkipLink: typeof import('./../onboarding/components/OnboardingSkipLink.vue')['default']
     OnboardingStepHeader: typeof import('./../onboarding/components/OnboardingStepHeader.vue')['default']
     PasskeyCeremonyDialog: typeof import('./../components/passkey/PasskeyCeremonyDialog.vue')['default']
+    PasskeyReuseLink: typeof import('./../components/composite/PasskeyReuseLink.vue')['default']
     PasskeyScreen: typeof import('./../components/composite/PasskeyScreen.vue')['default']
     PasswordVisibilityToggle: typeof import('./../components/composite/PasswordVisibilityToggle.vue')['default']
     PermissionRow: typeof import('./../components/composite/capabilities/PermissionRow.vue')['default']
@@ -116,6 +118,7 @@ declare module 'vue' {
     TransactionCardLayout: typeof import('./../components/composite/activity/TransactionCardLayout.vue')['default']
     TransactionIncomingCard: typeof import('./../components/composite/activity/TransactionIncomingCard.vue')['default']
     TransactionTerminalCard: typeof import('./../components/composite/activity/TransactionTerminalCard.vue')['default']
+    UnlockMethodChoice: typeof import('./../components/composite/import/UnlockMethodChoice.vue')['default']
     Update: typeof import('./../components/update.vue')['default']
   }
 }

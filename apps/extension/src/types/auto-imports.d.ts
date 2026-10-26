@@ -521,6 +521,7 @@ declare global {
   const useModel: typeof import('vue').useModel
   const useNetworkActivation: typeof import('../composables/useNetworkActivation').useNetworkActivation
   const useNetworkArrival: typeof import('../composables/useNetworkArrival').useNetworkArrival
+  const useNewProfilePasskey: typeof import('../composables/useNewProfilePasskey').useNewProfilePasskey
   const useNotificationStore: typeof import('../stores/notification.store').useNotificationStore
   const useOutside: typeof import('../composables/outside.js').useOutside
   const usePasskeyCeremony: typeof import('../composables/usePasskeyCeremony').usePasskeyCeremony
@@ -658,6 +659,9 @@ declare global {
   // @ts-ignore
   export type { UseNetworkArrivalOptions, NetworkArrivalState } from '../composables/useNetworkArrival'
   import('../composables/useNetworkArrival')
+  // @ts-ignore
+  export type { UnlockMethod, NewProfileUnlock } from '../composables/useNewProfilePasskey'
+  import('../composables/useNewProfilePasskey')
   // @ts-ignore
   export type { PinScope, PinResult, PinStore, UsePinnedTokensDeps } from '../composables/usePinnedTokens'
   import('../composables/usePinnedTokens')
@@ -1364,6 +1368,7 @@ declare module 'vue' {
     readonly useModel: UnwrapRef<typeof import('vue')['useModel']>
     readonly useNetworkActivation: UnwrapRef<typeof import('../composables/useNetworkActivation')['useNetworkActivation']>
     readonly useNetworkArrival: UnwrapRef<typeof import('../composables/useNetworkArrival')['useNetworkArrival']>
+    readonly useNewProfilePasskey: UnwrapRef<typeof import('../composables/useNewProfilePasskey')['useNewProfilePasskey']>
     readonly useNotificationStore: UnwrapRef<typeof import('../stores/notification.store')['useNotificationStore']>
     readonly useOutside: UnwrapRef<typeof import('../composables/outside.js')['useOutside']>
     readonly usePasskeyCeremony: UnwrapRef<typeof import('../composables/usePasskeyCeremony')['usePasskeyCeremony']>

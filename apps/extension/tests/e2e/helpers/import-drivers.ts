@@ -214,6 +214,9 @@ export async function importSeed(
 	}
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 10_000 })
+	// A phrase opens on Passkey; this driver imports under a password.
+	await clickByTestId(page, "import-method-password")
+	await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 10_000 })
 	await setInputs(page, {
 		...(profileName === undefined ? {} : { [`[data-testid="${shell.nameInputTestId}"] input`]: profileName }),
 		'[data-testid="import-seed-input"] input': seed,
@@ -247,20 +250,53 @@ export async function submitFullBackupImport(page: Page, filePath: string, passw
 	await submitWhenEnabled(page, shell.submitTestId("full-backup"))
 }
 
+/** Restore a passkey profile's backup under a new passkey from the full-backup picker on screen: the
+ *  form opens on the method the backup was made with, Passkey, and asks no new password. Lands on
+ *  the shell's success hash. */
+export async function restoreFullBackupWithPasskey(page: Page, filePath: string, shell: ImportShell): Promise<void> {
+	await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "import-option-full-backup")
+	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
+	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
+	await page.waitForSelector('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]', {
+		visible: true,
+		timeout: 10_000,
+	})
+	expect(await page.$('[data-testid="import-full-backup-password-input"]'), "the Passkey tab shows a password field").toBeNull()
+	await submitWhenEnabled(page, shell.submitTestId("full-backup"))
+	await waitForHash(page, shell.successHash, 120_000)
+}
+
 /** Restore an ENCRYPTED backup from the full-backup form already on screen: the file opens with
- *  `filePassword`, and the restored profile takes {@link TEST_PASSWORD}. Lands on Home; a refusal
- *  fails at once with the error box's text. */
-export async function submitEncryptedFullBackup(page: Page, filePath: string, filePassword: string, timeoutMs = 30_000): Promise<void> {
+ *  `filePassword`, and the restored profile takes {@link TEST_PASSWORD}, or with `unlock: "passkey"`
+ *  a new passkey, which must be the method the form opened on. Lands on Home; a refusal fails at
+ *  once with the error box's text. */
+export async function submitEncryptedFullBackup(
+	page: Page,
+	filePath: string,
+	filePassword: string,
+	timeoutMs = 30_000,
+	unlock: "password" | "passkey" = "password",
+): Promise<void> {
 	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
 	await page.waitForSelector('[data-testid="import-full-backup-decrypt-password-input"] input', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="import-full-backup-decrypt-password-input"]', filePassword)
 	await clickByTestId(page, "import-full-backup-decrypt-btn")
-	await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 60_000 })
-	await setInputs(page, {
-		'[data-testid="import-full-backup-password-input"] input': TEST_PASSWORD,
-		'[data-testid="import-full-backup-password-confirm-input"] input': TEST_PASSWORD,
-	})
+	await page.waitForSelector('[data-testid="import-full-backup-method-password"]', { visible: true, timeout: 60_000 })
+	if (unlock === "passkey") {
+		await page.waitForSelector('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]', {
+			visible: true,
+			timeout: 5_000,
+		})
+	} else {
+		await clickByTestId(page, "import-full-backup-method-password")
+		await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
+		await setInputs(page, {
+			'[data-testid="import-full-backup-password-input"] input': TEST_PASSWORD,
+			'[data-testid="import-full-backup-password-confirm-input"] input': TEST_PASSWORD,
+		})
+	}
 	await submitWhenEnabled(page, "import-full-backup-submit-btn")
 	const { refusal } = await pollUntil(
 		() =>
