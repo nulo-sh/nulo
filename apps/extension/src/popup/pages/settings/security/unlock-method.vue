@@ -68,6 +68,9 @@ const isNewPasswordStep = computed(() => heldAnswer.value !== null)
 /** This page's own changes still with the service. The update and the reopened session one causes
  *  arrive before its answer, and only that answer says whether the change was made. */
 let commitsInFlight = 0
+/** An update for this profile came while a change was with the service. A change that fails emits
+ *  none, so after a failure it was another window's. */
+let updatedWhileCommitting = false
 const currentLine = computed(() => {
 	if (isNewPasswordStep.value)
 		return "This profile currently unlocks with a passkey. After the change, it unlocks with the password you set here."
@@ -94,12 +97,14 @@ function reset() {
 	runs.invalidate()
 	clearStep()
 	isBusy.value = false
+	onCeremonyReject(new Error("The unlock method page started over"))
 }
 
 /** Another window changed this profile's unlock or password: the step, and what it holds, were
  *  asked of an unlock the profile no longer has. */
 function onChangedElsewhere() {
 	if (commitsInFlight === 0) reset()
+	else updatedWhileCommitting = true
 }
 
 /** A lock or an ended session: nothing asked under it outlives it. A change still with the service
@@ -110,9 +115,12 @@ function onSessionEnded() {
 }
 
 const changeUnlockMethod = async (id, current, next) => {
-	commitsInFlight++
+	if (commitsInFlight++ === 0) updatedWhileCommitting = false
 	try {
 		await managers.profile.changeUnlockMethod(id, current, next)
+	} catch (error) {
+		if (updatedWhileCommitting) clearStep()
+		throw error
 	} finally {
 		commitsInFlight--
 	}

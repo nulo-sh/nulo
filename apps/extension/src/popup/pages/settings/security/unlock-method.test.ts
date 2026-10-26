@@ -34,7 +34,10 @@ const profile = vi.hoisted(() => ({
 	})(),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile } }))
-const ceremony = vi.hoisted(() => ({ run: vi.fn(async (_req: { mode: string; prfSalt: string }): Promise<unknown> => undefined) }))
+const ceremony = vi.hoisted(() => ({
+	run: vi.fn(async (_req: { mode: string; prfSalt: string }): Promise<unknown> => undefined),
+	reject: vi.fn((_err: Error) => undefined),
+}))
 vi.mock("@/composables/usePasskeyCeremony", async () => {
 	const { ref } = await import("vue")
 	return {
@@ -42,7 +45,7 @@ vi.mock("@/composables/usePasskeyCeremony", async () => {
 			request: ref(null),
 			runCeremony: (req: { mode: string; prfSalt: string }) => ceremony.run(req),
 			onResolve: vi.fn(),
-			onReject: vi.fn(),
+			onReject: (err: Error) => ceremony.reject(err),
 		}),
 	}
 })
@@ -486,6 +489,33 @@ describe("another window's change, a lock and an ended session", () => {
 		await click(w, "unlock-method-save")
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Now unlocks with your password" })
 		leftForSettings()
+	})
+
+	test("a failed change keeps the answer for a retry, unless another window updated the profile meanwhile", async () => {
+		const w = await atNewPassword()
+		profile.changeUnlockMethod.mockRejectedValueOnce(new Error("quota"))
+		await click(w, "unlock-method-save")
+		expect(has(w, "unlock-method-new-password-input")).toBe(true)
+		profile.changeUnlockMethod.mockImplementationOnce(async () => {
+			profile.onProfileUpdated.invoke({ id: "p1", name: "Main", type: "passkey" })
+			throw new Error("Invalid profile id")
+		})
+		await click(w, "unlock-method-save")
+		expect(openToast).toHaveBeenLastCalledWith({ kind: "error", label: "Couldn't change the unlock method. Try again." })
+		expect(has(w, "unlock-method-new-password-input")).toBe(false)
+		expect(disabled(w, "unlock-method-use-password")).toBe(false)
+	})
+
+	test("another window's change while a card is open cancels the card", async () => {
+		ceremony.run.mockImplementationOnce(() => new Promise(() => {}))
+		const w = mountPage("passkey")
+		await flushPromises()
+		await click(w, "unlock-method-use-password")
+		expect(ceremony.reject).not.toHaveBeenCalled()
+		useAppStore().profile = as("password")
+		await flushPromises()
+		expect(ceremony.reject).toHaveBeenCalledOnce()
+		expect(has(w, "unlock-method-use-passkey")).toBe(true)
 	})
 
 	test("a change refused because the method changed meanwhile says so and starts the page over", async () => {

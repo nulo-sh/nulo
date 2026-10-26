@@ -109,6 +109,7 @@ declare global {
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
+  const applyAccountRow: typeof import('../utils/account-rows').applyAccountRow
   const applyFeePickUpdate: typeof import('../utils/fee-picks').applyFeePickUpdate
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
   const applyThemeChoice: typeof import('../utils/general').applyThemeChoice
@@ -736,6 +737,9 @@ declare global {
   export type { NotificationType, NotificationPayload, NotificationItem } from '../stores/notification.store'
   import('../stores/notification.store')
   // @ts-ignore
+  export type { AccountRowTarget } from '../utils/account-rows'
+  import('../utils/account-rows')
+  // @ts-ignore
   export type { ActivityRowTx, ActivityRowJournal, ActivityRowIncoming, ActivityRow, BuildActivityRowsParams } from '../utils/activity-rows'
   import('../utils/activity-rows')
   // @ts-ignore
@@ -957,6 +961,7 @@ declare module 'vue' {
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
+    readonly applyAccountRow: UnwrapRef<typeof import('../utils/account-rows')['applyAccountRow']>
     readonly applyFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['applyFeePickUpdate']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
     readonly applyThemeChoice: UnwrapRef<typeof import('../utils/general')['applyThemeChoice']>

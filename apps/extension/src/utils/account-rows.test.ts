@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { type Account, AccountType } from "@/wallet/services/account/client"
-import { type AccountRowTarget, applyAccountRow } from "./account-rows"
+import { type AccountRowTarget, applyAccountRow, listOwnAccountRow } from "./account-rows"
 
 const row = (address: string, fields: Partial<Account> = {}): Account => ({
 	profileId: "p1",
@@ -48,5 +48,18 @@ describe("an account row reported to a window", () => {
 		applyAccountRow(w, { ...SECOND, name: "Savings" })
 		expect(w.accounts[1]).toEqual({ ...SECOND, name: "Savings" })
 		expect(w.account).toEqual({ ...SECOND, name: "Savings" })
+	})
+})
+
+describe("the answer of a window's own create or import", () => {
+	test("is listed when no event listed it, and never overwrites the row an event already holds", () => {
+		const w = window()
+		listOwnAccountRow(w, IMPORTED)
+		expect(w.accounts).toEqual([FIRST, SECOND, IMPORTED])
+		applyAccountRow(w, { ...IMPORTED, visible: false })
+		listOwnAccountRow(w, IMPORTED)
+		expect(w.accounts).toEqual([FIRST, SECOND, { ...IMPORTED, visible: false }])
+		listOwnAccountRow(w, { ...IMPORTED, address: `0x${"04".repeat(32)}`, chainId: 8 })
+		expect(w.accounts).toHaveLength(3)
 	})
 })
