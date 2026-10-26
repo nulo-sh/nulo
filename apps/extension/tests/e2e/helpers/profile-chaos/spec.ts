@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect } from "vitest"
-import { BROWSER } from "../../fixtures/browser"
+import type { BrowserKind } from "../../fixtures/browser"
 import { chaosSeed } from "../../fixtures/chaos-seed"
 import { type ExtensionContext, test } from "../../fixtures/extension"
 import { inPlaceUpdate, updateBuilds } from "../../fixtures/update/in-place"
@@ -86,7 +86,10 @@ async function runSeed(ctx: ExtensionContext, r: SeedRun): Promise<void> {
  *  the records. With `NULO_E2E_UPDATE_FROM` set, each seed starts `pre-update`: the release makes
  *  its profiles, the candidate `NULO_E2E_UPDATE_TO` names replaces it in place, and the run starts
  *  on the candidate. */
-export function describeProfileChaos(title: string, opts: { armed: boolean; browser: string; caps: Caps; network?: NetworkRun }): void {
+export function describeProfileChaos(
+	title: string,
+	opts: { armed: boolean; browser: BrowserKind; caps: Caps; network?: NetworkRun },
+): void {
 	const { armed, browser, caps, network } = opts
 	const first = armed ? chaosSeed(process.env.NULO_E2E_CHAOS_SEED) : 0
 	const runs = armed ? runCount(process.env.NULO_E2E_CHAOS_RUNS) : 0
@@ -99,7 +102,7 @@ export function describeProfileChaos(title: string, opts: { armed: boolean; brow
 		for (const seed of seeds) {
 			if (start === "pre-update")
 				test(`seed ${seed} from the release`, { retry: 0, timeout: SEED_TIMEOUT_MS }, async () => {
-					const builds = updateBuilds(BROWSER)
+					const builds = updateBuilds(browser)
 					if (!builds) throw new Error("NULO_E2E_UPDATE_FROM names no release")
 					await inPlaceUpdate({
 						builds,
