@@ -40,6 +40,7 @@ import type { ChainRuntime, NetworkInfo, ProvePhaseEvent } from "./chain-runtime
 import { ChainRuntimeRegistry, ProductionPxeFactory, PXE_STORE_KEY_MISSING, type PxeFactory } from "./chain-runtime"
 import { PXE_DATA_DIR_ROOT, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { listChainStoreDirs, removeChainStoreDir, removeProfileStoreDirs } from "./opfs-store"
+import { SqliteCorruptionError } from "@aztec-labs/kv-store/sqlite-opfs"
 import { ArtifactRegistry } from "./artifact-registry"
 import { PxeLifecycleCoordinator } from "./lifecycle-coordinator"
 import { loadProductionKnownArtifacts } from "./known-artifacts"
@@ -909,15 +910,26 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			const missed = Symbol("runtime-miss")
 			const chainKey = this.chainKey(network.profileId, network.chainId)
 			const purgeEpochAtEntry = this.lifecycle.current(chainKey)
+			// The runtime whose store read as corrupt under READ: purged under WRITE below, once per op.
+			let corrupt: ChainRuntime | undefined
 			for (let attempt = 0; attempt < PxeService.MAX_RUNTIME_BIND_ATTEMPTS; attempt++) {
-				const result = await barrier.read(async () => {
-					return chainGuard.read(async () => {
-						this.assertGenerationCurrent(network)
-						const runtime = this.registry.peekMatching(network)
-						if (!runtime) return missed
-						return fn(runtime.pxe, runtime.node)
+				let used: ChainRuntime | undefined
+				let result: T | typeof missed
+				try {
+					result = await barrier.read(async () => {
+						return chainGuard.read(async () => {
+							this.assertGenerationCurrent(network)
+							const runtime = this.registry.peekMatching(network)
+							if (!runtime) return missed
+							used = runtime
+							return fn(runtime.pxe, runtime.node)
+						})
 					})
-				})
+				} catch (err) {
+					if (corrupt || !(err instanceof SqliteCorruptionError)) throw err
+					corrupt = used
+					result = missed
+				}
 				if (result !== missed) {
 					this.logDebug(`[DEBUG] [READ] ${label} completed (${Date.now() - start}ms)`)
 					return result as T
@@ -931,7 +943,14 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 						// same placement, as withPxeWrite's ensure.
 						this.assertGenerationCurrent(network)
 						this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-						await this.registry.ensure(network, this.storeKeys.get(network.profileId))
+						// Another op may have purged and reopened the store meanwhile: only a still-bound
+						// corrupt runtime is purged, never the fresh one.
+						if (corrupt && this.registry.peek(network.profileId, network.chainId) === corrupt) {
+							await this.purgeCorruptStore(network)
+						}
+						await this.reopeningCorruptStore(network, () =>
+							this.registry.ensure(network, this.storeKeys.get(network.profileId)),
+						)
 					})
 				})
 			}
@@ -980,17 +999,42 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 					// NOT resurrect the purged chain by re-creating its runtime + a fresh OPFS store
 					// (the read path fenced this but the write path called ensure directly). Same epoch check as withPxeRead — now the shared fence.
 					this.lifecycle.assertUnchanged(chainKey, purgeEpochAtEntry, label)
-					// Already under the chain WRITE guard — `ensure` may rebind here.
-					const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
-					this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
-					const result = await fn(runtime.pxe, runtime.node, runtime)
-					this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
-					return result
+					return this.reopeningCorruptStore(network, async () => {
+						// Already under the chain WRITE guard — `ensure` may rebind here.
+						const runtime = await this.registry.ensure(network, this.storeKeys.get(network.profileId))
+						this.logDebug(`[DEBUG] [WRITE] ${label} lock acquired, executing`)
+						const result = await fn(runtime.pxe, runtime.node, runtime)
+						this.logDebug(`[DEBUG] [WRITE] ${label} completed (${Date.now() - start}ms)`)
+						return result
+					})
 				})
 			})
 		} catch (err) {
 			this.logOpFailure("WRITE", label, start, err)
 			throw err
 		}
+	}
+
+	/**
+	 * Runs `op` under the chain WRITE guard; a store that reads as corrupt is purged and `op` runs once
+	 * more on a fresh one. No key recovers a corrupt image (`SqliteCorruptionError`), so the only exit
+	 * is a fresh store, which the PXE syncs again from the node; a second corruption is rethrown.
+	 */
+	private async reopeningCorruptStore<T>(network: NetworkInfo, op: () => Promise<T>): Promise<T> {
+		try {
+			return await op()
+		} catch (err) {
+			if (!(err instanceof SqliteCorruptionError)) throw err
+			await this.purgeCorruptStore(network)
+			return op()
+		}
+	}
+
+	/** Closes and unlinks `network`'s one chain store; the caller holds that chain's WRITE guard. The
+	 *  purge epoch is not bumped: the chain is still wanted, so ops queued behind this one reopen it. */
+	private async purgeCorruptStore({ profileId, chainId }: NetworkInfo): Promise<void> {
+		await this.registry.dispose(profileId, chainId)
+		await removeChainStoreDir({ profileId, chainId })
+		this.logWarn("PXE chain store read as corrupt: purged for a fresh sync", { chainId })
 	}
 }
