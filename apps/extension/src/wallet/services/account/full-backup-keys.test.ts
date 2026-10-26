@@ -47,6 +47,7 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	return {
 		...original,
 		unsealImportedSigningKeyV2: vi.fn(original.unsealImportedSigningKeyV2),
+		deriveAccountSeed: vi.fn(original.deriveAccountSeed),
 		sealImportedSigningKeyV2: vi.fn(async (...args: Parameters<typeof original.sealImportedSigningKeyV2>) => {
 			await box.beforeSeal?.()
 			return original.sealImportedSigningKeyV2(...args)
@@ -54,7 +55,7 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	}
 })
 
-import { sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { deriveAccountSeed, sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 
 const PASSWORD = "pass1234"
 const CHAIN = 0
@@ -567,6 +568,17 @@ describe("account exports — a retired profile row", () => {
 				],
 			}),
 		})
+	const derivedAt = ({ api, id }: Ctx) =>
+		new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, api.storage.local).set(accountRowId(id, CHAIN, ADDR_B), {
+			profileId: id,
+			chainId: CHAIN,
+			address: ADDR_B,
+			index: 0,
+			type: AccountType.Nulo_v1,
+			l1ChainId: L1,
+			name: "Main",
+			visible: true,
+		})
 	const retire = async ({ api, id }: Ctx) => {
 		const key = `nulo:core:profiles@${id}`
 		const {
@@ -579,23 +591,35 @@ describe("account exports — a retired profile row", () => {
 		await api.storage.local.set({ [key]: JSON.stringify({ ...rest, type: "passkey", credentialId: "Y3JlZA==" }) })
 	}
 
-	test.each<[string, (ctx: Ctx) => Promise<unknown>, (ctx: Ctx) => Promise<unknown>]>([
-		["exportAccount", async () => {}, (c) => c.account.exportAccount(c.id, CHAIN, ADDR_A, PASSWORD, true)],
-		["exportResetHeldAccount", heldInReset, (c) => c.account.exportResetHeldAccount(c.id, ADDR_A, PASSWORD, true)],
-		["exportFullBackupKeys", async () => {}, (c) => c.account.exportFullBackupKeys(c.fence, PASSWORD)],
+	const opensKey = vi.mocked(unsealImportedSigningKeyV2)
+	test.each<[string, (ctx: Ctx) => Promise<unknown>, (ctx: Ctx) => Promise<unknown>, typeof opensKey | typeof deriveAccountSeed]>([
+		[
+			"exportAccount, an imported account",
+			async () => {},
+			(c) => c.account.exportAccount(c.id, CHAIN, ADDR_A, PASSWORD, true),
+			opensKey,
+		],
+		[
+			"exportAccount, a derived account",
+			derivedAt,
+			(c) => c.account.exportAccount(c.id, CHAIN, ADDR_B, PASSWORD, true),
+			deriveAccountSeed,
+		],
+		["exportResetHeldAccount", heldInReset, (c) => c.account.exportResetHeldAccount(c.id, ADDR_A, PASSWORD, true), opensKey],
+		["exportFullBackupKeys", async () => {}, (c) => c.account.exportFullBackupKeys(c.fence, PASSWORD), opensKey],
 	])(
 		"%s opens the key of a password row, and refuses the same row retired before it opens one or writes",
-		async (_label, arrange, call) => {
+		async (_label, arrange, call, opener) => {
 			const ctx = await withImported()
 			await arrange(ctx)
 			await call(ctx).catch(() => undefined)
-			expect(unsealImportedSigningKeyV2).toHaveBeenCalled()
-			vi.mocked(unsealImportedSigningKeyV2).mockClear()
+			expect(opener).toHaveBeenCalled()
+			vi.mocked(opener).mockClear()
 
 			await retire(ctx)
 			const before = await ctx.api.storage.local.get(null)
 			await expect(call(ctx)).rejects.toBeInstanceOf(RetiredProfileError)
-			expect(unsealImportedSigningKeyV2).not.toHaveBeenCalled()
+			expect(opener).not.toHaveBeenCalled()
 			expect(await ctx.api.storage.local.get(null)).toStrictEqual(before)
 		},
 		60_000,
