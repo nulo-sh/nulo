@@ -7,7 +7,7 @@ import { pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
-import { pollUntil } from "../../fixtures/poll"
+import { PollTimeoutError, pollUntil } from "../../fixtures/poll"
 import { callService } from "../../fixtures/session"
 import { ADVANCES_ON_OPEN } from "./checkers"
 import type { Driven } from "./state"
@@ -185,6 +185,24 @@ export async function unlockAttemptEnded(page: Page, ms: number): Promise<void> 
 		},
 		{ timeout: ms, polling: 100 },
 	)
+}
+
+/** Where a held unlock's race ended: Home, the lock screen with no session behind it, or, past the
+ *  bound, `lock` over a session. A committed attempt holds its session before its submit goes idle
+ *  and leaves the lock screen only once the router resolves Home, so that pair is read again. */
+export async function raceEnd(page: Page, boundMs: number): Promise<string | undefined> {
+	const lock: Signal = { label: "lock", hash: "/popup/auth" }
+	return pollUntil(
+		async () => {
+			const { label } = await firstSignal(page, [HOME, lock], boundMs)
+			return label === "lock" && !(await isLocked(page)) ? "lock over a session" : label
+		},
+		(label) => label !== "lock over a session",
+		{ label: "the race's end", timeoutMs: boundMs, intervalMs: 200 },
+	).catch((error) => {
+		if (error instanceof PollTimeoutError) return "lock"
+		throw error
+	})
 }
 
 export async function typePasswordAndSubmit(page: Page, password: string): Promise<void> {

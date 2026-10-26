@@ -43,6 +43,7 @@ import {
 	pressUntilGone,
 	pickOnLockScreen,
 	pressTwice,
+	raceEnd,
 	REGISTER,
 	settle,
 	timed,
@@ -623,10 +624,10 @@ async function heldUnlockRace(s: RunState, compete: () => Promise<void>): Promis
 	await compete()
 	await hold.release()
 	await unlockAttemptEnded(page, UNLOCK_MS)
-	const seen = await firstSignal(s.anchor, [HOME, { label: "lock", hash: "/popup/auth" }], UNLOCK_MS)
+	const seen = await raceEnd(page, UNLOCK_MS)
 	// The cleanup lock below would wipe a session the race left open behind the lock screen.
-	if (seen.label !== "home" && !(await isLocked(page))) throw new Error("the lock screen shows while the service holds a session")
-	const outcome = seen.label === "home" ? "committed-then-locked" : "cancelled"
+	if (seen !== "home" && !(await isLocked(page))) throw new Error("the lock screen shows while the service holds a session")
+	const outcome = seen === "home" ? "committed-then-locked" : "cancelled"
 	await lockFromAnotherWindow(s.anchor)
 	await waitForLockScreen(s.anchor, LOCK_MS)
 	return timed(t0, UNLOCK_MS + LOCK_MS, outcome)

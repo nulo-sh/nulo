@@ -52,10 +52,14 @@ export async function replaceBackground(s: RunState): Promise<void> {
 }
 
 export async function restartBackground(s: RunState, next: World): Promise<Driven> {
+	// A page the restart outlives keeps its route, and with no profile left there is no lock screen
+	// to send it to: Import needs no session (`src/popup/pages/import.vue:5`), so it stays.
+	const keepsImport = s.caps.restartUnderOpenPage && s.anchor.url().includes("#/popup/import")
 	await replaceBackground(s)
 	const t0 = Date.now()
 	await backgroundServing(s.anchor, RESTART_MS)
-	const locked: Signal = live(next).length ? { label: "lock", hash: "/popup/auth" } : REGISTER
+	const empty: Signal = keepsImport ? { label: "import", hash: "/popup/import" } : REGISTER
+	const locked: Signal = live(next).length ? { label: "lock", hash: "/popup/auth" } : empty
 	// An open session keeps the page where it stood: any page showing the account selector, or any
 	// Settings page, which a locked wallet leaves for the lock screen, reads as open. O1 judges which.
 	const open: Signal[] = [HOME, { label: "open", testid: "account-selector" }, { label: "open", hash: "/popup/settings/" }]
