@@ -145,6 +145,16 @@ export function boundValue(b: Binding, snap: Shown): string | undefined {
 	return texts.every((t): t is string => t !== undefined) ? texts.join(" ") : undefined
 }
 
+/** The file a replayed `pick-file` names: a download or a picked copy is named by its session's
+ *  sequence number, then the wallet's own name, which may carry a time, so the replay takes its own
+ *  file of that number, or the recorded path when it holds no single one. */
+export function replayedFile(recorded: string, listing: (sub: string) => readonly string[]): string {
+	const m = /^(downloads|files)\/(\d+)-/.exec(recorded)
+	if (!m) return recorded
+	const same = listing(m[1]).filter((name) => name.startsWith(`${m[2]}-`))
+	return same.length === 1 ? `${m[1]}/${same[0]}` : recorded
+}
+
 /** What a session ends on: each page's route and stable testids, the listed profiles, the session,
  *  its findings not yet filed and its incomplete checks, each by what it says with ids masked. Filed
  *  findings are kept apart, since they recur by chance. */
@@ -167,6 +177,7 @@ export const findingKey = (oracle: string, message: string): string =>
 	`${oracle} ${message
 		.replace(/0x[0-9a-f]+/gi, "<hex>")
 		.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<id>")
+		.replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{8,}\b/gi, "<id>")
 		.replace(/\d+/g, "<n>")}`
 
 /** One served command as the actions log records it. */
@@ -180,8 +191,18 @@ export interface ActionRecord {
 	seen?: { route: string; testids: string[] }
 }
 
-/** The command as it was sent; a bound fill's value is the replay's own, so only its binding counts. */
-const sent = (a: ActionRecord): string => JSON.stringify(a.bound ? { ...a.command, value: undefined, bound: a.bound } : a.command)
+const PICKED = /^((?:downloads|files)\/\d+-).*$/
+
+/** The command as it was sent. A bound fill's value is the replay's own, so only its binding counts;
+ *  a picked download or copy is the replay's own of the same number, so only the number counts. */
+function sent(a: ActionRecord): string {
+	const { command } = a
+	const cmd =
+		command.verb === "pick-file" && typeof command.file === "string"
+			? { ...command, file: command.file.replace(PICKED, "$1") }
+			: command
+	return JSON.stringify(a.bound ? { ...cmd, value: undefined, bound: a.bound } : cmd)
+}
 
 function compareCommand(a: ActionRecord, b: ActionRecord): string | undefined {
 	if (sent(a) !== sent(b)) return `command ${a.n} was sent as ${sent(b)}, not ${sent(a)}`

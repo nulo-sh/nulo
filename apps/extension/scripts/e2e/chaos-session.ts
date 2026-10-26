@@ -15,13 +15,13 @@
  * waits and reports.
  */
 import { execFileSync, spawn } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { randomInt } from "node:crypto"
 import { readStartTime } from "../../tests/e2e/owned-processes"
 import type { ActionRecord, EndState } from "../../tests/e2e/helpers/chaos-session/checks"
-import { boundValue, compareReplay } from "../../tests/e2e/helpers/chaos-session/checks"
+import { boundValue, compareReplay, replayedFile } from "../../tests/e2e/helpers/chaos-session/checks"
 import { SESSION_ENV, stillTheSame, sweepSession } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
 	ACTIONS_FILE,
@@ -313,9 +313,10 @@ function readEnd(dir: string): EndState {
 }
 
 /** The command a recorded action replays: as sent, a bound fill taking its value from the replay's
- *  own snapshot of the same number. */
+ *  own snapshot of the same number, and a picked download or copy the replay's own of that number. */
 function replayCommand(dir: string, a: ActionRecord): Command {
 	const cmd = validateCommand(a.command)
+	if (cmd.verb === "pick-file") return { ...cmd, file: replayedFile(cmd.file, (sub) => readdirSync(join(dir, sub))) }
 	if (!a.bound || cmd.verb !== "fill") return cmd
 	const snap = readResult(dir, a.bound.snapshot)?.data as { items: { testid: string; nth: number; text?: string }[] } | undefined
 	const value = snap && boundValue(a.bound, { n: a.bound.snapshot, page: a.bound.page, items: snap.items })

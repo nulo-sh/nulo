@@ -10,6 +10,8 @@ import {
 	checkSessionRelation,
 	compareReplay,
 	type EndState,
+	findingKey,
+	replayedFile,
 	secretFieldKind,
 } from "../../tests/e2e/helpers/chaos-session/checks"
 import { ownedBy, SESSION_ENV } from "../../tests/e2e/helpers/chaos-session/processes"
@@ -436,6 +438,15 @@ describe("a replay", () => {
 		expect(boundValue(bound as NonNullable<typeof bound>, replayed)).toBe("w1 w2")
 	})
 
+	test("picks the replay's own download or copy of the same number", () => {
+		const listing = (sub: string) =>
+			sub === "downloads" ? ["1-Backup_Main_1792998639.gz", "12-Account.json"] : ["7-1-Backup_Main_1792998639.gz"]
+		expect(replayedFile("downloads/1-Backup_Main_1700000000.gz", listing)).toBe("downloads/1-Backup_Main_1792998639.gz")
+		expect(replayedFile("files/7-1-Backup_Main_1700000000.gz", listing)).toBe("files/7-1-Backup_Main_1792998639.gz")
+		expect(replayedFile("downloads/2-missing.gz", listing)).toBe("downloads/2-missing.gz")
+		expect(replayedFile("screenshots/3-p0.png", listing)).toBe("screenshots/3-p0.png")
+	})
+
 	const end: EndState = {
 		pages: [{ id: "p0", route: "#/popup/general", testids: ["a", "b"] }],
 		profiles: [{ name: "Main", type: "password" }],
@@ -462,6 +473,24 @@ describe("a replay", () => {
 	test("of the same commands to the same end is the same", () => {
 		const again = [actions[0], { ...actions[1], command: { ...actions[1].command, value: "new" } }]
 		expect(compareReplay({ actions, end }, { actions: again, end })).toEqual([])
+		const pick = (file: string): ActionRecord => ({
+			n: 3,
+			command: { verb: "pick-file", testid: "p", file, page: "p0", deadlineMs: 30_000 },
+			status: "ok",
+		})
+		expect(
+			compareReplay(
+				{
+					actions: [...actions, pick("downloads/1-Backup_1700000000.gz")],
+					end: { ...end, unfiled: [findingKey("O2", "9e3dc5ac's row")] },
+				},
+				{
+					actions: [...again, pick("downloads/1-Backup_1792998639.gz")],
+					end: { ...end, unfiled: [findingKey("O2", "72ab9851's row")] },
+				},
+			),
+		).toEqual([])
+		expect(compareReplay({ actions: [pick("downloads/1-a.gz")], end }, { actions: [pick("downloads/2-a.gz")], end })).toHaveLength(1)
 	})
 
 	test.each([
