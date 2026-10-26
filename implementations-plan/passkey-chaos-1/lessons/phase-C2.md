@@ -77,3 +77,13 @@ What else the probes taught:
 - `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` turns on Claude Code's Bash sandbox, which needs `socat` (absent here), so no command runs at all, and its first start left empty placeholder files (`.env*`, `package.json`, `node_modules/.bin`, `.claude/…`) in the working directory. Not used; the placeholders were removed.
 - This account's stored login had lapsed (`claude auth status`: not logged in), so agents run through `claude-usage run best`, which picks the roster account with headroom; no account name appears in any command or file.
 - An agent refused, on its own judgment, the items that expanded credential variables into `report`; a model's refusal is not the boundary, so the environment was checked by a fixed command instead. One such check ran with permissions bypassed in a scratch directory; it was redone under the normal permissions and its result is the one above.
+
+## Review round 1 (2026-10-26, Codex gpt-6.1-sol high read-only, and an Opus agent beside it)
+
+Codex: reject, 9 must-fix and 2 consider; Opus: conditional approve, 4 must-fix and 9 consider, six of them shared. Each finding was read in the tree before its disposition; all were accepted but one (plan.md § Review verdicts, D54 to D58).
+
+- The URL masking keyed on `scheme://`, and the endpoint editor's field is editable, so `press Home` and `Delete` gave back an endpoint with no `://`. Masking by the endpoints' values needs the runner to read them, which no session may. The fix withholds them by where they show (D55). Checked on a Chrome session, counting only: the network list and three detail pages and their editors gave 0 texts, 0 values that are not a length, 0 raw `://` in any result, action or summary file; every `screenshot`, `press` and `fill` there was refused.
+- `getEntropy` is async: an unawaited call in a `try` never reaches its `catch`, so an invalid phrase became a phrase needle and the next check threw.
+- Chrome's `refuseNextStep` replaces the page's `navigator.credentials` methods, so a hit counter set before it was overwritten and reported a fault that had applied as unmet. The counter now wraps the refusal.
+- Firefox's browser process is not Puppeteer's child (geckodriver starts it), so the session records no profile for it; its processes keep the session's environment, which is how `stop` finds them.
+- `/proc/self/fd/<fd>/<name>` gives a path API the effect of `openat`: a directory held open stays the one written to, whatever is renamed over its name.
