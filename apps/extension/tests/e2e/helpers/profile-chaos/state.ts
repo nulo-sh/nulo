@@ -70,6 +70,11 @@ export interface RunState {
 	verified: VerifyReading[]
 	/** Every PRF output a page of the run received, base64, as O7 needles. */
 	prf: Set<string>
+	/** Every `prfSalt` value the run has seen or forged, by needle name, with the one row it may sit in. */
+	salts: Map<string, { value: string; home?: string }>
+	/** The rows a release wrote plain in roots sealed since, by key: they stay plain until their
+	 *  profile next opens, and only these bytes are exempt. */
+	legacyPlain: Record<string, string>
 	/** Present on a run with a node. */
 	network?: NetworkRun
 }
@@ -105,6 +110,8 @@ type Derived =
 	| "scanned"
 	| "verified"
 	| "prf"
+	| "salts"
+	| "legacyPlain"
 
 export function newRunState(init: Omit<RunState, Derived>): RunState {
 	return {
@@ -122,6 +129,8 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		scanned: new Map(),
 		verified: [],
 		prf: new Set(),
+		salts: new Map(),
+		legacyPlain: {},
 	}
 }
 

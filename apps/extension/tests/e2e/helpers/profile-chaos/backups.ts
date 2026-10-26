@@ -1,5 +1,6 @@
 /** Full backups for the profile chaos drivers: export through Settings, restore through the import
  *  page, and the corrupted copies a restore must refuse. */
+import { randomBytes } from "node:crypto"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
@@ -8,7 +9,7 @@ import { clickByTestId, pickFileByTestId, replaceInputValue } from "../../fixtur
 import { downloadEncryptedBackup, downloadPasskeyBackup } from "../backup-export"
 import { type PlainBackup, sealPlainBackup } from "../backup-seal"
 import { setInputs } from "../import-drivers"
-import type { ModelFile, ModelProfile, ParamsMap } from "./model"
+import type { ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
 import { type Driven, type RunState, secretFor, wrongSecret } from "./state"
 import { answerConfirm, firstSignal, HOME, openRoute, type Signal, settle, timed } from "./ui"
 
@@ -16,14 +17,19 @@ const EXPORT_MS = 240_000
 const EARLIER_BACKUP = join(import.meta.dirname, "../../../../src/composables/fixtures/earlier-passkey-backup.json")
 const RESTORE_MS = 300_000
 
-/** Seven characters: one short of the file password rule a passkey profile's export applies. */
-const SHORT_FILE_PASSWORD = "Short12"
+/** Seven random characters, one short of the file password rule a passkey profile's export applies,
+ *  kept as the step's secret so O7 searches for it too. */
+function shortFilePassword(s: RunState, ref: SecretRef): string {
+	const value = randomBytes(6).toString("base64url").slice(0, 7)
+	s.secrets.set(ref, value)
+	return value
+}
 
 /** True once the file password is typed and the page still refuses to encrypt with it. */
-async function refusesShortPassword(page: Page): Promise<boolean> {
+async function refusesShortPassword(page: Page, short: string): Promise<boolean> {
 	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 })
-	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', SHORT_FILE_PASSWORD)
-	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', SHORT_FILE_PASSWORD)
+	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', short)
+	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', short)
 	await new Promise((resolve) => setTimeout(resolve, 500))
 	return page.$eval('[data-testid="protect-password-btn"]', (el) => (el as HTMLButtonElement).disabled)
 }
@@ -41,9 +47,10 @@ export async function exportFullBackup(s: RunState, open: ModelProfile, p: Param
 		await clickByTestId(page, "unlock-submit-btn")
 		text = await downloadEncryptedBackup(page)
 	} else if (p.variant === "short") {
+		const short = shortFilePassword(s, p.password as SecretRef)
 		// An enabled button is pressed, as a person would, so a file the rule let through is seen.
-		if (await refusesShortPassword(page)) return timed(t0, EXPORT_MS, "refused")
-		text = await downloadPasskeyBackup(page, SHORT_FILE_PASSWORD)
+		if (await refusesShortPassword(page, short)) return timed(t0, EXPORT_MS, "refused")
+		text = await downloadPasskeyBackup(page, short)
 	} else {
 		text = await downloadPasskeyBackup(page, secretFor(s, p.password as never))
 	}
@@ -185,7 +192,6 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
 	if (picked === "refused") return false
 	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
-	// Every backup restores under a new password the form asks, a passkey profile's included.
 	const password = secretFor(s, p.password)
 	await setInputs(page, {
 		'[data-testid="import-full-backup-password-input"] input': password,

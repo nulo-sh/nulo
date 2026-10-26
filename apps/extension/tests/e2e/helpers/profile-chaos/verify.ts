@@ -68,8 +68,6 @@ function retiredArgs(id: string): Record<(typeof RETIRED_REFUSALS)[number], unkn
 		unlockPasskeyProfile: [id],
 		exportMnemonic: [id, pw],
 		exportPlain: [id, pw],
-		exportImportedKeysDek: [id, pw],
-		openBackupTransfer: [id, pw],
 		changeProfilePassword: [id, pw, wrongSecret()],
 		finalizeRestore: [id, pw],
 	}
@@ -82,11 +80,12 @@ async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading
 	const id = profileId(s, p.ref)
 	await openRoute(page, "#/popup/auth")
 	await pickOnLockScreen(page, id)
-	await page.waitForSelector('[data-testid="auth-heading"]', { visible: true, timeout: 15_000 })
-	const screen = await page.evaluate(() => ({
-		setupAgain: !!document.querySelector('[data-testid="auth-setup-again"]'),
-		unlockOffered: !!document.querySelector('[data-testid="auth-submit"]'),
-	}))
+	const shown = (testid: string) =>
+		page
+			.waitForSelector(`[data-testid="${testid}"]`, { visible: true, timeout: testid === "auth-setup-again" ? 15_000 : 1_000 })
+			.then(() => true)
+			.catch(() => false)
+	const screen = { setupAgain: await shown("auth-setup-again"), unlockOffered: await shown("auth-submit") }
 	const before = new Map((await readCensus(page)).map((e) => [e.key, e.digest]))
 	const calls: Record<string, string> = {}
 	for (const [method, params] of Object.entries(retiredArgs(id)))
@@ -98,7 +97,8 @@ async function probeRetired(s: RunState, p: ModelProfile): Promise<VerifyReading
 	const after = await readCensus(page)
 	const wrote = after.filter((e) => before.get(e.key) !== e.digest && !e.key.startsWith("nulo:e2e:")).map((e) => e.key)
 	for (const key of before.keys()) if (!after.some((e) => e.key === key)) wrote.push(key)
-	return { ref: p.ref, wrongRefused: true, wrongWrote: wrote, opened: false, addresses: [], sentinels: [], retired: { ...screen, calls } }
+	const opened = (await callService<{ id: string } | undefined>(page, "profile", "getActiveProfile"))?.id === id
+	return { ref: p.ref, wrongRefused: true, wrongWrote: wrote, opened, addresses: [], sentinels: [], retired: { ...screen, calls } }
 }
 
 async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<VerifyReading> {

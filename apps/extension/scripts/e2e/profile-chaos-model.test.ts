@@ -44,7 +44,7 @@ import {
 	type Violation,
 	type WriteContext,
 } from "../../tests/e2e/helpers/profile-chaos/checkers"
-import { CITED, cite } from "../../tests/e2e/helpers/profile-chaos/citations"
+import { CITED } from "../../tests/e2e/helpers/profile-chaos/citations"
 import {
 	ACTIONS,
 	type ActionName,
@@ -76,6 +76,15 @@ const listOf = (steps: { action: ActionName; params: unknown }[]): ListedStep[] 
 	steps.map((s) => ({ action: s.action, params: s.params }) as ListedStep)
 
 /** A break fixture's violations go to the gate's output, so a reader sees each checker fail. */
+/** Each citation whose file is missing or whose line no longer holds its fragment. */
+function citationMisses(cited: ReadonlyMap<string, string>): string[] {
+	return [...cited].flatMap(([source, fragment]) => {
+		const [, file, line] = /^code:(\S+):(\d+)$/.exec(source) ?? []
+		const path = file.startsWith("apps/") ? join(import.meta.dirname, "../../../..", file) : join(import.meta.dirname, "../..", file)
+		return existsSync(path) && readFileSync(path, "utf8").split("\n")[Number(line) - 1]?.includes(fragment) ? [] : [source]
+	})
+}
+
 function shown(label: string, violations: Violation[]): Violation[] {
 	console.log(`[break] ${label}: ${violations.map((v) => `${v.oracle} ${v.message}`).join(" | ") || "<none>"}`)
 	return violations
@@ -429,14 +438,7 @@ describe("the model's clauses", () => {
 	// A citation that no longer resolves would let a clause outlive the branch it names.
 	test("every cited line holds the fragment its citation names", () => {
 		expect(CITED.size).toBeGreaterThan(40)
-		for (const [source, fragment] of CITED) {
-			const [, file, line] = /^code:(\S+):(\d+)$/.exec(source) ?? []
-			const path = file.startsWith("apps/")
-				? join(import.meta.dirname, "../../../..", file)
-				: join(import.meta.dirname, "../..", file)
-			expect(existsSync(path), source).toBe(true)
-			expect(readFileSync(path, "utf8").split("\n")[Number(line) - 1], source).toContain(fragment)
-		}
+		expect(citationMisses(CITED)).toEqual([])
 	})
 
 	test("every code source a plan or an allowlist names is a citation with its fragment", () => {
@@ -452,11 +454,21 @@ describe("the model's clauses", () => {
 		expect([...sources].filter((c) => c.startsWith("code:") && !CITED.has(c))).toEqual([])
 	})
 
-	test("a cited line that moved fails its citation", () => {
-		const moved = cite("src/wallet/services/profile/service.ts", 1, "public async createProfile(")
-		const line = readFileSync(join(import.meta.dirname, "../..", "src/wallet/services/profile/service.ts"), "utf8").split("\n")[0]
-		expect(line).not.toContain(CITED.get(moved))
-		CITED.delete(moved)
+	test("a cited line that moved, or a file that is gone, fails its citation", () => {
+		const moved = new Map([
+			["code:src/wallet/services/profile/service.ts:1", "public async createProfile("],
+			["code:src/wallet/services/profile/gone.ts:1", "anything"],
+		])
+		console.log(`[break] citations: ${citationMisses(moved).join(", ")}`)
+		expect(citationMisses(moved)).toEqual([...moved.keys()])
+	})
+
+	test("every call the retired probe makes is one a page can reach", () => {
+		const service = readFileSync(join(import.meta.dirname, "../..", "src/wallet/services/profile/service.ts"), "utf8")
+		const listed = /defineRpcMethods<Methods>\(\)\(([^)]*)\)/.exec(service)?.[1] ?? ""
+		const rpc = new Set([...listed.matchAll(/"(\w+)"/g)].map((m) => m[1]))
+		expect(rpc.size).toBeGreaterThan(10)
+		expect(RETIRED_REFUSALS.filter((m) => !rpc.has(m))).toEqual([])
 	})
 
 	test("the coverage line counts completed families, transitions and schedules", () => {
@@ -657,6 +669,7 @@ describe("O3, writes", () => {
 		envelopeOwner,
 	})
 	const base = [entry(`nulo:core:profiles@${P1}`, "a"), entry(`nulo:core:accounts@x1`, "b", P1), entry(`nulo:core:profiles@${P2}`, "c")]
+	const released: StoredEntry = { key: "nulo:core:networks@n1", digest: "r", envelope: false, plainOwner: P1 }
 	const ctx = (after: StoredEntry[], contract: WriteContext["contract"], extra: Partial<WriteContext> = {}): WriteContext => ({
 		before: base,
 		after,
@@ -707,8 +720,26 @@ describe("O3, writes", () => {
 		],
 		["a sealed family's row without its envelope", ctx([...base, entry("nulo:core:contacts@c1", "c")], [{ kind: "device" }])],
 		["a create that stored no row", ctx(base.slice(0, 2), [{ kind: "create", ref: "P2" }])],
+		[
+			"a plaintext row written in a sealed root",
+			ctx(
+				[...base, { key: "nulo:core:networks@n9", digest: "p", envelope: false, plainOwner: P1 }],
+				[{ kind: "profile", ref: "P1" }],
+			),
+		],
+		[
+			"a delete that left its release-era plaintext row",
+			ctx([base[2], released], [{ kind: "delete", ref: "P1" }], { before: [...base, released] }),
+		],
 	])("fails %s", (label, c) => {
 		expect(shown(`O3 ${label}`, checkWrites(c)).length).toBeGreaterThan(0)
+	})
+
+	test("passes a release-era plaintext row sealed at its profile's unlock, and one its delete purges", () => {
+		const before = [...base, released]
+		const sealedNow = entry("nulo:core:networks@n1", "s", P1)
+		expect(checkWrites(ctx([...base, sealedNow], [{ kind: "profile", ref: "P1" }], { before }))).toEqual([])
+		expect(checkWrites(ctx([base[2]], [{ kind: "delete", ref: "P1" }], { before }))).toEqual([])
 	})
 
 	test("every registered family is grouped, under the registry's own ref", () => {
@@ -738,6 +769,7 @@ describe("O3, writes", () => {
 		expect(ownerOf(entry("nulo:core:network-seeded@zzzz9999", "x"))).toBe("zzzz9999")
 		expect(ownerOf(entry("nulo:core:accounts@hashed", "x", P2))).toBe(P2)
 		expect(ownerOf(entry("nulo:core:accounts@hashed", "x"))).toBeUndefined()
+		expect(ownerOf({ key: "nulo:core:accounts@hashed", digest: "x", envelope: false, plainOwner: P1 })).toBe(P1)
 		expect(ownerOf(entry("nulo:config", "x"))).toBeUndefined()
 	})
 })
@@ -1301,11 +1333,16 @@ describe("O1, the lock screen on a retired profile", () => {
 		expect(shown(`O1 ${label}`, checkSession(w, on(screen), b)).length).toBeGreaterThan(0)
 	})
 
-	test("fails Set up again on an openable profile", () => {
+	test.each([
+		["Set up again on an openable profile", { setupAgain: true, unlockOffered: true }],
+		["an openable profile's lock screen offering no unlock", { setupAgain: false, unlockOffered: false }],
+	])("fails %s", (label, screen) => {
 		const onP1 = { ...w, selected: "P1" as const }
-		expect(
-			shown("O1 Set up again on an openable profile", checkSession(onP1, on({ setupAgain: true, unlockOffered: true }), b)).length,
-		).toBeGreaterThan(0)
+		expect(shown(`O1 ${label}`, checkSession(onP1, on(screen), b)).length).toBeGreaterThan(0)
+	})
+
+	test("passes an openable profile's lock screen offering its unlock", () => {
+		expect(checkSession({ ...w, selected: "P1" as const }, on({ setupAgain: false, unlockOffered: true }), b)).toEqual([])
 	})
 })
 

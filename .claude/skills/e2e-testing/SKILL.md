@@ -239,9 +239,6 @@ runtime env var can never arm a build-time flag.
   (`imported-account-lifecycle`, `frozen-account-canary`, `transfers` say why at the top).
 - The profile chaos files pin retry 0 too: a seed's steps change the profiles they run on, and a
   red seed is triaged from its replay record (README § Chaos runs), never re-run until green.
-- A driver that loads a popup document anew settles on Home's account selector, not the hash: a
-  fresh document boots through the lock screen and advances once it finds the session, so
-  `#/popup/general` shows before that redirect.
   A violation that is an instance of a filed issue goes in `KNOWN_FINDINGS` (`checkers.ts`) with
   that issue's number, so the seed stays red and names it; an expected line that is no finding
   goes in `ALLOWED_ERRORS` with the code line that writes it. Neither ever hides a new error text.
@@ -780,6 +777,11 @@ the pattern.
 - **`navigateByHash` returns when the hash changes**, but the router swaps the page later, after
   its guards, so a read straight after it can see the old page's rows. Wait for the new page's own
   rows, never for the hash (`implementations-plan/archive/layout-polish/plan.md#hash-navigation`).
+- **A fresh popup document boots through the lock screen**, then advances once it finds the
+  session, so `#/popup/general` shows before that redirect: settle on Home's account selector.
+- **A page that goes back on its own success undoes a hash written before it lands**: Change
+  password calls `router.back()` after its toast, and a hash written on the toast left the previous
+  page drawn under the new hash. Wait for the route to leave first.
 - **`navigateByHash` to the route the page is already on keeps that page, state and all**: Import
   account left on a preview never shows its file picker again. Leave for another page and wait for it
   first (`implementations-plan/archive/consent-display-2/lessons/phase-0.md`).

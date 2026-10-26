@@ -41,23 +41,33 @@ function flipLast(b64: string): string {
 	return bytes.toString("base64")
 }
 
-/** The row with `field` changed as something holding storage could change it. */
-function edited(raw: string, field: ParamsMap["editRowDuringUnlock"]["field"]): string {
+/** The row with `field` changed as something holding storage could change it; a forged `prfSalt`
+ *  becomes a needle that may sit nowhere once the row is back. */
+function edited(s: RunState, raw: string, field: ParamsMap["editRowDuringUnlock"]["field"]): string {
 	const row = JSON.parse(raw) as Record<string, unknown>
 	if (field === "type") row.type = "password"
 	else if (field === "secret") row.secret = flipLast(row.secret as string)
 	else row[field] = randomBytes(field === "prfSalt" ? 32 : 16).toString("base64url")
+	if (field === "prfSalt") s.salts.set(`forged/prf-salt-${s.salts.size}`, { value: row.prfSalt as string })
 	return JSON.stringify(row)
 }
 
-/** Runs `step` with the row of `id` changed by `change`, then puts the row back as it was. */
+/** Puts the original row back only where it still holds what the harness wrote, so a write or a
+ *  delete the wallet made to it during the step stays for the census to judge. */
+async function restoreRow(page: Page, id: string, wrote: string, original: string): Promise<void> {
+	const now = await page.evaluate(async (key: string) => (await chrome.storage.local.get(key))[key], rowKey(id))
+	if (now === wrote) await writeRow(page, id, original)
+}
+
+/** Runs `step` with the row of `id` changed by `change`, then puts it back as `restoreRow` says. */
 async function withRow(page: Page, id: string, change: (raw: string) => string, step: () => Promise<Driven>): Promise<Driven> {
 	const original = await readRow(page, id)
-	await writeRow(page, id, change(original))
+	const wrote = change(original)
+	await writeRow(page, id, wrote)
 	try {
 		return await step()
 	} finally {
-		await writeRow(page, id, original)
+		await restoreRow(page, id, wrote, original)
 	}
 }
 
@@ -72,13 +82,14 @@ export async function editRowDuringUnlock(s: RunState, p: ParamsMap["editRowDuri
 	const hold = await holdNextGet(page)
 	await clickByTestId(page, "auth-submit")
 	await hold.reached()
-	await writeRow(page, id, edited(original, p.field))
+	const wrote = edited(s, original, p.field)
+	await writeRow(page, id, wrote)
 	try {
 		await hold.release()
 		await unlockAttemptEnded(page, UNLOCK_MS)
 		return await settle(page, [HOME, ...UNLOCK_REFUSALS], { home: "committed", refused: "refused" }, UNLOCK_MS)
 	} finally {
-		await writeRow(page, id, original)
+		await restoreRow(page, id, wrote, original)
 	}
 }
 

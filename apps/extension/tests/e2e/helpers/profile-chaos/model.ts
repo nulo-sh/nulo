@@ -297,7 +297,7 @@ const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "di
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
 const REVEAL_PASSKEY = cite(SEED_PAGE, 106, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
 const REVEAL_CANCEL = cite(SEED_PAGE, 110, "handleCancelOrUnconfirmed(error, openToast)")
-const REVEAL_FENCED = cite(SEED_PAGE, 108, "if (isCurrent()) showWords(profileId, mnemonic)")
+const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
 const SLOTS_BIND_PASSKEY = cite(SERVICE, 422, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
 const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 910, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
 const PASSKEY_KIND_GATE = cite(SERVICE, 129, 'if (row.type === "password") throw new Error("Profile requires password")')
@@ -305,11 +305,13 @@ const RETIRED_UNLOCK = cite(SERVICE, 124, 'if (kind === "retired") throw new Ret
 const RETIRED_SLOTS = cite(SERVICE, 382, 'if (classified.kind === "retired") throw new RetiredProfileError()')
 const RETIRED_EXPORTS = cite(SERVICE, 480, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_LISTED = cite(SERVICE, 2081, 'classifyProfileRow(profile).kind === "retired")')
+const RETIRED_RESEAL = cite(SERVICE, 1218, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
+const RETIRED_FINALIZE = cite(SERVICE, 2264, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 300, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 110, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 122, 'await markGetStarted(createdId, "phraseSaved")')
-const ONBOARDING_LATER = cite(ONBOARDING, 126, "function onPhraseLater() {")
+const ONBOARDING_SAVED = cite(ONBOARDING, 123, "if (isMounted()) router.push(doneRoute(path.value))")
+const ONBOARDING_LATER = cite(ONBOARDING, 127, "router.push(doneRoute(path.value))")
 const EARLIER_AT_PICK = cite(IMPORT, 562, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 607, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 125, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
@@ -322,8 +324,8 @@ export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as cons
 
 /**
  * `empty`: a fresh install. `pre-update`: the release build made a password profile, then a passkey
- * profile, and locked; the wallet then updated in place. The password profile carries over (P86-14);
- * the passkey one is retired (P86-11). Its credential counts toward no slot: on a browser that keeps
+ * profile, and locked; the wallet then updated in place. The password profile carries over; the
+ * passkey one is retired. Its credential counts toward no slot: on a browser that keeps
  * a credential on its page, it went with the release's page, and a retired profile never asks it.
  */
 export function startWorld(start: StartState): World {
@@ -640,7 +642,7 @@ const switchProfile: ActionSpec<"switchProfile"> = {
 
 const PASSWORD_REVEALS = new Set<ParamsMap["revealPhrase"]["variant"]>(["right", "wrong"])
 
-/** A passkey profile reveals its phrase with its passkey in the password's place (P86-04). */
+/** A passkey profile reveals its phrase with its passkey in the password's place. */
 const revealPhrase: ActionSpec<"revealPhrase"> = {
 	name: "revealPhrase",
 	family: "phrase",
@@ -730,7 +732,7 @@ const addAccount: ActionSpec<"addAccount"> = {
 // ── full backups ────────────────────────────────────────────────────────
 
 /** A password profile's file opens with its password; a passkey profile's with a file password of
- *  its own, which the page asks under the wallet's rule before it encrypts anything (P86-06). */
+ *  its own, which the page asks under the wallet's rule before it encrypts anything. */
 const exportBackup: ActionSpec<"exportBackup"> = {
 	name: "exportBackup",
 	family: "backup",
@@ -812,8 +814,8 @@ function importBackupParams(rng: Rng, w: World): ParamsMap["importBackup"] | und
 	return restoreWarns(w, file, variant) ? { ...base, duplicate: chance(rng, 0.75) ? "confirm" : "decline" } : base
 }
 
-/** Until the unlock choice lands, every backup restores as a password profile under the new
- *  password the form asks, a passkey profile's included. */
+/** Every backup restores as a password profile under the new password the form asks, a passkey
+ *  profile's included. */
 function restoredWorld(w: World, file: ModelFile, ref: ProfileRef, password: SecretRef): World {
 	const next = addProfile(w, {
 		ref,
@@ -1198,7 +1200,7 @@ const restoreHeld: ActionSpec<"restoreHeld"> = {
 
 // ── the first profile in the onboarding tab ─────────────────────────────
 
-/** Onboarding makes the first profile and shows its phrase for either unlock (P86-01). It runs in
+/** Onboarding makes the first profile and shows its phrase for either unlock. It runs in
  *  the anchor's own tab, as a wallet with no profile runs it again, so its passkey outlives it. */
 const onboardingCreate: ActionSpec<"onboardingCreate"> = {
 	name: "onboardingCreate",
@@ -1241,7 +1243,7 @@ const onboardingCreate: ActionSpec<"onboardingCreate"> = {
 
 // ── backups an earlier version made ─────────────────────────────────────
 
-/** Refused by its shape as soon as it is picked, before any other control or prompt (P86-13). */
+/** Refused by its shape as soon as it is picked, before any other control or prompt. */
 const importEarlierBackup: ActionSpec<"importEarlierBackup"> = {
 	name: "importEarlierBackup",
 	family: "backup",
@@ -1294,14 +1296,14 @@ const tamperedUnlock: ActionSpec<"tamperedUnlock"> = {
 	},
 }
 
-/** The reveal shows nothing once its page has locked, whenever the prompt then answers. */
+/** A lock while the reveal waits at its prompt takes the page, and the prompt with it: no words show. */
 const raceLockDuringReveal: ActionSpec<"raceLockDuringReveal"> = {
 	name: "raceLockDuringReveal",
 	family: "race",
 	weight: 1,
 	invalid: (w) => (openProfile(w)?.method === "passkey" ? undefined : "needs an open passkey profile"),
 	params: (_rng, w) => (openProfile(w)?.method === "passkey" ? {} : undefined),
-	expect: (w) => result(lockedWorld(w), ["cancelled"], [], "lock", [REVEAL_FENCED, LOCK_CLOSES, "decision:D17"]),
+	expect: (w) => result(lockedWorld(w), ["cancelled"], [], "lock", [CEREMONY_ENDS_WITH_PAGE, LOCK_CLOSES, "decision:D17"]),
 }
 
 /** Every live profile in model order: a wrong secret refused with no write, its own secret opens it,
@@ -1313,13 +1315,12 @@ const verifyAll: ActionSpec<"verifyAll"> = {
 	invalid: (w) => (live(w).length ? undefined : "no live profile"),
 	params: (_rng, w) => (live(w).length ? {} : undefined),
 	expect: (w) => {
-		// A retired profile is probed for its refusals, which write nothing.
 		const writes: WriteScope[] = [{ kind: "device" }, ...openable(w).map((x) => ({ kind: "profile" as const, ref: x.ref }))]
 		const next = clone(w)
 		next.session = { kind: "locked" }
 		next.selected = w.selected ?? (live(w).at(-1) as ModelProfile).ref
 		const retired = live(w).some((x) => x.retired)
-			? [RETIRED_LISTED, RETIRED_UNLOCK, RETIRED_SLOTS, RETIRED_EXPORTS, "decision:P86-11"]
+			? [RETIRED_LISTED, RETIRED_UNLOCK, RETIRED_SLOTS, RETIRED_EXPORTS, RETIRED_RESEAL, RETIRED_FINALIZE, "decision:P86-11"]
 			: []
 		return result(next, ["committed"], writes, "lock", [UNLOCK_REFUSES, PASSKEY_UNLOCK_BINDS, OPEN_BEARER, ...retired])
 	},

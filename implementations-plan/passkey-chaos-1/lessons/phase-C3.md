@@ -22,3 +22,8 @@ Every consult, gate and meaningful attempt of phase C3.1. Paths repo-relative.
 
 - Seed 2008 stopped at step 20 `deleteProfile` via Forgot, after a passkey profile was open across a restart: `locked, but a session row for <id> remains`. The reduced shape of the filed #1134; recorded red-filed, as C1's 1006 was.
 - Seed 2011: `backgroundRestart` did not settle in 90 s with a password profile open under a bearer, the anchor still on the reveal page. Harness: the restart settle accepted Home or the account selector only; it accepts any Settings page now (D52), and O1 still judges the session.
+- Seed 2012 stopped at step 11 `revealPhrase`: the agree press never advanced. Bisected to a full backup export, then a password change, then a reveal (1 of 1 at each cut, green without the export or the change). The page under `#/popup/settings/security/export/seed` was the full backup page's agreement: Change password calls `router.back()` after its toast, and the driver wrote the next hash on the toast, so the back navigation landed after it. Harness: the driver waits for the route to leave Change password (skill, § Harness behaviours). Replayed green but for its planned restart.
+
+## Review round 1 (Codex and Opus, on 3c4149706)
+
+Both changes-needed; verdicts and what was declined in plan.md § Review verdicts. Verified before fixing: `openBackupTransfer` and `exportImportedKeysDek` are not in `ProfileService.rpcMethods`, and the base service drops such a call unanswered; `PasskeyCeremonyDialog` cancels its ceremony on unmount, so the reveal race's word check could never fail; 0.31.0 stores `nulo:core:networks@…` plain, and the sealed store keeps such a row plain until its profile unlocks. The citation test caught a wrong line in the fix itself (85, not 84).

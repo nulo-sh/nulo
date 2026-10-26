@@ -135,7 +135,10 @@ function checkLockScreens(w: World, r: SessionReading): Violation[] {
 			...(unlockOffered ? [violation("O1", `the lock screen offers retired ${selected.ref} an unlock`)] : []),
 		]
 	}
-	return setupAgain ? [violation("O1", `the lock screen shows Set up again on ${selected.ref}`)] : []
+	return [
+		...(setupAgain ? [violation("O1", `the lock screen shows Set up again on ${selected.ref}`)] : []),
+		...(unlockOffered ? [] : [violation("O1", `the lock screen offers ${selected.ref} no unlock`)]),
+	]
 }
 
 export function checkSession(w: World, r: SessionReading, b: Bindings): Violation[] {
@@ -324,17 +327,21 @@ export interface StoredEntry {
 	digest: string
 	/** A sealed row's envelope names its profile in clear. */
 	envelopeOwner?: string
+	/** The `profileId` a plaintext row names: a release wrote its sealed roots' rows so, and they stay
+	 *  so until their profile next opens. */
+	plainOwner?: string
 	/** Whether the value is a seal envelope. */
 	envelope: boolean
 }
 
-/** A row's owner: a sealed row's envelope profile; a plain root row's id up to its first
- *  separator, known to the run or not; nobody for a value key or an unregistered one. */
+/** A row's owner: a sealed row's envelope profile, or the profile its plaintext names; a plain root
+ *  row's id up to its first separator, known to the run or not; nobody for a value key or an
+ *  unregistered one. */
 export function ownerOf(entry: StoredEntry): string | undefined {
 	const family = familyOfKey(entry.key)
 	if (!family) return undefined
 	const e = FAMILY_GROUPS[family] as FamilyEntry
-	if (e.sealed) return entry.envelopeOwner
+	if (e.sealed) return entry.envelopeOwner ?? entry.plainOwner
 	if (e.ref.startsWith("value:")) return undefined
 	return /^[^|:@/]+/.exec(entry.key.slice(entry.key.indexOf("@") + 1))?.[0]
 }
@@ -381,12 +388,13 @@ function ownershipViolation(key: string, family: FamilyName, owner: string | und
 	return undefined
 }
 
-function checkChange(key: string, entry: StoredEntry, ctx: WriteContext): Violation | undefined {
+function checkChange(key: string, entry: StoredEntry, change: Change, ctx: WriteContext): Violation | undefined {
 	if (!key.startsWith("nulo:") || key.startsWith(HARNESS_PREFIX)) return undefined
 	const family = familyOfKey(key)
 	if (!family) return violation("O3", `${key} changed under no registered family`)
 	const { group, sealed } = FAMILY_GROUPS[family] as FamilyEntry
-	if (sealed && !entry.envelope) return violation("O3", `${key} (${family}) is stored outside a seal envelope`)
+	// A removed row is judged by what it held: sealing or purging a release's plaintext row writes none.
+	if (sealed && !entry.envelope && change !== "removed") return violation("O3", `${key} (${family}) is stored outside a seal envelope`)
 	const owner = ownerOf(entry)
 	const owned = ownershipViolation(key, family, owner, ctx)
 	if (owned) return owned
@@ -421,7 +429,7 @@ function checkLifecycle(ctx: WriteContext): Violation[] {
 
 export function checkWrites(ctx: WriteContext): Violation[] {
 	const changes = changedEntries(ctx.before, ctx.after).flatMap(({ key, entry, change }) => {
-		const v = checkChange(key, entry, ctx)
+		const v = checkChange(key, entry, change, ctx)
 		return v ? [{ ...v, detail: change }] : []
 	})
 	return [...changes, ...checkLifecycle(ctx)]
@@ -722,7 +730,9 @@ export function checkOutcome(
 	if (!expect.outcomes.includes(seen.outcome))
 		return [violation("O5", `${action} ended ${seen.outcome}; the model allows ${expect.outcomes.join(" or ")}`)]
 	if (expect.shows !== undefined && seen.shows !== expect.shows)
-		return [violation("O5", `${action} refused under "${seen.shows ?? "no title"}"; the model names "${expect.shows}"`)]
+		return [
+			{ ...violation("O5", `${action} refused under another title than the model names`), detail: `shown: ${seen.shows ?? "none"}` },
+		]
 	return []
 }
 
@@ -743,16 +753,15 @@ export interface VerifyReading {
 	retired?: { setupAgain: boolean; unlockOffered: boolean; calls: Record<string, string> }
 }
 
-/** The profile service's calls that open, export or reseal a profile: each refuses a retired one
- *  before it reads a secret, prompts or writes (P86-11; the refusal matrix of passkey-unlock-1). */
+/** The profile service's calls a page can make that open, export or reseal a profile: each refuses
+ *  a retired one before it reads a secret, prompts or writes. The service's other refusing calls
+ *  are internal to the background, so no page reaches them. */
 export const RETIRED_REFUSALS = [
 	"getPasskeyUnlockParams",
 	"unlockProfile",
 	"unlockPasskeyProfile",
 	"exportMnemonic",
 	"exportPlain",
-	"exportImportedKeysDek",
-	"openBackupTransfer",
 	"changeProfilePassword",
 	"finalizeRestore",
 ] as const
@@ -766,7 +775,10 @@ function checkRetired(r: VerifyReading): Violation[] {
 	if (r.opened) out.push(violation("O6", `retired ${r.ref} opened`))
 	for (const call of RETIRED_REFUSALS)
 		if (probe.calls[call] !== "retired")
-			out.push(violation("O6", `retired ${r.ref}'s ${call} answered ${probe.calls[call] ?? "nothing"}, not the retired refusal`))
+			out.push({
+				...violation("O6", `retired ${r.ref}'s ${call} did not answer the retired refusal`),
+				detail: probe.calls[call] ?? "no answer",
+			})
 	if (r.wrongWrote.length) out.push(violation("O6", `probing retired ${r.ref} wrote ${r.wrongWrote.join(", ")}`))
 	return out
 }
@@ -844,7 +856,7 @@ const PROFILE_ROOT = "nulo:core:profiles@"
 
 /**
  * After an in-place update from the release: every profile row the release wrote is still stored,
- * byte for byte, and listed, a retired one as retired and no other (P86-11, P86-14); the model
+ * byte for byte, and listed, a retired one as retired and no other; the model
  * holds exactly those profiles. Before the first step, so a dropped or rewritten row is never
  * read as the first step's doing.
  */
@@ -930,7 +942,11 @@ export function checkLeaks(
 	return out
 }
 
+/** The shortest value searched for: the run's secrets are random, and the shortest, a file password
+ *  one short of the wallet's rule, has 7 characters. */
+export const MIN_NEEDLE = 7
+
 /** Every place a needle occurs in `text`, by name. */
 export function findNeedles(text: string, needles: readonly Needle[]): string[] {
-	return needles.filter((n) => n.value.length >= 8 && text.includes(n.value)).map((n) => n.name)
+	return needles.filter((n) => n.value.length >= MIN_NEEDLE && text.includes(n.value)).map((n) => n.name)
 }

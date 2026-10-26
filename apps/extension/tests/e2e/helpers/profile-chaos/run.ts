@@ -23,6 +23,7 @@ import {
 	checkErrors,
 	checkLeaks,
 	checkOutcome,
+	MIN_NEEDLE,
 	checkLogContinuity,
 	checkProfiles,
 	checkSession,
@@ -97,16 +98,8 @@ async function needlesOf(s: RunState): Promise<Needle[]> {
 			{ name: `${ref}/entropy-b64`, value: b64(entropy) },
 		)
 	}
-	for (const [ref, id] of s.bindings.profiles) {
-		const key = `nulo:core:profiles@${id}`
-		const salt = await s.anchor
-			.evaluate(async (k: string) => {
-				const raw = (await chrome.storage.local.get(k))[k]
-				return typeof raw === "string" ? (JSON.parse(raw) as { prfSalt?: unknown }).prfSalt : undefined
-			}, key)
-			.catch(() => undefined)
-		if (typeof salt === "string") out.push({ name: `${ref}/prf-salt`, value: salt, home: `local:${key}` })
-	}
+	await learnSalts(s)
+	for (const [name, salt] of s.salts) out.push({ name, ...salt })
 	for (const [i, value] of [...s.prf].entries()) {
 		const bytes = Buffer.from(value, "base64")
 		out.push(
@@ -126,11 +119,20 @@ async function needlesOf(s: RunState): Promise<Needle[]> {
 const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'\\<>]+/gi
 const LOOPBACK_ORIGIN = /^[a-z][a-z0-9+.-]*:\/\/(localhost|127\.0\.0\.1|\[::1\])(?![\w.-])(:\d+)?/i
 
+/** The PRF outputs every page of the run captured since the last drain. */
+async function drainPages(s: RunState): Promise<void> {
+	for (const page of [s.anchor, ...s.extras.map((e) => e.page)]) await drainPrf(s, page)
+}
+
+/** A violation's message and detail with every needle masked: either may carry a wallet's text. */
+const masked = (out: Violation[], needles: readonly Needle[]): Violation[] =>
+	out.map((v) => ({ ...v, message: mask(v.message, needles), ...(v.detail ? { detail: mask(v.detail, needles) } : {}) }))
+
 /** Every URL and every needle's value replaced by a name, so the record can carry an error's text:
  *  a node URL may carry a provider key. A loopback URL keeps its origin, which names a local port. */
 function mask(text: string, needles: readonly Needle[]): string {
 	const unlinked = text.replace(URL_IN_TEXT, (url) => LOOPBACK_ORIGIN.exec(url)?.[0] ?? "<url>")
-	return needles.reduce((t, n) => (n.value.length >= 8 ? t.split(n.value).join(`<${n.name}>`) : t), unlinked)
+	return needles.reduce((t, n) => (n.value.length >= MIN_NEEDLE ? t.split(n.value).join(`<${n.name}>`) : t), unlinked)
 }
 
 const add = (into: Record<string, number>, from: Readonly<Record<string, number>>): void => {
@@ -157,15 +159,31 @@ async function opensOnlyWith(
 	return { opensWithOwn: body !== undefined, refusesOther, body }
 }
 
-interface FileScan {
-	hits: LeakHit[]
+/** Each bound profile's stored `prfSalt`, kept for the rest of the run: a salt outlives its row in
+ *  nothing, so after a delete it is found nowhere. */
+async function learnSalts(s: RunState): Promise<void> {
+	for (const [ref, id] of s.bindings.profiles) {
+		const key = `nulo:core:profiles@${id}`
+		const salt = await s.anchor
+			.evaluate(async (k: string) => {
+				const raw = (await chrome.storage.local.get(k))[k]
+				return typeof raw === "string" ? (JSON.parse(raw) as { prfSalt?: unknown }).prfSalt : undefined
+			}, key)
+			.catch(() => undefined)
+		if (typeof salt === "string" && ![...s.salts.values()].some((x) => x.value === salt))
+			s.salts.set(`${ref}/prf-salt-${s.salts.size}`, { value: salt, home: `local:${key}` })
+	}
+}
+
+interface FileOpen {
 	exports: StructureReading["exports"]
 	prfSalt: string[]
+	gaps: string[]
 }
 
 /** A file's first sight: its raw text, and, for a password export, the check that it opens with its
  *  own password and refuses another, keeping the opened body. */
-async function readHeldFile(s: RunState, next: World, ref: FileRef, out: FileScan): Promise<ScannedFile | undefined> {
+async function readHeldFile(s: RunState, next: World, ref: FileRef, out: FileOpen): Promise<ScannedFile | undefined> {
 	const held = s.files.get(ref)
 	if (!held) return undefined
 	const text = readFileSync(held.path, "utf8")
@@ -176,40 +194,52 @@ async function readHeldFile(s: RunState, next: World, ref: FileRef, out: FileSca
 	const { body, ...check } = await opensOnlyWith(open, secretFor(s, model.password))
 	out.exports.push({ file: ref, ...check })
 	if (body?.includes("prfSalt")) out.prfSalt.push(`file:${ref}:opened`)
-	if (body && held.kind === "backup" && model.method === "passkey") await learnFromBody(s, model, body)
+	if (body && held.kind === "backup" && model.method === "passkey") {
+		const gap = await learnFromBody(s, model, body)
+		if (gap) out.gaps.push(gap)
+	}
 	return { text, body, carried: carriedBy(model) }
 }
 
 /** A passkey profile's phrase shows only when it is revealed; its backup carries it, so the first
- *  body opened teaches it, and the logs and files already read are searched again for it. */
-async function learnFromBody(s: RunState, model: ModelFile, body: string): Promise<void> {
+ *  body opened teaches it, and the logs and files already read are searched again for it. Returns
+ *  the gap when the body carries none. */
+async function learnFromBody(s: RunState, model: ModelFile, body: string): Promise<string | undefined> {
 	const entropy = (JSON.parse(body) as { entropy?: unknown }).entropy
-	if (!model.phrase || typeof entropy !== "string") return
+	if (!model.phrase) return undefined
+	if (typeof entropy !== "string") return `leaks: ${model.ref}'s opened body carries no recovery phrase`
 	const words = await getMnemonic(Uint8Array.from(Buffer.from(entropy, "base64")))
 	const learnt = s.phrases.get(model.phrase)
 	if (learnt && learnt.join(" ") !== words.join(" ")) throw new Error(`${model.ref} carries another phrase than ${model.phrase}'s`)
 	s.phrases.set(model.phrase, words)
+	return undefined
+}
+
+/** Opens each held file the run has not read yet, before the step's needles are built, so a phrase
+ *  its body teaches is searched for in this step's storage too. */
+async function openNewFiles(s: RunState, next: World): Promise<FileOpen> {
+	const out: FileOpen = { exports: [], prfSalt: [], gaps: [] }
+	for (const ref of s.files.keys()) {
+		if (s.scanned.has(ref)) continue
+		const file = await readHeldFile(s, next, ref, out)
+		if (file) s.scanned.set(ref, file)
+	}
+	return out
 }
 
 /** Every held file against every needle known now. A body may carry a secret by design under another
  *  needle's name as well (an imported account file re-exported), so what it carries is excepted by
  *  value. */
-async function scanFiles(s: RunState, next: World, needles: readonly Needle[]): Promise<FileScan> {
-	const out: FileScan = { hits: [], exports: [], prfSalt: [] }
-	for (const ref of s.files.keys()) {
-		let file = s.scanned.get(ref)
-		if (!file) {
-			file = await readHeldFile(s, next, ref, out)
-			if (!file) continue
-			s.scanned.set(ref, file)
-		}
-		out.hits.push(...findNeedles(file.text, needles).map((needle) => ({ where: `file:${ref}`, needle })))
+function scanFiles(s: RunState, needles: readonly Needle[]): LeakHit[] {
+	const hits: LeakHit[] = []
+	for (const [ref, file] of s.scanned) {
+		hits.push(...findNeedles(file.text, needles).map((needle) => ({ where: `file:${ref}`, needle })))
 		if (file.body === undefined) continue
 		const carried = new Set(needles.filter((n) => file.carried(n.name)).map((n) => n.value))
 		const own = needles.filter((n) => !carried.has(n.value))
-		out.hits.push(...findNeedles(file.body, own).map((needle) => ({ where: `file:${ref}:opened`, needle })))
+		hits.push(...findNeedles(file.body, own).map((needle) => ({ where: `file:${ref}:opened`, needle })))
 	}
-	return out
+	return hits
 }
 
 interface StepEvidence {
@@ -326,19 +356,16 @@ async function checkStep(
 	const out: Violation[] = []
 	out.push(...checkOutcome(step.action, step.expect, driven))
 	out.push(...checkSettle(step.action, driven.settle))
-	if (out.length) {
-		const known = await needlesOf(s)
-		for (const v of out) if (v.detail) v.detail = mask(v.detail, known)
-		return { violations: out, incomplete: [] }
-	}
-	for (const page of [s.anchor, ...s.extras.map((e) => e.page)]) await drainPrf(s, page)
+	await drainPages(s)
+	if (out.length) return { violations: masked(out, await needlesOf(s)), incomplete: [] }
 	const unread = await learn(s, next)
+	const opened = await openNewFiles(s, next)
 	const needles = await needlesOf(s)
 	out.push(...(await checkState(s, step, before, census)))
 	const logs = await checkStepLogs(s, step, before, restarted, needles)
-	const storage = await scanStorage(s.anchor, needles)
-	const files = await scanFiles(s, next, needles)
-	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...files.prfSalt], exports: files.exports }
+	const storage = await scanStorage(s.anchor, needles, s.legacyPlain)
+	const fileHits = scanFiles(s, needles)
+	const structure = { ...storage.structure, prfSalt: [...storage.structure.prfSalt, ...opened.prfSalt], exports: opened.exports }
 	const passkeyIds = idsOf(
 		s.bindings,
 		live(next)
@@ -346,9 +373,8 @@ async function checkStep(
 			.map((p) => p.ref),
 	)
 	const homes = new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
-	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...files.hits], structure, passkeyIds, homes))
-	for (const v of out) if (v.detail) v.detail = mask(v.detail, needles)
-	return { violations: out, incomplete: [...logs.incomplete, ...unread] }
+	out.push(...logs.violations, ...checkLeaks([...storage.hits, ...logs.hits, ...fileHits], structure, passkeyIds, homes))
+	return { violations: masked(out, needles), incomplete: [...logs.incomplete, ...unread, ...opened.gaps] }
 }
 
 const revision = (): string => {
@@ -436,6 +462,7 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 		driven = await drive(s, step, before)
 	} catch (err) {
 		const text = `${err instanceof Error ? err.message : String(err)}${callSite(err)} ${await whereStuck(s.anchor)}`
+		await drainPages(s)
 		const detail = mask(text, await needlesOf(s))
 		return recordOf(step, t0, { violations: [{ oracle: "O5", message: `${step.action}'s driver could not finish the step`, detail }] })
 	}
@@ -482,8 +509,9 @@ function runCoverage(s: RunState, steps: readonly StepRecord[]): string {
 
 /** Runs `plan` until `stopsRun` says it cannot go on, and writes the record. `start` is what the
  *  start state's own check found; a violation in it runs no step. */
-export async function runPlan(s: RunState, plan: Plan, target: RecordTarget, start: Violation[] = []): Promise<Verdict> {
+export async function runPlan(s: RunState, plan: Plan, target: RecordTarget, startCheck: Violation[] = []): Promise<Verdict> {
 	const t0 = Date.now()
+	const start = masked(startCheck, await needlesOf(s))
 	// A background clears its ring once its config loads, so its first ids are gone before the run:
 	// the continuity check starts after the last line the run found, and step 0 reads those lines.
 	s.logs.carried = await drainLogs(s.anchor, 0)
@@ -499,11 +527,11 @@ export async function runPlan(s: RunState, plan: Plan, target: RecordTarget, sta
 		if (stopsRun(result)) break
 		world = step.expect.next
 	}
-	const kind = runVerdict(steps, plan.steps.length)
+	const kind = start.length ? "red" : runVerdict(steps, plan.steps.length)
 	const line = runCoverage(s, steps)
 	writeRecord(target, plan, s, { start, steps, kind, line })
 	return {
-		kind: start.length ? "red" : kind,
+		kind,
 		seed: plan.seed,
 		start,
 		steps,

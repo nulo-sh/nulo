@@ -316,8 +316,34 @@ const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 	return driven
 }
 
-/** The reveal's passkey held at its prompt, the wallet locked from another window, then the prompt
- *  answered: the words stay off the page whichever way the held request ends. */
+type AbortProbe = Window & { __chaosPromptAborted?: boolean }
+
+/** Marks the page once the next passkey request's own signal aborts. Installed over a hold, so the
+ *  page's call meets it first. */
+async function watchPromptAbort(page: Page): Promise<() => Promise<boolean>> {
+	await page.evaluate(() => {
+		const probe = window as AbortProbe
+		probe.__chaosPromptAborted = false
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		credentials.get = (options) => {
+			credentials.get = get
+			options?.signal?.addEventListener("abort", () => {
+				probe.__chaosPromptAborted = true
+			})
+			return get(options)
+		}
+	})
+	return () =>
+		page
+			.waitForFunction(() => (window as AbortProbe).__chaosPromptAborted === true, { timeout: 15_000, polling: 100 })
+			.then(() => true)
+			.catch(() => false)
+}
+
+/** The reveal's passkey held at its prompt while another window locks: the lock takes the page, and
+ *  the prompt must end with it. A prompt that outlives its page is let through, and reported as the
+ *  ceremony going on. */
 const raceLockDuringReveal: Drivers["raceLockDuringReveal"] = async (s) => {
 	const page = s.anchor
 	const t0 = Date.now()
@@ -325,15 +351,15 @@ const raceLockDuringReveal: Drivers["raceLockDuringReveal"] = async (s) => {
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="reveal-passkey-btn"]', { visible: true, timeout: 10_000 })
 	const hold = await holdNextGet(page)
+	const aborted = await watchPromptAbort(page)
 	await clickByTestId(page, "reveal-passkey-btn")
 	await hold.reached()
 	await lockFromAnotherWindow(page)
 	await waitForLockScreen(page, LOCK_MS)
+	const ended = await aborted()
 	await hold.release()
-	// The answer the release lets through has the rest of its round trip to show words.
-	await new Promise((resolve) => setTimeout(resolve, 3_000))
-	const shown = await page.evaluate(() => !!document.querySelector('[data-testid="reveal-content-word"]'))
-	return timed(t0, UNLOCK_MS + LOCK_MS, shown ? "committed" : "cancelled")
+	if (!ended) await unlockAttemptEnded(page, UNLOCK_MS)
+	return timed(t0, UNLOCK_MS + LOCK_MS, ended ? "cancelled" : "committed")
 }
 
 /** Brings the anchor to the import page: from the register page while no profile is live, else the
@@ -449,7 +475,7 @@ const changePassword: Drivers["changePassword"] = async (s, p, _step, before) =>
 	await replaceInputValue(page, '[data-testid="new-password-input"]', next)
 	await replaceInputValue(page, '[data-testid="new-password-repeat-input"]', next)
 	await clickByTestId(page, "change-password-submit-btn")
-	return settle(
+	const driven = await settle(
 		page,
 		[
 			{ label: "committed", text: "Profile password changed" },
@@ -458,6 +484,10 @@ const changePassword: Drivers["changePassword"] = async (s, p, _step, before) =>
 		{ committed: "committed", refused: "refused" },
 		EDIT_MS,
 	)
+	// The page goes back once it has changed it; a hash written before that lands is undone by it.
+	if (driven.outcome === "committed")
+		await page.waitForFunction(() => !location.hash.includes("/change-password"), { timeout: EDIT_MS, polling: 100 })
+	return driven
 }
 
 const rename: Drivers["rename"] = async (s, p) => {

@@ -14,6 +14,7 @@ import {
 	FAMILY_GROUPS,
 	type FamilyEntry,
 	type LeakHit,
+	MIN_NEEDLE,
 	type Needle,
 	pageErrorText,
 	type ProfileReading,
@@ -31,16 +32,16 @@ export interface RunPage {
 
 // ── storage ─────────────────────────────────────────────────────────────
 
-/** Every `storage.local` entry as a digest, with a sealed envelope's owner. */
+/** Every `storage.local` entry as a digest, with a sealed envelope's owner, or the `profileId` a
+ *  plaintext row names. */
 export async function readCensus(page: Page): Promise<StoredEntry[]> {
 	return page.evaluate(async () => {
 		const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("")
-		const ownerOf = (value: unknown): string | undefined => {
+		const parse = (value: unknown): Record<string, unknown> | undefined => {
 			if (typeof value !== "string") return undefined
 			try {
 				const parsed = JSON.parse(value)
-				const keys = parsed && typeof parsed === "object" ? Object.keys(parsed).sort().join() : ""
-				return keys === "profileId,sealed" && typeof parsed.profileId === "string" ? parsed.profileId : undefined
+				return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined
 			} catch {
 				return undefined
 			}
@@ -48,8 +49,16 @@ export async function readCensus(page: Page): Promise<StoredEntry[]> {
 		const entry = async (key: string, value: unknown) => {
 			const text = typeof value === "string" ? value : JSON.stringify(value)
 			const digest = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).slice(0, 24)
-			const owner = ownerOf(value)
-			return owner === undefined ? { key, digest, envelope: false } : { key, digest, envelope: true, envelopeOwner: owner }
+			const row = parse(value)
+			const named = typeof row?.profileId === "string" ? row.profileId : undefined
+			if (
+				named !== undefined &&
+				Object.keys(row as object)
+					.sort()
+					.join() === "profileId,sealed"
+			)
+				return { key, digest, envelope: true, envelopeOwner: named }
+			return named === undefined ? { key, digest, envelope: false } : { key, digest, envelope: false, plainOwner: named }
 		}
 		const all = await chrome.storage.local.get(null)
 		return Promise.all(Object.entries(all).map(([key, value]) => entry(key, value)))
@@ -89,9 +98,16 @@ const SLOT_FRAMES: Record<string, Record<string, { version: number; length: numb
 export async function scanStorage(
 	page: Page,
 	needles: readonly Needle[],
+	legacy: Readonly<Record<string, string>> = {},
 ): Promise<{ hits: LeakHit[]; structure: Omit<StructureReading, "exports"> }> {
 	return page.evaluate(
-		async (needleList: Needle[], sealedPrefixes: readonly string[], frames: typeof SLOT_FRAMES) => {
+		async (
+			needleList: Needle[],
+			sealedPrefixes: readonly string[],
+			frames: typeof SLOT_FRAMES,
+			released: Record<string, string>,
+			minNeedle: number,
+		) => {
 			const hits: { where: string; needle: string }[] = []
 			const structure = { unsealedRows: [] as string[], unframedSlots: [] as string[], prfSalt: [] as string[] }
 			/** Why `value` is no frame of `spec`, or undefined when it is one; the reason names no byte. */
@@ -106,7 +122,7 @@ export async function scanStorage(
 				return bytes[0] === spec.version && bytes.length === spec.length ? undefined : `version ${bytes[0]}, ${bytes.length} bytes`
 			}
 			const scan = (where: string, text: string) => {
-				for (const n of needleList) if (n.value.length >= 8 && text.includes(n.value)) hits.push({ where, needle: n.name })
+				for (const n of needleList) if (n.value.length >= minNeedle && text.includes(n.value)) hits.push({ where, needle: n.name })
 				if (text.includes("prfSalt")) structure.prfSalt.push(where)
 			}
 			const kindOf = (row: Record<string, unknown>) => (row.type === "passkey" && !("prfSalt" in row) ? "retired" : String(row.type))
@@ -123,9 +139,11 @@ export async function scanStorage(
 					if (why) structure.unframedSlots.push(`${label}.${field} (${why})`)
 				}
 			}
+			// A release's plaintext row in a root sealed since stays plain until its profile next opens.
+			const sealedOrKept = (key: string, text: string) =>
+				/^\{"profileId":"[^"]+","sealed":"[^"]+"\}$/.test(text) || released[key] === text
 			const checkLocal = (key: string, text: string) => {
-				if (sealedPrefixes.some((p) => key.startsWith(p)) && !/^\{"profileId":"[^"]+","sealed":"[^"]+"\}$/.test(text))
-					structure.unsealedRows.push(key)
+				if (sealedPrefixes.some((p) => key.startsWith(p)) && !sealedOrKept(key, text)) structure.unsealedRows.push(key)
 				if (key.startsWith("nulo:core:profiles@")) checkProfileRow(key, text)
 			}
 			const text = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value))
@@ -140,6 +158,8 @@ export async function scanStorage(
 		[...needles],
 		SEALED_PREFIXES,
 		SLOT_FRAMES,
+		{ ...legacy },
+		MIN_NEEDLE,
 	)
 }
 
@@ -172,8 +192,25 @@ export async function readSession(probe: Page, pages: readonly RunPage[], locked
 	const active = await callService<{ id: string } | undefined>(probe, "profile", "getActiveProfile")
 	const routes = await Promise.all(
 		pages.map(async (p) => {
+			// The lock screen hides its form until it knows the selected profile; it is read once it shows
+			// one of its two faces, or as it stands after the wait.
+			await p.page
+				.waitForFunction(
+					() => {
+						const shown = (id: string) => {
+							const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
+							return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden"
+						}
+						return !location.hash.startsWith("#/popup/auth") || shown("auth-setup-again") || shown("auth-submit")
+					},
+					{ timeout: 5_000, polling: 100 },
+				)
+				.catch(() => {})
 			const { hash, lockScreen } = await p.page.evaluate(() => {
-				const shown = (testid: string) => !!document.querySelector(`[data-testid="${testid}"]`)
+				const shown = (id: string) => {
+					const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
+					return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden"
+				}
 				const onAuth = location.hash.replace(/^#/, "").split("?")[0] === "/popup/auth"
 				const lock = onAuth ? { setupAgain: shown("auth-setup-again"), unlockOffered: shown("auth-submit") } : undefined
 				return { hash: location.hash, lockScreen: lock }

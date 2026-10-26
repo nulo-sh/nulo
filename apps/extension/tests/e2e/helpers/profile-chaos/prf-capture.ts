@@ -37,14 +37,18 @@ export async function capturePrf(page: Page): Promise<void> {
 	})
 }
 
-/** Moves what `page` captured into the run, leaving the page's list empty. A page that is gone, or
- *  a document that replaced the watched one, gives nothing. */
-export async function drainPrf(s: RunState, page: Page): Promise<void> {
-	const taken = await page
+/** What `page` captured, leaving its list empty. A page that is gone, or a document that replaced
+ *  the watched one, gives nothing. */
+export async function takePrf(page: Page): Promise<string[]> {
+	return page
 		.evaluate(() => {
 			const probe = window as CaptureProbe
 			return probe.__chaosPrf?.splice(0) ?? []
 		})
 		.catch(() => [] as string[])
-	for (const value of taken) s.prf.add(value)
+}
+
+/** Moves what `page` captured into the run. */
+export async function drainPrf(s: RunState, page: Page): Promise<void> {
+	for (const value of await takePrf(page)) s.prf.add(value)
 }
