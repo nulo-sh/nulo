@@ -60,6 +60,34 @@ Three agents, 30 minutes each, on today's `dev`: CH1 on Chrome, CH3 on Firefox, 
 
 Each pilot found something, so each was triaged and its replay recorded. The harness's differences are fixed (D75), and a session on each browser then replayed to the same end. A replay that deletes the selected profile can still differ until #1150 is fixed.
 
+## Testnet pass
+
+P87-03 B: a manual pass, once per browser, after the local campaign's fixes land and before the campaign is accepted. The owner drives it, or the orchestrator on the owner's word; no agent and no harness run touches Testnet. Whoever drives it follows these rules throughout:
+
+- Type invented passwords and file passwords, write each phrase on paper only, and never paste a phrase, a password, a file password or a screenshot showing one anywhere.
+- Never copy, print or screenshot a node endpoint (Settings → Networks).
+- Read a log export before it leaves the machine.
+- Transactions on Testnet are public.
+- Funds come from where the owner says (OA-C2's open question).
+
+**The build.** A release candidate of the campaign's head, built as a release is, with no test-only `VITE_*` flag and no env file: `bash apps/extension/scripts/e2e/build-update-candidate.sh <browser> rc.1` writes one to `apps/extension/.e2e-state/update-candidate/<browser>/`. On Chrome, load it unpacked into a new, empty browser profile. On Firefox, a temporary add-on is removed when Firefox restarts, which step 9 does: zip the directory's contents and install the zip from Add-ons → Install Add-on From File, in Firefox Developer Edition or Nightly with `xpinstall.signatures.required` set to `false`, in a new, empty profile. A second empty profile of the same browser is the "second install" of step 11. A new or restored profile starts on Mainnet: switch each one to Testnet (Home → network) before it is funded, compared or sent from.
+
+| # | Step | Expected |
+|---|---|---|
+| 1 | Install; onboarding opens. Create a **password** profile, pass the recovery phrase stage with "I saved it" (write the 24 words down), switch it to Testnet | Home with one account; no error notice |
+| 2 | From the lock screen's New profile, create a **passkey** profile (a create in the popup has no phrase stage); switch it to Testnet | a passkey prompt, then Home with another account; Get started offers the phrase |
+| 3 | Reveal each profile's phrase (Settings → Security → Backup → Recovery phrase): the password profile with its password, the passkey profile with "Reveal with passkey" | 24 words each; the password profile's match step 1's |
+| 4 | Import each phrase as a new profile, one choosing Password, the other Passkey, confirming the duplicate-wallet warning; switch each to Testnet | each imported profile shows the same first account address as its source |
+| 5 | Fund the password profile's first account | the balance shows after sync |
+| 6 | Open unleashed's testnet app (`https://testnet.app.unleashed.systems`) and connect the funded profile; check the emoji | the connect window names the app, the emojis match, the app shows the account |
+| 7 | Send once: a small amount of a default token to the passkey profile's address, approved in the wallet | the send proves and lands; Activity shows it; the recipient's balance rises after sync |
+| 8 | Lock and unlock each way: the password profile with a wrong password, then the right one; the passkey profile with its prompt cancelled, then approved | the wrong password marks the field wrong and stays locked; the cancel stays locked with no message; the right secret opens it |
+| 9 | Settings → Lock: Strict security on, unlock, then close every wallet window and stop the background (Chrome: `chrome://serviceworker-internals` → Stop; Firefox: `about:debugging` → This Firefox → Terminate background script), check it shows stopped, and open the wallet; then off, unlock once, and the same again; then restart the browser | on: the lock screen after the background restart; off: the session stays open across it; after the browser restart, the lock screen whatever the setting |
+| 10 | Export a full backup and an account file of each profile: the password profile's under its profile password, the passkey profile's under a file password of its own after its passkey approves | each file downloads; the passkey profile's 7-character file password is refused before any file exists |
+| 11 | On the second install, restore each full backup with the password it was made under (the password profile's profile password, the passkey profile's file password), choosing the unlock method the restore offers, and switch each to Testnet; import each account file into another profile with the same password | the restored profiles show the same accounts and, after sync, the same balances; the imported account shows its original address; a wrong password is refused with no profile made |
+
+**A step that fails** is a finding, written with the browser and its version, the build's version and commit, the step's number and what was done, the expected outcome above, what happened, the time, and a screenshot or a log export read first. It goes through § Triage below, class first; a suspected exploitable weakness goes to the orchestrator privately and nowhere else.
+
 ## Triage
 
 1. **Class it first.** Before any evidence leaves the run's local directory, decide whether the finding is a suspected exploitable weakness. If it is, or might be: a private draft security advisory, nowhere else; only a count appears in any report, plan, issue or PR until the advisory is published. Nothing below copies its evidence anywhere public.
