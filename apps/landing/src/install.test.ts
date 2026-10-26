@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { detectInstall, type Install, type NavigatorLike, STORES } from "./install"
+import { detectInstall, type Install, type NavigatorLike } from "./install"
 
 const WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
 const CHROME = `${WIN} Chrome/129.0.0.0 Safari/537.36`
@@ -111,9 +111,10 @@ describe("detectInstall", () => {
 })
 
 describe.each(["index.html", "how-aztec-works.html"])("%s", (page) => {
-	it("links the stores only through the URLs the script uses", () => {
+	// The listings open on 3 Nov 2026; until then a page links no store and serves no button for
+	// `mountInstall` to turn into one.
+	it("links no store and serves no install button before the listings open", () => {
 		const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8")
-		const storeLinks = html.match(/https:\/\/(?:chromewebstore\.google\.com|addons\.mozilla\.org)[^"]*/g) ?? []
-		expect(new Set(storeLinks)).toEqual(new Set([STORES.chrome.url, STORES.firefox.url]))
+		expect(html).not.toMatch(/chromewebstore\.google\.com|addons\.mozilla\.org|data-install/)
 	})
 })
