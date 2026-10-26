@@ -44,7 +44,7 @@ import {
 	writeOwn,
 } from "../../tests/e2e/helpers/chaos-session/protocol"
 import { PROFILE_ROW_FIELDS, type ProfileReading, type SessionReading } from "../../tests/e2e/helpers/profile-chaos/checkers"
-import { readFace } from "../../tests/e2e/helpers/profile-chaos/collect"
+import { readFace } from "../../tests/e2e/helpers/profile-chaos/page-face"
 import { runnerEnv } from "./chaos-session"
 
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-chaos-session-test-"))
