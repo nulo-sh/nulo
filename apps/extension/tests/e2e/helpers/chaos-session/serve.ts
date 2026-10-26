@@ -75,6 +75,7 @@ import {
 	ENDED_FILE,
 	FINDINGS_FILE,
 	holdSessionDirs,
+	nearerEnd,
 	type PageId,
 	publishFile,
 	READ_VERBS,
@@ -473,7 +474,7 @@ class Session {
 			case "screenshot":
 				return { data: { file: await this.screenshot(n, cmd.page) } }
 			case "pick-file":
-				return { data: await this.pickFile(n, cmd) }
+				return this.pickFile(n, cmd)
 			case "downloads":
 				return { data: { files: this.saved.map((f) => f.rel) } }
 			case "passkey":
@@ -507,8 +508,10 @@ class Session {
 	}
 
 	private async snapshot(id: PageId): Promise<unknown> {
-		const read = await this.page(id).evaluate(readScreen, NETWORK_ROUTE.source, ENDPOINT_FIELD.source)
-		return { page: id, ...read, pages: await this.routes() }
+		const page = this.page(id)
+		const read = await page.evaluate(readScreen, NETWORK_ROUTE.source, ENDPOINT_FIELD.source)
+		const texts = await page.evaluate(readLooseText, NETWORK_ROUTE.source)
+		return { page: id, ...read, texts, pages: await this.routes() }
 	}
 
 	private async routes(): Promise<{ id: PageId; route: string }[]> {
@@ -626,11 +629,14 @@ class Session {
 		return { closed: id, reopened: "p0" }
 	}
 
-	private async pickFile(n: number, cmd: Extract<Command, { verb: "pick-file" }>): Promise<unknown> {
-		const copy = damaged(readInside(this.dir, cmd.file), cmd.truncate, cmd.flip)
+	private async pickFile(n: number, cmd: Extract<Command, { verb: "pick-file" }>): Promise<Done> {
+		const source = readInside(this.dir, cmd.file)
+		const copy = damaged(source, cmd.truncate, cmd.flip)
 		const rel = writeOwn(this.dirs, "files", `${n}-${basename(cmd.file)}`, copy)
 		await pickFileByTestId(this.page(cmd.page), cmd.testid, join(this.dir, rel))
-		return { picked: rel, bytes: copy.length }
+		const kept = cmd.truncate === undefined ? source.length : damaged(source, cmd.truncate).length
+		const resolved: Command = { ...cmd, truncate: nearerEnd(source.length, cmd.truncate), flip: nearerEnd(kept, cmd.flip) }
+		return { data: { picked: rel, bytes: copy.length }, resolved }
 	}
 
 	private async restart(): Promise<Done> {
@@ -847,11 +853,13 @@ function outcomeOf(cmd: Command, data: unknown): unknown {
 		case "passkey":
 			return d?.fault
 		case "open":
-			return { page: d?.page, route: maskIds(String(d?.route)) }
+			// The route a page opens on is read before it settles; `after` holds where it settled.
+			return { page: d?.page }
 		case "close":
 			return d
 		case "pick-file":
-			return d?.bytes
+			// A file the wallet made differs in size between runs.
+			return d?.picked !== undefined
 		case "downloads":
 			return (d?.files as unknown[] | undefined)?.length
 		default:
@@ -926,6 +934,10 @@ function readScreen(
 				: null
 	const withheld = (input: HTMLInputElement | HTMLTextAreaElement, testid: string) =>
 		quiet || input.type === "password" || endpoint.test(testid) || endpoint.test(input.name ?? "")
+	const shownValue = (input: HTMLInputElement | HTMLTextAreaElement | null, testid: string) => {
+		if (!input) return undefined
+		return withheld(input, testid) ? `<${input.value.length} characters>` : unlinked(input.value).slice(0, 200)
+	}
 	const describe = (el: HTMLElement, testid: string, nth: number) => {
 		const leaf = !el.querySelector("[data-testid]")
 		const input = inputOf(el, leaf)
@@ -936,12 +948,9 @@ function readScreen(
 			tag: el.tagName.toLowerCase(),
 			text: leaf && !quiet ? ownText(el) : undefined,
 			type: input?.type,
-			value: input
-				? withheld(input, testid)
-					? `<${input.value.length} characters>`
-					: unlinked(input.value).slice(0, 200)
-				: undefined,
+			value: shownValue(input, testid),
 			disabled: (el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true" || undefined,
+			invalid: (input ?? el).getAttribute("aria-invalid") === "true" || undefined,
 			checked: checked === null ? undefined : checked === "true",
 			focused: document.activeElement === el || (!!input && document.activeElement === input) || undefined,
 		}
@@ -959,6 +968,29 @@ function readScreen(
 		items.push(describe(el, testid, nth))
 	}
 	return { route: unlinked(location.hash), title: unlinked(document.title), items }
+}
+
+/** The page's visible text that no item carries, in page order: a field's error or hint, a
+ *  dialog's body, whatever sits outside every testid that holds no other. None on a network page,
+ *  and every URL masked. */
+function readLooseText(networkRoute: string): string[] {
+	if (new RegExp(networkRoute).test(location.hash)) return []
+	const out: string[] = []
+	const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+	for (let node = walker.nextNode(); node && out.length < 80; node = walker.nextNode()) {
+		const parent = node.parentElement
+		const owner = parent?.closest<HTMLElement>("[data-testid]")
+		if (!parent || (owner && !owner.querySelector("[data-testid]"))) continue
+		const style = window.getComputedStyle(parent)
+		if (style.display === "none" || style.visibility === "hidden" || parent.getClientRects().length === 0) continue
+		const text = (node.textContent ?? "")
+			.replace(/\s+/g, " ")
+			.trim()
+			.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'\\<>]+/gi, "<url>")
+			.slice(0, 200)
+		if (text && out.at(-1) !== text) out.push(text)
+	}
+	return out
 }
 
 /** The page's route, its visible testids with their disabled state, and the loading marks among them. */

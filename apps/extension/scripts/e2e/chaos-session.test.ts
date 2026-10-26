@@ -17,6 +17,7 @@ import {
 	pauseBefore,
 	replayedFile,
 	secretFieldKind,
+	stableTestids,
 } from "../../tests/e2e/helpers/chaos-session/checks"
 import { isLaunchProfile, ownedBy, profileDirOf, SESSION_ENV } from "../../tests/e2e/helpers/chaos-session/processes"
 import {
@@ -27,6 +28,7 @@ import {
 	HeldDir,
 	holdSessionDirs,
 	makeSessionDirs,
+	nearerEnd,
 	newSessionId,
 	parseCommandArgs,
 	publishCommand,
@@ -139,6 +141,7 @@ describe("a command", () => {
 			flip: 3,
 		})
 		expect(parseCommandArgs(["click", "x", "--now"])).toMatchObject({ now: true })
+		expect(parseCommandArgs(["pick-file", "import-file-btn", "downloads/1-b.gz", "--flip", "-1"])).toMatchObject({ flip: -1 })
 	})
 })
 
@@ -216,7 +219,21 @@ describe("the session directory", () => {
 		expect([...damaged(bytes, 2)]).toEqual([1, 2])
 		expect([...damaged(bytes, undefined, 1)]).toEqual([1, 0xfd, 3, 4])
 		expect([...bytes]).toEqual([1, 2, 3, 4])
-		expect(refusal("a flip past the end", () => damaged(bytes, 2, 3))).toMatch(/past the file's 2 bytes/)
+		expect(refusal("a flip past the end", () => damaged(bytes, 2, 3))).toMatch(/outside the file's 2 bytes/)
+		expect([...damaged(bytes, -1)]).toEqual([1, 2, 3])
+		expect([...damaged(bytes, undefined, -1)]).toEqual([1, 2, 3, 0xfb])
+		expect(refusal("a flip before the start", () => damaged(bytes, undefined, -5))).toMatch(/outside the file's 4 bytes/)
+		expect(refusal("a cut before the start", () => damaged(bytes, -5))).toMatch(/before the file's start/)
+	})
+
+	test("pick-file records a position in a file's second half from its end, which a replay's copy keeps", () => {
+		expect(nearerEnd(1474, 1473)).toBe(-1)
+		expect(nearerEnd(1474, 737)).toBe(-737)
+		expect(nearerEnd(1474, 70)).toBe(70)
+		expect(nearerEnd(1474, -2)).toBe(-2)
+		expect(nearerEnd(1474, undefined)).toBeUndefined()
+		const replayCopy = Uint8Array.from({ length: 1471 }, () => 0)
+		expect(damaged(replayCopy, undefined, nearerEnd(1474, 1473))[1470]).toBe(0xff)
 	})
 })
 
@@ -492,8 +509,16 @@ describe("a replay", () => {
 		expect(findingKey("incomplete", "the passkey refuse fault armed on p1 met no prompt")).toContain("on p1 met")
 		expect(findingKey("O2", "9e3dc5ac's row holds 4 fields")).toBe("O2 <id>'s row holds <n> fields")
 		expect(findingKey("O7", "S1000012/password")).not.toBe(findingKey("O7", "S1000013/password"))
+		expect(findingKey("O5", "click did not settle within 15000 ms (route #/popup/auth, loading: aria-busy:auth-submit)")).toBe(
+			findingKey("O5", "click did not settle within 15000 ms (route #/popup/auth, loading: none)"),
+		)
 		expect(maskIds("#/popup/settings/networks/abcdefab")).toBe(maskIds("#/popup/settings/networks/e2fb77f7"))
 		expect(maskIds("#/popup/settings/accounts")).toBe("#/popup/settings/accounts")
+	})
+
+	test("compares a snapshot by the testids that stay, not its notices and loading marks", () => {
+		const ids = ["home-hero", "snackbar-error", "gas-balance-refreshing", "gas-skeleton-public", "tokens-loading", "home-hero"]
+		expect(stableTestids(ids)).toEqual(["home-hero"])
 	})
 
 	test("names profiles by the order the session first saw them, whatever order the wallet lists them in", () => {
@@ -578,6 +603,13 @@ describe("a replay", () => {
 		expect(compareReplay({ actions: [pick("downloads/1-a.gz")], end }, { actions: [pick("downloads/2-a.gz")], end })).toHaveLength(1)
 	})
 
+	test("of a session that ended at its deadline leaves out the end its launcher sends", () => {
+		const launcherEnd: ActionRecord = { n: 3, command: { verb: "end", page: "p0", deadlineMs: 60_000 }, status: "ok" }
+		expect(compareReplay({ actions, end }, { actions: [...actions, launcherEnd], end })).toEqual([])
+		const ended = [...actions, launcherEnd]
+		expect(compareReplay({ actions: ended, end }, { actions: [...ended, { ...launcherEnd, n: 4 }], end })).toHaveLength(1)
+	})
+
 	test.each([
 		["a command sent otherwise", { actions: [actions[0], { ...actions[1], bound: undefined }], end }],
 		["a status", { actions: [{ ...actions[0], status: "failed" }, actions[1]], end }],
@@ -586,6 +618,7 @@ describe("a replay", () => {
 			{ actions: [{ ...actions[0], seen: { route: "#/popup/auth", testids: ["x"] } }, actions[1]], end },
 		],
 		["a command it never served", { actions: [actions[0]], end }],
+		["a command the original never sent", { actions: [...actions, { ...actions[0], n: 3 }], end }],
 		["a command that came to another outcome", { actions: [actions[0], { ...actions[1], path: { outcome: "refused" } }], end }],
 		[
 			"a command whose checks found otherwise",

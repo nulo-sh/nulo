@@ -169,7 +169,7 @@ export interface EndState {
 }
 
 /** Testids that come and go on their own: notices and loading marks. */
-const TRANSIENT = /^(?:snackbar|toast)-|pending|loading|spinner|progress/
+const TRANSIENT = /^(?:snackbar|toast)-|pending|loading|spinner|progress|refreshing|skeleton/
 
 export const stableTestids = (ids: readonly string[]): string[] => [...new Set(ids.filter((id) => !TRANSIENT.test(id)))].sort()
 
@@ -193,9 +193,12 @@ export function noteProfiles(order: Map<string, number>, listed: readonly { id: 
 }
 
 /** A finding as two runs can compare it: ids and addresses masked, and numbers too, but not a
- *  symbol's (`S1000012`, `O4`, `p1`), which the same commands name the same. */
+ *  symbol's (`S1000012`, `O4`, `p1`), which the same commands name the same; a settle reading's
+ *  loading list, read at the instant its bound passed, is dropped. */
 export const findingKey = (oracle: string, message: string): string =>
-	`${oracle} ${maskIds(message).replace(/(?<![A-Za-z0-9])\d+/g, "<n>")}`
+	`${oracle} ${maskIds(message)
+		.replace(/, loading: [^)]*\)/g, ")")
+		.replace(/(?<![A-Za-z0-9])\d+/g, "<n>")}`
 
 /** One served command as the actions log records it. */
 export interface ActionRecord {
@@ -270,6 +273,14 @@ function comparePages(o: EndState, r: EndState): string[] {
 	return out
 }
 
+/** The replay's commands less the `end` its launcher sends once every command is sent, when the
+ *  original ended without one, at its deadline. */
+function withoutLauncherEnd(original: readonly ActionRecord[], replay: readonly ActionRecord[]): readonly ActionRecord[] {
+	const last = replay.at(-1)
+	const launcherEnd = replay.length === original.length + 1 && last?.command.verb === "end" && original.at(-1)?.command.verb !== "end"
+	return launcherEnd ? replay.slice(0, -1) : replay
+}
+
 /** Every way a replay differs from what it replays: a command sent otherwise, a status, a snapshot,
  *  the end, the findings. */
 export function compareReplay(
@@ -277,10 +288,11 @@ export function compareReplay(
 	replay: { actions: readonly ActionRecord[]; end: EndState },
 ): string[] {
 	const out: string[] = []
-	if (original.actions.length !== replay.actions.length)
-		out.push(`the replay served ${replay.actions.length} commands, the original ${original.actions.length}`)
+	const actions = withoutLauncherEnd(original.actions, replay.actions)
+	if (original.actions.length !== actions.length)
+		out.push(`the replay served ${actions.length} commands, the original ${original.actions.length}`)
 	original.actions.forEach((a, i) => {
-		const diff = replay.actions[i] && compareCommand(a, replay.actions[i])
+		const diff = actions[i] && compareCommand(a, actions[i])
 		if (diff) out.push(diff)
 	})
 	const o = original.end

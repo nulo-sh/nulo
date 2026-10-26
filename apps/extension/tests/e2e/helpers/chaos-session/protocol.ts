@@ -206,6 +206,13 @@ const count = (v: unknown, what: string): number | undefined => {
 	return v
 }
 
+/** A byte position in a file: from its start, or from its end when negative. */
+const position = (v: unknown, what: string): number | undefined => {
+	if (v === undefined) return undefined
+	if (typeof v !== "number" || !Number.isSafeInteger(v)) return refuse(`${what} must be an integer`)
+	return v
+}
+
 /** A path relative to the session directory that stays inside it lexically; the session checks the
  *  opened file again, since a directory on the way may be a link. */
 export function relativeInside(v: unknown): string {
@@ -291,8 +298,8 @@ const BODY: Readonly<Record<Verb, Body>> = {
 			verb: "pick-file",
 			testid: shaped(o.testid, "testid", TESTID),
 			file: relativeInside(o.file),
-			truncate: count(o.truncate, "truncate"),
-			flip: count(o.flip, "flip"),
+			truncate: position(o.truncate, "truncate"),
+			flip: position(o.flip, "flip"),
 		}),
 	downloads: none,
 	passkey: (o) => {
@@ -369,6 +376,12 @@ const intFlag = (s: string | undefined, what: string): number | undefined => {
 	return Number(s)
 }
 
+const positionFlag = (s: string | undefined, what: string): number | undefined => {
+	if (s === undefined) return undefined
+	if (!/^-?\d{1,9}$/.test(s)) return refuse(`--${what} takes an integer, negative to count from the end`)
+	return Number(s)
+}
+
 /** The launcher's argv for `cmd`, after the session directory, as a command: positional arguments
  *  by verb, then `--page`, `--deadline`, `--nth`, `--truncate`, `--flip` and `--now`. */
 export function parseCommandArgs(argv: readonly string[]): Command {
@@ -381,8 +394,8 @@ export function parseCommandArgs(argv: readonly string[]): Command {
 			page: flags.page,
 			deadlineMs: intFlag(flags.deadline, "deadline"),
 			nth: intFlag(flags.nth, "nth"),
-			truncate: intFlag(flags.truncate, "truncate"),
-			flip: intFlag(flags.flip, "flip"),
+			truncate: positionFlag(flags.truncate, "truncate"),
+			flip: positionFlag(flags.flip, "flip"),
 			now: flags.now === undefined ? undefined : true,
 			...POSITIONAL[verb as Verb](positional),
 		}),
@@ -604,15 +617,24 @@ export function appendOwn(held: HeldDir, name: string, line: string): void {
 }
 
 /** A copy of `bytes` cut to `truncate` bytes, then with the byte at `flip` inverted: the damaged
- *  files a person might pick. */
+ *  files a person might pick. A negative position counts from the end (`flip: -1` is the last byte). */
 export function damaged(bytes: Uint8Array, truncate?: number, flip?: number): Uint8Array {
-	const out = Uint8Array.from(truncate === undefined ? bytes : bytes.subarray(0, truncate))
+	const keep = truncate === undefined ? bytes.length : truncate < 0 ? bytes.length + truncate : truncate
+	if (keep < 0) refuse(`truncate ${truncate} is before the file's start (${bytes.length} bytes)`)
+	const out = Uint8Array.from(bytes.subarray(0, keep))
 	if (flip !== undefined) {
-		if (flip >= out.length) refuse(`flip ${flip} is past the file's ${out.length} bytes`)
-		out[flip] ^= 0xff
+		const at = flip < 0 ? out.length + flip : flip
+		if (at < 0 || at >= out.length) refuse(`flip ${flip} is outside the file's ${out.length} bytes`)
+		out[at] ^= 0xff
 	}
 	return out
 }
+
+/** `at` as the session records it: from the end when it lies in the file's second half. A file the
+ *  wallet made differs in size between runs, and a gzip ends in a fixed trailer, so a replay hits the
+ *  same part of its own copy only by the distance from the nearer end. */
+export const nearerEnd = (size: number, at: number | undefined): number | undefined =>
+	at === undefined || at < 0 || at < size / 2 ? at : at - size
 
 // ── deadlines ───────────────────────────────────────────────────────────
 
