@@ -190,8 +190,8 @@ export class GasBalanceReader {
 			return result.encoded[0]?.[0] ? result.encoded[0][0].toBigInt().toString() : null
 		}
 		const [publicLeg, privateLeg] = await Promise.all([
-			this.legWithRetry("public", readPublic),
-			this.legWithRetry("private", readPrivate),
+			this.legWithRetry("public", readPublic, evictGenAtStart),
+			this.legWithRetry("private", readPrivate, evictGenAtStart),
 		])
 		const { value: publicFeeJuice } = publicLeg
 		const { value: privateFeeJuice } = privateLeg
@@ -218,18 +218,33 @@ export class GasBalanceReader {
 
 	/** Run a leg; on a THROW, wait out the boot window and re-read once.
 	 *  First failure logs at debug (the retry usually recovers it); only a
-	 *  failed retry earns the error-level log the old single-shot always paid. */
-	private async legWithRetry(label: "public" | "private", read: () => Promise<string | null>): Promise<LegOutcome> {
+	 *  failed retry earns the error-level log the old single-shot always paid.
+	 *  An eviction since the compute began (a lock, a delete or a switch) makes
+	 *  the read moot: no retry, which would read under the next session, and a
+	 *  retry it overtakes fails at debug. */
+	private async legWithRetry(
+		label: "public" | "private",
+		read: () => Promise<string | null>,
+		evictGenAtStart: number,
+	): Promise<LegOutcome> {
 		try {
 			return { value: await read(), failed: false }
-		} catch (err) {
-			this.deps.logDebug(`getGasBalances: ${label} FeeJuice leg failed, retrying once:`, err)
+		} catch (error) {
+			this.deps.logDebug(`getGasBalances: ${label} FeeJuice leg failed, retrying once:`, { error })
 		}
 		await sleep(this.deps.failedLegRetryDelayMs ?? GAS_BALANCE_FAILED_LEG_RETRY_DELAY_MS)
+		if (this.evictGeneration !== evictGenAtStart) {
+			this.deps.logDebug(`getGasBalances: ${label} FeeJuice leg not retried: its profile context was evicted`)
+			return { value: null, failed: true }
+		}
 		try {
 			return { value: await read(), failed: false }
-		} catch (err) {
-			this.deps.logError(`Failed to get ${label} FeeJuice balance`, err)
+		} catch (error) {
+			if (this.evictGeneration !== evictGenAtStart) {
+				this.deps.logDebug(`getGasBalances: ${label} FeeJuice retry failed after its profile context was evicted`, { error })
+			} else {
+				this.deps.logError(`Failed to get ${label} FeeJuice balance`, { error })
+			}
 			return { value: null, failed: true }
 		}
 	}
