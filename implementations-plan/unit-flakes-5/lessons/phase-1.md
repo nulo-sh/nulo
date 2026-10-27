@@ -1,0 +1,12 @@
+# Phase 1: the four pre-checks and the memo
+
+- Change: commit 4156d2926. The 15 new inline cases were run first against the base guards: all green (150 passed, 1 skipped).
+- Mutation proof, each applied alone to the final code and reverted (23 mutations, each red on the named cases):
+  - stored-shapes: `nulo:` → the unregistered-key, template-head, SFC-script, dead-entry and not-vacuous cases; `useSyncedRef` → the useSyncedRef case; the backslash → the unregistered-key case (escaped head); `...STORE_CLASSES` → the store-construction case; `...STORE_CLASS_MODULES` → the store-import case.
+  - useLogFilters: `logger` → 11 ownership cases, the unreadable-source case, the row-liveness case and the D3 test; each of `Lock`, `ReadWriteGuard`, `createPlaced`, `LoggingTelemetrySink`, `ClockTickerAdapter`, `NuloAccount` → its logger-free row and the D3 test; `&#` → the encoded template case; the check moved in front of `own` → the helper-only service case.
+  - copy-dash: the em dash → six hit cases and the stale-entry check; the escape → the escaped-dash case; the check moved onto the raw file text → the bound character-reference case.
+  - type-role: `font` → 10 cases, the carve-out check and the D3 test; `letter` → the letter-spacing key and the D3 test; `transform` → the two upper-case cases and the D3 test; the backslash → the escaped key; the `i` flag → the upper-case key, the upper-case family and the D3 test; the check moved onto the raw snippet → the bound character-reference case (with 16 template-only cases).
+- Tree dump against the base guards (same harness, appended and removed): stored-shapes 18874 bytes, useLogFilters 52945 (logged and registered sources, so the memo is covered), copy-dash 7268, type-role 4954, each byte-identical.
+- Harness pitfall: in zsh, assigning a variable named `path` rewrites `PATH`; the harness ran under bash after that.
+- Gate: `bun run lint` exit 0 (no diagnostic in the four files); `bun run typecheck:all` exit 0; the four files together 30/30 at retry 0 (152 passed, 1 skipped each, load 83 to 202). The base guards, same harness: 30/30 at load 103 to 227.
+- Durations over 30 runs, median/max ms, base → change: stored-shapes literals 1416/2606 → 404/771, factories 1499/2126 → 386/748, dead entry 1456/2265 → 408/767, useSyncedRef 910/1493 → 234/398, not vacuous 697/1316 → 197/442; useLogFilters every source 1663/3097 → 468/959; copy-dash 1452/3412 → 872/1961; type-role 1539/3359 → 619/1477.

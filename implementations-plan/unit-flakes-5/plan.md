@@ -63,7 +63,7 @@ None. Only test files change.
 
 ## Phases
 
-### Phase 1: the four pre-checks and the memo
+### Phase 1: the four pre-checks and the memo ✓
 - Files, under `apps/extension`: `src/wallet/storage/stored-shapes.scan.test.ts`, `src/components/JsonViewer/useLogFilters.scan.test.ts`, `src/utils/copy-dash-ban.test.ts`, `src/utils/type-role-ban.test.ts`.
 - Steps: make the changes in § Architecture. Add these inline cases, each confirmed to pass on the base guard first. Each case holds only the trigger it proves. An escape is in the text the scanner reads, so the test source writes its backslash doubled.
   - stored-shapes: `"\x6eulo:core:unregistered"` is unregistered.
