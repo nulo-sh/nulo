@@ -301,10 +301,11 @@ onBeforeUnmount(() => {
 							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
 						</template>
 						<template #description>
-							<Text color="secondary" height="140">
-								Don't forget your
-								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>
-								password, as it will be required to restore your backup.
+							<Text v-if="isPasskeyProfile" color="secondary" height="140">
+								Don't forget your password, as it will be required to restore your backup.
+							</Text>
+							<Text v-else color="secondary" height="140">
+								This file opens with the profile password you have now. Changing your password later does not change that.
 							</Text>
 						</template>
 					</Banner>
