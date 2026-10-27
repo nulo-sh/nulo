@@ -1,5 +1,65 @@
 # Changelog
 
+## [1.1.0](https://github.com/nulo-sh/nulo/compare/v1.0.0...v1.1.0) (2026-10-27)
+
+
+### Features
+
+* **crypto:** seal profile secrets under a per-profile passkey unlock key ([#1130](https://github.com/nulo-sh/nulo/issues/1130)) ([0634a79](https://github.com/nulo-sh/nulo/commit/0634a79542905d452248e4e541c3d51ffa4ab94d))
+* **passkey:** a passkey profile keeps a recovery phrase its passkey unlocks ([#1139](https://github.com/nulo-sh/nulo/issues/1139)) ([74cf899](https://github.com/nulo-sh/nulo/commit/74cf8995b64e89640ed27d1573d1bf7e20ff7287))
+* **passkey:** choose how to unlock after a phrase import or a backup restore ([#1143](https://github.com/nulo-sh/nulo/issues/1143)) ([bd4e666](https://github.com/nulo-sh/nulo/commit/bd4e666b9b79eb5a02d16dc5349eb27018236055))
+
+
+### Bug Fixes
+
+* **backup:** a change of the profile's unlock from another window starts full backup over ([#1153](https://github.com/nulo-sh/nulo/issues/1153)) ([3a53715](https://github.com/nulo-sh/nulo/commit/3a53715cd22f4406565c4094cf9e8958cf4c72f7))
+* **export:** the protected-file banners name the password the file was sealed with ([#1233](https://github.com/nulo-sh/nulo/issues/1233)) ([9e88a3c](https://github.com/nulo-sh/nulo/commit/9e88a3c712bd9f1f0980b82fff6e814c6c64219b))
+* **fpc:** a fee-payer discovery stores nothing for a profile that locked meanwhile ([#1217](https://github.com/nulo-sh/nulo/issues/1217)) ([0564b48](https://github.com/nulo-sh/nulo/commit/0564b48cee56f8a4e067941a2c30d36a3cbf5152))
+* **import:** clear refusals for unopenable, misplaced and already-imported account files ([#1220](https://github.com/nulo-sh/nulo/issues/1220)) ([0768249](https://github.com/nulo-sh/nulo/commit/07682497463cbbdc89524497e960aa20b30b39cf))
+* **import:** the phrase checksum verdict says the phrase does not check out ([#1230](https://github.com/nulo-sh/nulo/issues/1230)) ([cdd1533](https://github.com/nulo-sh/nulo/commit/cdd1533714bd12357df39c26867501ad05f5c640))
+* **onboarding:** cap the notice card's width so it reads as a dialog in the tab ([#1231](https://github.com/nulo-sh/nulo/issues/1231)) ([7f588ce](https://github.com/nulo-sh/nulo/commit/7f588ce861afb29c215da516e50c9339a1d57636))
+* **onboarding:** the create screen drops the recovery phrase when the wallet locks ([#1168](https://github.com/nulo-sh/nulo/issues/1168)) ([74badd2](https://github.com/nulo-sh/nulo/commit/74badd2b7f9d6fb2ed585fd41b356f2ad64af0b0))
+* **popup:** lock-screen profile, backup picker, confirm headings and multi-window messages ([#1209](https://github.com/nulo-sh/nulo/issues/1209)) ([f66a171](https://github.com/nulo-sh/nulo/commit/f66a171997aa5ae433fe69ff2f44db2b43c21940))
+* **profile:** deleting a profile after a restart drops its persisted session row ([#1201](https://github.com/nulo-sh/nulo/issues/1201)) ([4cd4b02](https://github.com/nulo-sh/nulo/commit/4cd4b0296fdb157ead370caedfd35ce4604b5180))
+* **profiles:** export checks the passkey first, one phrase verdict, the import name shown ([#1224](https://github.com/nulo-sh/nulo/issues/1224)) ([81c7b7b](https://github.com/nulo-sh/nulo/commit/81c7b7bd5d1a3385a358236fefabe098b1e640b7))
+* **profiles:** trimmed names, a trapped creation notice and honest strict-mode copy ([#1221](https://github.com/nulo-sh/nulo/issues/1221)) ([6cf8353](https://github.com/nulo-sh/nulo/commit/6cf8353c1e3907754392ad1237c9673d8814b44f))
+* **pxe:** a corrupt chain store is purged and reopened instead of failing every read ([#1202](https://github.com/nulo-sh/nulo/issues/1202)) ([4002346](https://github.com/nulo-sh/nulo/commit/4002346bedf4b3ce9f3872963945f9c13b045df4))
+* **settings:** a negative auto-lock can no longer lock every profile out ([#1155](https://github.com/nulo-sh/nulo/issues/1155)) ([4df1ef6](https://github.com/nulo-sh/nulo/commit/4df1ef67c847ea2427c7c5d400977ea8f84f8b9c))
+* **ui:** name the network alpha v6 and tidy the reveal and unlock-method flows ([#1191](https://github.com/nulo-sh/nulo/issues/1191)) ([244bfc5](https://github.com/nulo-sh/nulo/commit/244bfc53650ca84d7a6e9c11fb2f2b6cdd5cd858))
+* **windows:** a backup seals under the current password and register follows another window ([#1227](https://github.com/nulo-sh/nulo/issues/1227)) ([68ef940](https://github.com/nulo-sh/nulo/commit/68ef9404a9f275865f666016f0d08fa800103a52))
+* **windows:** a second window follows a profile delete, an unlock and the picker ([#1223](https://github.com/nulo-sh/nulo/issues/1223)) ([4d68036](https://github.com/nulo-sh/nulo/commit/4d68036fdb7289c495d3a17682cefb551ab7c72c))
+* **windows:** a second window follows an account import and an unlock-method change ([#1219](https://github.com/nulo-sh/nulo/issues/1219)) ([6aba7ca](https://github.com/nulo-sh/nulo/commit/6aba7ca83749ddb8327d6981ca85cf8d99ce99de))
+
+
+### Tests
+
+* **e2e:** agent chaos sessions over an isolated, instrumented wallet ([#1156](https://github.com/nulo-sh/nulo/issues/1156)) ([5d4dff0](https://github.com/nulo-sh/nulo/commit/5d4dff0f6a58fb01f95fe35aa4e8406fdc587ba1))
+* **e2e:** profile chaos campaign results and close-out ([#1193](https://github.com/nulo-sh/nulo/issues/1193)) ([aa6995b](https://github.com/nulo-sh/nulo/commit/aa6995bd5a0da4d7ec0c229bb631d8182105e9ec))
+* **e2e:** seeded profile chaos with model oracles on chrome and firefox ([#1140](https://github.com/nulo-sh/nulo/issues/1140)) ([dde9b98](https://github.com/nulo-sh/nulo/commit/dde9b989bd59f895224edd74dc9233cb45570a12))
+* **e2e:** the update replay records and replays v1.0.0 ([#1203](https://github.com/nulo-sh/nulo/issues/1203)) ([570986a](https://github.com/nulo-sh/nulo/commit/570986a0709cc1ecf0d946e7f9cbdf913b8d4dd7))
+* **extension:** drop the deleted token before the cursor case's rebuild ([#1129](https://github.com/nulo-sh/nulo/issues/1129)) ([67cae68](https://github.com/nulo-sh/nulo/commit/67cae683b30ab479a708149a0d8b27090005e0db))
+
+
+### Misc
+
+* **landing:** add a 10 s teaser as nulo.sh's og:video ([6ceeadc](https://github.com/nulo-sh/nulo/commit/6ceeadc9c85f66f57ff822249d05064750dfd735))
+* **landing:** add a 10 s teaser as nulo.sh's og:video ([#1169](https://github.com/nulo-sh/nulo/issues/1169)) ([926c0fd](https://github.com/nulo-sh/nulo/commit/926c0fd61d167ec4da058b76ecce21335dd6714f))
+* **landing:** add a 10 s teaser as nulo.sh's og:video ([#1187](https://github.com/nulo-sh/nulo/issues/1187)) ([05fd428](https://github.com/nulo-sh/nulo/commit/05fd428e214f60992ecad383c2bf6c28229a06b2))
+* **landing:** announce the store launch in place of the install buttons ([bea29e0](https://github.com/nulo-sh/nulo/commit/bea29e07eee70ee6b9121200556e3fff7f53e714))
+* **landing:** announce the store launch in place of the install buttons ([#1159](https://github.com/nulo-sh/nulo/issues/1159)) ([56c48f2](https://github.com/nulo-sh/nulo/commit/56c48f24845b36fba3f8839472c0b6793d2f2a05))
+* **landing:** announce the store launch in place of the install buttons ([#1160](https://github.com/nulo-sh/nulo/issues/1160)) ([048c7a6](https://github.com/nulo-sh/nulo/commit/048c7a6b76d93cfa3a352b6b0b36d546a52dbc2e))
+* re-baseline prerelease manifest to 1.0.0 ([f03936a](https://github.com/nulo-sh/nulo/commit/f03936af0b91da42e526243ed2c40a7517679dde))
+* sync main → dev ([#1126](https://github.com/nulo-sh/nulo/issues/1126)) ([face800](https://github.com/nulo-sh/nulo/commit/face80099f1ed4f474935d35c861784994621698))
+* sync main → dev ([#1188](https://github.com/nulo-sh/nulo/issues/1188)) ([039ac35](https://github.com/nulo-sh/nulo/commit/039ac350617a164bd6f60692dbf9f5d5f425274a))
+* sync main → dev ([#1204](https://github.com/nulo-sh/nulo/issues/1204)) ([33217ff](https://github.com/nulo-sh/nulo/commit/33217ffa21f5615459012f98576bf89ea7bae025))
+
+
+### Docs
+
+* **legal:** date terms 1.2 and privacy 1.2.6 as effective "27 October 2026" ([#1229](https://github.com/nulo-sh/nulo/issues/1229)) ([c969864](https://github.com/nulo-sh/nulo/commit/c96986491e671c2bf5af153dcb640cf5bfbee835))
+* **legal:** passkey profiles have a recovery phrase ([#1142](https://github.com/nulo-sh/nulo/issues/1142)) ([518170a](https://github.com/nulo-sh/nulo/commit/518170a18da6780d2d407388d3ffe7ee1a390a3e))
+* **plans:** profile chaos campaign, fleet wave 2 ([#1205](https://github.com/nulo-sh/nulo/issues/1205)) ([3445ec4](https://github.com/nulo-sh/nulo/commit/3445ec41568262176665e230a538cb063cbfce39))
+
 ## [1.0.0](https://github.com/nulo-sh/nulo/compare/v0.31.0...v1.0.0) (2026-10-25)
 
 
