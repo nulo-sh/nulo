@@ -42,7 +42,9 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import type { ReadWriteGuard } from "@nulo/wallet-core/utils"
 import { makeFetchWithTimeout, type RetryOptions } from "../utils/fetch"
 import { ChainRuntime, type NetworkInfo, type PxeFactory } from "./chain-runtime"
+import { StoreErasedError } from "./lifecycle-coordinator"
 import { PxeService, type IProfileReader } from "./service"
+import { PXE_NOT_SYNCED_DIAGNOSTIC } from "./stale-anchor"
 import { LogLevel } from "@nulo/wallet-core/logger"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -442,6 +444,46 @@ describe("PxeService op-failure log classification", () => {
 		await expect(service.getContractInstance(network, address)).rejects.toThrow(/PXE_STORE_KEY_MISSING/)
 		expect(errorCalls(calls)).toEqual([])
 		expect(calls.some((c) => c[1] === LogLevel.Debug && String(c[2]).includes("pre-provision miss"))).toBe(true)
+	})
+
+	test("a fresh PXE's not-synced refusal of getSyncedBlockHeader logs at DEBUG: both callers answer from elsewhere", async () => {
+		const factory: PxeFactory = {
+			createChainRuntime: async (n) => {
+				const pxe = {
+					getSyncedBlockHeader: async () => {
+						throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
+					},
+				} as unknown as PXE
+				return new ChainRuntime(n.chainId, {} as AztecNode, pxe, n.rpcUrl)
+			},
+		}
+		const { service, calls } = makeSpyLoggerService(factory)
+		await expect(service.getSyncedBlockHeader(network)).rejects.toThrow(PXE_NOT_SYNCED_DIAGNOSTIC)
+		expect(errorCalls(calls)).toEqual([])
+		expect(calls.some((c) => c[1] === LogLevel.Debug && String(c[2]).includes("refused before the PXE's first sync"))).toBe(true)
+	})
+
+	test("the not-synced text on any other op still logs at ERROR", async () => {
+		const factory: PxeFactory = {
+			createChainRuntime: async () => {
+				throw new Error(PXE_NOT_SYNCED_DIAGNOSTIC)
+			},
+		}
+		const { service, calls } = makeSpyLoggerService(factory)
+		await expect(service.getContractInstance(network, address)).rejects.toThrow(PXE_NOT_SYNCED_DIAGNOSTIC)
+		expect(errorCalls(calls).filter((c) => / failed after \d+ms$/.test(String(c[2])))).toHaveLength(1)
+	})
+
+	test("a store a purge or an erase ended under the op logs at DEBUG: its caller's context went with it", async () => {
+		const factory: PxeFactory = {
+			createChainRuntime: async () => {
+				throw new StoreErasedError("getContractInstance: chain was purged mid-operation — refusing to re-create its runtime/store")
+			},
+		}
+		const { service, calls } = makeSpyLoggerService(factory)
+		await expect(service.getContractInstance(network, address)).rejects.toBeInstanceOf(StoreErasedError)
+		expect(errorCalls(calls)).toEqual([])
+		expect(calls.some((c) => c[1] === LogLevel.Debug && String(c[2]).includes("ended the store it captured"))).toBe(true)
 	})
 
 	test("any OTHER op failure still logs at ERROR (the downgrade is marker-scoped)", async () => {

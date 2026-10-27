@@ -15,6 +15,12 @@
  * {@link assertUnchanged} throws); a new op after the purge sees the new epoch
  * at entry and may legitimately re-create.
  */
+/** An op whose captured store a chain purge or a profile erase ended while it ran: the op's
+ *  result is moot, as its caller's context went with the store. */
+export class StoreErasedError extends Error {
+	public readonly isStoreErased = true as const
+}
+
 export class PxeLifecycleCoordinator {
 	readonly #epochs = new Map<string, number>()
 
@@ -38,7 +44,7 @@ export class PxeLifecycleCoordinator {
 	 */
 	public assertUnchanged(key: string, captured: number, label: string): void {
 		if (this.current(key) !== captured) {
-			throw new Error(`${label}: chain was purged mid-operation — refusing to re-create its runtime/store`)
+			throw new StoreErasedError(`${label}: chain was purged mid-operation — refusing to re-create its runtime/store`)
 		}
 	}
 }
