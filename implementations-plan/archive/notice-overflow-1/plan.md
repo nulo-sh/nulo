@@ -107,7 +107,7 @@ Pass: exit 0 on each; the new case red at step 1 and green at step 2; in the cap
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `17f35c504`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `17f35c504`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff origin/dev...HEAD` after Phase 1: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1; prompts under `~/.cache/nulo-backlog/notice-overflow-1/`; hard stop at three rounds; rounds in `lessons/phase-1.md` and the table below.
 - Approval boundary (a plan change; stop): any copy change, a cut name, a scrolling card, a rule outside `.card`.
 - Close-out in the PR's final commits, after the Codex loop: Outcome (status "draft until OA-1 is signed"); the known limit above filed and closed; D5's issue filed (`ux`; dedupe first); lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. If the owner picks (b) or (c), the orchestrator resumes the lane and the Outcome is rewritten. Teardown after the merge: `agent-worktree done notice-overflow-1 --merged`; trunk `dev`; `implementations-plan/archive/notice-overflow-1/plan.md`.
