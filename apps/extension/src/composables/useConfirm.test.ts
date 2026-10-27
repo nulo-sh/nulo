@@ -1,5 +1,6 @@
 /**
- * `requestConfirm` on the real stores and a mounted ConfirmPopup, bound as PopupManager binds it;
+ * `requestConfirm` and `askConfirm` on the real stores and a mounted ConfirmPopup, bound as
+ * PopupManager binds it;
  * then the static ban on opening the dialog any other way.
  */
 import { readFileSync } from "node:fs"
@@ -196,7 +197,6 @@ describe("useConfirm — answering", () => {
 })
 
 describe("useConfirm — askConfirm", () => {
-	/** `askConfirm` inside its own scope, as a component's setup runs it; `stop` ends that scope. */
 	function asker() {
 		const scope = effectScope()
 		const { askConfirm } = scope.run(() => useConfirm()) as ReturnType<typeof useConfirm>

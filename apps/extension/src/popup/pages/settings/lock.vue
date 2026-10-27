@@ -82,19 +82,26 @@ async function updateSessionTtl(value) {
 	}
 }
 
-/** Never locking widens every unattended-browser window, and an emptied field reads 0 too, so a 0
- *  waits for the person's yes. The answer settles only the 0 it was asked about: a field that moved
- *  while the dialog was up keeps its newer edit. */
+/** An emptied int field emits 0 too, so clearing the field asks. One question at a time: a second
+ *  would replace the first, whose "no" would then undo the 0 the second asks about. */
+let isAskingNeverLock = false
 async function confirmNeverLock() {
-	const confirmed = await askConfirm({
-		title: "Never lock automatically?",
-		description: "Nulo will stay unlocked until you lock it yourself. Anyone who can use this browser can use your wallet meanwhile.",
-		confirm_text: "Never lock",
-		confirm_color: "red",
-	})
-	if (isUnmounted || Number(sessionTtlMinutes.value) !== 0) return
-	if (confirmed) await updateSessionTtl(0)
-	else sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
+	if (isAskingNeverLock) return
+	isAskingNeverLock = true
+	try {
+		const confirmed = await askConfirm({
+			title: "Never lock automatically?",
+			description:
+				"Nulo will stay unlocked until you lock it yourself. Anyone who can use this browser can use your wallet meanwhile.",
+			confirm_text: "Never lock",
+			confirm_color: "red",
+		})
+		if (isUnmounted || Number(sessionTtlMinutes.value) !== 0) return
+		if (confirmed) await updateSessionTtl(0)
+		else sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
+	} finally {
+		isAskingNeverLock = false
+	}
 }
 
 function onSettingUpdate(setting) {

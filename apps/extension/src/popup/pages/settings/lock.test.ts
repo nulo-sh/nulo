@@ -251,6 +251,22 @@ describe("settings/lock", () => {
 			expect(field().attributes("modelvalue")).toBe("45")
 		})
 
+		test("a 0 typed again while the question is open asks nothing new; its answer still writes the 0", async () => {
+			const { field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			const ask = confirm()
+			field().vm.$emit("update:modelValue", "15")
+			await debounced()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			expect(confirm()).toBe(ask)
+			ask.callback?.()
+			await flushPromises()
+			expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 0)
+			expect(field().attributes("modelvalue")).toBe("0")
+		})
+
 		test("a page that opens with 0 stored never asks", async () => {
 			fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 0 : true))
 			const { field } = await mountSettled()
@@ -263,21 +279,28 @@ describe("settings/lock", () => {
 		test("a 0 that settles after the page closed neither asks nor writes", async () => {
 			const { w, field } = await mountSettled()
 			field().vm.$emit("update:modelValue", "0")
+			await flushPromises()
 			w.unmount()
 			await debounced()
 			expect(confirm()).toEqual({})
 			expect(fakes.config.setValue).not.toHaveBeenCalled()
 		})
 
-		test("closing the page while it asks answers no and closes the question", async () => {
+		test("closing the page while it asks closes the question", async () => {
 			const { w, field } = await mountSettled()
 			field().vm.$emit("update:modelValue", "0")
 			await debounced()
-			const ask = confirm()
 			w.unmount()
 			await flushPromises()
 			expect(usePopupStore().close).toHaveBeenCalledWith("confirm")
-			ask.callback?.()
+		})
+
+		test("a Never lock whose answer lands after the page closed writes nothing", async () => {
+			const { w, field } = await mountSettled()
+			field().vm.$emit("update:modelValue", "0")
+			await debounced()
+			confirm().callback?.()
+			w.unmount()
 			await flushPromises()
 			expect(fakes.config.setValue).not.toHaveBeenCalled()
 		})
