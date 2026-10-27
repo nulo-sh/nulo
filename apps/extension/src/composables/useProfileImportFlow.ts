@@ -3,7 +3,6 @@ import { computed, type Ref, readonly, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
-import { usePopupStore } from "@/stores/popup.store"
 import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
@@ -93,8 +92,7 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
-	const popupStore = usePopupStore()
-	const { requestConfirm } = useConfirm()
+	const { askConfirm } = useConfirm()
 	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
 	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
 	const allowDuplicate = ref(false)
@@ -111,30 +109,12 @@ function useDuplicateConfirm() {
 		} catch (err) {
 			if (!(err instanceof DuplicateWalletError)) throw err
 			const existing = (err.details as { existingProfileName?: string } | undefined)?.existingProfileName
-			const confirmed = await new Promise<boolean>((resolve) => {
-				let settled = false
-				const settle = (value: boolean) => {
-					if (settled) return
-					settled = true
-					stop()
-					resolve(value)
-				}
-				// A close without the callback is the dialog's only cancel signal; a confirm closes it
-				// too, after `settle(true)`, which `settled` keeps final.
-				const stop = watch(
-					() => popupStore.isOpened("confirm"),
-					(isOpen, wasOpen) => {
-						if (wasOpen && !isOpen) settle(false)
-					},
-				)
-				requestConfirm({
-					title: "You already have this wallet",
-					description: existing
-						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
-					confirm_text: "Add anyway",
-					callback: () => settle(true),
-				})
+			const confirmed = await askConfirm({
+				title: "You already have this wallet",
+				description: existing
+					? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+					: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+				confirm_text: "Add anyway",
 			})
 			if (!confirmed) return undefined
 			allowDuplicate.value = true

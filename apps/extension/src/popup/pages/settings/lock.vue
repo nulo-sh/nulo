@@ -31,7 +31,7 @@ import { useLockWallet } from "@/composables/useLockWallet"
 import { SETTING_UPDATE_FAILED } from "@/composables/useSettingUpdate"
 import { useSettingsRowHighlight } from "@/composables/useSettingsRowHighlight"
 const { openToast } = useToast()
-const { requestConfirm } = useConfirm()
+const { requestConfirm, askConfirm } = useConfirm()
 const { vSettingsRow } = useSettingsRowHighlight()
 const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
@@ -41,6 +41,7 @@ const lockRead = useConfigRead(configService, fetchLockConfig, landLockConfig)
 
 const profileService = new ProfileServiceClient()
 const isLoading = ref(true)
+let isUnmounted = false
 
 const defaultConfig = makeDefaultConfig()
 const MAX_SESSION_TTL = 1440
@@ -79,6 +80,21 @@ async function updateSessionTtl(value) {
 		if (Number(sessionTtlMinutes.value) * 60 * 1_000 === value) sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
 		openToast({ kind: "error", label: SETTING_UPDATE_FAILED })
 	}
+}
+
+/** Never locking widens every unattended-browser window, and an emptied field reads 0 too, so a 0
+ *  waits for the person's yes. The answer settles only the 0 it was asked about: a field that moved
+ *  while the dialog was up keeps its newer edit. */
+async function confirmNeverLock() {
+	const confirmed = await askConfirm({
+		title: "Never lock automatically?",
+		description: "Nulo will stay unlocked until you lock it yourself. Anyone who can use this browser can use your wallet meanwhile.",
+		confirm_text: "Never lock",
+		confirm_color: "red",
+	})
+	if (isUnmounted || Number(sessionTtlMinutes.value) !== 0) return
+	if (confirmed) await updateSessionTtl(0)
+	else sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
 }
 
 function onSettingUpdate(setting) {
@@ -149,7 +165,8 @@ watch(
 		const minutes = Number(sessionTtlMinutes.value)
 		// Only whole minutes from 0 (never) to the maximum are a timeout: a stored negative expires
 		// every session the moment it opens.
-		if (Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_SESSION_TTL) updateSessionTtl(minutes * 60 * 1_000)
+		if (minutes === 0 && sessionTtl.value !== 0) void confirmNeverLock()
+		else if (Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_SESSION_TTL) updateSessionTtl(minutes * 60 * 1_000)
 		switch (minutes) {
 			case 0:
 				fillNotification("'0' means the wallet will never be locked automatically")
@@ -170,6 +187,7 @@ onBeforeMount(() => {
 })
 
 onBeforeUnmount(() => {
+	isUnmounted = true
 	configService.disconnect()
 	profileService.disconnect()
 	lockRead.dispose()

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs"
 import { join, relative } from "node:path"
 import { createPinia, type Pinia, setActivePinia } from "pinia"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
-import { defineComponent, h, ref } from "vue"
+import { defineComponent, effectScope, h, ref } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
@@ -192,6 +192,81 @@ describe("useConfirm — answering", () => {
 		await request({ title: "First" })
 		await request({ title: "Second" })
 		expect((pinia.state.value.cache as { confirm: { title?: string } }).confirm.title).toBe("Second")
+	})
+})
+
+describe("useConfirm — askConfirm", () => {
+	/** `askConfirm` inside its own scope, as a component's setup runs it; `stop` ends that scope. */
+	function asker() {
+		const scope = effectScope()
+		const { askConfirm } = scope.run(() => useConfirm()) as ReturnType<typeof useConfirm>
+		return { askConfirm, stop: () => scope.stop() }
+	}
+	const settled = <T>(p: Promise<T>) => Promise.race([p, flushPromises().then(() => "pending" as const)])
+
+	test("Confirm answers true once, and the dialog closes", async () => {
+		const answer = asker().askConfirm({ title: "Never lock automatically?" })
+		await flushPromises()
+		wrapper.find('[data-testid="confirm-submit"]').trigger("click")
+		expect(await answer).toBe(true)
+		await flushPromises()
+		expect(shown()).toBe(false)
+	})
+
+	test("Cancel answers false", async () => {
+		const answer = asker().askConfirm({ title: "Never lock automatically?" })
+		await flushPromises()
+		wrapper.find('[data-testid="confirm-cancel"]').trigger("click")
+		expect(await answer).toBe(false)
+	})
+
+	test("a close from the store, as a lock's closeAll does, answers false", async () => {
+		const answer = asker().askConfirm({ title: "Never lock automatically?" })
+		await flushPromises()
+		usePopupStore().closeAll()
+		expect(await answer).toBe(false)
+	})
+
+	test("a later request answers the replaced ask false; Confirm then answers only the later one", async () => {
+		const first = asker().askConfirm({ title: "Never lock automatically?" })
+		const later = vi.fn()
+		useConfirm().requestConfirm({ title: "Remove this token?", callback: later })
+		expect(await first).toBe(false)
+		await flushPromises()
+		wrapper.find('[data-testid="confirm-submit"]').trigger("click")
+		expect(later).toHaveBeenCalledOnce()
+	})
+
+	test("the asking scope's end answers false and closes the dialog it still shows", async () => {
+		const { askConfirm, stop } = asker()
+		const answer = askConfirm({ title: "Never lock automatically?" })
+		await flushPromises()
+		stop()
+		expect(await answer).toBe(false)
+		expect(shown()).toBe(false)
+	})
+
+	test("the asking scope's end leaves a dialog another request took over", async () => {
+		const { askConfirm, stop } = asker()
+		const answer = askConfirm({ title: "Never lock automatically?" })
+		useConfirm().requestConfirm({ title: "Remove this token?" })
+		expect(await answer).toBe(false)
+		stop()
+		await flushPromises()
+		expect(text("confirm-title")).toBe("Remove this token?")
+	})
+
+	test("an ask after its scope ended answers false and opens nothing", async () => {
+		const { askConfirm, stop } = asker()
+		stop()
+		expect(await askConfirm({ title: "Never lock automatically?" })).toBe(false)
+		expect(shown()).toBe(false)
+	})
+
+	test("an open ask stays unanswered until the person answers", async () => {
+		const answer = asker().askConfirm({ title: "Never lock automatically?" })
+		expect(await settled(answer)).toBe("pending")
+		expect(text("confirm-title")).toBe("Never lock automatically?")
 	})
 })
 

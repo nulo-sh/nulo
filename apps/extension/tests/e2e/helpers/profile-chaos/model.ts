@@ -276,7 +276,7 @@ const SESSION_RESTORE = cite(SESSIONS, 611, "session.passhash || (this.strictSec
 const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
 const STRICT_TOGGLE = cite(SESSIONS, 769, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
-const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 197, ':title="strictRow.title"')
+const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 215, ':title="strictRow.title"')
 const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 67, "setLastActiveProfileId(profile.id)")
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 248, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
