@@ -22,7 +22,8 @@ import { managers } from "@/utils/core"
 import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 import { isNewPasswordValid } from "@/utils/password"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
+import { goBack } from "@/utils/page-back"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 
@@ -72,6 +73,7 @@ const accounts = computed(() => {
 })
 
 const confirmPasskeyButton = useTemplateRef("confirmPasskeyButton")
+const closeButton = useTemplateRef("closeButton")
 const selectedAddress = ref("")
 const isAgreed = ref(false)
 const password = ref()
@@ -87,7 +89,7 @@ const approval = shallowRef(null)
 const isApproved = computed(() => approval.value !== null)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
 
-/** "" | "ready" | "protected" — the file stages, mirroring Full Backup's status machine. */
+/** "" | "ready" | "protected" | "downloaded" — the file stages, mirroring Full Backup's status machine. */
 const fileStatus = ref("")
 const payload = ref("")
 
@@ -311,6 +313,7 @@ const handleDownload = async () => {
 	try {
 		await downloadFile({ data: payload.value, filename: fileName.value })
 		if (!isCurrent()) return
+		fileStatus.value = "downloaded"
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
 		if (!isCurrent()) return
@@ -320,6 +323,17 @@ const handleDownload = async () => {
 		if (isCurrent()) isDownloading.value = false
 	}
 }
+
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
+}
+
+watch(fileStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 /** Enter advances the active stage, matching the flow's CTA (the popup this page replaced
  *  submitted on Enter). Download stages stay click-only: Enter re-firing a download is noise. */
@@ -411,7 +425,7 @@ onBeforeUnmount(() => {
 			@clearError="isWrongPassword = false"
 		/>
 
-		<!-- Steps 4/5: file ready / protected -->
+		<!-- Steps 4-6: file ready / protected / saved -->
 		<template v-else>
 			<div class="export_section_last">
 				<span class="export_section_label type--label-section">File</span>
@@ -427,7 +441,9 @@ onBeforeUnmount(() => {
 					</Banner>
 
 					<Banner v-else variant="done" direction="vertical" data-testid="account-file-protected-banner">
-						<template #title> Account file is protected </template>
+						<template #title>
+							{{ fileStatus === "downloaded" ? "Saved to your downloads" : "Account file is protected" }}
+						</template>
 						<template #description>
 							<Text color="secondary" height="140">
 								{{
@@ -507,6 +523,17 @@ onBeforeUnmount(() => {
 
 			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">
 				Download File
+			</Button>
+
+			<Button
+				v-else-if="fileStatus === 'downloaded'"
+				ref="closeButton"
+				@click="handleClose"
+				@keydown.enter="refuseRepeatEnter"
+				variant="cta"
+				data-testid="account-close-btn"
+			>
+				Close
 			</Button>
 		</template>
 	</CollapsingHeroLayout>

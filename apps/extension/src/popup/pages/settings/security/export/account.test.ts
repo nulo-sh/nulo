@@ -52,9 +52,15 @@ vi.mock("vue-router", () => ({
 	useRoute: () => ({ path: "/popup/settings/security/export/account", query: route.query, meta: {} }),
 }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast }) }))
+const surface = vi.hoisted(() => ({ toolbar: false }))
+vi.mock("@/utils/browser-surface", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/browser-surface")>()),
+	isToolbarPopup: () => surface.toolbar,
+}))
 
 import { Icon } from "@nulo/design"
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import AccountExport from "./account.vue"
@@ -118,6 +124,7 @@ const download = (w: VueWrapper) => w.get('[data-testid="account-download-btn"]'
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	surface.toolbar = false
 	route.query = { address: ADDRESS }
 	installChromeStorage({}, { persist: false })
 })
@@ -216,6 +223,77 @@ describe("account file export", () => {
 	})
 })
 
+describe("an account file once saved", () => {
+	const banner = (w: VueWrapper) => w.get('[data-testid="account-file-protected-banner"]').text()
+	const close = (w: VueWrapper) => w.find('[data-testid="account-close-btn"]')
+	async function protectedStage() {
+		const w = await readyStage()
+		await w.get('[data-testid="account-protect-btn"]').trigger("click")
+		await flushPromises()
+		return w
+	}
+	async function saved() {
+		const w = await protectedStage()
+		download(w).click()
+		await flushPromises()
+		return w
+	}
+
+	test("the password path's download says it is saved, and Close takes Download's place and the focus", async () => {
+		const w = await saved()
+		expect(downloadFile).toHaveBeenCalledOnce()
+		expect(banner(w)).toContain("Saved to your downloads")
+		expect(banner(w)).toContain("This file opens with the profile password you have now.")
+		expect(w.find('[data-testid="account-download-btn"]').exists()).toBe(false)
+		expect(close(w).text()).toBe("Close")
+		expect(document.activeElement).toBe(close(w).element)
+	})
+
+	test("a failed download keeps Download File and the protected banner", async () => {
+		downloadFile.mockRejectedValueOnce(new Error("blocked"))
+		const w = await saved()
+		expect(banner(w)).toContain("Account file is protected")
+		expect(download(w).disabled).toBe(false)
+		expect(close(w).exists()).toBe(false)
+	})
+
+	test("a download that settles after the flow was reset leaves the next file's flow at its start", async () => {
+		let settle = () => {}
+		downloadFile.mockImplementationOnce(() => new Promise<undefined>((resolve) => (settle = () => resolve(undefined))))
+		const w = await protectedStage()
+		download(w).click()
+		useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+		await flushPromises()
+		settle()
+		await flushPromises()
+		// The deep-linked address is selected again, so the reset flow stands at its agree step.
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect(w.find('[data-testid="unlock-password-input"]').exists()).toBe(true)
+		expect(w.text()).not.toContain("Saved to your downloads")
+	})
+
+	test("in the toolbar popup, Close closes the popup; a held Enter's repeat does nothing", async () => {
+		const closeWindow = vi.spyOn(window, "close").mockImplementation(() => {})
+		surface.toolbar = true
+		const w = await saved()
+		expect(pressOn(close(w).element as HTMLElement, "Enter", { repeat: true })).toEqual([false])
+		expect(closeWindow).not.toHaveBeenCalled()
+		await close(w).trigger("click")
+		await flushPromises()
+		expect(closeWindow).toHaveBeenCalledOnce()
+		expect(router.push).not.toHaveBeenCalled()
+	})
+
+	test("anywhere else, Close leaves as the back arrow does", async () => {
+		const closeWindow = vi.spyOn(window, "close").mockImplementation(() => {})
+		const w = await saved()
+		await close(w).trigger("click")
+		await flushPromises()
+		expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
+		expect(closeWindow).not.toHaveBeenCalled()
+	})
+})
+
 describe("a passkey profile's account file", () => {
 	async function approved() {
 		const w = mountPage("passkey")
@@ -255,9 +333,11 @@ describe("a passkey profile's account file", () => {
 			data: "sealed-body",
 			filename: `NuloEncryptedAccount_Main_${ADDRESS.slice(0, 10)}.txt`,
 		})
-		expect(w.get('[data-testid="account-file-protected-banner"]').text()).toContain(
-			"This password will be required to import this account.",
-		)
+		const banner = w.get('[data-testid="account-file-protected-banner"]').text()
+		expect(banner).toContain("Saved to your downloads")
+		expect(banner).toContain("This password will be required to import this account.")
+		expect(w.find('[data-testid="account-download-btn"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="account-close-btn"]').element)
 	})
 
 	test("Enter in the file password saves, but not while a composition is open", async () => {
