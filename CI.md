@@ -15,7 +15,7 @@ Contributor-facing reference for what runs when, how to opt in to slow gates, ho
 |---|---|---|
 | Push to a feature branch (no PR) | local pre-commit hook only (biome + commitlint) | <1 s |
 | Open / sync PR to `dev` | `pr-quick` always; `pr-extension-smoke-e2e` + `pr-extension-network-e2e` when their filters trip or their label is set | 3–10 min (`pr-quick`); +5–10 min each if smoke / network triggers |
-| Open / sync PR to `main` | all three workflows above run unconditionally | 15–25 min total |
+| Open / sync PR to `main` | `pr-quick` always; each e2e lane when its filter trips on the PR's diff (a promote's is everything since the last one) or its label is set | 10–12 min (`pr-quick`); 15–25 min when the lanes run |
 | Add the `e2e:extension-smoke` or `e2e:extension-network` label | the corresponding workflow runs (removing the label re-evaluates) | as above |
 | Push to `main` | `release.yml` (release-please opens or updates a Release PR; merging it tags + creates the GitHub Release + attaches built artifacts) | 1–2 min for the PR refresh; 15–25 min for the publish run after merge |
 | Click "Run workflow" on `release.yml` | re-publish artifacts for an existing tag (escape hatch) | 15–25 min |
@@ -43,8 +43,7 @@ The `quality-status` aggregator at the end is the required check on `main` / `de
 Runs the smoke e2e suite (`vitest.e2e.config.ts`) as a **3-shard matrix**, each runner about a third of the files' recorded time ([shard timings](./apps/extension/tests/e2e/README.md#ci-sharding-5-way-matrix)), because a whole Firefox run neared the 30-minute job limit; the Firefox twin runs the same shards. No Aztec sandbox; just puppeteer driving the popup UI.
 
 Triggers:
-- **Always** on PRs to `main`
-- **Auto** on PRs to `dev` whose diff touches the `smoke-surface` paths-filter (popup, components, manifest, the wallet services smoke exercises, build inputs, the harness, etc. — see [`pr-extension-smoke-e2e.yml`](./.github/workflows/pr-extension-smoke-e2e.yml) `filters:`)
+- **Auto** on PRs to `dev` or `main` whose diff touches the `smoke-surface` paths-filter (popup, components, manifest, the wallet services smoke exercises, build inputs, the harness, etc. — see [`pr-extension-smoke-e2e.yml`](./.github/workflows/pr-extension-smoke-e2e.yml) `filters:`)
 - **Manual** by adding the `e2e:extension-smoke` label
 
 The seeded profile chaos files (`profile-chaos.test.ts`, smoke and network) skip unless `NULO_E2E_CHAOS=1` arms them, which no smoke job sets and the network lane sets only for its `send-chaos` job; they are local runs ([README § Chaos runs](./apps/extension/tests/e2e/README.md#chaos-runs)).
