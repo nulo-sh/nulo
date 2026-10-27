@@ -164,9 +164,9 @@ describe("the lock event", () => {
 		)
 		await new Promise((resolve) => setTimeout(resolve, 0))
 		expect(gone.routes).toEqual([])
-		lastActive.resolve("p3")
+		lastActive.resolve("p2")
 		await done
-		expect([gone.store.selected, gone.routes]).toEqual([p3, ["/popup/auth"]])
+		expect([gone.store.selected, gone.routes]).toEqual([p2, ["/popup/auth"]])
 	})
 
 	test("past the last-active wait, a list read again and a page or selection the window moved to meanwhile decide", async () => {
@@ -229,12 +229,12 @@ describe("a list that no longer holds the selected profile", () => {
 	}
 
 	test("the lock event selects the last active profile, else the only one, else the first by name", async () => {
-		const lastActive = shell([p1, p2, p3], { lastActiveId: "p3" })
+		const lastActive = shell([p1, p2, p3], { lastActiveId: "p2" })
 		await lastActive.onLockEvent(
 			async () => [p2, p3],
 			() => true,
 		)
-		expect(lastActive.store.selected).toEqual(p3)
+		expect(lastActive.store.selected).toEqual(p2)
 		expect(lastActive.routes).toEqual(["/popup/auth"])
 
 		const only = shell([p1, p2])

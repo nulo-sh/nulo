@@ -3,6 +3,8 @@ import { E2E_WALLET_CLOCK_VALUES } from "@/e2e/wallet-clocks"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, replaceInputValue, waitForHash, withTimeoutMessage } from "./dom"
 import { navigateByHash } from "./navigation"
+import { pollUntil } from "./poll"
+import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
 
 /** Lock the wallet via the Header lock button, then wait for the lock screen.
@@ -305,13 +307,20 @@ export async function reopenAndRecoverAfterImport(page: Page, password = TEST_PA
 	await page.waitForFunction(() => window.location.hash.includes("/popup/general"), { timeout: 30_000 })
 }
 
-/** Opens the lock screen's profile chooser once the screen has settled on the profile it opens on,
- *  which it does whenever a profile exists. */
+/** Opens the lock screen's profile chooser once the screen names a profile the service still lists:
+ *  right after a delete it can name the deleted one until it settles, and a chooser pressed open
+ *  then is closed by the landing that follows. */
 export async function openProfileChooser(page: Page): Promise<void> {
-	await page.waitForFunction(() => !!document.querySelector('[data-testid="auth-profile"]')?.getAttribute("data-profile-name"), {
-		timeout: 15_000,
-		polling: 100,
-	})
+	await pollUntil(
+		async () => {
+			const shown = await page.$eval('[data-testid="auth-profile"]', (el) => el.getAttribute("data-profile-name")).catch(() => null)
+			if (!shown) return false
+			const listed = await callService<{ name: string }[]>(page, "profile", "getProfiles")
+			return listed.some((p) => p.name === shown)
+		},
+		(settled) => settled,
+		{ label: "the lock screen names a listed profile", timeoutMs: 15_000, intervalMs: 100 },
+	)
 	await clickByTestId(page, "auth-profile")
 	await page.waitForSelector('[data-testid="select-profile-new-btn"]', { visible: true, timeout: 10_000 })
 }

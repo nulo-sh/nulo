@@ -14,7 +14,7 @@ function deps(over: Partial<Parameters<typeof resolveBootSession<P>>[0]> = {}) {
 		getProfiles: async () => [p1, p2],
 		getActiveProfile: async () => p1,
 		bootstrap: async () => true,
-		lastActiveProfileId: async () => "p2",
+		lastActiveProfileId: async () => "p1",
 		isCurrent: () => true,
 		// Short overall bound so the unreachable cases settle in milliseconds, not the 60s default.
 		deadlineMs: 40,
@@ -32,16 +32,10 @@ describe("resolveBootSession", () => {
 		expect(await resolveBootSession(deps({ getActiveProfile: async () => undefined }))).toEqual({
 			kind: "locked",
 			profiles: [p1, p2],
-			candidate: p2,
+			candidate: p1,
 		})
 		expect(
-			await resolveBootSession(
-				deps({
-					getActiveProfile: async () => undefined,
-					lastActiveProfileId: async () => "gone",
-					getProfiles: async () => [p1, p2],
-				}),
-			),
+			await resolveBootSession(deps({ getActiveProfile: async () => undefined, lastActiveProfileId: async () => "gone" })),
 		).toMatchObject({ candidate: p2 })
 		expect(await resolveBootSession(deps({ getProfiles: async () => [], getActiveProfile: async () => undefined }))).toEqual({
 			kind: "locked",
@@ -55,9 +49,9 @@ describe("resolveBootSession", () => {
 		expect(await resolveBootSession(deps({ getActiveProfile: never }))).toEqual({
 			kind: "unreachable",
 			profiles: [p1, p2],
-			candidate: p2,
+			candidate: p1,
 		})
-		expect(await resolveBootSession(deps({ getActiveProfile: rejects }))).toMatchObject({ kind: "unreachable", candidate: p2 })
+		expect(await resolveBootSession(deps({ getActiveProfile: rejects }))).toMatchObject({ kind: "unreachable", candidate: p1 })
 	})
 
 	test("a rejecting last-active read is a preference lost, never an undecided check: the first by name stands in", async () => {

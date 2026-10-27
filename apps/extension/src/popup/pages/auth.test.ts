@@ -132,6 +132,7 @@ beforeEach(() => {
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
 	waitHolder.mock.mockReset().mockImplementation((...a: unknown[]) => waitHolder.real(...a))
 	vi.mocked(managers.profile.getProfiles).mockReset().mockResolvedValue([])
+	vi.mocked(getLastActiveProfileId).mockReset().mockResolvedValue(undefined)
 	vi.stubGlobal("chrome", {
 		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
@@ -640,6 +641,30 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		await flushPromises()
 		expect(selected()).toBe("pB")
 		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick another window makes while an automatic settle reads is the one that stands", async () => {
+		// Pages earlier tests left mounted still hear picks; their reads would take the held answers.
+		elsewhere.picks.clear()
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pC")
 	})
 
 	test("with no last active profile in the list, a selection it still holds stays; a last active one is selected", async () => {

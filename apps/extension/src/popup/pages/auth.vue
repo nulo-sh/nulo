@@ -250,8 +250,10 @@ const handleUnlockWallet = async () => {
  *  the route guard. */
 const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
-	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	const profiles = await managers.profile.getProfiles().catch(() => undefined)
+	// Read last: a pick another window writes meanwhile is either read here or reaches `followPick`
+	// after this settle applied, never lost between the two.
+	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
 	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
