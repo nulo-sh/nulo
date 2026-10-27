@@ -102,6 +102,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 - **Arc 1158, round 2** (Codex resume over `9dfb28417..7adc3eb5a`): `clean`.
 - **Arc 1192, round 1** (Codex over `1054f2b08..6ca25aa57`): one finding, accepted: two comments restated their declarations; trimmed. Opus diff review, same round: four findings, all accepted. The countdown's tabular figures sat on the button beside `type--label-section`, which sets `font-variant-numeric: normal` at equal specificity; moved to the countdown span. The repeat-Enter test pressed "Do it later" directly, so it did not depend on the focus hand-off; it now presses the focused element. A link test renamed; a stale option doc in `useSecretCountdown`. Rejected: none.
 - **Arc 1192, round 2** (Codex resume over `6ca25aa57..212584dc1`): `clean`.
+- **Arc 1208, round 1** (Codex over `f5ae44a44..b931e502e`): `clean`. Opus diff review, same round: one finding, accepted: the two-name test fed names that code-unit order sorts the same way as `stringCompare`, so it could not prove the chooser's collation; the fixture's case now differs. Noted, not taken: no test proves a reserved row is left out of the names, a gap older than this arc.
+- **Arc 1208, round 2** (Codex resume over `b931e502e..6ee1a67d7`): `clean`.
 
 ## Seeds (draft; run none until the orchestrator spawns an arc)
 
