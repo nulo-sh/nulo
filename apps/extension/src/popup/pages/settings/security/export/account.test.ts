@@ -143,11 +143,15 @@ describe("account file export", () => {
 		expect(downloadFile).not.toHaveBeenCalled()
 	})
 
-	test("once protected, Download gives out the sealed file", async () => {
+	test("once protected, the banner names the password in force, and Download gives out the sealed file", async () => {
 		const w = await readyStage()
 		await w.get('[data-testid="account-protect-btn"]').trigger("click")
 		await flushPromises()
-		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
+		const banner = w.get('[data-testid="account-file-protected-banner"]').text()
+		expect(banner).toContain(
+			"This file opens with the profile password you have now. Changing your password later does not change that.",
+		)
+		expect(banner).not.toContain("will be required")
 		expect(download(w).disabled).toBe(false)
 
 		download(w).click()

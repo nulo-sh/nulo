@@ -433,7 +433,7 @@ onBeforeUnmount(() => {
 								{{
 									isPasskeyProfile
 										? "This password will be required to import this account."
-										: "Your profile password will be required to import this account."
+										: "This file opens with the profile password you have now. Changing your password later does not change that."
 								}}
 							</Text>
 						</template>

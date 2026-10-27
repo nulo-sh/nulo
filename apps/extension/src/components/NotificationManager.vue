@@ -154,6 +154,7 @@ watch(
 	box-shadow: 0 0 0 1px var(--nulo-border), 0 -6px 16px rgba(10, 9, 8, 0.3);
 
 	width: 90%;
+	max-width: 480px;
 	padding: 24px;
 }
 </style>
