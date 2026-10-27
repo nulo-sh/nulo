@@ -68,7 +68,7 @@ Flow unchanged: the store's `active` notice renders in the card; only line break
 - Attacker capability: write any network name into a backup the person restores. Today it can push text off the card and, in the popup, off-screen; after (a) every character shows inside the card. It never covers or moves OK sideways.
 - **Known limit (to file at close-out, closed `known-limit`)**: the card does not scroll. Path: in the onboarding tab (the one shell whose notice carries names), a crafted backup with many unrestored networks, or, newly with (a), one very long name, makes the card taller than the window. The close areas above and below shrink to nothing and the strips beside the card answer no press, so OK and every close target leave the pointer's reach. Focus starts on OK, so Enter and Escape still close it (measured). Measured: 80 short names bring the popup card to 579 of 600 px; with (a), 1,500 characters leave OK in view in the onboarding tab at 800 px (651 px) and put it at 769 px in a 600 px popup; a shorter window needs fewer. Consequence: a person using only a pointer must use the keyboard or close the tab. Labelled: needs a crafted backup; pre-existing for long lists; the notice's layout is outside this lane. Reopen on a user report, or on a caller that passes unbounded text from a source that is not crafted.
 
-## Phase 1: the rule and its test
+## Phase 1: the rule and its test ✓
 
 Warning: take the before measurement from the base build first (it is already in recon § Measured).
 1. Add the case (D3); run it on the base copy and see it red.

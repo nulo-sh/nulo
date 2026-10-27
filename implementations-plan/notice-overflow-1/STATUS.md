@@ -6,3 +6,8 @@
 - 2026-10-27 plan drafted (light); OWNER-ASKS OA-1 written.
 - 2026-10-27 dual audit r1: Codex conditional approve, Opus conditional approve; fixes applied (plan § Audit verdicts).
 - 2026-10-27 final Codex pass: conditional approve, two wording fixes applied; r3 approve. Plan approved for auto-continue; OA-1 open (arc ships a draft).
+- 2026-10-27 arc1 phase 1 steps 1-2: new case red on base (1 failed / 27 passed), green with the rule (28 passed).
+- 2026-10-27 arc1 gate 1: audit:vue green (942 files passed, 15932 tests, lint clean, build ok).
+- 2026-10-27 arc1 gate 1: test:all green (every workspace, exit 0).
+- 2026-10-27 arc1 gate 2-3: armed Chrome build ok; smoke import-errors-scroll.test.ts green (4 passed, retry 0, 56 s).
+- 2026-10-27 arc1 gate 4: capture on the arc build: card scrollWidth = clientWidth in both shells (324/324, 480/480); ordinary text and all ten createFailedNotice measurements identical to the base. Phase 1 ✓.
