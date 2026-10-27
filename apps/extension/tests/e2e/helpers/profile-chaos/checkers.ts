@@ -563,13 +563,6 @@ export interface KnownFinding {
 const UNHANDLED_LOCKED = /^\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]$/
 
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
-	{
-		issue: 1131,
-		pattern:
-			/^\["Failed to get (?:public|private) FeeJuice balance",.*(?:has no current incarnation|"message":"(?:Wallet|Profile) locked"|PXE_STORE_KEY_MISSING)/,
-		kinds: ["log"],
-		source: "execution",
-	},
 	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
 	{ issue: 1133, pattern: UNHANDLED_LOCKED, kinds: ["log"], source: "ui" },
 	{
@@ -580,13 +573,6 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 			source: "ui",
 			text: (pageError) => `["unhandled rejection",{"error":{"name":"Error","message":"${pageError.replace(/^Error: /, "")}"}}]`,
 		},
-	},
-	{
-		issue: 1136,
-		pattern:
-			/^\["\[READ\] (?:getSyncedBlockHeader failed after \d+ms",.*not-yet-synchronized PXE|\w+ failed after \d+ms",.*chain was purged mid-operation)/,
-		kinds: ["log"],
-		source: "pxe",
 	},
 	{
 		issue: 432,

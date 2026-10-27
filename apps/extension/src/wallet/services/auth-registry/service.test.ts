@@ -14,7 +14,6 @@ import { TxStatus as AztecTxStatus } from "@aztec-labs/stdlib/tx"
 import { JobCancelledError, SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -28,6 +27,7 @@ import { TASK_SERVICE_NAME, TaskStatus } from "@/wallet/services/task/spec"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { OriginType, TRANSACTION_SERVICE_NAME, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { getAuthRegistryAddress } from "@/wallet/utils/auth-registry"
+import { awaitedBus } from "../../../../tests/helpers/held-read"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { GRANT_BLOCK_WAIT_MS } from "./grant-block"
@@ -161,7 +161,7 @@ async function makeHarness(opts: { node?: unknown; grantNode?: unknown; activePr
 	const api = new FakeBrowserApi()
 	api.reset()
 	const deletionState = new ProfileDeletionState()
-	const txUpdated = new EventHandler<unknown>()
+	const txUpdated = awaitedBus<unknown>()
 	let active: { id: string } | undefined = "activeProfile" in opts ? opts.activeProfile : { id: "p1" }
 	let session = 1
 	const network = {
@@ -839,11 +839,7 @@ describe("AuthRegistryService.reconcileFromTx — scoped by the tx's provenance;
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
 	})
 
-	// reconcileFromTx is fired void'd off the event; give its storage ops a beat.
-	const emitTx = async (tx: Record<string, unknown>) => {
-		h.txUpdated.invoke({ profileId: "p1", chainId: 1, account: A, ...tx })
-		await new Promise((r) => setTimeout(r, 10))
-	}
+	const emitTx = (tx: Record<string, unknown>) => h.txUpdated.dispatch({ profileId: "p1", chainId: 1, account: A, ...tx })
 
 	test("a Dropped tx does NOT remove pending rows — dropped is reversible (resurrection), so the row stays pending", async () => {
 		await emitTx({ hash: TX1, status: TxStatus.Dropped, updatedAt: Date.now() })
