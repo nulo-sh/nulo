@@ -51,6 +51,9 @@ vi.mock("@/utils/core", () => ({
 }))
 
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+import { getStartedPhraseSavedKey, profileImportedKey } from "@/utils/profile-ui-keys"
 import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
 import Reset from "./reset.vue"
@@ -89,7 +92,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	activation.running = false
 	checkSelection.mockResolvedValue("present")
-	installChromeStorage({}, { persist: false })
+	installChromeStorage({ [getStartedPhraseSavedKey(main.id)]: true }, { persist: false })
 	reads.getNetworks.mockResolvedValue([])
 	reads.getAccounts.mockResolvedValue([])
 	reads.getPendingReset.mockResolvedValue(null)
@@ -101,6 +104,7 @@ describe("Delete Profile's client", () => {
 		const call = client.pending()
 		const { w, app } = await mountReady()
 		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
 
 		w.unmount()
@@ -120,6 +124,7 @@ describe("Delete Profile's client", () => {
 		const call = client.pending()
 		const { w, app } = await mountReady()
 		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
 		w.unmount()
 		const third: ProfileInfo = { id: "p3", name: "Third", type: "password" }
 		app.profiles = [main, other, third]
@@ -263,6 +268,9 @@ describe("Delete Profile stays bound to the profile it was opened for", () => {
 				}),
 			)
 			await deleteButton(w).trigger("click")
+			// The phrase-flag read answers, so the press reaches its list read before the page leaves.
+			await flushPromises()
+			expect(reads.getNetworks).toHaveBeenCalledTimes(2)
 			w.unmount()
 			if (outcome === "answers") answer([])
 			else fail(new Error("worker gone"))
@@ -273,6 +281,85 @@ describe("Delete Profile stays bound to the profile it was opened for", () => {
 			expect(reads.getNetworks).toHaveBeenCalledTimes(2)
 			expect(client.disconnect).toHaveBeenCalledTimes(1)
 		}
+	})
+})
+
+describe("Delete Profile asks first when the recovery phrase was never revealed", () => {
+	test("a profile whose phrase was never revealed: Delete asks, naming it, and deletes only on Yes", async () => {
+		installChromeStorage({}, { persist: false })
+		client.deleteProfile.mockResolvedValue(main)
+		const { w } = await mountReady()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
+
+		const confirm = useCacheStore().confirm
+		expect(confirm).toMatchObject({
+			title: "Delete this profile?",
+			description: "Its recovery phrase was never saved. Without it, or a backup, its accounts are gone for good.",
+			confirm_color: "red",
+			irreversible: true,
+		})
+		expect(client.deleteProfile).not.toHaveBeenCalled()
+
+		confirm.callback?.()
+		await flushPromises()
+		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("a revealed or imported phrase, or a retired profile with none, deletes at once", async () => {
+		for (const [stored, profile] of [
+			[{ [getStartedPhraseSavedKey(main.id)]: true }, main],
+			[{ [profileImportedKey(main.id)]: true }, main],
+			[{}, { ...main, retired: true }],
+		] as const) {
+			vi.clearAllMocks()
+			installChromeStorage(stored, { persist: false })
+			client.deleteProfile.mockResolvedValue(main)
+			const { w } = await mountReady({ profile })
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			await flushPromises()
+			expect(useCacheStore().confirm).toEqual({})
+			expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+			w.unmount()
+		}
+	})
+
+	test("a flag read that answers after the page was left, or its profile moved, asks nothing and deletes nothing", async () => {
+		const leaves = [(w: { unmount: () => void }) => w.unmount(), (_w: unknown, app: { profile?: ProfileInfo }) => (app.profile = other)]
+		for (const leave of leaves) {
+			const storage = installChromeStorage({}, { persist: false })
+			const { w, app } = await mountReady()
+			const held = storage.deferNextGet()
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			leave(w, app)
+			held.release()
+			await flushPromises()
+			expect(useCacheStore().confirm).toEqual({})
+			expect(client.deleteProfile).not.toHaveBeenCalled()
+		}
+	})
+
+	test("a second press while the first one's flag read runs asks nothing more", async () => {
+		const storage = installChromeStorage({}, { persist: false })
+		const { w } = await mountReady()
+		const held = storage.deferNextGet()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		held.release()
+		await flushPromises()
+		expect(vi.mocked(usePopupStore().open).mock.calls.filter(([name]) => name === "confirm")).toHaveLength(1)
+	})
+
+	test("a Yes after the page's profile moved deletes nothing", async () => {
+		installChromeStorage({}, { persist: false })
+		const { w, app } = await mountReady()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		await flushPromises()
+
+		app.profile = other
+		useCacheStore().confirm.callback?.()
+		await flushPromises()
+		expect(client.deleteProfile).not.toHaveBeenCalled()
 	})
 })
 
@@ -433,6 +520,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(reads.getPendingReset).not.toHaveBeenCalled()
 		expect(w.find('[data-testid="reset-imported"]').exists()).toBe(false)
 		await deleteButton(w).trigger("click")
+		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
 	})
 })

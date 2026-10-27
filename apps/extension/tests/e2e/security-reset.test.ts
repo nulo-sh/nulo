@@ -24,7 +24,8 @@ test("reset profile wipes state and routes to register", async ({ registeredExte
 	await waitForHash(page, "#/popup/general")
 
 	const profileId = await captureSoleProfileId(page)
-	await resetProfile(page)
+	// The fixture's profile was registered in the popup, which never shows its recovery phrase.
+	expect(await resetProfile(page)).toEqual({ warned: true, preTitle: "Irreversible", title: "Delete this profile?" })
 	await waitForProfilePurged(page, profileId, { timeoutMs: 15_000 })
 
 	// With only one profile, deletion lands the user on /popup/register
