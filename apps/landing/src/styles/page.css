@@ -466,6 +466,68 @@ footer {
 	opacity: 0.6;
 }
 
+.signup__fieldwrap {
+	position: relative;
+	display: flex;
+	flex: 999 1 220px;
+	min-width: 0;
+}
+
+.signup__fieldwrap .signup__field {
+	flex: 1 1 auto;
+	width: 100%;
+}
+
+/* Answered: the button is the receipt, the field keeps the address it saved. */
+.signup[data-state="ok"] .signup__field {
+	color: var(--nulo-secondary);
+}
+
+.signup[data-state="ok"] .signup__fieldwrap::after {
+	content: "Saved";
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-family: var(--font-mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--green);
+	pointer-events: none;
+}
+
+.signup[data-state="ok"] .signup__row .btn,
+.signup[data-state="ok"] .signup__row .btn:hover {
+	background: var(--green);
+	border-color: var(--green);
+	color: #0a0908;
+	opacity: 1;
+	cursor: default;
+}
+
+.signup[data-state="ok"] .signup__row .btn::before {
+	content: "";
+	width: 16px;
+	height: 16px;
+	background: currentColor;
+	mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='square'%3E%3Cpolyline points='2.5 8.5 6 12 13.5 4'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+
+.signup[data-state="error"] .signup__row .btn,
+.signup[data-state="error"] .signup__row .btn:hover {
+	background: transparent;
+	border-color: var(--txt-danger);
+	color: var(--txt-danger);
+}
+
+.signup__field[aria-invalid="true"],
+.signup__field[aria-invalid="true"]:hover {
+	border-color: var(--txt-danger);
+}
+
 /* Follows `.hero p`, whose size, measure and margin are for the hero's paragraph, to outrank it. */
 .signup p {
 	margin: 0;
@@ -502,6 +564,26 @@ footer {
 
 .signup p.signup__status[data-state="error"] {
 	color: var(--txt-danger);
+}
+
+/* The button already says it; the live region keeps the words for a screen reader. */
+.signup[data-state="ok"] p.signup__status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+}
+
+.signup p.signup__status[data-state="error"]::before {
+	content: "";
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--red);
+	margin-right: 10px;
+	vertical-align: middle;
 }
 
 /* Empty, the live region leaves the layout but stays in the accessibility tree, so its first message is announced. */
