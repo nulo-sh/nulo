@@ -151,9 +151,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// successful, or removed if the tx dropped/reverted — so the local revocation index
 		// never claims a grant that never landed. Best-effort + idempotent: a failed pass is
 		// retried on the next tx update (or by sync). See implementations-plan/archive/network-e2e-required/plan.md#pending-authwits.
-		this.transactionService.onTransactionUpdated.add((tx) => {
-			void this.reconcileFromTx(tx).catch(() => {})
-		})
+		this.transactionService.onTransactionUpdated.add((tx) => this.reconcileFromTx(tx).catch(() => {}))
 		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 	}
 
