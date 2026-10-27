@@ -29,8 +29,8 @@ const CALLS: Record<string, [number, number]> = {
 
 /** [compact, plain]: plain has no fourth argument, compact passes exactly `{ compact: true }`. */
 function kinds(text: string, file = "inline.ts"): [number, number] {
-	// A file holds a call only if it spells the name, or a template hides a letter behind a `&#`
-	// reference, which the compiler decodes.
+	// A file holds a call only if it spells the name, or a template hides one of its letters behind
+	// a `&#` reference (no named reference decodes to one).
 	if (!text.includes("balanceFormatted") && !text.includes("&#")) return [0, 0]
 	let compact = 0
 	let plain = 0

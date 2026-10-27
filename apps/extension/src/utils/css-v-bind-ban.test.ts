@@ -38,10 +38,11 @@ type Reviewed = Finding & { why: string }
 const REVIEWED: Reviewed[] = []
 
 function scan(file: string, source: string): Finding[] {
-	// A file holds a finding only if it spells `useCssVars` or `v-bind`, or a template hides a letter
-	// behind a `&#` reference, which the compiler decodes.
-	if (!["useCssVars", "v-bind", "&#"].some((word) => source.includes(word))) return []
-	const calls = callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" }))
+	// Only a file spelling `useCssVars`, or a template hiding one of its letters behind a `&#`
+	// reference (no named reference decodes to one), can call it. Styles get no such check: Vue
+	// reads `v-/**/bind` as a `v-bind`.
+	const mayCall = source.includes("useCssVars") || source.includes("&#")
+	const calls = mayCall ? callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" })) : []
 	if (!file.endsWith(".vue")) return calls
 	const vars = parse(source, { filename: file, sourceMap: false }).descriptor.cssVars
 	return [...vars.map((expression) => ({ file, text: `v-bind(${expression})` })), ...calls]
@@ -85,6 +86,12 @@ describe("css vars ban (static)", () => {
 			"a v-bind in a style",
 			"x.vue",
 			"<template><span /></template><style module>.e { &:hover { color: v-bind(x); } }</style>",
+			["v-bind(x)"],
+		],
+		[
+			"a v-bind a CSS comment splits",
+			"x.vue",
+			"<template><span /></template><style>.e { color: v-/**/bind(x); }</style>",
 			["v-bind(x)"],
 		],
 		["a hand-written call in a component", "x.vue", "<script setup>useCssVars(() => ({ x: 1 }))</script>", ["useCssVars(…)"]],
