@@ -19,6 +19,19 @@ other reasons. This plan restates the reason as policy, with its source and the 
 the plans standard's PR-title cap from 93 to 92 characters. Docs and one test-file comment only. Over the light target
 (150 lines) by the review records.
 
+## Outcome
+
+- **Date:** 2026-10-27. Planned, audited and implemented in one session.
+- **Status:** completed, delivered as #1273 (one arc, into `dev`); its merge closes #1267 and archives this plan.
+- **Shipped:** the manual bumps stated as policy in SECURITY.md (source, read date, two untested points), CLAUDE.md
+  and the `dependabot.test.ts` header; the plans standard's title cap at 92 (`cde95ac1e`); review fixes (`fd2c13d8f`).
+- **Dropped or rejected:** the issue's fork test (the lane forbids it; D1); a CLAUDE.md § Branching edit (already 92;
+  D4); moving SECURITY.md's misplaced paragraphs (D6, filed as #1274). No `lessons.md` line: nothing generalizes
+  beyond the docs this PR fixed.
+- **Known limits:** none.
+- **Open items:** #1274.
+- **Seeds retired:** the `/goal` below is a record, not an instruction.
+
 ## Outcome & Quality Bar
 
 - **For whom**: a maintainer or an agent who reads § Dependency policy before a dependency change, or the plans
@@ -154,7 +167,7 @@ them. Accepted as D6 (E1 names them by title; E2 claims less); the move itself i
 301: canonical URL taken. 3. A 123-character comment line: re-wrapped. 4. "the text `bun.lock`" read as a literal:
 "text-format". Fixes in `fd2c13d8f`. Codex round 2 (resumed): `clean`; it backs D6 (an independent defect, not needed here).
 
-## Seeds
+## Seeds (retired)
 
 Not run (orchestrator-owned). `/goal`: phase 1 ✓ with its gate pasted; the Codex loop converged; the PR into `dev`
 open with `Closes #1267` and the close-out on it; `bun run test:ci-gating` and `bun run lint` exit 0.
