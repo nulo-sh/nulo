@@ -16,15 +16,19 @@ function element() {
 const busy = (v: SignupView) => v.button.getAttribute("aria-disabled") === "true"
 
 function view() {
-	const button = element()
+	const form = element()
+	const button = Object.assign(element(), { textContent: "Notify me" as string | null })
+	button.setAttribute("data-label-ok", "On the list")
+	button.setAttribute("data-label-retry", "Try again")
 	const field = element()
 	const v = {
+		form,
 		button,
 		field,
 		status: { textContent: "" as string | null, dataset: {} as DOMStringMap },
 		body: () => new URLSearchParams({ email: "someone@example.com", website: "" }),
 	} satisfies SignupView
-	return { v, attributes: field.attributes }
+	return { v, attributes: field.attributes, form: form.attributes, button }
 }
 
 function fakeFetch(answer: () => Promise<Response>, v: SignupView) {
@@ -49,11 +53,42 @@ describe("submitSignup", () => {
 		expect(new Headers(call.init.headers).get("accept")).toBe("application/json")
 		expect(String(call.init.body)).toBe("email=someone%40example.com&website=")
 		expect(call.disabledInFlight).toBe(true)
-		expect(busy(v)).toBe(false)
 		// A stalled connection ends in the retry error instead of a button held disabled.
 		expect(call.init.signal).toBeInstanceOf(AbortSignal)
 		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.subscribed)
 		expect(v.status.dataset.state).toBe("ok")
+	})
+
+	it("answers success in place: the form reads ok, the button says On the list and stays locked, the field keeps the address", async () => {
+		const { v, form, button, attributes } = view()
+		await submitSignup(v, "/api/subscribe", fakeFetch(async () => Response.json({ ok: true }), v).fetchImpl)
+		expect(form.get("data-state")).toBe("ok")
+		expect(button.textContent).toBe("On the list")
+		expect(busy(v)).toBe(true)
+		expect(attributes.has("readonly")).toBe(true)
+		// A second press changes nothing: no request, same answer.
+		const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), v)
+		await submitSignup(v, "/api/subscribe", fetchImpl)
+		expect(calls).toHaveLength(0)
+		expect(button.textContent).toBe("On the list")
+	})
+
+	it("answers a failure in place: the form reads error and the button offers Try again, then reads Notify me again while a retry is in flight", async () => {
+		const { v, form, button } = view()
+		await submitSignup(v, "/api/subscribe", fakeFetch(async () => new Response(null, { status: 503 }), v).fetchImpl)
+		expect(form.get("data-state")).toBe("error")
+		expect(button.textContent).toBe("Try again")
+		expect(busy(v)).toBe(false)
+		let labelInFlight: string | null = null
+		let stateInFlight: string | undefined = "unset"
+		await submitSignup(v, "/api/subscribe", async () => {
+			labelInFlight = button.textContent
+			stateInFlight = form.get("data-state")
+			return Response.json({ ok: true })
+		})
+		expect(labelInFlight).toBe("Notify me")
+		expect(stateInFlight).toBeUndefined()
+		expect(form.get("data-state")).toBe("ok")
 	})
 
 	it("shows the address error on a 400 and marks the field invalid until the next try", async () => {
@@ -92,7 +127,7 @@ describe("submitSignup", () => {
 		const first = submitSignup(v, "/api/subscribe", fetchImpl)
 		await submitSignup(v, "/api/subscribe", fetchImpl)
 		expect(calls).toHaveLength(1)
-		resolve(Response.json({ ok: true }))
+		resolve(new Response(null, { status: 503 }))
 		await first
 		expect(busy(v)).toBe(false)
 	})
