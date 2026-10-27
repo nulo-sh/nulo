@@ -1,7 +1,7 @@
 ---
 plan: log-levels-1
 tier: light (the orchestrator's call; Opus Plan leg added)
-status: planned; final Codex pass approved
+status: approved; arc 1 delivered for review, arcs 2-3 pending
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -134,6 +134,7 @@ Round 1, run in parallel on the draft. Every finding was checked against the tre
 - **Codex** (gpt-6.1-sol, high): reject. (1) D5's `Promise.all` publishes a core failure before a lock's supersede (reproduced in a scratch run, see the arc 2 bullet). (2) `exportPlain` flattens the typed refusals (`service.ts:2126`). (3) `PasskeyUnconfirmedError` wraps any cause, so demoting it hides real failures. (4) D2 op-wide is broader than the evidence: narrowed to `getSyncedBlockHeader`. (5) The #1216 diagnostic must not change rejected values. (6) A wrong citation (`session-manager.ts:359`).
 - **Opus** (Plan): conditional approve, on the same (1) to (3) and (5) to (6), plus: the arc 2 gate (20 runs) cannot prove a 5% flake gone, and the smoke runs need the armed build (both fixed in 2.3 and the gates); the generation fence (`service.ts:888,893`) logs a delete's refusal at error too (folded into `StoreErasedError`); the gas reader logs a bare error. Opus held D2 op-wide as equivalent in practice (`autoSync` makes the text reach only `getSyncedBlockHeader`); the narrower match costs nothing and was kept.
 - Round 2, Codex resumed on the revised plan: `VERDICT: approve` (no remaining material defect).
+- Arc 1 review loop (on `4c5c67f2f..HEAD`). Round 1: Codex (fresh session, gpt-6.1-sol, high) found one comment error (the not-synced callers fall back or defer; they do not both answer from elsewhere); Opus (diff review) found `StoreErasedError` splitting the coordinator's doc from its class (also caught in self-review), a gas comment that named too few session changes, a vacuous chaos-model assertion, a stale fixture id, and asked that the erased-store debug line carry the error. All accepted, fixed in `056881d8a`. Round 2 (Codex resumed): `VERDICT: clean`.
 - Both: D1, D3, D4 and D7's typed errors sound; no fix adds state, a lifecycle, a protocol, a recovery policy or a public contract.
 
 ## Seeds (not run; orchestrator-owned)
