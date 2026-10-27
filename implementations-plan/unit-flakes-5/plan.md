@@ -10,6 +10,21 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev at 17f35c504dacfadf49e4291c496054252b5594b2
 ---
 
+## Outcome
+
+- Date: 2026-10-27.
+- Status: completed, delivered in PR #1280 (awaiting the merge). The four files ran 30/30 at retry 0 on the final head, as on the base; each of the 23 mutations went red on named cases; each guard's whole-tree findings are byte-identical to the base guards'.
+- Shipped: PR #1280.
+  - stored-shapes, useLogFilters, copy-dash and type-role check a file's text for a substring every finding needs before they parse it; useLogFilters also memoises `constantValue`.
+  - The tests' maxima over 30 runs fall from 1.3 to 3.4 s to 0.4 to 1.9 s, their medians from 0.7 to 1.7 s to 0.26 to 0.96 s.
+- Left as they are: icon-names and log-payload-ban (D4); the deep-nesting pair (D5).
+- Superseded in review: type-role's first trigger was one regex with a backslash alternative. Every pick regex holds `\s`, so D3 could never fail on one. Round 1 caught it, and the names now stand apart from the escape.
+- Did not hold: #1270's "`type-role-ban` and `log-payload-ban` have no such condition" ([`recon.md`](recon.md) § Issue claims checked).
+- Lessons: none promoted. `lessons.md` holds 8183 of its 8192 bytes and nothing there is superseded. The two candidates are agent-harness gotchas, kept in [`lessons/phase-0.md`](lessons/phase-0.md) and [`lessons/phase-1.md`](lessons/phase-1.md): a tool input decodes backslash-u escapes, and zsh's `path=` rewrites `PATH`.
+- Known limits: #1279.
+- Open items: none. A1, closing #1270 while four tests keep their cost, is the orchestrator's call before the merge.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
+
 # unit-flakes-5: whole-tree unit tests near the 5 s default
 
 #1270 names nine extension unit tests that run 0.5 to 2.4 s at load 73 to 123 on this host, which gives 2.3 to 10.7 s at #1112's 4.5× load factor. This plan measures each one (`recon.md` § Measurements) and decides one by one. Four guards stop parsing files that provably cannot hold a finding, and one of them also stops rescanning the tree for every constant. Four tests stay as they are, for the reasons in D4 and D5. No budget is raised, no assertion is loosened, and only test files change.
