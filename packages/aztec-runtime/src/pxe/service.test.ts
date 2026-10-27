@@ -446,7 +446,7 @@ describe("PxeService op-failure log classification", () => {
 		expect(calls.some((c) => c[1] === LogLevel.Debug && String(c[2]).includes("pre-provision miss"))).toBe(true)
 	})
 
-	test("a fresh PXE's not-synced refusal of getSyncedBlockHeader logs at DEBUG: both callers answer from elsewhere", async () => {
+	test("a fresh PXE's not-synced refusal of getSyncedBlockHeader logs at DEBUG: its callers fall back or defer", async () => {
 		const factory: PxeFactory = {
 			createChainRuntime: async (n) => {
 				const pxe = {

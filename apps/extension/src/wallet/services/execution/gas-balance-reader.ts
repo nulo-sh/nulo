@@ -219,9 +219,9 @@ export class GasBalanceReader {
 	/** Run a leg; on a THROW, wait out the boot window and re-read once.
 	 *  First failure logs at debug (the retry usually recovers it); only a
 	 *  failed retry earns the error-level log the old single-shot always paid.
-	 *  An eviction since the compute began (a lock, a delete or a switch) makes
-	 *  the read moot: no retry, which would read under the next session, and a
-	 *  retry it overtakes fails at debug. */
+	 *  An eviction since the compute began (any session open or close: a lock,
+	 *  a delete, a switch, a re-open) makes the read moot: no retry, which would
+	 *  read under the next session, and a retry it overtakes fails at debug. */
 	private async legWithRetry(
 		label: "public" | "private",
 		read: () => Promise<string | null>,

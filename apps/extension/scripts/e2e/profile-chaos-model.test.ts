@@ -952,7 +952,9 @@ describe("O4, errors", () => {
 			source: "execution",
 			text: '["Failed to get public FeeJuice balance",{"error":{"name":"Error","message":"Profile locked"}}]',
 		}
-		expect(shown("O4 a fixed finding's line", checkErrors([gasRetry], []).violations)[0]?.known).toBeUndefined()
+		const [refired] = shown("O4 a fixed finding's line", checkErrors([gasRetry], []).violations)
+		expect(refired?.oracle).toBe("O4")
+		expect(refired?.known).toBeUndefined()
 		const disconnect = {
 			kind: "log" as const,
 			level: "error" as const,
@@ -1036,7 +1038,7 @@ describe("bindings", () => {
 })
 
 describe("the run's verdict", () => {
-	const known: Violation = { oracle: "O4", message: "error log from execution: unclassified", known: 1131 }
+	const known: Violation = { oracle: "O4", message: "error log from ui: unclassified", known: 1132 }
 	const fresh: Violation = { oracle: "O1", message: "locked, but the service reports p active" }
 	const step = (r: Partial<StepOutcome> = {}): StepOutcome => ({ violations: [], incomplete: [], ...r })
 

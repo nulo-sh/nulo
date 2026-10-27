@@ -1,3 +1,9 @@
+/** An op whose captured store a chain purge or a profile erase ended while it ran: the op's
+ *  result is moot, as its caller's context went with the store. */
+export class StoreErasedError extends Error {
+	public readonly isStoreErased = true as const
+}
+
 /**
  * The per-chain purge-epoch fence, extracted from `PxeService`'s
  * god-class. Owns the epoch counter and the fence operations that were
@@ -15,12 +21,6 @@
  * {@link assertUnchanged} throws); a new op after the purge sees the new epoch
  * at entry and may legitimately re-create.
  */
-/** An op whose captured store a chain purge or a profile erase ended while it ran: the op's
- *  result is moot, as its caller's context went with the store. */
-export class StoreErasedError extends Error {
-	public readonly isStoreErased = true as const
-}
-
 export class PxeLifecycleCoordinator {
 	readonly #epochs = new Map<string, number>()
 
