@@ -38,7 +38,7 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 **Facts** (at the base):
 - F1. The shell holds the sheet's verdict in `legalSheetShown` (`app.vue:120`): undefined until the first verdict, and again on unmount. The wrapper already exposes e2e state attributes (`app.vue:607-610`).
 - F2. `answerUpdatedTerms` has four call sites in three files (recon.md); each is followed by `answerArrival`. Every one but the chaos run's reaches Home by an in-app navigation; the chaos run calls it on whatever settled route its last step left (`profile-chaos/run.ts:488-493`).
-- F3. The sheet's status starts `loading` (no verdict). If its read lands before the router's first navigation ends, the sheet judges the start location, whose meta is empty, and the verdict is `false` (`legal-sheet.ts:27`). An in-app navigation finalizes the hash and `currentRoute` in one task (vue-router 5.2.0), and Vue patches the DOM in a microtask, before any later page evaluation; after a reload into a preset hash nothing says the first navigation has ended.
+- F3. The sheet's status starts `loading` (no verdict). If its read lands before the router's first navigation ends, the sheet judges the start location, whose meta is empty, and the verdict is `false` (`legal-sheet.ts:27`). An in-app navigation finalizes the hash and `currentRoute` in one task (vue-router 5.2.0), and Vue patches the DOM in a microtask, before any later page evaluation; after a reload into a preset hash nothing says the first navigation has ended. Traced in Phase 1, both browsers: such a reload lands first on `#/popup/auth` (the guard's answer before the session is checked, `auth-guard.ts`), where the verdict is `hidden`, and reaches the hash's page about 70-280 ms later.
 - F4. `expectFitsNarrow` (`fixtures/type-roles.ts:755-777`) already waits out a self-closing success snack before the record pass; 12 spec files reach it.
 - F5. `readPending` (`FeeSettingsCard.vue:207`) is exactly "this card's read is in flight". With a saved pick the trigger shows the pick and no Checking, while the "Available" row stays until the read ends (`:203`, `:415-419`). `fee-settings-card` already carries state attributes (`data-origin`, `data-sponsor-funding`).
 - F6. Firefox's Remote Agent dismisses a picker through a factory whose `open` calls `done(returnCancel)` at once (`FilePickerHandler.sys.mjs`). 153 arms it by the pref above, when the session starts BiDi; 158 arms it by `unhandledPromptBehavior` with `file` set to anything but `ignore`. `returnCancel` fires the input's `cancel`, which `pickFile` handles (`src/utils/files.ts:116-123`). Firefox asks for a picker only on a click that carries user activation.
@@ -58,10 +58,10 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 ## Architecture & Implementation
 
 **Arc 1 change map.**
-1. `apps/extension/src/popup/app.vue`: the wrapper gets `data-testid="popup-shell"` and `:data-legal-sheet="legalSheetShown === undefined ? undefined : legalSheetShown ? 'shown' : 'hidden'"`.
-2. `tests/e2e/helpers/legal-drivers.ts`: `legalSheetVerdict(page)` waits for `popup-shell` to carry `data-legal-sheet` (15 s) and returns it. Its TSDoc says the verdict is for the route the page has settled on. `answerUpdatedTerms` refuses `missing` first, before any page call, with its own error. `current` waits for the verdict, throws when it is `shown`, and then still asserts that no `legal-sheet` is in the page. `stale` is unchanged.
-3. `tests/e2e/legal-acceptance.test.ts` S7: after its record check, reload, wait for `home-hero`, and `answerUpdatedTerms(page, { [LEGAL_ACCEPTANCE_KEY]: record })` resolves. Then `reloadWithLegalState(page, "stale")`, wait for `home-hero`, and the same call rejects with "raised the Terms sheet": the success control.
-4. `apps/extension/scripts/e2e/legal-drivers.test.ts` (new): no record, and a malformed one, each reject with the refusal, and the page stub is never touched.
+1. `apps/extension/src/popup/app.vue`: the wrapper gets `data-testid="popup-shell"` and `:data-legal-sheet`, the verdict as `shown` or `hidden`, marked only while `legalSheetShown` holds one and the route's meta has `isAuthRequired` (D1, amended in Phase 1).
+2. `tests/e2e/helpers/legal-drivers.ts`: `legalSheetVerdict(page)` waits for `popup-shell` to carry `data-legal-sheet` (15 s) and returns it. Its TSDoc says the shell marks no verdict on the start location or the lock screen, which a reload passes through. `answerUpdatedTerms` refuses `missing` first, before any page call, with its own error. `current` waits for the verdict, throws when it is `shown`, and then still asserts that no `legal-sheet` is in the page. `stale` is unchanged.
+3. `tests/e2e/legal-acceptance.test.ts` S7: after its banner check, `reloadWithLegalState(page, "current")`, and `answerUpdatedTerms(page, { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") })` resolves. Then `reloadWithLegalState(page, "stale")`, and the same call rejects with "raised the Terms sheet": the success control. Neither waits for Home, so the control proves the marker skips the reload's transient routes.
+4. `tests/e2e/fixtures/legal.ts` gains `updatedTermsAnswer(entries)`, the pure decision the helper branches on; `apps/extension/scripts/e2e/updated-terms.test.ts` (new) refuses no record and a malformed one, and answers `none` over `current` and `changed` over `stale`. It tests the fixture, not the helper: importing `helpers/legal-drivers` pulls the e2e fixture graph into `tsconfig.scripts.json`, which fails typecheck.
 5. `FeeSettingsCard.vue`: `:data-read-pending="readPending || undefined"`. `fixtures/type-roles.ts` `expectFitsNarrow`: after the snack wait, wait until no `fee-settings-card` carries it, with a one-line why. The bound comes from Phase 2's measurement.
 6. Only if Phase 3 shows I1 and I2: `fixtures/browser/firefox.ts` `capabilities()` always adds the dismissal pref, in its own named const beside `permissionRequestPrefs` and out of `FIREFOX_LAUNCH_PREFS`; `scripts/e2e/firefox-driver.test.ts` pins both facts; `toolbar-panel.test.ts`'s comment and FIREFOX.md's panel row say that the session dismisses the picker.
 
@@ -78,7 +78,7 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 
 ### Decision ledger
 
-- **D1** (#1123) A shell attribute, found through a shell testid, is the verdict marker. Its TSDoc limits it to a settled route (F3), and S7 waits for Home. Rejected: a delay (a time bound); the worker's status (not the popup's read); the arrival (absent for sealing releases); withholding the sheet's verdict until the router is ready (a product logic change for a test).
+- **D1** (#1123) A shell attribute, found through a shell testid, is the verdict marker. Its TSDoc limits it to a settled route (F3), and S7 waits for Home. **Amended in Phase 1:** a settled route is not enough, since the lock screen is one (F3's trace), and a wait for Home breaks the chaos run, whose steps can end on Settings (`profile-chaos/ui.ts:298`). The shell marks the verdict only on a route whose meta has `isAuthRequired`, the only routes where it turns on the acceptance, and S7 drops its Home waits. The sheet's own logic is untouched. Rejected: a delay (a time bound); the worker's status (not the popup's read); the arrival (absent for sealing releases); withholding the sheet's verdict until the router is ready (a product logic change for a test).
 - **D2** (#1123) The `current` branch is proven in S7's tail, with a stale reload as its success control. Rejected: waiting for the v1.1.0 recording (A1).
 - **D3** (#1210) `data-read-pending` on the fee card, waited out in `expectFitsNarrow` beside the snack wait. Rejected: Checking's absence (false with a saved pick, F5); a generic `aria-busy` wait (`TokenCard`, holdings and the takeover hold it for spans nobody measured); a wait in the Send case (the other sweeps stay exposed); ignoring detached elements at compare (hides a real width fate); `aria-busy` on the card (an a11y change made for a test).
 - **D4** (#1222) If Phase 3 shows a material difference, the session dismisses pickers. Rejected, by the panel rule: a longer bound; skipping the cancel half on a timeout. The cancel still proves activation, because no picker is asked for without it. An inconclusive Phase 3 ships nothing: #1222 gets a comment with the numbers and stays open.
@@ -91,15 +91,15 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **UI impact:** none. `app.vue` and `FeeSettingsCard.vue` gain attributes and nothing visible; arc 2 changes no product file.
 
-## Phase 1: the Terms answer (#1123)
+## Phase 1: the Terms answer (#1123) ✓
 
 **Assumptions:** F1-F3.
-1. `gh stack init --adopt worktree-e2e-infra-3`. Make change-map items 1 to 4. Commit.
+1. `gh stack init --adopt worktree-e2e-infra-3`. Make change-map items 1 to 4. Commit. (gh-stack 0.3.0 has no `--adopt`; `gh stack init --base dev worktree-e2e-infra-3` adopts the existing branch.)
 2. Build the smoke extension for each browser, with FIREFOX.md's flags (`build:chrome`, `build:firefox`).
 3. Red proof (scratch): restore the old `current` branch in the helper, run S7 five times per browser, and count how often the control resolves when it should reject. Restore the new helper.
 
 **Validation gate** (lint, typecheck, unit, smoke e2e on both browsers):
-- `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/legal-drivers.test.ts`: each exits 0, with 2 tests.
+- `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/updated-terms.test.ts`: each exits 0, with 3 tests.
 - `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/legal-acceptance.test.ts --retry=0`, then the same under `NULO_E2E_BROWSER=firefox`: green, with S7's duration recorded.
 
 ## Phase 2: the fee read before the 240 px record (#1210)
