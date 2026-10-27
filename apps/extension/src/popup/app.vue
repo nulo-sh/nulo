@@ -354,12 +354,13 @@ const checkSelection = () => {
 }
 provide("checkSelection", checkSelection)
 
-/** A deletion while locked closes no session, so no lock event lands the window; one of the open
- *  profile closes its session first, and the lock event lands it. A lock screen with no selection
- *  checks at every deletion: the one that leaves no profile sends it to register. */
 const onProfileDeleted = (profile) => {
-	if (appStore.isLogined) return
-	if (appStore.profile ? profile?.id === appStore.profile.id : route.name === "popup-auth") void checkSelection()
+	const seq = profileEventSeq
+	void lockedState.onProfileDeleted(
+		profile?.id,
+		() => managers.profile.getProfiles(),
+		() => seq === profileEventSeq,
+	)
 }
 
 /** The profile unlocked in RECOVERY MODE: its imported-keys DEK (or the envelope MAC over it)

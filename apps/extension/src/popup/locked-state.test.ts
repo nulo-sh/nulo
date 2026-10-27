@@ -172,6 +172,44 @@ describe("the lock event", () => {
 		expect([gone.store.selected, gone.routes]).toEqual([p3, ["/popup/auth"]])
 	})
 
+	test("past the last-active wait, a list read again and a page or selection the window moved to meanwhile decide", async () => {
+		const second = deferred<string | undefined>()
+		const s = shell([p1, p2, p3], { readLastActiveId: () => second.promise })
+		const lists = [[p2, p3], [p3]]
+		const done = s.onLockEvent(
+			async () => lists.shift() ?? [],
+			() => true,
+		)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		second.resolve("p2")
+		await done
+		expect([s.store.selected, s.store.profiles, s.routes]).toEqual([p3, [p3], ["/popup/auth"]])
+
+		const moved = deferred<string | undefined>()
+		const toImport = shell([p1, p2], { readLastActiveId: () => moved.promise })
+		const pending = toImport.onLockEvent(
+			async () => [p2],
+			() => true,
+		)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		toImport.store.routeName = "popup-import"
+		moved.resolve(undefined)
+		await pending
+		expect([toImport.store.selected, toImport.routes]).toEqual([p2, []])
+
+		const picked = deferred<string | undefined>()
+		const choosing = shell([p1, p2, p3], { readLastActiveId: () => picked.promise })
+		const held = choosing.onLockEvent(
+			async () => [p2, p3],
+			() => true,
+		)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		choosing.store.selected = p3
+		picked.resolve("p2")
+		await held
+		expect([choosing.store.selected, choosing.routes]).toEqual([p3, []])
+	})
+
 	test("a rejected lookup lands on the cached list", async () => {
 		const s = shell()
 		const lookup = deferred<{ id: string }[]>()
@@ -273,6 +311,67 @@ describe("a list that no longer holds the selected profile", () => {
 			),
 		).toBe("followed")
 		expect(s.routes).toEqual(["/popup/register"])
+	})
+
+	test("with no selection, a list that still holds profiles leaves the window and its chooser as they are", async () => {
+		const s = lockedShell([p2, p3])
+		s.store.selected = undefined
+		expect(
+			await s.checkSelection(
+				async () => [p2],
+				() => true,
+			),
+		).toBe("present")
+		expect([s.store.profiles, s.routes, s.store.popups]).toEqual([[p2, p3], [], 1])
+	})
+
+	test("the selection's deletion drops its sheets before any read answers, whoever lands the window", async () => {
+		const s = lockedShell([p1, p2], { routeName: "popup-settings-security-reset" })
+		const read = deferred<{ id: string }[]>()
+		const check = s.onProfileDeleted(
+			"p1",
+			() => read.promise,
+			() => true,
+		)
+		expect(s.store.popups).toBe(0)
+		s.store.selected = p2
+		read.resolve([p2])
+		expect(await check).toBe("superseded")
+
+		const free = lockedShell([p1, p2], { routeName: "popup-import" })
+		await free.onProfileDeleted(
+			"p1",
+			async () => [p2],
+			() => true,
+		)
+		expect([free.store.popups, free.store.selected]).toEqual([1, p2])
+	})
+
+	test("a deletion of another profile, any deletion while unlocked, and one off the lock screen with no selection check nothing", async () => {
+		let reads = 0
+		const read = async () => {
+			reads++
+			return [p2]
+		}
+		const other = lockedShell([p1, p2, p3])
+		expect(other.onProfileDeleted("p3", read, () => true)).toBeUndefined()
+		const unlocked = shell([p1, p2])
+		expect(unlocked.onProfileDeleted("p1", read, () => true)).toBeUndefined()
+		const register = lockedShell([p2], { routeName: "popup-register" })
+		register.store.selected = undefined
+		expect(register.onProfileDeleted("p2", read, () => true)).toBeUndefined()
+		expect([reads, other.store.popups, unlocked.store.popups]).toEqual([0, 1, 1])
+
+		const lockScreen = lockedShell([p2])
+		lockScreen.store.selected = undefined
+		expect(
+			await lockScreen.onProfileDeleted(
+				"p2",
+				async () => [],
+				() => true,
+			),
+		).toBe("followed")
+		expect(lockScreen.routes).toEqual(["/popup/register"])
 	})
 
 	test("on a page that needs no profile, the check changes the selection and nothing else", async () => {

@@ -57,6 +57,17 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		shell.route(profiles.length ? "/popup/auth" : "/popup/register")
 		if (choose) shell.openChooser()
 	}
+	/** Lands a window whose selection is gone. A page that needs no profile only changes the
+	 *  selection, as its flow owns the window; any other drops its sheets and lands as a lock does. */
+	const follow = (profiles: P[], lastActiveId: string | undefined) => {
+		if (PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) {
+			shell.setProfiles(profiles)
+			reselect(profiles, lastActiveId)
+			return
+		}
+		shell.closePopups()
+		land(profiles, lastActiveId)
+	}
 
 	/** Entered where the lock is already known and nothing is left to read. */
 	const enter = (profiles: P[]) => {
@@ -72,7 +83,7 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 	const onLockEvent = async (readProfiles: () => Promise<P[]>, isCurrent: () => boolean) => {
 		seal()
 		// Started with the list but awaited only when the selection is gone: a storage read can queue
-		// behind a purge's writes, and a landing that late moves a window its person already moved.
+		// behind a purge's writes, and a landing that needs no pick never waits for it.
 		const lastActiveId = shell.readLastActiveId().catch(() => undefined)
 		let profiles = shell.cachedProfiles()
 		try {
@@ -80,9 +91,17 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		} catch {}
 		if (!isCurrent()) return
 		const selected = shell.selectedId()
-		const picks = selected !== undefined && profiles.length > 0 && !profiles.some((p) => p.id === selected)
-		const pick = picks ? await lastActiveId : undefined
-		if (isCurrent()) land(profiles, pick)
+		if (selected === undefined || !profiles.length || profiles.some((p) => p.id === selected)) {
+			land(profiles)
+			return
+		}
+		// Past the wait the list is read again, as another profile may have gone meanwhile, and a
+		// selection or a page the window moved to meanwhile stands.
+		const pick = await lastActiveId
+		try {
+			profiles = await readProfiles()
+		} catch {}
+		if (isCurrent() && shell.selectedId() === selected) follow(profiles, pick)
 	}
 
 	/**
@@ -101,15 +120,24 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 			return "unread"
 		}
 		if (!isCurrent() || shell.openProfileId() !== undefined || shell.selectedId() !== selected) return "superseded"
-		if (selected !== undefined && profiles.some((p) => p.id === selected)) return "present"
-		if (PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) {
-			shell.setProfiles(profiles)
-			reselect(profiles, lastActiveId)
-		} else {
-			shell.closePopups()
-			land(profiles, lastActiveId)
-		}
+		// With no selection, only an empty list leaves the window something to follow.
+		if (selected === undefined ? profiles.length > 0 : profiles.some((p) => p.id === selected)) return "present"
+		follow(profiles, lastActiveId)
 		return "followed"
+	}
+
+	/**
+	 * A deletion while locked closes no session, so no lock event lands the window; one of the open
+	 * profile closes its session first, and the lock event lands it. The deletion of the selection
+	 * drops its sheets at once, whichever follower lands the window, and checks; a lock screen with no
+	 * selection checks at every deletion, as the one that leaves no profile sends it to register.
+	 */
+	const onProfileDeleted = (deletedId: string | undefined, readProfiles: () => Promise<P[]>, isCurrent: () => boolean) => {
+		if (shell.openProfileId() !== undefined) return
+		const selected = shell.selectedId()
+		if (selected === undefined ? shell.routeName() !== "popup-auth" : deletedId !== selected) return
+		if (selected !== undefined && !PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) shell.closePopups()
+		return checkSelection(readProfiles, isCurrent)
 	}
 
 	/** A session opened without a lock before it (a password change re-opens one). An import fenced to
@@ -123,7 +151,7 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		shell.closePopups()
 	}
 
-	return { enter, onLockEvent, checkSelection, onSessionOpened }
+	return { enter, onLockEvent, checkSelection, onProfileDeleted, onSessionOpened }
 }
 
 /** A lock control (the header chip or Lock now) marks the popup locked before the worker answers its
