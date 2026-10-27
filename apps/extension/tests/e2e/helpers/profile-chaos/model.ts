@@ -290,7 +290,7 @@ const FILE_PASSWORD_BLOCKED = cite(EXPORT, 360, "if (filePasswordBlocked(ctx)) r
 const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 677, "public async exportAccount(")
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 761, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 832, "This account is already in your wallet")
-const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 308, 'data-testid="import-account-held"')
+const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 309, 'data-testid="import-account-held"')
 const BACKUP_UNREADABLE = cite(IMPORT, 656, "DECRYPTION_FAILED.title")
 const BACKUP_INTEGRITY = cite(IMPORT, 173, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
 const BACKUP_UNPARSED = cite(IMPORT, 601, "parseError.title, parseError.tooltip")
