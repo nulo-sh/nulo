@@ -8,11 +8,13 @@
 // biome-ignore lint: disable
 export {}
 declare global {
+  const ACCOUNT_FILE_NOT_BACKUP: typeof import('../composables/useFullBackupImport').ACCOUNT_FILE_NOT_BACKUP
   const ACTIVITY_FEED_KINDS: typeof import('../utils/journal-state').ACTIVITY_FEED_KINDS
   const ADDED_COALESCE: typeof import('../utils/coalesce').ADDED_COALESCE
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
+  const AccountFileNotBackupError: typeof import('../utils/full-backup-helpers').AccountFileNotBackupError
   const ActivationSupersededError: typeof import('../composables/unlockWait').ActivationSupersededError
   const AssemblyAbortedError: typeof import('../utils/full-backup-helpers').AssemblyAbortedError
   const BALANCE_DECIMALS: typeof import('../utils/fee-estimation').BALANCE_DECIMALS
@@ -34,6 +36,7 @@ declare global {
   const FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').FEE_PICKS_ROOT
   const FEE_READOUT_UNIT: typeof import('../utils/fee-estimation').FEE_READOUT_UNIT
   const FIRST_PROFILE_NAME: typeof import('../utils/profile-name').FIRST_PROFILE_NAME
+  const FULL_BACKUP_TAG_FAMILY: typeof import('../utils/full-backup-helpers').FULL_BACKUP_TAG_FAMILY
   const FULL_BACKUP_V2_TAG: typeof import('../utils/full-backup-helpers').FULL_BACKUP_V2_TAG
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
   const FilePickCanceledError: typeof import('../utils/files').FilePickCanceledError
@@ -787,7 +790,7 @@ declare global {
   export type { FullBackupCtaSource } from '../utils/full-backup-ctas'
   import('../utils/full-backup-ctas')
   // @ts-ignore
-  export type { AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
+  export type { AccountFileNotBackupError, AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
   export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedStep, GetStartedView } from '../utils/get-started'
@@ -874,11 +877,13 @@ import { UnwrapRef } from 'vue'
 declare module 'vue' {
   interface GlobalComponents {}
   interface ComponentCustomProperties {
+    readonly ACCOUNT_FILE_NOT_BACKUP: UnwrapRef<typeof import('../composables/useFullBackupImport')['ACCOUNT_FILE_NOT_BACKUP']>
     readonly ACTIVITY_FEED_KINDS: UnwrapRef<typeof import('../utils/journal-state')['ACTIVITY_FEED_KINDS']>
     readonly ADDED_COALESCE: UnwrapRef<typeof import('../utils/coalesce')['ADDED_COALESCE']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
+    readonly AccountFileNotBackupError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AccountFileNotBackupError']>
     readonly ActivationSupersededError: UnwrapRef<typeof import('../composables/unlockWait')['ActivationSupersededError']>
     readonly AssemblyAbortedError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AssemblyAbortedError']>
     readonly BALANCE_DECIMALS: UnwrapRef<typeof import('../utils/fee-estimation')['BALANCE_DECIMALS']>
@@ -900,6 +905,7 @@ declare module 'vue' {
     readonly FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['FEE_PICKS_ROOT']>
     readonly FEE_READOUT_UNIT: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_READOUT_UNIT']>
     readonly FIRST_PROFILE_NAME: UnwrapRef<typeof import('../utils/profile-name')['FIRST_PROFILE_NAME']>
+    readonly FULL_BACKUP_TAG_FAMILY: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_TAG_FAMILY']>
     readonly FULL_BACKUP_V2_TAG: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_V2_TAG']>
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
     readonly FilePickCanceledError: UnwrapRef<typeof import('../utils/files')['FilePickCanceledError']>

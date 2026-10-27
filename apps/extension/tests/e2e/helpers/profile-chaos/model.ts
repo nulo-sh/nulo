@@ -277,22 +277,23 @@ const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
 const STRICT_TOGGLE = cite(SESSIONS, 769, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
 const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 197, ':title="strictRow.title"')
-const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 59, "setLastActiveProfileId(profile.id)")
-const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 210, "if (!appStore.profiles.length) {")
+const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 67, "setLastActiveProfileId(profile.id)")
+const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 248, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
 const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
-const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 287, "public async createAccount(")
+const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 299, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
 const FULL_EXPORT = cite(EXPORT, 369, "sealFullBackupText(plaintext as string, state.password.value as string)")
 const FILE_PASSWORD_RULE = cite(EXPORT, 502, "!isPasskeyProfile.value || isNewPasswordValid(")
 const FILE_PASSWORD_BLOCKED = cite(EXPORT, 360, "if (filePasswordBlocked(ctx)) return")
-const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 665, "public async exportAccount(")
-const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 749, "public async importAccount(")
-const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 820, "This account is already in your wallet")
-const BACKUP_UNREADABLE = cite(IMPORT, 644, "DECRYPTION_FAILED.title")
-const BACKUP_INTEGRITY = cite(IMPORT, 166, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
-const BACKUP_UNPARSED = cite(IMPORT, 594, "parseError.title, parseError.tooltip")
+const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 677, "public async exportAccount(")
+const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 761, "public async importAccount(")
+const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 832, "This account is already in your wallet")
+const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 309, 'data-testid="import-account-held"')
+const BACKUP_UNREADABLE = cite(IMPORT, 656, "DECRYPTION_FAILED.title")
+const BACKUP_INTEGRITY = cite(IMPORT, 173, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(IMPORT, 601, "parseError.title, parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
 	140,
@@ -303,7 +304,7 @@ const RESTORE_ROLLS_BACK = cite(
 	966,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
-const RESTORE_FINALIZES = cite(IMPORT, 501, "restoreRun = await finalizeWithReminder(")
+const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithReminder(")
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
@@ -319,17 +320,17 @@ const RETIRED_EXPORTS = cite(SERVICE, 529, 'if (classifyProfileRow(profile).kind
 const RETIRED_LISTED = cite(SERVICE, 2402, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1294, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_FINALIZE = cite(SERVICE, 2584, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 359, 'data-testid="auth-delete-retired"')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 377, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 142, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 155, "if (isMounted()) router.push(doneRoute(path.value))")
 const ONBOARDING_LATER = cite(ONBOARDING, 159, "router.push(doneRoute(path.value))")
-const EARLIER_AT_PICK = cite(IMPORT, 589, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_AT_DECRYPT = cite(IMPORT, 634, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
-const EARLIER_SHAPE = cite(IMPORT, 127, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
+const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
+const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
-const EARLIER_TITLE_SOURCE = cite(IMPORT, 115, `title: "${EARLIER_TITLE}"`)
+const EARLIER_TITLE_SOURCE = cite(IMPORT, 122, `title: "${EARLIER_TITLE}"`)
 
 /** The names a release gives the two profiles the `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const
@@ -434,7 +435,7 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
-const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 147, "handleImportProfile")
+const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 163, "handleImportProfile")
 
 /** An import that does not commit: a later profile is imported from the lock screen only, so the
  *  open session, if any, was locked on the way in. */
@@ -943,7 +944,7 @@ const importAccountFile: ActionSpec<"importAccountFile"> = {
 	expect: (w, p) => {
 		const file = w.files.find((f) => f.ref === p.file) as ModelFile
 		const target = openProfile(w) as ModelProfile
-		if (holdsAccount(w, target, file)) return unchanged(w, "refused", [ACCOUNT_DUPLICATE])
+		if (holdsAccount(w, target, file)) return unchanged(w, "refused", [ACCOUNT_HELD, ACCOUNT_DUPLICATE])
 		const next = clone(w)
 		;(openProfile(next) as ModelProfile).imported.push(file.ref)
 		return result(next, ["committed"], [{ kind: "profile", ref: target.ref }], "unchanged", [ACCOUNT_IMPORT])

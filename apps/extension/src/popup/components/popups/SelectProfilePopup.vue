@@ -4,6 +4,7 @@
 import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { isActivatingOtherThan } from "@/composables/useProfileBootstrap"
 
 /** Utils */
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
@@ -49,14 +50,21 @@ const handleSelectProfile = async (profile) => {
 		// call sites use (AccountsPopup, NewAccountPopup, …) instead of assigning
 		// `appStore.profile` directly, and persist the last-active id only once the
 		// switch is actually admitted.
+		let outcome = "picked"
 		const switched = await appStore.commitScopeChange(() => {
-			appStore.profile = profile
+			// The pick chooses what the lock screen unlocks. A session open or opening owns the
+			// selection: an activation sets it on entry and marks the window unlocked at its end. A
+			// profile deleted while the pick waited has left the list, and the chooser stays.
+			if (appStore.isLogined || isActivatingOtherThan(profile.id)) outcome = "unlocked"
+			else if (!profiles.value.some((p) => p.id === profile.id)) outcome = "gone"
+			else appStore.profile = profile
 		})
 		if (!switched) {
 			openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
 			return
 		}
-		await setLastActiveProfileId(profile.id)
+		if (outcome === "gone") return
+		if (outcome === "picked") await setLastActiveProfileId(profile.id)
 		emit("onClose")
 	} finally {
 		isSwitching.value = false
@@ -88,6 +96,14 @@ function onProfileDeleted(profile) {
 		profiles.value.splice(idx, 1)
 	}
 }
+
+// The chooser belongs to the lock screen; an unlock that lands while it is open, or as it opens, closes it.
+watch(
+	() => props.show && appStore.isLogined,
+	(stale) => {
+		if (stale) emit("onClose")
+	},
+)
 
 watch(
 	() => props.show,

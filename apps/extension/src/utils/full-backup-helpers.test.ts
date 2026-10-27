@@ -1,8 +1,11 @@
+import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
+import { buildAccountExport, encryptAccountExport } from "@nulo/aztec-runtime/account"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import { describe, expect, it, vi } from "vitest"
 import { IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
 import {
+	AccountFileNotBackupError,
 	AssemblyAbortedError,
 	assembleFullBackup,
 	type BackupSource,
@@ -166,6 +169,18 @@ describe("encrypted full-backup text", () => {
 		const accountExport = await frameText(PASSWORD, "nulo:account-export:v1")
 		await expect(openFullBackupText(accountExport, PASSWORD)).rejects.toThrow()
 		await expect(openFullBackupText(`${PREFIX}${accountExport}`, PASSWORD)).rejects.toThrow()
+	})
+
+	it("an account file opened with its own password is named one; under a wrong password it is not", async () => {
+		const accountFile = await encryptAccountExport(buildAccountExport(GrumpkinScalar.fromString("0x2a"), 31337, "0xabc"), PASSWORD)
+		expect(detectBackupType(accountFile)).toBe("encrypted")
+		await expect(openFullBackupText(accountFile, PASSWORD)).rejects.toBeInstanceOf(AccountFileNotBackupError)
+		const wrong = await openFullBackupText(accountFile, "wrong-pass").then(
+			() => null,
+			(err: unknown) => err,
+		)
+		expect(wrong).toBeInstanceOf(Error)
+		expect(wrong).not.toBeInstanceOf(AccountFileNotBackupError)
 	})
 
 	const frame29 = toBase64(new Uint8Array(29))

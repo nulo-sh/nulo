@@ -3,7 +3,8 @@
  * FIFO locks); only the service clients are fakes.
  */
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey } from "@nulo/wallet-crypto"
+import { toBase64 } from "@nulo/wallet-core/utils"
 import { isProxy, nextTick, reactive, ref } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
@@ -386,6 +387,29 @@ describe("useRestoreAgain: refusals change nothing", () => {
 		expect(opts.fillError).toHaveBeenCalledWith("full_backup", "Backup Integrity Check Failed", expect.any(String))
 		expect(page.restoreStatus.value).toBe("failed")
 		expect(accountStateClient.restore).not.toHaveBeenCalled()
+		expect(store.get(KEY)).toEqual(before)
+	})
+
+	test("an account file opened with its own password is refused as one, never as a wrong password", async () => {
+		const { page, opts } = await open()
+		const before = structuredClone(store.get(KEY))
+		const key = await EncryptionKey.fromPassword("right password")
+		const accountAad = new TextEncoder().encode(ACCOUNT_EXPORT_AAD_LABEL)
+		const sealed = toBase64(await key.encrypt(new TextEncoder().encode('{"format":"nulo-account-export"}'), accountAad))
+		page.selectedBackup.value = { name: "NuloEncryptedAccount_1.txt", backup: sealed, kind: "sealed", profileType: null }
+		page.decryptionPassword.value = "right password"
+
+		await page.decryptBackup()
+
+		expect(opts.fillError.mock.calls).toEqual([
+			["full_backup", "Not a Backup File", "This is an account file. Import it from Settings > Accounts > Import Account."],
+		])
+		expect(page.selectedBackup.value).toEqual({
+			kind: "unreadable",
+			name: "NuloEncryptedAccount_1.txt",
+			backup: null,
+			profileType: null,
+		})
 		expect(store.get(KEY)).toEqual(before)
 	})
 
