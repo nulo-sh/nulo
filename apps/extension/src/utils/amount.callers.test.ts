@@ -29,6 +29,9 @@ const CALLS: Record<string, [number, number]> = {
 
 /** [compact, plain]: plain has no fourth argument, compact passes exactly `{ compact: true }`. */
 function kinds(text: string, file = "inline.ts"): [number, number] {
+	// A file holds a call only if it spells the name, or a template hides one of its letters behind
+	// a `&#` reference (no named reference decodes to one).
+	if (!text.includes("balanceFormatted") && !text.includes("&#")) return [0, 0]
 	let compact = 0
 	let plain = 0
 	for (const { args } of callsTo(file, text, /\bbalanceFormatted$/)) {
@@ -59,6 +62,11 @@ describe("balanceFormatted's callers", () => {
 
 	test("a parenthesis in a string or a comment inside a call is not the call's end", () => {
 		expect(kinds('balanceFormatted(a, ")", 8 /* ) */, { compact: true })')).toEqual([1, 0])
+	})
+
+	test("a call a template spells with a character reference is read", () => {
+		const template = '<template><span :title="&#98;alanceFormatted(a, d, 8, { compact: true })" /></template>'
+		expect(kinds(template, "x.vue")).toEqual([1, 0])
 	})
 
 	test.each([

@@ -494,6 +494,10 @@ describe("AccountStateService.restore (bounded)", () => {
 		;(accountStateService as unknown as { pxeService: FakePxe }).pxeService = pxe
 	})
 
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
 	// Restore again hands over the live rows, and a URL saved before a rule tightened must not turn
 	// its network into an absent one.
 	test("a network holding a saved http://[::1] endpoint still restores through its primary", async () => {
@@ -511,16 +515,29 @@ describe("AccountStateService.restore (bounded)", () => {
 		expect(result[0].senders.every((s) => !s.restoreError)).toBe(true)
 	})
 
-	test("PER-LAUNCH deadline: a slow-but-successful first registration crossing the deadline stops the SECOND from ever launching", async () => {
+	/** Only `Date` is faked, so the budget moves when the first registration spends `ms`, never with the host's speed. */
+	function firstRegistrationTakes(ms: number): void {
+		vi.useFakeTimers({ toFake: ["Date"] })
 		pxe.registerSender.mockImplementationOnce(async (_info: unknown, addr: { toString(): string }) => {
-			await new Promise((r) => setTimeout(r, 30))
+			vi.advanceTimersByTime(ms)
 			return addr
 		})
+	}
+
+	test("PER-LAUNCH deadline: a slow-but-successful first registration crossing the deadline stops the SECOND from ever launching", async () => {
+		firstRegistrationTakes(30)
 		const result = await accountStateService.restore([item([sender(1), sender(2), sender(3)])], [NET], LIVE_FENCE, 10)
 		expect(pxe.registerSender).toHaveBeenCalledTimes(1)
 		expect(result[0].senders).toHaveLength(1)
 		expect(result[0].restoreError).toContain("ran out of time")
 		expect(result[0].restoreError).toContain("2 registration(s) not attempted")
+	})
+
+	test("PER-LAUNCH deadline: a first registration inside the budget lets every later one launch", async () => {
+		firstRegistrationTakes(5)
+		const result = await accountStateService.restore([item([sender(1), sender(2), sender(3)])], [NET], LIVE_FENCE, 10)
+		expect(pxe.registerSender).toHaveBeenCalledTimes(3)
+		expect(result[0].restoreError).toBeUndefined()
 	})
 
 	test("deadline clamp floor: a hostile negative deadline skips everything without launching", async () => {
