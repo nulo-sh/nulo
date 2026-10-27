@@ -22,6 +22,7 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 
 /** Utils */
 import { AccountServiceClient } from "@/wallet/services/account/client"
+import { isInvalidProfileIdError } from "@/wallet/services/profile/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, onLastActiveProfileChanged, setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { lockScreenProfile } from "@/popup/lock-screen-profile"
@@ -74,6 +75,7 @@ const isProfileKnown = computed(() => !!appStore.profile)
 const bootOutcome = inject("bootOutcome", ref(""))
 const bootRetrying = inject("bootRetrying", ref(false))
 const isBootWithheld = computed(() => bootOutcome.value === "failed" || bootRetrying.value)
+const checkSelection = inject("checkSelection", async () => "unread")
 
 // Path A: in-page passkey ceremony. The dialog is mounted via `v-if="ceremonyRequest"`
 // in the template; we drive it imperatively via `runCeremony` to keep the
@@ -112,16 +114,20 @@ const advancePastAuth = async () => {
 
 /** Path A pulls the credential and its PRF input so the ceremony targets THIS profile's credential
  *  (not a discovery picker that would let the user choose any of their passkeys); Path B's
- *  background reads both from its own snapshot. `appStore.profile.id` is read at each site, as before — never captured once
- *  across the awaits. */
-const unlockActiveProfile = async () => {
+ *  background reads both from its own snapshot. The attempt belongs to the profile selected when it
+ *  started: once the selection moves (a pick, or a deletion followed), it unlocks nothing and
+ *  answers `undefined`. */
+const unlockActiveProfile = async (attemptId) => {
+	const moved = () => appStore.profile?.id !== attemptId
 	if (isPasskeyProfile.value) {
-		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(appStore.profile.id)
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(appStore.profile.id)
+		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(attemptId)
+		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(attemptId)
+		if (moved()) return
 		const credData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "unlock", profileName: appStore.profile.name })
-		return managers.profile.unlockPasskeyProfile(appStore.profile.id, credData)
+		if (moved()) return
+		return managers.profile.unlockPasskeyProfile(attemptId, credData)
 	}
-	return managers.profile.unlockProfile(appStore.profile.id, password.value)
+	return managers.profile.unlockProfile(attemptId, password.value)
 }
 
 /** The unlock failure ladder — one synchronous pass, in this order, on the original error. */
@@ -166,12 +172,21 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 	openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
 }
 
+/** An unknown-id refusal: the profile may be gone, and a screen that follows its deletion has nothing
+ *  to retry. */
+const followedMissingProfile = async (error) => {
+	if (!isInvalidProfileIdError(error)) return false
+	const check = await checkSelection()
+	return check === "followed" || check === "superseded"
+}
+
 const handleUnlockWallet = async () => {
 	if (!isAllowedToContinue.value) return
 	// Reentry guard: two programmatic submits while the first unlock awaits
 	// must not mint duplicate same-profile continuations.
 	if (isAwaitingResponse.value) return
 	const isPasskeyAttempt = isPasskeyProfile.value
+	const attemptId = appStore.profile?.id
 	// Closed before the attempt, so one that unlocks lands on a clean Home and a second failure shows
 	// its toast afresh.
 	if (toast.value?.kind === "error") closeToast()
@@ -183,15 +198,18 @@ const handleUnlockWallet = async () => {
 			// A stale failure record from a PRIOR attempt must not insta-reject
 			// this attempt's activation wait.
 			appStore.bootstrapFailure = null
-			activeProfile = await unlockActiveProfile()
+			activeProfile = await unlockActiveProfile(attemptId)
 			if (!activeProfile?.id) return
 			// Bounded, identity-aware, failure-joined wait — replaces an
 			// unbounded isLogined poll whose finally was unreachable when
 			// bootstrap starved it (bricked spinner). 30 s matches the e2e
 			// suite's dominant post-unlock envelope (transport bound is 60 s;
 			// the analogous import handshake allows 30 s).
-			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS)
+			// Started: the profile is selected, so the wait ends as soon as the selection moves off it.
+			await awaitProfileActivation(appStore, activeProfile.id, UNLOCK_WAIT_MS, { deadlineCovers: "start", limitMs: UNLOCK_WAIT_MS })
 		} catch (error) {
+			// A failure belongs to the profile the attempt started on; a screen that moved off it says nothing.
+			if (appStore.profile?.id !== attemptId || (await followedMissingProfile(error))) return
 			handleUnlockError(error, activeProfile?.id, isPasskeyAttempt)
 			return
 		} finally {

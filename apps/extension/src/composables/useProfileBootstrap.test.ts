@@ -556,11 +556,17 @@ describe("useProfileBootstrap", () => {
 			clearActivity: () => undefined,
 			resetInFlight: () => undefined,
 			resetContactImports: () => undefined,
+			openProfileId: () => undefined,
 			cachedProfiles: () => [fakeProfile],
 			setProfiles: () => undefined,
 			route: (path) => {
 				landing = router.push(path)
 			},
+			selectedId: () => appStore.profile?.id,
+			select: () => undefined,
+			readLastActiveId: async () => undefined,
+			routeName: () => undefined,
+			openChooser: () => undefined,
 		})
 		const lockEvent = lockedState.onLockEvent(
 			() =>
