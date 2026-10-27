@@ -213,8 +213,10 @@ describe("link-missing", () => {
 	test("an archived legal text's links to the documents mean the ones in legal/; its other links are checked where they sit", () => {
 		const repo = makeRepo({
 			"legal/terms.md": "t\n",
+			"legal/website-privacy.md": "w\n",
 			"legal/gone.md": "g\n",
-			"legal/archive/privacy-1.0.md": "[Terms](terms.md#3) [gone](gone.md)\n",
+			"legal/archive/privacy-1.0.md": "[Terms](terms.md#3) [notice](website-privacy.md) [gone](gone.md)\n",
+			"legal/archive/website-privacy-1.0.md": "[Terms](terms.md)\n",
 		})
 		expect(findings(repo, "link-missing").map((f) => f.detail)).toEqual(["gone.md → legal/archive/gone.md is not in the git index"])
 	})

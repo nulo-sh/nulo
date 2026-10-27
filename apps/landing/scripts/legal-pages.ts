@@ -3,21 +3,39 @@
  * so the same functions plan the Vite inputs and are unit-tested without touching disk.
  */
 
-import { LEGAL_MANIFEST, type LegalDocument, type LegalVersion, hasPlaceholders, parseDocumentHeader } from "@nulo/legal"
+import { LEGAL_MANIFEST, type LegalDocument, hasPlaceholders, parseDocumentHeader } from "@nulo/legal"
 
 /** Built into the pinned Bun line; Cloudflare's Bun is pinned by a dashboard variable, not the repo. */
 declare const Bun: { markdown?: { html(source: string, options?: { headings?: { ids?: boolean } }): string } } | undefined
 
-export const LEGAL_DOCUMENTS: readonly LegalDocument[] = ["terms", "privacy"]
+/**
+ * The website's own notice is published like the wallet documents but is no part of `@nulo/legal`, so
+ * the wallet never asks anyone to accept it: its versions are its own history table, oldest first.
+ */
+export type PageDocument = LegalDocument | "website-privacy"
 
-const TITLES: Record<LegalDocument, string> = { terms: "Terms of Use", privacy: "Privacy Policy" }
+export const LEGAL_DOCUMENTS: readonly PageDocument[] = ["terms", "privacy", "website-privacy"]
+
+const TITLES: Record<PageDocument, string> = {
+	terms: "Terms of Use",
+	privacy: "Privacy Policy",
+	"website-privacy": "Website Privacy Notice",
+}
 const SITE = "https://nulo.sh"
 
 export interface LegalSource {
-	readonly doc: LegalDocument
+	readonly doc: PageDocument
 	readonly version: string
 	readonly markdown: string
 }
+
+export interface PageVersion {
+	readonly version: string
+	/** The effective date as published, or `null` while it is still a placeholder. */
+	readonly effective: string | null
+}
+
+export type PageVersions = Readonly<Record<PageDocument, readonly PageVersion[]>>
 
 export interface LegalPage {
 	/** Path relative to the landing root, e.g. `terms.html` or `terms/v1.0/index.html`. */
@@ -25,9 +43,21 @@ export interface LegalPage {
 	readonly html: string
 }
 
-/** Every page the manifest implies: one canonical page per document, one permalink per version. */
-export function legalPagePaths(manifest = LEGAL_MANIFEST): readonly string[] {
-	return LEGAL_DOCUMENTS.flatMap((doc) => [`${doc}.html`, ...manifest[doc].map((entry) => `${doc}/v${entry.version}/index.html`)])
+/**
+ * A wallet document's versions are its manifest entries. The notice's are its sources, one per row of its
+ * history table, each dated by its own header.
+ */
+export function pageVersions(sources: readonly LegalSource[], manifest = LEGAL_MANIFEST): PageVersions {
+	const notice = sources
+		.filter((source) => source.doc === "website-privacy")
+		.map(({ version, markdown }) => ({ version, effective: parseDocumentHeader(markdown).effective }))
+	if (notice.length === 0) throw new Error("website-privacy: no version history")
+	return { ...manifest, "website-privacy": notice }
+}
+
+/** Every page the versions imply: one canonical page per document, one permalink per version. */
+export function legalPagePaths(versions: PageVersions): readonly string[] {
+	return LEGAL_DOCUMENTS.flatMap((doc) => [`${doc}.html`, ...versions[doc].map((entry) => `${doc}/v${entry.version}/index.html`)])
 }
 
 function escapeHtml(text: string): string {
@@ -102,9 +132,11 @@ function assertOnlyAllowedHtml(html: string, label: string): void {
 	}
 }
 
+const DOCUMENT_LINK = new RegExp(`\\]\\((${LEGAL_DOCUMENTS.join("|")})\\.md(#[^)]*)?\\)`, "g")
+
 /** `](terms.md#x)` → `](/terms#x)`. Whatever else a link points at is judged after rendering. */
 function rewriteLinks(markdown: string): string {
-	return markdown.replace(/\]\((terms|privacy)\.md(#[^)]*)?\)/g, (_all, doc: string, hash?: string) => `](/${doc}${hash ?? ""})`)
+	return markdown.replace(DOCUMENT_LINK, (_all, doc: string, hash?: string) => `](/${doc}${hash ?? ""})`)
 }
 
 /** Placeholders are marked in text only; a tag's attributes are never rewritten. */
@@ -121,18 +153,18 @@ function renderMarkdown(markdown: string): string {
 	return render(markdown, { headings: { ids: true } })
 }
 
-function banner(kind: "draft" | "superseded", doc: LegalDocument): string {
+function banner(kind: "draft" | "superseded", doc: PageDocument): string {
 	if (kind === "draft") {
 		return `<p class="legal-banner" data-legal-banner="draft"><b>Draft.</b> This document still contains unfilled placeholders and is not yet in effect.</p>`
 	}
 	return `<p class="legal-banner" data-legal-banner="superseded"><b>Superseded.</b> This is an earlier version, kept so you can read what you accepted. <a href="/${doc}">Read the current ${TITLES[doc]}</a>.</p>`
 }
 
-function versionList(doc: LegalDocument, manifest: typeof LEGAL_MANIFEST): string {
-	const head = manifest[doc].at(-1)
+function versionList(doc: PageDocument, versions: PageVersions): string {
+	const head = versions[doc].at(-1)
 	// An undated version that is no longer the head was replaced before it ever took effect.
-	const undated = (entry: LegalVersion) => (entry === head ? "not yet effective" : "never in effect")
-	const items = [...manifest[doc]]
+	const undated = (entry: PageVersion) => (entry === head ? "not yet effective" : "never in effect")
+	const items = [...versions[doc]]
 		.reverse()
 		.map(
 			(entry) =>
@@ -143,17 +175,17 @@ function versionList(doc: LegalDocument, manifest: typeof LEGAL_MANIFEST): strin
 
 interface RenderOptions {
 	readonly permalink: boolean
-	readonly manifest?: typeof LEGAL_MANIFEST
+	readonly versions: PageVersions
 }
 
 export function renderLegalPage(source: LegalSource, options: RenderOptions): string {
-	const manifest = options.manifest ?? LEGAL_MANIFEST
+	const { versions } = options
 	const { doc, version, markdown } = source
 	const label = `${doc} v${version}`
 	const header = parseDocumentHeader(markdown)
 	if (header.version !== version) throw new Error(`${label}: the document says version ${header.version}`)
 
-	const head = manifest[doc][manifest[doc].length - 1]
+	const head = versions[doc][versions[doc].length - 1]
 	const superseded = head?.version !== version
 	const draft = hasPlaceholders(markdown)
 	const rendered = renderMarkdown(rewriteLinks(markdown))
@@ -184,18 +216,19 @@ export function renderLegalPage(source: LegalSource, options: RenderOptions): st
 				<nav aria-label="Legal documents">
 					<a href="/terms">Terms</a>
 					<a href="/privacy">Privacy</a>
+					<a href="/website-privacy">Website privacy</a>
 				</nav>
 			</div>
 		</header>
 		<main id="main" class="wrap legal" data-legal-doc="${doc}" data-legal-version="${escapeHtml(version)}">
 			${banners}
 			<article class="legal-body">${body}</article>
-			${versionList(doc, manifest)}
+			${versionList(doc, versions)}
 		</main>
 		<footer>
 			<div class="wrap">
 				<span>nulo.sh</span>
-				<span><a href="/terms">terms</a> · <a href="/privacy">privacy</a> · <a href="https://github.com/nulo-sh/nulo">github</a></span>
+				<span><a href="/terms">terms</a> · <a href="/privacy">privacy</a> · <a href="/website-privacy">website privacy</a> · <a href="https://github.com/nulo-sh/nulo">github</a></span>
 			</div>
 		</footer>
 		<script type="module" src="/src/legal.ts"></script>
@@ -205,19 +238,18 @@ export function renderLegalPage(source: LegalSource, options: RenderOptions): st
 }
 
 /**
- * `sources` must hold exactly one markdown per manifest version. The head version renders twice:
- * at the canonical path and at its permalink, which is what an installed wallet links to.
+ * `sources` must hold exactly one markdown per version. The head version renders twice: at the
+ * canonical path and at its permalink, which is what an installed wallet links to.
  */
-export function planLegalPages(sources: readonly LegalSource[], manifest = LEGAL_MANIFEST): readonly LegalPage[] {
+export function planLegalPages(sources: readonly LegalSource[], versions: PageVersions): readonly LegalPage[] {
 	return LEGAL_DOCUMENTS.flatMap((doc) => {
-		const versions = manifest[doc]
-		const head = versions[versions.length - 1]
-		return versions.flatMap((entry) => {
+		const head = versions[doc][versions[doc].length - 1]
+		return versions[doc].flatMap((entry) => {
 			const source = sources.find((candidate) => candidate.doc === doc && candidate.version === entry.version)
 			if (!source) throw new Error(`${doc} v${entry.version}: no markdown source`)
-			const permalink = { path: `${doc}/v${entry.version}/index.html`, html: renderLegalPage(source, { permalink: true, manifest }) }
+			const permalink = { path: `${doc}/v${entry.version}/index.html`, html: renderLegalPage(source, { permalink: true, versions }) }
 			if (entry !== head) return [permalink]
-			return [{ path: `${doc}.html`, html: renderLegalPage(source, { permalink: false, manifest }) }, permalink]
+			return [{ path: `${doc}.html`, html: renderLegalPage(source, { permalink: false, versions }) }, permalink]
 		})
 	})
 }
