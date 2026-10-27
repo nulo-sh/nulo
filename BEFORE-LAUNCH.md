@@ -191,9 +191,9 @@ them:
 has a recovery phrase. Terms 1.2 is material, so every install that accepted 1.1 meets the
 re-acceptance sheet. Both effective dates are the day the promote publishes them:
 
-- [ ] `legal/terms.md` and `legal/privacy.md` — the version lines and the 1.2 and 1.2.6 history
-      rows, dated the day they are published
-- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2 and `privacy` 1.2.6, same date
+- [x] `legal/terms.md` and `legal/privacy.md` — the version lines and the 1.2 and 1.2.6 history
+      rows, dated the day they are published (27 October 2026)
+- [x] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2 and `privacy` 1.2.6, same date
 - [ ] After the deploy, `nulo.sh/terms`, `nulo.sh/terms/v1.2/`, `nulo.sh/privacy` and
       `nulo.sh/privacy/v1.2.6/` show no DRAFT banner, and AMO's Privacy policy field carries the
       1.2.6 text (`apps/extension/store/listing.md` § Privacy policy text)

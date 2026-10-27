@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.6 — effective «FILL: effective date»**
+**Version 1.2.6 — effective 27 October 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -460,4 +460,4 @@ described in § 5.
 | 1.2.3 | 25 October 2026 | Contacts, history, balances, accounts, tokens, networks and app permissions are now stored encrypted on your device, readable only after you unlock the profile. |
 | 1.2.4 | 25 October 2026 | Pinned tokens, fee-payer choices and the last-selected account are now stored encrypted too. |
 | 1.2.5 | 25 October 2026 | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
-| 1.2.6 | «FILL: effective date» | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
+| 1.2.6 | 27 October 2026 | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
