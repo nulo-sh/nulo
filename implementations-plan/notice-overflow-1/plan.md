@@ -12,7 +12,19 @@ base: origin/dev at 17f35c504
 trunk: dev
 issues: "#1232 (arc 1 closes)"
 post_implementation_hardening: not scheduled
+status: delivered (draft #1277, owner sign-off pending)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-27.
+- **Status:** delivered as one draft PR against `dev`, #1277, which carries this close-out. It leaves draft when the owner signs OA-1's option (a); its merge closes the plan. If the owner picks (b) or (c), the lane resumes and this Outcome is rewritten.
+- **Shipped:** #1277: `overflow-wrap: anywhere` on `NotificationManager.vue`'s `.card`, with its source-scan case. Closes #1232.
+- **Dispositions:** option (b) not built (D4); the name's other places (D5) filed as #1276; an e2e computed-style assertion and a guard against a `@media`-wrapped rule rejected (audit table).
+- **Known limits:** #1275 (the card does not scroll).
+- **Open items:** #1276.
+- **Lessons:** none promoted: `lessons.md` is at 8183 of 8192 B and nothing in it is superseded. The `break-word` finding stays in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # notice-overflow-1: a notice's text stays inside its card
 
