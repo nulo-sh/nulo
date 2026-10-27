@@ -4,7 +4,12 @@
  * profile's, exactly one unlock opens the row before and after, and every refusal leaves the row's
  * bytes as they were. Only storage writes and the session open are wrapped, to fail them.
  */
-import { InvalidPasswordError, RetiredProfileError, UnlockMethodChangedError } from "@nulo/extension-messaging/errors"
+import {
+	InvalidPasswordError,
+	RetiredProfileError,
+	StaleUnlockCredentialError,
+	UnlockMethodChangedError,
+} from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler, getMnemonic } from "@nulo/wallet-core/utils"
 import {
@@ -225,7 +230,7 @@ describe("changeUnlockMethod", () => {
 					const { id } = await passkeyProfile(env)
 					return { id, current: asPasskey(await fakePasskeyAnswer("cred-old", freshPrfSalt())), next: { password: NEW_PASSWORD } }
 				},
-				PASSKEY_DID_NOT_OPEN,
+				StaleUnlockCredentialError,
 			],
 			[
 				"another passkey's answer",
@@ -237,12 +242,30 @@ describe("changeUnlockMethod", () => {
 						next: { password: NEW_PASSWORD },
 					}
 				},
-				PASSKEY_DID_NOT_OPEN,
+				StaleUnlockCredentialError,
 			],
 			[
 				"a password where the row takes a passkey",
 				async (env) => ({ id: (await passkeyProfile(env)).id, current: { password: PASSWORD }, next: { password: NEW_PASSWORD } }),
-				InvalidPasswordError,
+				StaleUnlockCredentialError,
+			],
+			[
+				"the passkey's answer once the profile moved to a password",
+				async (env) => {
+					const { id, answer } = await passkeyProfile(env)
+					await env.service.changeUnlockMethod(id, asPasskey(answer), { password: PASSWORD })
+					return { id, current: asPasskey(answer), next: { password: NEW_PASSWORD } }
+				},
+				StaleUnlockCredentialError,
+			],
+			[
+				"the old passkey's answer once the profile moved to a new passkey",
+				async (env) => {
+					const { id, answer } = await passkeyProfile(env)
+					await env.service.changeUnlockMethod(id, asPasskey(answer), asPasskey(await newAnswer()))
+					return { id, current: asPasskey(answer), next: { password: NEW_PASSWORD } }
+				},
+				StaleUnlockCredentialError,
 			],
 			[
 				"a new password under 8 characters",
@@ -344,6 +367,19 @@ describe("changeUnlockMethod", () => {
 			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toThrow(/Invalid profile id/)
 			expect(await env.row(id)).toStrictEqual({ ...before, name: "Renamed" })
 			expect(verifyBeforeSessionOpen).not.toHaveBeenCalled()
+		}, 30_000)
+
+		test("a change of unlock made during the unlocked derivation refuses the credential as stale and keeps that change", async () => {
+			const env = await boot()
+			const { id, current, next } = await fromPassword(env)
+			const elsewhere = await newAnswer("cred-elsewhere")
+			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+				await env.service.changeUnlockMethod(id, { password: PASSWORD }, asPasskey(elsewhere))
+				return derive(password)
+			})
+			await expect(env.service.changeUnlockMethod(id, current, next)).rejects.toBeInstanceOf(StaleUnlockCredentialError)
+			expect(await env.row(id)).toMatchObject({ type: "passkey", credentialId: elsewhere.id, prfSalt: elsewhere.prfSalt })
 		}, 30_000)
 
 		test("a row deleted during the unlocked derivation stays deleted", async () => {

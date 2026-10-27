@@ -577,6 +577,21 @@ export class UnlockMethodChangedError extends WalletError {
 }
 
 /**
+ * A change of unlock method was refused, and nothing written, because the profile does not store
+ * the unlock its credential is for: the other kind, or another passkey or input. A caller that
+ * checked the credential against the profile first learns that the method was changed since.
+ * NEVER surfaced verbatim to dApps.
+ */
+export class StaleUnlockCredentialError extends WalletError {
+	public static readonly CODE = "STALE_UNLOCK_CREDENTIAL"
+	public static readonly MESSAGE = "The profile does not unlock with this credential"
+
+	public constructor(message: string = StaleUnlockCredentialError.MESSAGE, details?: unknown) {
+		super(StaleUnlockCredentialError.CODE, message, details, "StaleUnlockCredentialError")
+	}
+}
+
+/**
  * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
  * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
  * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
@@ -626,6 +641,7 @@ const REBUILT_AS = [
 	RecoveryModeError,
 	RetiredProfileError,
 	UnlockMethodChangedError,
+	StaleUnlockCredentialError,
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
