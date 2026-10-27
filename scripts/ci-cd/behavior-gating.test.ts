@@ -307,7 +307,6 @@ describe("network suite job names", () => {
 	})
 })
 
-// The range lint guards commits that land: the squash drops Dependabot's, and the main and sync ranges hold merged history.
 describe("commitlint", () => {
 	const step = workflowOf("pr-quick.yml").jobs.commitlint.steps.find((s: { name?: string }) => s.name === "Lint PR commits")
 	// A failing lint, so a PR that reaches it goes red and one that skips it stays green.
