@@ -69,7 +69,7 @@ None. Only test files change.
 - Steps: do the change in § Architecture. Run the mutation proof as scratch: drop each disjunct in turn (`useCssVars`, `v-bind`, `&#` in `scan`; `balanceFormatted`, `&#` in `kinds`). Record which case goes red for each, then revert.
 - **Validation gate**: lint and typecheck as P1. Run 30 times at retry 0 with `--reporter=verbose`: `bun --bun vitest run src/utils/css-v-bind-ban.test.ts src/utils/amount.callers.test.ts --retry=0`. Pass: `30/30`, the two encoded cases green, the mutation proof red. Report each whole-tree case's maximum duration as a measurement, not a pass criterion. Layers: lint, typecheck, unit.
 
-### Phase 3 — #1241: pin the unfiltered fetch
+### Phase 3 — #1241: pin the unfiltered fetch ✓
 - Files: `scripts/ci-cd/plans/permalinks.test.ts`.
 - Steps: do the change in § Architecture. Run the mutation proof as scratch: put `--filter=tree:0` back into `prepareDev`'s fetch, confirm the pin fails on host git 2.43, then revert.
 - **Validation gate**: `bun test scripts/ci-cd/plans/permalinks.test.ts` 30 times at retry 0 on the host, `30/30`. Run the same 30 times in the git 2.56 container, `30/30`. Run `bun run test:ci-gating` and `bun run test:release` once each, exit 0. Layers: unit (gate).
