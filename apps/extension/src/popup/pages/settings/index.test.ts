@@ -150,6 +150,7 @@ const PASSWORD_ROWS = [
 	["setting-nav-lock", "/popup/settings/lock"],
 	["backup-link-btn", "/popup/settings/security/export"],
 	["change-password-link-btn", "/popup/settings/security/change-password"],
+	["setting-nav-unlock-method", "/popup/settings/security/unlock-method"],
 	["setting-nav-privacy", "/popup/settings/privacy"],
 	["setting-nav-display", "/popup/settings/display"],
 	["setting-nav-developer", "/popup/settings/developer"],
@@ -159,7 +160,7 @@ const PASSWORD_ROWS = [
 ]
 
 describe("settings hub — rows", () => {
-	test("a password profile sees the card and 16 rows in their groups, each linking to its page", async () => {
+	test("a password profile sees the card and 17 rows in their groups, each linking to its page", async () => {
 		const w = await mountHub()
 		expect(w.findAll(ROWS).map((row) => [row.attributes("data-testid"), row.attributes("href")])).toEqual(PASSWORD_ROWS)
 		const groups = w.findAllComponents(ItemsContainer)
@@ -175,11 +176,13 @@ describe("settings hub — rows", () => {
 		expect(groups.map((g) => g.props("danger"))).toEqual([false, false, false, false, false, false, true])
 	})
 
-	test("a passkey profile sees no Change password row, and Lock describes auto-lock only", async () => {
+	test("a passkey profile sees no Change password row, and Lock names strict mode too", async () => {
 		const w = await mountHub(PASSKEY)
 		expect(rowIds(w)).toEqual(PASSWORD_ROWS.map(([id]) => id).filter((id) => id !== "change-password-link-btn"))
 		const lock = w.findAllComponents(SettingItem).find((row) => row.attributes("data-testid") === "setting-nav-lock")
-		expect(lock?.props("description")).toBe("Auto-lock")
+		expect(lock?.props("description")).toBe("Auto-lock, strict mode")
+		const unlock = w.findAllComponents(SettingItem).find((row) => row.attributes("data-testid") === "setting-nav-unlock-method")
+		expect(unlock?.props("description")).toBe("Passkey")
 		expect(w.get('[data-testid="setting-nav-profile"]').text()).toContain("Passkey profile")
 	})
 
@@ -221,6 +224,7 @@ describe("settings hub — rows", () => {
 			["Lock", "Auto-lock, strict mode"],
 			["Back up profile", "Keep a copy of this profile"],
 			["Change password", undefined],
+			["Unlock method", "Password"],
 			["Privacy", "Prices, explorer"],
 			["Display", "Theme, layout"],
 			["Developer", "Mode, logs, account state"],

@@ -44,8 +44,8 @@ describe("zeroize", () => {
 	// and `Fr.fromBufferReduce(...)` make their own internal copies of the
 	// input bytes. If `Fr` retained a reference, zeroing the input would
 	// corrupt the field element. Both call patterns are used in
-	// session-manager / passkey-credential — pin both.
-	describe("Fr copy-semantics (load-bearing for SessionManager + PasskeyCredential)", () => {
+	// session-manager / mnemonic-master — pin both.
+	describe("Fr copy-semantics (load-bearing for SessionManager + the mnemonic master)", () => {
 		it("Fr.fromBuffer(Buffer.from(bytes)) copies; zeroing input doesn't corrupt Fr", () => {
 			// Use a small value (< field modulus). 0x42-fill would exceed
 			// the BN254 modulus and Fr.fromBuffer would reject it; that's
@@ -74,7 +74,7 @@ describe("zeroize", () => {
 		})
 
 		it("Fr.fromBufferReduce copies a 64-byte input too (the production reduce width)", () => {
-			// Both production reduce sites (mnemonic-master, passkey-credential) feed 64 bytes.
+			// The production reduce site (mnemonic-master) feeds 64 bytes.
 			// A 64-byte value with only a tiny low limb reduces to itself, so the round-trip
 			// comparison against the low 32 bytes stays exact.
 			const original = new Uint8Array(64)

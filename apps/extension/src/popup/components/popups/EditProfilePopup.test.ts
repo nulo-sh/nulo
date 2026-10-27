@@ -309,6 +309,76 @@ describe("EditProfilePopup — name normalization per site", () => {
 		expect(warns(w)).toBe(true)
 	})
 
+	test("a taken name with an outer space warns, keeps Update disabled and saves nothing", async () => {
+		const w = await mountShown()
+		await typeName(w, "Backup ")
+		expect(warns(w)).toBe(true)
+		expect(w.get('[data-testid="edit-profile-submit"]').attributes("disabled")).toBeDefined()
+		pressEnterOnInput()
+		await flushPromises()
+		expect(profileServiceMock.changeProfileName).not.toHaveBeenCalled()
+	})
+
+	test("the in-latch recheck drops outer spaces on the stored side too", async () => {
+		profileServiceMock.getProfiles.mockReset()
+		profileServiceMock.getProfiles
+			.mockImplementationOnce(() => new Promise(() => {}))
+			.mockResolvedValueOnce([
+				{ id: "p1", name: "Main" },
+				{ id: "p2", name: "Backup " },
+			])
+		const w = await mountShown()
+		await typeName(w, "Backup")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(profileServiceMock.changeProfileName).not.toHaveBeenCalled()
+		expect(warns(w)).toBe(true)
+	})
+
+	test("a field changed during the in-latch read saves the name that was submitted", async () => {
+		let answer!: (profiles: unknown) => void
+		profileServiceMock.getProfiles.mockReset()
+		profileServiceMock.getProfiles
+			.mockResolvedValueOnce([
+				{ id: "p1", name: "Main" },
+				{ id: "p2", name: "Backup" },
+			])
+			.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+		const w = await mountShown()
+		await typeName(w, "Renamed")
+		pressEnterOnInput()
+		await flushPromises()
+		await typeName(w, "   ")
+		answer([
+			{ id: "p1", name: "Main" },
+			{ id: "p2", name: "Backup" },
+		])
+		await flushPromises()
+		expect(profileServiceMock.changeProfileName).toHaveBeenCalledExactlyOnceWith("p1", "Renamed")
+	})
+
+	test("control: a free name saves without its outer spaces", async () => {
+		const w = await mountShown()
+		await typeName(w, " Renamed ")
+		expect(warns(w)).toBe(false)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(profileServiceMock.changeProfileName).toHaveBeenCalledExactlyOnceWith("p1", "Renamed")
+	})
+
+	test.each([
+		["its own name with an outer space", "Main ", "Already exist"],
+		["only spaces", "   ", undefined],
+	])("%s is no change, so Update stays disabled", async (_case, typed, warning) => {
+		const w = await mountShown()
+		await typeName(w, typed)
+		if (warning) expect(w.text()).toContain(warning)
+		expect(w.get('[data-testid="edit-profile-submit"]').attributes("disabled")).toBeDefined()
+		pressEnterOnInput()
+		await flushPromises()
+		expect(profileServiceMock.changeProfileName).not.toHaveBeenCalled()
+	})
+
 	test("the unchanged check folds case only, so a ligature name retyped plain is a change", async () => {
 		appStoreState.profile = { id: "p1", name: LIGATURE }
 		profileServiceMock.getProfiles.mockResolvedValue([{ id: "p1", name: LIGATURE }])

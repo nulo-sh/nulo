@@ -5,14 +5,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
 	importMnemonic: vi.fn(async () => ({ id: "p1", name: "Main", type: "password" })),
-	importPasskey: vi.fn(async () => ({ id: "p1", name: "Main", type: "passkey" })),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrap = vi.hoisted(() => ({ bootstrapActiveProfile: vi.fn(), hydrateKnownProfile: vi.fn() }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => bootstrap }))
-vi.mock("@/composables/usePasskeyCeremony", () => ({
-	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
-}))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ meta: {} }) }))
 const importFlow = vi.hoisted(() => ({
@@ -82,7 +78,6 @@ vi.mock("@/composables/useProfileImportFlow", async (importOriginal) => {
 })
 
 import { BrutalistTitle, Flex, Input, Text } from "@nulo/design"
-import { PasskeyProfileExistsError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
@@ -91,6 +86,7 @@ import OnboardingProfileNameField from "../components/OnboardingProfileNameField
 import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { doneRoute } from "../steps"
 import Import from "./import.vue"
+import { useNotificationStore } from "@/stores/notification.store"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
@@ -105,7 +101,6 @@ async function mountImport() {
 				OnboardingBackLink: true,
 				StepIndicator: true,
 				ImportMethodPicker: true,
-				PasskeyCeremonyDialog: true,
 			},
 		},
 	})
@@ -131,6 +126,15 @@ afterEach(() => {
 })
 
 describe("onboarding import", () => {
+	test("its notice closes when the page does", async () => {
+		const w = await mountImport()
+		const notices = useNotificationStore()
+		expect(notices.clear).not.toHaveBeenCalled()
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		expect(notices.clear).toHaveBeenCalledOnce()
+	})
+
 	test("a first-run import has no name field and reads Import / Wallet", async () => {
 		const w = await mountImport()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
@@ -138,7 +142,7 @@ describe("onboarding import", () => {
 		expect(w.text()).toContain("Import")
 		expect(w.text()).toContain("Wallet")
 		expect(w.text()).not.toContain("Profile")
-		expect(w.text()).toContain("Restore from a recovery phrase, passkey, or full backup.")
+		expect(w.text()).toContain("Restore from a recovery phrase or a full backup.")
 	})
 
 	test("with a profile already there, the field shows prefilled Profile 2", async () => {
@@ -159,9 +163,11 @@ describe("onboarding import", () => {
 		useToast().closeToast()
 		await mountImport()
 		const flow = importFlow.api!
-		flow.seedPhrase.value = "abandon ".repeat(24).trim()
+		flow.unlockMethod.value = "password"
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
+		await vi.waitFor(() => expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true))
 
 		await flow.handleImportSeed()
 
@@ -255,26 +261,9 @@ describe("onboarding import", () => {
 		expect(router.push).toHaveBeenCalledWith(doneRoute("import"))
 	})
 
-	test("a passkey whose profile is already here gets its own notice, not the authenticator one", async () => {
-		await mountImport()
-		const existing = new PasskeyProfileExistsError(undefined, { existingProfileName: "Daily" })
-		profileApi.importPasskey.mockRejectedValueOnce(walletErrorFromPayload(existing.toPayload()))
-
-		await importFlow.api!.handleImportPasskey()
-
-		const { useNotificationStore } = await import("@/stores/notification.store")
-		expect(useNotificationStore().create).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({ payload: expect.objectContaining({ title: "Passkey already in use" }) }),
-		)
-	})
-
-	test.each([
-		["with no check shows the way back under the file, and asks for no passkey", false],
-		["with its check goes on to the passkey prompt (control)", true],
-	])("a passkey backup %s", async (_label, withCheck) => {
+	test("an earlier passkey backup picked here shows its refusal under the file, and nothing to restore", async () => {
 		const w = await mountImport()
 		importFlow.api!.selectedImportOption.value = "full_backup"
-		const profileId = "9f2c4e1ab37d4f60"
 		const body = {
 			"wallet-version": "0.31.0",
 			"aztec-version": "6.0.0-rc.3",
@@ -282,38 +271,18 @@ describe("onboarding import", () => {
 			"backup-schema-version": 1,
 			"master-key": Buffer.from("cred-PK123").toString("base64"),
 			"imported-keys-dek-sealed": Buffer.from(new Uint8Array(76).fill(9)).toString("base64"),
-			data: {
-				profile: { id: profileId, name: "Daily", type: "passkey" },
-				account: [],
-				token: [],
-				contact: [],
-			},
+			data: { profile: { id: "9f2c4e1ab37d4f60", name: "Daily", type: "passkey" }, account: [], token: [], contact: [] },
 		}
-		backupImport.api!.selectedBackup.value = {
-			name: "_Daily_1760000000.json",
-			kind: "plain",
-			profileType: "passkey",
-			backup: {
-				...body,
-				checksum: await EncryptionKey.getHashHex(JSON.stringify(body)),
-				...(withCheck ? { "backup-mac": "bWFjLW92ZXItdGhlLWNoZWNrc3Vt" } : {}),
-			},
-		}
+		const file = { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
+		backupImport.opts!.pickFile = vi.fn(async () => new File([JSON.stringify(file)], "_Daily_1760000000.json"))
+		await backupImport.api!.pickBackupFile()
 		await flushPromises()
 
-		await w.get('[data-testid="onboarding-submit-import"]').trigger("click")
-		const ceremony = backupImport.opts!.runCeremony as ReturnType<typeof vi.fn>
-		if (withCheck) {
-			await vi.waitFor(() => expect(ceremony).toHaveBeenCalledOnce())
-			expect(ceremony).toHaveBeenCalledWith(expect.objectContaining({ mode: "get", credentialId: body["master-key"] }))
-			return
-		}
-		await vi.waitFor(() => expect(w.find('[data-testid="import-full-backup-error"]').exists()).toBe(true))
-
 		expect(w.get('[data-testid="import-full-backup-error"]').text()).toBe(
-			"ErrorBackup cannot be restoredThis passkey backup is too old or was changed. Choose Passkey to restore your wallet, then add your contacts and imported accounts again.",
+			"ErrorBackup from an earlier versionThis backup was made by a passkey profile on an earlier version of Nulo, and this version can't restore it.",
 		)
-		expect(ceremony).not.toHaveBeenCalled()
+		expect(backupImport.api!.selectedBackup.value?.kind).toBe("unreadable")
+		expect(w.find('[data-testid="onboarding-submit-import"]').exists()).toBe(false)
 	})
 })
 
@@ -381,9 +350,11 @@ const IMPORTING: OnboardingCta = ["Importing...", "onboarding-submit-import", tr
 const RETRY: OnboardingCta = ["Retry", "import-full-backup-retry-btn", false, "false", "cta_outline", "large"]
 const CONTINUE: OnboardingCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta", "large"]
 const VIEW_ERRORS: OnboardingCta = ["View errors", "import-full-backup-view-errors-btn", false, null, "cta_outline", "large"]
+const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a passkey I already have", testid, disabled, null, "", ""]
+const REUSE_BACKUP = REUSE("onboarding-import-backup-passkey-reuse")
 
 type Apis = { flow: NonNullable<typeof importFlow.api>; backup: NonNullable<typeof backupImport.api> }
-type ApisPatch = (a: Apis) => void
+type ApisPatch = (a: Apis) => void | Promise<void>
 
 const validPair = ({ flow }: Apis) => {
 	flow.password.value = "password123"
@@ -396,7 +367,7 @@ async function mountFullBackup(patch: ApisPatch): Promise<VueWrapper> {
 	const apis = { flow: importFlow.api!, backup: backupImport.api! }
 	apis.flow.selectedImportOption.value = "full_backup"
 	await flushPromises()
-	patch(apis)
+	await patch(apis)
 	await flushPromises()
 	return w
 }
@@ -435,9 +406,29 @@ const ONBOARDING_CTA_STATES: Array<[string, ApisPatch, OnboardingCta[]]> = [
 		[IMPORT, BACK],
 	],
 	[
-		"decrypted passkey backup (no new password needed)",
+		// A passkey-made backup opens the unlock choice on Passkey, which asks no new password.
+		"decrypted passkey backup with no new password",
 		({ backup }) => {
 			backup.selectedBackup.value = PASSKEY_BACKUP
+		},
+		[IMPORT, REUSE_BACKUP, BACK],
+	],
+	[
+		"decrypted passkey backup switched to Password, with no new password",
+		async ({ flow, backup }) => {
+			backup.selectedBackup.value = PASSKEY_BACKUP
+			await flushPromises()
+			flow.unlockMethod.value = "password"
+		},
+		[IMPORT_OFF, BACK],
+	],
+	[
+		"decrypted passkey backup switched to Password, with a valid new password",
+		async (a) => {
+			a.backup.selectedBackup.value = PASSKEY_BACKUP
+			await flushPromises()
+			a.flow.unlockMethod.value = "password"
+			validPair(a)
 		},
 		[IMPORT, BACK],
 	],
@@ -526,9 +517,12 @@ describe("onboarding import — the CTA bar in each state", () => {
 		const flow = importFlow.api!
 		flow.selectedImportOption.value = "seed"
 		await flushPromises()
-		expect(onboardingCtas(w)).toEqual([["Import profile", "onboarding-submit-import", true, "false", "cta", "large"], BACK])
+		expect(onboardingCtas(w)).toEqual([IMPORT_OFF, REUSE("onboarding-import-passkey-reuse", true), BACK])
+		flow.unlockMethod.value = "password"
+		await flushPromises()
+		expect(onboardingCtas(w)).toEqual([IMPORT_OFF, BACK])
 
-		flow.seedPhrase.value = "abandon ".repeat(24).trim()
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
 		await flushPromises()

@@ -10,7 +10,7 @@
  * close's in-mutex re-check stands down against.
  */
 
-import { asImportedKeysDek, asMasterSecretBytes, asPasshash, type MasterSecretBytes } from "@nulo/wallet-crypto"
+import { asImportedKeysDek, asMasterSecretBytes, type MasterSecretBytes } from "@nulo/wallet-crypto"
 import { describe, expect, test } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
@@ -240,7 +240,7 @@ describe("SessionManager artifact fence", () => {
 			throw new Error("crypto prep failed")
 		}
 		const dek = new Uint8Array(new ArrayBuffer(32)) as Uint8Array<ArrayBuffer>
-		await manager.open(profileB, secretBuffer(), asPasshash(new ArrayBuffer(32)), asImportedKeysDek(dek))
+		await manager.open(profileB, secretBuffer(), asImportedKeysDek(dek))
 
 		// The failed open bumped nothing: A's expiry close proceeds normally.
 		await manager.getActive()
@@ -351,7 +351,7 @@ describe("SessionManager artifact fence", () => {
 			return { v: 2 } as never // dummy bearer — the row stores it opaquely
 		}
 		const dek = new Uint8Array(new ArrayBuffer(32)) as Uint8Array<ArrayBuffer>
-		const opening = manager.open(profileB, secretBuffer(), asPasshash(new ArrayBuffer(32)), asImportedKeysDek(dek))
+		const opening = manager.open(profileB, secretBuffer(), asImportedKeysDek(dek))
 		await new Promise((r) => setTimeout(r, 0))
 
 		await manager.getActive() // A expired → close runs to COMPLETION (row + alarm gone)

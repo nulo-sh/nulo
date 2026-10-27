@@ -15,6 +15,7 @@ export const PASSKEY_COPY = {
 	notConfirmed: "Passkey not confirmed. Try again.",
 	noPrf: "This passkey can't unlock Nulo.",
 	unlockFailed: "Couldn't unlock. Try again.",
+	revealFailed: "Couldn't open the recovery phrase. Try again.",
 	waiting: {
 		title: ["Use your", "passkey"],
 		body: "Confirm the request from your browser or password manager.",
@@ -29,10 +30,6 @@ export const PASSKEY_COPY = {
 		body: "Finishing up. This window closes by itself.",
 	},
 	stepFailedBody: "Close this window and try again from Nulo.",
-	profileExists: {
-		title: ["Passkey", "already in use"],
-		body: "This passkey already has a profile in this wallet. Close this window, open Nulo and choose it on the lock screen.",
-	},
 	windowNote: "On Firefox, Nulo uses this window for passkeys.",
 } as const
 
@@ -40,17 +37,19 @@ const STEP_LABEL: Record<PasskeyStep, string> = {
 	unlock: "Unlock",
 	create: "New profile",
 	import: "Import",
-	export: "Backup",
 	restore: "Restore",
+	reveal: "Recovery phrase",
+	export: "Backup",
+	accountFile: "Account file",
+	unlockMethod: "Unlock method",
 }
 
 /** The steps the passkey window runs to their end; the others finish in the page that asked. */
-export type WindowStep = Extract<PasskeyStep, "unlock" | "create" | "import">
+export type WindowStep = Extract<PasskeyStep, "unlock" | "create">
 
 const STEP_FAILED_TITLE: Record<WindowStep, PasskeyTitle> = {
 	unlock: ["Couldn't", "unlock"],
 	create: ["Couldn't", "create the profile"],
-	import: ["Couldn't", "import the passkey"],
 }
 
 /** "Unlock · Alice": the step and the profile it is for, or the step alone without a name. */

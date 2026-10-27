@@ -1,11 +1,13 @@
+import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
+import { buildAccountExport, encryptAccountExport } from "@nulo/aztec-runtime/account"
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import { describe, expect, it, vi } from "vitest"
 import { IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
 import {
+	AccountFileNotBackupError,
 	AssemblyAbortedError,
 	assembleFullBackup,
-	BACKUP_MAC_FIELD,
 	type BackupSource,
 	MAX_BACKUP_FILE_BYTES,
 	collectRestoreErrors,
@@ -77,22 +79,8 @@ describe("assembleFullBackup", () => {
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
 	})
 
-	it("rejects an envelope that already carries a checksum or a MAC", async () => {
+	it("rejects an envelope that already carries a checksum", async () => {
 		await expect(assembleFullBackup({ checksum: "forged" }, [])).rejects.toThrow(/must not carry a checksum/)
-		await expect(assembleFullBackup({ [BACKUP_MAC_FIELD]: "preset" }, [])).rejects.toThrow(/must not carry a checksum/)
-	})
-
-	it("puts the authenticator's MAC of the checksum beside it, outside the hashed body", async () => {
-		const { sources } = twelveSources((name) => [{ from: name }])
-		const authenticate = vi.fn(async (checksum: string) => `mac-of-${checksum}`)
-		const result = await assembleFullBackup({ "wallet-version": "1.0.0" }, sources, undefined, authenticate)
-		const { checksum, [BACKUP_MAC_FIELD]: mac, ...body } = JSON.parse(result.pretty) as Record<string, unknown>
-		expect(authenticate).toHaveBeenCalledExactlyOnceWith(result.checksum)
-		expect(mac).toBe(`mac-of-${result.checksum}`)
-		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
-		// Without an authenticator the file has no MAC field at all.
-		const plain = JSON.parse((await assembleFullBackup({ "wallet-version": "1.0.0" }, sources)).compact) as Record<string, unknown>
-		expect(BACKUP_MAC_FIELD in plain).toBe(false)
 	})
 
 	it("aborts via the onSlice probe without calling later sources", async () => {
@@ -181,6 +169,18 @@ describe("encrypted full-backup text", () => {
 		const accountExport = await frameText(PASSWORD, "nulo:account-export:v1")
 		await expect(openFullBackupText(accountExport, PASSWORD)).rejects.toThrow()
 		await expect(openFullBackupText(`${PREFIX}${accountExport}`, PASSWORD)).rejects.toThrow()
+	})
+
+	it("an account file opened with its own password is named one; under a wrong password it is not", async () => {
+		const accountFile = await encryptAccountExport(buildAccountExport(GrumpkinScalar.fromString("0x2a"), 31337, "0xabc"), PASSWORD)
+		expect(detectBackupType(accountFile)).toBe("encrypted")
+		await expect(openFullBackupText(accountFile, PASSWORD)).rejects.toBeInstanceOf(AccountFileNotBackupError)
+		const wrong = await openFullBackupText(accountFile, "wrong-pass").then(
+			() => null,
+			(err: unknown) => err,
+		)
+		expect(wrong).toBeInstanceOf(Error)
+		expect(wrong).not.toBeInstanceOf(AccountFileNotBackupError)
 	})
 
 	const frame29 = toBase64(new Uint8Array(29))

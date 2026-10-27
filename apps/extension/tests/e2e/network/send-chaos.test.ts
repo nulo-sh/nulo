@@ -13,7 +13,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
-import { chaosSeed } from "../fixtures/chaos-seed"
+import { chaosSeed, prng } from "../fixtures/chaos-seed"
 import { clickByTestId, connectPlayground, grantCapBundle } from "../fixtures/extension"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResults } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -34,18 +34,6 @@ const ACTIONS = 8
 /** The share of actions that are dApp sends rather than Send-page sends. */
 const DAPP_SHARE = 0.2
 const SIDES = ["public", "private"] as const
-
-/** mulberry32: a small seeded PRNG, so a logged seed replays the same actions. */
-function prng(seed: number): () => number {
-	let a = seed >>> 0
-	return () => {
-		a = (a + 0x6d2b79f5) >>> 0
-		let t = a
-		t = Math.imul(t ^ (t >>> 15), t | 1)
-		t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-	}
-}
 
 type Action = { kind: "send"; send: BurstSend; abandon: boolean } | { kind: "dapp" }
 

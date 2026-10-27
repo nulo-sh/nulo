@@ -51,12 +51,6 @@ describe("reduced motion and Disable animations both stop the shakes and the shi
 		expect(noAnimationsRules(source).get(selectors)).toBe("animation: none;")
 	})
 
-	test("popup/pages/settings/security/export/full.vue: .shake is the shared one, with its stop", () => {
-		expect(read("popup/pages/settings/security/export/full.vue")).toMatch(
-			/\.shake \{\s*composes: shake_password from "(\.\.\/)+components\/composite\/shake\.module\.css";\s*\}/,
-		)
-	})
-
 	test("no extension file draws its own skeleton shimmer: they all render the design package's Skeleton", () => {
 		const own = sourceFiles({ roots: ["apps/extension/src"], exts: ["vue", "css"] }).filter((file) =>
 			/^\s*\.skeleton\s*\{/m.test(readFileSync(resolve(REPO_ROOT, file), "utf8")),

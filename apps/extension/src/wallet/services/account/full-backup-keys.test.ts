@@ -5,10 +5,18 @@
  * to hold an export mid-flight and to see the key buffers it was handed.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { fromBase64, toBase64 } from "@nulo/wallet-core/utils"
-import { asBase64MasterSecret, asImportedKeysDek, EncryptionKey, type ImportedKeysDek } from "@nulo/wallet-crypto"
+import {
+	asBase64MasterSecret,
+	asImportedKeysDek,
+	EncryptionKey,
+	type ImportedKeysDek,
+	PasskeyCredential,
+	type PasskeyCredentialData,
+} from "@nulo/wallet-crypto"
+import { InvalidPasswordError, RetiredProfileError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { fakePasskeyAnswer, freshPrfSalt } from "../../../../tests/helpers/fake-passkey"
 import { validateAndMigrateBackup } from "@/composables/useFullBackupImport"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -39,6 +47,7 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	return {
 		...original,
 		unsealImportedSigningKeyV2: vi.fn(original.unsealImportedSigningKeyV2),
+		deriveAccountSeed: vi.fn(original.deriveAccountSeed),
 		sealImportedSigningKeyV2: vi.fn(async (...args: Parameters<typeof original.sealImportedSigningKeyV2>) => {
 			await box.beforeSeal?.()
 			return original.sealImportedSigningKeyV2(...args)
@@ -46,7 +55,7 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	}
 })
 
-import { sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { deriveAccountSeed, sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 
 const PASSWORD = "pass1234"
 const CHAIN = 0
@@ -85,7 +94,7 @@ async function build(opts: { api?: FakeBrowserApi; networks?: ReturnType<typeof 
 	const config = new ConfigStore()
 	const logger = new LoggerStore(config)
 	const services = new ServiceCollection()
-	services.add(svc(PASSKEY_SERVICE_NAME, {}))
+	services.add(svc(PASSKEY_SERVICE_NAME, { materializeCredential: (data: PasskeyCredentialData) => PasskeyCredential.create(data) }))
 	services.add(svc(NETWORK_SERVICE_NAME, opts.networks ?? networksOf(new Map([[CHAIN, L1]]))))
 	const profile = new ProfileService(config, logger, api)
 	services.add(profile)
@@ -136,6 +145,7 @@ async function backupFile(keys: {
 	importedKeysDek: string
 	accounts: Account[]
 	rows: ImportedAccountKey[]
+	type?: "password" | "passkey"
 }) {
 	const body = {
 		"compat-epoch": 5,
@@ -144,7 +154,7 @@ async function backupFile(keys: {
 		entropy: keys.entropy,
 		"imported-keys-dek": keys.importedKeysDek,
 		data: {
-			profile: { id: "source-id", name: "P", type: "password" },
+			profile: { id: "source-id", name: "P", type: keys.type ?? "password" },
 			[ACCOUNT_SERVICE_NAME]: keys.accounts,
 			[IMPORTED_KEYS_SERVICE_NAME]: keys.rows,
 		},
@@ -160,7 +170,6 @@ async function restoreProfileFrom(file: Awaited<ReturnType<typeof backupFile>>, 
 	const restored = await fresh.profile.restore(
 		{ id: "source-id", name: "Restored", type: "password" },
 		{
-			type: "password",
 			masterKey: asBase64MasterSecret(envelope["master-key"]!),
 			entropy: envelope.entropy!,
 			importedKeysDek: envelope["imported-keys-dek"]!,
@@ -280,6 +289,28 @@ describe("exportFullBackupKeys — restore", () => {
 		expect(restored).toEqual([Array(32).fill(0x2a)])
 	}, 60_000)
 
+	// One body for both methods: a passkey profile's file carries what a password profile's does, and
+	// opens with the file's password alone.
+	test("a passkey profile's backup, opened with its own answer, restores under the file password to the original signing key", async () => {
+		const { api, profile, account } = await build()
+		const answer = await fakePasskeyAnswer("cred-a", freshPrfSalt())
+		const p = await profile.createPasskeyProfile("PK", answer)
+		await seedImported(api, p.id, ADDR_A, 0x2b, (await profile.getProfileDek(p.id))!)
+		const fence = await profile.captureRunFence()
+		await expect(account.exportFullBackupKeys(fence, PASSWORD)).rejects.toBeInstanceOf(InvalidPasswordError)
+		await expect(account.exportFullBackupKeys(fence, undefined, await fakePasskeyAnswer("cred-a", freshPrfSalt()))).rejects.toThrow(
+			"Passkey did not open this profile",
+		)
+		const keys = await account.exportFullBackupKeys(fence, undefined, answer)
+		expect(keys.importedKeyRows).toHaveLength(1)
+
+		const restored = await restoreIntoFreshWallet(
+			await backupFile({ ...keys, importedKeysDek: keys.importedKeysKey, rows: keys.importedKeyRows, type: "passkey" }),
+		)
+
+		expect(restored).toEqual([Array(32).fill(0x2b)])
+	}, 60_000)
+
 	test("a legacy backup, which carries the profile's DEK and DEK-sealed rows, still restores", async () => {
 		const { api, profile, account, keys: repo } = await build()
 		const p = await profile.createProfile("P", PASSWORD)
@@ -386,7 +417,7 @@ describe("exportFullBackupKeys — the run fence", () => {
 		await profile.deleteProfile(a.id)
 		const recreated = await profile.restore(
 			{ id: a.id, name: "A", type: "password" },
-			{ type: "password", masterKey: asBase64MasterSecret(masterKey), entropy, importedKeysDek: toBase64(transferKey) },
+			{ masterKey: asBase64MasterSecret(masterKey), entropy, importedKeysDek: toBase64(transferKey) },
 			PASSWORD,
 		)
 		await profile.finalizeRestore(recreated.id, PASSWORD)
@@ -465,7 +496,7 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 		await expect(account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)).rejects.toThrow(/^ERR_RESET_PENDING/)
 	}, 30_000)
 
-	test("the passkey path's slices refuse when a reset journal appears while they read", async () => {
+	test("the imported-keys and accounts slices refuse when a reset journal appears while they read", async () => {
 		const { api, profile, account, keys } = await build()
 		const p = await profile.createProfile("P", PASSWORD)
 		await seedImported(api, p.id, ADDR_A, 0x2a, (await profile.getProfileDek(p.id))!)
@@ -499,4 +530,119 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 		})
 		await expect(account.backup()).rejects.toThrow(/^ERR_RESET_PENDING/)
 	}, 30_000)
+})
+
+// The password the caller gives opens the key, never the session, so an export answers the same
+// whichever profile is unlocked.
+describe("exportAccount — an imported account's key", () => {
+	test("opens under the profile's own DEK by its password while another profile is unlocked", async () => {
+		const { api, profile, account } = await build()
+		const a = await profile.createProfile("A", PASSWORD)
+		const dek = (await profile.getProfileDek(a.id))!
+		const dekOfA = Array.from(dek)
+		await seedImported(api, a.id, ADDR_A, 0x2a, dek)
+		await profile.createProfile("B", "other-pass")
+		const actual = await vi.importActual<typeof import("@nulo/wallet-crypto")>("@nulo/wallet-crypto")
+		const keys: number[][] = []
+		vi.mocked(unsealImportedSigningKeyV2).mockImplementationOnce(async (key, ...rest) => {
+			keys.push(Array.from(key))
+			return actual.unsealImportedSigningKeyV2(key, ...rest)
+		})
+		await account.exportAccount(a.id, CHAIN, ADDR_A, PASSWORD, true).catch(() => undefined)
+		expect(keys).toEqual([dekOfA])
+	}, 30_000)
+})
+
+// A row an earlier build wrote for a passkey profile holds no slot any answer opens, so each
+// account export refuses it with the typed error before it opens a key.
+describe("account exports — a retired profile row", () => {
+	type Ctx = Awaited<ReturnType<typeof withImported>>
+	async function withImported() {
+		const built = await build()
+		const a = await built.profile.createProfile("A", PASSWORD)
+		const row = await seedImported(built.api, a.id, ADDR_A, 0x2a, (await built.profile.getProfileDek(a.id))!)
+		return { ...built, id: a.id, row, fence: await built.profile.captureRunFence() }
+	}
+	const heldInReset = ({ api, id, row }: Ctx) =>
+		api.storage.local.set({
+			[`nulo:core:network-reset@${id}`]: JSON.stringify({
+				profileId: id,
+				networkId: "n1",
+				fromChainId: 1,
+				toChainId: CHAIN,
+				l1ChainId: L1,
+				cause: { networkReset: true, addressesMoved: false },
+				purged: true,
+				switchToSeedNode: false,
+				probedEndpoint: null,
+				accounts: [
+					{
+						type: AccountType.Imported,
+						index: 0,
+						name: "Imp",
+						visible: true,
+						oldAddress: "0xOLD",
+						newAddress: ADDR_A,
+						encryptedSigningKey: row.encryptedSigningKey,
+						done: true,
+					},
+				],
+			}),
+		})
+	const derivedAt = ({ api, id }: Ctx) =>
+		new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, api.storage.local).set(accountRowId(id, CHAIN, ADDR_B), {
+			profileId: id,
+			chainId: CHAIN,
+			address: ADDR_B,
+			index: 0,
+			type: AccountType.Nulo_v1,
+			l1ChainId: L1,
+			name: "Main",
+			visible: true,
+		})
+	const retire = async ({ api, id }: Ctx) => {
+		const key = `nulo:core:profiles@${id}`
+		const {
+			guard: _g,
+			secret: _s,
+			entropy: _e,
+			envelopeMac: _m,
+			...rest
+		} = JSON.parse((await api.storage.local.get(key))[key] as string)
+		await api.storage.local.set({ [key]: JSON.stringify({ ...rest, type: "passkey", credentialId: "Y3JlZA==" }) })
+	}
+
+	const opensKey = vi.mocked(unsealImportedSigningKeyV2)
+	test.each<[string, (ctx: Ctx) => Promise<unknown>, (ctx: Ctx) => Promise<unknown>, typeof opensKey | typeof deriveAccountSeed]>([
+		[
+			"exportAccount, an imported account",
+			async () => {},
+			(c) => c.account.exportAccount(c.id, CHAIN, ADDR_A, PASSWORD, true),
+			opensKey,
+		],
+		[
+			"exportAccount, a derived account",
+			derivedAt,
+			(c) => c.account.exportAccount(c.id, CHAIN, ADDR_B, PASSWORD, true),
+			deriveAccountSeed,
+		],
+		["exportResetHeldAccount", heldInReset, (c) => c.account.exportResetHeldAccount(c.id, ADDR_A, PASSWORD, true), opensKey],
+		["exportFullBackupKeys", async () => {}, (c) => c.account.exportFullBackupKeys(c.fence, PASSWORD), opensKey],
+	])(
+		"%s opens the key of a password row, and refuses the same row retired before it opens one or writes",
+		async (_label, arrange, call, opener) => {
+			const ctx = await withImported()
+			await arrange(ctx)
+			await call(ctx).catch(() => undefined)
+			expect(opener).toHaveBeenCalled()
+			vi.mocked(opener).mockClear()
+
+			await retire(ctx)
+			const before = await ctx.api.storage.local.get(null)
+			await expect(call(ctx)).rejects.toBeInstanceOf(RetiredProfileError)
+			expect(opener).not.toHaveBeenCalled()
+			expect(await ctx.api.storage.local.get(null)).toStrictEqual(before)
+		},
+		60_000,
+	)
 })

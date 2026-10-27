@@ -51,6 +51,7 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ConfigProp, IConfig } from "@/wallet/config"
+import { defaultConfig } from "@/wallet/config/config"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { ValueStorage } from "@/wallet/storage"
 import type { AlarmEvent, AlarmsPort, BrowserApi } from "@nulo/wallet-core/ports"
@@ -59,7 +60,6 @@ import {
 	asImportedKeysDek,
 	type ImportedKeysDek,
 	type MasterSecretBytes,
-	type Passhash,
 	SessionSecretBox,
 	verifyEnvelopeMacV3,
 	zeroize,
@@ -85,6 +85,9 @@ const MAX_EXPIRY_DEFERRAL_MS = 10 * 60_000
 /** How far one deferral moves the deadline, capped again by the TTL. */
 const EXPIRY_DEFERRAL_STEP_MS = 60_000
 
+/** The timeout a session runs on when the stored one is unusable. */
+const DEFAULT_SESSION_TTL = defaultConfig().sessionTtl
+
 /** Deletes `close()` makes of the persisted session before it leaves the row to the read-back. */
 const CLOSE_DELETE_ATTEMPTS = 2
 
@@ -94,6 +97,12 @@ export type CloseOutcome = { emitted: boolean; recordKept: boolean }
 
 /** The deadline and TTL revision a snapshot-based write was decided on. */
 type CommitExpectation = { lockedAt: number | undefined; configRev: number }
+
+/** A stored timeout that is negative or not finite reads as the default: applied as stored, it
+ *  would expire every session the moment it opens, with no way back to Settings. */
+function usableTtl(ttl: number): number {
+	return Number.isFinite(ttl) && ttl >= 0 ? ttl : DEFAULT_SESSION_TTL
+}
 
 /** Callback the facade passes to `restore()` so SessionManager can fetch
  *  the profile named in the persisted session without reaching into
@@ -183,7 +192,7 @@ export class SessionManager {
 		runExclusive?: <T>(fn: () => Promise<T>) => Promise<T>,
 	) {
 		this.onChange = onChange
-		this.sessionTtl = config.get("sessionTtl")
+		this.sessionTtl = usableTtl(config.get("sessionTtl"))
 		this.strictSecurityMode = config.get("strictSecurityMode")
 		config.onUpdate.add(this.onConfigUpdated)
 		this.session = new ValueStorage<Session>(SESSION_STORAGE_ROOT, browserApi.storage.session)
@@ -261,10 +270,9 @@ export class SessionManager {
 		return session.dek ? asImportedKeysDek(new Uint8Array(session.dek)) : undefined
 	}
 
-	/** Persists + enters the session for `profile`. `passhash` is now only
-	 *  a PRESENCE signal (a password unlock/create where a silent-restore
-	 *  bearer is appropriate) — its VALUE is never persisted. Only
-	 *  non-strict password profiles persist a bearer. Emits
+	/** Persists + enters the session for `profile`. Every open is an unlock the person made (or a
+	 *  profile they created, imported or restored), so a session with its DEK persists a
+	 *  silent-restore bearer unless strict mode is on, whatever the profile's unlock. Emits
 	 *  `onChange(ProfileInfo)` on success.
 	 *
 	 *  Failures are logged but swallowed — historically `_openSession`
@@ -275,27 +283,20 @@ export class SessionManager {
 	 *
 	 *  ## Buffer ownership
 	 *
-	 *  `secretBuffer` and `passhash` are **caller-owned**. This method
-	 *  copies what it needs (`Fr.fromBuffer` copies; the bearer wraps a
-	 *  COPY of `secretBuffer` under a fresh random token). The caller is
-	 *  responsible for calling `zeroize(...)` on these buffers after `open`
+	 *  `secretBuffer` and `dek` are **caller-owned**. This method copies what it needs
+	 *  (`Fr.fromBuffer` copies; the bearer wraps a COPY of `secretBuffer` under a fresh random
+	 *  token). The caller is responsible for calling `zeroize(...)` on these buffers after `open`
 	 *  returns. */
-	public async open(profile: Profile, secretBuffer: MasterSecretBytes, passhash?: Passhash, dek?: ImportedKeysDek): Promise<void> {
+	public async open(profile: Profile, secretBuffer: MasterSecretBytes, dek?: ImportedKeysDek): Promise<void> {
 		try {
 			const since = Date.now()
-			// `passhash` is only a PRESENCE signal — "a password
-			// unlock/create where the user authenticated, so a silent-restore
-			// bearer is appropriate." Its value is no longer persisted; the
-			// bearer wraps the master secret under a fresh RANDOM token
-			// (AAD-bound to the profile id). In strict mode NO bearer is
-			// persisted. Reading `strictSecurityMode` here (not at the call
-			// sites) keeps the gate race-free with a concurrent strict-toggle ON
-			// mid-unlock — it cannot create a session that already carries a bearer.
-			// A DEGRADED (dek-less) session persists NO bearer either: the next SW
-			// wake must force a full password unlock that re-surfaces the state,
-			// never silently extend it (degradation state machine, rule 2).
-			const persistBearer = passhash !== undefined && !this.strictSecurityMode && profile.type === "password" && dek !== undefined
-			const bearer = persistBearer && dek ? await this.sessionSecretBox.wrapPair(secretBuffer, dek, profile.id) : undefined
+			// The bearer wraps the master secret and the DEK under a fresh RANDOM token (AAD-bound to
+			// the profile id). In strict mode NO bearer is persisted. Reading `strictSecurityMode`
+			// here (not at the call sites) keeps the gate race-free with a concurrent strict-toggle ON
+			// mid-unlock — it cannot create a session that already carries a bearer. A DEGRADED
+			// (dek-less) session persists NO bearer either: the next SW wake must force a full unlock
+			// that re-surfaces the state, never silently extend it (degradation state machine, rule 2).
+			const bearer = !this.strictSecurityMode && dek ? await this.sessionSecretBox.wrapPair(secretBuffer, dek, profile.id) : undefined
 			const session: Session = {
 				profile: profile.id,
 				bearer,
@@ -308,8 +309,8 @@ export class SessionManager {
 			// the in-memory secret usable for this SW lifetime (degraded success:
 			// not persisted, but usable).
 			// Named + wiped in a finally: `Fr.fromBuffer` copies, so an anonymous `Buffer.from(...)`
-			// here would leave a second master-equivalent buffer alive until GC (same class of leak
-			// as the passkey OKM copy) — and an out-of-range throw must not skip the wipe.
+			// here would leave a second master-equivalent buffer alive until GC — and an out-of-range
+			// throw must not skip the wipe.
 			const secretCopy = Buffer.from(secretBuffer)
 			let secret: Fr
 			try {
@@ -469,6 +470,27 @@ export class SessionManager {
 		}
 	}
 
+	/** Closes `profileId`'s session: the one in memory, or, while no session is in memory, the
+	 *  persisted record naming it, which an earlier failed delete leaves. Caller MUST hold the
+	 *  facade lock; memory is checked again after the read in case the lock was force-released.
+	 *  Another profile's session or record is never touched; an unreadable record stays, as at
+	 *  restore. Never throws. */
+	public async closeProfile(profileId: string): Promise<void> {
+		const recorded = this.activeSession ? undefined : await this.persistedProfile()
+		if (this.isActive(profileId) || (recorded === profileId && !this.activeSession)) await this.close()
+	}
+
+	/** The profile the persisted record names, or `undefined` when there is none or it cannot be
+	 *  read. The read's error stays out of the log: a JSON parse error quotes the stored text. */
+	private async persistedProfile(): Promise<string | undefined> {
+		try {
+			return (await this.session.get())?.profile
+		} catch {
+			this.logger.log(LOG_SOURCE, LogLevel.Warn, "Persisted session unreadable; left in place")
+			return undefined
+		}
+	}
+
 	/** Resets `since` to now, extending the TTL window. No-op when no
 	 *  session is active (via the `getActive` guard). Does not emit —
 	 *  the UI already has the correct active-profile info. */
@@ -550,10 +572,9 @@ export class SessionManager {
 	 *
 	 *  TTL expiry → silent close.
 	 *  Profile no longer exists on disk → silent close.
-	 *  Password profile + bearer fails to unwrap (tampered / wrong profile /
-	 *  legacy passhash / missing) → silent close.
-	 *  Passkey profile → skipped (requires user interaction; lock-screen
-	 *  prompts for passkey the next time the popup opens). */
+	 *  Bearer fails to unwrap (tampered / wrong profile / legacy passhash /
+	 *  missing) → silent close. A passkey profile restores as a password
+	 *  profile does: its bearer holds the master and DEK its unlock opened. */
 	public async restore(lookup: SessionProfileLookup): Promise<void> {
 		let session: Session | undefined
 		try {
@@ -581,18 +602,12 @@ export class SessionManager {
 			await this.silentClose()
 			return
 		}
-		if (profile.type === "passkey") {
-			// Passkey sessions can't be silently restored — the browser
-			// requires a user gesture for WebAuthn `get`. Leave persisted
-			// record in place; the popup's lock screen will handle it.
-			return
-		}
 		// Shape gate — fail closed. `silentClose` (never throw) if:
 		//  - a LEGACY `passhash`-shaped session (pre-bearer) is present — NEVER
 		//    accepted, even non-strict → one-time re-unlock (profile intact);
 		//  - strict mode + any bearer — untrusted (open() never persists a
 		//    bearer under strict; this is a leftover or a mid-toggle race);
-		//  - a password session with NO bearer — nothing to restore.
+		//  - a session with NO bearer — nothing to restore.
 		if (session.passhash || (this.strictSecurityMode && session.bearer) || !session.bearer) {
 			this.logger.log(LOG_SOURCE, LogLevel.Debug, "No restorable bearer (legacy passhash / strict+bearer / missing) → silentClose")
 			await this.silentClose()
@@ -607,15 +622,6 @@ export class SessionManager {
 			pair = await this.sessionSecretBox.unwrapPair(session.bearer, profile.id)
 			if (!pair) {
 				this.logger.log(LOG_SOURCE, LogLevel.Debug, "Session bearer failed to unwrap (tampered / wrong profile / v1) → silentClose")
-				await this.silentClose()
-				return
-			}
-			// Race: re-check strict AFTER the async unwrap, immediately
-			// before committing `activeSession`. A strict-toggle ON that landed
-			// mid-restore already cleared storage; do not resurrect an in-memory
-			// bearer session past it.
-			if (this.strictSecurityMode) {
-				this.logger.log(LOG_SOURCE, LogLevel.Debug, "Strict toggled ON mid-restore → silentClose")
 				await this.silentClose()
 				return
 			}
@@ -639,6 +645,14 @@ export class SessionManager {
 			)
 			if (!envelopeIntact) {
 				this.logger.log(LOG_SOURCE, LogLevel.Error, "Sealed-envelope MAC mismatch → silentClose (password unlock will verify)")
+				await this.silentClose()
+				return
+			}
+			// Re-checked after the last await, with none before `activeSession` is committed: a
+			// strict toggle ON that landed mid-restore already cleared storage, and no bearer
+			// session may outlive it in memory.
+			if (this.strictSecurityMode) {
+				this.logger.log(LOG_SOURCE, LogLevel.Debug, "Strict toggled ON mid-restore → silentClose")
 				await this.silentClose()
 				return
 			}
@@ -685,9 +699,7 @@ export class SessionManager {
 		}
 	}
 
-	/** `true` iff a session belongs to `profileId` right now. Used by
-	 *  the facade to decide whether a profile-mutation operation (e.g.
-	 *  `deleteProfile`) should also close the session. */
+	/** `true` iff a session belongs to `profileId` right now. */
 	public isActive(profileId: string): boolean {
 		return this.activeSession?.session.profile === profileId
 	}
@@ -748,7 +760,7 @@ export class SessionManager {
 	private readonly onConfigUpdated = (prop: ConfigProp) => {
 		if (prop.key === "sessionTtl") {
 			const oldTtl = this.sessionTtl
-			const newTtl = prop.value
+			const newTtl = usableTtl(prop.value)
 			this.sessionTtl = newTtl
 			if (oldTtl === newTtl) return
 			// Don't await — config.set returns immediately and the listener

@@ -7,6 +7,7 @@ import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 import { useToast } from "@/composables/toast"
 import { managers } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -18,7 +19,7 @@ import Auth from "./auth.vue"
 
 const unlockProfile = vi.fn()
 const unlockPasskeyProfile = vi.fn()
-const getPasskeyCredentialId = vi.fn()
+const getPasskeyUnlockParams = vi.fn()
 const runCeremony = vi.fn()
 const initTransactionServiceMock = vi.fn()
 const setLastActiveProfileIdMock = vi.fn(async () => undefined)
@@ -37,13 +38,40 @@ vi.mock("@/composables/unlockWait", async (importOriginal) => {
 	return { ...mod, awaitProfileActivation: (...a: unknown[]) => waitHolder.mock(...(a as [])) }
 })
 
+/** Profile ids whose activation runs in this document, as the bootstrap's registry reports them. */
+const activations = vi.hoisted(() => ({ ids: undefined as unknown as Set<string> }))
+vi.mock("@/composables/useProfileBootstrap", async () => {
+	const { reactive } = await import("vue")
+	activations.ids = reactive(new Set<string>())
+	return { isAnyActivating: () => activations.ids.size > 0 }
+})
+
+/** Another window's writes of the last-active pointer, and the service's deletions, as this page hears them. */
+const elsewhere = vi.hoisted(() => {
+	const picks = new Set<(id: string | undefined) => void>()
+	const deletions = new Set<(profile: { id: string }) => void>()
+	return {
+		picks,
+		deletions,
+		pick: (id: string) => {
+			for (const listener of picks) listener(id)
+		},
+		delete: (id: string) => {
+			for (const listener of deletions) listener({ id })
+		},
+	}
+})
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
 			unlockProfile: (...args: unknown[]) => unlockProfile(...args),
 			unlockPasskeyProfile: (...args: unknown[]) => unlockPasskeyProfile(...args),
-			getPasskeyCredentialId: (...args: unknown[]) => getPasskeyCredentialId(...args),
+			getPasskeyUnlockParams: (...args: unknown[]) => getPasskeyUnlockParams(...args),
 			getProfiles: vi.fn(async () => []),
+			onProfileDeleted: {
+				add: (listener: (profile: { id: string }) => void) => elsewhere.deletions.add(listener),
+				remove: (listener: (profile: { id: string }) => void) => elsewhere.deletions.delete(listener),
+			},
 		},
 		account: undefined,
 	},
@@ -78,6 +106,10 @@ vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false
 vi.mock("@/utils/lastActiveProfile", () => ({
 	getLastActiveProfileId: vi.fn(async () => undefined),
 	setLastActiveProfileId: (...args: unknown[]) => setLastActiveProfileIdMock(...(args as [])),
+	onLastActiveProfileChanged: (listener: (id: string | undefined) => void) => {
+		elsewhere.picks.add(listener)
+		return () => elsewhere.picks.delete(listener)
+	},
 }))
 vi.mock("@/wallet/services/account/client", () => ({ AccountServiceClient: vi.fn() }))
 const routerPush = vi.fn()
@@ -87,9 +119,10 @@ vi.mock("vue-router", () => ({
 }))
 
 beforeEach(() => {
+	activations.ids?.clear()
 	unlockProfile.mockReset()
 	unlockPasskeyProfile.mockReset()
-	getPasskeyCredentialId.mockReset()
+	getPasskeyUnlockParams.mockReset()
 	runCeremony.mockReset()
 	vi.mocked(closesOnFocusLoss).mockReturnValue(false)
 	openToastMock.mockReset()
@@ -116,9 +149,10 @@ const InputStub = {
 	template: `<input :value="modelValue" data-stub-input @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)" />`,
 }
 
-function mountAuth() {
+function mountAuth(provide: Record<string, unknown> = {}) {
 	const wrapper = mount(Auth, {
 		global: {
+			provide,
 			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
 			stubs: {
 				Input: InputStub,
@@ -405,6 +439,204 @@ describe("auth.vue — the mount's last-active lookup", () => {
 		await flushPromises()
 		expect(appStore.profile).toBeUndefined()
 	})
+
+	test("after the last active profile was deleted, several left: none is presumed and the chooser opens", async () => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("deleted")
+		vi.mocked(managers.profile.getProfiles).mockResolvedValueOnce([B, A])
+		const { appStore } = mountAuth()
+		appStore.profile = undefined
+		await flushPromises()
+
+		expect(appStore.profile).toBeUndefined()
+		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+})
+
+describe("auth.vue — the profile it shows follows other windows", () => {
+	const A = { id: "pA", name: "A", type: "password" } as ProfileInfo
+	const B = { id: "pB", name: "B", type: "password" } as ProfileInfo
+	const C = { id: "pC", name: "C", type: "password" } as ProfileInfo
+
+	beforeEach(() => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, B, C])
+	})
+
+	test("another window's pick on its lock screen moves this one, and a later pick wins over an earlier one still loading", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		let releaseEarlier!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (releaseEarlier = () => resolve([A, B, C]))))
+		elsewhere.pick("pB")
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseEarlier()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a pick elsewhere while an unlock runs here leaves the profile that unlock reads", async () => {
+		unlockProfile.mockReturnValue(new Promise(() => {}))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		elsewhere.pick("pB")
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a selection made here while another window's pick loads stands", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([A, B, C]))))
+		elsewhere.pick("pB")
+		appStore.profile = C
+		release()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("a pick or a deletion elsewhere during an unlock that fails here settles the profile once it ends", async () => {
+		const unlockThatFails = async (profile: ProfileInfo, elsewhereMeanwhile: () => void) => {
+			let fail!: () => void
+			unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+			const mounted = mountAuth()
+			mounted.appStore.profile = profile
+			await flushPromises()
+			await mounted.wrapper.find("[data-stub-input]").setValue("pass1234")
+			await mounted.wrapper.find("form").trigger("submit")
+			await flushPromises()
+			elsewhereMeanwhile()
+			await flushPromises()
+			expect(mounted.appStore.profile?.id).toBe(profile.id)
+			fail()
+			await flushPromises()
+			return mounted
+		}
+
+		const picked = await unlockThatFails(A, () => {
+			vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+			elsewhere.pick("pB")
+		})
+		expect(picked.appStore.profile?.id).toBe("pB")
+		picked.wrapper.unmount()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
+		const deleted = await unlockThatFails(A, () => {
+			vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+			elsewhere.delete("pA")
+		})
+		expect(deleted.appStore.profile).toBeUndefined()
+		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick elsewhere waits out an activation running here, and applies only if that activation leaves the page locked", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		activations.ids.add("pA")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+		activations.ids.delete("pA")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+
+		activations.ids.add("pB")
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		elsewhere.pick("pC")
+		await flushPromises()
+		appStore.isLogined = true
+		activations.ids.delete("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("a profile chosen here during an unlock stands over a pick that arrived during it", async () => {
+		let fail!: () => void
+		unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		elsewhere.pick("pB")
+		appStore.profile = C
+		fail()
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
+	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		elsewhere.delete("pA")
+		await flushPromises()
+		expect(appStore.profile).toBeUndefined()
+		expect(popups.isOpened("select_profile")).toBe(true)
+
+		popups.closeAll()
+		appStore.profile = B
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C])
+		elsewhere.delete("pB")
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pC")
+		expect(popups.isOpened("select_profile")).toBe(false)
+	})
+
+	test("its selection cleared from outside while locked: the only profile left is selected, several open the chooser", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+		const selected = () => appStore.profile?.id
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBe("pB")
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBeUndefined()
+		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
+	test("a deletion of another profile changes nothing here", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, C])
+		elsewhere.delete("pB")
+		await flushPromises()
+
+		expect(appStore.profile?.id).toBe("pA")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
+	})
 })
 
 describe("auth.vue — the account client survives an unlock", () => {
@@ -433,12 +665,20 @@ describe("auth.vue — passkey unlock", () => {
 		await flushPromises()
 	}
 
-	test("in the page, the ceremony runs against this profile's credential", async () => {
-		getPasskeyCredentialId.mockResolvedValue("cred-1")
-		runCeremony.mockResolvedValue({ id: "cred-1" })
+	// Another input would rebuild another key, which opens nothing this profile sealed.
+	test("in the page, the ceremony runs against this profile's credential at its own input", async () => {
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
 		await submitPasskeyUnlock()
-		expect(runCeremony).toHaveBeenCalledWith({ mode: "get", credentialId: "cred-1", step: "unlock", profileName: "P" })
-		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1" })
+		expect(getPasskeyUnlockParams).toHaveBeenCalledWith("p1")
+		expect(runCeremony).toHaveBeenCalledWith({
+			mode: "get",
+			credentialId: "cred-1",
+			prfSalt: "c2FsdA==",
+			step: "unlock",
+			profileName: "P",
+		})
+		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1", prfSalt: "c2FsdA==" })
 	})
 
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
@@ -446,14 +686,14 @@ describe("auth.vue — passkey unlock", () => {
 		await submitPasskeyUnlock()
 		expect(unlockPasskeyProfile).toHaveBeenCalledTimes(1)
 		expect(unlockPasskeyProfile.mock.calls[0]).toEqual(["p1"])
-		expect(getPasskeyCredentialId).not.toHaveBeenCalled()
+		expect(getPasskeyUnlockParams).not.toHaveBeenCalled()
 		expect(runCeremony).not.toHaveBeenCalled()
 	})
 })
 
 describe("auth.vue — what a failed unlock says", () => {
 	async function failPasskeyUnlock(error: unknown) {
-		getPasskeyCredentialId.mockResolvedValue("cred-1")
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
 		runCeremony.mockRejectedValue(error)
 		const { wrapper, appStore } = mountAuth()
 		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
@@ -537,6 +777,148 @@ describe("auth.vue — what a failed unlock says", () => {
 	test("a cancelled passkey prompt stays silent", async () => {
 		await failPasskeyUnlock(new UserRejectedError("User cancelled passkey ceremony"))
 		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test("a passkey whose answer opens nothing gets the generic line, never the error's text", async () => {
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+		unlockPasskeyProfile.mockRejectedValue(new Error("Passkey did not open this profile"))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
+	})
+})
+
+describe("auth.vue — an unlock refused as an unknown id", () => {
+	async function refuse(check: string, { passkey = false, moveTo }: { passkey?: boolean; moveTo?: string } = {}) {
+		const checkSelection = vi.fn(async () => check)
+		const { wrapper, appStore } = mountAuth({ checkSelection })
+		const refusal = new Error("Invalid profile id")
+		if (passkey) {
+			appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+			getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+			runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+			unlockPasskeyProfile.mockImplementation(async () => {
+				if (moveTo) appStore.profile = { id: moveTo, name: "Q", type: "password" } as never
+				throw refusal
+			})
+		} else unlockProfile.mockRejectedValue(refusal)
+		await flushPromises()
+		if (!passkey) await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		return checkSelection
+	}
+
+	test("the screen that followed the deleted profile, or moved on meanwhile, offers no retry", async () => {
+		for (const check of ["followed", "superseded"]) {
+			openToastMock.mockReset()
+			expect(await refuse(check)).toHaveBeenCalledTimes(1)
+			expect(openToastMock).not.toHaveBeenCalled()
+		}
+	})
+
+	test("an attempt whose profile was replaced on screen during its last call says nothing, whatever the error", async () => {
+		expect(await refuse("present", { passkey: true, moveTo: "p2" })).not.toHaveBeenCalled()
+		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test("a profile still listed, or a list that could not be read, keeps the attempt's own failure line", async () => {
+		await refuse("present")
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+		openToastMock.mockReset()
+		await refuse("unread", { passkey: true })
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
+	})
+})
+
+describe("auth.vue — a passkey attempt belongs to the profile it started on", () => {
+	test("a selection replaced or cleared during the prompt sends the answer nowhere and says nothing", async () => {
+		for (const next of [{ id: "p2", name: "Q", type: "password" }, undefined]) {
+			unlockPasskeyProfile.mockReset()
+			openToastMock.mockReset()
+			const { wrapper, appStore } = mountAuth()
+			appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+			getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+			runCeremony.mockImplementation(async () => {
+				appStore.profile = next as never
+				return { id: "cred-1", prfSalt: "c2FsdA==" }
+			})
+			await flushPromises()
+			await wrapper.find("form").trigger("submit")
+			await flushPromises()
+			expect(unlockPasskeyProfile).not.toHaveBeenCalled()
+			expect(openToastMock).not.toHaveBeenCalled()
+			wrapper.unmount()
+		}
+	})
+
+	test("an unlock that won but whose profile left the screen before its activation ended releases Continue at once, silently", async () => {
+		unlockProfile.mockResolvedValue({ id: "p1", name: "P", type: "password" })
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(waitHolder.mock).toHaveBeenCalledTimes(1)
+
+		appStore.profile = { id: "p2", name: "Q", type: "password" } as never
+		await flushPromises()
+		expect(openToastMock).not.toHaveBeenCalled()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenLastCalledWith("p2", "pass1234")
+	})
+
+	test("an unchanged selection sends the answer to the profile the attempt started on", async () => {
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		getPasskeyUnlockParams.mockResolvedValue({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+		unlockPasskeyProfile.mockRejectedValue(new Error("Passkey did not open this profile"))
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1", prfSalt: "c2FsdA==" })
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
+	})
+})
+
+describe("auth.vue — a passkey profile made before 1.1", () => {
+	async function mountRetired() {
+		const mounted = mountAuth()
+		mounted.appStore.profile = { id: "p1", name: "Old", type: "passkey", retired: true } as never
+		await flushPromises()
+		return mounted
+	}
+
+	test("offers only its deletion: no unlock form, no passkey prompt", async () => {
+		const { wrapper } = await mountRetired()
+		expect(wrapper.get('[data-testid="auth-setup-again"]').text()).toBe("Set upagain")
+		expect(wrapper.get('[data-testid="auth-setup-again-text"]').text()).toBe(
+			"This profile was made with an earlier version of Nulo and can't be opened in this version. Delete it, then create or import a profile. What it held stays on the network, out of this version's reach.",
+		)
+		expect(wrapper.find('[data-testid="auth-form"]').exists()).toBe(false)
+		expect(getPasskeyUnlockParams).not.toHaveBeenCalled()
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(unlockPasskeyProfile).not.toHaveBeenCalled()
+	})
+
+	test("Delete profile leads to the delete page", async () => {
+		const { wrapper } = await mountRetired()
+		await wrapper.get('[data-testid="auth-delete-retired"]').trigger("click")
+		expect(routerPush).toHaveBeenCalledWith("/popup/settings/security/reset")
+	})
+
+	test("a later profile picked on this screen gets its unlock form back", async () => {
+		const { wrapper, appStore } = await mountRetired()
+		appStore.profile = { id: "p2", name: "New", type: "passkey" } as never
+		await flushPromises()
+		expect(wrapper.find('[data-testid="auth-setup-again"]').exists()).toBe(false)
+		expect(wrapper.find('[data-testid="auth-form"]').exists()).toBe(true)
 	})
 })
 

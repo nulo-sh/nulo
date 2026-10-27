@@ -3349,16 +3349,21 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 
 	test("onTokenDeleted deletes the cursor row (re-add re-indexes from startBlock)", async () => {
 		const { reader, state } = makePublicReader()
-		const { service } = await bootPublic(reader, state)
+		const tokens = makeTokenStub([tokenA])
+		const { service } = await bootPublic(reader, state, { token: tokens })
 		await seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
 		await seedPublic({ txHash: "0xtok", l2BlockNumber: 8 })
 
+		// The token service deletes the row before it emits, so the rebuild ending the handler no longer
+		// lists the token; a stub still listing it re-installs the scan, whose first tick writes a cursor.
+		tokens.getTokensRaw.mockResolvedValue([])
 		await (service as unknown as { onTokenDeleted: (t: unknown) => Promise<void> }).onTokenDeleted({
 			id: tokenA.id,
 			profileId: "p1",
 			chainId: 1,
 			contract: tokenA.contract,
 		})
+		await flushPromises()
 
 		expect(await cursorFor()).toBeUndefined()
 	})

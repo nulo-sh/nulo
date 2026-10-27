@@ -1365,6 +1365,26 @@
 			}
 		},
 		{
+			"id": "profiles.passkeyPhrase",
+			"stamp": 0,
+			"shape": "profiles",
+			"key": "nulo:core:profiles@e0019fcb",
+			"value": {
+				"id": "e0019fcb",
+				"name": "Passkey wallet",
+				"type": "passkey",
+				"pxeGeneration": "36bb2a7716075a6690f6cba44370b737",
+				"dekSealed": "AUZY94bAC1yw5Kky63pNvuRyDe03ZX1kXKn5wljy7k0fAaXIgd1MajHzy/e886CTc1/Z97FPEgkCPNgKdQ==",
+				"walletFingerprint": "cded11cf77cd8b6cbb04e96c6dbafbd75195e8bfddfdda0f3bbc0c2eb94f405c",
+				"guard": "AU5s2PVz3uJ2DDR42auD+p6P4Lvdr5tsWkio62+KDcm9Ovc4cQ==",
+				"secret": "AVgMXam9sxfM4edBfHtHfzneUuhBiya0+0r0IGQdjbopbzTAeEFxT/5GDylsUUcIcqm5CXH5/LECiCTN9Q==",
+				"entropy": "ATax1uuktuV8ijfF7hYPJkZjYAXOUZlJcL6+IJcw2urKpbX8Fgv36xmYokqF2m1MCk1I0nH+HZb0vkYvzQ==",
+				"envelopeMac": "Ut7v3qFD0sH3JA+kdJa3aE9ug1Y1pbfzf+hNmz392gk=",
+				"credentialId": "-NvbCCazjEtUBKYctVVcD5gmQWqcSEYQWM_Y44SBLwc",
+				"prfSalt": "sHYvpl3xVea8sBgv/2m0iBqDHwtX+R3UMN2wivClWIE="
+			}
+		},
+		{
 			"id": "config.minimal",
 			"stamp": 0,
 			"shape": "config",

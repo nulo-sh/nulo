@@ -13,14 +13,13 @@ import { basename } from "node:path"
 import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
-import { PASSKEY_PRF_LABEL, RP_ID } from "@/wallet/services/passkey/spec"
 import type { ILogger } from "@nulo/wallet-core/logger"
-import { prepareClick, type VirtualAuthenticator } from "../fixtures/browser"
 import {
 	clickByTestId,
 	expectNameFieldPrefill,
 	expectNoNameField,
 	pickFileByTestId,
+	replaceInputValue,
 	waitForHash,
 	withTimeoutMessage,
 } from "../fixtures/dom"
@@ -29,10 +28,7 @@ import { selectedAccount, waitForSelectedAccount } from "../fixtures/accounts"
 import { pollUntil } from "../fixtures/poll"
 import { expectNewProfileNamed, readProfileNames } from "../fixtures/profiles"
 import { openOnboarding, openPopup, waitForServiceReady } from "../fixtures/wallet-pages"
-import { refusePasskeyStep } from "../fixtures/passkey"
 import { readSwLogTrail } from "../fixtures/journal"
-import { sealPasskeyBackup } from "./backup-seal"
-import { findAccount } from "./identity-rows"
 import {
 	appendImportRecord,
 	buildImportRecord,
@@ -42,7 +38,8 @@ import {
 	type ImportStageRecord,
 	type StageEvent,
 } from "./import-stage-timing"
-export { TEST_PASSWORD } from "../fixtures/constants"
+import { TEST_PASSWORD } from "../fixtures/constants"
+export { TEST_PASSWORD }
 export { writeBackupToTemp } from "./test-temp-dir"
 
 /** Per-fork measurement identity (vitest runs one fork per test file). */
@@ -217,6 +214,9 @@ export async function importSeed(
 	}
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 10_000 })
+	// A phrase opens on Passkey; this driver imports under a password.
+	await clickByTestId(page, "import-method-password")
+	await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 10_000 })
 	await setInputs(page, {
 		...(profileName === undefined ? {} : { [`[data-testid="${shell.nameInputTestId}"] input`]: profileName }),
 		'[data-testid="import-seed-input"] input': seed,
@@ -242,6 +242,11 @@ export async function submitFullBackupImport(page: Page, filePath: string, passw
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
 
 	await page.waitForSelector(`[data-testid="${shell.submitTestId("full-backup")}"]`, { visible: true, timeout: 10_000 })
+	// A passkey profile's backup opens on Passkey; this driver restores under a password.
+	if (await page.$('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]')) {
+		await clickByTestId(page, "import-full-backup-method-password")
+		await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
+	}
 	await setInputs(page, {
 		'[data-testid="import-full-backup-password-input"] input': password,
 		'[data-testid="import-full-backup-password-confirm-input"] input': password,
@@ -250,12 +255,53 @@ export async function submitFullBackupImport(page: Page, filePath: string, passw
 	await submitWhenEnabled(page, shell.submitTestId("full-backup"))
 }
 
-/** Restore a PASSKEY backup from the full-backup form already on screen. A passkey backup has no
- *  new-password section: the submit runs the in-page passkey step, and the page lands on Home. A
- *  refusal fails at once with the error box's text. */
-export async function submitPasskeyFullBackup(page: Page, filePath: string, timeoutMs = 30_000): Promise<void> {
+/** Restore a passkey profile's backup under a new passkey from the full-backup picker on screen: the
+ *  form opens on the method the backup was made with, Passkey, and asks no new password. Lands on
+ *  the shell's success hash. */
+export async function restoreFullBackupWithPasskey(page: Page, filePath: string, shell: ImportShell): Promise<void> {
+	await page.waitForSelector('[data-testid="import-option-full-backup"]', { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "import-option-full-backup")
 	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
 	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
+	await page.waitForSelector('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]', {
+		visible: true,
+		timeout: 10_000,
+	})
+	expect(await page.$('[data-testid="import-full-backup-password-input"]'), "the Passkey tab shows a password field").toBeNull()
+	await submitWhenEnabled(page, shell.submitTestId("full-backup"))
+	await waitForHash(page, shell.successHash, 120_000)
+}
+
+/** Restore an ENCRYPTED backup from the full-backup form already on screen: the file opens with
+ *  `filePassword`, and the restored profile takes {@link TEST_PASSWORD}, or with `unlock: "passkey"`
+ *  a new passkey, which must be the method the form opened on. Lands on Home; a refusal fails at
+ *  once with the error box's text. */
+export async function submitEncryptedFullBackup(
+	page: Page,
+	filePath: string,
+	filePassword: string,
+	timeoutMs = 30_000,
+	unlock: "password" | "passkey" = "password",
+): Promise<void> {
+	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
+	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
+	await page.waitForSelector('[data-testid="import-full-backup-decrypt-password-input"] input', { visible: true, timeout: 10_000 })
+	await replaceInputValue(page, '[data-testid="import-full-backup-decrypt-password-input"]', filePassword)
+	await clickByTestId(page, "import-full-backup-decrypt-btn")
+	await page.waitForSelector('[data-testid="import-full-backup-method-password"]', { visible: true, timeout: 60_000 })
+	if (unlock === "passkey") {
+		await page.waitForSelector('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]', {
+			visible: true,
+			timeout: 5_000,
+		})
+	} else {
+		await clickByTestId(page, "import-full-backup-method-password")
+		await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
+		await setInputs(page, {
+			'[data-testid="import-full-backup-password-input"] input': TEST_PASSWORD,
+			'[data-testid="import-full-backup-password-confirm-input"] input': TEST_PASSWORD,
+		})
+	}
 	await submitWhenEnabled(page, "import-full-backup-submit-btn")
 	const { refusal } = await pollUntil(
 		() =>
@@ -264,9 +310,9 @@ export async function submitPasskeyFullBackup(page: Page, filePath: string, time
 				refusal: document.querySelector('[data-testid="import-full-backup-error"]')?.textContent?.trim() ?? null,
 			})),
 		({ home, refusal }) => home || refusal !== null,
-		{ label: "the passkey restore landing on Home or refusing the backup", timeoutMs, intervalMs: 250 },
+		{ label: "the restore landing on Home or refusing the backup", timeoutMs, intervalMs: 250 },
 	)
-	if (refusal !== null) throw new Error(`the passkey restore refused the backup: ${refusal}`)
+	if (refusal !== null) throw new Error(`the restore refused the backup: ${refusal}`)
 }
 
 /** Drive the full-backup import. Lands on the shell's success hash, or — when
@@ -483,94 +529,4 @@ export function buildSyntheticBackup({
 	}
 	const checksum = createHash("sha256").update(JSON.stringify(body)).digest("hex")
 	return JSON.stringify({ ...body, checksum })
-}
-
-/** What a backup of a passkey profile carries from its register-time record: the sealed DEK
- *  verbatim, since the restore re-derives the same PRF wrap key to open it, and the account's
- *  derivation fields, since the integrity check re-derives the address and withholds a session that
- *  differs. */
-export interface RegisteredPasskey {
-	credentialId: string
-	dekSealed: string
-	account: { address: string; chainId: number; l1ChainId: number; index: number; type: number }
-}
-
-/** The one passkey profile in storage, with the row of the active account. */
-export async function readRegisteredPasskey(page: Page): Promise<RegisteredPasskey> {
-	const { profile } = await page.evaluate(async () => {
-		const all = await chrome.storage.local.get(null)
-		const profile = Object.entries(all)
-			.filter(([key]) => key.startsWith("nulo:core:profiles@"))
-			.map(([, raw]) => (typeof raw === "string" ? JSON.parse(raw) : raw))
-			.find((row) => row?.type === "passkey")
-		if (!profile) throw new Error("no passkey profile in storage")
-		return { profile: profile as { id: string; credentialId: string; dekSealed: string } }
-	})
-	const active = String(await selectedAccount(page))
-	const row = await findAccount(page, profile.id, active)
-	if (!row) throw new Error(`no account row for the active account ${active}`)
-	const { address, chainId, l1ChainId, index, type } = row
-	return { credentialId: profile.credentialId, dekSealed: profile.dekSealed, account: { address, chainId, l1ChainId, index, type } }
-}
-
-/** The PRF output the wallet's ceremony reads from `credentialId`, asked in `page`, where the
- *  credential's virtual authenticator answers. */
-export async function readPasskeyPrf(page: Page, credentialId: string): Promise<string> {
-	const prfInput = [...createHash("sha256").update(PASSKEY_PRF_LABEL).digest()]
-	await prepareClick(page)
-	return await page.evaluate(
-		async (id: string, rpId: string, input: number[]) => {
-			const assertion = (await navigator.credentials.get({
-				publicKey: {
-					challenge: crypto.getRandomValues(new Uint8Array(32)),
-					rpId,
-					userVerification: "required",
-					allowCredentials: [{ id: Uint8Array.from(atob(id), (c) => c.charCodeAt(0)), type: "public-key" }],
-					extensions: { prf: { eval: { first: new Uint8Array(input) } } },
-				},
-			})) as PublicKeyCredential | null
-			const first = assertion?.getClientExtensionResults().prf?.results?.first
-			if (!first) throw new Error("the passkey returned no PRF output")
-			return btoa(String.fromCharCode(...new Uint8Array(first as ArrayBuffer)))
-		},
-		credentialId,
-		RP_ID,
-		prfInput,
-	)
-}
-
-/** A full backup of a registered passkey profile that the importer accepts. Its `master-key` is the
- *  credential id, and it carries no entropy: the restore derives the master from the passkey, which
- *  `page` asks for once to make the backup's check. */
-export async function buildSyntheticPasskeyBackup(page: Page, passkey: RegisteredPasskey, profileName = "Imported PK"): Promise<string> {
-	const body = {
-		"wallet-version": "test",
-		"aztec-version": "test",
-		"compat-epoch": 5,
-		"backup-schema-version": 1,
-		"master-key": passkey.credentialId,
-		"imported-keys-dek-sealed": passkey.dekSealed,
-		data: {
-			profile: { id: SYNTHETIC_PROFILE_ID, name: profileName, type: "passkey" },
-			account: [{ ...passkey.account, profileId: SYNTHETIC_PROFILE_ID, name: "Account", visible: true }],
-			token: [],
-			// Present though empty: the e2e builds' backup migration reads this slice.
-			contact: [],
-		},
-	}
-	return sealPasskeyBackup(body, { id: passkey.credentialId, prf: await readPasskeyPrf(page, passkey.credentialId) })
-}
-
-/** Chooses `filePath` in the full-backup form and submits it with the passkey refused once; the
- *  backup must stay chosen with no error box. Returns with the passkey allowed again. */
-export async function refusePasskeyRestore(page: Page, auth: VirtualAuthenticator, submitTestId: string, filePath: string): Promise<void> {
-	await page.waitForSelector('[data-testid="import-full-backup-pick-file"]', { visible: true, timeout: 10_000 })
-	await pickFileByTestId(page, "import-full-backup-pick-file", filePath)
-	await refusePasskeyStep(page, auth, submitTestId)
-	const form = await page.evaluate(() => ({
-		chosen: document.querySelector('[data-testid="import-full-backup-pick-file"]')?.textContent ?? "",
-		errorBox: document.querySelector('[data-testid="import-full-backup-error"]') !== null,
-	}))
-	expect(form.chosen).toContain(basename(filePath))
-	expect(form.errorBox).toBe(false)
 }

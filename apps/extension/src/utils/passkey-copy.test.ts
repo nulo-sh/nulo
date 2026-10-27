@@ -13,7 +13,7 @@ import {
 
 const dismissed = () => new DOMException("The operation either timed out or was not allowed.", "NotAllowedError")
 const aborted = () => new DOMException("user cancelled with Escape", "AbortError")
-const unconfirmed = (cause: unknown) => new PasskeyUnconfirmedError("cred-1", "a3f29b14", cause)
+const unconfirmed = (cause: unknown) => new PasskeyUnconfirmedError("cred-1", "c2FsdA==", cause)
 
 describe("classifyPasskeyFailure", () => {
 	test("a dismissed or timed-out prompt is not confirmed, also behind a created credential", () => {
@@ -69,14 +69,12 @@ describe("the passkey screen's words", () => {
 	test("the tag joins the step and the profile name, or shows the step alone", () => {
 		expect(passkeyTag("unlock", "Alice")).toBe("Unlock · Alice")
 		expect(passkeyTag("create", "Savings")).toBe("New profile · Savings")
-		expect(passkeyTag("import")).toBe("Import")
+		expect(passkeyTag("reveal", "Main")).toBe("Recovery phrase · Main")
 		expect(passkeyTag("export", "")).toBe("Backup")
-		expect(passkeyTag("restore", "Main")).toBe("Restore · Main")
 	})
 
 	test("a step that failed after the prompt names what failed", () => {
 		expect(stepFailedTitle("unlock")).toEqual(["Couldn't", "unlock"])
 		expect(stepFailedTitle("create")).toEqual(["Couldn't", "create the profile"])
-		expect(stepFailedTitle("import")).toEqual(["Couldn't", "import the passkey"])
 	})
 })

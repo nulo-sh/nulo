@@ -18,12 +18,12 @@ import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH } from "@/wallet/services/backup/backup-migration-registry"
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
 import { downloadFile, profileFileNameSegment } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, passkeyBackupAuthenticator, sealFullBackupText } from "@/utils/full-backup-helpers"
+import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { markGetStarted } from "@/utils/get-started"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { isNewPasswordValid } from "@/utils/password"
 import { createRunFence, type RunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
-import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 
 type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted" | "downloaded"
@@ -41,9 +41,8 @@ interface ExportRun {
 
 type KeyMaterial = {
 	key: string
-	entropyB64?: string
-	dekB64?: string
-	dekSealedB64?: string
+	entropyB64: string
+	dekB64: string
 	dekReplaced: boolean
 	unopenedImportedKeys?: number
 	importsOnAddedNetworks: AddedNetworkImports
@@ -64,7 +63,6 @@ interface ExportState {
 	isDownloading: Ref<boolean>
 	showRecommendation: Ref<boolean>
 	isWrongPassword: Ref<boolean>
-	isPasswordMismatch: Ref<boolean>
 	// Two distinct losses the user must know about before trusting the download. `dekReplaced`: the
 	// stored imported-keys key no longer opens, so the file carries a FRESH one and every imported
 	// account must be re-imported. `chainStateOmitted`: the profile is in recovery mode, so the PXE
@@ -78,29 +76,32 @@ interface ExportState {
 	/** The file's imported accounts with a key in it, on chains a restore does not re-create; a key
 	 *  that did not open counts too. None when a replaced DEK has its own warning. */
 	importsOnAddedNetworks: Ref<AddedNetworkImports>
-	/** The saved file is a passkey profile's plain file, which no password opens. */
-	savedPlain: Ref<boolean>
 }
 
 interface ExportCtx {
 	state: ExportState
 	// Sealed artifact strings, published only by a completed run — never a mutable draft object.
-	// `pretty` is the plain download body, `compact` the encryption input (both derive from the SAME
-	// sealed snapshot inside `assembleFullBackup`, so the embedded checksum covers exactly these
-	// bytes), `sealed` the encrypted file.
-	artifacts: { pretty: string | null; compact: string | null; sealed: string | null }
+	// `compact` is the encryption input (the snapshot `assembleFullBackup` checksummed, so the
+	// embedded checksum covers exactly these bytes), `sealed` the encrypted file.
+	artifacts: { compact: string | null; sealed: string | null }
 	// The one fence: `discardRun` invalidates it and runs only snapshot it, so a superseded run can
 	// neither publish state nor resurrect scrubbed secrets.
 	runs: RunFence
 	// The in-flight create, for the scrub's client teardown.
 	activeRun: ExportRun | null
+	// The session the published backup was made in. A password profile's file is sealed under the
+	// password that opened its keys there, which stays the profile's while that session stands: a
+	// password change reopens the session under the same lock as its commit.
+	madeIn: ProfileRunFence | null
+	// Counts the page's start-overs: a reset or a switch ends what a late answer may still say, a
+	// completed download does not.
+	resets: number
 	disposed: boolean
 	appStore: ReturnType<typeof useAppStore>
 	/** The page requires a session, so a profile is always active; read live, never cached. */
 	profile: () => ProfileInfo
 	isPasskeyProfile: ComputedRef<boolean>
 	openToast: ReturnType<typeof useToast>["openToast"]
-	requestConfirm: ReturnType<typeof useConfirm>["requestConfirm"]
 	opts: UseFullBackupExportOptions
 }
 
@@ -153,16 +154,21 @@ function buildBackupServices(): NamedClient[] {
 	] as NamedClient[]
 }
 
-/** Collects the WebAuthn credential via the in-page modal BEFORE
- *  calling the service. Targeted `get` against this profile's stored
- *  credentialId so the OS prompt is bound to the right key. Returns "handled"
- *  when the flow already resolved the failure UI (or was superseded). */
+/** Runs the profile's passkey in the in-page card BEFORE the service is called, bound to the
+ *  profile's credential and PRF input. Returns "handled" when the flow already resolved the
+ *  failure UI (or was superseded). */
 async function acquirePasskeyCredential(ctx: ExportCtx, isCurrent: () => boolean) {
 	const { state } = ctx
 	try {
-		const credentialId = await managers.profile.getPasskeyCredentialId(ctx.profile().id)
+		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(ctx.profile().id)
 		if (!isCurrent()) return "handled"
-		const credentialData = await ctx.opts.runCeremony({ mode: "get", credentialId, step: "export", profileName: ctx.profile().name })
+		const credentialData = await ctx.opts.runCeremony({
+			mode: "get",
+			credentialId,
+			prfSalt,
+			step: "export",
+			profileName: ctx.profile().name,
+		})
 		return { credentialData }
 	} catch (err) {
 		if (!isCurrent()) return "handled"
@@ -184,9 +190,9 @@ async function acquirePasskeyCredential(ctx: ExportCtx, isCurrent: () => boolean
 	}
 }
 
-/** Stage 2: the authenticated key-material export, discriminated per profile
- *  type. Returns "handled" when the failure UI already resolved (wrong
- *  password / passkey failure / superseded run). */
+/** Stage 2: the authenticated key-material export, the same body for both unlock methods. Returns
+ *  "handled" when the failure UI already resolved (wrong password / passkey failure / superseded
+ *  run). */
 async function exportKeyMaterial(
 	ctx: ExportCtx,
 	isCurrent: () => boolean,
@@ -196,24 +202,12 @@ async function exportKeyMaterial(
 ): Promise<KeyMaterial | "handled"> {
 	const { state } = ctx
 	try {
-		if (ctx.isPasskeyProfile.value) {
-			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
-			// the master re-derives from the passkey PRF at restore. The imported-keys DEK travels
-			// as a SEALED blob (the restore ceremony's wrap key opens it) — the stored one, or a
-			// fresh one when the stored slot no longer opens. The file carries the key rows it counted.
-			const passkeyKeys = await accountClient.exportPasskeyBackupKeys(fence, credentialData as PasskeyCredentialData)
-			if (!isCurrent()) return "handled"
-			return {
-				key: passkeyKeys.credentialId,
-				dekSealedB64: passkeyKeys.dekSealed,
-				dekReplaced: passkeyKeys.dekReplaced,
-				unopenedImportedKeys: passkeyKeys.unopenedImportedKeys,
-				importsOnAddedNetworks: importsOnAddedNetworks(passkeyKeys.accounts, passkeyKeys.importedKeyRows),
-				heldSlices: { [ACCOUNT_SERVICE_NAME]: passkeyKeys.accounts, [IMPORTED_KEYS_SERVICE_NAME]: passkeyKeys.importedKeyRows },
-			}
-		}
-		// The file carries a key made for this backup alone, never the profile's imported-keys DEK.
-		const material = await accountClient.exportFullBackupKeys(fence, state.password.value as string)
+		// The file carries a key made for this backup alone, never the profile's imported-keys DEK. A
+		// passkey profile's password field holds the file password, which opens nothing here.
+		const material = credentialData
+			? await accountClient.exportFullBackupKeys(fence, undefined, credentialData)
+			: await accountClient.exportFullBackupKeys(fence, state.password.value as string)
+		if (!isCurrent()) return "handled"
 		return {
 			key: material.masterKey,
 			entropyB64: material.entropy,
@@ -245,24 +239,19 @@ async function exportKeyMaterial(
  *  Constants are single-sourced with the import gates. `data` and
  *  `checksum` are the assembler's to add — in that order, so the sealed
  *  key order matches what the import side re-serializes. */
-function buildBackupEnvelope(ctx: ExportCtx, { key, entropyB64, dekB64, dekSealedB64 }: KeyMaterial) {
+function buildBackupEnvelope(ctx: ExportCtx, { key, entropyB64, dekB64 }: KeyMaterial) {
 	return {
 		"wallet-version": __VERSION__,
 		"aztec-version": __AZTEC_VERSION__,
 		[COMPAT_EPOCH_FIELD]: CURRENT_COMPAT_EPOCH,
 		[BACKUP_SCHEMA_VERSION_FIELD]: CURRENT_BACKUP_SCHEMA_VERSION,
 		"master-key": key,
-		// Password blobs REQUIRE this; passkey blobs must NOT carry it (`undefined` is dropped
-		// by JSON.stringify). Restore verifies PBKDF2(words(entropy)) == master-key before
-		// sealing either.
+		// Restore verifies PBKDF2(words(entropy)) == master-key before sealing.
 		entropy: entropyB64,
-		// Imported-keys key carriers (epoch-4 REQUIRED, per profile type; the other stays
-		// undefined → dropped): for password blobs, plaintext beside the plaintext master, the key
-		// made for this backup alone that its imported-key rows open under; for passkey blobs, the
-		// profile's sealed DEK. Restore feeds it ONLY into the rewrap context (the restored row
-		// mints a FRESH dek — clone divergence).
+		// Plaintext beside the plaintext master: the key made for this backup alone that its
+		// imported-key rows open under. Restore feeds it ONLY into the rewrap context (the restored
+		// row mints a FRESH dek — clone divergence).
 		"imported-keys-dek": dekB64,
-		"imported-keys-dek-sealed": dekSealedB64,
 		// The active-network preference names a CHAIN (row ids are per install and the backup
 		// carries no network rows); restore honours it only for a seeded chain, else the primary
 		// seed stays active. `undefined` is dropped by JSON.stringify when there is no active network.
@@ -346,15 +335,14 @@ async function runBackup(ctx: ExportCtx) {
 		showFileWarnings(ctx, material)
 		const envelope = buildBackupEnvelope(ctx, material)
 
-		const authenticate = credentialData ? passkeyBackupAuthenticator(credentialData) : undefined
 		const sources = backupSources(run.clients, material.heldSlices)
-		const result = await assembleFullBackup(envelope, sources, isCurrent, authenticate)
+		const result = await assembleFullBackup(envelope, sources, isCurrent)
 		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (!isCurrent() || rejectOversizedBackup(ctx, result.pretty)) return
 
 		ctx.artifacts.compact = result.compact
-		ctx.artifacts.pretty = result.pretty
+		ctx.madeIn = fence
 		state.backupStatus.value = "finished"
 		state.showRecommendation.value = true
 	} catch (err) {
@@ -366,28 +354,36 @@ async function runBackup(ctx: ExportCtx) {
 	}
 }
 
-/** Passkey profiles type the encryption password on this page, so it needs
- *  the empty/mismatch checks here. Returns true when encryption must not start. */
-function passkeyPasswordBlocked(ctx: ExportCtx) {
+/** A passkey profile's file gets a password of its own, typed on this page; it meets the new-password
+ *  rule, since the file holds the recovery phrase. Returns true when encryption must not start. */
+function filePasswordBlocked(ctx: ExportCtx) {
 	const { state } = ctx
-	if (!ctx.isPasskeyProfile.value) return false
-	state.showRecommendation.value = false
-	if (!state.password.value) return true
-	if (state.password.value !== state.repeatedPassword.value) {
-		state.isPasswordMismatch.value = true
+	return ctx.isPasskeyProfile.value && !isNewPasswordValid(state.password.value ?? "", state.repeatedPassword.value ?? "")
+}
+
+/** Whether a password profile's backup was made in the session still open, so the password it is
+ *  sealed under still opens the profile. The service answers under the lock a password change holds
+ *  from its commit through its reopen. A passkey profile's file takes a password of its own and never
+ *  asks. */
+async function madeInSessionStands(ctx: ExportCtx, madeIn: ProfileRunFence | null): Promise<boolean> {
+	if (ctx.isPasskeyProfile.value) return true
+	try {
+		await managers.profile.assertRunFence(madeIn as ProfileRunFence)
 		return true
+	} catch {
+		return false
 	}
-	return false
 }
 
 async function runEncrypt(ctx: ExportCtx) {
 	const { state } = ctx
 	// Never mid-download: the plaintext file would land on disk while the page says it is encrypted.
 	if (ctx.disposed || state.isBusy.value || state.isDownloading.value) return
-	if (passkeyPasswordBlocked(ctx)) return
+	if (filePasswordBlocked(ctx)) return
 	state.isBusy.value = true
 	const isCurrent = ctx.runs.snapshot()
 	const plaintext = ctx.artifacts.compact
+	const madeIn = ctx.madeIn
 
 	state.backupStatus.value = "encrypting"
 	state.showRecommendation.value = false
@@ -395,6 +391,14 @@ async function runEncrypt(ctx: ExportCtx) {
 	try {
 		const sealed = await sealFullBackupText(plaintext as string, state.password.value as string)
 		if (!isCurrent()) return
+		// After the seal, so a change committed while the seal ran is caught too.
+		const stands = await madeInSessionStands(ctx, madeIn)
+		if (!isCurrent()) return
+		if (!stands) {
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to encrypt the backup" })
+			return
+		}
 		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
 		// overhead could in principle cross the line a plain file sits under).
 		// The text is pure ASCII, so string length IS the byte count here.
@@ -415,21 +419,28 @@ async function runEncrypt(ctx: ExportCtx) {
 	}
 }
 
-async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
+/** The file holds the master secret, the recovery phrase and every key, so only its encrypted form
+ *  leaves the page. */
+async function runDownload(ctx: ExportCtx) {
 	const { state } = ctx
 	if (ctx.disposed || state.isDownloading.value || state.isBusy.value) return
-	// `canDownload`'s rule, held again where the file is written.
-	if (!isEncrypted && !ctx.isPasskeyProfile.value) return
-	const fileContent = isEncrypted ? ctx.artifacts.sealed : ctx.artifacts.pretty
-	if (!fileContent) return
+	const fileContent = ctx.artifacts.sealed
+	if (!fileContent || state.backupStatus.value !== "encrypted") return
 	state.isDownloading.value = true
 	const isCurrent = ctx.runs.snapshot()
 	// A profile switch discards the run, so the active profile is the one this file backs up.
 	const profileId = ctx.profile().id
-	let filename = `_${profileFileNameSegment(ctx.profile().name)}_${Math.floor(Date.now() / 1000)}`
-	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
+	const filename = `NuloEncryptedBackup_${profileFileNameSegment(ctx.profile().name)}_${Math.floor(Date.now() / 1000)}.txt`
 
 	try {
+		// A change of password whose update this page never heard still leaves no file behind.
+		const stands = await madeInSessionStands(ctx, ctx.madeIn)
+		if (!isCurrent()) return
+		if (!stands) {
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to download backup" })
+			return
+		}
 		// A file already requested still lands after a scrub; its toast and Home's flag are fenced.
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
 		if (!isCurrent()) return
@@ -438,7 +449,6 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 		// A saved file is the run's last step, so its plaintext and passwords go now. The latch clears
 		// first: the discard invalidates the fence the `finally` below checks.
 		state.backupStatus.value = "downloaded"
-		state.savedPlain.value = !isEncrypted
 		state.showRecommendation.value = false
 		state.isDownloading.value = false
 		discardRun(ctx)
@@ -449,24 +459,6 @@ async function runDownload(ctx: ExportCtx, isEncrypted: boolean) {
 	} finally {
 		if (isCurrent()) state.isDownloading.value = false
 	}
-}
-
-/** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
- *  the callback downloads only the plain file of the run the person was warned about. */
-function confirmPlainDownload(ctx: ExportCtx) {
-	const isCurrent = ctx.runs.snapshot()
-	ctx.requestConfirm({
-		pre_title: "Not encrypted",
-		title: "Download without a password?",
-		description:
-			"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
-		confirm_color: "red",
-		confirm_variant: "destructive",
-		confirm_text: "Download anyway",
-		callback: () => {
-			if (isCurrent() && ctx.state.backupStatus.value === "finished") void runDownload(ctx, false)
-		},
-	})
 }
 
 /** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
@@ -480,14 +472,15 @@ function discardRun(ctx: ExportCtx) {
 		disconnectAll(active.clients ?? [])
 		ctx.activeRun = null
 	}
-	ctx.artifacts.pretty = null
 	ctx.artifacts.compact = null
 	ctx.artifacts.sealed = null
+	ctx.madeIn = null
 	ctx.state.password.value = null
 	ctx.state.repeatedPassword.value = null
 }
 
 function resetFlow(ctx: ExportCtx) {
+	ctx.resets++
 	discardRun(ctx)
 	const { state } = ctx
 	state.isBusy.value = false
@@ -496,12 +489,24 @@ function resetFlow(ctx: ExportCtx) {
 	state.backupStatus.value = ""
 	state.showRecommendation.value = false
 	state.isWrongPassword.value = false
-	state.isPasswordMismatch.value = false
 	state.dekReplaced.value = false
 	state.unopenedImportedKeys.value = 0
 	state.importsOnAddedNetworks.value = noAddedNetworkImports()
 	state.chainStateOmitted.value = false
-	state.savedPlain.value = false
+}
+
+/** An update of the password profile while the page holds its backup: a password change made elsewhere
+ *  reopens the session the backup was made in, a rename leaves it standing. Before a backup the prompt
+ *  refuses a replaced password itself, and a downloaded file left while its session stood. */
+async function followProfileUpdate(ctx: ExportCtx) {
+	const madeIn = ctx.madeIn
+	if (!madeIn) return
+	// A download that completes meanwhile ends the run, but the person must still hear that the file
+	// it saved opens with the replaced password.
+	const resets = ctx.resets
+	if ((await madeInSessionStands(ctx, madeIn)) || ctx.disposed || ctx.resets !== resets) return
+	resetFlow(ctx)
+	ctx.openToast({ kind: "info", label: "Profile password changed in another window." })
 }
 
 function createExportState(): ExportState {
@@ -514,12 +519,10 @@ function createExportState(): ExportState {
 		isDownloading: ref(false),
 		showRecommendation: ref(false),
 		isWrongPassword: ref(false),
-		isPasswordMismatch: ref(false),
 		dekReplaced: ref(false),
 		chainStateOmitted: ref(false),
 		unopenedImportedKeys: ref(0),
 		importsOnAddedNetworks: ref(noAddedNetworkImports()),
-		savedPlain: ref(false),
 	}
 }
 
@@ -532,46 +535,41 @@ function createExportState(): ExportState {
 export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 	const appStore = useAppStore()
 	const { openToast } = useToast()
-	const { requestConfirm } = useConfirm()
 	const state = createExportState()
 	const profile = () => appStore.profile as ProfileInfo
 	const isPasskeyProfile = computed(() => profile().type === "passkey")
 	const ctx: ExportCtx = {
 		state,
-		artifacts: { pretty: null, compact: null, sealed: null },
+		artifacts: { compact: null, sealed: null },
 		runs: createRunFence(),
 		activeRun: null,
+		madeIn: null,
+		resets: 0,
 		disposed: false,
 		appStore,
 		profile,
 		isPasskeyProfile,
 		openToast,
-		requestConfirm,
 		opts,
 	}
-	// A password profile's unencrypted file holds its master secret and every key, so only its encrypted
-	// file leaves the page. A passkey profile's plain file reaches no funds without the passkey, so it
-	// may leave once the person confirms what it exposes.
-	const canDownload = computed(
-		() => state.backupStatus.value === "encrypted" || (isPasskeyProfile.value && state.backupStatus.value === "finished"),
+	const canDownload = computed(() => state.backupStatus.value === "encrypted")
+	/** A passkey profile's file password meets the new-password rule; a password profile's file
+	 *  takes the profile password it was unlocked with. */
+	const canEncrypt = computed(
+		() => !isPasskeyProfile.value || isNewPasswordValid(state.password.value ?? "", state.repeatedPassword.value ?? ""),
 	)
-
-	function handleDownloadClick() {
-		if (ctx.disposed) return
-		if (state.backupStatus.value === "encrypted") void runDownload(ctx, true)
-		else if (canDownload.value) confirmPlainDownload(ctx)
-	}
 
 	return {
 		...state,
 		isPasskeyProfile,
 		canDownload,
+		canEncrypt,
 		handleBackup: () => runBackup(ctx),
 		handleEncrypt: () => runEncrypt(ctx),
-		downloadBackup: (isEncrypted: boolean) => runDownload(ctx, isEncrypted),
-		handleDownloadClick,
+		downloadBackup: () => runDownload(ctx),
 		/** The scrub, then every flow ref back to its initial value. */
 		reset: () => resetFlow(ctx),
+		followProfileUpdate: () => followProfileUpdate(ctx),
 		dispose: () => {
 			ctx.disposed = true
 			discardRun(ctx)

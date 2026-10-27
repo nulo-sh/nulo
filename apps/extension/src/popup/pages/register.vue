@@ -12,6 +12,7 @@ import { vSnackFooter } from "@/composables/snackInset"
 
 /** Utils */
 import { openLegalDocument } from "@/utils/legal-links"
+import { postAuthRoute } from "@/utils/own-window"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 
 /** Store */
@@ -19,6 +20,16 @@ import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const router = useRouter()
+
+// A session another window opens is this window's too, so it leaves for where an unlock goes, as the
+// lock screen does. Only once this window's activation has finished: until then Home has no account.
+watch(
+	() => appStore.isLogined,
+	(logged) => {
+		if (logged) router.push(postAuthRoute(appStore.pageAwaitingAuth))
+	},
+	{ immediate: true },
+)
 
 // First-time install: redirect to the onboarding tab. The popup is too small
 // for the welcome / create / import flow. Delegates to the shared predicate

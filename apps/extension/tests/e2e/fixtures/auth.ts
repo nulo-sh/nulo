@@ -305,11 +305,28 @@ export async function reopenAndRecoverAfterImport(page: Page, password = TEST_PA
 	await page.waitForFunction(() => window.location.hash.includes("/popup/general"), { timeout: 30_000 })
 }
 
+/** Opens the lock screen's profile chooser. The lock screen opens it by itself when it has no
+ *  profile to open on, as after the last active one was deleted, so this waits for the screen to
+ *  settle on a profile or on the chooser, and presses the profile only in the first case: a press
+ *  with the chooser up lands on its dimmer and closes it. */
+export async function openProfileChooser(page: Page): Promise<void> {
+	const settled = await page.waitForFunction(
+		() => {
+			if (document.querySelector<HTMLElement>('[data-testid="select-profile-new-btn"]')?.checkVisibility()) return "chooser"
+			return document.querySelector('[data-testid="auth-profile"]')?.getAttribute("data-profile-name") ? "profile" : false
+		},
+		{ timeout: 15_000, polling: 100 },
+	)
+	const on = await settled.jsonValue()
+	await settled.dispose()
+	if (on === "profile") await clickByTestId(page, "auth-profile")
+	await page.waitForSelector('[data-testid="select-profile-new-btn"]', { visible: true, timeout: 10_000 })
+}
+
 /** Pick `profileId` on the lock screen and unlock it. `diagnostic` adds the caller's context to the
  *  timeout raised when the picker never admits the switch. */
 export async function unlockProfile(page: Page, profileId: string, password: string, diagnostic?: () => Promise<string>): Promise<void> {
-	await page.waitForSelector('[data-testid="auth-profile"]', { visible: true, timeout: 15_000 })
-	await clickByTestId(page, "auth-profile")
+	await openProfileChooser(page)
 	const row = `[data-testid="select-profile-row"][data-profile-id="${profileId}"]`
 	await page.waitForSelector(row, { visible: true, timeout: 10_000 })
 	await clickSelector(page, row)

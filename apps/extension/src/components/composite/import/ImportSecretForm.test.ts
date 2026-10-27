@@ -1,12 +1,18 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
-import { mount, type VueWrapper } from "@vue/test-utils"
-import { afterEach, describe, expect, it } from "vitest"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { createPinia, setActivePinia } from "pinia"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { defineComponent, h } from "vue"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { getProfiles: vi.fn(async () => []) } } }))
+
+import { useProfileImportFlow } from "@/composables/useProfileImportFlow"
 import ImportSecretForm from "./ImportSecretForm.vue"
 
 const stubs = {
 	Flex: { template: "<div><slot /></div>" },
-	Text: { template: "<span><slot /></span>" },
+	Text: { props: ["color"], template: "<span :data-color='color'><slot /></span>" },
 	Icon: { props: ["name"], template: '<i :data-name="name"></i>' },
 	Tooltip: { template: "<div data-tooltip><slot /><slot name='content' /></div>" },
 	Transition: { template: "<div><slot /></div>" },
@@ -27,14 +33,26 @@ const baseProps = (over = {}) => ({
 	method: "seed",
 	error: { type: "", title: "", tooltip: "" },
 	maxPasswordLength: 128,
+	unlockMethod: "password",
 	...over,
 })
 
 describe("ImportSecretForm", () => {
-	it("renders phrase input + new+confirm password fields when method=seed", () => {
+	it("a phrase opens on Passkey: its note, and no password field until Password is picked", async () => {
+		const { unlockMethod: _, ...props } = baseProps()
+		const wrapper = mount(ImportSecretForm, { props, global: { stubs } })
+		expect(wrapper.get("[data-testid=import-method-passkey]").attributes("aria-selected")).toBe("true")
+		expect(wrapper.find("[data-testid=unlock-method-passkey-note]").exists()).toBe(true)
+		expect(wrapper.find("[data-testid=import-password-input]").exists()).toBe(false)
+		await wrapper.get("[data-testid=import-method-password]").trigger("click")
+		expect(wrapper.emitted("update:unlockMethod")).toEqual([["password"]])
+	})
+
+	it("renders phrase input + new+confirm password fields when Password is picked", () => {
 		const wrapper = mount(ImportSecretForm, { props: baseProps(), global: { stubs } })
 		expect(wrapper.text()).toContain("Recovery Phrase")
-		expect(wrapper.text()).toContain("New Password")
+		expect(wrapper.text()).toContain("How you'll unlock Nulo")
+		expect(wrapper.find("[data-testid=unlock-method-passkey-note]").exists()).toBe(false)
 		// new + confirm
 		expect(wrapper.find("[data-testid=import-password-input]").exists()).toBe(true)
 		expect(wrapper.find("[data-testid=import-password-confirm-input]").exists()).toBe(true)
@@ -82,14 +100,78 @@ describe("ImportSecretForm", () => {
 		expect(wrapper.find('[data-name="info"]').exists()).toBe(false)
 	})
 
-	it("shows the 'Correct' indicator only at exactly 24 words", () => {
-		const short = mount(ImportSecretForm, { props: baseProps({ method: "seed" }), global: { stubs } })
-		expect(short.text()).not.toContain("Correct")
-		const full = mount(ImportSecretForm, {
-			props: { ...baseProps({ method: "seed" }), seedPhrase: Array(24).fill("word").join(" ") },
+	it.each([
+		[{ kind: "valid" }, "Correct", true, "primary"],
+		[{ kind: "count", count: 23 }, "23 of 24 words", false, "tertiary"],
+		[{ kind: "count", count: 25 }, "25 words. A phrase has 24.", false, "txt-danger"],
+		[{ kind: "word", position: 5 }, "Word 5 is not in the word list.", false, "txt-danger"],
+		[{ kind: "checksum" }, "This phrase does not check out. Check each word and its order.", false, "txt-danger"],
+	])("the phrase's verdict %o reads %j under the field, with the check only when valid", (phraseVerdict, line, checked, color) => {
+		const wrapper = mount(ImportSecretForm, { props: baseProps({ method: "seed", phraseVerdict }), global: { stubs } })
+		const hint = wrapper.get("[data-testid=import-seed-hint]")
+		expect(hint.text()).toBe(line)
+		expect(hint.get("span").attributes("data-color")).toBe(color)
+		expect(wrapper.find('[data-name="square-check"]').exists()).toBe(checked)
+	})
+
+	it.each([{ kind: "empty" }, { kind: "pending" }])("a verdict of %o shows no line", (phraseVerdict) => {
+		const wrapper = mount(ImportSecretForm, { props: baseProps({ method: "seed", phraseVerdict }), global: { stubs } })
+		expect(wrapper.find("[data-testid=import-seed-hint]").exists()).toBe(false)
+	})
+
+	it("an import failure shows its cause under its title, as text", () => {
+		const wrapper = mount(ImportSecretForm, {
+			props: baseProps({ error: { type: "unknown", title: "Import failed", tooltip: "<b>Passkey input already belongs</b>" } }),
 			global: { stubs },
 		})
-		expect(full.text()).toContain("Correct")
+		const cause = wrapper.get("[data-testid=import-seed-error-cause]")
+		expect(cause.text()).toBe("<b>Passkey input already belongs</b>")
+		expect(cause.find("b").exists()).toBe(false)
+	})
+})
+
+describe("ImportSecretForm — the import flow's own verdict", () => {
+	/** The form and an Import button wired to one real flow, as both import pages wire them. */
+	const Wired = defineComponent({
+		setup() {
+			const flow = useProfileImportFlow({ completeImport: vi.fn(), showErrorLog: vi.fn(), openToast: vi.fn() })
+			flow.unlockMethod.value = "password"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			return () => [
+				h(ImportSecretForm, {
+					method: "seed",
+					error: flow.error.value,
+					phraseVerdict: flow.phraseVerdict.value,
+					seedPhrase: flow.seedPhrase.value,
+					"onUpdate:seedPhrase": (v: string) => {
+						flow.seedPhrase.value = v
+					},
+					password: flow.password.value,
+					repeatedPassword: flow.repeatedPassword.value,
+					unlockMethod: flow.unlockMethod.value,
+				}),
+				h("button", { "data-testid": "import-seed-submit-btn", disabled: !flow.isAllowedToImportBySeedPhrase.value }),
+			]
+		},
+	})
+	const VALID = `${"abandon ".repeat(23)}art`
+
+	it.each([
+		["a bad checksum", "abandon ".repeat(24).trim(), "This phrase does not check out. Check each word and its order.", true],
+		["a padded, double-spaced valid phrase", `  ${VALID.replaceAll(" ", "  ")} `, "Correct", false],
+	])("%s: the line and the button agree", async (_, phrase, line, disabled) => {
+		setActivePinia(createPinia())
+		const wrapper = mount(Wired, { global: { stubs } })
+		await wrapper.get("[data-testid=import-seed-input]").setValue(phrase)
+		await vi.waitFor(async () => {
+			await flushPromises()
+			expect(wrapper.find("[data-testid=import-seed-hint]").exists()).toBe(true)
+		})
+		expect(wrapper.get("[data-testid=import-seed-hint]").text()).toBe(line)
+		expect(wrapper.text().includes("Correct")).toBe(line === "Correct")
+		expect((wrapper.get("[data-testid=import-seed-submit-btn]").element as HTMLButtonElement).disabled).toBe(disabled)
+		wrapper.unmount()
 	})
 })
 

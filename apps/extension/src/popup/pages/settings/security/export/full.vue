@@ -13,6 +13,7 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import FilePasswordSection from "@/components/composite/FilePasswordSection.vue"
 import StatusCard from "@/components/composite/StatusCard.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
@@ -49,21 +50,22 @@ const {
 	isDownloading,
 	showRecommendation,
 	isWrongPassword,
-	isPasswordMismatch,
 	dekReplaced,
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
-	savedPlain,
 	isPasskeyProfile,
 	canDownload,
+	canEncrypt,
 	handleBackup,
 	handleEncrypt,
 	downloadBackup,
-	handleDownloadClick,
 	reset,
+	followProfileUpdate,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
+
+const maxPasswordLength = 128
 
 const addedNetworksText = computed(() => {
 	const { accounts, networks } = importsOnAddedNetworks.value
@@ -83,6 +85,13 @@ const syncPendingReset = async () => {
 }
 managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
 void syncPendingReset()
+
+// An update of this password profile may be a change of its password made elsewhere; a change of its
+// unlock method is the type watcher's below.
+managers.profile.onProfileUpdated.add(onProfileUpdated)
+function onProfileUpdated(profile) {
+	if (profile?.id === appStore.profile?.id && profile.type === "password") void followProfileUpdate()
+}
 
 const handleAgree = () => {
 	if (pendingReset.value) return
@@ -107,7 +116,7 @@ const onKeydown = (e) => {
 			handleEncrypt()
 			break
 		case "encrypted":
-			downloadBackup(true)
+			downloadBackup()
 			break
 		default:
 			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
@@ -127,13 +136,14 @@ watch(backupStatus, async (status) => {
 	closeButton.value?.$el?.focus()
 })
 
-// A profile switch made elsewhere updates this page in place. A backup it holds is the previous
-// profile's, and the download rule would read the new profile's type, so the page starts over.
+// A profile switch, or a change of its unlock, made elsewhere updates this page in place. A backup it
+// holds was made for the previous profile or unlock, and the file-password rule reads the live type,
+// so the page starts over.
 watch(
-	() => appStore.profile?.id,
+	[() => appStore.profile?.id, () => appStore.profile?.type],
 	() => {
 		reset()
-		onCeremonyReject(new Error("The active profile changed"))
+		onCeremonyReject(new Error("The active profile or its unlock changed"))
 		pendingReset.value = null
 		void syncPendingReset()
 	},
@@ -148,6 +158,7 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
+	managers.profile.onProfileUpdated.remove(onProfileUpdated)
 	dispose()
 })
 </script>
@@ -226,15 +237,8 @@ onBeforeUnmount(() => {
 						<template #description>
 							<Text color="secondary" height="140">
 								This profile's imported-keys key could not be recovered, so the file carries a fresh one:
-								any imported account must be imported again after the restore.
-								<template v-if="isPasskeyProfile">
-									To repair: keep this file and your passkey, delete this profile from the wallet, then
-									restore the file with that passkey.
-								</template>
-								<template v-else>
-									To repair: restore this file (or your recovery phrase) into a new profile, then delete
-									this one.
-								</template>
+								any imported account must be imported again after the restore. To repair: restore this
+								file (or your recovery phrase) into a new profile, then delete this one.
 							</Text>
 						</template>
 					</Banner>
@@ -278,8 +282,7 @@ onBeforeUnmount(() => {
 						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
 						<template #description>
 							<Text v-if="isPasskeyProfile" height="140">
-								Protect it with a password before you download it. Without a password, the file is saved in
-								plain text.
+								Choose a password for this file. You'll need it to restore the backup.
 							</Text>
 							<Text v-else height="140">
 								Encrypt the file with your profile password before you download it. Without a password, anyone
@@ -288,74 +291,33 @@ onBeforeUnmount(() => {
 						</template>
 					</Banner>
 
-					<!-- Banner always lays out its description, so a lone title sits on one row, where the empty
-					     description takes no height. -->
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"
-						:direction="savedPlain ? 'horizontal' : 'vertical'"
+						direction="vertical"
 						data-testid="backup-done-banner"
 					>
 						<template #title>
 							{{ backupStatus === "downloaded" ? "Saved to your downloads" : "Backup is successfully encrypted" }}
 						</template>
-						<template v-if="!savedPlain" #description>
-							<Text color="secondary" height="140">
-								Don't forget your
-								<Text v-if="!isPasskeyProfile" color="primary">profile</Text>
-								password, as it will be required to restore your backup.
+						<template #description>
+							<Text v-if="isPasskeyProfile" color="secondary" height="140">
+								Don't forget your password, as it will be required to restore your backup.
+							</Text>
+							<Text v-else color="secondary" height="140">
+								This file opens with the profile password you have now. Changing your password later does not change that.
 							</Text>
 						</template>
 					</Banner>
 				</div>
 
-				<!-- Encryption password fields (passkey profiles) -->
-				<div
-					v-if="!showRecommendation && isPasskeyProfile && backupStatus === 'finished'"
-					class="export_section_last"
-				>
-					<span class="export_section_label type--label-section">Encrypt with password</span>
-					<Flex direction="column" gap="12">
-						<div :class="[isPasswordMismatch && $style.shake]">
-							<Input
-								v-model="password"
-								:error="isPasswordMismatch"
-								:ariaInvalid="isPasswordMismatch"
-								@click="isPasswordMismatch = false"
-								@input="isPasswordMismatch = false"
-								type="password"
-								label="Password"
-								placeholder="Enter password"
-								autocomplete="new-password"
-								autofocus
-								:disabled="backupStatus === 'encrypting'"
-								data-testid="backup-encrypt-password-input"
-							/>
-						</div>
-						<Input
-							v-model="repeatedPassword"
-							:error="isPasswordMismatch"
-							:ariaInvalid="isPasswordMismatch"
-							@click="isPasswordMismatch = false"
-							@input="isPasswordMismatch = false"
-							type="password"
-							placeholder="Repeat password"
-							autocomplete="new-password"
-							:disabled="backupStatus === 'encrypting'"
-							data-testid="backup-encrypt-password-confirm-input"
-						/>
-						<Transition name="fade">
-							<span
-								v-if="isPasswordMismatch"
-								:class="$style.error_text"
-								role="alert"
-								data-testid="backup-encrypt-error-text"
-							>
-								Passwords don't match
-							</span>
-						</Transition>
-					</Flex>
-				</div>
+				<FilePasswordSection
+					v-if="isPasskeyProfile && backupStatus === 'finished'"
+					v-model:password="password"
+					v-model:repeatedPassword="repeatedPassword"
+					testid="backup-encrypt-password"
+					:maxLength="maxPasswordLength"
+				/>
 			</template>
 		</template>
 
@@ -385,7 +347,7 @@ onBeforeUnmount(() => {
 					v-if="backupStatus === 'finished' || backupStatus === 'encrypting'"
 					@click="handleEncrypt()"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="backupStatus === 'encrypting' || isDownloading"
+					:disabled="backupStatus === 'encrypting' || isDownloading || !canEncrypt"
 					variant="cta"
 					data-testid="protect-password-btn"
 				>
@@ -403,7 +365,7 @@ onBeforeUnmount(() => {
 				</Button>
 				<Button
 					v-else
-					@click="handleDownloadClick"
+					@click="downloadBackup()"
 					@keydown.enter="refuseRepeatEnter"
 					:disabled="!canDownload || isDownloading"
 					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
@@ -428,17 +390,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.error_text {
-	composes: type--body from global;
-	color: var(--txt-danger);
-	margin-top: 4px;
-	display: block;
-}
-
-.shake {
-	composes: shake_password from "../../../../../components/composite/shake.module.css";
-}
-
 .agreement_blocked {
 	opacity: 0.38;
 }

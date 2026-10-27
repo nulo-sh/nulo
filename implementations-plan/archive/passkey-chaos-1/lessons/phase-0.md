@@ -1,0 +1,30 @@
+# Phase 0: planning consults
+
+Every consult and review round of the planning, with its verdict. Paths repo-relative.
+
+## Recon (2026-10-25)
+
+Two Explore agents on sonnet: a reuse sweep over ten harness capabilities, and a map of what the profile service and storage expose to an e2e oracle. Each load-bearing claim was checked against the tree (`recon.md`). Two claims did not hold as first stated: there is no `GlobalLoader` component (the start bar is `start-pending`), and no `prfSalt` exists yet (passkey-unlock-1 A2 adds it).
+
+## Codex, harness design consult (2026-10-25, gpt-6.1-sol, high)
+
+Asked: the state model and planner, the oracles, finding → reproduction, the launcher shape, cuts and gaps. Verdict: "sound direction, but several oracles currently contradict wallet behavior; fix those contracts before building the harness." Every factual claim was checked against the tree; all held:
+
+- A passkey session row survives a background restart with no active session behind it (`apps/extension/src/wallet/services/profile/session-manager.ts:584-589`), so "locked ⇒ no session row" is false. Accepted: the session oracle reads three things apart (the stored row, the service's active session, each page's state) and asserts their relation per method and per strict mode; after a lock it also tries a protected call.
+- `LoggerStore` persists `nulo:logs` only in developer mode, on a 2 s debounce, in a bounded ring (`src/wallet/logger/store.ts:24-36,110-116`). Accepted: drain `log-viewer.getLogs(count, fromId)` after every action, with each background restart reported as a capture gap.
+- `openPopup` and `openOnboarding` reset `ctx.pageErrors` and `ctx.consoleErrors` (`tests/e2e/fixtures/wallet-pages.ts:62-63,176-177`). Accepted: an append-only collector the harness owns.
+- Chrome cleanup matches the exact `--load-extension` argument (`tests/e2e/sandbox-ownership.ts:199-201`, `( |$)`), not a prefix as the e2e-testing skill says. Accepted: unique copies stay; the skill's hazard line is corrected in arc 1.
+- Strict security mode is device-wide and on by default (`src/wallet/config/config.ts:31`). Accepted into the model.
+- Accepted as design: symbolic identities bound at run time; `verifyAll` as an explicit sequence with modeled side effects; named race schedules with holds and acknowledgements; commit-versus-refusal outcomes per action contract; per-action write contracts over the registered key families; a no-PRF assertion fault of its own; leak scans after every action, structural checks apart, `prfSalt` expected in storage and forbidden outside it; derived-account lists and an imported-account sentinel; named start states (pre-update included) and coverage accounting; replay records (revision, build, browser, flags, start state, bindings, hold order); Vitest file plus file queue for the launcher with atomic commands, deadlines and a stop that a stuck command cannot block; oracle controls in arc 1.
+- Accepted with a limit: "nothing that leaves opens with the passkey alone" is a crypto property; passkey-unlock-1's unit tests prove it (its excellent 2). The chaos oracle checks what a run can observe: every passkey profile's export is an encrypted frame that opens with its file password, refuses another, and carries no `prfSalt`.
+- Rejected: none.
+
+## Dual audit, round 1 (2026-10-25)
+
+**Codex (gpt-6.1-sol, high): reject**, ten findings. Verified: strict mode on drops the bearer at once, off waits for the next unlock (`apps/extension/src/wallet/services/profile/session-manager.ts:493-538,757-768`); the tombstone and restore-pending markers live in raw storage outside `STORES` and inside `STORED_SHAPES` (`apps/extension/src/wallet/storage/stored-shapes.ts:42-43,221`); `freshExtensionPerTest` is test-scoped (`apps/extension/tests/e2e/fixtures/extension.ts:766-773`); `network/backup-restore-sw-restart.test.ts` is Chrome-only for the open-page kill. All accepted except moving the report format and the agents' model to the orchestrator (the lane brief names the first an owner ask; the second is the fleet's main cost). It also proposed a narrow service-level seeded test (Outline B's core): not added, with a reopening condition (plan § Review verdicts).
+
+**Opus (Plan agent): conditional approve**, fifteen findings. Verified: `scripts/e2e/browser-seam.test.ts:200,252-263` refuses `credentialOutlivesPage` in `helpers/**`; the restore gate releases itself after 20 s (`apps/extension/src/e2e/chrome-storage-restore-gate.ts:22`); `global-setup-smoke.ts:28-31` already refuses an unarmed dist; `STALL_MS` is in `tests/e2e/run-limits.ts:6`. All accepted, with its four cuts, except the same authority move. It argued to keep Outline B out.
+
+## Final fresh pass (2026-10-25)
+
+**Codex (gpt-6.1-sol, high): conditional approve**, seven findings, all verified and accepted. Profile names are stored in plaintext (`apps/extension/src/wallet/services/profile/profile-row.ts:35`), so needles from every long `fill` would report a rename as a leak: needles now come from the secret fields' testids (D18). The host's sandbox does not confine a process and agents share one user (`~/.agents/machine.md`), so C2.2 opens with a probe of the agents' tool configuration and stops if confinement cannot be shown. A poll can still click after its command's deadline (`apps/extension/tests/e2e/fixtures/dom.ts:253`): a timed-out command now ends the session. Replay records were named by seed alone and collide across browsers: now per browser, seed and launch. The log ring overwrites past 1,000 entries (`apps/extension/src/wallet/logger/store.ts:31`, `utils.ts:25-30`): a log-id gap makes that step's log checks incomplete, with a control fixture. CH10 had no launch path (the launcher runs the smoke config only): dropped from the fleet, the seeded network file keeps the dApp flows. The phrase-to-entropy step is `getEntropy` in `@nulo/wallet-core/utils` (`packages/wallet-core/src/utils/mnemonic.ts:2116`): I7 became fact F10. On Outline B it sided with Opus; the plan keeps it out. Rejected: none.

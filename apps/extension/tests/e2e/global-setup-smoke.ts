@@ -43,8 +43,12 @@ export default async function setupWithTeardown(project: TestProject): Promise<(
 	return teardown
 }
 
+/** A chaos session's dist copy is new to its launch, so no stale Chrome can load it, and its
+ *  launcher stops the session's own processes by pid. */
+const SWEEPS_STALE = !process.env.NULO_E2E_CHAOS_SESSION
+
 export async function setup(project: TestProject) {
-	killChromesLoading(EXTENSION_PATH)
+	if (SWEEPS_STALE) killChromesLoading(EXTENSION_PATH)
 
 	const manifest = path.join(EXTENSION_PATH, "manifest.json")
 	if (!fs.existsSync(manifest)) {
@@ -63,7 +67,7 @@ export async function setup(project: TestProject) {
 }
 
 export async function teardown() {
-	killChromesLoading(EXTENSION_PATH)
+	if (SWEEPS_STALE) killChromesLoading(EXTENSION_PATH)
 }
 
 declare module "vitest" {

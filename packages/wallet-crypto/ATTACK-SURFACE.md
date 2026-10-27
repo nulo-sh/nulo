@@ -39,20 +39,20 @@ until it ends or the profile is deleted. Never the master.
 
 | Artifact | Contents | Protected by |
 |---|---|---|
-| `profiles@<id>.secret` | the 32-byte master | AES-256-GCM under `EncryptionKey(passhash)` |
+| `profiles@<id>.secret` | the 32-byte master | AES-256-GCM under `EncryptionKey(passhash)` (password) / the passkey unlock key |
 | `profiles@<id>.entropy` | the BIP-39 entropy — **literally the 24 words** | same |
 | `profiles@<id>.guard` | a known constant, used to detect a wrong password | same |
-| `profiles@<id>.dekSealed` | the 32-byte imported-keys DEK | same (password) / passkey PRF wrap key |
+| `profiles@<id>.dekSealed` | the 32-byte imported-keys DEK | same (password) / the passkey unlock key |
 | `profiles@<id>.envelopeMac` | HMAC-SHA256 over all four slots | keyed `HKDF(master ‖ dek)` |
 | `profiles@<id>.walletFingerprint` | `sha256("nulo:wallet-fingerprint:v1" ‖ master)` | **nothing — plaintext by design** |
 | `profiles@<id>.credentialId` | WebAuthn credential id (passkey profiles) | nothing — it is a public identifier |
+| `profiles@<id>.prfSalt` | 32 random bytes, the input the profile's passkey is asked at (passkey profiles) | plaintext; opens nothing without the passkey |
 | imported-key rows | an external account's Grumpkin signing key, inside the row seal below | AES-256-GCM under `HKDF(dek, chainId ‖ address)` |
 | contact, dApp-session and registration-count, journal, transaction, account, imported-key, token and seeder-marker, network, fee-payer, balance, authwit and incoming rows, the pinned-token and fee-pick maps, and the device's selected-account row | the row, as `{ profileId, sealed }`: names, addresses, origins, grants, amounts, balances, fees, endpoints, errors, hashes | AES-256-GCM under `HKDF(master, profileId ‖ pxeGeneration)`, the AAD binding root, storage key and profile; a transaction row's key is the HMAC of its hash, an account or imported-key key the HMAC of its address, and an incoming or authwit-flag key the HMAC of what follows its scope, under the same derivation's index key; a session also keeps its `HKDF(master ‖ dek)` MAC inside |
 | account-integrity stamp, stale-network record | the account set's digest, never its addresses | `HMAC(K_idx, accountSetDigest)` under the same index key |
 | `storage.session` bearer | `master ‖ dek` **and** the random token that unwraps it | nothing, jointly — see below |
 | password full backup file | the master, the entropy, and a key made for this backup alone, under which its imported-key rows open (never the profile's DEK) | the profile's password at export time (a later password change does not touch the file) |
-| passkey full backup file | the credential id, the profile's own DEK sealed under the passkey's wrap key, the imported-key rows | the keys open only with the passkey; without the optional password, everything but the keys is readable |
-| passkey full backup's `backup-mac` | HMAC-SHA256 over the body's checksum | keyed by the passkey's PRF (`nulo:backup-mac:v1`); a body restores only under it |
+| passkey full backup file | as the password full backup | the file password chosen at export |
 
 ## Cost to invert each one
 
@@ -95,14 +95,12 @@ the master and still cannot reach them: the master is not an input to that key. 
 property the DEK exists for, and it is the one place this design goes beyond what a standard wallet
 does.
 
-**The passkey path has no offline attack.** The master comes from the passkey's PRF output, which
-only the authenticator computes, after user verification; nothing on disk lets anyone compute it. A
-disk reader gets `credentialId` (a public identifier) and ciphertext they cannot key; there is no
-password to guess. The same design makes the passkey the whole secret: the wallet holds no second
-factor, so a fresh install recovers the master and every derived account from the passkey alone
-(imported keys come back only with a full backup). Against what is on disk, it is the strongest
-profile type on offer; beyond that, it is no stronger than the control the browser and the
-authenticator keep over who may use the passkey for its RP ID.
+**A passkey profile has no offline attack either.** Its slots are sealed under a key rebuilt from
+the passkey's output for the profile's own random input, which only the authenticator computes,
+after user verification. A disk reader gets that input and ciphertext they cannot key; there is no
+password to guess. The passkey unlocks; it does not restore: a fresh install recovers from the
+recovery phrase or a full backup. Storage plus an approved passkey prompt opens the profile, as
+storage plus the password opens a password profile.
 
 **The session bearer is an admission, made only in lenient mode.** `storage.session` holds the
 random token *and* the ciphertext it opens, side by side — so whoever reads it recovers the master
@@ -142,6 +140,8 @@ strength of the profile's password; see the known limit below for older files.
   a planted grant; a planted transaction row that names no profile is shown to every profile until
   one that alone holds its account adopts it). The envelope's profile id, the row ids and each
   row's size stay visible, and an incoming key also shows its profile and network.
+- **A password or unlock-method change reseals the stored row only.** A copy of the row taken
+  before the change still opens with the password or passkey it was sealed under.
 - **This is a custom derivation scheme.** It is built entirely from standard primitives — PBKDF2,
   HMAC-SHA512, HKDF, AES-256-GCM, SHA-256 — with no hand-rolled cryptography, and the primitives
   are pinned against published test vectors (all 24 official BIP-39 vectors, RFC 5869 A.1 for

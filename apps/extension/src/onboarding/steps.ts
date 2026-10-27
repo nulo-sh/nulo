@@ -1,6 +1,6 @@
 import type { RouteLocationRaw } from "vue-router"
 
-/** Only a password wallet made on Create has the phrase step; the step row draws its path's cells. */
+/** Only a wallet made on Create has the phrase step; the step row draws its path's cells. */
 export type OnboardingPath = "password" | "passkey" | "import"
 
 export type OnboardingStep = "terms" | "wallet" | "phrase" | "ready"
@@ -16,7 +16,7 @@ export function stepCells(path: OnboardingPath): StepCell[] {
 		["terms", "Terms"],
 		["wallet", path === "import" ? "Import" : "Create"],
 	]
-	if (path === "password") steps.push(["phrase", "Phrase"])
+	if (path !== "import") steps.push(["phrase", "Phrase"])
 	steps.push(["ready", "Ready"])
 	return steps.map(([step, label], i) => ({ step, label, num: String(i + 1).padStart(2, "0") }))
 }

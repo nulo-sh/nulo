@@ -3,7 +3,7 @@ import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { waitForNewTab } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { navigateByHash, revealSeedPhrase } from "./fixtures/helpers"
+import { navigateByHash, readRecoveryWords } from "./fixtures/helpers"
 import { createAndActivateProfile } from "./fixtures/profiles"
 import { shotSend } from "./fixtures/send-page"
 import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
@@ -51,7 +51,7 @@ const PASSWORD = TEST_PASSWORD
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
-test("Home's steps are checked as they are done: How Aztec works opens its page, and the seed reveal checks the phrase step", async ({
+test("Home's steps are checked as they are done: How Aztec works opens its page, and the seed reveal checks the phrase step and closes out of Back's reach", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -65,12 +65,24 @@ test("Home's steps are checked as they are done: How Aztec works opens its page,
 	await tab.close()
 	await page.waitForSelector(`${sel("get-started-aztec")}[data-done="true"]`, { timeout: 10_000 })
 
-	const tokens = await revealSeedPhrase(page, PASSWORD)
+	// Opened from the Backup menu, as a person opens it: a link pushes the page, a hash change does not.
+	await navigateByHash(page, "#/popup/settings/security/export")
+	await clickByTestId(page, "seed-phrase-link-btn")
+	await waitForHash(page, "#/popup/settings/security/export/seed")
+	await clickByTestId(page, "agree-continue-btn")
+	await page.waitForSelector(sel("unlock-password-input"), { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, sel("unlock-password-input"), PASSWORD)
+	await clickByTestId(page, "unlock-submit-btn")
+	const tokens = await readRecoveryWords(page)
 	expect(tokens.length).toBe(24)
 	for (const token of tokens) expect(token).toMatch(/^[a-z]+$/)
 	expect(await widestWordOverruns(page, CLASSIC_SCROLLBAR_PX)).toEqual([])
 
-	await navigateByHash(page, "#/popup/general")
+	// Close returns to the menu, and the menu's Back reaches the page before it, never the phrase.
+	await clickByTestId(page, "close-btn")
+	await waitForHash(page, "#/popup/settings/security/export")
+	await clickByTestId(page, "subpage-back")
+	await waitForHash(page, "#/popup/general")
 	await waitForHomeReminders(page)
 	expect(await getStartedRows(page)).toEqual([
 		"get-started-phrase done",

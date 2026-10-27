@@ -36,6 +36,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 
 import { useLockWallet } from "@/composables/useLockWallet"
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
 import LockPage from "./lock.vue"
@@ -86,14 +87,22 @@ describe("settings/lock", () => {
 		expect(w.get('[data-testid="lock-now-btn"]').text()).toContain("Locks Nulo until you unlock it again")
 	})
 
-	test.each([
-		["password", true],
-		["passkey", false],
-	] as const)("a %s profile sees strict mode: %s; both see the auto-lock field", async (type, strict) => {
-		const w = await mountLock(type)
-		expect(w.find('[data-testid="setting-strict-security-mode"]').exists()).toBe(strict)
-		expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
-	})
+	test.each(["password", "passkey"] as const)(
+		"a %s profile sees strict mode and the auto-lock field, and turning strict off says it holds from the next unlock for every profile on this device",
+		async (type) => {
+			const w = await mountLock(type)
+			const strict = w.get('[data-testid="setting-strict-security-mode"]')
+			expect(strict.text()).toContain("More secure, asks you to unlock more often on this device. Recommended.")
+			expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
+			;(w.getComponent('[data-testid="strict-security-toggle"]') as VueWrapper).vm.$emit("update:modelValue", false)
+			expect(useCacheStore().confirm).toMatchObject({
+				title: "Disable strict security?",
+				description:
+					"From your next unlock, every profile on this device stays unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
+					"Anyone who can read browser data can unlock the wallet without your password or passkey.",
+			})
+		},
+	)
 
 	test("Lock now runs the shared lock on the popup's long-lived profile client", async () => {
 		const w = await mountLock()
@@ -133,6 +142,21 @@ describe("settings/lock", () => {
 		field().vm.$emit("update:modelValue", "0")
 		await debounced()
 		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
+	})
+
+	test.each([-5, 1.5, 1441])("an auto-lock of %s minutes is never written; the stated maximum is", async (minutes) => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
+
+		field().vm.$emit("update:modelValue", minutes)
+		await debounced()
+		expect(fakes.config.setValue).not.toHaveBeenCalled()
+
+		field().vm.$emit("update:modelValue", 1440)
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 86_400_000)
 	})
 
 	test("a failure that lands after a newer edit leaves that edit, which is then written", async () => {

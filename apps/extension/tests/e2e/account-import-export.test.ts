@@ -132,16 +132,16 @@ test("a DUPLICATE account import is rejected", { timeout: 180_000 }, async ({ re
 	await waitForHash(page, "#/popup/general", 30_000)
 	const body = await exportAccountBody(page, FIRST_ACCOUNT_NAME, false)
 
-	// The account is ALREADY in this profile — the very first import must be refused as a
-	// duplicate (importAccount's dup check is (profileId, chainId)-scoped).
+	// The account is ALREADY in this profile: the preview names it held before it asks for a name,
+	// and Import Account stays disabled once one is typed.
 	const previewed = await previewImport(page, body)
-	expect(previewed).toBeTruthy() // preview only decodes; the write is what rejects
-	// The name is required (no default) and gates the CTA; the rejection happens at the write.
+	expect(previewed).toBeTruthy()
+	await page.waitForSelector('[data-testid="import-account-held"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="import-account-name-input"] input', "Dup Probe")
-	await clickByTestId(page, "import-account-submit")
-	await page.waitForSelector('[data-testid="import-account-error"]', { visible: true, timeout: 20_000 })
-	const errorText = await page.evaluate(() => document.querySelector('[data-testid="import-account-error"]')?.textContent ?? "")
-	expect(errorText).toMatch(/already in your wallet/i)
+	const submit = await page.evaluate(
+		() => (document.querySelector('[data-testid="import-account-submit"]') as HTMLButtonElement | null)?.disabled,
+	)
+	expect(submit).toBe(true)
 })
 
 test("the file-chooser import path accepts a written export file", { timeout: 180_000 }, async ({ registeredExtension }) => {
@@ -167,8 +167,8 @@ test("the file-chooser import path accepts a written export file", { timeout: 18
 			document.querySelector('[data-testid="import-account-error"]') !== null,
 		{ timeout: 30_000, polling: 200 },
 	)
-	// Same profile ⇒ the account already exists, so this previews fine and would reject at
-	// write; the point here is that the FILE PATH produced a decodable body.
+	// Same profile ⇒ the account already exists, so this previews as held; the point here is that
+	// the FILE PATH produced a decodable body.
 	const previewed = await page.evaluate(() => {
 		const row = document.querySelector('[data-testid="import-account-preview"]')
 		const el = document.querySelector('[data-testid="import-account-preview-address"]') as HTMLElement | null

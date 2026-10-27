@@ -25,22 +25,13 @@ import { installChromeStorage } from "../../../../../../tests/helpers/chrome-sto
 function sliceClient() {
 	return { backup: vi.fn(async (): Promise<unknown> => []), disconnect: vi.fn() }
 }
-const exportFullBackupKeys = vi.fn<(fence: unknown, password: string) => Promise<unknown>>()
+const exportFullBackupKeys = vi.fn<(fence: unknown, password?: string, credentialData?: unknown) => Promise<unknown>>()
 function accountSliceClient() {
 	return {
 		...sliceClient(),
 		backupImportedKeys: vi.fn(async (): Promise<unknown> => []),
-		exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
-		exportPasskeyBackupKeys: vi.fn(async () => PASSKEY_KEYS),
+		exportFullBackupKeys: (...args: [unknown, string?, unknown?]) => exportFullBackupKeys(...args),
 	}
-}
-const PASSKEY_KEYS = {
-	credentialId: "cred",
-	dekSealed: "sealed",
-	dekReplaced: false,
-	unopenedImportedKeys: 0,
-	accounts: [],
-	importedKeyRows: [],
 }
 let profileClient = sliceClient()
 let accountClient = accountSliceClient()
@@ -122,8 +113,9 @@ vi.mock("@/utils/core", () => ({
 		profile: {
 			captureRunFence: () => captureRunFence(),
 			assertRunFence: (fence: unknown) => assertRunFence(fence),
-			getPasskeyCredentialId: vi.fn(async () => "cred"),
+			getPasskeyUnlockParams: vi.fn(async () => ({ credentialId: "cred", prfSalt: "c2FsdA==" })),
 			exportPlain: vi.fn(async () => "mk"),
+			onProfileUpdated: { add: vi.fn(), remove: vi.fn() },
 		},
 	},
 }))
@@ -133,11 +125,6 @@ const downloadFile = vi.fn<(opts: DownloadArgs) => Promise<void>>(async () => un
 vi.mock("@/utils", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	downloadFile: (opts: DownloadArgs) => downloadFile(opts),
-}))
-
-const requestConfirm = vi.fn<(request: { callback: () => void }) => void>()
-vi.mock("@/composables/useConfirm", () => ({
-	useConfirm: () => ({ requestConfirm: (request: { callback: () => void }) => requestConfirm(request) }),
 }))
 
 const openToast = vi.fn()
@@ -459,7 +446,7 @@ describe("export/full.vue — sealed artifact", () => {
 		const parsed = await downloadAndOpen(wrapper)
 		const { checksum, ...body } = parsed
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
-		// A password file carries no passkey check.
+		// No file carries the check an earlier passkey body did.
 		expect("backup-mac" in parsed).toBe(false)
 		expect(parsed["master-key"]).toBe("mk")
 		expect((parsed.data as Record<string, unknown>).profile).toEqual([{ id: "p1", type: "password" }])
@@ -727,7 +714,10 @@ describe("export/full.vue — the done state after the encrypted file", () => {
 		const wrapper = await downloaded()
 		const banner = wrapper.get("[data-testid='backup-done-banner']").text()
 		expect(banner).toContain("Saved to your downloads")
-		expect(banner).toContain("password, as it will be required to restore your backup.")
+		expect(banner).toContain(
+			"This file opens with the profile password you have now. Changing your password later does not change that.",
+		)
+		expect(banner).not.toContain("Don't forget")
 		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
 		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
 		expect(closeButton(wrapper).text()).toBe("Close")
@@ -766,30 +756,41 @@ describe("export/full.vue — the done state after the encrypted file", () => {
 	})
 })
 
-describe("export/full.vue — the done state after a passkey profile's plain file", () => {
+describe("export/full.vue — the done state after a passkey profile's encrypted file", () => {
 	const CEREMONY_ANSWER = {
 		id: Buffer.from("cred").toString("base64"),
 		prf: Buffer.from(new Uint8Array(32).fill(6)).toString("base64"),
+		prfSalt: "c2FsdA==",
 	}
 
-	async function savedPlain() {
+	async function downloaded() {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
 		const wrapper = mountPage("Test Profile", "passkey")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await vi.waitFor(() => expect(wrapper.findComponent(PasskeyCeremonyDialog).exists()).toBe(true))
 		wrapper.findComponent(PasskeyCeremonyDialog).vm.$emit("resolve", CEREMONY_ANSWER)
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-encrypt-password-input']").exists()).toBe(true))
+		for (const id of ["backup-encrypt-password-input", "backup-encrypt-password-confirm-input"]) {
+			;(wrapper.findComponent(`[data-testid='${id}']`) as VueWrapper).vm.$emit("update:modelValue", "pass1234")
+		}
+		await flushPromises()
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
 		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
 		await downloadButton(wrapper).trigger("click")
-		requestConfirm.mock.calls[0][0].callback()
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-close-btn']").exists()).toBe(true))
 		await flushPromises()
 		return wrapper
 	}
 
-	it("reads saved with no password named, and a focused Close replaces Download and Protect with Password", async () => {
-		const wrapper = await savedPlain()
+	it("reads saved with the file password reminder, and a focused Close replaces Download and Protect with Password", async () => {
+		const wrapper = await downloaded()
 		expect(downloadFile).toHaveBeenCalledOnce()
-		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloBackup_.+\.json$/)
-		expect(wrapper.get("[data-testid='backup-done-banner']").text()).toBe("Saved to your downloads")
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_.+\.txt$/)
+		const banner = wrapper.get("[data-testid='backup-done-banner']").text()
+		expect(banner).toContain("Saved to your downloads")
+		expect(banner).toMatch(/Don't forget your\s+password, as it will be required to restore your backup\./)
+		expect(banner).not.toContain("profile")
 		expect(wrapper.find("[data-testid='backup-ready-banner']").exists()).toBe(false)
 		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
 		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)

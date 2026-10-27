@@ -11,16 +11,10 @@
  * same code.
  */
 
-import {
-	asBase64CredentialId,
-	asBase64SecretPrf,
-	asHexUserHandle,
-	type PasskeyCredentialData,
-	PASSKEY_PRF_LABEL,
-} from "@nulo/wallet-crypto"
+import { asBase64CredentialId, asBase64SecretPrf, type PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { PASSKEY_TIMEOUT, type PasskeyRequest, RP_ID } from "@/wallet/services/passkey/spec"
-import { bytesToHex, fromBase64, fromHex, toBase64 } from "@/wallet/utils"
-import { formatPasskeyUserName } from "./passkey-label"
+import { fromBase64, fromHex, toBase64 } from "@/wallet/utils"
+import { passkeyUserName } from "./passkey-label"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "./passkey-errors"
 
 function encodeBase64(buf: BufferSource): string {
@@ -28,33 +22,25 @@ function encodeBase64(buf: BufferSource): string {
 	return toBase64(bytes)
 }
 
-function decodeBase64(b64: string): Uint8Array {
-	return fromBase64(b64)
+/** The PRF extension input: evaluate at the profile's own `prfSalt`. */
+function prfEval(prfSalt: string): AuthenticationExtensionsClientInputs {
+	return { prf: { eval: { first: fromBase64(prfSalt) } } }
 }
 
-async function buildPrfInput(): Promise<ArrayBuffer> {
-	const te = new TextEncoder()
-	return await crypto.subtle.digest("SHA-256", te.encode(PASSKEY_PRF_LABEL))
-}
-
-export async function buildCreateOptions(userHandle: string, name: string): Promise<PublicKeyCredentialCreationOptions> {
+export function buildCreateOptions(userHandle: string, prfSalt: string, profileName: string): PublicKeyCredentialCreationOptions {
 	const challenge = crypto.getRandomValues(new Uint8Array(32))
-	const prfInput = await buildPrfInput()
-	const userHandleBytes = fromHex(userHandle)
-	// The label shown by iCloud Keychain / password managers. `user.name` and
-	// `user.displayName` carry the same value so the credential renders
-	// consistently regardless of which field a given manager surfaces.
-	const label = formatPasskeyUserName(name, userHandle)
 	return {
 		challenge,
 		rp: {
 			name: "Nulo",
 			id: RP_ID,
 		},
+		// `user.name` and `user.displayName` carry the same label, so the credential renders alike
+		// whichever field a password manager shows.
 		user: {
-			id: userHandleBytes,
-			name: label,
-			displayName: label,
+			id: fromHex(userHandle),
+			name: passkeyUserName(profileName),
+			displayName: passkeyUserName(profileName),
 		},
 		// ES256 first, RS256 as the fallback the spec asks for. Key material is the PRF output, never
 		// the credential's signature, so the algorithm an authenticator picks changes nothing else.
@@ -68,103 +54,83 @@ export async function buildCreateOptions(userHandle: string, name: string): Prom
 			requireResidentKey: true,
 		},
 		timeout: PASSKEY_TIMEOUT,
-		extensions: { prf: { eval: { first: new Uint8Array(prfInput) } } },
+		extensions: prfEval(prfSalt),
 	}
 }
 
-export async function buildGetOptions(credentialId?: string): Promise<PublicKeyCredentialRequestOptions> {
-	const challenge = crypto.getRandomValues(new Uint8Array(32))
-	const prfInput = await buildPrfInput()
-	const opts: PublicKeyCredentialRequestOptions = {
-		challenge,
+export function buildGetOptions(credentialId: string, prfSalt: string): PublicKeyCredentialRequestOptions {
+	return { ...buildDiscoverOptions(prfSalt), allowCredentials: [{ id: fromBase64(credentialId), type: "public-key" }] }
+}
+
+/** A `get` with no `allowCredentials`: the device offers every passkey it holds for the RP. */
+export function buildDiscoverOptions(prfSalt: string): PublicKeyCredentialRequestOptions {
+	return {
+		challenge: crypto.getRandomValues(new Uint8Array(32)),
 		rpId: RP_ID,
 		userVerification: "required",
 		timeout: PASSKEY_TIMEOUT,
-		extensions: { prf: { eval: { first: new Uint8Array(prfInput) } } },
+		extensions: prfEval(prfSalt),
 	}
-	if (credentialId) {
-		// Cast through unknown — `Uint8Array<ArrayBufferLike>` from
-		// `Uint8Array.from` upcasts to BufferSource at runtime; TS's stricter
-		// generic-typed-array narrowing in @types/dom misses this. Mirrors the
-		// pre-extraction code in `windows/passkey/index.vue` which compiled
-		// without this cast under the same target.
-		opts.allowCredentials = [{ id: decodeBase64(credentialId) as unknown as BufferSource, type: "public-key" }]
-	}
-	return opts
 }
 
 /**
  * Run the create-mode ceremony. Once the credential exists, every failure is a
- * `PasskeyUnconfirmedError` carrying its id, so a retry confirms it instead of minting another.
+ * `PasskeyUnconfirmedError` carrying its id and the input it was asked for, so a retry confirms it
+ * instead of minting another.
  */
-async function runCreate(userHandle: string, name: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
-	const publicKey = await buildCreateOptions(userHandle, name)
+async function runCreate(
+	{ userHandle, prfSalt, profileName }: Extract<PasskeyRequest, { mode: "create" }>,
+	signal?: AbortSignal,
+): Promise<PasskeyCredentialData> {
+	const publicKey = buildCreateOptions(userHandle, prfSalt, profileName)
 	const credential = await navigator.credentials.create({ publicKey, signal })
 	if (!credential) throw new Error("Failed to create passkey credential")
 	if (!(credential instanceof PublicKeyCredential)) throw new Error("Unexpected credential type")
 	const id = asBase64CredentialId(encodeBase64(credential.rawId))
 	const ext = credential.getClientExtensionResults()
-	if (!ext.prf) throw new PasskeyUnconfirmedError(id, userHandle, new PasskeyPrfError("Passkey PRF not available"))
+	if (!ext.prf) throw new PasskeyUnconfirmedError(id, prfSalt, new PasskeyPrfError("Passkey PRF not available"))
 
 	if (ext.prf.results) {
-		return {
-			id,
-			prf: asBase64SecretPrf(encodeBase64(ext.prf.results.first)),
-			userHandle: asHexUserHandle(userHandle),
-		}
+		return { id, prf: asBase64SecretPrf(encodeBase64(ext.prf.results.first)), prfSalt }
 	}
 
 	// Some authenticators expose PRF only on assertion, so the new credential is confirmed by a
-	// second prompt.
-	return await confirmMinted(id, userHandle, signal)
+	// second prompt at the same input.
+	return await confirmMinted(id, prfSalt, signal)
 }
 
-/** Confirms a credential a create already minted. Every failure is a `PasskeyUnconfirmedError`
- *  with this attempt's cause: the credential still exists, and a caller can tell a credential
- *  whose authenticator has no PRF from a prompt that was dismissed. */
-export async function confirmMinted(credentialId: string, userHandle: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
+/** Confirms a credential a create already minted, at the input the create asked for. Every failure
+ *  is a `PasskeyUnconfirmedError` with this attempt's cause: the credential still exists, and a
+ *  caller can tell a credential whose authenticator has no PRF from a prompt that was dismissed. */
+export async function confirmMinted(credentialId: string, prfSalt: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
 	try {
-		return await confirmCreatedCredential(credentialId, userHandle, signal)
+		const assertion = await runGet(credentialId, prfSalt, signal)
+		if (assertion.id !== credentialId) throw new Error("Passkey PRF fallback returned a different credential")
+		return assertion
 	} catch (cause) {
-		throw new PasskeyUnconfirmedError(credentialId, userHandle, cause)
+		throw new PasskeyUnconfirmedError(credentialId, prfSalt, cause)
 	}
 }
 
-async function runGet(credentialId: string | undefined, signal?: AbortSignal): Promise<PasskeyCredentialData> {
-	const publicKey = await buildGetOptions(credentialId)
+/** `credentialId` undefined: a discovery get, which any of the device's passkeys may answer. */
+async function runGet(credentialId: string | undefined, prfSalt: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
+	const publicKey = credentialId === undefined ? buildDiscoverOptions(prfSalt) : buildGetOptions(credentialId, prfSalt)
 	const assertion = await navigator.credentials.get({ publicKey, signal })
 	if (!assertion) throw new Error("Failed to get passkey assertion")
 	if (!(assertion instanceof PublicKeyCredential)) throw new Error("Unexpected assertion type")
 	const ext = assertion.getClientExtensionResults()
 	if (!ext.prf) throw new PasskeyPrfError("Passkey PRF not available")
 	if (!ext.prf.results) throw new PasskeyPrfError("Passkey PRF has no results")
-	if (!(assertion.response instanceof AuthenticatorAssertionResponse)) throw new Error("Unexpected assertion response type")
-	const userHandleOption = assertion.response.userHandle
 	return {
 		id: asBase64CredentialId(encodeBase64(assertion.rawId)),
 		prf: asBase64SecretPrf(encodeBase64(ext.prf.results.first)),
-		userHandle: userHandleOption ? asHexUserHandle(bytesToHex(new Uint8Array(userHandleOption))) : undefined,
+		prfSalt,
 	}
 }
 
 /**
- * Reads the PRF of a credential `create` just minted, through an assertion pinned to it. A
- * different credential is refused, and the registration's handle replaces the one a pinned
- * assertion may legally omit: a missing handle would mint a second profile identity.
- */
-export async function confirmCreatedCredential(
-	credentialId: string,
-	userHandle: string,
-	signal?: AbortSignal,
-): Promise<PasskeyCredentialData> {
-	const assertion = await runGet(credentialId, signal)
-	if (assertion.id !== credentialId) throw new Error("Passkey PRF fallback returned a different credential")
-	return { ...assertion, userHandle: asHexUserHandle(userHandle) }
-}
-
-/**
- * Run a passkey ceremony for the given request, returning the credential
- * data the wallet needs to derive a master secret.
+ * Run a passkey ceremony for the given request. The answer reports the PRF input the request
+ * asked for, the one the passkey evaluated.
  *
  * `signal` is forwarded to `navigator.credentials.{create,get}` so the
  * caller can abort the ceremony cleanly via `AbortController.abort()`.
@@ -172,8 +138,8 @@ export async function confirmCreatedCredential(
  */
 export async function runPasskeyCeremony(request: PasskeyRequest, signal?: AbortSignal): Promise<PasskeyCredentialData> {
 	if (request.mode === "create") {
-		if (request.credentialId) return await confirmMinted(request.credentialId, request.userHandle, signal)
-		return await runCreate(request.userHandle, request.name, signal)
+		if (request.credentialId) return await confirmMinted(request.credentialId, request.prfSalt, signal)
+		return await runCreate(request, signal)
 	}
-	return await runGet(request.credentialId, signal)
+	return await runGet(request.mode === "get" ? request.credentialId : undefined, request.prfSalt, signal)
 }

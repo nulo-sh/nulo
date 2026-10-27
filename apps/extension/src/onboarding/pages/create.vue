@@ -15,6 +15,7 @@ import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 /** Services */
 import { managers } from "@/utils/core"
 import type { ProfileInfo } from "@/wallet/services/profile/spec"
+import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
@@ -29,6 +30,7 @@ import { useNotificationStore } from "@/stores/notification.store"
 	shell declares too. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
 import OnboardingPhraseStep from "../components/OnboardingPhraseStep.vue"
 
 const router = useRouter()
@@ -38,8 +40,9 @@ const { bootstrapActiveProfile } = useProfileBootstrap()
 
 const maxPasswordLength = 128
 
-// The words live only in this ref, for this page's life.
-const stage = ref<"form" | "phrase">("form")
+// The words live only in this ref, for this page's life. `closed` renders nothing while the route
+// to Ready settles, so neither the words nor a second Create stand meanwhile.
+const stage = ref<"form" | "phrase" | "closed">("form")
 const words = ref<string[]>([])
 let createdId = ""
 // One generation for the page's life: a Create that settles after the person left publishes
@@ -47,9 +50,41 @@ let createdId = ""
 const lifetime = createRunFence()
 const isMounted = lifetime.snapshot()
 
-async function readPhrase(id: string, typed: string): Promise<string[] | undefined> {
+const path = ref<"password" | "passkey">("password")
+
+// The words stand only while the new profile holds the session. A worker restart may come back
+// without one and emits no lock, so a dropped connection ends them too.
+let sessionLost = false
+let stopSessionWatch: (() => void) | undefined
+
+function loseSession() {
+	if (sessionLost || !isMounted()) return
+	sessionLost = true
+	if (stage.value !== "phrase") return
+	words.value = []
+	stage.value = "closed"
+	router.push(doneRoute(path.value))
+}
+
+async function watchSession(profileId: string) {
+	managers.profile.onDisconnected.add(loseSession)
+	const stop = await managers.profile.subscribeActiveProfile((active) => {
+		if (active?.id !== profileId) loseSession()
+	})
+	if (isMounted()) stopSessionWatch = stop
+	else stop()
+}
+
+async function readPhrase(
+	profile: ProfileInfo,
+	typed: string,
+	credentialData: PasskeyCredentialData | undefined,
+): Promise<string[] | undefined> {
+	if (profile.type === "passkey" && !credentialData) return undefined
 	try {
-		return await managers.profile.exportMnemonic(id, typed)
+		return profile.type === "password"
+			? await managers.profile.exportMnemonic(profile.id, typed)
+			: await managers.profile.exportMnemonic(profile.id, undefined, credentialData)
 	} catch (error) {
 		console.debug("onboarding phrase read failed", { error })
 		return undefined
@@ -73,15 +108,19 @@ const {
 	strengthHint: passwordStrengthHint,
 	isAllowedToContinue,
 	handleCreate: handleSubmit,
+	handleCreateWithExistingPasskey,
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
-	// Reading the words needs the typed password, so they are read before it is cleared; a failed
-	// read still reaches Ready, where Home's reminder stays until the phrase is saved.
-	onCreated: async (created) => {
+	// The words open with the typed password, or with the passkey answer the create was made from,
+	// so they are read before either is dropped; a failed read still reaches Ready, where Home's
+	// reminder stays until the phrase is saved.
+	onCreated: async (profile, credentialData) => {
 		if (!isMounted()) return
-		const profile = created as ProfileInfo
-		const phrase = profile.type === "password" ? await readPhrase(profile.id, password.value) : undefined
+		const typed = password.value
+		await watchSession(profile.id)
+		if (!isMounted()) return
+		const phrase = await readPhrase(profile, typed, credentialData)
 		password.value = ""
 		confirm.value = ""
 		if (!isMounted()) return
@@ -89,12 +128,16 @@ const {
 		if (!isMounted()) return
 		if (active) await setLastActiveProfileId(profile.id)
 		if (!isMounted()) return
-		// The lock wins: a session locked or superseded during bootstrap shows no words.
-		if (!phrase || !active) {
+		// The lock wins: a session locked or superseded at any point since the create shows no words,
+		// nor the form, whose Create would make a second profile while the route settles.
+		const lost = !active || sessionLost
+		if (lost) stage.value = "closed"
+		if (!phrase || lost) {
 			router.push(doneRoute(profile.type === "password" ? "password" : "passkey"))
 			return
 		}
 		createdId = profile.id
+		path.value = profile.type
 		words.value = phrase
 		stage.value = "phrase"
 	},
@@ -109,16 +152,19 @@ const submitLabel = computed(() => {
 
 async function onPhraseSaved() {
 	await markGetStarted(createdId, "phraseSaved")
-	if (isMounted()) router.push(doneRoute("password"))
+	if (isMounted()) router.push(doneRoute(path.value))
 }
 
 function onPhraseLater() {
-	router.push(doneRoute("password"))
+	router.push(doneRoute(path.value))
 }
 
 onBeforeUnmount(() => {
 	lifetime.invalidate()
+	stopSessionWatch?.()
+	managers.profile.onDisconnected.remove(loseSession)
 	dispose()
+	notificationStore.clear()
 	// Defense-in-depth: zero out secret material on unmount.
 	password.value = ""
 	confirm.value = ""
@@ -127,8 +173,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" @saved="onPhraseSaved" @later="onPhraseLater" />
-	<OnboardingPage v-else data-testid="onboarding-create-page" :data-name-field="nameFieldState">
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="onPhraseLater" />
+	<OnboardingPage v-else-if="stage === 'form'" data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"
 			:path="authMethod"
@@ -209,6 +255,13 @@ onBeforeUnmount(() => {
 			>
 				{{ submitLabel }}
 			</Button>
+			<PasskeyReuseLink
+				v-if="authMethod === 'passkey'"
+				testid="onboarding-passkey-reuse"
+				:disabled="isCreating"
+				:class="$style.reuse"
+				@click="handleCreateWithExistingPasskey"
+			/>
 		</form>
 
 		<PasskeyCeremonyDialog
@@ -274,6 +327,10 @@ onBeforeUnmount(() => {
 .tabActive:focus-visible {
 	outline: 2px solid var(--app-bg);
 	outline-offset: -5px;
+}
+
+.reuse {
+	margin-top: -12px;
 }
 
 .passkeyInfo {

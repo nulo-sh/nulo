@@ -39,6 +39,7 @@ import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/ser
 import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
 import { usableQuotes } from "@/wallet/services/price/service"
+import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { RESTORE_PENDING_ROOT, RestorePendingSchema } from "@/wallet/services/profile/restore-pending-repository"
 import { PROFILE_TOMBSTONE_ROOT, TombstoneSchema } from "@/wallet/services/profile/tombstone-repository"
 import {
@@ -149,19 +150,6 @@ export const SeedMarkersSchema = z.record(
 		verifiedPins: z.string().optional(),
 	}),
 )
-
-const profileBase = { id: z.string(), name: z.string(), pxeGeneration: z.string(), dekSealed: z.string(), walletFingerprint: z.string() }
-export const ProfileRowSchema = z.discriminatedUnion("type", [
-	z.object({
-		...profileBase,
-		type: z.literal("password"),
-		guard: z.string(),
-		secret: z.string(),
-		entropy: z.string(),
-		envelopeMac: z.string(),
-	}),
-	z.object({ ...profileBase, type: z.literal("passkey"), credentialId: z.string() }),
-])
 
 const legalEntry = {
 	termsVersion: z.string(),

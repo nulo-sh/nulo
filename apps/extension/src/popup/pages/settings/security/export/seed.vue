@@ -15,6 +15,7 @@ import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vu
 import RecoveryPhraseGrid from "@/components/composite/RecoveryPhraseGrid.vue"
 import SecretCountdownClose from "@/components/composite/SecretCountdownClose.vue"
 import SecretUnlockSection from "@/components/composite/SecretUnlockSection.vue"
+import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 /** Services */
 import { managers } from "@/utils/core"
@@ -25,11 +26,16 @@ import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntit
 import { createRunFence } from "@/composables/runFence"
 import { useSecretClipboardCopy } from "@/composables/useSecretClipboardCopy"
 import { useSecretCountdown } from "@/composables/useSecretCountdown"
+import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 const { openToast } = useToast()
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
+import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow } from "@/utils/own-window"
+import { leaveFor } from "@/utils/page-back"
+import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -38,25 +44,38 @@ const appStore = useAppStore()
 const router = useRouter()
 
 const AUTO_CLOSE_MS = 60_000 * 5
+const BACKUP_MENU = "/popup/settings/security/export"
 
 const isStarted = ref(false)
 const isUnlocked = ref(false)
 const password = ref()
 const isWrongPassword = ref(false)
 const words = ref([])
+const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
 // Not template state: a pointer double-click must decrypt the phrase once, with nothing re-rendered.
 let isRevealing = false
 const revealFence = createRunFence()
 
-const handleClose = () => {
+const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
+
+const handleClose = async () => {
 	words.value = []
-	router.push("/popup/settings/security/export")
+	if (await closeOwnWindow()) return
+	leaveFor(router, BACKUP_MENU)
 }
 
 const countdown = useSecretCountdown({ autoCloseMs: AUTO_CLOSE_MS, onTimeout: handleClose })
 
 const handleStart = () => {
 	isStarted.value = true
+}
+
+const showWords = (profileId, mnemonic) => {
+	words.value = mnemonic
+	password.value = null
+	isUnlocked.value = true
+	countdown.start()
+	void markGetStarted(profileId, "phraseSaved")
 }
 
 const handleUnlock = async () => {
@@ -68,14 +87,30 @@ const handleUnlock = async () => {
 	const profileId = appStore.profile.id
 	try {
 		const mnemonic = await managers.profile.exportMnemonic(profileId, password.value)
-		if (!isCurrent()) return
-		words.value = mnemonic
-		password.value = null
-		isUnlocked.value = true
-		countdown.start()
-		void markGetStarted(profileId, "phraseSaved")
+		if (isCurrent()) showWords(profileId, mnemonic)
 	} catch (error) {
 		if (isCurrent()) isWrongPassword.value = true
+	} finally {
+		isRevealing = false
+	}
+}
+
+/** The passkey takes the password's place: its answer opens the words once and is dropped. A cancel
+ *  leaves the button where it was. */
+const handlePasskeyReveal = async () => {
+	if (isRevealing) return
+
+	isRevealing = true
+	const isCurrent = revealFence.begin()
+	const { id: profileId, name } = appStore.profile
+	try {
+		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
+		const credentialData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal", profileName: name })
+		const mnemonic = await managers.profile.exportMnemonic(profileId, undefined, credentialData)
+		if (isCurrent()) showWords(profileId, mnemonic)
+	} catch (error) {
+		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
+		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.revealFailed) })
 	} finally {
 		isRevealing = false
 	}
@@ -87,9 +122,15 @@ const handleCopy = () => {
 }
 
 const onKeydown = (e) => {
-	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
+	if (e.defaultPrevented || !isPopupSubmitKey(e) || isPasskeyProfile.value) return
 	handleUnlock()
 }
+
+// Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
+// reveal moves to its own window first. A failed move keeps the page where it is.
+onBeforeMount(() => {
+	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.reveal)
+})
 
 onBeforeUnmount(() => {
 	revealFence.invalidate()
@@ -103,7 +144,7 @@ onBeforeUnmount(() => {
 		heroMain="Recovery"
 		heroSub="Phrase"
 		collapsingLabel="Recovery Phrase"
-		backTo="/popup/settings/security/export"
+		:backTo="BACKUP_MENU"
 		@keydown="onKeydown"
 	>
 		<!-- Agreement gate -->
@@ -125,7 +166,12 @@ onBeforeUnmount(() => {
 			</div>
 		</template>
 
-		<!-- Password gate -->
+		<!-- Password gate; a passkey profile's gate is its button, under one sentence -->
+		<div v-else-if="isStarted && !isUnlocked && isPasskeyProfile" class="export_section_last">
+			<Text variant="body" height="150" color="body" data-testid="reveal-passkey-note">
+				Your passkey confirms it's you before the phrase shows.
+			</Text>
+		</div>
 		<SecretUnlockSection
 			v-else-if="isStarted && !isUnlocked"
 			v-model="password"
@@ -162,6 +208,16 @@ onBeforeUnmount(() => {
 			</Button>
 
 			<Button
+				v-else-if="isStarted && !isUnlocked && isPasskeyProfile"
+				@click="handlePasskeyReveal"
+				@keydown.enter="refuseRepeatEnter"
+				variant="cta"
+				data-testid="reveal-passkey-btn"
+			>
+				Reveal with passkey
+			</Button>
+
+			<Button
 				v-else-if="isStarted && !isUnlocked"
 				@click="handleUnlock"
 				@keydown.enter="refuseRepeatEnter"
@@ -182,4 +238,11 @@ onBeforeUnmount(() => {
 			/>
 		</template>
 	</CollapsingHeroLayout>
+
+	<PasskeyCeremonyDialog
+		v-if="ceremonyRequest"
+		:request="ceremonyRequest"
+		@resolve="onCeremonyResolve"
+		@reject="onCeremonyReject"
+	/>
 </template>

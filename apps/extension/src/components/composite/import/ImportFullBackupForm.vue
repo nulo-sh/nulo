@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { newPasswordHint } from "@/utils/password"
 import { COLLAPSING_HERO } from "../collapsing-hero"
@@ -8,8 +9,8 @@ import { restoreWarningText } from "./restore-warning"
 /**
  * Renders the full-backup-restore form: file picker, error/warning
  * banners, decryption-password section (when the backup is encrypted),
- * and the new-profile-password section (when restoring a password
- * profile). Visibility toggles for the password fields are local.
+ * and how the new profile will unlock (when restoring into a new one).
+ * Visibility toggles for the password fields are local.
  */
 const props = defineProps({
 	selectedBackup: { type: Object, default: null },
@@ -36,6 +37,7 @@ const emit = defineEmits(["pickFile", "copyError", "passwordInput"])
 const decryptionPassword = defineModel("decryptionPassword", { default: "" })
 const password = defineModel("password", { default: "" })
 const repeatedPassword = defineModel("repeatedPassword", { default: "" })
+const unlockMethod = defineModel("unlockMethod", { default: "password" })
 
 const hero = inject(COLLAPSING_HERO, null)
 
@@ -70,7 +72,7 @@ watch(
 			<SettingItem
 				@click="emit('pickFile')"
 				title="Choose a backup file"
-				:description="selectedBackup ? selectedBackup.name : 'Select a .json or .txt file'"
+				:description="selectedBackup ? selectedBackup.name : 'Select a .gz, .json or .txt file'"
 				icon="package"
 				:iconBgColor="error.type === 'full_backup' ? 'red' : selectedBackup ? 'blue' : 'gray'"
 				chevron
@@ -90,7 +92,7 @@ watch(
 		>
 			<Flex align="center" gap="8" :class="$style.error_title_wrapper">
 				<span :class="$style.error_tag">Error</span>
-				<Text variant="body" color="txt-danger" :class="$style.error_title">{{ error.title }}</Text>
+				<Text variant="body" color="txt-danger" :class="$style.error_title" data-testid="import-full-backup-error-title">{{ error.title }}</Text>
 				<Icon :name="isCopied ? 'check' : 'copy'" size="13" color="red" />
 			</Flex>
 			<Flex v-if="error.tooltip" align="start" :class="$style.error_description_wrapper" wide>
@@ -135,45 +137,50 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="askNewPassword && selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
-		<span :class="$style.section_label">New Password</span>
-		<Flex direction="column" gap="12">
-			<Input
-				v-model="password"
-				:type="isPasswordType ? 'password' : 'text'"
-				@input="emit('passwordInput')"
-				:maxLength="maxPasswordLength"
-				placeholder="Enter new password"
-				autocomplete="new-password"
-				data-testid="import-full-backup-password-input"
-			>
-				<template #suffix>
-					<PasswordVisibilityToggle
-						:hidden="isPasswordType"
-						data-testid="import-full-backup-password-input-visibility-toggle"
-						@toggle="isPasswordType = !isPasswordType"
-					/>
-				</template>
-				<template #bottom>
-					<Flex align="center" gap="6" :class="$style.hint_row">
-						<Icon name="lock" :size="12" color="tertiary" />
-						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
-					</Flex>
-				</template>
-			</Input>
-			<Input
-				v-model="repeatedPassword"
-				:type="isPasswordType ? 'password' : 'text'"
-				@input="emit('passwordInput')"
-				:maxLength="maxPasswordLength"
-				placeholder="Repeat password"
-				autocomplete="new-password"
-				data-testid="import-full-backup-password-confirm-input"
-			/>
-			<Text variant="body" color="tertiary" height="150">
-				Create a new password that will be used to log in to your profile in the future
-			</Text>
-		</Flex>
+	<div v-if="askNewPassword && selectedBackup?.profileType && !restoreStatus" :class="$style.section">
+		<UnlockMethodChoice
+			v-model="unlockMethod"
+			passwordTestid="import-full-backup-method-password"
+			passkeyTestid="import-full-backup-method-passkey"
+		>
+			<Flex direction="column" gap="12">
+				<Input
+					v-model="password"
+					:type="isPasswordType ? 'password' : 'text'"
+					@input="emit('passwordInput')"
+					:maxLength="maxPasswordLength"
+					placeholder="Enter new password"
+					autocomplete="new-password"
+					data-testid="import-full-backup-password-input"
+				>
+					<template #suffix>
+						<PasswordVisibilityToggle
+							:hidden="isPasswordType"
+							data-testid="import-full-backup-password-input-visibility-toggle"
+							@toggle="isPasswordType = !isPasswordType"
+						/>
+					</template>
+					<template #bottom>
+						<Flex align="center" gap="6" :class="$style.hint_row">
+							<Icon name="lock" :size="12" color="tertiary" />
+							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
+						</Flex>
+					</template>
+				</Input>
+				<Input
+					v-model="repeatedPassword"
+					:type="isPasswordType ? 'password' : 'text'"
+					@input="emit('passwordInput')"
+					:maxLength="maxPasswordLength"
+					placeholder="Repeat password"
+					autocomplete="new-password"
+					data-testid="import-full-backup-password-confirm-input"
+				/>
+				<Text variant="body" color="tertiary" height="150">
+					Create a new password that will be used to log in to your profile in the future
+				</Text>
+				</Flex>
+		</UnlockMethodChoice>
 	</div>
 </template>
 

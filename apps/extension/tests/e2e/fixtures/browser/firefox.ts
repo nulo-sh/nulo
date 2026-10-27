@@ -24,6 +24,7 @@ import {
 } from "./ownership"
 import { WebDriverSession } from "./webdriver-classic"
 import { EGRESS_CANARY_HOST } from "../egress-guard"
+import { PENDING_FILE_INPUT } from "../file-accept"
 import { PollTimeoutError, pollUntil } from "../poll"
 
 const SCHEME = "moz-extension://"
@@ -601,8 +602,6 @@ const stopBackground = (browser: Browser): Promise<void> =>
 		pollEveryMs: 100,
 	})
 
-const PENDING_FILE_INPUT = 'body > input[type="file"]:not([data-e2e-stale])'
-
 /**
  * Firefox refuses a file picker without a user gesture, and an evaluated click is not one, so no
  * chooser event ever comes. The wallet appends its `<input type="file">` to the body before asking
@@ -842,6 +841,8 @@ export const firefoxDriver: BrowserDriver = {
 	kind: "firefox",
 	scheme: SCHEME,
 	credentialOutlivesPage: true,
+	stopsBackgroundUnderOpenPage: false,
+	residentCredentialSlots: Number.POSITIVE_INFINITY,
 	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
 	// A temporary install over the installed add-on is an update to it; the UUID and storage stay.

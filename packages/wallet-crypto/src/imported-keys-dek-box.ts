@@ -11,11 +11,11 @@
  * Wrap-key sources (per profile variant):
  *   password: `EncryptionKey.fromPasshash(...)` sealing via its own `encrypt(payload, DEK_AAD)`
  *             (the audited PBKDF2 + AES-GCM path — no new crypto for that branch);
- *   passkey:  `PasskeyCredential.deriveDekWrapKey()` (HKDF → AES-GCM CryptoKey), sealed with the
+ *   passkey:  the profile's passkey unlock key (`passkey-unlock-key.ts`), sealed with the
  *             functions in THIS module.
  *
  * Envelope (this module): the base64 `aes-gcm-frame`, AAD = `DEK_AAD` — a wrong
- * wrap key (a sibling profile's ceremony), a slot transplant, or corruption all fail AES-GCM
+ * wrap key (another profile's unlock key), a slot transplant, or corruption all fail AES-GCM
  * authentication closed. Uses `globalThis.crypto` for the same cross-env reason as
  * `mnemonic-master.ts`.
  */
@@ -35,7 +35,7 @@ export function generateImportedKeysDek(): ImportedKeysDek {
 	return asImportedKeysDek(globalThis.crypto.getRandomValues(new Uint8Array(IMPORTED_KEYS_DEK_LEN)))
 }
 
-/** Seal a DEK under an AES-GCM wrap key (the passkey branch's `deriveDekWrapKey` output).
+/** Seal a DEK under an AES-GCM wrap key (a passkey profile's unlock key).
  *  Caller owns + zeroes `dek`. */
 export async function sealDekUnderWrapKey(wrapKey: CryptoKey, dek: ImportedKeysDek): Promise<string> {
 	return sealFrame(wrapKey, dek, IMPORTED_DEK_AAD)

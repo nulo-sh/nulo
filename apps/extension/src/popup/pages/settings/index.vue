@@ -187,6 +187,7 @@ onBeforeUnmount(() => {
 						chevron
 						v-bind="settingItemProps('hub-change-password', searchContext)"
 					/>
+					<SettingItem chevron v-bind="settingItemProps('hub-unlock-method', searchContext)" />
 				</ItemsContainer>
 
 				<ItemsContainer title="Preferences">

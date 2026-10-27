@@ -57,6 +57,7 @@ import { PASSKEY_SERVICE_NAME } from "@/wallet/services/passkey/spec"
 import { PriceService, type PriceState, TOKEN_PRICES_STORAGE_KEY } from "@/wallet/services/price/service"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { PROFILE_SERVICE_NAME, PROFILE_STORAGE_ROOT, type Profile } from "@/wallet/services/profile/spec"
 import { PinMismatchError, type SeedMarkerState, type SeedPreview, SEED_ATTEMPT_CAP } from "@/wallet/services/token/seeder"
 import { CONTRACT, CHAIN_ID, disposeSeeders, makeSeeder, readMarker, skipBackoff } from "@/wallet/services/token/seeder.harness"
@@ -77,7 +78,6 @@ import {
 	MigrationDegradedSchema,
 	PinMapSchema,
 	PriceStateSchema,
-	ProfileRowSchema,
 	STORED_SHAPES,
 	SeedMarkersSchema,
 	SendPicksSchema,
@@ -87,6 +87,7 @@ import {
 import { isSealedText } from "./sealed-entity-storage"
 import { sealedEntityStorage } from "./stores"
 import { rowKeysForEveryProfile } from "./sealed-entity-storage.testing"
+import { fakePasskeyCredential } from "../../../tests/helpers/fake-passkey"
 
 const bootMigrations = vi.hoisted((): Migration[] => [])
 vi.mock("./migrations", async (importOriginal) => ({
@@ -106,6 +107,8 @@ type DeepReadonly<T> = T extends (infer E)[]
 		? { readonly [K in keyof T]: DeepReadonly<T[K]> }
 		: T
 type Variant<T, K extends string> = Extract<T, { type: K }>
+/** The passkey row a build writes now; the registry also reads the retired one, which none writes. */
+type WrittenPasskey<T> = Extract<T, { type: "passkey"; prfSalt: string }>
 
 /** The stored value as the registry says it is encoded, parsed by its schema back to itself. */
 function expectDescribed(name: StoredShapeName, raw: unknown): void {
@@ -149,7 +152,7 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Out<typeof SeedMarkersSchema>, SeedMarkerState>,
 			Equivalent<Out<typeof RegistrationCountsSchema>, RegistrationCounts>,
 			Equivalent<Variant<Out<typeof ProfileRowSchema>, "password">, Variant<Profile, "password">>,
-			Equivalent<Variant<Out<typeof ProfileRowSchema>, "passkey">, Variant<Profile, "passkey">>,
+			Equivalent<WrittenPasskey<Out<typeof ProfileRowSchema>>, Variant<Profile, "passkey">>,
 			Equivalent<DeepReadonly<Registered<"legalAccepted">>, LegalAcceptanceRecord>,
 			Equivalent<Out<typeof PinMapSchema>, PinMap>,
 			Equivalent<Out<typeof AppPicksSchema>, Record<string, AppPick>>,
@@ -359,14 +362,8 @@ describe("what each writer stores parses back to itself", () => {
 		api.reset()
 		const log = logger()
 		const passkeys = svc(PASSKEY_SERVICE_NAME, {
-			createKey: async (userHandle: string) => ({
-				credential: {
-					id: `cred-${userHandle}`,
-					userHandle,
-					deriveMasterSecret: async () => new Uint8Array(32).fill(7),
-					deriveDekWrapKey: async () =>
-						crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]),
-				},
+			createKey: async (userHandle: string, prfSalt: string) => ({
+				credential: await fakePasskeyCredential(`cred-${userHandle}`, prfSalt),
 				finish: () => {},
 			}),
 		})

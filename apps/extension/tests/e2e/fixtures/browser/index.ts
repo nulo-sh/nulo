@@ -1,4 +1,6 @@
+import { basename } from "node:path"
 import type { Browser, Page, Target } from "puppeteer"
+import { acceptLists, PENDING_FILE_INPUT } from "../file-accept"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
 import { type BrowserKind, resolveBrowserKind } from "./selection"
@@ -85,6 +87,18 @@ export interface BrowserDriver {
 	 * background kill reads this to know whether its ceremony may move to a fresh popup.
 	 */
 	readonly credentialOutlivesPage: boolean
+	/**
+	 * Whether `stopBackground` ends the background while an extension page stays open. Chrome stops
+	 * its service worker under any page; Firefox will not end an event page that one keeps busy, so a
+	 * spec there closes every extension page before a restart.
+	 */
+	readonly stopsBackgroundUnderOpenPage: boolean
+	/**
+	 * How many resident credentials one virtual authenticator keeps; a create past it is refused at
+	 * once with `NotAllowedError`, as a dismissed prompt is. Chrome's CTAP2 virtual device stores
+	 * three and CDP has no option to raise it; Firefox's keeps every one.
+	 */
+	readonly residentCredentialSlots: number
 	/**
 	 * Hosts this browser reaches on its own on every run, whatever the wallet does, each with why.
 	 * The egress guard refuses them without failing a launch. Exact names, never a domain, so a wallet
@@ -244,6 +258,8 @@ export const BROWSER: BrowserKind = driver.kind
 export const EXTENSION_SCHEME = driver.scheme
 export const isFirefox = BROWSER === "firefox"
 export const credentialOutlivesPage = driver.credentialOutlivesPage
+export const stopsBackgroundUnderOpenPage = driver.stopsBackgroundUnderOpenPage
+export const residentCredentialSlots = driver.residentCredentialSlots
 /** What the egress guard checks a launch's record against: whose traffic it is, and which of it is the browser's own. */
 export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts }
 
@@ -301,7 +317,31 @@ export const openScratchPage = (browser: Browser, extensionId: string): Promise<
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
 export const doubleClick = (page: Page, x: number, y: number, gapMs: number): Promise<void> => driver.doubleClick(page, x, y, gapMs)
-export const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> => driver.pickFile(page, open, filePath)
+/** Answers the picker `open` asks for with `filePath`, once the picker's `accept` lists that file:
+ *  a person's chooser offers only the files it lists until they ask for every file. */
+export const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> =>
+	driver.pickFile(
+		page,
+		async () => {
+			await open()
+			await expectPickerLists(page, filePath)
+		},
+		filePath,
+	)
+
+async function expectPickerLists(page: Page, filePath: string): Promise<void> {
+	const pending = await page.waitForFunction(
+		(selector: string) => {
+			const inputs = document.querySelectorAll<HTMLInputElement>(selector)
+			return inputs.length > 0 && { accept: inputs[inputs.length - 1].accept }
+		},
+		{ timeout: 10_000 },
+		PENDING_FILE_INPUT,
+	)
+	const { accept } = (await pending.jsonValue()) as { accept: string }
+	await pending.dispose()
+	if (!acceptLists(accept, basename(filePath))) throw new Error(`the picker's accept "${accept}" does not list ${basename(filePath)}`)
+}
 export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promise<VirtualAuthenticator> =>
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)
