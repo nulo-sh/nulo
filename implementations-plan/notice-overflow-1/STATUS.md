@@ -11,3 +11,5 @@
 - 2026-10-27 arc1 gate 1: test:all green (every workspace, exit 0).
 - 2026-10-27 arc1 gate 2-3: armed Chrome build ok; smoke import-errors-scroll.test.ts green (4 passed, retry 0, 56 s).
 - 2026-10-27 arc1 gate 4: capture on the arc build: card scrollWidth = clientWidth in both shells (324/324, 480/480); ordinary text and all ten createFailedNotice measurements identical to the base. Phase 1 ✓.
+- 2026-10-27 arc1 fix loop: Codex r1 clean, Opus diff review 2 comment fixes applied, Codex r2 clean; converged.
+- 2026-10-27 arc1 final gates on head: lint, typecheck:all, test:all green; armed build + smoke import-errors-scroll green (4 passed, 52 s).

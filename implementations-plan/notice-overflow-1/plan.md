@@ -108,6 +108,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the gate order (as Codex); D5 and OA-1's uneven comparison (the name's other places, which (b) bounds); the known limit's consequence (no pointer target at all) and shell; line numbers (`joinNames` 102-105, `.card` 152-159, `spec.ts` 212-217, 20 files); "widest name" corrected (U+FDFD); the pictures' captions say the notice was raised directly; `lint` and `typecheck:all` folded into `audit:vue` | an e2e assertion of the computed `overflow-wrap` in `import-errors-scroll.test.ts` (optional in the finding): the scan pins the rule and the capture measures the real layout; it would mix a second concern into a test about scrolling. Dropping the Opus diff review: the implementer brief requires it |
 | plan 2 (final) | Codex, resumed | conditional approve | U+FDFD recast as a backup-origin example (the field's sanitizer drops it); OA-1 says the "Profile creation failed" notices render unchanged and an overflowing restore notice wraps; all ten fixed-copy measurement pairs, the gate order, the known limit and D5 verified | none |
 | plan 3 | Codex, resumed | **approve** | both wording fixes verified; no regression | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a17f84) | **clean** | none | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings | the `.card` comment's claim corrected (a centred item sizes to fit-content; min-content is its floor) and the caller dropped from both comments; the test's comment states D3's blind spot | a guard against a `@media`-wrapped `.card` rule passing the scan: nothing realistic leads there |
+| arc 1 r2 | Codex, resumed | **clean** | the comment fixes verified; no regression | none |
 
 Plan status: **approved** by the final Codex pass; OA-1 open with the owner (the arc ships it as a draft).
 
