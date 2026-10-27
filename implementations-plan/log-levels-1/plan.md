@@ -63,6 +63,7 @@ Good enough: no new log categories, no log-viewer work, no change to the redacto
 - D4 (#1132): one Vue handler with the rule unhandled rejections already follow. A disconnect is how every page's own teardown ends its calls; a catch per page would copy the rule into each page. Non-disconnect errors keep `error`, so nothing is hidden.
 - D5 (#1133): observe the core at once, settle in today's order, rethrow its failure. Rejected: `Promise.all` (Codex, reproduced: it publishes a core failure before a lock's supersede can turn it into `false`, so `runFencedBootstrap` could log and toast); a no-op `.catch` (it drops the core's failure). When `getProfiles()` fails first, its error propagates and the core's is dropped, as `Promise.all` would.
 - D6 (#1216): no handler without the call named. The diagnostic records the method beside the rejection and never changes a rejected value, so every exact-message matcher behaves as shipped. If 80 Chrome runs do not reproduce it, comment on #1216 and leave it open.
+- D8 (arc 1, a deviation): `StoreErasedError` follows the brand-field idiom of `WrongStoreKeyError` (`isStoreErased = true as const`) with no literal `name`: `instanceof` runs in the module that throws it, and the logged name stays `Error`, as today.
 - D7 (#1178): typed errors over message matching, per `InvalidPasswordError` and `StaleUnlockCredentialError`; `exportPlain` keeps them through its catch. Reusing `StaleUnlockCredentialError` for the stale form was rejected: its page shows another toast. `PasskeyUnconfirmedError` is a stage, not a refusal: only its cause decides.
 
 ## Security & Adversarial Considerations
@@ -84,11 +85,11 @@ None. No arc changes a screen, its copy, a toast or a route. `chooseUnlock`'s me
 
 ## Phases
 
-### Arc 1 (#1131, #1136)
+### Arc 1 (#1131, #1136) ✓
 
-1.1 Gas reader. Pass `evictGenAtStart` into `legWithRetry`, then add the two checks. Tests in `gas-balance-reader.test.ts`: an eviction in the retry delay means no second read, a debug line and no `logError`; an eviction while the retry runs, then its failure, logs debug; control: a failed retry with no eviction logs `logError` once.
-1.2 PXE levels. Add `StoreErasedError`, the constant and the two demotions. Tests: `service.test.ts` gets one case per refusal (debug, no error line), and the not-synced text on another op still logs error (the control); the existing "any OTHER failure logs at ERROR" case stays. `lifecycle-coordinator.test.ts` and `incarnation-fence.test.ts` assert the type and the unchanged messages.
-1.3 Remove the #1131 and #1136 entries from `KNOWN_FINDINGS` (`tests/e2e/helpers/profile-chaos/checkers.ts`).
+1.1 ✓ Gas reader. Pass `evictGenAtStart` into `legWithRetry`, then add the two checks. Tests in `gas-balance-reader.test.ts`: an eviction in the retry delay means no second read, a debug line and no `logError`; an eviction while the retry runs, then its failure, logs debug; control: a failed retry with no eviction logs `logError` once.
+1.2 ✓ PXE levels. Add `StoreErasedError`, the constant and the two demotions. Tests: `service.test.ts` gets one case per refusal (debug, no error line), and the not-synced text on another op still logs error (the control); the existing "any OTHER failure logs at ERROR" case stays. `lifecycle-coordinator.test.ts` and `incarnation-fence.test.ts` assert the type and the unchanged messages.
+1.3 ✓ Remove the #1131 and #1136 entries from `KNOWN_FINDINGS` (`tests/e2e/helpers/profile-chaos/checkers.ts`), and their cases from `scripts/e2e/profile-chaos-model.test.ts`, which now pins that a fixed finding's line is an unfiled red.
 Gate: `bun run lint && bun run typecheck:all && bun run test && bun run test:all` exit 0; the new cases fail on the base copy of each source file and pass after. #1131's replay list 15 times on Chrome on the armed smoke build (`NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_ACTIONS=<file> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0`; 1 in 5 on base), and one proverless network run of seed 1001 (`NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1001 NULO_E2E_CHAOS_RUNS=1 NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/profile-chaos.test.ts`): neither shows a #1131 or #1136 line. A red from another lane's open issue is read and named, not fixed here.
 
 ### Arc 2 (#1133, #1132, #1216)
