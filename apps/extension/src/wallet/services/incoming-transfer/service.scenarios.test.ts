@@ -3370,11 +3370,18 @@ describe("IncomingTransferService — public-arm lifecycle", () => {
 
 	test("clearChain wipes the public cursor + outbox rows too", async () => {
 		const { reader, state } = makePublicReader()
-		const { service } = await bootPublic(reader, state)
+		const tokens = makeTokenStub([tokenA])
+		const { service } = await bootPublic(reader, state, { token: tokens })
 		await seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 } })
 		await repo.setOutbox("p1", "n1", "0xa", 1, { dirtyAt: 1 })
+		expect(await cursorFor()).toBeDefined()
+		expect(await outboxFor()).toBeDefined()
 
+		// A chain purge runs the token service's subscriber first, so the rebuild ending the clear lists
+		// no token on the chain; a stub still listing one re-installs the scan, whose first tick writes a cursor.
+		tokens.getTokensRaw.mockResolvedValue([])
 		await service.clearChain("p1", "n1")
+		await flushPromises()
 
 		expect(await cursorFor()).toBeUndefined()
 		expect(await outboxFor()).toBeUndefined()
