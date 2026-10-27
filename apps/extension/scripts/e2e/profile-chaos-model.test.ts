@@ -945,32 +945,14 @@ describe("O4, errors", () => {
 	})
 
 	test("a filed finding's error line is marked with its issue; any other error line is not", () => {
-		const fenced = (label: string) => ({
+		// A fixed finding's entry is gone, so its line, should it come back, is an unfiled red.
+		const gasRetry = {
 			kind: "log" as const,
 			level: "error" as const,
 			source: "execution",
-			text: `["Failed to get ${label} FeeJuice balance",{"message":"pxe op rejected: profile x has no current incarnation (deleted or tombstoned)"}]`,
-		})
-		expect(checkErrors([fenced("public"), fenced("private")], []).violations.map((v) => v.known)).toEqual([1131, 1131])
-		const afterLock = [
-			{
-				...fenced("private"),
-				text: '["Failed to get private FeeJuice balance",{"name":"WalletLockedError","message":"Wallet locked"}]',
-			},
-			{
-				...fenced("public"),
-				text: '["Failed to get public FeeJuice balance",{"message":"PXE_STORE_KEY_MISSING: no store key provisioned for profile x"}]',
-			},
-		]
-		afterLock.push({
-			...fenced("private"),
-			text: '["Failed to get private FeeJuice balance",{"name":"Error","message":"Profile locked"}]',
-		})
-		expect(checkErrors(afterLock, []).violations.map((v) => v.known)).toEqual([1131, 1131, 1131])
-		const elsewhere1131 = checkErrors([{ ...afterLock[0], source: "token" }], []).violations
-		expect(shown("O4 the gas-balance text from another source", elsewhere1131)[0]?.known).toBeUndefined()
-		const other = checkErrors([{ ...fenced("public"), text: '["Failed to get public FeeJuice balance",{"message":"boom"}]' }], [])
-		expect(shown("O4 an error line beside a filed one's text", other.violations)[0]?.known).toBeUndefined()
+			text: '["Failed to get public FeeJuice balance",{"error":{"name":"Error","message":"Profile locked"}}]',
+		}
+		expect(shown("O4 a fixed finding's line", checkErrors([gasRetry], []).violations)[0]?.known).toBeUndefined()
 		const disconnect = {
 			kind: "log" as const,
 			level: "error" as const,
@@ -1018,20 +1000,6 @@ describe("O4, errors", () => {
 			expect(refusal?.known).toBeUndefined()
 		}
 		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
-		const pxe = [
-			read(
-				'["[READ] getSyncedBlockHeader failed after 4ms",{"error":{"name":"Error","message":"Trying to get block header with a not-yet-synchronized PXE - this should never happen"}}]',
-			),
-			read(
-				'["[READ] getRegisteredAccounts failed after 207ms",{"error":{"name":"Error","message":"getRegisteredAccounts: chain was purged mid-operation — refusing to re-create its runtime/store"}}]',
-			),
-		]
-		expect(checkErrors(pxe, []).violations.map((v) => v.known)).toEqual([1136, 1136])
-		const otherRead = checkErrors(
-			[read('["[READ] getSyncedBlockHeader failed after 4ms",{"error":{"message":"boom"}}]')],
-			[],
-		).violations
-		expect(shown("O4 a PXE read failure that is not an expected refusal", otherRead)[0]?.known).toBeUndefined()
 		const unreachable = checkErrors([discovery("Error 400 from server")], []).violations
 		expect(shown("O4 a discovery failure that is not the lock's", unreachable)[0]?.known).toBeUndefined()
 		const retried = (module: string, cause = "TypeError: Failed to fetch") =>
