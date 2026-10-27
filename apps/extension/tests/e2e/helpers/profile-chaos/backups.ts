@@ -5,11 +5,13 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { openFullBackupText, sealFullBackupText } from "@/utils/full-backup-helpers"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { clickByTestId, pickFileByTestId, replaceInputValue } from "../../fixtures/dom"
 import { downloadEncryptedBackup, downloadPasskeyBackup } from "../backup-export"
 import { type PlainBackup, sealPlainBackup } from "../backup-seal"
 import { setInputs } from "../import-drivers"
 import type { ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
+import { pickDiscovered } from "./prf-capture"
 import { type Driven, type RunState, secretFor, wrongSecret } from "./state"
 import { answerConfirm, firstSignal, HOME, openRoute, type Signal, settle, timed } from "./ui"
 
@@ -19,19 +21,24 @@ const RESTORE_MS = 300_000
 
 /** Seven random characters, one short of the file password rule a passkey profile's export applies,
  *  kept as the step's secret so O7 searches for it too. */
-function shortFilePassword(s: RunState, ref: SecretRef): string {
+export function shortFilePassword(s: RunState, ref: SecretRef): string {
 	const value = randomBytes(6).toString("base64url").slice(0, 7)
 	s.secrets.set(ref, value)
 	return value
 }
 
+/** A file password section and the button it enables. */
+export type FilePasswordForm = { field: "backup-encrypt-password" | "account-file-password"; button: string }
+
+const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "protect-password-btn" }
+
 /** True once the file password is typed and the page still refuses to encrypt with it. */
-async function refusesShortPassword(page: Page, short: string): Promise<boolean> {
-	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 })
-	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', short)
-	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', short)
+export async function refusesShortPassword(page: Page, short: string, form: FilePasswordForm = BACKUP_FILE_PASSWORD): Promise<boolean> {
+	await page.waitForSelector(`[data-testid="${form.field}-input"]`, { visible: true, timeout: 180_000 })
+	await replaceInputValue(page, `[data-testid="${form.field}-input"]`, short)
+	await replaceInputValue(page, `[data-testid="${form.field}-confirm-input"]`, short)
 	await new Promise((resolve) => setTimeout(resolve, 500))
-	return page.$eval('[data-testid="protect-password-btn"]', (el) => (el as HTMLButtonElement).disabled)
+	return page.$eval(`[data-testid="${form.button}"]`, (el) => (el as HTMLButtonElement).disabled)
 }
 
 /** The passkey ceremony starts on agree; a password profile types its password first. */
@@ -100,6 +107,8 @@ async function refusalTitle(page: Page): Promise<string | undefined> {
 }
 
 const ERROR: Signal = { label: "refused", testid: "import-full-backup-error" }
+/** A passkey card's failure, which the import page reports in a toast. */
+const PASSKEY_REFUSED: Signal[] = [PASSKEY_COPY.notConfirmed, PASSKEY_COPY.noPrf].map((text) => ({ label: "refused", text }))
 const CONTINUE: Signal = { label: "continue", testid: "import-full-backup-continue-btn" }
 
 /** After the pick: refused at once, a decrypt step, or the form ready to submit. */
@@ -146,12 +155,13 @@ export async function pickEarlierBackup(s: RunState): Promise<Driven> {
 	return driven
 }
 
-/** Submits and answers a duplicate warning as asked; an errors screen's Continue goes on to Home. */
-async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["duplicate"]): Promise<Driven> {
+/** Submits with `press` and answers a duplicate warning as asked; an errors screen's Continue goes on
+ *  to Home. */
+async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["duplicate"], press: string): Promise<Driven> {
 	const page = s.anchor
-	await clickByTestId(page, "import-full-backup-submit-btn")
+	await clickByTestId(page, press)
 	const warn: Signal = { label: "warned", testid: "confirm-submit" }
-	const first = await firstSignal(page, [warn, HOME, CONTINUE, ERROR], RESTORE_MS)
+	const first = await firstSignal(page, [warn, HOME, CONTINUE, ERROR, ...PASSKEY_REFUSED], RESTORE_MS)
 	if (first.label === "warned") {
 		if (duplicate !== "confirm") {
 			await answerConfirm(page, "cancel")
@@ -162,12 +172,12 @@ async function submitRestore(s: RunState, duplicate: ParamsMap["importBackup"]["
 		}
 		await answerConfirm(page, "submit")
 	}
-	const seen = first.label === "warned" ? await firstSignal(page, [HOME, CONTINUE, ERROR], RESTORE_MS) : first
+	const seen = first.label === "warned" ? await firstSignal(page, [HOME, CONTINUE, ERROR, ...PASSKEY_REFUSED], RESTORE_MS) : first
 	if (seen.label === "continue") {
 		await clickByTestId(page, "import-full-backup-continue-btn")
 		return settle(page, [HOME], { home: "committed" }, RESTORE_MS)
 	}
-	return settle(page, [HOME, ERROR], { home: "committed", refused: "refused" }, 1_000)
+	return settle(page, [HOME, ERROR, ...PASSKEY_REFUSED], { home: "committed", refused: "refused" }, 1_000)
 }
 
 /** Presses an errors screen's Continue, as a person keeping the restored profile would, and waits
@@ -192,10 +202,15 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 	if (picked === undefined) throw new Error("the import page showed nothing after the pick")
 	if (picked === "refused") return false
 	if (picked === "decrypt" && !(await decrypt(s, file, p.variant === "wrong-password"))) return false
-	// A passkey profile's backup opens on Passkey; the model restores under a password.
+	// The form opens on the method the backup was made with; the step names the one it restores under.
+	if (p.method === "passkey") {
+		await clickByTestId(page, "import-full-backup-method-passkey")
+		await page.waitForSelector('[data-testid="import-full-backup-method-passkey"][aria-selected="true"]', { timeout: 10_000 })
+		return true
+	}
 	await clickByTestId(page, "import-full-backup-method-password")
 	await page.waitForSelector('[data-testid="import-full-backup-password-input"] input', { visible: true, timeout: 10_000 })
-	const password = secretFor(s, p.password)
+	const password = secretFor(s, p.password as SecretRef)
 	await setInputs(page, {
 		'[data-testid="import-full-backup-password-input"] input': password,
 		'[data-testid="import-full-backup-password-confirm-input"] input': password,
@@ -203,13 +218,16 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 	return true
 }
 
-/** Restores `file` from the import page the caller opened, as `p` says. */
-export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"]): Promise<Driven> {
+/** Restores `file` from the import page the caller opened, as `p` says: `reused`, the id of a
+ *  passkey the browser's chooser picks through "Use a passkey I already have". */
+export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"], reused?: string): Promise<Driven> {
 	const t0 = Date.now()
 	if (!(await fillRestore(s, file, p))) {
 		const driven = timed(t0, RESTORE_MS, "refused")
 		driven.shows = await refusalTitle(s.anchor)
 		return driven
 	}
-	return submitRestore(s, p.duplicate)
+	if (reused === undefined) return submitRestore(s, p.duplicate, "import-full-backup-submit-btn")
+	await pickDiscovered(s.anchor, reused)
+	return submitRestore(s, p.duplicate, "import-full-backup-passkey-reuse")
 }

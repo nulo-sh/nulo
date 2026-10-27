@@ -10,6 +10,7 @@
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { cite } from "./citations"
 import {
+	type CredentialRef,
 	type Expectation,
 	type ModelFile,
 	type ModelProfile,
@@ -42,6 +43,8 @@ export interface Bindings {
 	names: Map<ProfileRef, string>
 	/** Each profile's derived account addresses, by index, as first read on the chain it stood on. */
 	addresses: Map<ProfileRef, ChainAddresses>
+	/** Each credential's id as the wallet stores it, learnt from the answer that minted it. */
+	credentials: Map<CredentialRef, string>
 }
 
 /** Derived addresses read on one chain: an address takes its chain's L1 id, so two readings
@@ -51,7 +54,7 @@ export interface ChainAddresses {
 	addresses: string[]
 }
 
-export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map() })
+export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map(), credentials: new Map() })
 
 /** Binds `ref` to `id`. A full-backup restore keeps the backed-up profile's id, so a deleted
  *  profile's id comes back under the ref that restored it: `deleted` names the refs whose id a new
@@ -168,8 +171,9 @@ export function checkSession(w: World, r: SessionReading, b: Bindings): Violatio
 export interface ProfileReading {
 	/** `profile.getProfiles`, with whether each is listed as retired. */
 	listed: { id: string; name: string; type: string; retired: boolean }[]
-	/** Every stored profile row: its key's id and the row's id, name, type and field names. */
-	rows: { keyId: string; id: string; name: string; type: string; fields: string[] }[]
+	/** Every stored profile row: its key's id and the row's id, name, type, field names and, on a
+	 *  passkey row, the credential it names. */
+	rows: { keyId: string; id: string; name: string; type: string; fields: string[]; credentialId?: string }[]
 }
 
 export type RowKind = "password" | "passkey" | "retired"
@@ -204,7 +208,15 @@ function checkLiveProfile(p: ModelProfile, r: ProfileReading, b: Bindings, field
 	const want = [...fields[rowKind(p)]].sort().join(",")
 	const got = [...row.fields].sort().join(",")
 	if (want !== got) out.push(violation("O2", `${p.ref}'s row holds the fields [${got}], not [${want}]`))
-	return out
+	return [...out, ...checkCredential(p, row, b)]
+}
+
+/** A passkey row names the credential its profile was given, as bound from the answer that minted it. */
+function checkCredential(p: ModelProfile, row: ProfileReading["rows"][number], b: Bindings): Violation[] {
+	if (p.method !== "passkey" || p.retired || !p.credential) return []
+	const bound = b.credentials.get(p.credential)
+	if (!bound) return [violation("O2", `${p.ref}'s credential ${p.credential} was never bound`)]
+	return row.credentialId === bound ? [] : [violation("O2", `${p.ref}'s row names another credential than ${p.credential}`)]
 }
 
 export function checkProfiles(w: World, r: ProfileReading, b: Bindings, fields: RowFields = PROFILE_ROW_FIELDS): Violation[] {
@@ -589,6 +601,12 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 		source: "pxe",
 	},
 	{
+		issue: 1178,
+		pattern: /^\["\[unlock-method\] change failed",\{"error":\{"name":"Error","message":"Passkey did not open this profile"\}\}\]$/,
+		kinds: ["log"],
+		source: "ui",
+	},
+	{
 		issue: 432,
 		// A closed known limit: its entry stays while the issue does.
 		pattern:
@@ -847,13 +865,11 @@ function checkRetired(r: VerifyReading): Violation[] {
 	return out
 }
 
-/** Profiles that must derive the same accounts: those sharing a phrase or a credential. */
-/** Profiles that share `p`'s phrase or credential, deleted ones included: a restore must derive the
- *  addresses its source derived before that source was deleted. */
+/** Profiles that share `p`'s phrase, deleted ones included: a restore must derive the addresses its
+ *  source derived before that source was deleted. A shared credential is no sibling: each profile
+ *  on it holds its own phrase. */
 function siblings(w: World, p: ModelProfile): ModelProfile[] {
-	return w.profiles.filter(
-		(x) => x.ref !== p.ref && ((p.phrase && x.phrase === p.phrase) || (p.credential && x.credential === p.credential)),
-	)
+	return w.profiles.filter((x) => x.ref !== p.ref && p.phrase !== undefined && x.phrase === p.phrase)
 }
 
 function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings): Violation[] {
@@ -875,7 +891,7 @@ function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings)
 }
 
 function checkSentinels(p: ModelProfile, r: VerifyReading): Violation[] {
-	const want = (p.method === "password" ? [...p.imported] : []).sort().join(",")
+	const want = [...p.imported].sort().join(",")
 	const got = r.sentinels
 		.map((s) => s.file)
 		.sort()

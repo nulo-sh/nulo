@@ -18,7 +18,9 @@ import { setInputs } from "../import-drivers"
 import { exportAccount, importAccountFile } from "./accounts-io"
 import {
 	type ActionName,
+	type CredentialRef,
 	deleteTarget,
+	isMinted,
 	type ModelFile,
 	type ModelProfile,
 	type ParamsMap,
@@ -30,7 +32,7 @@ import {
 } from "./model"
 import { drainBeforeStop, restartBackground } from "./restart"
 import { bindProfile } from "./checkers"
-import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
+import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
 	activeProfileId,
 	answerConfirm,
@@ -52,9 +54,11 @@ import {
 	unlockAttemptEnded,
 	waitForRoute,
 	anchorAdvanced,
+	watchPromptAbort,
 } from "./ui"
 import { verifyAll } from "./verify"
-import { capturePrf, drainPrf } from "./prf-capture"
+import { answeredCredentials, type Ceremony, capturePrf, drainPrf, minted, pickDiscovered } from "./prf-capture"
+import { changeUnlockMethod, raceLockDuringMethodChange } from "./unlock-method"
 import { exportFullBackup, pickEarlierBackup, restoreFile } from "./backups"
 import { editRowDuringUnlock as editRow, tamperedUnlock as tamperSlot } from "./tamper"
 
@@ -108,11 +112,34 @@ async function openCreateForm(s: RunState, before: World): Promise<void> {
 }
 
 /** Home, or a refusal the create form shows: an inline error or a passkey notice. */
-async function submitCreate(s: RunState, double: boolean): Promise<Driven> {
-	if (double) await pressTwice(s.anchor, "register-submit-btn")
-	else await clickByTestId(s.anchor, "register-submit-btn")
+async function submitCreate(s: RunState, double: boolean, button = "register-submit-btn"): Promise<Driven> {
+	if (double) await pressTwice(s.anchor, button)
+	else await clickByTestId(s.anchor, button)
 	const refusals = [...PASSKEY_REFUSAL.map((r) => ({ label: "refused", text: r.text })), { label: "refused", testid: "error-text" }]
 	return settle(s.anchor, [HOME, ...refusals], { home: "committed", refused: "refused" }, CREATE_MS)
+}
+
+/** A new passkey profile's ceremonies: a mint's create, or the browser's pick of `credential`. */
+const ceremoniesFor = (before: World, credential: CredentialRef): Ceremony[] =>
+	isMinted(before, credential) ? [{ kind: "get", credential }] : minted(credential)
+
+/** Arms the browser's pick of `credential` when the step reuses it, and names the link that asks
+ *  for it; a mint presses `submit`. */
+async function passkeyPress(
+	s: RunState,
+	page: Page,
+	before: World,
+	credential: CredentialRef,
+	links: { submit: string; reuse: string },
+): Promise<string> {
+	if (!isMinted(before, credential)) return links.submit
+	await pickDiscovered(page, credentialId(s, credential))
+	return links.reuse
+}
+
+/** Checks a passkey step's answers once it settled on an outcome the model allows. */
+async function checkAnswers(s: RunState, page: Page, step: PlannedStep, driven: Driven, expected: Ceremony[]): Promise<void> {
+	if (driven.settle.reached && step.expect.outcomes.includes(driven.outcome)) await answeredCredentials(s, page, expected)
 }
 
 async function bindOpened(s: RunState, ref: ModelProfile["ref"], before?: World): Promise<void> {
@@ -135,17 +162,6 @@ const createPassword: Drivers["createPassword"] = async (s, p, _step, before) =>
 	return driven
 }
 
-/** Binds `credential` to the credential id the row of a just-created passkey profile names. */
-async function learnCredential(s: RunState, ref: ModelProfile["ref"], credential: ModelProfile["credential"]): Promise<void> {
-	const id = s.bindings.profiles.get(ref)
-	if (!id || !credential) return
-	const stored = await s.anchor.evaluate(
-		async (key: string) => (JSON.parse((await chrome.storage.local.get(key))[key] as string) as { credentialId?: string }).credentialId,
-		`nulo:core:profiles@${id}`,
-	)
-	if (stored) s.credentials.set(credential, stored)
-}
-
 /** Records the words a screen showed for `phrase`; a second reading must show the same ones. */
 function learnWords(s: RunState, phrase: PhraseRef | undefined, words: string[]): void {
 	if (!phrase) return
@@ -154,21 +170,23 @@ function learnWords(s: RunState, phrase: PhraseRef | undefined, words: string[])
 	s.phrases.set(phrase, words)
 }
 
-const createPasskey: Drivers["createPasskey"] = async (s, p, _step, before) => {
+const createPasskey: Drivers["createPasskey"] = async (s, p, step, before) => {
 	await openCreateForm(s, before)
 	const page = s.anchor
+	await capturePrf(page)
 	if (live(before).length) await replaceInputValue(page, '[data-testid="register-name-input"]', p.name)
 	await clickByTestId(page, "register-method-passkey")
-	const driven = await submitCreate(s, p.double)
+	const press = await passkeyPress(s, page, before, p.credential, { submit: "register-submit-btn", reuse: "register-passkey-reuse" })
+	const driven = await submitCreate(s, p.double, press)
+	await checkAnswers(s, page, step, driven, ceremoniesFor(before, p.credential))
 	await bindOpened(s, p.ref)
-	await learnCredential(s, p.ref, p.credential)
 	return driven
 }
 
 /** Onboarding in the anchor's own tab, as a wallet with no profile runs it again, so a passkey it
  *  makes stays with the page that holds every other. Open wallet's own write stands in for its
  *  press, which would close the tab. */
-const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step) => {
+const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step, before) => {
 	const page = s.anchor
 	const t0 = Date.now()
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
@@ -183,7 +201,12 @@ const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step) => {
 		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', password)
 		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', password)
 	}
-	await clickByTestId(page, "onboarding-submit-create")
+	const credential = p.credential as CredentialRef
+	const press =
+		p.method === "password"
+			? "onboarding-submit-create"
+			: await passkeyPress(s, page, before, credential, { submit: "onboarding-submit-create", reuse: "onboarding-passkey-reuse" })
+	await clickByTestId(page, press)
 	const refusals = [...PASSKEY_REFUSAL.map((r) => ({ label: "refused", text: r.text })), { label: "refused", testid: "error-text" }]
 	const shown = await settle(
 		page,
@@ -192,6 +215,7 @@ const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step) => {
 		CREATE_MS,
 	)
 	if (shown.outcome !== "committed" || !shown.settle.reached) return shown
+	if (p.method === "passkey") await answeredCredentials(s, page, ceremoniesFor(before, credential))
 	learnWords(s, profileOf(nextOf(step), p.ref)?.phrase, await readRecoveryWords(page, "onboarding-phrase"))
 	await clickByTestId(page, p.answer === "saved" ? "onboarding-phrase-saved" : "onboarding-phrase-later")
 	await waitForRoute(page, "#/onboarding/done", 10_000)
@@ -203,7 +227,6 @@ const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step) => {
 	// A fresh document boots through the lock screen and advances once it finds the session.
 	const driven = await settle(page, [{ ...HOME, testid: "account-selector" }], { home: "committed" }, CREATE_MS)
 	await bindOpened(s, p.ref)
-	await learnCredential(s, p.ref, p.credential)
 	driven.settle.elapsedMs = Date.now() - t0
 	return driven
 }
@@ -241,7 +264,7 @@ const unlockPasskey: Drivers["unlockPasskey"] = async (s, p) => {
 		}
 	}
 	if (p.variant === "no-prf") await withholdGetPrf(s.anchor)
-	if (p.variant === "other") await answerWithCredential(s.anchor, s.credentials.get(p.other as never) as string)
+	if (p.variant === "other") await answerWithCredential(s.anchor, credentialId(s, p.other))
 	return pressAndSettle(s)
 }
 
@@ -302,7 +325,7 @@ async function revealWithPasskey(s: RunState, p: ParamsMap["revealPhrase"]): Pro
 		}
 	}
 	if (p.variant === "no-prf") await withholdGetPrf(page)
-	if (p.variant === "other") await answerWithCredential(page, s.credentials.get(p.other as never) as string)
+	if (p.variant === "other") await answerWithCredential(page, credentialId(s, p.other))
 	return press()
 }
 
@@ -316,31 +339,6 @@ const revealPhrase: Drivers["revealPhrase"] = async (s, p, _step, before) => {
 	if (driven.outcome === "committed") learnWords(s, open.phrase, await readRecoveryWords(page))
 	driven.settle.elapsedMs = Date.now() - t0
 	return driven
-}
-
-type AbortProbe = Window & { __chaosPromptAborted?: boolean }
-
-/** Marks the page once the next passkey request's own signal aborts. Installed over a hold, so the
- *  page's call meets it first. */
-async function watchPromptAbort(page: Page): Promise<() => Promise<boolean>> {
-	await page.evaluate(() => {
-		const probe = window as AbortProbe
-		probe.__chaosPromptAborted = false
-		const credentials = navigator.credentials
-		const get = credentials.get.bind(credentials)
-		credentials.get = (options) => {
-			credentials.get = get
-			options?.signal?.addEventListener("abort", () => {
-				probe.__chaosPromptAborted = true
-			})
-			return get(options)
-		}
-	})
-	return () =>
-		page
-			.waitForFunction(() => (window as AbortProbe).__chaosPromptAborted === true, { timeout: 15_000, polling: 100 })
-			.then(() => true)
-			.catch(() => false)
 }
 
 /** The reveal's passkey held at its prompt while another window locks: the lock takes the page, and
@@ -403,25 +401,37 @@ async function answerDuplicate(
 	return settle(page, done, { home: "committed", refused: "refused" }, boundMs)
 }
 
-const importPhrase: Drivers["importPhrase"] = async (s, p, _step, before) => {
+/** The import form's password fields, filled with `p`'s password. */
+function passwordInputs(s: RunState, p: ParamsMap["importPhrase"]): Record<string, string> {
+	const password = secretFor(s, p.password as never)
+	return {
+		'[data-testid="import-password-input"] input': password,
+		'[data-testid="import-password-confirm-input"] input': password,
+	}
+}
+
+const importPhrase: Drivers["importPhrase"] = async (s, p, step, before) => {
 	await openImport(s, before)
 	const page = s.anchor
+	await capturePrf(page)
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 10_000 })
-	// A phrase import opens on Passkey; the model imports under a password.
-	await clickByTestId(page, "import-method-password")
-	await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 10_000 })
-	const password = secretFor(s, p.password)
+	const passkey = p.method === "passkey"
+	await clickByTestId(page, passkey ? "import-method-passkey" : "import-method-password")
+	if (!passkey) await page.waitForSelector('[data-testid="import-password-input"] input', { visible: true, timeout: 10_000 })
 	const words = s.phrases.get(p.phrase)
 	if (!words) throw new Error(`${p.phrase} was never read`)
 	await setInputs(page, {
 		...(live(before).length ? { '[data-testid="import-name-input"] input': p.name } : {}),
 		'[data-testid="import-seed-input"] input': words.join(" "),
-		'[data-testid="import-password-input"] input': password,
-		'[data-testid="import-password-confirm-input"] input': password,
+		...(passkey ? {} : passwordInputs(s, p)),
 	})
-	await clickByTestId(page, "import-seed-submit-btn")
-	const driven = await answerDuplicate(s, p.duplicate, [HOME, { label: "refused", testid: "error-text" }], CREATE_MS)
+	const credential = p.credential as CredentialRef
+	const links = { submit: "import-seed-submit-btn", reuse: "import-seed-passkey-reuse" }
+	await clickByTestId(page, passkey ? await passkeyPress(s, page, before, credential, links) : links.submit)
+	const done = [HOME, { label: "refused", testid: "error-text" }, ...PASSKEY_REFUSAL.map((r) => ({ label: "refused", text: r.text }))]
+	const driven = await answerDuplicate(s, p.duplicate, done, CREATE_MS)
+	if (passkey) await checkAnswers(s, page, step, driven, ceremoniesFor(before, credential))
 	if (driven.outcome === "committed") await bindOpened(s, p.ref)
 	return driven
 }
@@ -451,10 +461,15 @@ const importEarlierBackup: Drivers["importEarlierBackup"] = async (s, _p, _step,
 	return pickEarlierBackup(s)
 }
 
-const importBackup: Drivers["importBackup"] = async (s, p, _step, before) => {
+const importBackup: Drivers["importBackup"] = async (s, p, step, before) => {
 	const file = before.files.find((f) => f.ref === p.file) as ModelFile
 	await openImport(s, before)
-	const driven = await restoreFile(s, file, p)
+	await capturePrf(s.anchor)
+	const credential = p.credential as CredentialRef
+	const passkey = p.method === "passkey"
+	const reused = passkey && isMinted(before, credential) ? credentialId(s, credential) : undefined
+	const driven = await restoreFile(s, file, p, reused)
+	if (passkey) await checkAnswers(s, s.anchor, step, driven, ceremoniesFor(before, credential))
 	if (driven.outcome === "committed") await bindOpened(s, p.ref, before)
 	return driven
 }
@@ -690,6 +705,8 @@ export const DRIVERS: Drivers = {
 	editRowDuringUnlock: async (s, p, _step, before) => editRow(s, p, profileOf(before, before.selected as never) as ModelProfile),
 	tamperedUnlock: async (s, p, _step, before) => tamperSlot(s, p, profileOf(before, p.target) as ModelProfile),
 	raceLockDuringReveal,
+	changeUnlockMethod: async (s, p, _step, before) => changeUnlockMethod(s, openBefore(before), p),
+	raceLockDuringMethodChange: async (s) => raceLockDuringMethodChange(s),
 	dappWhileLocked: networkOnly,
 	dappDuringHeldUnlock: networkOnly,
 	restoreHeld: networkOnly,

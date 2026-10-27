@@ -359,3 +359,28 @@ export async function dismissNotices(page: Page): Promise<void> {
 	})
 	await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"]'), { timeout: 5_000, polling: 100 }).catch(() => {})
 }
+
+type AbortProbe = Window & { __chaosPromptAborted?: boolean }
+
+/** Marks the page once the next passkey request's own signal aborts. Installed over a hold, so the
+ *  page's call meets it first. */
+export async function watchPromptAbort(page: Page): Promise<() => Promise<boolean>> {
+	await page.evaluate(() => {
+		const probe = window as AbortProbe
+		probe.__chaosPromptAborted = false
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		credentials.get = (options) => {
+			credentials.get = get
+			options?.signal?.addEventListener("abort", () => {
+				probe.__chaosPromptAborted = true
+			})
+			return get(options)
+		}
+	})
+	return () =>
+		page
+			.waitForFunction(() => (window as AbortProbe).__chaosPromptAborted === true, { timeout: 15_000, polling: 100 })
+			.then(() => true)
+			.catch(() => false)
+}

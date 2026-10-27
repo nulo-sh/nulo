@@ -116,7 +116,7 @@ The owner: "Please, do test a LOT this." (#1127). The orchestrator's lane brief 
 
 **Arc 1 (the model).**
 
-**1.1 ✗ The model and its test.** Change `PC/model.ts` as § Model says. Add to the model test: a clause test per new action (committed, refused, cancelled; the minted count; the session and bearer under strict on and off); every new action and variant drawn within 1,000 seeds on Chrome, Firefox and network caps; no plan mints past `credentialSlots`, a declined passkey import counted; a reuse mints none; `other` never names the target's credential; every new source a citation whose fragment holds.
+**1.1 ✓ The model and its test.** Change `PC/model.ts` as § Model says. Add to the model test: a clause test per new action (committed, refused, cancelled; the minted count; the session and bearer under strict on and off); every new action and variant drawn within 1,000 seeds on Chrome, Firefox and network caps; no plan mints past `credentialSlots`, a declined passkey import counted; a reuse mints none; `other` never names the target's credential; every new source a citation whose fragment holds.
 Add O6 fixtures: two profiles on one credential with two phrases pass; a passkey profile's honest re-export passes, a missing or changed one fails. Add two replay controls: a phrase import and a backup import listed without `method` plan as password imports.
 Gate: `bun run lint`, `bun run typecheck:all`; `cd apps/extension && for i in $(seq 30); do bun --bun vitest run scripts/e2e/profile-chaos-model.test.ts --retry=0 || exit 1; done` exits 0 after 30 runs. Layers: lint, typecheck, unit.
 

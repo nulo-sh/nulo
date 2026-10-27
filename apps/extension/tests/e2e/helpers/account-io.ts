@@ -80,12 +80,7 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 	if (wrongPassword) throw new Error("export unlock rejected the password")
 
 	await clickByTestId(page, "account-protect-btn")
-	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
-
-	await armDownloadCapture(page, { gzip: false })
-	await clickByTestId(page, "account-download-btn")
-	const body = await readCapturedDownload(page)
-	expect(body.length).toBeGreaterThan(0)
+	const body = await downloadProtectedAccountFile(page)
 	if (encrypt) return body
 	const { decryptAccountExport } = await import("@nulo/aztec-runtime/account")
 	return decryptAccountExport(body, password)
@@ -94,6 +89,16 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 /** Every network's first derived account is named this (`DEFAULT_ACCOUNT_NAME`). */
 export const FIRST_ACCOUNT_NAME = "Account 1"
 
+/** The protected file the export page offers once it shows it protected, as downloaded. */
+export async function downloadProtectedAccountFile(page: Page): Promise<string> {
+	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
+	await armDownloadCapture(page, { gzip: false })
+	await clickByTestId(page, "account-download-btn")
+	const body = await readCapturedDownload(page)
+	expect(body.length).toBeGreaterThan(0)
+	return body
+}
+
 /** Export the account named `accountName` via the full page flow (picker included). */
 export async function exportAccountBody(
 	page: Page,
@@ -101,6 +106,12 @@ export async function exportAccountBody(
 	encrypt: boolean,
 	password: string = TEST_PASSWORD,
 ): Promise<string> {
+	await openAccountExport(page, accountName)
+	return runExportStages(page, encrypt, password)
+}
+
+/** The export page on the account named `accountName`, picked from its list: the agree gate shows. */
+export async function openAccountExport(page: Page, accountName: string): Promise<void> {
 	await closeStuckPopup(page)
 	await waitForRouteStability(page)
 	// Route via the backup landing first: navigating to a hash the page is ALREADY on is a no-op,
@@ -123,7 +134,6 @@ export async function exportAccountBody(
 		if (!row) throw new Error(`no export row named ${name}`)
 		row.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 	}, accountName)
-	return runExportStages(page, encrypt, password)
 }
 
 /** Export the IMPORTED account via the Manage Accounts row deep-link — the row is found by its

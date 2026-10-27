@@ -1,7 +1,7 @@
 /**
  * `verifyAll`: every live profile in model order is refused a wrong secret with no write, opens with
- * its own, and shows its accounts; a password profile also re-exports each imported account. The
- * lock screen then goes back to the model's selection.
+ * its own, shows its accounts and re-exports each imported account. The lock screen then goes back
+ * to the model's selection.
  */
 import { RetiredProfileError } from "@nulo/extension-messaging/errors"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
@@ -10,17 +10,18 @@ import { answerWithCredential } from "../../fixtures/passkey"
 import { derivedAddresses, reexportImported } from "./accounts-io"
 import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
 import { readCensus } from "./collect"
-import { live, type ModelProfile, type World } from "./model"
+import { live, type ModelFile, type ModelProfile, otherCredentials, type World } from "./model"
 import { expireRelease } from "./pre-update"
-import { type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
+import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import { authSubmitReady, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
 import { waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId } from "../../fixtures/dom"
 
 const STEP_MS = 60_000
 
-/** A wrong secret for `p`: another password, or another live profile's passkey, else a refused
- *  prompt. Resolves whether the lock screen refused it. */
+/** A wrong secret for `p`: another password, or a passkey the authenticator holds other than `p`'s
+ *  own (a replaced or a declined one included), else a refused prompt. Resolves whether the lock
+ *  screen refused it. */
 async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boolean> {
 	const page = s.anchor
 	if (p.method === "password") {
@@ -30,9 +31,9 @@ async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boo
 		)
 	}
 	await authSubmitReady(page)
-	const other = live(w).find((x) => x.ref !== p.ref && x.credential && s.credentials.has(x.credential))
-	if (other?.credential) {
-		await answerWithCredential(page, s.credentials.get(other.credential) as string)
+	const other = otherCredentials(w, p.ref).at(-1)
+	if (other) {
+		await answerWithCredential(page, credentialId(s, other))
 		await clickByTestId(page, "auth-submit")
 	} else if (s.auth) {
 		const allow = await s.auth.refuseNextStep(page)
@@ -132,9 +133,10 @@ async function verifyOne(s: RunState, p: ModelProfile, w: World): Promise<Verify
 	const lost = opened ? await expireRelease(s, id, census) : []
 	const { addresses, chainId } = opened ? await derivedAddresses(page, id) : { addresses: [], chainId: 0 }
 	const sentinels: VerifyReading["sentinels"] = []
-	if (opened && p.method === "password") {
+	if (opened) {
 		for (const file of p.imported) {
-			sentinels.push({ file, now: await reexportImported(s, p, file), imported: s.files.get(file)?.signingKey ?? "" })
+			const held = w.files.find((f) => f.ref === file) as ModelFile
+			sentinels.push({ file, now: await reexportImported(s, p, held), imported: s.files.get(file)?.signingKey ?? "" })
 		}
 	}
 	await lockFromAnotherWindow(page)
