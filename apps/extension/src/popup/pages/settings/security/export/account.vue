@@ -329,12 +329,6 @@ const handleClose = () => {
 	else void goBack(router, "/popup/settings/security/export")
 }
 
-watch(fileStatus, async (status) => {
-	if (status !== "downloaded") return
-	await nextTick()
-	closeButton.value?.$el?.focus()
-})
-
 /** Enter advances the active stage, matching the flow's CTA (the popup this page replaced
  *  submitted on Enter). Download stages stay click-only: Enter re-firing a download is noise. */
 const onKeydown = (e) => {
@@ -345,6 +339,11 @@ const onKeydown = (e) => {
 	else if (isApproved.value && isPopupSubmitKey(e)) handleSaveFile()
 }
 watch(selectedAddress, () => dropApproval())
+watch(fileStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // account file moves to its own window first. A failed move keeps the page where it is.
@@ -521,7 +520,14 @@ onBeforeUnmount(() => {
 				</Button>
 			</Flex>
 
-			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">
+			<Button
+				v-else-if="fileStatus === 'protected'"
+				@click="handleDownload"
+				@keydown.enter="refuseRepeatEnter"
+				:disabled="isDownloading"
+				variant="cta"
+				data-testid="account-download-btn"
+			>
 				Download File
 			</Button>
 

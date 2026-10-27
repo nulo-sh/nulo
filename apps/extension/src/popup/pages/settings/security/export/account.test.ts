@@ -249,6 +249,13 @@ describe("an account file once saved", () => {
 		expect(document.activeElement).toBe(close(w).element)
 	})
 
+	test("a held Enter's repeat on Download downloads nothing", async () => {
+		const w = await protectedStage()
+		expect(pressOn(download(w), "Enter", { repeat: true })).toEqual([false])
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
 	test("a failed download keeps Download File and the protected banner", async () => {
 		downloadFile.mockRejectedValueOnce(new Error("blocked"))
 		const w = await saved()
