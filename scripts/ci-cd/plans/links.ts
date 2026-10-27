@@ -40,9 +40,9 @@ const LIVE_DOCS = [
 ]
 const HISTORY_DOCS = new Set(["CHANGELOG.md"])
 /** A superseded legal text, kept verbatim in `legal/archive/`. */
-const ARCHIVED_LEGAL = /^legal\/archive\/(?:terms|privacy)-[\d.]+\.md$/
+const ARCHIVED_LEGAL = /^legal\/archive\/(?:terms|privacy|website-privacy)-[\d.]+\.md$/
 /** The links the landing renders as its own pages (`apps/landing/scripts/legal-pages.ts`). */
-const LEGAL_DOC_LINK = /^(?:terms|privacy)\.md(?:#.*)?$/
+const LEGAL_DOC_LINK = /^(?:terms|privacy|website-privacy)\.md(?:#.*)?$/
 
 /** Where a link resolves from: an archived legal text's link to a document still means the one in `legal/`. */
 function linkBase(path: string, href: string): string {

@@ -154,6 +154,15 @@
         "wrangler": "^4",
       },
     },
+    "infra/subscribe": {
+      "name": "@nulo/subscribe",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "1.4.2",
+        "typescript": "^6.0.3",
+        "wrangler": "4.129.1",
+      },
+    },
     "infra/token-list": {
       "name": "@nulo/token-list-host",
       "version": "0.0.0",
@@ -831,6 +840,8 @@
     "@nulo/playground": ["@nulo/playground@workspace:apps/playground"],
 
     "@nulo/resolve-asset": ["@nulo/resolve-asset@workspace:packages/resolve-asset"],
+
+    "@nulo/subscribe": ["@nulo/subscribe@workspace:infra/subscribe"],
 
     "@nulo/third-party-notices": ["@nulo/third-party-notices@workspace:packages/third-party-notices"],
 
