@@ -113,23 +113,25 @@ function ancestry(file: string, line: number, detail: string, fix: string): Find
 }
 
 /**
- * Makes `dev`'s commit graph available: a pull-request run fetches it by name (commits only) and fails
- * closed; a local run uses the existing ref. The PR base is never the anchor: on a stacked PR it is a
- * parent arc, whose commits may never reach `dev`.
+ * Makes `dev`'s commit graph available: a pull-request run fetches it by name and fails closed; a
+ * local run uses the existing ref. The PR base is never the anchor: on a stacked PR it is a parent
+ * arc, whose commits may never reach `dev`.
  *
  * A shallow checkout is unshallowed: once anything has fetched dev's tip at depth 1 (the complexity
  * ratchet does, earlier in the same job), a plain fetch adds nothing and dev's history stops at it.
+ * The fetch is unfiltered on purpose: a `--filter` makes index-pack repack the checkout's own objects
+ * into promisor packs, and that pack-objects aborts on a shallow checkout under git 2.56.
  */
 function prepareDev(ctx: Ctx): Finding | null {
 	if (ctx.env.GITHUB_ACTIONS === "true") {
 		const shallow = ctx.git("rev-parse", "--is-shallow-repository").stdout.trim() === "true"
 		const deepen = shallow ? ["--unshallow"] : []
-		// A runner's fetch sometimes dies in index-pack; one more try after a pause is the same remedy as
-		// re-running the job, and the whole stderr says why when both fail.
-		let fetched = ctx.git("fetch", "--no-tags", "--filter=tree:0", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
+		// A transient fetch failure gets one more try after a pause, the in-process form of re-running
+		// the job; the finding carries the whole tail of stderr when both fail.
+		let fetched = ctx.git("fetch", "--no-tags", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
 		if (!fetched.ok) {
 			pause(FETCH_RETRY_PAUSE_MS)
-			fetched = ctx.git("fetch", "--no-tags", "--filter=tree:0", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
+			fetched = ctx.git("fetch", "--no-tags", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
 		}
 		if (fetched.ok) return null
 		const why = fetched.stderr.trim().split("\n").filter(Boolean).slice(-3).join(" | ") || "fetch failed"
