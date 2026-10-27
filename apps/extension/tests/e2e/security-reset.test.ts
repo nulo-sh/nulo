@@ -1,7 +1,8 @@
 import { expect } from "vitest"
 import { interceptRpc, reloadExtensionPage } from "./fixtures/browser"
+import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash } from "./fixtures/extension"
-import { captureSoleProfileId, resetProfile, waitForProfilePurged } from "./fixtures/helpers"
+import { captureSoleProfileId, createAndActivateProfile, lockWallet, resetProfile, waitForProfilePurged } from "./fixtures/helpers"
 import { DEFAULT_NODE_ORIGIN } from "./fixtures/networks"
 import { readActivityScope } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
@@ -60,3 +61,35 @@ test("reset purges within the same budget while the node refuses connections", a
 		await node.stop()
 	}
 }, 60_000)
+
+// A deletion on a lock screen closes no session, so only the deletion event reaches another window,
+// whose shell has to follow it. No cheaper layer runs the shell or carries an event between two
+// documents.
+test("a profile deleted on one lock screen leaves another window's lock screen on one that exists", async ({
+	registeredExtensionPerTest: ctx,
+}) => {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general")
+	const second = await createAndActivateProfile(page, "Second", TEST_PASSWORD)
+	await lockWallet(page)
+
+	const other = await openPopup(ctx)
+	await waitForHash(other, "#/popup/auth", 10_000)
+	const showsProfile = (p: typeof page, name: string) =>
+		p.waitForFunction(
+			(n) => document.querySelector('[data-testid="auth-profile"]')?.textContent?.includes(n),
+			{ timeout: 10_000 },
+			name,
+		)
+	await showsProfile(other, "Second")
+
+	await resetProfile(page)
+	await waitForProfilePurged(page, second, { timeoutMs: 15_000 })
+	await waitForHash(page, "#/popup/auth", 10_000)
+
+	await showsProfile(other, "Main")
+	await showsProfile(page, "Main")
+	expect(await other.evaluate(() => window.location.hash)).toBe("#/popup/auth")
+	expect(ctx.pageErrors).toEqual([])
+	await other.close()
+}, 90_000)

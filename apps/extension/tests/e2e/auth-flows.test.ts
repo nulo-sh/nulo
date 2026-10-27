@@ -58,8 +58,8 @@ test("ForgotPassword link opens popup and routes to reset", async ({ registeredE
 // wallet, a lingering popup or a tampered row cannot leak into the next. The lock-and-reopen dance
 // is heavy enough that a clean fixture is simpler than recovering arbitrary state.
 
-// A stored row the wallet hides (its embedded id disagrees with its key) fails the unlock with an
-// error no rung of the failure ladder names. The unit test proves the ladder; this proves the toast
+// A stored row whose unlock kind no longer matches the form the lock screen shows fails the unlock
+// with an error no rung of the failure ladder names, while the profile stays listed. The unit test proves the ladder; this proves the toast
 // renders over the real lock screen and the button comes back, on each browser.
 test("an unlock that fails for an unlisted reason says so and stops the spinner", async ({ registeredExtensionPerTest }) => {
 	const page = await openPopup(registeredExtensionPerTest)
@@ -74,18 +74,18 @@ test("an unlock that fails for an unlisted reason says so and stops the spinner"
 		timeout: 10_000,
 	})
 
-	const moved = await page2.evaluate(async () => {
+	const retyped = await page2.evaluate(async () => {
 		let count = 0
 		for (const [key, raw] of Object.entries(await chrome.storage.local.get(null))) {
 			if (!key.startsWith("nulo:core:profiles@") || typeof raw !== "string") continue
 			const row = JSON.parse(raw)
-			row.id = `${row.id}-moved`
+			row.type = "passkey"
 			await chrome.storage.local.set({ [key]: JSON.stringify(row) })
 			count++
 		}
 		return count
 	})
-	expect(moved).toBe(1)
+	expect(retyped).toBe(1)
 
 	await replaceInputValue(page2, '[data-testid="auth-password-input"]', TEST_PASSWORD)
 	await clickByTestId(page2, "auth-submit")

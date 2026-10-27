@@ -12,6 +12,12 @@ export * from "./spec"
  *  start-up allowance the call may spend waiting for the background's Ready. */
 export const DELETE_PROFILE_TIMEOUT_MS = 30 * 60_000 + DEFAULT_INIT_TIMEOUT_MS
 
+/** The service's refusal of a profile id it does not hold, or holds mid-deletion, or whose row changed
+ *  under an unlock. It crosses the port as a plain `Error`, known by its message alone. */
+export function isInvalidProfileIdError(error: unknown): boolean {
+	return error instanceof Error && error.message === "Invalid profile id"
+}
+
 // Declaration-merge the passthrough signatures onto the class type. Bodies are
 // installed at runtime by `definePassthroughs`; this is what satisfies
 // `implements ServiceSpec` and gives consumers full inference.

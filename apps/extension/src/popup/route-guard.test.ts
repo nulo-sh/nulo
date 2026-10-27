@@ -38,6 +38,19 @@ describe("earlyDecision (synchronous)", () => {
 		expect(earlyDecision(route("popup-register"), route("y"), store())).toBeUndefined()
 		expect(earlyDecision(route("popup-auth"), route("y"), store())).toBeUndefined()
 	})
+
+	test("Back to the lock screen from a page it leads to, once unlocked, goes where an unlock goes, never onto the page again", () => {
+		const deletePage = route("popup-settings-security-reset", { isAuthRequired: false })
+		expect(earlyDecision(route("popup-auth"), deletePage, store({ isLogined: true }))).toEqual({
+			kind: "redirect",
+			to: "/popup/general",
+		})
+		expect(earlyDecision(route("popup-auth"), deletePage, store())).toBeUndefined()
+		expect(earlyDecision(route("popup-auth"), route("popup-settings", { isAuthRequired: true }), store({ isLogined: true }))).toEqual({
+			kind: "redirect",
+			to: { name: "popup-settings" },
+		})
+	})
 })
 
 describe("lateDecision", () => {

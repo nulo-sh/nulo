@@ -15,6 +15,7 @@ const H = vi.hoisted(() => {
 	]
 	const appStoreState = {
 		profile: null as unknown,
+		isLogined: false,
 		blockSend: false,
 		commitScopeChange: vi.fn(),
 	}
@@ -28,16 +29,24 @@ const H = vi.hoisted(() => {
 		appStoreState,
 		openToastMock: vi.fn(),
 		setLastActiveProfileIdMock: vi.fn().mockResolvedValue(undefined),
+		activating: new Set<string>(),
 		client: null as unknown,
 	}
 })
 
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.appStoreState }))
+vi.mock("@/stores/app.store", async () => {
+	const { reactive } = await import("vue")
+	H.appStoreState = reactive(H.appStoreState)
+	return { useAppStore: () => H.appStoreState }
+})
 vi.mock("@/stores/popup.store", () => ({
 	usePopupStore: () => ({ len: 1, popups: { select_profile: { order: 0 } }, closeAll: vi.fn() }),
 }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: H.openToastMock }) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: H.setLastActiveProfileIdMock }))
+vi.mock("@/composables/useProfileBootstrap", () => ({
+	isActivatingOtherThan: (id: string) => [...H.activating].some((other) => other !== id),
+}))
 vi.mock("@/utils/string", () => ({ stringCompare: (a: string, b: string) => a.localeCompare(b) }))
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("@/wallet/services/profile/client", () => ({
@@ -82,7 +91,9 @@ beforeEach(() => {
 	H.setLastActiveProfileIdMock.mockClear()
 	H.appStoreState.commitScopeChange.mockClear()
 	H.appStoreState.profile = null
+	H.appStoreState.isLogined = false
 	H.appStoreState.blockSend = false
+	H.activating.clear()
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -135,6 +146,66 @@ describe("SelectProfilePopup — scope-switch guard", () => {
 		expect(H.openToastMock).toHaveBeenCalledWith(
 			expect.objectContaining({ kind: "error", label: "Finish or cancel your pending transaction first" }),
 		)
+	})
+})
+
+describe("SelectProfilePopup — a session open or opening owns the selection", () => {
+	async function pickWhile(arrange: () => void) {
+		const w = await mountOpen()
+		arrange()
+		await w.find('[data-testid="select-profile-row"]').trigger("click")
+		await flushPromises()
+		return w
+	}
+	const expectRefused = (w: Awaited<ReturnType<typeof mountOpen>>) => {
+		expect(H.appStoreState.profile).toBeNull()
+		expect(H.setLastActiveProfileIdMock).not.toHaveBeenCalled()
+		expect(w.emitted("onClose")).toBeDefined()
+		expect(H.openToastMock).not.toHaveBeenCalled()
+	}
+
+	test("an unlocked pick never sets the selection or the last-active profile", async () => {
+		expectRefused(
+			await pickWhile(() => {
+				H.appStoreState.isLogined = true
+			}),
+		)
+	})
+
+	test("a pick while another profile's activation runs is refused", async () => {
+		expectRefused(await pickWhile(() => H.activating.add("p2")))
+	})
+
+	test("a pick whose commit lands after a session opened is refused", async () => {
+		H.appStoreState.commitScopeChange.mockImplementationOnce(async (commit: () => void) => {
+			await Promise.resolve()
+			H.appStoreState.isLogined = true
+			commit()
+			return true
+		})
+		expectRefused(await pickWhile(() => {}))
+	})
+
+	test("an unlock that lands while the chooser is open closes it", async () => {
+		const w = await mountOpen()
+		expect(w.emitted("onClose")).toBeUndefined()
+		H.appStoreState.isLogined = true
+		await flushPromises()
+		expect(w.emitted("onClose")?.length).toBe(1)
+	})
+
+	test("a profile deleted while its pick waited is never selected, and the chooser stays", async () => {
+		const client = () => H.client as { onProfileDeleted: ReturnType<typeof liveBus> }
+		H.appStoreState.commitScopeChange.mockImplementationOnce(async (commit: () => void) => {
+			await Promise.resolve()
+			client().onProfileDeleted.invoke(H.profiles[0])
+			commit()
+			return true
+		})
+		const w = await pickWhile(() => {})
+		expect(H.appStoreState.profile).toBeNull()
+		expect(H.setLastActiveProfileIdMock).not.toHaveBeenCalled()
+		expect(w.emitted("onClose")).toBeUndefined()
 	})
 })
 

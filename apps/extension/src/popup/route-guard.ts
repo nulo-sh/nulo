@@ -33,7 +33,11 @@ export function earlyDecision(to: RouteLocationNormalized, from: RouteLocationNo
 	// where an unlock would, so a replay that cancels the shell's push keeps an own window's route.
 	const back = from.name && from.name !== to.name ? { name: from.name } : postAuthRoute(appStore.pageAwaitingAuth)
 	if (to.name === "popup-register" && appStore.isRegistered) return { kind: "redirect", to: back }
-	if (to.name === "popup-auth" && appStore.isLogined) return { kind: "redirect", to: back }
+	// A page the lock screen leads to (Delete profile, a new profile, an import) has it behind: held
+	// there, Back from it in an unlocked window would land on the page again, so it goes where an
+	// unlock would.
+	if (to.name === "popup-auth" && appStore.isLogined)
+		return { kind: "redirect", to: from.meta.isAuthRequired === false ? postAuthRoute(appStore.pageAwaitingAuth) : back }
 	return undefined
 }
 
