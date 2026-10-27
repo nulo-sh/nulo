@@ -377,6 +377,12 @@ jobs:
         env:
           NULO_LAUNCH_GATE: "1"
         run: bun run test src/launch.test.ts
+      # nulo.sh publishes the website notice from main whatever the release version.
+      - name: Refuse a blank in the website privacy notice
+        working-directory: apps/landing
+        env:
+          NULO_LAUNCH_GATE: "1"
+        run: bun run test scripts/legal-pages.test.ts
 
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`

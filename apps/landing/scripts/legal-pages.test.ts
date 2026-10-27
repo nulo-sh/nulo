@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { LEGAL_MANIFEST, parseDocumentHeader, parseVersionHistory } from "@nulo/legal"
+import { LEGAL_MANIFEST, hasPlaceholders, parseDocumentHeader, parseVersionHistory } from "@nulo/legal"
 import { describe, expect, test } from "vitest"
 import type * as LegalPages from "./legal-pages"
 import { type LegalSource, type PageVersion, type PageVersions, legalPagePaths, pageVersions } from "./legal-pages"
@@ -229,5 +229,11 @@ describe("the real documents", () => {
 		expect(parseVersionHistory(noticeMarkdown).at(-1)).toBe(noticeHeader.version)
 		const row = noticeMarkdown.split("\n").find((line) => line.startsWith(`| ${noticeHeader.version} |`)) ?? ""
 		expect(row.split("|")[2]?.trim()).toBe(noticeHeader.effective)
+	})
+
+	// The launch-legal job runs this on every pull request into main. nulo.sh publishes the notice from
+	// main at any release version, and the wallet's launch check does not read it.
+	test.skipIf(!process.env.NULO_LAUNCH_GATE)("the website notice main would publish has no blank left", () => {
+		expect(hasPlaceholders(noticeMarkdown)).toBe(false)
 	})
 })
