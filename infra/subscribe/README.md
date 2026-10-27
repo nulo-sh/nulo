@@ -72,3 +72,7 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 ## Tests
 
 `bun run test` (`bun test`) fakes Resend through the injected `fetch` and pins every row above by status and body, the exact lookup and create requests, no write to a known address in any state, a concurrent duplicate pair leaving one contact, the retry, timeout and streaming-cap paths, the headers on every response, a console spy over every test, and (`test/deploy.test.ts`) the `wrangler.jsonc` pins and a `wrangler deploy --dry-run` bundle whose only inputs are `src/`. `bun run deploy:dry` bundles without credentials.
+
+## Operator scripts
+
+`scripts/broadcast-topic.ts <broadcast id>` scopes a broadcast to the launch topic over the API and prints the broadcast back without its bodies; it runs as a keyed run from `ops.env.example` (the `my-stack` skill, Keyed runs), last, after every edit of the draft, since an API update from any client can clear the topic. `bun test` covers it.
