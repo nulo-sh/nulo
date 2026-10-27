@@ -22,6 +22,6 @@
 	// Branch previews stay on; a preview is a separate version URL, never the production host.
 	"workers_dev": false,
 	"preview_urls": true,
-	// Privacy Policy § 5.5 lists every request record the Developer can see; Workers Logs is not one.
+	// The Website Privacy Notice § 2 lists every request record the Developer can see; Workers Logs is not one.
 	"observability": { "enabled": false }
 }

@@ -5,7 +5,8 @@ publishes each at its permalink (`nulo.sh/terms/v1.0/`), which is what an instal
 so a user can always read the text they actually accepted.
 
 Copy the current document here **before** editing it for a new version. `@nulo/legal`'s tests fail
-when a superseded manifest version has no file in this directory. Never edit an archived file, with
+when a superseded manifest version has no file in this directory; the landing's build fails when a
+superseded row of the website notice's version history has none. Never edit an archived file, with
 one exception: a link or contact address in it that no longer works may be replaced with one that
 serves the same purpose. The file then carries an editorial note, directly under its version line,
 that says which address was updated and that no other text differs from the version as published.

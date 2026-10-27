@@ -2,10 +2,10 @@ import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { LegalDocument, LegalVersion } from "@nulo/legal"
+import { LEGAL_MANIFEST, hasPlaceholders, parseDocumentHeader, parseVersionHistory } from "@nulo/legal"
 import { describe, expect, test } from "vitest"
 import type * as LegalPages from "./legal-pages"
-import { legalPagePaths } from "./legal-pages"
+import { type LegalSource, type PageVersion, type PageVersions, legalPagePaths, pageVersions } from "./legal-pages"
 
 // The renderer needs `Bun.markdown`, so it runs in Bun as the landing's build does, whichever engine
 // runs this file; a throw comes back as an error with the same message.
@@ -27,12 +27,16 @@ function inBun<F extends "renderLegalPage" | "planLegalPages">(
 const renderLegalPage = (...args: Parameters<typeof LegalPages.renderLegalPage>) => inBun("renderLegalPage", ...args)
 const planLegalPages = (...args: Parameters<typeof LegalPages.planLegalPages>) => inBun("planLegalPages", ...args)
 
-const v = (version: string, effective: string | null = null): LegalVersion => ({ version, effective, material: true, changes: ["x"] })
-const manifest: Record<LegalDocument, readonly LegalVersion[]> = { terms: [v("1.0", "1 January 2027"), v("1.1")], privacy: [v("1.0")] }
+const v = (version: string, effective: string | null = null): PageVersion => ({ version, effective })
+const versions: PageVersions = {
+	terms: [v("1.0", "1 January 2027"), v("1.1")],
+	privacy: [v("1.0")],
+	"website-privacy": [v("1.0", "1 January 2027")],
+}
 const md = (version: string, body = "Body.", effective = "1 January 2027") =>
 	`# Terms of Use\n\n**Version ${version} — effective ${effective}**\n\n## 1. Who we are\n\n${body}\n\n| A | B |\n|---|---|\n| 1 | 2 |\n`
 const render = (body?: string, effective?: string) =>
-	renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.1", body, effective) }, { permalink: false, manifest })
+	renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.1", body, effective) }, { permalink: false, versions })
 
 describe("renderLegalPage", () => {
 	test("headings get stable ids and tables survive", () => {
@@ -42,10 +46,18 @@ describe("renderLegalPage", () => {
 	})
 
 	test("links between the documents point at site paths, anchors kept", () => {
-		const html = render("See the [policy](privacy.md) and [§ 3](terms.md#3-eligibility).")
+		const html = render("See the [policy](privacy.md), [§ 3](terms.md#3-eligibility) and [the notice](website-privacy.md#3).")
 		expect(html).toContain('href="/privacy"')
 		expect(html).toContain('href="/terms#3-eligibility"')
+		expect(html).toContain('href="/website-privacy#3"')
 		expect(html).not.toMatch(/href="[^"]*\.md/)
+	})
+
+	test("the nav and the footer link every document, the notice after the policy", () => {
+		const html = render()
+		const nav = html.slice(html.indexOf('<nav aria-label="Legal documents">'), html.indexOf("</nav>"))
+		expect([...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1])).toEqual(["/terms", "/privacy", "/website-privacy"])
+		expect(html).toContain('<a href="/privacy">privacy</a> · <a href="/website-privacy">website privacy</a> · ')
 	})
 
 	test("any other relative link fails the build instead of shipping a 404", () => {
@@ -102,7 +114,7 @@ describe("renderLegalPage", () => {
 	})
 
 	test("a document whose version line disagrees with the manifest entry is rejected", () => {
-		expect(() => renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.0") }, { permalink: false, manifest })).toThrow(
+		expect(() => renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.0") }, { permalink: false, versions })).toThrow(
 			/says version 1.0/,
 		)
 	})
@@ -122,7 +134,7 @@ describe("renderLegalPage", () => {
 	})
 
 	test("a superseded permalink says so, links forward, and stays out of the index", () => {
-		const html = renderLegalPage({ doc: "terms", version: "1.0", markdown: md("1.0") }, { permalink: true, manifest })
+		const html = renderLegalPage({ doc: "terms", version: "1.0", markdown: md("1.0") }, { permalink: true, versions })
 		expect(html).toContain('data-legal-banner="superseded"')
 		expect(html).toContain("noindex")
 		expect(html).toContain('<link rel="canonical" href="https://nulo.sh/terms" />')
@@ -136,8 +148,8 @@ describe("renderLegalPage", () => {
 	})
 
 	test("an undated version that is no longer the head reads as never in effect", () => {
-		const undated = { ...manifest, terms: [v("1.0"), v("1.1")] }
-		const html = renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.1") }, { permalink: false, manifest: undated })
+		const undated = { ...versions, terms: [v("1.0"), v("1.1")] }
+		const html = renderLegalPage({ doc: "terms", version: "1.1", markdown: md("1.1") }, { permalink: false, versions: undated })
 		expect(html).toContain('<a href="/terms/v1.0/">Version 1.0</a> <span>never in effect</span>')
 		expect(html).toContain('<a href="/terms/v1.1/">Version 1.1</a> <span>not yet effective</span>')
 	})
@@ -153,29 +165,75 @@ describe("planLegalPages", () => {
 		{ doc: "terms" as const, version: "1.0", markdown: md("1.0") },
 		{ doc: "terms" as const, version: "1.1", markdown: md("1.1") },
 		{ doc: "privacy" as const, version: "1.0", markdown: md("1.0") },
+		{ doc: "website-privacy" as const, version: "1.0", markdown: md("1.0") },
 	]
 
 	test("one canonical page per document plus a permalink per version", () => {
-		const paths = planLegalPages(sources, manifest).map((page) => page.path)
-		expect([...paths].sort()).toEqual([...legalPagePaths(manifest)].sort())
+		const paths = planLegalPages(sources, versions).map((page) => page.path)
+		expect([...paths].sort()).toEqual([...legalPagePaths(versions)].sort())
 		expect(paths).toContain("terms/v1.0/index.html")
 		expect(paths).toContain("terms.html")
 	})
 
 	test("a manifest version without a source is an error", () => {
-		expect(() => planLegalPages(sources.slice(1), manifest)).toThrow(/terms v1.0: no markdown source/)
+		expect(() => planLegalPages(sources.slice(1), versions)).toThrow(/terms v1.0: no markdown source/)
+	})
+
+	test("the notice is titled, canonical and versioned on its own, beside the wallet documents", () => {
+		const pages = planLegalPages(sources, versions)
+		const notice = pages.find((page) => page.path === "website-privacy.html")?.html ?? ""
+		expect(pages.map((page) => page.path)).toContain("website-privacy/v1.0/index.html")
+		expect(notice).toContain("<title>Website Privacy Notice | NULO</title>")
+		expect(notice).toContain('<link rel="canonical" href="https://nulo.sh/website-privacy" />')
+		expect(notice).toContain('<a href="/website-privacy/v1.0/">Version 1.0</a> <span>1 January 2027</span>')
+		expect(notice).not.toContain("noindex")
+	})
+})
+
+describe("pageVersions", () => {
+	const notice = (version: string, effective: string): LegalSource => ({
+		doc: "website-privacy",
+		version,
+		markdown: md(version, "x", effective),
+	})
+
+	test("the wallet documents keep the manifest; the notice is dated by each version's own header", () => {
+		const derived = pageVersions([notice("1.0", "1 January 2027"), notice("1.1", "«FILL: effective date»")])
+		expect(derived.terms).toBe(LEGAL_MANIFEST.terms)
+		expect(derived.privacy).toBe(LEGAL_MANIFEST.privacy)
+		expect(derived["website-privacy"]).toEqual([v("1.0", "1 January 2027"), v("1.1")])
+	})
+
+	test("a notice with no version history is an error, never a site without it", () => {
+		expect(() => pageVersions([])).toThrow(/website-privacy: no version history/)
 	})
 })
 
 describe("the real documents", () => {
 	const legalDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../../legal")
+	const noticeMarkdown = readFileSync(resolve(legalDir, "website-privacy.md"), "utf8")
+	const noticeHeader = parseDocumentHeader(noticeMarkdown)
+	const shipped = pageVersions([{ doc: "website-privacy", version: noticeHeader.version, markdown: noticeMarkdown }])
 
-	test.each(["terms", "privacy"] as const)("%s.md renders against the shipped manifest", (doc) => {
+	test.each(["terms", "privacy", "website-privacy"] as const)("%s.md renders against the shipped versions", (doc) => {
 		const markdown = readFileSync(resolve(legalDir, `${doc}.md`), "utf8")
 		const version = /\*\*Version (\S+) /.exec(markdown)?.[1] ?? ""
-		const html = renderLegalPage({ doc, version, markdown }, { permalink: false })
+		const html = renderLegalPage({ doc, version, markdown }, { permalink: false, versions: shipped })
 		// External documents may themselves be Markdown files (a linked GitHub PRIVACY.md).
 		expect(html).not.toMatch(/href="(?!https:)[^"]*\.md/)
 		expect(html.match(/<script/g)).toHaveLength(1)
+	})
+
+	test("the notice is not a wallet document, and its history row carries its header's version and date", () => {
+		expect(Object.keys(LEGAL_MANIFEST)).not.toContain("website-privacy")
+		expect(parseVersionHistory(noticeMarkdown).at(-1)).toBe(noticeHeader.version)
+		const row = noticeMarkdown.split("\n").find((line) => line.startsWith(`| ${noticeHeader.version} |`)) ?? ""
+		expect(row.split("|")[2]?.trim()).toBe(noticeHeader.effective)
+	})
+
+	// The launch-legal job runs this on every pull request into main. nulo.sh publishes the notice from
+	// main at any release version, and the wallet's launch check does not read it.
+	test.skipIf(!process.env.NULO_LAUNCH_GATE)("the website notice main would publish has no blank left", () => {
+		expect(hasPlaceholders(noticeMarkdown)).toBe(false)
 	})
 })

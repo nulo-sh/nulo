@@ -23,6 +23,12 @@ describe("wrangler.jsonc", () => {
 		expect(raw).not.toMatch(/\bre_[A-Za-z0-9_]{8,}/)
 	})
 
+	// Every contact records this as the notice version in effect when it joined.
+	test("names the website privacy notice's current version", () => {
+		const notice = readFileSync(resolve(WORKSPACE, "../../legal/website-privacy.md"), "utf8")
+		expect(WRANGLER.vars.CONSENT_VERSION).toBe(/^\*\*Version (\S+) — /m.exec(notice)?.[1])
+	})
+
 	test("limits each IP to 5 and everyone together to 60 per minute, on separate namespaces", () => {
 		expect(WRANGLER.ratelimits).toEqual([
 			{ name: "IP_LIMITER", namespace_id: expect.any(String), simple: { limit: 5, period: 60 } },

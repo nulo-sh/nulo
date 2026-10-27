@@ -1,6 +1,7 @@
 # legal/
 
-Canonical source for the two documents the extension links to. Everything here is written to be
+Canonical source for the two documents the extension links to, and for the website's own privacy
+notice. Everything here is written to be
 **checkable against the code** — the whole point of the drafting exercise was that a factual claim a
 routine change silently falsifies is a misrepresentation claim, not a typo.
 
@@ -8,12 +9,16 @@ routine change silently falsifies is a misrepresentation claim, not a typo.
 |---|---|---|
 | [`terms.md`](terms.md) | `nulo.sh/terms` | the onboarding Terms gate, the popup re-acceptance sheet, popup register, Settings → About |
 | [`privacy.md`](privacy.md) | `nulo.sh/privacy` | the same places |
+| [`website-privacy.md`](website-privacy.md) | `nulo.sh/website-privacy` | the Privacy Policy (§§ 2, 5.5), the legal pages' nav and footer |
 
-The landing generates both pages, plus one permalink per version (`nulo.sh/terms/v1.0/`), from these
-files at build time — `apps/landing/scripts/build-legal.ts`, rendered with Bun's built-in markdown.
-The version list, which versions are material, and what changed in each live in
-[`@nulo/legal`](../packages/legal/README.md), whose tests fail when the manifest and these documents
-disagree. While any `«FILL»` survives, the published page carries a DRAFT banner and `noindex`.
+The landing generates the three pages, plus one permalink per version (`nulo.sh/terms/v1.0/`), from
+these files at build time — `apps/landing/scripts/build-legal.ts`, rendered with Bun's built-in markdown.
+For the two wallet documents, the version list, which versions are material, and what changed in each
+live in [`@nulo/legal`](../packages/legal/README.md), whose tests fail when the manifest and these
+documents disagree. The website notice is not a wallet document: it is outside `@nulo/legal`, so the
+wallet never asks anyone to accept it, and the rows of its own version history table are the versions
+the landing publishes. While any `«FILL»` survives, the published page carries a DRAFT banner and
+`noindex`.
 
 ## Placeholders
 
@@ -26,8 +31,9 @@ that cannot be read out of this repository.
 |---|---|
 | `effective date` | Terms 1.1: the date the 1.0.0 listing goes live (1.0 never takes effect). A patch of either document: the day it is published, since a patch takes effect on publication. |
 
-What privacy §§ 5.1 and 5.5 say the Developer can see in the provider dashboards was read from those
-dashboards: re-check it if a plan, Worker logging or browser analytics setting changes.
+What privacy §§ 5.1 and 5.5 and the website notice § 2 say the Developer can see in the provider
+dashboards was read from those dashboards: re-check it if a plan, Worker logging or browser analytics
+setting changes.
 
 ## Release blockers beyond the text
 
@@ -113,6 +119,8 @@ Terms is worth doing before or shortly after 1.0.
 
 - Every change bumps the version and the effective date in the file **and** in its version-history
   table.
+- The website notice: copy the current file to `archive/website-privacy-<version>.md` first, as for
+  the others. It has no manifest and asks for no acceptance in the wallet.
 - **Material** changes — anything affecting what leaves the device, liability, or governing law —
   bump the minor digit and trigger in-product re-acceptance. Typos and link fixes bump the patch
   digit and take effect on publication.

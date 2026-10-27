@@ -50,10 +50,13 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 
 ## Legal pages
 
-`/terms`, `/privacy` and a permalink per version (`/terms/v1.0/`) are generated from
-[`legal/*.md`](../../legal/README.md) by `scripts/build-legal.ts`, which `predev` and `prebuild` run.
-The outputs (`terms.html`, `privacy.html`, `terms/`, `privacy/`, `src/generated/legal-pages.json`)
-are gitignored; `vite.config.ts` reads the JSON list as its extra HTML entries. Rendering rules —
-raw HTML rejected, `.md` links rewritten, DRAFT banner + `noindex` while a placeholder survives — are
-in `scripts/legal-pages.ts` and pinned by `scripts/legal-pages.test.ts`. `quality-status` builds the
+`/terms`, `/privacy`, `/website-privacy` and a permalink per version (`/terms/v1.0/`) are generated
+from [`legal/*.md`](../../legal/README.md) by `scripts/build-legal.ts`, which `predev` and `prebuild`
+run. The wallet documents' versions are `@nulo/legal`'s manifest; the website notice's are the rows of
+its own version history table, each dated by that version's header, so it never enters the manifest
+or the wallet's acceptance flow. The outputs (`terms.html`, `privacy.html`, `website-privacy.html`,
+their version directories, `src/generated/legal-pages.json`) are gitignored; `vite.config.ts` reads
+the JSON list as its extra HTML entries. Rendering rules — raw HTML rejected, `.md` links rewritten,
+DRAFT banner + `noindex` while a placeholder survives — are in `scripts/legal-pages.ts` and pinned by
+`scripts/legal-pages.test.ts`. `quality-status` builds the
 landing on every PR that touches it or `legal/`.

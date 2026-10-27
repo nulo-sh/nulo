@@ -656,6 +656,10 @@ describe("CI behavior-gating guard", () => {
 		expect(check?.["working-directory"]).toBe("packages/legal")
 		expect(check?.env?.NULO_LAUNCH_GATE, "without it the live assertion skips and the job passes").toBe("1")
 		expect(readFileSync(join(ROOT, "packages/legal/src/launch.test.ts"), "utf8")).toContain("process.env.NULO_LAUNCH_GATE")
+		const notice = job.steps.find((step: { run?: string }) => step.run?.includes("legal-pages.test.ts"))
+		expect(notice?.["working-directory"]).toBe("apps/landing")
+		expect(notice?.env?.NULO_LAUNCH_GATE, "the website notice is outside the wallet's launch check").toBe("1")
+		expect(readFileSync(join(ROOT, "apps/landing/scripts/legal-pages.test.ts"), "utf8")).toContain("process.env.NULO_LAUNCH_GATE")
 		expect(wf.jobs.status.needs).toContain("launch-legal")
 	})
 
