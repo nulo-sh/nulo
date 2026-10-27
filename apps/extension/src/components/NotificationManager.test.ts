@@ -99,3 +99,10 @@ describe("the notice is fixed to the viewport", () => {
 		expect(declarationsOf(parseSource(FILE), ".layer")).toMatchObject({ position: "fixed", inset: "0" })
 	})
 })
+
+/** A backup's network name can be one string wider than the card. */
+describe("a notice's text stays inside its card", () => {
+	test("the card breaks a string wider than itself anywhere", () => {
+		expect(declarationsOf(parseSource(FILE), ".card")).toMatchObject({ "overflow-wrap": "anywhere" })
+	})
+})
