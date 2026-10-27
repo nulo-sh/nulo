@@ -81,7 +81,7 @@ function nameConstant(cls: string): { constant: string; file: string } {
 	return { constant: fileNameConstant(file, text), file }
 }
 
-/** A lookup reads every source, so a value is kept once found; a failed lookup throws at each call. */
+/** `SOURCES` is read once, so a resolved constant keeps its value. */
 const constantValues = new Map<string, string>()
 
 function constantValue(constant: string): string {
@@ -236,8 +236,11 @@ function resolveSource(file: string, text: string, expr: string): string | undef
 /** Every callee `sourceExprs` reads, so each file is parsed once. */
 const READ_CALLEES = new RegExp([LOGGER_CALL, ...INJECTED.map((inj) => inj.site)].map((re) => `(?:${re.source})`).join("|"))
 
-/** Every callee `READ_CALLEES` matches spells one of these names. A template's code is decoded, and no named reference
- *  decodes to their letters, so only `&#` can hide one. */
+/**
+ * Every callee `READ_CALLEES` matches spells one of these names. A script's callee is matched as written, so an escape
+ * cannot spell one. A template's code is decoded, and only `&#` can hide a letter: `&fjlig;`, the one named reference
+ * that decodes to letters, spells none of them.
+ */
 const CALLEE_NAMES = ["logger", "Lock", "ReadWriteGuard", "createPlaced", "LoggingTelemetrySink", "ClockTickerAdapter", "NuloAccount", "&#"]
 
 /** Every source expression in one file, with its line: logger calls, a service's own log calls, and the sources it supplies to a primitive. */
@@ -340,7 +343,7 @@ describe("log source filter: a primitive reached through a member", () => {
 	})
 })
 
-describe("log source filter: a file that names no logger", () => {
+describe("log source filter: the files the callee check admits", () => {
 	test.each([
 		['new Lock("network", log)', "network"],
 		['new ReadWriteGuard("fpc", log)', "fpc"],

@@ -271,7 +271,7 @@ function flat(text: string): string {
 }
 
 function scanScript(file: string, source: string, firstLine: number, out: Hit[]): void {
-	// A literal holds an em dash only if its code spells one or a `\u` escape.
+	// Template code arrives decoded, so a literal holds an em dash only if its code spells one or a `\u` escape.
 	if (!source.includes("—") && !source.includes("\\u")) return
 	const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 	const visit = (node: ts.Node): void => {

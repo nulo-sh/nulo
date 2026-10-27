@@ -140,8 +140,8 @@ function notLocal({ text, file, extended }: Literal): boolean {
 	)
 }
 
-/** A file holds no finding unless it spells a key head, `useSyncedRef`, a store class or module, or an escape (`\`) that a
- *  literal or a name decodes. */
+/** A file holds no finding unless it spells `nulo:`, `useSyncedRef`, a store class or module, or an escape (`\`) that a
+ *  literal or a name decodes. Only `<script>` is read, and Vue decodes nothing there. */
 const MAY_HOLD = ["nulo:", "useSyncedRef", "\\", ...STORE_CLASSES, ...STORE_CLASS_MODULES]
 
 /** Each script of a file, with the line its content starts on, so a hit is reported at its file line. */

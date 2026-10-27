@@ -343,11 +343,14 @@ function scanString(scan: Scan, tree: ts.SourceFile, node: ts.Node, context: Scr
 	scan.findings.push({ file: scan.file, rule: pick[0], text: normalize(pick[1]), at: context.at ?? nearestName(node.parent), line })
 }
 
-/** Every judged key and style string spells font, letter or transform in some case, unless an escape hides a letter. */
-const MAY_PICK = /font|letter|transform|\\/i
+/**
+ * Every judged key and style string spells one of these in some case, unless an escape hides a letter. Template code
+ * arrives decoded, so no character reference needs a trigger.
+ */
+const PICK_NAMES = /font|letter|transform/i
 
 function scanScript(scan: Scan, source: string, context: ScriptContext): void {
-	if (!MAY_PICK.test(source)) return
+	if (!PICK_NAMES.test(source) && !source.includes("\\")) return
 	const tree = ts.createSourceFile("source.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 	const visit = (node: ts.Node): void => {
 		if (ts.isObjectLiteralExpression(node)) scanStyleKeys(scan, tree, node, context)
@@ -954,7 +957,7 @@ describe("type role ban rules", () => {
 		const camel = (key: string): string => key.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase())
 		const keys = [...SCRIPT_KEYS, ...ROLE_PROPERTIES].flatMap((key) => [key, camel(key)])
 		const picks = [...STRING_PICKS.map(([, pattern]) => pattern.source), STRING_FONT.source]
-		expect([...keys, ...picks].filter((text) => !MAY_PICK.test(text))).toEqual([])
+		expect([...keys, ...picks].filter((text) => !PICK_NAMES.test(text))).toEqual([])
 	})
 
 	test.each([
