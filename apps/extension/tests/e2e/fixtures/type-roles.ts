@@ -757,8 +757,9 @@ export async function expectFitsNarrow(page: Page, label: string): Promise<void>
 	// A menu a press closed is still in the DOM for its leave.
 	await settleLayout(page)
 	// A success snack closes itself within seconds, unless a pointer or focus holds it, and Send's fee
-	// card ends its balance read, whose legs run at once under the store's 20 s bound each
-	// (`INIT_FETCH_TIMEOUT_MS`); either changing mid-check would read as text the width hid.
+	// card ends its balance read; either changing mid-check would read as text the width hid. Send's
+	// read is forced, so it may wait out an older flight and then fetch, each under the store's 20 s
+	// bound (`INIT_FETCH_TIMEOUT_MS`).
 	const held = await page.evaluate(() => {
 		const snack = document.querySelector('[data-testid="snackbar"][data-kind="success"]')
 		if (snack?.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur()
@@ -767,9 +768,9 @@ export async function expectFitsNarrow(page: Page, label: string): Promise<void>
 	if (held) await page.mouse.move(0, 0)
 	const unsettled = '[data-testid="snackbar"][data-kind="success"], [data-testid="fee-settings-card"][data-read-pending]'
 	await withTimeoutMessage(
-		page.waitForFunction((s) => !document.querySelector(s), { timeout: 30_000, polling: 100 }, unsettled),
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: 50_000, polling: 100 }, unsettled),
 		async () =>
-			`${label}: still on the page after 30 s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), unsettled)}`,
+			`${label}: still on the page after 50 s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), unsettled)}`,
 	)
 	await textFates(page, "record")
 	await atWidth(page, NARROW_WIDTH, async () => {
