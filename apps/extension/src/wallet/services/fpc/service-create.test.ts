@@ -2,7 +2,8 @@
  * FPC creation fences: `addFpc` and the `getFpcs` protocol-discovery writes
  * capture the deletion fence and a network liveness mark at their entry and
  * assert both flush against the row write — a deletion, network delete or
- * reset completing during the PXE work must never land a row.
+ * reset completing during the PXE work must never land a row. The discovery,
+ * which no user action asks for, is also bound to its session: a lock refuses it.
  *
  * A purge or sweep is awaited while a registration is parked, so one that
  * waited on the registration times the case out instead of racing a timer.
@@ -10,10 +11,11 @@
 import { describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { deferred } from "@nulo/wallet-core/utils"
+import { PxeStoreKeyMissingError } from "@nulo/extension-messaging/errors"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
-import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
+import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
@@ -73,13 +75,20 @@ async function makeHarness() {
 	api.reset()
 	const deletionState = new ProfileDeletionState()
 	const reservations = makeReservations()
+	// The row keys outlive a lock, as `ProfileService.rowKeys` keeps them: only the fence sees it.
+	const session: { serial: number | undefined } = { serial: 1 }
 	const services = new ServiceCollection()
 	services.add(
 		svc(PROFILE_SERVICE_NAME, {
 			...ROW_KEY_FAKE,
 			getDeletionState: () => deletionState,
 			getActiveProfile: async () => ({ id: "p1" }),
-			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1") }),
+			captureExecutionFence: async () => ({ profileId: "p1", epoch: deletionState.capture("p1"), session: session.serial }),
+			isFenceLive: (fence: ExecutionFence) =>
+				session.serial !== undefined &&
+				fence.session === session.serial &&
+				fence.profileId === "p1" &&
+				deletionState.isCurrent(fence.profileId, fence.epoch),
 		}),
 	)
 	services.add(
@@ -99,7 +108,10 @@ async function makeHarness() {
 		sponsored: "0xsponsored",
 		private: "0xprivate",
 	})
-	return { api, deletionState, reservations, service }
+	const lock = () => {
+		session.serial = undefined
+	}
+	return { api, deletionState, reservations, service, lock }
 }
 
 type Harness = Awaited<ReturnType<typeof makeHarness>>
@@ -109,6 +121,20 @@ function setPxe(h: Harness, pxe: Record<string, unknown>) {
 }
 
 type Registration = { instance: { address: { toString(): string } } }
+
+/** The messages the service logs, per level. */
+function spyLogs(h: Harness) {
+	const logged = { debug: [] as string[], warn: [] as string[], error: [] as string[] }
+	const service = h.service as unknown as Record<"logDebug" | "logWarn" | "logError", (message: string) => void>
+	for (const [level, method] of [
+		["debug", "logDebug"],
+		["warn", "logWarn"],
+		["error", "logError"],
+	] as const) {
+		vi.spyOn(service, method).mockImplementation((message) => void logged[level].push(message))
+	}
+	return logged
+}
 
 const macrotask = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -139,6 +165,26 @@ describe("FPC creation fences", () => {
 		writes.restore()
 		expect(writes.log).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("addFpc: a lock completing DURING the artifact fetch still stores the row the user asked for", async () => {
+		const h = await makeHarness()
+		const gate = deferred<unknown>()
+		setPxe(h, {
+			getContractInstance: async () => ({ currentContractClassId: "c1" }),
+			getContractArtifact: () => gate.promise,
+		})
+		const emitted: unknown[] = []
+		h.service.onFpcAdded.add((f) => emitted.push(f))
+
+		const run = h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, `0x${"11".repeat(32)}`, "New")
+		await macrotask()
+		h.lock()
+		gate.resolve(SPONSOR_ARTIFACT)
+
+		await expect(run).resolves.toMatchObject({ name: "New", profileId: "p1" })
+		expect(emitted).toHaveLength(1)
+		expect(await fpcRowCount(h.api)).toBe(1)
 	})
 
 	test("getFpcs discovery: stores one row per protocol FPC and returns both as protocol rows", async () => {
@@ -258,6 +304,88 @@ describe("FPC creation fences", () => {
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
+	test("getFpcs discovery: a lock landing during a registration stores NO row for the locked profile", async () => {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		const registered: string[] = []
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => {
+				registered.push(instance.address.toString())
+				reached.resolve()
+				await gate.promise
+			},
+		})
+		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
+
+		const run = h.service.getFpcs(1)
+		await reached.promise
+		h.lock()
+		gate.resolve()
+
+		await run
+		writes.restore()
+		expect(writes.log).toEqual([])
+		expect(registered).toEqual(["0xsponsored"])
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: a lock landing while the row is sealed stores NO row for the locked profile", async () => {
+		const h = await makeHarness()
+		setPxe(h, { registerContract: async () => {} })
+		// The liveness read between the row's seal and its commit is the last await before the write.
+		const network = (h.service as unknown as { networkService: { isNetworkLive: (id: string, since?: number) => Promise<boolean> } })
+			.networkService
+		const isNetworkLive = network.isNetworkLive
+		let reads = 0
+		network.isNetworkLive = async (id, since) => {
+			if (++reads === 2) h.lock()
+			return isNetworkLive(id, since)
+		}
+		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@")
+
+		await h.service.getFpcs(1)
+		writes.restore()
+		expect(writes.log).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(0)
+		expect(reads).toBe(2)
+	})
+
+	test("getFpcs discovery: a registration the lock refused ends the discovery at debug, with no warn or error line", async () => {
+		const h = await makeHarness()
+		const registered: string[] = []
+		setPxe(h, {
+			registerContract: async ({ instance }: Registration) => {
+				registered.push(instance.address.toString())
+				h.lock()
+				throw new PxeStoreKeyMissingError("PXE_STORE_KEY_MISSING: no store key provisioned for profile p1")
+			},
+		})
+		const logged = spyLogs(h)
+
+		await h.service.getFpcs(1)
+		expect(registered).toEqual(["0xsponsored"])
+		expect(logged.warn).toEqual([])
+		expect(logged.error).toEqual([])
+		expect(logged.debug).toContain("Protocol FPC discovery stopped: its session ended")
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: a registration that fails while its session is live is still logged at error", async () => {
+		const h = await makeHarness()
+		setPxe(h, {
+			registerContract: async () => {
+				throw new Error("node unreachable")
+			},
+		})
+		const logged = spyLogs(h)
+
+		await h.service.getFpcs(1)
+		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
+		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its session ended")
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
 	test("getFpcs discovery: admitted while its network is reserved, it registers nothing and stores NO row", async () => {
 		const h = await makeHarness()
 		const registered: string[] = []
@@ -273,12 +401,12 @@ describe("FPC creation fences", () => {
 		expect(registered).toEqual(["0xsponsored", "0xprivate"])
 	})
 
-	test("getFpcs discovery: a deletion landing DURING a protocol row write compensates it; the logged refusal is exact", async () => {
+	test("getFpcs discovery: a deletion landing DURING a protocol row write compensates it and ends the discovery at debug", async () => {
 		const h = await makeHarness()
 		;(h.service as unknown as { pxeService: unknown }).pxeService = {
 			getPXE: () => ({ registerContract: async () => {} }),
 		}
-		const logError = vi.spyOn(h.service as unknown as { logError: (m: string, e: unknown) => void }, "logError")
+		const logged = spyLogs(h)
 		let fired = false
 		const writes = recordWrites(h.api.storage.local, "nulo:core:fpcs@", () => {
 			if (fired) return
@@ -291,8 +419,8 @@ describe("FPC creation fences", () => {
 		expect(writes.log).toHaveLength(2)
 		expect(writes.log[1]).toBe(writes.log[0]?.replace(/^set:/, "remove:"))
 		expect(fired).toBe(true)
-		const errors = logError.mock.calls.map(([, e]) => (e as Error).message)
-		expect(errors[0]).toBe("profile p1 deleted")
+		expect(logged.error).toEqual([])
+		expect(logged.debug).toContain("Protocol FPC discovery stopped: its session ended")
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
