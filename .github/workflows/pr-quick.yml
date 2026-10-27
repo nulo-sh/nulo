@@ -338,7 +338,7 @@ jobs:
       - name: Verify the pages shipped
         working-directory: apps/landing
         run: |
-          for f in how-aztec-works.html terms.html privacy.html terms/v1.0/index.html privacy/v1.0/index.html; do
+          for f in how-aztec-works.html subscribed.html terms.html privacy.html terms/v1.0/index.html privacy/v1.0/index.html; do
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
 

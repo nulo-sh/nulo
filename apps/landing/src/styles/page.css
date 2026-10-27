@@ -254,7 +254,7 @@ footer {
 
 .hero {
 	position: relative;
-	height: 720px;
+	height: 820px;
 	overflow: hidden;
 	background: var(--app-bg);
 }
@@ -409,6 +409,127 @@ footer {
 	color: var(--txt-body);
 	max-width: 44ch;
 	margin-bottom: 24px;
+}
+
+.signup {
+	display: grid;
+	gap: 10px;
+	width: 100%;
+	max-width: 548px;
+	margin-bottom: 8px;
+}
+
+.signup__label {
+	font-family: var(--font-headline);
+	font-weight: 700;
+	font-size: 16px;
+	color: var(--txt-primary);
+}
+
+.signup__row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.signup__field {
+	flex: 999 1 220px;
+	min-width: 0;
+	font-family: var(--font-body);
+	font-size: 16px;
+	line-height: 21px;
+	color: var(--txt-primary);
+	background: var(--app-bg);
+	border: 1px solid var(--nulo-track);
+	border-radius: 0;
+	padding: 13px 16px;
+	/* A link to the field scrolls it to the top edge; this keeps its label clear of the 64 px sticky bar. */
+	scroll-margin-top: 120px;
+}
+
+.signup__field::placeholder {
+	color: var(--nulo-secondary);
+	opacity: 1;
+}
+
+.signup__field:hover {
+	border-color: var(--nulo-secondary);
+}
+
+.signup__row .btn {
+	flex: 1 0 auto;
+	justify-content: center;
+}
+
+.signup__row .btn[aria-disabled="true"] {
+	cursor: progress;
+	opacity: 0.6;
+}
+
+/* Follows `.hero p`, whose size, measure and margin are for the hero's paragraph, to outrank it. */
+.signup p {
+	margin: 0;
+	max-width: none;
+}
+
+.signup p.signup__avail {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--txt-primary);
+}
+
+.signup p.signup__print {
+	font-family: var(--font-body);
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--nulo-secondary);
+	max-width: 60ch;
+}
+
+.signup p.signup__print a {
+	color: var(--txt-primary);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.signup p.signup__status {
+	font-family: var(--font-body);
+	font-size: 14px;
+	color: var(--txt-primary);
+}
+
+.signup p.signup__status[data-state="error"] {
+	color: var(--txt-danger);
+}
+
+/* Empty, the live region leaves the layout but stays in the accessibility tree, so its first message is announced. */
+.signup__status:empty {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+}
+
+/* The honeypot: off-screen rather than `display: none`, which form-filling bots skip. */
+.signup__trap {
+	position: absolute;
+	left: -10000px;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+/* #get puts copy on the grain; a form is copy and controls, so it gets a plate as the hero's has. */
+.signup-plate {
+	max-width: 620px;
+	margin-bottom: 20px;
+}
+
+.signup-plate .signup {
+	margin-bottom: 0;
 }
 
 section.s {
@@ -946,6 +1067,16 @@ section.s {
 	margin: 12px 0 22px;
 }
 
+/* Fills a tall screen so the footer sits at its foot: 100svh less the 64 px bar and the 86 px footer. */
+section.subscribed {
+	min-height: calc(100svh - 150px);
+	padding: 120px 0 160px;
+}
+
+.subscribed .lead {
+	margin-bottom: 28px;
+}
+
 footer {
 	border-top: 1px solid var(--line2);
 	padding: 28px 0 40px;
@@ -991,6 +1122,10 @@ footer .wrap a:hover {
 		top: auto;
 		transform: none;
 		width: auto;
+		padding: 24px;
+	}
+
+	.signup-plate {
 		padding: 24px;
 	}
 
