@@ -395,7 +395,8 @@ async function runEncrypt(ctx: ExportCtx) {
 		const stands = await madeInSessionStands(ctx, madeIn)
 		if (!isCurrent()) return
 		if (!stands) {
-			startOver(ctx, { kind: "error", label: "Failed to encrypt the backup" })
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to encrypt the backup" })
 			return
 		}
 		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
@@ -436,7 +437,8 @@ async function runDownload(ctx: ExportCtx) {
 		const stands = await madeInSessionStands(ctx, ctx.madeIn)
 		if (!isCurrent()) return
 		if (!stands) {
-			startOver(ctx, { kind: "error", label: "Failed to download backup" })
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to download backup" })
 			return
 		}
 		// A file already requested still lands after a scrub; its toast and Home's flag are fenced.
@@ -493,12 +495,6 @@ function resetFlow(ctx: ExportCtx) {
 	state.chainStateOmitted.value = false
 }
 
-/** The run ends, and the page starts over and says so. */
-function startOver(ctx: ExportCtx, toast: { kind: "info" | "error"; label: string }) {
-	resetFlow(ctx)
-	ctx.openToast(toast)
-}
-
 /** An update of the password profile while the page holds its backup: a password change made elsewhere
  *  reopens the session the backup was made in, a rename leaves it standing. Before a backup the prompt
  *  refuses a replaced password itself, and a downloaded file left while its session stood. */
@@ -509,7 +505,8 @@ async function followProfileUpdate(ctx: ExportCtx) {
 	// it saved opens with the replaced password.
 	const resets = ctx.resets
 	if ((await madeInSessionStands(ctx, madeIn)) || ctx.disposed || ctx.resets !== resets) return
-	startOver(ctx, { kind: "info", label: "Profile password changed in another window." })
+	resetFlow(ctx)
+	ctx.openToast({ kind: "info", label: "Profile password changed in another window." })
 }
 
 function createExportState(): ExportState {

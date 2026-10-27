@@ -285,7 +285,7 @@ const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "
 const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 299, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
 const FULL_EXPORT = cite(EXPORT, 392, "sealFullBackupText(plaintext as string, state.password.value as string)")
-const FILE_PASSWORD_RULE = cite(EXPORT, 562, "!isPasskeyProfile.value || isNewPasswordValid(")
+const FILE_PASSWORD_RULE = cite(EXPORT, 559, "!isPasskeyProfile.value || isNewPasswordValid(")
 const FILE_PASSWORD_BLOCKED = cite(EXPORT, 382, "if (filePasswordBlocked(ctx)) return")
 const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 677, "public async exportAccount(")
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 761, "public async importAccount(")
