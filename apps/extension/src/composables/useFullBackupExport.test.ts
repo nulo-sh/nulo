@@ -480,6 +480,28 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		await expectNothingPublished(api, opts, at)
 	})
 
+	it("a password change heard while the download runs is said once the file has left", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		const saving = deferred<void>()
+		m.downloadFile.mockReturnValueOnce(saving.promise)
+		const download = api.downloadBackup()
+		await vi.waitFor(() => expect(m.downloadFile).toHaveBeenCalledOnce())
+		// The change commits after the download's own check: the follower's waits behind its reopen.
+		const reopened = deferred<void>()
+		m.assertRunFence.mockReturnValueOnce(reopened.promise)
+		const follow = api.followProfileUpdate()
+		saving.resolve()
+		await download
+		expect(api.backupStatus.value).toBe("downloaded")
+
+		reopened.reject(new Error("Session ended"))
+		await follow
+		expect(m.openToast).toHaveBeenLastCalledWith({ kind: "info", label: "Profile password changed in another window." })
+		expect(api.backupStatus.value).toBe("")
+	})
+
 	it.each(["resolves", "rejects"] as const)("a requested download lands, and only its toast is dropped, when it %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()

@@ -93,6 +93,9 @@ interface ExportCtx {
 	// password that opened its keys there, which stays the profile's while that session stands: a
 	// password change reopens the session under the same lock as its commit.
 	madeIn: ProfileRunFence | null
+	// Counts the page's start-overs: a reset or a switch ends what a late answer may still say, a
+	// completed download does not.
+	resets: number
 	disposed: boolean
 	appStore: ReturnType<typeof useAppStore>
 	/** The page requires a session, so a profile is always active; read live, never cached. */
@@ -475,6 +478,7 @@ function discardRun(ctx: ExportCtx) {
 }
 
 function resetFlow(ctx: ExportCtx) {
+	ctx.resets++
 	discardRun(ctx)
 	const { state } = ctx
 	state.isBusy.value = false
@@ -501,8 +505,10 @@ function startOver(ctx: ExportCtx, toast: { kind: "info" | "error"; label: strin
 async function followProfileUpdate(ctx: ExportCtx) {
 	const madeIn = ctx.madeIn
 	if (!madeIn) return
-	const isCurrent = ctx.runs.snapshot()
-	if ((await madeInSessionStands(ctx, madeIn)) || !isCurrent()) return
+	// A download that completes meanwhile ends the run, but the person must still hear that the file
+	// it saved opens with the replaced password.
+	const resets = ctx.resets
+	if ((await madeInSessionStands(ctx, madeIn)) || ctx.disposed || ctx.resets !== resets) return
 	startOver(ctx, { kind: "info", label: "Profile password changed in another window." })
 }
 
@@ -541,6 +547,7 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		runs: createRunFence(),
 		activeRun: null,
 		madeIn: null,
+		resets: 0,
 		disposed: false,
 		appStore,
 		profile,
