@@ -5,7 +5,7 @@
  * file).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey } from "@nulo/wallet-crypto"
 import { RpcDisconnectedError } from "@nulo/extension-messaging/errors"
 import {
 	AS_SENDER,
@@ -481,6 +481,23 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		expect((c.selectedBackup.value?.backup as { data?: { profile?: { type?: string } } })?.data?.profile?.type).toBe("password")
 		expect(c.selectedBackup.value?.profileType).toBe("password")
 		expect(c.parsedBackupName.value).toBe("EncName")
+	})
+
+	it("decryptBackup: an account file under its own password is refused as one, never as a wrong password", async () => {
+		const key = await EncryptionKey.fromPassword("pw12345678")
+		const accountAad = new TextEncoder().encode(ACCOUNT_EXPORT_AAD_LABEL)
+		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode('{"format":"nulo-account-export"}'), accountAad)).toString(
+			"base64",
+		)
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		c.selectedBackup.value = { name: "NuloEncryptedAccount_1.txt", backup: sealed, kind: "sealed", profileType: null }
+		c.decryptionPassword.value = "pw12345678"
+		await c.decryptBackup()
+		expect(opts.fillError.mock.calls).toEqual([
+			["full_backup", "Not a Backup File", "This is an account file. Import it from Settings > Accounts > Import Account."],
+		])
+		expect(c.selectedBackup.value).toEqual({ kind: "unreadable", name: "NuloEncryptedAccount_1.txt", backup: null, profileType: null })
 	})
 
 	it("a nameless decrypt or pick clears the previous backup's name", async () => {

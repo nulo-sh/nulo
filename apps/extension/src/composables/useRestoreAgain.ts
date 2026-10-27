@@ -11,6 +11,7 @@ import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
 import { type Outcome, showSnack, type Snack } from "@/utils/snack"
 import {
+	AccountFileNotBackupError,
 	type BackupSelection,
 	openSelection,
 	type ProcessBackupResult,
@@ -33,6 +34,7 @@ import {
 } from "./full-backup-restore"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
+	ACCOUNT_FILE_NOT_BACKUP,
 	DECRYPTION_FAILED,
 	EARLIER_PASSKEY_BACKUP,
 	errorLogWriters,
@@ -205,8 +207,12 @@ async function runDecrypt(state: AgainRefs, opts: UseRestoreAgainOptions) {
 		}
 		state.selectedBackup.value = opened.selection
 		opts.clearError()
-	} catch {
+	} catch (error) {
 		if (stale()) return
+		if (error instanceof AccountFileNotBackupError) {
+			state.selectedBackup.value = unreadableSelection(target.name)
+			return opts.fillError("full_backup", ACCOUNT_FILE_NOT_BACKUP.title, ACCOUNT_FILE_NOT_BACKUP.message)
+		}
 		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
 }

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto"
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
 import type { ILogger } from "@nulo/wallet-core/logger"
+import { fromBase64, toBase64 } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import {
+	AccountExportUnreadableError,
 	buildAccountExport,
 	decryptAccountExport,
 	encryptAccountExport,
@@ -133,5 +135,29 @@ describe("account-export envelope (NULO-ACCOUNT-EXPORT v1)", () => {
 		const back = parseAccountExport(await decryptAccountExport(blob, "hunter2"))
 		expect(back.signingKey.toString()).toBe(SIGNING_KEY.toString())
 		await expect(decryptAccountExport(blob, "wrong-pass")).rejects.toThrow()
+	})
+
+	test("a wrong password, a truncated or flipped file and a body that is not base64 fail as one error", async () => {
+		const blob = await encryptAccountExport(buildAccountExport(SIGNING_KEY, L1, "0xabc"), "hunter2")
+		const flipped = fromBase64(blob)
+		flipped[flipped.length - 1] ^= 0x01
+		const failures = await Promise.all(
+			[
+				[blob, "wrong-pass"],
+				[blob.slice(0, 40), "hunter2"],
+				[blob.slice(0, 41), "hunter2"],
+				[blob.slice(0, 8), "hunter2"],
+				[toBase64(flipped), "hunter2"],
+				["\u0089PNG\r\n\u001a\n", "hunter2"],
+			].map(([body, password]) =>
+				decryptAccountExport(body, password).then(
+					() => null,
+					(err: unknown) => err,
+				),
+			),
+		)
+		for (const err of failures) expect(err).toBeInstanceOf(AccountExportUnreadableError)
+		expect(new Set(failures.map((err) => (err as Error).message)).size).toBe(1)
+		expect(parseAccountExport(await decryptAccountExport(blob, "hunter2")).claimedAddress).toBe("0xabc")
 	})
 })

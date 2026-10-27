@@ -4,7 +4,7 @@
  * No vue, no chrome.*, no service clients — safe to import anywhere.
  */
 
-import { EncryptionKey, zeroize } from "@nulo/wallet-crypto"
+import { ACCOUNT_EXPORT_AAD_LABEL, EncryptionKey, zeroize } from "@nulo/wallet-crypto"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
@@ -70,7 +70,8 @@ export function detectBackupType(text: string): BackupFileType {
  * else, nor anything else as a v2 backup, and stripping or adding the tag fails authentication.
  */
 export const FULL_BACKUP_V2_TAG = "nulo:full-backup:v2"
-const FULL_BACKUP_TAG_FAMILY = "nulo:full-backup:"
+/** The prefix every tagged full backup starts with, whatever its version. */
+export const FULL_BACKUP_TAG_FAMILY = "nulo:full-backup:"
 /** Version byte, 12-byte IV and 16-byte GCM tag: the shortest frame `EncryptionKey` writes. */
 const MIN_ENCRYPTED_FRAME_BYTES = 29
 
@@ -107,13 +108,39 @@ export async function sealFullBackupText(plaintext: string, password: string): P
 	}
 }
 
+/** An encrypted account file picked as a backup: it opened under the account file's AAD. */
+export class AccountFileNotBackupError extends Error {
+	constructor() {
+		super("This is an account file, not a full backup")
+		this.name = "AccountFileNotBackupError"
+	}
+}
+
+/** An untagged frame is a legacy backup's shape and an account file's alike, so only the AAD that
+ *  authenticates it tells them apart. Runs on a failed open only; what it decrypts is wiped unread. */
+async function opensAsAccountFile(key: EncryptionKey, frame: Uint8Array<ArrayBuffer>): Promise<boolean> {
+	try {
+		zeroize(await key.decrypt(frame, new TextEncoder().encode(ACCOUNT_EXPORT_AAD_LABEL)))
+		return true
+	} catch {
+		return false
+	}
+}
+
 /** Decrypts an encrypted full-backup file's text to its JSON. Refuses what `parseEncryptedBackup`
- *  refuses before deriving a key, and a wrong password or a moved tag at authentication. */
+ *  refuses before deriving a key, a wrong password or a moved tag at authentication, and an untagged
+ *  frame that opens as an account file with `AccountFileNotBackupError`. */
 export async function openFullBackupText(text: string, password: string): Promise<string> {
 	const parsed = parseEncryptedBackup(text)
 	if (!parsed) throw new Error("Not an encrypted backup")
 	const key = await EncryptionKey.fromPassword(password)
-	const plaintext = await key.decrypt(parsed.frame, parsed.aad)
+	let plaintext: Uint8Array<ArrayBuffer>
+	try {
+		plaintext = await key.decrypt(parsed.frame, parsed.aad)
+	} catch (err) {
+		if (!parsed.aad && (await opensAsAccountFile(key, parsed.frame))) throw new AccountFileNotBackupError()
+		throw err
+	}
 	try {
 		return new TextDecoder().decode(plaintext)
 	} finally {

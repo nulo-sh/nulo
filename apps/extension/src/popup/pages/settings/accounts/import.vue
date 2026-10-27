@@ -23,6 +23,8 @@ import { sameStoredName } from "@/utils/account-name"
 import { listOwnAccountRow } from "@/utils/account-rows"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
+import { FULL_BACKUP_TAG_FAMILY, parseEncryptedBackup } from "@/utils/full-backup-helpers"
+import { ACCOUNT_FILE_UNREADABLE } from "@/wallet/services/account/spec"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 
 /** Composables */
@@ -41,6 +43,9 @@ const fileName = ref("")
 const password = ref("")
 const accountName = ref("")
 const previewAddress = ref("")
+/** Whether the wallet already held the previewed address when the preview resolved. Recorded, not
+ *  derived, so this page's own push of the imported account cannot turn it on. */
+const previewHeld = ref(false)
 const error = ref("")
 const isBusy = ref(false)
 
@@ -62,6 +67,23 @@ const nameTaken = computed(() =>
 	appStore.accounts.some((a) => !sameFieldAddress(a.address, previewAddress.value) && sameStoredName(a.name, accountName.value)),
 )
 
+/** The refusal a picked body earns before any password is asked, or "" for one worth opening. A
+ *  protected account file is the untagged sealed frame an early full backup also is, so a body that
+ *  cannot be one never asks for a password. */
+const pickRefusal = (body) => {
+	if (!body) return "The file is empty."
+	if (body.startsWith(FULL_BACKUP_TAG_FAMILY)) return "This is a full backup. Restore it from Import profile > Full Backup."
+	if (body.startsWith("{") || parseEncryptedBackup(body)) return ""
+	return "This is not an account file, or it is damaged."
+}
+
+/** Only rows of the current profile and chain count: the store can still hold the previous scope's
+ *  list while a switch loads, and a row it misses falls back to the service's own refusal. */
+const heldInScope = (address) =>
+	appStore.accounts.some(
+		(a) => a.profileId === appStore.profile?.id && a.chainId === appStore.network?.chainId && sameFieldAddress(a.address, address),
+	)
+
 // Coarse pre-read byte gate (×4 headroom over the service's authoritative
 // 64 KiB string-length check, covering UTF-8-bytes vs UTF-16-units skew).
 const MAX_ACCOUNT_FILE_BYTES = 256 * 1024
@@ -79,9 +101,12 @@ const handlePickFile = async () => {
 		if (!picked) return
 		const text = (await picked.text()).trim()
 		if (gen !== generation) return
-		fileBody.value = text
+		// A password typed for one file never rides with another, refused or not.
+		const refusal = pickRefusal(text)
+		fileBody.value = refusal ? "" : text
 		fileName.value = picked.name ?? ""
-		error.value = ""
+		password.value = ""
+		error.value = refusal
 	} catch (err) {
 		if (err instanceof FileTooLargeError && gen === generation) {
 			// Drop any previously-picked file too — a stale body under the new
@@ -105,10 +130,12 @@ const handlePreview = async () => {
 	try {
 		const address = await managers.account.previewImportAccount(fileBody.value.trim(), password.value)
 		if (gen !== generation) return
+		previewHeld.value = heldInScope(address)
 		previewAddress.value = address
 	} catch (err) {
 		if (gen !== generation) return
-		error.value = errorMessageFromUnknown(err)
+		// An engine's crypto error can cross the RPC with an empty message; a failure never shows nothing.
+		error.value = errorMessageFromUnknown(err) || ACCOUNT_FILE_UNREADABLE
 	} finally {
 		isBusy.value = false
 	}
@@ -116,7 +143,7 @@ const handlePreview = async () => {
 
 /** The user confirmed the previewed address; write the account and return to the list. */
 const handleConfirmImport = async () => {
-	if (!needsConfirm.value || !accountName.value.trim() || nameTaken.value || isBusy.value) return
+	if (!needsConfirm.value || previewHeld.value || !accountName.value.trim() || nameTaken.value || isBusy.value) return
 	isBusy.value = true
 	error.value = ""
 	const gen = generation
@@ -159,13 +186,14 @@ const handleConfirmImport = async () => {
 	}
 }
 
-// A confirmed address is only valid for the exact body+password it was previewed from. Any edit
-// invalidates it — including a preview RPC still in flight (generation bump) — so the user must
-// re-preview (the service also recomputes and rejects a stale confirmation, but this keeps the UI
-// honest).
-watch([fileBody, password], () => {
+// A confirmed address is only valid for the exact body+password it was previewed from, in the
+// profile and chain it was previewed in. Any edit, or a scope another window moves, invalidates it —
+// including a preview RPC still in flight (generation bump) — so the user must re-preview (the
+// service also recomputes and rejects a stale confirmation, but this keeps the UI honest).
+watch([fileBody, password, () => appStore.profile?.id, () => appStore.network?.chainId], () => {
 	generation++
 	previewAddress.value = ""
+	previewHeld.value = false
 })
 
 // Flipping from a protected body to a plain one orphans the file password; drop it so it cannot
@@ -278,7 +306,10 @@ const collapsingLabel = "Import Account"
 					<Text variant="body" height="150" color="tertiary">
 						The address is recomputed from the file. Confirm it matches the account you expect.
 					</Text>
-					<Text variant="body" height="150" color="tertiary">
+					<Text v-if="previewHeld" variant="body" height="150" color="txt-danger" data-testid="import-account-held">
+						This account is already in your wallet.
+					</Text>
+					<Text v-else variant="body" height="150" color="tertiary">
 						This account is not covered by your recovery phrase. Keep its file safe.
 					</Text>
 				</Flex>
@@ -304,7 +335,7 @@ const collapsingLabel = "Import Account"
 			<Button
 				v-else
 				@click="handleConfirmImport"
-				:disabled="!accountName.trim() || nameTaken || isBusy"
+				:disabled="previewHeld || !accountName.trim() || nameTaken || isBusy"
 				variant="cta"
 				data-testid="import-account-submit"
 			>

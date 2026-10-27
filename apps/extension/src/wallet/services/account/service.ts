@@ -21,6 +21,7 @@ import type { RunFence } from "@/wallet/services/profile/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
 import {
+	AccountExportUnreadableError,
 	buildAccountExport,
 	decryptAccountExport,
 	encryptAccountExport,
@@ -44,6 +45,7 @@ import { ImportedKeysRepository } from "./imported-keys-repository"
 import type { AccountIntegrityBlocked, AccountRuntimeMismatchDelegate } from "../account-integrity/types"
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
 import {
+	ACCOUNT_FILE_UNREADABLE,
 	ACCOUNT_SERVICE_NAME,
 	AccountMethodSchemas,
 	AccountSchema,
@@ -111,6 +113,16 @@ function assertPasskeyFilePassword(credentialData: PasskeyCredentialData | undef
 function accountFileBody(signingKey: GrumpkinScalar, l1ChainId: number, address: string, password: string, encrypt: boolean) {
 	const envelope = buildAccountExport(signingKey, l1ChainId, address)
 	return encrypt ? encryptAccountExport(envelope, password) : serializeAccountExport(envelope)
+}
+
+/** A protected file that does not open reaches the page as the one line it shows, never a browser's
+ *  own crypto or decoding error, whose message is empty on some engines. */
+async function openProtectedAccountFile(body: string, password: string): Promise<string> {
+	try {
+		return await decryptAccountExport(body, password)
+	} catch (err) {
+		throw err instanceof AccountExportUnreadableError ? new Error(ACCOUNT_FILE_UNREADABLE) : err
+	}
 }
 
 /** `unattended` refuses a live L1 probe; the rest are the in-place reset's: the journal's index and
@@ -1115,7 +1127,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (fileBody.length > 64 * 1024) throw new Error("Account export file is too large")
 		// Encrypted variant is base64 (not JSON); plaintext starts with `{`.
 		const trimmed = fileBody.trim()
-		const json = trimmed.startsWith("{") ? trimmed : await decryptAccountExport(trimmed, password)
+		const json = trimmed.startsWith("{") ? trimmed : await openProtectedAccountFile(trimmed, password)
 		const { signingKey, claimedAddress } = parseAccountExport(json)
 		// The address is a pure function of the signing key — recompute and require it to match the
 		// file's self-claim (catches a plaintext file whose address was edited without the key).

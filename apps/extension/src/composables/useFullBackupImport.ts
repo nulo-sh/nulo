@@ -17,6 +17,7 @@ import { TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { FilePickCanceledError } from "@/utils/files"
 import {
+	AccountFileNotBackupError,
 	type BackupSelection,
 	collectRestoreErrors,
 	normalizeAllIds,
@@ -97,6 +98,12 @@ export const DECRYPTION_FAILED = {
 	title: "Decryption Failed",
 	message:
 		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
+} as const
+
+/** An encrypted account file picked as a backup, recognised once its password opens it. */
+export const ACCOUNT_FILE_NOT_BACKUP = {
+	title: "Not a Backup File",
+	message: "This is an account file. Import it from Settings > Accounts > Import Account.",
 } as const
 
 const INTEGRITY_REFUSAL = { kind: "rejected", ...INTEGRITY_FAILED } as const
@@ -639,8 +646,13 @@ async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOpti
 		// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
 		state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
 		opts.clearError()
-	} catch {
+	} catch (err) {
 		if (state.selectedBackup.value !== target) return
+		if (err instanceof AccountFileNotBackupError) {
+			state.selectedBackup.value = unreadableSelection(target.name)
+			opts.fillError("full_backup", ACCOUNT_FILE_NOT_BACKUP.title, ACCOUNT_FILE_NOT_BACKUP.message)
+			return
+		}
 		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
 }
