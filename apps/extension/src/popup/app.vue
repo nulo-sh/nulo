@@ -608,6 +608,8 @@ onBeforeUnmount(() => {
 		:data-session-checked="appStore.isSessionChecked ? 'true' : undefined"
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
+		:data-legal-sheet="legalSheetShown === undefined ? undefined : legalSheetShown ? 'shown' : 'hidden'"
+		data-testid="popup-shell"
 	>
 		<!-- Popup Teleport -->
 		<div id="popup" />

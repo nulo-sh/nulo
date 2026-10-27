@@ -29,6 +29,7 @@ import { downloadEncryptedBackup, downloadPasskeyBackup, FILE_PASSWORD, openEncr
 import { CANONICAL_SEED_24, importSeed, ONBOARDING_IMPORT_SHELL, readActiveAccount, TEST_PASSWORD } from "./helpers/import-drivers"
 import {
 	acceptOnboardingTerms,
+	answerUpdatedTerms,
 	isContinueDisabled,
 	isSheetPresent,
 	pointerClick,
@@ -41,6 +42,7 @@ import {
 	waitForToastLayer,
 } from "./helpers/legal-drivers"
 import { expectFitsNarrow } from "./fixtures/type-roles"
+import { LEGAL_ACCEPTANCE_KEY, legalSeedValue } from "./fixtures/legal"
 
 const CURRENT_TERMS = LEGAL_MANIFEST.terms.at(-1)?.version
 const CURRENT_PRIVACY = LEGAL_MANIFEST.privacy.at(-1)?.version
@@ -277,6 +279,16 @@ describe("popup: declining never locks a person out", () => {
 		await navigateByHash(page, "#/popup/send", 15_000)
 		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
+
+		// The update scenarios' answer: nothing rises over a current acceptance, and the check that
+		// says so catches a sheet that rises over one it was told is current.
+		const current = { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") }
+		await reloadWithLegalState(page, "current")
+		await page.waitForSelector('[data-testid="home-hero"]', { visible: true, timeout: 30_000 })
+		await answerUpdatedTerms(page, current)
+		await reloadWithLegalState(page, "stale")
+		await page.waitForSelector('[data-testid="home-hero"]', { visible: true, timeout: 30_000 })
+		await expect(answerUpdatedTerms(page, current)).rejects.toThrow("raised the Terms sheet over a current acceptance")
 		await page.close()
 	}, 120_000)
 
