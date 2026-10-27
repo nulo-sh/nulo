@@ -1,8 +1,4 @@
 <script setup>
-/**
- * "Disable auto-close", under the countdown of a screen that shows a recovery phrase: it keeps the
- * words open past the countdown. A link-styled button, so it never reads as the screen's action.
- */
 defineProps({
 	testid: { type: String, required: true },
 })
