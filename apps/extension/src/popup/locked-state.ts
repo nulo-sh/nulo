@@ -83,9 +83,9 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 
 	/**
 	 * A locked window's selected profile may be gone: deleted in another window, which closes no
-	 * session here, or refused by an action as an unknown id. Gone, the window lands as a lock does,
-	 * unless it is on a page that needs no profile. A lock, an unlock or another selection meanwhile
-	 * supersedes the check.
+	 * session here, or refused by an action as an unknown id. Gone, the window drops the sheets it
+	 * held for it and lands as a lock does, unless it is on a page that needs no profile. A lock, an
+	 * unlock or another selection meanwhile supersedes the check.
 	 */
 	const checkSelection = async (readProfiles: () => Promise<P[]>, isCurrent: () => boolean): Promise<SelectionCheck> => {
 		const selected = shell.selectedId()
@@ -101,7 +101,10 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		if (PROFILE_FREE_ROUTES.has(shell.routeName() ?? "")) {
 			shell.setProfiles(profiles)
 			reselect(profiles, lastActiveId)
-		} else land(profiles, lastActiveId)
+		} else {
+			shell.closePopups()
+			land(profiles, lastActiveId)
+		}
 		return "followed"
 	}
 

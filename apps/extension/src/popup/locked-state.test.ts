@@ -213,7 +213,7 @@ describe("a list that no longer holds the selected profile", () => {
 		expect([none.store.selected, none.store.chooser, none.routes]).toEqual([undefined, false, ["/popup/auth"]])
 	})
 
-	test("a locked window's check lands it as a lock does, and says the profile was followed", async () => {
+	test("a locked window's check closes its sheets and lands it as a lock does, and says the profile was followed", async () => {
 		const s = lockedShell([p1, p2], { routeName: "popup-settings-security-reset" })
 		expect(
 			await s.checkSelection(
@@ -221,7 +221,7 @@ describe("a list that no longer holds the selected profile", () => {
 				() => true,
 			),
 		).toBe("followed")
-		expect([s.store.selected, s.store.profiles, s.routes]).toEqual([p2, [p2], ["/popup/auth"]])
+		expect([s.store.selected, s.store.profiles, s.routes, s.store.popups]).toEqual([p2, [p2], ["/popup/auth"], 0])
 
 		const last = lockedShell()
 		expect(
@@ -253,7 +253,7 @@ describe("a list that no longer holds the selected profile", () => {
 				() => true,
 			),
 		).toBe("followed")
-		expect([s.store.selected, s.routes, s.store.chooser]).toEqual([p2, [], false])
+		expect([s.store.selected, s.routes, s.store.chooser, s.store.popups]).toEqual([p2, [], false, 1])
 	})
 
 	test("a selection still listed, a lock, an unlock or another selection meanwhile, and a failed read change nothing", async () => {
@@ -301,7 +301,7 @@ describe("a list that no longer holds the selected profile", () => {
 			),
 		).toBe("unread")
 
-		for (const s of [present, unlocked, moved, locked, failed]) expect(s.routes).toEqual([])
+		for (const s of [present, unlocked, moved, locked, failed]) expect([s.routes, s.store.popups]).toEqual([[], 1])
 		expect([present.store.selected, unlocked.store.selected, moved.store.selected]).toEqual([p1, p1, p3])
 	})
 })
