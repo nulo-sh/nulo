@@ -1,0 +1,19 @@
+{
+	"name": "@nulo/subscribe",
+	"version": "0.0.0",
+	"license": "Apache-2.0",
+	"private": true,
+	"type": "module",
+	"description": "The key-holding Worker that adds a nulo.sh visitor to the launch list on Resend (nulo-subscribe).",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
+		"test": "bun test",
+		"deploy": "wrangler deploy",
+		"deploy:dry": "wrangler deploy --dry-run --outdir dist"
+	},
+	"devDependencies": {
+		"@types/bun": "1.4.2",
+		"typescript": "^6.0.3",
+		"wrangler": "4.129.1"
+	}
+}
