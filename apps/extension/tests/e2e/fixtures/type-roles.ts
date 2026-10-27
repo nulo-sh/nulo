@@ -755,18 +755,19 @@ export async function expectFits(page: Page, label: string): Promise<void> {
 export async function expectFitsNarrow(page: Page, label: string): Promise<void> {
 	// A menu a press closed is still in the DOM for its leave.
 	await settleLayout(page)
-	// A success snack closes itself within seconds, unless a pointer or focus holds it; one leaving
-	// mid-check would read as text the width hid.
+	// A success snack closes itself within seconds, unless a pointer or focus holds it, and Send's fee
+	// card ends its balance read; either changing mid-check would read as text the width hid.
 	const held = await page.evaluate(() => {
 		const snack = document.querySelector('[data-testid="snackbar"][data-kind="success"]')
 		if (snack?.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur()
 		return snack?.matches(":hover") ?? false
 	})
 	if (held) await page.mouse.move(0, 0)
-	await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"][data-kind="success"]'), {
-		timeout: 10_000,
-		polling: 100,
-	})
+	await page.waitForFunction(
+		() =>
+			!document.querySelector('[data-testid="snackbar"][data-kind="success"], [data-testid="fee-settings-card"][data-read-pending]'),
+		{ timeout: 15_000, polling: 100 },
+	)
 	await textFates(page, "record")
 	await atWidth(page, NARROW_WIDTH, async () => {
 		const at = `${label} at ${NARROW_WIDTH} px`
