@@ -8,3 +8,5 @@
 - 2026-10-27: arc 1 gate green (unit layers; #1131 replay 15/15 with a base red; network seed 1001 clean of #1131/#1136 with a base red; its only red is #1132, arc 2).
 - 2026-10-27: arc 1 review loop converged (Codex round 2 clean); final gates next.
 - 2026-10-27: final gates on the head: lint, typecheck:all, test:all exit 0; #1131 replay 5/5 on a fresh armed build.
+- 2026-10-27: PR #1268 (arc 1) checks green; merged by the orchestrator as 2e524ef73. Arc 2 starts on `log-levels-1-popup`, synced onto dev.
+- 2026-10-27: phase 2.1 green (useProfileBootstrap.test.ts 29/29; the three new cases red on the base source).
