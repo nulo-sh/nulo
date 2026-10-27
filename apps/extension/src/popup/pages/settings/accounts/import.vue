@@ -20,6 +20,7 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
+import { listOwnAccountRow } from "@/utils/account-rows"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
@@ -139,7 +140,7 @@ const handleConfirmImport = async () => {
 		// from beyond the grave. Re-checked after EVERY await: the scope can also move while the
 		// active-pointer persist is in flight.
 		if (isStale()) return
-		appStore.accounts.push(account)
+		listOwnAccountRow(appStore, account)
 		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 		if (isStale()) return
 		const imported = { kind: "success", label: "Account imported" }
