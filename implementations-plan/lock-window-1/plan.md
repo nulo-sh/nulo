@@ -92,6 +92,7 @@ One comment on #1218 carries the dispositions table above with each reason, name
 | D10 | #1186: a comment, no change | the sentence is right at the base; the composition test pins the behaviour | both: agree |
 | D11 | The discovery log level waits for the `fpc/service.ts` arc | same file and same catch as OA-3's change; a warn line during a network reset is the whole consequence | lead; not yet audited |
 | D12 | Deviation: the chaos model cites `seed.vue` and `auth.vue` by line, which recon missed; arc 1 moves the three citations in `tests/e2e/helpers/profile-chaos/model.ts` | `profile-chaos-model.test.ts` requires each cited line to hold its fragment; a line number is upkeep, not a harness change | lead |
+| D13 | A reset rejects a passkey prompt the page left open, and each passkey path checks its run after the lookup and after the answer; the reveal guard is freed by the reset and released only by its own run | the reset must not leave a prompt for the ended session, nor let a late lookup raise one; `unlock-method.vue`'s and `export/full.vue`'s resets already reject theirs, and an ordinary lock closes it with the page | Codex arc r1 1-2 (closing is within the first-step return), Opus arc 1 (asked whether closing needs the owner); Codex r2: no owner decision |
 
 ## Assumptions
 
@@ -132,6 +133,8 @@ Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `b
 
 Gate run (at the code head, before the review loop): `bun run audit:vue` exit 0 (942 files, 15 940 tests; lint, `typecheck:all`, build), after one red run on `profile-chaos-model.test.ts` (D12). The nine regression cases red against the base sources (the two "keep open" seed cases also with only `start()` reverted); the first-profile control green. Smoke, armed Chrome build, retry 0: 6 files (`security` also matched `security-reset`), 23 tests, 3:36. Screenshots: `screenshots/arc1/`, from a scratch spec that also asserts, in the browser, the empty, masked field and the disabled Continue after the switch.
 
+Final gates after the review loop (head before this record): lint, `typecheck:all`, `test:all` and the same smoke specs on a fresh armed build, all pass (smoke 3:43). The arc adds no e2e scenario.
+
 ### Arc 2
 
 **Phase 2 — the import landing.** Steps:
@@ -146,7 +149,7 @@ Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `b
 ## UI impact
 
 - Lock screen (`auth.vue`): after a profile switch, the password field is empty and masked, and Continue is off. Before: the earlier text, its mask state and a wrong-password shake.
-- Back up profile › Account and › Recovery phrase: when the wallet locks with the page still mounted, the page returns to its first step. Recovery phrase also does so on a profile switch. Before: the page kept its step.
+- Back up profile › Account and › Recovery phrase: when the wallet locks with the page still mounted, the page returns to its first step, and a passkey prompt it had open closes, as it does when a lock unmounts the page. Recovery phrase also does so on a profile switch. Before: the page kept its step.
 - Home's "save your recovery phrase" reminder: a reveal that settles after a profile switch no longer marks the earlier profile's phrase saved, since its words are no longer shown. Before: the words showed under the new profile and the earlier profile's reminder went away.
 - An import that a worker restart overtook after its restore: the lock screen, with no "Profile imported" toast after the unlock. Before: Home with no session behind it. The import's errors summary is not shown; Home's restore banner names a skipped account state after the unlock (OA-2).
 - #1218: none; no site changes.
@@ -214,6 +217,10 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - Agreed: B1's exception, the countdown fix at its cause, the reuse of `watchLockStart` and the run fences, I1 and I3.
 
 **Second final pass, resumed to verify**: `conditional approve`. (2)-(4) verified in the plan. (1): no implementation dependency or architectural defect, but the toast is seen on the lock screen, which arc 1 touches, so under the surface rule arc 1 waits for the orchestrator's determination. No new material defect. The plan stops at its approval gate here.
+
+**Arc 1, Codex** (fresh session, then resumed): round 1 `changes requested`. (1) A reset left the reveal guard held, so the next press did nothing until the discarded answer settled. (2) A late passkey lookup opened the old profile's prompt over the reset page, and an open prompt survived the reset. (3) The account lock test did not pin the file passwords, the typed password or the made file. All verified and fixed (D13), each with a test red against the pre-fix pages. Round 2 `approve with nits`: one test title claimed more than it proved; renamed. No owner decision in closing the prompt.
+
+**Arc 1, Opus** (`general-purpose`, beside round 1): `approve with nits`. (1) The passkey reveal kept going after a reset: folded into D13. (2) No test pinned `countdown.clear()` in the reset: added, red when the line is removed. (3) The seed profile-id watcher's default flush: not taken, the path needs a reveal answer and a profile change in one checkpoint, which separate port messages do not produce.
 
 ## Seeds
 
