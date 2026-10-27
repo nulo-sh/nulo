@@ -7,7 +7,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-trunk: main
+trunk: dev
 ---
 
 # mailing-list-1 — a launch mailing list on nulo.sh, through Resend
@@ -280,22 +280,32 @@ regression. Issues filed: #1236 (double opt-in, open); known limits #1237, #1238
 
 ## Delivery
 
-- One `gh stack` on trunk `main`: `subscribe` → `landing-plumbing` → `notice` → `landing-form` →
-  `mailing-list-1-close-out`. Titles: `infra(subscribe): add nulo-subscribe, the worker that holds
-  the resend key`; `chore(landing): route /api/subscribe to nulo-subscribe, same-origin forms only`;
-  `docs(legal): add the website privacy notice and narrow privacy § 5.5`; `chore(landing): add the
-  launch mailing list signup`; `docs(plans): close out mailing-list-1`. No arc closes an issue;
-  each body names #1236, #1237, #1238 and #1239.
-- Every branch commit lands on `main` as authored, so: types `infra`, `chore`, `docs` or `test`
-  only (no `feat`, `fix`, `deps`); no branch is pushed before its loop converges; squash each arc
-  locally into one commit before that first push and before the next arc branches from it; later
-  fixes are their own conventional commits; the close-out's archive move stays its own commit.
-- **Nothing merges before the orchestrator's word** (the 1.1.0 promote, its Release PR, the
-  `main → dev` sync). Arc 2 waits on the owner's dashboard steps, arc 3 on A1–A3 and A12, arc 4 on
-  A4–A9. A `chore: sync main → dev` (merge commit, never squash) follows arc 3 and arc 4 at least.
-  `main` is strict: after a lower arc merges, `git merge origin/main` into the next and push; never
-  rebase. Before choosing the privacy version, list open `dev` PRs touching `legal/privacy.md`.
-- No lanes: arcs are sequential by precondition, not by code.
+Changed 2026-10-27 by the orchestrator, with the owner's go (the Twitter thread and the Aztec
+Foundation CTA made the list part of the release day): the arcs land on `dev` as ordinary
+squash-merged PRs, and a second `release: promote dev → main` carries them after 1.1.0's own
+promote, Release PR and `main → dev` sync. Nothing goes to `main` directly, and no `gh stack`.
+
+- PRs to `dev`, each merged by the orchestrator after the five required checks and its gate scan:
+  #1240 `feat(subscribe): a key-holding worker that adds a visitor to the launch list` (arc
+  `subscribe`); #1242 `feat(landing): the launch email signup as the page's primary action` (arcs
+  `landing-plumbing` and `landing-form`, one PR: the Worker script, the `SUBSCRIBE` binding, the
+  CSP directive, the form on both pages, `/subscribed`, `og.png`); the `notice` arc as its own
+  `docs(legal)` PR (the website privacy notice 1.0, the wallet policy 1.2.7, the legal-page link);
+  this plan folder as a `docs(plans)` PR. No PR closes an issue.
+- The promote is a merge commit, so release-please reads the squash subjects: the two `feat`
+  commits make the next Release PR a minor (1.2.0), which the owner merges when the next release is
+  due, not as part of this work.
+- What the pre-merge preconditions became: arc 2's "the Worker deployed, A13 held, the secret set"
+  moved from the merge to the deploy. The landing's `SUBSCRIBE` binding names a Worker that exists
+  only once the owner's first dashboard step has run, so after the promote merges the landing's
+  own Workers Build fails until `nulo-subscribe` is created and deployed, and is retried from the
+  dashboard then. A13 is held by the owner's interim choice (b): non-production builds off on
+  `nulo-landing` (done 2026-10-27), `nulo-subscribe` builds `main` only, per-Worker tokens tracked
+  as #1235 before the launch send.
+- The smoke in Phase 2 and the real-browser submission in Phase 4 run after the deploy, by the
+  orchestrator, on an address the owner controls; neither is committed.
+- Before the notice arc chose the privacy version, the open `dev` PRs touching `legal/privacy.md`
+  were listed: none.
 
 ## Post-implementation
 
@@ -303,17 +313,18 @@ The contract is this plan plus `implementations-plan/README.md` § Post-implemen
 `926c0fd61`. Values: `code_review: off`; reviewer `~/.claude/skills/codex/scripts/run-codex.sh
 <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one loop per arc
 (three rounds, then stop), then one fresh cross-arc pass; the arc map in every prompt; rounds in
-`lessons/phase-N.md`. Close-out: merge `origin/main`, read `index.md` and `lessons.md`, Outcome
-with `Known limits: #1237, #1238, #1239` and `Open items: #1236`, delete `STATUS.md`, archive. Teardown
-once `git fetch -q origin main && git cat-file -e FETCH_HEAD:implementations-plan/archive/mailing-list-1/plan.md`
-succeeds: `agent-worktree done mailing-list-1 --merged --trunk main`. The orchestrator notices the merge.
+`lessons/phase-N.md`. Close-out: merge `origin/dev`, read `index.md` and `lessons.md`, Outcome
+with `Known limits: #1237, #1238, #1239` and `Open items: #1236`, delete `STATUS.md`, archive, as a
+`docs(plans)` PR to `dev` once the deploy and the smoke are done. Teardown once
+`git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/mailing-list-1/plan.md`
+succeeds: `agent-worktree done mailing-list-1 --merged`. The orchestrator notices the merge.
 
 ## Seeds
 
 ```
-/goal Every phase in implementations-plan/mailing-list-1/plan.md is marked ✓, each backed by its gate reported passing in the transcript; LESSONS_FILE=implementations-plan/mailing-list-1/lessons/phase-N.md printed per phase; the codex loop converged per arc and once across arcs (a resumed pass with no new material finding quoted); the stack exists on GitHub, opened only after the loops, including the close-out's archive move (`git show --stat`); `bun run test:all` and `bun run lint` exit 0.
+/goal Every phase in implementations-plan/mailing-list-1/plan.md is marked ✓, each backed by its gate reported passing in the transcript; LESSONS_FILE=implementations-plan/mailing-list-1/lessons/phase-N.md printed per phase; the codex loop converged per arc and once across arcs (a resumed pass with no new material finding quoted); each arc's PR to `dev` is open or merged, opened only after the loops, and the close-out's archive move is its own commit (`git show --stat`); `bun run test:all` and `bun run lint` exit 0.
 ```
 
 ```
-/loop 15m Drive implementations-plan/mailing-list-1 on trunk main. Each firing: read plan.md and lessons/ (the top stack layer's copy); if the plan is archived on origin/main, run the teardown and stop; otherwise take the next phase whose precondition holds (an unmet owner precondition means: report and wait, never build around it), run its gate, mark ✓, run the arc loop at each boundary, then Delivery and close-out. Never merge, never push to main, never touch the Resend key.
+/loop 15m Drive implementations-plan/mailing-list-1 on trunk dev. Each firing: read plan.md and lessons/ (the top stack layer's copy); if the plan is archived on origin/dev, run the teardown and stop; otherwise take the next phase whose precondition holds (an unmet owner precondition means: report and wait, never build around it), run its gate, mark ✓, run the arc loop at each boundary, then Delivery and close-out. Never merge, never push to main or dev, never touch the Resend key.
 ```
