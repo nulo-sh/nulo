@@ -99,7 +99,7 @@ function onStrictToggle(next) {
 		requestConfirm({
 			title: "Disable strict security?",
 			description:
-				"Stay unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
+				"From your next unlock, every profile on this device stays unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
 				"Anyone who can read browser data can unlock the wallet without your password or passkey.",
 			confirm_text: "Disable",
 			confirm_color: "red",

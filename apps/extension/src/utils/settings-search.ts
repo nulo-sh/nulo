@@ -214,7 +214,7 @@ export const SETTINGS_ROWS = {
 		page: "/popup/settings/lock",
 		section: "Lock",
 		title: "Strict security mode",
-		description: "More secure, asks you to unlock more often. Recommended.",
+		description: "More secure, asks you to unlock more often on this device. Recommended.",
 		synonyms: ["password", "passkey", "security"],
 		testid: "setting-strict-security-mode",
 	},

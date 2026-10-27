@@ -39,7 +39,9 @@ const handleFillFieldsWithDefaultValues = () => {
 	isStartedEditing.value = false
 }
 
-const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === nameTerm.value.toLowerCase() && isStartedEditing.value)
+/** The name a save stores: a profile name never keeps outer spaces. */
+const newName = computed(() => nameTerm.value.trim())
+const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === newName.value.toLowerCase() && isStartedEditing.value)
 const isCollision = computed(() => {
 	if (!nameTerm.value || !isStartedEditing.value) return false
 	const normalized = normalizeProfileName(nameTerm.value)
@@ -53,7 +55,7 @@ const isAvailableToUpdateProfile = computed(() => {
 	// gate a pre-edit Enter would submit the unchanged name.
 	if (isProfileUpdateInProgress.value) return
 	if (!isStartedEditing.value) return
-	if (!nameTerm.value?.length) return
+	if (!newName.value.length) return
 	if (isUnchanged.value) return
 	if (isCollision.value) return
 
@@ -72,16 +74,18 @@ const handleUpdateProfile = async () => {
 		// async; without this re-check a fast click could submit before the
 		// list arrived). Service has no server-side uniqueness check, so
 		// this is the only defense-in-depth path.
+		// The field stays editable during the read: the name checked and saved is the one submitted.
 		const currentId = appStore.profile?.id
+		const name = newName.value
 		const freshList = await profileService.getProfiles()
-		const normalized = normalizeProfileName(nameTerm.value)
+		const normalized = normalizeProfileName(name)
 		const collidesNow = freshList.some((p) => p.id !== currentId && normalizeProfileName(p.name) === normalized)
 		if (collidesNow) {
 			otherProfileNames.value = freshList.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
 			isProfileUpdateInProgress.value = false
 			return
 		}
-		appStore.profile = await profileService.changeProfileName(appStore.profile.id, nameTerm.value)
+		appStore.profile = await profileService.changeProfileName(currentId, name)
 		emit("onClose")
 
 		openToast({ kind: "success", label: "Profile is updated" })
