@@ -88,17 +88,17 @@ describe("settings/lock", () => {
 	})
 
 	test.each(["password", "passkey"] as const)(
-		"a %s profile sees strict mode, worded for either unlock, and the auto-lock field",
+		"a %s profile sees strict mode and the auto-lock field, and turning strict off says it holds from the next unlock for every profile on this device",
 		async (type) => {
 			const w = await mountLock(type)
 			const strict = w.get('[data-testid="setting-strict-security-mode"]')
-			expect(strict.text()).toContain("More secure, asks you to unlock more often. Recommended.")
+			expect(strict.text()).toContain("More secure, asks you to unlock more often on this device. Recommended.")
 			expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
 			;(w.getComponent('[data-testid="strict-security-toggle"]') as VueWrapper).vm.$emit("update:modelValue", false)
 			expect(useCacheStore().confirm).toMatchObject({
 				title: "Disable strict security?",
 				description:
-					"Stay unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
+					"From your next unlock, every profile on this device stays unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
 					"Anyone who can read browser data can unlock the wallet without your password or passkey.",
 			})
 		},

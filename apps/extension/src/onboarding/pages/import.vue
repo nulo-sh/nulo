@@ -126,6 +126,7 @@ const fullBackupCta = readonly({
 
 onBeforeUnmount(() => {
 	dispose()
+	notificationStore.clear()
 	// Defense-in-depth: zero out secret material on unmount.
 	password.value = ""
 	repeatedPassword.value = ""

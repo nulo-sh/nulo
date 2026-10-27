@@ -92,3 +92,10 @@ describe("the notice card has square corners", () => {
 		expect(roundedCorners(source)).toEqual([])
 	})
 })
+
+/** The document under the notice can scroll (the onboarding tab), so its layer holds the viewport. */
+describe("the notice is fixed to the viewport", () => {
+	test("its layer is fixed and covers the whole viewport", () => {
+		expect(declarationsOf(parseSource(FILE), ".layer")).toMatchObject({ position: "fixed", inset: "0" })
+	})
+})

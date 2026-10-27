@@ -17,6 +17,7 @@ import {
 	RestoreTornError,
 	RetiredProfileError,
 	SessionEndedError,
+	StaleUnlockCredentialError,
 	UnlockMethodChangedError,
 } from "@nulo/extension-messaging/errors"
 import { fromBase64Lenient, Lock } from "@/wallet/utils"
@@ -132,6 +133,15 @@ type OpenedSlots = {
 /** A passkey answer that opens no slot of the row it was asked for: another passkey, or a slot
  *  changed in storage. */
 const PASSKEY_DID_NOT_OPEN = "Passkey did not open this profile"
+
+/** Whether `key` is for the unlock `row` stores: the same kind and, for a passkey, the row's own
+ *  credential at its own input. A key that is still has to open the slots. */
+function unlocksWith(row: Profile, key: SlotKey): boolean {
+	const classified = classifyProfileRow(row)
+	if (classified.kind === "password") return "password" in key
+	if (classified.kind !== "passkey" || !("passkey" in key)) return false
+	return key.passkey.id === classified.credentialId && key.passkey.unlockKeyFor(classified.prfSalt) !== null
+}
 
 /** The refusal at password change once the DEK slot no longer unseals: the DEK keys the PXE store
  *  and every dApp-session tag, so the only non-destructive repair is export + restore. */
@@ -1369,8 +1379,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const { profile: snapshot, capturedEpoch } = await this.captureRowFence(id)
 		const kind = classifyProfileRow(snapshot).kind
 		if (kind !== "password" && kind !== "passkey") throw new Error("Profile storage corrupted")
-		if (kind === "password" && "password" in next) throw new Error("A password profile changes its password, not its unlock method")
 		const key = await this.unlockCredentialKey(current)
+		if (!unlocksWith(snapshot, key)) throw new StaleUnlockCredentialError()
+		if (kind === "password" && "password" in next) throw new Error("A password profile changes its password, not its unlock method")
 		const seal = "password" in next ? await this.newRowSeal(next.password, undefined) : await this.newRowSeal(undefined, next.passkey)
 		let opened: OpenedSlots | null = null
 		try {
@@ -1378,12 +1389,23 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
 			const old = opened
 			return await this.runExclusive((isCurrent) =>
-				this.commitUnlockChangeHoldingLock({ snapshot, capturedEpoch, old, seal, isCurrent }),
+				this.commitUnlockChangeHoldingLock({ snapshot, capturedEpoch, key, old, seal, isCurrent }),
 			)
 		} finally {
 			opened?.wipe()
 			if ("passhash" in seal) zeroize(seal.passhash)
 		}
+	}
+
+	/** Why a change's row is no longer its snapshot: a stale credential when the same profile now
+	 *  stores an unlock `key` is not for, which only another change of unlock writes; else the row is
+	 *  gone or was otherwise rewritten, and a retry may succeed. */
+	private async movedRowRefusal(id: string, capturedEpoch: number, key: SlotKey): Promise<Error> {
+		const live = await this.repo.get(id)
+		if (!live || (await this.profileFenceBroken(id, capturedEpoch))) return new Error("Invalid profile id")
+		const kind = classifyProfileRow(live).kind
+		const resealed = (kind === "password" || kind === "passkey") && !unlocksWith(live, key)
+		return resealed ? new StaleUnlockCredentialError() : new Error("Invalid profile id")
 	}
 
 	private async unlockCredentialKey(credential: UnlockCredential): Promise<SlotKey> {
@@ -1395,14 +1417,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private async commitUnlockChangeHoldingLock(change: {
 		snapshot: Profile
 		capturedEpoch: number
+		key: SlotKey
 		old: OpenedSlots
 		seal: RowSeal
 		isCurrent: () => boolean
 	}): Promise<ProfileInfo> {
-		const { snapshot, capturedEpoch, old, seal, isCurrent } = change
+		const { snapshot, capturedEpoch, key, old, seal, isCurrent } = change
 		const id = snapshot.id
 		const unchanged = () => this.rowUnchangedHoldingLock(snapshot, capturedEpoch)
-		if (!(await unchanged())) throw new Error("Invalid profile id")
+		if (!(await unchanged())) throw await this.movedRowRefusal(id, capturedEpoch, key)
 		await this.assertEntropyMasterPair(old.secret, old.entropy)
 		const dek = await this.trustedDekForRekeyHoldingLock(snapshot, old.secret, old, "unlock method")
 		try {
@@ -1412,7 +1435,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.precheckBeforeRekeyHoldingLock(snapshot, old.secret)
 			// The lock's watchdog may have admitted a successor during the slow steps above or this read,
 			// so ownership is checked last, with no await before the write.
-			if (!(await unchanged()) || !isCurrent()) throw new Error("Invalid profile id")
+			if (!(await unchanged())) throw await this.movedRowRefusal(id, capturedEpoch, key)
+			if (!isCurrent()) throw new Error("Invalid profile id")
 			if (!(await this.writeReplacementHoldingLock(snapshot, replacement))) {
 				await this.closeAfterUnlockChangeHoldingLock(id)
 				throw new UnlockMethodChangedError()

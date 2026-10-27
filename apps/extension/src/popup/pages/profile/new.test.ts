@@ -17,6 +17,7 @@ vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: (
 import { Flex, Input, Text } from "@nulo/design"
 import { expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../../tests/helpers/credential-pins"
 import New from "./new.vue"
+import { useNotificationStore } from "@/stores/notification.store"
 import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
@@ -57,6 +58,15 @@ afterEach(() => {
 })
 
 describe("popup new profile", () => {
+	test("its notice closes when the page does", async () => {
+		const w = await mountNew()
+		const notices = useNotificationStore()
+		expect(notices.clear).not.toHaveBeenCalled()
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		expect(notices.clear).toHaveBeenCalledOnce()
+	})
+
 	test("a later profile shows the name field prefilled Profile N", async () => {
 		profileApi.getProfiles.mockResolvedValue([{ name: "Main" }])
 		const w = await mountNew()
