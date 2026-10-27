@@ -21,6 +21,7 @@ import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
+import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
@@ -295,7 +296,7 @@ watch(
 	() => {
 		switchRun = switchNetwork()
 		// Only a completed reset awaits a run, so its failure is reported here.
-		switchRun.catch((error) => console.error("network switch failed", { error }))
+		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
 

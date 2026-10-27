@@ -9,7 +9,7 @@ const { log, documentLogger } = vi.hoisted(() => {
 })
 vi.mock("@/wallet/services/logger/client", () => ({ documentLogger }))
 
-import { forwardVueError, installConsoleForwarding } from "./console-forwarding"
+import { forwardVueError, installConsoleForwarding, logCallFailure } from "./console-forwarding"
 
 type Hooks = Record<string, (...args: unknown[]) => void>
 
@@ -58,7 +58,7 @@ describe("installConsoleForwarding", () => {
 	})
 })
 
-describe("forwardVueError", () => {
+describe("forwardVueError and logCallFailure", () => {
 	let debug: MockInstance
 	let error: MockInstance
 	beforeEach(() => {
@@ -77,6 +77,15 @@ describe("forwardVueError", () => {
 		forwardVueError(other, null, "mounted hook")
 		expect(debug).toHaveBeenCalledExactlyOnceWith("vue error", { error: disconnect, info: "mounted hook" })
 		expect(error).toHaveBeenCalledExactlyOnceWith("vue error", { error: other, info: "mounted hook" })
+	})
+
+	test("logCallFailure: a client disconnect logs at debug, any other failure at error", () => {
+		const disconnect = new Error(CLIENT_DISCONNECTED_MESSAGE)
+		const other = new Error("Profile locked")
+		logCallFailure("network switch failed", disconnect)
+		logCallFailure("network switch failed", other)
+		expect(debug).toHaveBeenCalledExactlyOnceWith("network switch failed", { error: disconnect })
+		expect(error).toHaveBeenCalledExactlyOnceWith("network switch failed", { error: other })
 	})
 
 	test.each([
