@@ -27,7 +27,7 @@ In order; every refusal answers `{"ok":false}` with the status alone, never Rese
 | Honeypot | field `website` non-empty | the success answer; Resend is not called |
 | Address | after trimming and lowercasing the domain: not one `@`, a local part over 64 or the whole over 254 characters, a character outside RFC 5322 atext or one a URL path reserves or escapes (slash, `?`, `#`, `%`, `^`, pipe, backtick, braces), a non-ASCII or undotted domain, or a numeric last label | 400 |
 | Config | `RESEND_API_KEY`, `RESEND_SEGMENT_ID`, `RESEND_TOPIC_ID` or `CONSENT_VERSION` missing | 503 |
-| Lookup | `GET /contacts/{email}` answers 2xx: the address exists in some state | a second read of it, then the success answer; **no write** |
+| Lookup | `GET /contacts/{email}` answers 2xx: the address exists in some state | a second read of it, which must answer 2xx too, then the success answer; **no write** |
 | Create | lookup 404: `POST /contacts` with `unsubscribed: false`, the segment, the topic with `subscription: "opt_in"`, properties `source: "landing"`, `consent_version`, `consented_at` (ISO 8601) | the success answer |
 | Duplicate | the create answers any other 4xx: the address is looked up again, and if it exists now (a concurrent first submission won), the success answer | else 502 |
 | Upstream | each request times out after 5 s, never follows a redirect (Workers would forward `Authorization` to the new host), and a 429 or 5xx is retried once after its `retry-after` (capped at 2 s) | a timeout, a network error or a second 429/5xx: 503; any other answer, a 3xx included: 502 |
@@ -41,7 +41,9 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 3. **Build tokens.** Inspect the Workers Builds API token of `nulo-landing` and of `nulo-subscribe` and narrow each to its own Worker. If Workers Builds cannot run on a narrowed token, turn off non-production builds on `nulo-landing`, or move `nulo-subscribe` to its own account.
 4. **Service binding** on `nulo-landing`: `SUBSCRIBE` → `nulo-subscribe` (the landing's change declares it in its `wrangler.jsonc`; add it in the dashboard if that deploy cannot).
 5. **No challenge** in front of `nulo.sh/api/*`: a challenge page answers in place of the Worker and breaks the form.
-6. **Acceptance, once the key is set and before the form is visible** (a fake cannot establish these): submit one address twice and see one contact and the same answer; submit it again with a different case in the local part and record whether Resend's lookup found it; submit six times from one browser within a minute and see the sixth refused, which shows `CF-Connecting-IP` reaches this Worker through the binding. Resend's answer to a duplicate create, a case variant included, goes into this README.
+6. **Acceptance, once the key is set and before the form is visible** (a fake cannot establish these, and no test holds the key):
+   - Resend's duplicate semantics, on a disposable address, through the Resend dashboard's own tools or the OAuth-connected Resend MCP (never a copy of the key): create the contact; create it again; create it again with a different case in the local part; look it up with that case variant. Record each answer here, then delete the contact.
+   - Through the form: submit one address twice and see one contact and the same answer both times; submit six times from one browser within a minute and see the sixth refused, which shows `CF-Connecting-IP` reaches this Worker through the binding.
 
 ## Operations
 

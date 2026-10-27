@@ -12,7 +12,6 @@ import {
 	makeEnv,
 	NORMALIZED,
 	post,
-	type Recorded,
 	reply,
 	resendStore,
 	TEST_KEY,
@@ -372,17 +371,23 @@ describe("Resend", () => {
 		expect(upstream.requests).toHaveLength(1)
 	})
 
-	test("any other Resend error is a 502 that carries none of Resend's text", async () => {
-		const answers: [string, (request: Recorded) => Response][] = [
-			["the lookup refused (bad key)", () => reply(401)],
-			["the lookup forbidden", () => reply(403)],
-			["the create refused and the address still unknown", (r) => (r.method === "GET" ? reply(404) : reply(422))],
+	test("any other Resend answer is a 502 that carries none of Resend's text, on the known path and the new one alike", async () => {
+		const found = () => Response.json({ object: "contact" })
+		const redirect = () => new Response(null, { status: 307, headers: { location: "https://elsewhere.example/" } })
+		const scripts: [string, Response[], string[]][] = [
+			["the lookup refused (bad key)", [reply(401)], ["GET"]],
+			["the lookup forbidden", [reply(403)], ["GET"]],
+			["the mirror read refused", [found(), reply(403)], ["GET", "GET"]],
+			["the mirror read finding nothing", [found(), reply(404)], ["GET", "GET"]],
+			["the create refused and the address still unknown", [reply(404), reply(422), reply(404)], ["GET", "POST", "GET"]],
+			["the create redirected, even with the address existing by now", [reply(404), redirect(), found()], ["GET", "POST"]],
 		]
-		for (const [, answer] of answers) {
-			const response = await run(json({ email: ADDRESS }), makeEnv(), fakeUpstream(answer).up)
-			await expectRefusal(response, 502)
+		for (const [, script, methods] of scripts) {
+			const upstream = fakeUpstream(() => script.shift() ?? reply(500))
+			await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
+			expect(upstream.requests.map((r) => r.method)).toEqual(methods)
 		}
-		expect(logged.length).toBe(answers.length)
+		expect(logged.length).toBe(scripts.length)
 		expect(Bun.inspect(logged)).toContain("status")
 	})
 

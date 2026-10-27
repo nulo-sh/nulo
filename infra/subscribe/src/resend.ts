@@ -90,14 +90,15 @@ export async function addContact(up: Upstream, config: ContactConfig, email: str
 			// rate limit. A known address makes a second read in its place, so neither its timing nor an
 			// upstream refusal an attacker induces tells the two apart.
 			stage = "mirror"
-			await call(up, config, "GET", path)
-			return { kind: "ok" }
+			const again = await call(up, config, "GET", path)
+			return isOk(again) ? { kind: "ok" } : { kind: "failed", stage, status: again }
 		}
 		if (found !== 404) return { kind: "failed", stage, status: found }
 		stage = "create"
 		const created = await call(up, config, "POST", "/contacts", createBody(config, email, up.now()))
 		if (isOk(created)) return { kind: "ok" }
-		// Whatever Resend answers a duplicate create with, a concurrent first submission of the same
+		if (created < 400) return { kind: "failed", stage, status: created }
+		// Whatever 4xx Resend answers a duplicate create with, a concurrent first submission of the same
 		// address may have won: if the contact exists now, this submission succeeded too.
 		stage = "recheck"
 		if (isOk(await call(up, config, "GET", path))) return { kind: "ok" }
