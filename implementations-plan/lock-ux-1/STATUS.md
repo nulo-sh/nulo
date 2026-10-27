@@ -9,3 +9,4 @@
 - 2026-10-27: arc 1158 built on P88-01 (option A); Codex round 2 clean; gates green.
 - 2026-10-27: arc 1192 built on P88-02 (option A); Codex round 2 clean; gates green on Chrome and Firefox.
 - 2026-10-27: arc 1208 built on P88-04 (option A); Codex round 2 clean; gates green.
+- 2026-10-27: arc 1207 built on P88-03 (option A); Codex round 2 clean; gates green on Chrome and Firefox.
