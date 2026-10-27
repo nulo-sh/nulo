@@ -61,6 +61,7 @@ const {
 	handleEncrypt,
 	downloadBackup,
 	reset,
+	followPasswordChange,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
 
@@ -84,6 +85,18 @@ const syncPendingReset = async () => {
 }
 managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
 void syncPendingReset()
+
+/** The profile's name as this page last heard it. No write renames a profile and changes its
+ *  password, so an update that renames it changed no password; a change of unlock method is the type
+ *  watcher's below. */
+let heardName = appStore.profile?.name
+managers.profile.onProfileUpdated.add(onProfileUpdated)
+function onProfileUpdated(profile) {
+	if (profile?.id !== appStore.profile?.id || profile.type !== "password") return
+	const renamed = profile.name !== heardName
+	heardName = profile.name
+	if (!renamed) followPasswordChange()
+}
 
 const handleAgree = () => {
 	if (pendingReset.value) return
@@ -134,6 +147,7 @@ watch(backupStatus, async (status) => {
 watch(
 	[() => appStore.profile?.id, () => appStore.profile?.type],
 	() => {
+		heardName = appStore.profile?.name
 		reset()
 		onCeremonyReject(new Error("The active profile or its unlock changed"))
 		pendingReset.value = null
@@ -150,6 +164,7 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
+	managers.profile.onProfileUpdated.remove(onProfileUpdated)
 	dispose()
 })
 </script>
