@@ -9,7 +9,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 		return profileClient
 	}),
 }))
-const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn() }))
+const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
@@ -24,6 +24,7 @@ import {
 	typeNow,
 } from "../../../../../tests/helpers/credential-pins"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import { useAppStore } from "@/stores/app.store"
 import ChangePassword from "./change-password.vue"
 
 const wrappers: VueWrapper[] = []
@@ -196,4 +197,29 @@ describe("change password — the credential fields' controls", () => {
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
 		expect(shaker().className).not.toMatch(/shake/)
 	})
+})
+
+describe("change password — the profile's unlock changed in another window", () => {
+	test("a move to a passkey takes the page to the profile's settings; a rename keeps it", async () => {
+		await mountWithValidFields()
+		const app = useAppStore()
+		app.profile = { id: "p1", name: "Renamed", type: "password" }
+		await flushPromises()
+		expect(router.replace).not.toHaveBeenCalled()
+		app.profile = { id: "p1", name: "Renamed", type: "passkey" }
+		await flushPromises()
+		expect(router.replace).toHaveBeenCalledExactlyOnceWith("/popup/settings/profile")
+		expect(profileClient.changeProfilePassword).not.toHaveBeenCalled()
+	})
+})
+
+test("change password — a lock leaves no typed password on the page", async () => {
+	const w = await mountWithValidFields()
+	const app = useAppStore()
+	app.isLogined = true
+	await flushPromises()
+	app.isLogined = false
+	await flushPromises()
+	for (const id of ["current-password-input", "new-password-input", "new-password-repeat-input"])
+		expect((w.get(`[data-testid="${id}"] input`).element as HTMLInputElement).value).toBe("")
 })

@@ -110,6 +110,7 @@ declare global {
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
+  const applyAccountRow: typeof import('../utils/account-rows').applyAccountRow
   const applyFeePickUpdate: typeof import('../utils/fee-picks').applyFeePickUpdate
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
   const applyThemeChoice: typeof import('../utils/general').applyThemeChoice
@@ -198,6 +199,7 @@ declare global {
   const fitHero: typeof import('../utils/hero-fit').fitHero
   const flaggedKeysOf: typeof import('../utils/token-flag').flaggedKeysOf
   const foldLabel: typeof import('../utils/token-fold').foldLabel
+  const followAccountRows: typeof import('../utils/account-rows').followAccountRows
   const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
@@ -300,6 +302,7 @@ declare global {
   const leaveFor: typeof import('../utils/page-back').leaveFor
   const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
+  const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
@@ -741,6 +744,9 @@ declare global {
   export type { NotificationType, NotificationPayload, NotificationItem } from '../stores/notification.store'
   import('../stores/notification.store')
   // @ts-ignore
+  export type { AccountRowTarget } from '../utils/account-rows'
+  import('../utils/account-rows')
+  // @ts-ignore
   export type { ActivityRowTx, ActivityRowJournal, ActivityRowIncoming, ActivityRow, BuildActivityRowsParams } from '../utils/activity-rows'
   import('../utils/activity-rows')
   // @ts-ignore
@@ -963,6 +969,7 @@ declare module 'vue' {
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
+    readonly applyAccountRow: UnwrapRef<typeof import('../utils/account-rows')['applyAccountRow']>
     readonly applyFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['applyFeePickUpdate']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
     readonly applyThemeChoice: UnwrapRef<typeof import('../utils/general')['applyThemeChoice']>
@@ -1051,6 +1058,7 @@ declare module 'vue' {
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
     readonly flaggedKeysOf: UnwrapRef<typeof import('../utils/token-flag')['flaggedKeysOf']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
+    readonly followAccountRows: UnwrapRef<typeof import('../utils/account-rows')['followAccountRows']>
     readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
@@ -1153,6 +1161,7 @@ declare module 'vue' {
     readonly leaveFor: UnwrapRef<typeof import('../utils/page-back')['leaveFor']>
     readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
+    readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
