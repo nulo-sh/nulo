@@ -86,6 +86,7 @@ import OnboardingProfileNameField from "../components/OnboardingProfileNameField
 import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { doneRoute } from "../steps"
 import Import from "./import.vue"
+import { useNotificationStore } from "@/stores/notification.store"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const wrappers: VueWrapper[] = []
@@ -125,6 +126,15 @@ afterEach(() => {
 })
 
 describe("onboarding import", () => {
+	test("its notice closes when the page does", async () => {
+		const w = await mountImport()
+		const notices = useNotificationStore()
+		expect(notices.clear).not.toHaveBeenCalled()
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		expect(notices.clear).toHaveBeenCalledOnce()
+	})
+
 	test("a first-run import has no name field and reads Import / Wallet", async () => {
 		const w = await mountImport()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")

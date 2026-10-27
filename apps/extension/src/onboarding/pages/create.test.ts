@@ -63,6 +63,7 @@ import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { doneRoute } from "../steps"
 import Create from "./create.vue"
+import { useNotificationStore } from "@/stores/notification.store"
 
 const wrappers: VueWrapper[] = []
 
@@ -117,6 +118,15 @@ afterEach(() => {
 })
 
 describe("onboarding create", () => {
+	test("its notice closes when the page does", async () => {
+		const w = await mountCreate()
+		const notices = useNotificationStore()
+		expect(notices.clear).not.toHaveBeenCalled()
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		expect(notices.clear).toHaveBeenCalledOnce()
+	})
+
 	test("a first profile: no name field, the drawn words, Passkey first and selected", async () => {
 		const w = await mountCreate()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
