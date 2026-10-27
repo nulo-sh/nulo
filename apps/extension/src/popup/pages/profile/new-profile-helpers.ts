@@ -1,7 +1,7 @@
 import type { Router } from "vue-router"
 import type { ToastOptions } from "@/composables/toast"
 import { ActivationSupersededError, activationFailureReason, awaitProfileActivation } from "@/composables/unlockWait"
-import { isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
+import { isActivating, isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
 import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
 import { initTransactionService, managers } from "@/utils/core"
@@ -52,6 +52,7 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: Cr
 	await awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, {
 		deadlineCovers: "start",
 		limitMs: CREATE_ACTIVATION_LIMIT_MS,
+		activating: () => isActivating(profile.id),
 	})
 	assertActive()
 

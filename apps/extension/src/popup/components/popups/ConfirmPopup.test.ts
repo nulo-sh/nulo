@@ -103,10 +103,11 @@ describe("ConfirmPopup — pre-title", () => {
 	})
 
 	test.each([
-		{ confirm: { confirm_color: "red" }, shown: "Irreversible" },
-		{ confirm: {}, shown: "Action required" },
-		{ confirm: { confirm_color: "red", pre_title: "Running transactions" }, shown: "Running transactions" },
-	])("shows $shown", async ({ confirm, shown }) => {
+		{ case: "an irreversible action", confirm: { confirm_color: "red", irreversible: true }, shown: "Irreversible" },
+		{ case: "a red button alone", confirm: { confirm_color: "red" }, shown: "Action required" },
+		{ case: "a plain request", confirm: {}, shown: "Action required" },
+		{ case: "its own pre-title", confirm: { irreversible: true, pre_title: "Running transactions" }, shown: "Running transactions" },
+	])("$case shows $shown", async ({ confirm, shown }) => {
 		const wrapper = mount(ConfirmPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await open(wrapper, confirm)
 		expect(wrapper.find('[data-testid="confirm-pre-title"]').text()).toBe(shown)
@@ -122,7 +123,7 @@ describe("ConfirmPopup — pre-title", () => {
 
 		await wrapper.setProps({ show: false })
 		await nextTick()
-		await open(wrapper, { confirm_color: "red" })
+		await open(wrapper, { irreversible: true })
 		expect(wrapper.find('[data-testid="confirm-pre-title"]').text()).toBe("Irreversible")
 	})
 })
