@@ -402,8 +402,8 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 // mid-wait, must end terminally `cancelled` WITHOUT ever advancing to
 // simulating/proving/submitting — and must not wedge the slot for the next job.
 //
-// The slot holder is acquired directly via `lane.acquireSlot` — the SAME
-// primitive a live send holds while simulating/proving.
+// The slot holder is acquired directly via `lane.acquireSlot`, which takes the same
+// (profile, chain) slot every live send holds while simulating or proving.
 describe("ExecutionService composition — cancel during queued-wait (in-process)", () => {
 	test("cancel a queued dapp-send waiting on the held slot → cancelled, never advances, slot not wedged", async () => {
 		const { service, journal, captureExecutionFence } = await makeHarness()
@@ -1545,12 +1545,12 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 	test.each([
 		{ label: "× then accept", cancelFirst: true },
 		{ label: "accept then ×", cancelFirst: false },
-	])("$label in the same tick while the send waits for the slot ends cancelled, never proved", async ({ cancelFirst }) => {
+	])("$label in the same tick while another send holds the slot ends cancelled, never proved", async ({ cancelFirst }) => {
 		const h = await makeHarness()
 		const run = queuedTransfer(h)
 		const id = await asking(h)
-		// An earlier send holds the slot, so the accepted send cannot pass `pending` before the cancel
-		// lands; a cancel after the `proving` mark is the mid-prove cancel, which proves and drops.
+		// While the slot is held, an accepted send cannot reach `proving` before the cancel lands; a
+		// cancel after its `proving` mark is the mid-prove cancel, which proves and drops.
 		const slot = await h.lane.tryTakeSlot("p1", NETWORK.chainId)
 		expect(slot).toBeDefined()
 		const cancel = () => h.service.cancelJob(id)

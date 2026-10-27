@@ -333,7 +333,7 @@ export class ExecutionCoordinator {
 	): Promise<{ txHash: TxHash; offchainOutput?: TOffchain }> {
 		ctx.checkCancelled()
 		await ctx.markJournal({ stage: "proving", enteredProveAt: Date.now() })
-		// A cancel that took the journal first refused this swallowed mark: stop before the proof.
+		// A cancel that won the journal lock refused this mark and aborted before the refusal returned.
 		ctx.checkCancelled()
 		const provedTx = await this.proveTxTask(ctx.pxe, ctx.txRequest, ctx.scopes, ctx.parentTask, ctx.journalId)
 		// Key checkpoint: if cancel fired during prove, this prevents
