@@ -177,9 +177,9 @@ export async function isSheetPresent(page: Page): Promise<boolean> {
 }
 
 /**
- * The shell's verdict on the Terms sheet, once the sheet has read the acceptance status. It is the
- * verdict for the route the shell is on: until the router's first navigation lands, that is the start
- * location, which the sheet never covers, so after a reload into a preset hash wait for that page first.
+ * The shell's verdict on the Terms sheet for the route it is on, once the sheet has read the acceptance
+ * status. A reload into a preset hash judges the start location and then the lock screen, neither of
+ * which the sheet covers, before the router lands on that hash, so ask once its page is up.
  */
 export async function legalSheetVerdict(page: Page): Promise<"shown" | "hidden"> {
 	const shell = sel("popup-shell")
@@ -195,6 +195,8 @@ export async function legalSheetVerdict(page: Page): Promise<"shown" | "hidden">
  *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
 export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
 	if (updatedTermsAnswer(entries) === "none") {
+		// Every update scenario answers on Home, whose hash a reload sets before the router lands there.
+		await page.waitForSelector(sel("home-hero"), { visible: true, timeout: 30_000 })
 		if ((await legalSheetVerdict(page)) === "shown" || (await isSheetPresent(page))) {
 			throw new Error("the update raised the Terms sheet over a current acceptance")
 		}

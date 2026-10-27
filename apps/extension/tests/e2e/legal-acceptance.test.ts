@@ -284,10 +284,8 @@ describe("popup: declining never locks a person out", () => {
 		// says so catches a sheet that rises over one it was told is current.
 		const current = { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") }
 		await reloadWithLegalState(page, "current")
-		await page.waitForSelector('[data-testid="home-hero"]', { visible: true, timeout: 30_000 })
 		await answerUpdatedTerms(page, current)
 		await reloadWithLegalState(page, "stale")
-		await page.waitForSelector('[data-testid="home-hero"]', { visible: true, timeout: 30_000 })
 		await expect(answerUpdatedTerms(page, current)).rejects.toThrow("raised the Terms sheet over a current acceptance")
 		await page.close()
 	}, 120_000)
