@@ -8,3 +8,10 @@
 - Opus Plan leg (opus): `conditional approve`, five findings; four accepted as written, one (the `cooldown` caveat)
   accepted as one clause.
 - Codex final pass (resumed session): `approve`, no remaining material finding.
+
+# Arc 1 review loop
+
+- Codex diff review round 1 (gpt-6.1-sol, high, fresh session): `findings`, one low (the CVE runbook read as exempt
+  from the review too); accepted.
+- Opus diff review (opus, general-purpose): `findings`, four (section placement, a 301 link, a long comment line, a
+  wording nit); all accepted, the section move left out of scope (plan D6) and filed at close-out.

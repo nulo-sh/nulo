@@ -549,11 +549,12 @@ or publish refuse them. A fresh clone refuses the same way until
 actions use: one grouped pull request a week, after a 7-day cooldown
 (`.github/dependabot.yml`). npm dependencies are updated by hand, as
 policy. Each update is held to the age gate above and read with
-`bun pm diff` (the review workflow below); the CVE runbook and the
-exact-pinned Aztec line, bumped through the `aztec-update` skill, are the
-exceptions below. GitHub's [supported-ecosystems page for
-Dependabot](https://docs.github.com/en/code-security/dependabot/ecosystems-supported-by-dependabot/supported-ecosystems-and-repositories),
-read 2026-10-27, lists version updates for Bun ≥ 1.1.39 (the text
+`bun pm diff` (the review workflow below). The CVE-on-Friday runbook and
+the exact-pinned Aztec line, bumped through the `aztec-update` skill, both
+further down this file, are exceptions to the age gate. GitHub's
+[supported-ecosystems page for
+Dependabot](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories),
+read 2026-10-27, lists version updates for Bun ≥ 1.1.39 (the text-format
 `bun.lock`) as supported and security updates as not supported. Whether
 Dependabot reads this repository's `lockfileVersion: 2` lockfile, or
 resolves under the age gate (a frozen install never re-gates a locked

@@ -41,8 +41,8 @@ the plans standard's PR-title cap from 93 to 92 characters. Docs and one test-fi
    with `len(title) + len(" (#NNNN)") ≤ 100`, since `17f35c504` (#1265). No change there.
 7. `.commitlintrc.json` extends `@commitlint/config-conventional` 21.2.2, whose `header-max-length` is 100.
 8. No test asserts on the wording of any edited file (`recon.md` § Claim C).
-9. SECURITY.md § Dependency policy holds the age gate (line 519) above the Dependabot paragraph, and below it the
-   `bun pm diff` review (594), the CVE runbook (828) and the Aztec line (874).
+9. SECURITY.md § Dependency policy holds the age gate above the Dependabot paragraph and the `bun pm diff` review
+   below it; the CVE-on-Friday runbook, the Aztec line and the Bun-version trap sit under § Binary dependencies (D6).
 
 **Inferences**: (a) ` (#NNNN)` is eight characters while PR numbers have four digits; at #10000 the cap is 91 (E4 says so).
 (b) A reader takes "cannot" as a tool limit (the issue's impact); "as policy" makes it a choice the owner may revisit.
@@ -58,15 +58,15 @@ Exact edits (the implementer may re-wrap lines; the words are the contract):
 
 - **E1 `SECURITY.md:548-551`**, after "(`.github/dependabot.yml`).": replace "It cannot read Bun's lockfile, so npm
   dependencies are updated by hand, under the age gate above." with: "npm dependencies are updated by hand, as policy.
-  Each update is held to the age gate above and read with `bun pm diff` (the review workflow below); the CVE runbook
-  and the exact-pinned Aztec line, bumped through the `aztec-update` skill, are the exceptions below. GitHub's
-  supported-ecosystems page for Dependabot, read 2026-10-27, lists version updates for Bun ≥ 1.1.39 (the text
-  `bun.lock`) as supported and security updates as not supported. Whether Dependabot reads this repository's
+  Each update is held to the age gate above and read with `bun pm diff` (the review workflow below). The CVE-on-Friday
+  runbook and the exact-pinned Aztec line, bumped through the `aztec-update` skill, both further down this file, are
+  exceptions to the age gate. GitHub's supported-ecosystems page for Dependabot, read 2026-10-27, lists version updates
+  for Bun ≥ 1.1.39 (the text-format `bun.lock`) as supported and security updates as not supported. Whether Dependabot reads this repository's
   `lockfileVersion: 2` lockfile, or resolves under the age gate (a frozen install never re-gates a locked version), is
   untested. Turning on its Bun version updates is the owner's decision." The page name links to `recon.md`'s URL.
 - **E2 `CLAUDE.md:106`**: replace "It cannot read Bun's lockfile, so npm dependencies, Bun, Biome and the Aztec line are
   bumped by hand." with: "npm dependencies, Bun, Biome and the Aztec line are bumped by hand, as policy; SECURITY.md
-  (Dependency policy) says how, what GitHub lists Dependabot as supporting for Bun, and what is untested." The how is
+  (Dependency policy) records what GitHub lists Dependabot as supporting for Bun, and what is untested." The how is
   already in the bullets around it (age gate, review, Aztec, Bun-version sync), so E2 repeats none of it.
 - **E3 `scripts/ci-cd/dependabot.test.ts:2-3`**: "It updates only GitHub Actions: Bun's lockfile is unreadable to it, and
   Bun, Biome and the Aztec line are bumped by hand." becomes "It updates only GitHub Actions; npm dependencies, Bun,
@@ -86,6 +86,7 @@ Exact edits (the implementer may re-wrap lines; the words are the contract):
 | D3 | The reasons named | E1: the age gate and the `bun pm diff` review with their exceptions named, the Aztec runbook, no Bun security updates (dated) | "every bump passes the gate": false for the CVE runbook, the Aztec excludes and a Bun-binary bump (both legs); "Dependabot would bypass the gate": unverified, so stated as untested (D5) |
 | D4 | Fix CLAUDE.md § Branching's "~93" | no edit | the brief's claim did not hold at `17f35c504` (Fact 6) |
 | D5 | Dependabot's `cooldown` beside the age gate | E1 names the gate under "untested": a bot-resolved lock that ignored `bunfig.toml` would pass CI's frozen install | silence: a reader equates `cooldown` with the gate (Opus 4) |
+| D6 | The CVE runbook and Aztec paragraph sit under § Binary dependencies | E1 names them by title, "further down this file"; E2 claims only the source and the untested points | move them into § Dependency policy (Opus review): right, and it fixes `bunfig.toml`'s and CLAUDE.md's older pointers too, but a third correction outside the lane: an issue at close-out |
 
 ## Security & Adversarial Considerations
 
@@ -143,6 +144,14 @@ Accepted as one clause (D5). 5. Nit: commitlint caps the header, not the subject
 body names the unrun fork test. Facts hold; gate commands exist.
 
 **Codex, final pass (resumed session): `approve`**, no remaining material finding; each revised sentence verified.
+
+**Post-implementation loop (arc 1, diff `3e85212ca..cde95ac1e`).** Codex round 1 (gpt-6.1-sol, high): `findings`, one
+low, plausible: "the exceptions below" could read as exempting the CVE runbook from the `bun pm diff` review too.
+Accepted: "exceptions to the age gate". Opus diff review: `findings`. 1. Low, demonstrated: the CVE runbook and the
+Aztec paragraph sit under § Binary dependencies, so Fact 9 was wrong and E2's "says how" pointed at a section without
+them. Accepted as D6 (E1 names them by title; E2 claims less); the move itself is out of scope. 2. The link answered
+301: canonical URL taken. 3. A 123-character comment line: re-wrapped. 4. "the text `bun.lock`" read as a literal:
+"text-format". Fixes in the round-1 fix commit.
 
 ## Seeds
 
