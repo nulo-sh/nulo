@@ -1,7 +1,7 @@
 ---
 plan: unit-flakes-3
 tier: light
-status: arc 1 implemented; review loop
+status: arc 1 implemented, review loop converged; delivery
 issues: "#1122, #1244, #1198, #1215"
 driver: claude-code
 claude_model: opus
@@ -104,6 +104,8 @@ None. No rendered surface, copy or row changes. A cancelled send now stops befor
 - **Opus Plan leg:** `conditional approve` (the `:344` pin; red by assertion, not timeout; reword the self-delivered abort and cite the `simulating` precedent). Also accepted: `flushPromises()` after `clearChain`, red controls per fix, the stale slot header, a note that the F2 scratch ran without the F1 checkpoint.
 - **Codex verification 1:** `conditional approve` (the F2 control was circular: the gate cannot open while the slot is held, so the held read must be released once the send queues behind the slot). Accepted: the earlier scratch "green" had passed through its wait's 1.5 s fallback.
 - **Codex verification 2:** `approve`. The panel's verdicts are final for planning; implementation gates remain.
+- **Review loop round 1** (Codex, gpt-6.1-sol high, arc diff): `findings: 1`, low: the auth-registry subscription comment said a dropped tx removes its row and cited a plan path. **Opus `general-purpose` review** beside it: `findings: 3`, all low: the slot header named the wrong primitive, the same-tick name and comment overstated the precondition, the new check's comment omitted the abort-before-refusal invariant. All four accepted; no correctness finding from either.
+- **Review loop round 2** (Codex resume): `clean`. Converged.
 
 ## Delivery
 
