@@ -16,6 +16,7 @@ const emit = defineEmits(["click"])
 		@click="emit('click')"
 		type="button"
 		data-testid="auth-profile"
+		:data-profile-name="name"
 		:class="$style.profile_pill"
 	>
 		<Flex align="center" gap="12">

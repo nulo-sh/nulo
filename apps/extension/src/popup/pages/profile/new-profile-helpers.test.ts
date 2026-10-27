@@ -15,10 +15,16 @@ vi.mock("@/utils/lastActiveProfile", () => ({
 	setLastActiveProfileId: vi.fn(async () => undefined),
 }))
 
-vi.mock("@/composables/useProfileBootstrap", () => ({
-	isActivatingOtherThan: vi.fn(() => false),
-	supersedeProfileActivations: vi.fn(),
-}))
+vi.mock("@/composables/useProfileBootstrap", async () => {
+	const { reactive } = await import("vue")
+	const activations = reactive(new Set<string>())
+	return {
+		activations,
+		isActivating: (id: string) => activations.has(id),
+		isActivatingOtherThan: vi.fn(() => false),
+		supersedeProfileActivations: vi.fn(),
+	}
+})
 
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
@@ -26,6 +32,7 @@ vi.mock("@/wallet/services/account/client", () => ({
 	}),
 }))
 
+import * as bootstrap from "@/composables/useProfileBootstrap"
 import { isActivatingOtherThan, supersedeProfileActivations } from "@/composables/useProfileBootstrap"
 import { initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
@@ -101,8 +108,12 @@ function expectHomeHandOff(store: ReturnType<typeof makeAppStore>, router: { pus
 	expect(openToast).toHaveBeenCalledWith(HAND_OFF_TOAST)
 }
 
+/** The shell's event-driven activations in flight, as the mocked registry holds them. */
+const activations = (bootstrap as unknown as { activations: Set<string> }).activations
+
 beforeEach(() => {
 	vi.clearAllMocks()
+	activations.clear()
 	vi.mocked(isActivatingOtherThan).mockReturnValue(false)
 	vi.useFakeTimers()
 	managers.account = undefined as never
@@ -320,6 +331,30 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(existing.getAccounts).toHaveBeenCalledWith("created", "1", true)
 		expect(store.accounts).toEqual([{ address: "0xEXISTING", index: 0, visible: true }])
 		expect(router.push).toHaveBeenCalledWith("/popup/general")
+	})
+
+	test("another window's profile open here: the created one opens once its own activation settles, with no toast", async () => {
+		const store = makeAppStore()
+		bootstrapped(store, "other")
+		const { router, openToast, state } = start(store)
+		// The shell opens the created profile in place: it selects it and clears the network to
+		// re-read it, while `isLogined` still holds from the profile before.
+		activations.add("created")
+		store.profile = created
+		store.network = undefined
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(state.outcome).toBe("pending")
+		expect(setLastActiveProfileId).not.toHaveBeenCalled()
+
+		store.network = { chainId: "1" }
+		activations.delete("created")
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(accountInstance.getAccounts).toHaveBeenCalledWith("created", "1", true)
+		expect(router.push).toHaveBeenCalledTimes(1)
+		expect(router.push).toHaveBeenCalledWith("/popup/general")
+		expect(openToast).not.toHaveBeenCalled()
 	})
 
 	test("a step after the created profile opened fails: no accounts loaded; its home and the toast", async () => {

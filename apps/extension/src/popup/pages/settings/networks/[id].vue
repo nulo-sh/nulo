@@ -156,6 +156,7 @@ const handleDeleteEndpoint = (endpoint) => {
 	requestConfirm({
 		confirm_text: "Yes, delete endpoint",
 		confirm_color: "red",
+		irreversible: true,
 		title: "Delete this endpoint?",
 		description: `This RPC URL will be removed from ${network.value.name}. The chain itself stays.`,
 		callback: async () => {
@@ -187,6 +188,7 @@ const confirmDeleteNetwork = (id, name, description) =>
 	requestConfirm({
 		confirm_text: "Yes, delete chain",
 		confirm_color: "red",
+		irreversible: true,
 		title: `Delete ${name}?`,
 		description,
 		callback: async () => {

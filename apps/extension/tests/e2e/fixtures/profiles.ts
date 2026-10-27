@@ -88,8 +88,8 @@ export async function getActiveProfileName(page: Page): Promise<string> {
  *
  *  After submit the router redirects to either `/popup/auth` (if other
  *  profiles remain) or `/popup/register` (if it was the last profile). The
- *  caller asserts the redirect; this helper does not. */
-export async function resetProfile(page: Page): Promise<void> {
+ *  caller asserts the redirect; this helper does not. Resolves what `confirmProfileReset` does. */
+export async function resetProfile(page: Page): Promise<PhraseWarning> {
 	const RESET_HASH = "#/popup/settings/security/reset"
 	// One re-navigation covers the single characterized race (a competing push
 	// already in flight when the hash was set supersedes our navigation). A SECOND
@@ -173,20 +173,44 @@ export async function resetProfile(page: Page): Promise<void> {
 			`resetProfile: reset route never held for ${DWELL_MS}ms across ${ATTEMPTS} navigations; last parked state: ${lastDiag}`,
 		)
 	}
-	await confirmProfileReset(page, 10_000)
+	return confirmProfileReset(page, 10_000)
 }
 
+/** Whether Delete asked first because the profile's recovery phrase was never revealed, with the
+ *  dialog's heading and title when it did. */
+export type PhraseWarning = { warned: false } | { warned: true; preTitle: string; title: string }
+
 /** The reset page's deliberate-delete ritual: the three acknowledgements, the active profile's
- *  name typed back, and submit, which enables only then. The page must already be at the reset
- *  route; `timeoutMs` bounds the first checkbox's mount and the submit's enable. The caller
- *  asserts where the app lands. */
-export async function confirmProfileReset(page: Page, timeoutMs: number): Promise<void> {
+ *  name typed back, and submit, which enables only then; a profile whose recovery phrase was never
+ *  revealed asks once more, and that warning is confirmed. The page must already be at the reset
+ *  route; `timeoutMs` bounds the first checkbox's mount, the submit's enable and the warning's
+ *  decision. The caller asserts where the app lands. */
+export async function confirmProfileReset(page: Page, timeoutMs: number): Promise<PhraseWarning> {
 	await page.waitForSelector('[data-testid="reset-checkbox-permanent"]', { visible: true, timeout: timeoutMs })
 	await clickByTestId(page, "reset-checkbox-permanent")
 	await clickByTestId(page, "reset-checkbox-undone")
 	await clickByTestId(page, "reset-checkbox-sure")
 	await replaceInputValue(page, '[data-testid="reset-confirm-input"]', await getActiveProfileName(page))
 	await clickByTestId(page, "reset-submit-btn", timeoutMs)
+	// The page reads the profile's flags, then either asks or starts the deletion, which holds the
+	// button until it ends and then leaves the page.
+	const decided = await page.waitForFunction(
+		() => {
+			if (document.querySelector<HTMLElement>('[data-testid="confirm-submit"]')?.checkVisibility()) return "warned"
+			const submit = document.querySelector<HTMLButtonElement>('[data-testid="reset-submit-btn"]')
+			return !submit || submit.disabled ? "deleting" : false
+		},
+		{ timeout: timeoutMs, polling: 50 },
+	)
+	const outcome = await decided.jsonValue()
+	await decided.dispose()
+	if (outcome !== "warned") return { warned: false }
+	const copy = await page.evaluate(() => ({
+		preTitle: document.querySelector('[data-testid="confirm-pre-title"]')?.textContent?.trim() ?? "",
+		title: document.querySelector('[data-testid="confirm-title"]')?.textContent?.trim() ?? "",
+	}))
+	await clickByTestId(page, "confirm-submit")
+	return { warned: true, ...copy }
 }
 
 /** Capture the sole profile's id from raw storage and PROVE its row exists — the
