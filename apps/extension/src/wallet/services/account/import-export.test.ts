@@ -25,7 +25,13 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => {
 	}
 })
 
-import { buildAccountExport, decryptAccountExport, parseAccountExport, serializeAccountExport } from "@nulo/aztec-runtime/account"
+import {
+	buildAccountExport,
+	decryptAccountExport,
+	encryptAccountExport,
+	parseAccountExport,
+	serializeAccountExport,
+} from "@nulo/aztec-runtime/account"
 import { asImportedKeysDek, type PasskeyCredentialData, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -34,7 +40,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
-import { AccountType, ImportedAccountUnusableError } from "./spec"
+import { ACCOUNT_FILE_UNREADABLE, AccountType, ImportedAccountUnusableError } from "./spec"
 import { BalanceRepository } from "@/wallet/services/token-balance/balance-repository"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
@@ -149,6 +155,17 @@ describe("AccountService import/export", () => {
 		await expect(account.importAccount("p1", CHAIN, exportFile(), "0xWRONG", "")).rejects.toThrow(
 			/does not match the confirmed address/,
 		)
+	})
+
+	test("a protected file that does not open refuses with the import page's line, at preview and at import", async () => {
+		const { account } = await build()
+		const sealed = await encryptAccountExport(buildAccountExport(SK, L1, addrFor(SK)), "filepass")
+		await expect(account.previewImportAccount(sealed, "wrong-pass")).rejects.toThrow(new Error(ACCOUNT_FILE_UNREADABLE))
+		await expect(account.previewImportAccount("not base64 ###", "filepass")).rejects.toThrow(new Error(ACCOUNT_FILE_UNREADABLE))
+		await expect(account.importAccount("p1", CHAIN, sealed, addrFor(SK), "wrong-pass")).rejects.toThrow(
+			new Error(ACCOUNT_FILE_UNREADABLE),
+		)
+		expect(await account.previewImportAccount(sealed, "filepass")).toBe(addrFor(SK))
 	})
 
 	test("rejects a duplicate import", async () => {

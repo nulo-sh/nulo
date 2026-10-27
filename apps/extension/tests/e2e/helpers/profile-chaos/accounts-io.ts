@@ -76,6 +76,8 @@ export async function importAccountFile(s: RunState, file: ModelFile): Promise<D
 	const t0 = Date.now()
 	const address = await previewImport(page, readFileSync(held.path, "utf8"), secretFor(s, file.password as never))
 	if (!address) return timed(t0, ACCOUNT_MS, "refused")
+	// An account the profile holds is refused at the preview, which renders with the held line.
+	if (await page.$('[data-testid="import-account-held"]')) return timed(t0, ACCOUNT_MS, "refused")
 	await page.waitForSelector('[data-testid="import-account-name-input"] input', { visible: true, timeout: 15_000 })
 	await replaceInputValue(page, '[data-testid="import-account-name-input"] input', importedName(file.ref))
 	await clickByTestId(page, "import-account-submit")
