@@ -33,7 +33,12 @@ vi.mock("@/wallet/services/profile/client", async (importOriginal) => ({
 const activation = vi.hoisted(() => ({ running: false }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ isActivatingOtherThan: () => activation.running }))
 const checkSelection = vi.hoisted(() => vi.fn(async () => "present"))
-const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
+const router = vi.hoisted(() => ({
+	push: vi.fn(),
+	back: vi.fn(),
+	replace: vi.fn(),
+	currentRoute: { value: { name: "popup-settings-security-reset" } },
+}))
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ query: {}, meta: {} }) }))
 const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
@@ -90,6 +95,7 @@ async function mountReady(app: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	router.currentRoute.value.name = "popup-settings-security-reset"
 	activation.running = false
 	checkSelection.mockResolvedValue("present")
 	installChromeStorage({ [getStartedPhraseSavedKey(main.id)]: true }, { persist: false })
@@ -118,6 +124,28 @@ describe("Delete Profile's client", () => {
 		expect(app.profile).toBeUndefined()
 		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
 		expect(router.push).toHaveBeenCalledWith("/popup/auth")
+	})
+
+	test("a deletion that returns after its window was taken on to a page that needs no profile leaves it there", async () => {
+		for (const [route, pushed] of [
+			["popup-import", false],
+			["popup-profile-new", false],
+			["popup-register", false],
+			["popup-auth", true],
+		] as const) {
+			vi.clearAllMocks()
+			const call = client.pending()
+			const { w, app } = await mountReady({ profiles: [main] })
+			await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+			await flushPromises()
+			w.unmount()
+			router.currentRoute.value.name = route
+			call.resolve(main)
+			await flushPromises()
+			expect([app.profiles, app.profile]).toEqual([[], undefined])
+			expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
+			expect(router.push.mock.calls).toEqual(pushed ? [["/popup/register"]] : [])
+		}
 	})
 
 	test("a profile unlocked while the deletion runs keeps its session and route", async () => {

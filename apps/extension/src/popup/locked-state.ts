@@ -4,6 +4,9 @@ import { lockScreenProfile } from "./lock-screen-profile"
 /** Pages that need no selected profile, as the route guard leaves them without one. */
 const PROFILE_FREE_ROUTES: ReadonlySet<string> = new Set(["popup-register", "popup-import", "popup-profile-new"])
 
+/** Whether `name` is a page that needs no selected profile, whose flow owns the window. */
+export const isProfileFreeRoute = (name: unknown) => typeof name === "string" && PROFILE_FREE_ROUTES.has(name)
+
 /** How a check of the window's selected profile against the stored list ended. */
 export type SelectionCheck = "present" | "followed" | "superseded" | "unread"
 

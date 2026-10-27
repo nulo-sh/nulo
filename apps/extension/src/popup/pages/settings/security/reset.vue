@@ -19,6 +19,7 @@ import { dashIfBlank, trimAddress } from "@/utils/string"
 import { leaveFor } from "@/utils/page-back"
 import { postAuthRoute } from "@/utils/own-window"
 import { importedKey, readImportedAccounts } from "./imported-accounts"
+import { isProfileFreeRoute } from "@/popup/locked-state"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -241,6 +242,9 @@ const finishDeletion = (deletedId) => {
 
 	openToast({ kind: "success", label: "Profile deleted" })
 
+	// The lock lands the window before a long purge returns; one taken on to a page that needs no
+	// profile meanwhile keeps that page's flow.
+	if (isProfileFreeRoute(router.currentRoute.value.name)) return
 	if (!appStore.profiles.length) {
 		router.push("/popup/register")
 	} else {
