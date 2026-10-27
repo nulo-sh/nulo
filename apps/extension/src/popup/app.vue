@@ -294,12 +294,19 @@ watch(
 	() => appStore.network,
 	() => {
 		switchRun = switchNetwork()
+		// Only a completed reset awaits a run, so its failure is reported here.
+		switchRun.catch((error) => console.error("network switch failed", { error }))
 	},
 )
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
-watchLockStart(() => appStore.isLogined, onLocked)
+/** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
+const endScopeOnLock = () => {
+	onLocked()
+	switchNetwork.supersede()
+}
+watchLockStart(() => appStore.isLogined, endScopeOnLock)
 
 /** The popup's locked state, entered from the lock event and from a boot-time session check
  *  that finds no session under an authenticated page (a worker restart). */
@@ -308,7 +315,7 @@ const lockedState = createLockedState({
 		popupStore.closeAll()
 		notificationStore.clear()
 	},
-	onLocked,
+	onLocked: endScopeOnLock,
 	markLocked: () => {
 		supersedeProfileActivations()
 		appStore.isLogined = false
