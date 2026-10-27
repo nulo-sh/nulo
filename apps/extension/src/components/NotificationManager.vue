@@ -156,8 +156,8 @@ watch(
 	width: 90%;
 	max-width: 480px;
 	padding: 24px;
-	/* A backup's network name can be one string wider than the card. The centred text sizes to its
-	 * min-content width, which only `anywhere` (not `break-word`) shrinks to let the string break. */
+	/* Notice text can carry data: one string wider than the card. A centred flex item never shrinks
+	 * below its min-content width, which `anywhere` lowers and `break-word` does not. */
 	overflow-wrap: anywhere;
 }
 </style>

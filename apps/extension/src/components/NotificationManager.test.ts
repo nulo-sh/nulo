@@ -100,7 +100,10 @@ describe("the notice is fixed to the viewport", () => {
 	})
 })
 
-/** A backup's network name can be one string wider than the card. */
+/**
+ * Notice text can carry data wider than the card.
+ * Blind spot: a descendant that turns wrapping off (`noWrap`).
+ */
 describe("a notice's text stays inside its card", () => {
 	test("the card breaks a string wider than itself anywhere", () => {
 		expect(declarationsOf(parseSource(FILE), ".card")).toMatchObject({ "overflow-wrap": "anywhere" })
