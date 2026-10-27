@@ -10,6 +10,21 @@ eli5_mode: skipped (orchestrator-owned)
 base: dev at 78f5f9171e6a670279a013ddc8d32566a35478f5
 ---
 
+## Outcome
+
+- Date: 2026-10-27.
+- Status: completed, delivered in PR #1269 (awaiting the merge). Each fix ran 30/30 at retry 0 with its red/green or mutation proof; the git 2.56 container ran 30/30.
+- Shipped: PR #1269.
+  - #1226: the PER-LAUNCH case fakes only `Date` and has a 5 ms success control.
+  - #1112: the two guards pre-check only the TypeScript call search; Vue's `cssVars` read stays on every `.vue`.
+  - #1241: a `--local` promisor pin in the depth-1 case.
+- Superseded in review: the first #1112 design pre-checked `v-bind` on the styles too. Vue deletes style comments before it matches `v-bind`, so that design missed `v-/**/bind(x)`. Round 1 caught it, and the fix landed in #1269.
+- Did not hold: #1241's "a git failure inside the test's own temporary repositories, not a property of the gate". The test ran the gate's then-filtered fetch, which #1247 had already fixed.
+- Lessons: none promoted. `lessons.md` holds 8183 of its 8192 bytes, and nothing there is superseded. The two candidates live where they bite: the git 2.56 abort in `permalinks.ts`'s comment and the depth-1 case's pin, and the Vue parser quirks in #1270 and the guard comments.
+- Known limits: none.
+- Open items: #1270 (the same-cost whole-tree tests, D2).
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
+
 # unit-flakes-4: three unit tests that read the host's speed or git's version
 
 Three tests fail for reasons outside what they check: two whole-tree source scans run past vitest's 5 s default on a saturated host (#1112), a restore-deadline test spends its 10 ms budget before the first launch on a slow host (#1226), and the plans gate's depth-1 case failed in git 2.56's index-pack (#1241). Each fix measures the behaviour instead of the host. No timeout is raised. Evidence: [`recon.md`](recon.md).
@@ -106,7 +121,7 @@ None. Only test files change.
 
 ## Delivery
 
-Single arc: branch `worktree-unit-flakes-4` → one PR into `dev`, opened only after the review loop converges. Title (73 chars): `test: three unit tests stop depending on host speed and the runner's git`. The body gives each phase's 30-run counts, the red/green and mutation proofs, the git 2.56 container counts, and `Closes #1112`, `Closes #1226`, `Closes #1241`. No label: no e2e lane is needed. Parallel lanes: none (the critical path is about an hour serial).
+Single arc: branch `worktree-unit-flakes-4` → one PR into `dev`, opened only after the review loop converges. Title (72 chars): `test: three unit tests stop depending on host speed and the runner's git`. The body gives each phase's 30-run counts, the red/green and mutation proofs, the git 2.56 container counts, and `Closes #1112`, `Closes #1226`, `Closes #1241`. No label: no e2e lane is needed. Parallel lanes: none (the critical path is about an hour serial).
 
 ## Post-implementation
 
@@ -121,8 +136,7 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
    - Promote lessons. Candidate: git 2.56's filtered-fetch abort on a shallow checkout, dated.
    - File the D2 issue.
    - Delete `STATUS.md`.
-   - `git mv` the plan into `archive/` in its own commit, and move the index line.
-   - Run `check:plans`. Nothing merges before the orchestrator's word.
+   - `git mv` the plan into `archive/` in its own commit, move the index line, and run `check:plans`. Nothing merges before the orchestrator's word.
 5. Teardown after the merge: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/unit-flakes-4/plan.md`, then `agent-worktree done unit-flakes-4 --merged`. The orchestrator merges, so it notices the merge and runs this step or spawns a session for it. A `/loop` session checks on each firing.
 
 ## Seeds
