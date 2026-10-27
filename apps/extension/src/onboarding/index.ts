@@ -22,6 +22,7 @@ import "@nulo/design/base.css"
 import "./onboarding.scss"
 
 import { initAppServiceContext, managers } from "@/utils/core"
+import { isOnboardingDone, openPopupWindowAndClose, startOnboarding } from "./hand-over"
 import { createLegalGuard } from "./legal-guard"
 
 // Match popup's eager service-context init so consumers don't race on
@@ -43,4 +44,8 @@ const router = createRouter({
 
 router.beforeEach(createLegalGuard(() => managers.legal.getStatus()))
 
-createApp(App).use(router).use(createPinia()).mount("#app")
+void startOnboarding({
+	isDone: isOnboardingDone,
+	handOver: openPopupWindowAndClose,
+	mount: () => createApp(App).use(router).use(createPinia()).mount("#app"),
+})

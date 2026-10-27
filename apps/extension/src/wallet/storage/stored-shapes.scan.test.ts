@@ -308,7 +308,8 @@ describe("every nulo: key is registered", () => {
 		expect(files.length).toBeGreaterThan(500)
 		expect(files).toContain("apps/extension/src/wallet/services/profile/repository.ts")
 		expect(files.some((file) => file.startsWith("packages/wallet-core/src/"))).toBe(true)
-		expect(nuloLiterals(sources).some(({ file }) => file.endsWith(".vue"))).toBe(true)
+		// The SFCs are read; that a literal in one is found is the fixture test below.
+		expect(files.some((file) => file.endsWith(".vue"))).toBe(true)
 		expect(nuloLiterals(sources).filter(({ text }) => claimingShape(text)).length).toBeGreaterThan(40)
 	})
 })
