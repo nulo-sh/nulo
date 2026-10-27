@@ -271,7 +271,11 @@ describe("useProfileImportFlow", () => {
 				{ existingProfileNames: ["Main"] },
 				"“Main” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
 			],
-			["two names, A to Z", { existingProfileNames: ["savings", "Main"] }, `“Main” and “savings” already use ${TAIL}`],
+			[
+				"two names, A to Z whatever their case",
+				{ existingProfileNames: ["Savings", "main"] },
+				`“main” and “Savings” already use ${TAIL}`,
+			],
 			[
 				"three names, A to Z",
 				{ existingProfileNames: ["Work", "Savings", "Main"] },
