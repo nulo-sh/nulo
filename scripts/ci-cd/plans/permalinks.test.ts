@@ -109,6 +109,7 @@ describe("permalink-ancestry (a shallow pull-request checkout)", () => {
 	/** An origin whose `pr` branch merges a feature into an unmerged parent arc, as refs/pull/N/merge does. */
 	function stackedOrigin(): { origin: string; onDev: string; onParent: string } {
 		const origin = makeRepo({ "README.md": "r\n" })
+		// Serves filters, as GitHub does.
 		git(origin, "config", "uploadpack.allowFilter", "true")
 		const onDev = git(origin, "rev-parse", "HEAD")
 		writeFiles(origin, { "dev.md": "d\n" })
@@ -145,6 +146,9 @@ describe("permalink-ancestry (a shallow pull-request checkout)", () => {
 		const work = shallowClone(origin)
 		git(work, "fetch", "-q", "--no-tags", "--depth=1", "origin", git(origin, "rev-parse", "dev"))
 		expect(findings(work, "permalink-ancestry", PR_RUN).map((f) => f.detail)).toEqual([`${onParent} is not an ancestor of dev`])
+		// A filtered fetch marks origin a promisor remote, and under git 2.56 its index-pack then aborts
+		// on a shallow checkout.
+		expect(git(work, "config", "--local", "--default", "", "--get", "remote.origin.promisor")).toBe("")
 	}, 30_000)
 
 	test("an unreachable origin fails closed", () => {
