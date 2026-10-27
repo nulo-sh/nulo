@@ -71,14 +71,18 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 	 */
 	const onLockEvent = async (readProfiles: () => Promise<P[]>, isCurrent: () => boolean) => {
 		seal()
-		// Read before the list, so no deletion lands between the list's answer and its use.
-		const lastActiveId = await shell.readLastActiveId().catch(() => undefined)
+		// Started with the list but awaited only when the selection is gone: a storage read can queue
+		// behind a purge's writes, and a landing that late moves a window its person already moved.
+		const lastActiveId = shell.readLastActiveId().catch(() => undefined)
 		let profiles = shell.cachedProfiles()
 		try {
 			profiles = await readProfiles()
 		} catch {}
 		if (!isCurrent()) return
-		land(profiles, lastActiveId)
+		const selected = shell.selectedId()
+		const picks = selected !== undefined && profiles.length > 0 && !profiles.some((p) => p.id === selected)
+		const pick = picks ? await lastActiveId : undefined
+		if (isCurrent()) land(profiles, pick)
 	}
 
 	/**

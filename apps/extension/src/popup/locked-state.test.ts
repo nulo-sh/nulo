@@ -9,7 +9,14 @@ const p1 = { id: "p1" }
 const p2 = { id: "p2" }
 const p3 = { id: "p3" }
 
-function shell(profiles = [p1], { lastActiveId = "p1" as string | undefined, routeName = "popup-auth" } = {}) {
+function shell(
+	profiles = [p1],
+	{
+		lastActiveId = "p1" as string | undefined,
+		routeName = "popup-auth",
+		readLastActiveId = undefined as (() => Promise<string | undefined>) | undefined,
+	} = {},
+) {
 	const store = reactive({
 		isLogined: true,
 		open: "p1",
@@ -62,7 +69,7 @@ function shell(profiles = [p1], { lastActiveId = "p1" as string | undefined, rou
 		select: (profile) => {
 			store.selected = profile
 		},
-		readLastActiveId: async () => store.lastActiveId,
+		readLastActiveId: readLastActiveId ?? (async () => store.lastActiveId),
 		routeName: () => store.routeName,
 		openChooser: () => {
 			store.chooser = true
@@ -140,6 +147,29 @@ describe("the lock event", () => {
 		await done
 		expect(s.store.profiles).toEqual([p1])
 		expect(s.routes).toEqual([])
+	})
+
+	test("an empty list, or one that still holds the selection, lands without waiting for the last-active read", async () => {
+		for (const list of [[], [p1, p2]]) {
+			const s = shell([p1, p2], { readLastActiveId: () => new Promise(() => {}) })
+			await s.onLockEvent(
+				async () => list,
+				() => true,
+			)
+			expect(s.routes).toEqual([list.length ? "/popup/auth" : "/popup/register"])
+		}
+
+		const lastActive = deferred<string | undefined>()
+		const gone = shell([p1, p2, p3], { readLastActiveId: () => lastActive.promise })
+		const done = gone.onLockEvent(
+			async () => [p2, p3],
+			() => true,
+		)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(gone.routes).toEqual([])
+		lastActive.resolve("p3")
+		await done
+		expect([gone.store.selected, gone.routes]).toEqual([p3, ["/popup/auth"]])
 	})
 
 	test("a rejected lookup lands on the cached list", async () => {
