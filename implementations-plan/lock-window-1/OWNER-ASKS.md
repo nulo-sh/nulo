@@ -1,5 +1,7 @@
 # lock-window-1: owner asks
 
+**Answered by the owner on 2026-10-27:** "ok go with your proposals, fix all." OA-1: A, keep (no code). OA-2: the narrowed reading, confirmed; New profile and the first-profile create: A, the same rule (arc 2). OA-3: fix (arc 3), with D11 in the same file. The UI sign-off for arc 1's three surfaces: ok. The text below is the record as asked.
+
 No ask blocks arc 1. Arc 1 changes the lock screen's password field and the two export pages. One ask touches the lock screen only in passing: OA-1's option B would change the error toast a network add shows after a lock, and the popup shows that toast over whatever page is open, the lock screen included. Arc 1 neither renders nor changes that toast, and OA-1's answer changes nothing arc 1 builds. Each arc ships what is written under "What ships now", and the asked part waits.
 
 ## OA-1. A change the person (or a dApp) asked for, when the wallet locks while it is still saving

@@ -11,3 +11,4 @@
 - 2026-10-27 — arc 1 phase 1 gate green; screenshots taken; D12 recorded (chaos model citations).
 - 2026-10-27 — arc 1 review: Codex r1 changes requested (3, fixed), r2 approve with nits (fixed); Opus approve with nits (2 folded, 1 declined).
 - 2026-10-27 — arc 1 final gates at 5d38398d1: lint, typecheck:all, test:all (extension 942 files, 15 948 tests) and the smoke specs on an armed Chrome build (6 files, 23 tests, 3:43) pass; origin/dev moved only on CI, no merge.
+- 2026-10-27 — the owner answered every ask ("ok go with your proposals, fix all."); plan amended: OA-2 widened to New profile and the first create (arc 2), arc 3 for OA-3 and D11; #1218 closes at the close-out.
