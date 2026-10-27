@@ -714,7 +714,10 @@ describe("export/full.vue — the done state after the encrypted file", () => {
 		const wrapper = await downloaded()
 		const banner = wrapper.get("[data-testid='backup-done-banner']").text()
 		expect(banner).toContain("Saved to your downloads")
-		expect(banner).toContain("password, as it will be required to restore your backup.")
+		expect(banner).toContain(
+			"This file opens with the profile password you have now. Changing your password later does not change that.",
+		)
+		expect(banner).not.toContain("Don't forget")
 		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
 		expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(false)
 		expect(closeButton(wrapper).text()).toBe("Close")
