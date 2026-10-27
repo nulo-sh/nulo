@@ -1,6 +1,6 @@
 /**
- * Dependabot's configuration. It updates only GitHub Actions: Bun's lockfile is unreadable to it, and
- * Bun, Biome and the Aztec line are bumped by hand. One weekly group moves every use of an action
+ * Dependabot's configuration. It updates only GitHub Actions; npm dependencies, Bun, Biome and the
+ * Aztec line are bumped by hand, as policy (SECURITY.md, Dependency policy). One weekly group moves every use of an action
  * together, which action-pins.test.ts ("one action, one SHA") requires. The commit prefix gives its
  * titles a Conventional type and scope; the case of "bump" is Dependabot's guess from the default
  * branch's history, which the merger corrects (CLAUDE.md, Dependency policy).
