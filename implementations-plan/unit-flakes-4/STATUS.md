@@ -5,3 +5,4 @@
 - 2026-10-27 codex round 1: conditional approve, 5 findings accepted; waiting on the Opus leg.
 - 2026-10-27 opus plan leg: conditional approve, 4 findings accepted; codex final pass (resume) next.
 - 2026-10-27 codex final pass: approve. Plan committed; auto-continue into arc 1 (no owner asks).
+- 2026-10-27 phase 1 green: lint, typecheck:all, service.test.ts 30/30 at retry 0; delay and mutation proofs as planned.

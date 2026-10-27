@@ -59,7 +59,7 @@ None. Only test files change.
 
 ## Phases
 
-### Phase 1 — #1226: the deadline runs on a fake clock
+### Phase 1 — #1226: the deadline runs on a fake clock ✓
 - Files: `apps/extension/src/wallet/services/account-state/service.test.ts`.
 - Steps: do the change in § Architecture. Run the red/green proof as scratch, and do not commit the injection: inject a 20 ms real delay into `ensureInitialized` at the base (red) and on the fix (green), then remove it. Also mutate `expired` to report true after the first launch whenever a deadline is set, and confirm the 5 ms control goes red. Record both in `lessons/phase-1.md`.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && pass=0; for i in $(seq 30); do bun --bun vitest run src/wallet/services/account-state/service.test.ts --retry=0 >/dev/null 2>&1 && pass=$((pass+1)); done; echo "$pass/30"` prints `30/30`; red at the base and green on the fix. Layers: lint, typecheck, unit.
