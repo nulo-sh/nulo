@@ -311,7 +311,7 @@ export type Methods = {
 	 * canonical form (NFKD/lowercase/collapse) BEFORE any persistence: exactly 24 words, all
 	 * on the wordlist, checksum valid. The master derives via the standard BIP-39 PBKDF2 step
 	 * (NULO-ACCOUNT-KDF v2); the entropy is stored sealed so the phrase re-displays.
-	 * Throws `DuplicateWalletError` (naming the colliding profile) when another live profile
+	 * Throws `DuplicateWalletError` (naming every colliding profile) when another live profile
 	 * carries the same wallet fingerprint, unless `allowDuplicate` — the UI confirms and retries
 	 * (warn-and-confirm, never a hard block; owner policy).
 	 * @param name Display name.
