@@ -45,8 +45,10 @@ import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetwork
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { useNotificationStore } from "@/stores/notification.store"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
+const notificationStore = useNotificationStore()
 const { bootstrapActiveProfile } = useProfileBootstrap()
 const { openToast, closeToast, toast } = useToast()
 const { onScopeChanged, onLocked } = createScopeEpochHandlers({
@@ -290,7 +292,10 @@ watchLockStart(() => appStore.isLogined, onLocked)
 /** The popup's locked state, entered from the lock event and from a boot-time session check
  *  that finds no session under an authenticated page (a worker restart). */
 const lockedState = createLockedState({
-	closePopups: () => popupStore.closeAll(),
+	closePopups: () => {
+		popupStore.closeAll()
+		notificationStore.clear()
+	},
 	onLocked,
 	markLocked: () => {
 		supersedeProfileActivations()

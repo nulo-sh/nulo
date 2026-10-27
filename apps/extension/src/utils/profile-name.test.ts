@@ -30,4 +30,13 @@ describe("normalizeProfileName", () => {
 		expect(normalizeProfileName("ﬂow")).toBe(normalizeProfileName("FLOW"))
 		expect(normalizeProfileName("Аlpha")).not.toBe(normalizeProfileName("Alpha"))
 	})
+
+	test("drops outer spaces, so a stored or typed name with one collides with the bare name", () => {
+		expect(normalizeProfileName(" Main 1 ")).toBe(normalizeProfileName("Main 1"))
+		expect(normalizeProfileName("Main  1")).not.toBe(normalizeProfileName("Main 1"))
+		const field = useProfileNameField()
+		field.profileName.value = "Main 1"
+		expect(field.validate({ existingNames: ["Main 1 "] })).toBe(false)
+		expect(field.validate({ existingNames: ["Main 2 "] })).toBe(true)
+	})
 })

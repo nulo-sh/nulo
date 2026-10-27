@@ -81,6 +81,7 @@ const onKeydown = makeCreateKeydownHandler(handleCreate)
 
 onBeforeUnmount(() => {
 	dispose()
+	notificationStore.clear()
 })
 </script>
 
