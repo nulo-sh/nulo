@@ -28,9 +28,6 @@ const cacheStore = useCacheStore()
 
 const router = useRouter()
 
-/** Account export is password-gated in the service, so passkey profiles get no export entry. */
-const canExportAccounts = computed(() => appStore.profile?.type !== "passkey")
-
 const accounts = computed(() => appStore.accounts.filter((a) => a.visible).sort((a, b) => a.index - b.index))
 const hiddenAccounts = computed(() => appStore.accounts.filter((a) => !a.visible))
 
@@ -109,7 +106,7 @@ const handleCopyAddress = (target) => {
 								<template #content>Copy account address</template>
 							</Tooltip>
 
-							<Tooltip v-if="canExportAccounts" position="end" delay="350">
+							<Tooltip position="end" delay="350">
 								<RowAction label="Export account" data-testid="account-export-btn" @click="handleExportAccount(account)">
 									<Icon name="upload" size="14" color="tertiary" />
 								</RowAction>

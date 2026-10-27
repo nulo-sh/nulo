@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import fc from "fast-check"
 import {
 	changedGetStarted,
 	combineHoldings,
@@ -139,10 +140,6 @@ describe("get started view (pure)", () => {
 		})
 	})
 
-	test("a new passkey wallet: the backup step in the phrase's place", () => {
-		expect(drawn({ type: "passkey" })).toEqual(["backup", "aztec", "feeJuice", "presto"])
-	})
-
 	test("a funded password wallet keeps the phrase as the card's step 1, with no banner", () => {
 		expect(view({ funds: "some" })).toEqual({
 			banner: false,
@@ -160,9 +157,29 @@ describe("get started view (pure)", () => {
 		expect(view({ funds: "unknown" })).toBeNull()
 	})
 
-	test("never a banner for a passkey wallet, funded or not", () => {
-		expect(view({ type: "passkey", funds: "some" })?.banner).toBe(false)
-		expect(drawn({ type: "passkey", funds: "some" })).toEqual(["backup", "aztec", "feeJuice", "presto"])
+	// A passkey profile keeps a recovery phrase too, so its card is the password card, step for step.
+	test("over generated states, a passkey wallet's card and banner are the password wallet's", () => {
+		const state = fc.record({
+			funds: fc.constantFrom("none", "some", "unknown"),
+			feeJuice: fc.constantFrom("none", "some", "unknown"),
+			prestoReached: fc.boolean(),
+			flags: fc.record({
+				phraseSaved: fc.boolean(),
+				backupSaved: fc.boolean(),
+				aztecOpened: fc.boolean(),
+				feeJuiceHeld: fc.boolean(),
+				prestoOpened: fc.boolean(),
+				hidden: fc.boolean(),
+				imported: fc.boolean(),
+				notFirst: fc.boolean(),
+			}),
+		})
+		fc.assert(
+			fc.property(state, ({ flags, ...over }) => {
+				expect(view({ ...over, type: "passkey" }, flags)).toEqual(view({ ...over, type: "password" }, flags))
+			}),
+			{ numRuns: 500 },
+		)
 	})
 
 	test("null until the flags, the profile type and the Presto flag are read", () => {
@@ -173,10 +190,6 @@ describe("get started view (pure)", () => {
 
 	test("a saved phrase checks the phrase step in place", () => {
 		expect(drawn({ funds: "some" }, { phraseSaved: true })).toEqual(["phrase done", "aztec", "feeJuice", "presto"])
-	})
-
-	test("a full backup checks the passkey backup step", () => {
-		expect(drawn({ type: "passkey" }, { backupSaved: true })).toEqual(["backup done", "aztec", "feeJuice", "presto"])
 	})
 
 	test("an opened Aztec page, a Fee Juice balance, and an opened or reached Presto each check their step; an unread balance does not", () => {
@@ -190,7 +203,6 @@ describe("get started view (pure)", () => {
 
 	test("Fee Juice once held stays done: a later empty read, as on a new chain, does not reopen it", () => {
 		expect(drawn({ feeJuice: "none" }, { feeJuiceHeld: true })).toEqual(["phrase", "aztec", "feeJuice done", "presto"])
-		expect(drawn({ type: "passkey", feeJuice: "none" }, { feeJuiceHeld: true })).toEqual(["backup", "aztec", "feeJuice done", "presto"])
 	})
 
 	test("Hide offers while a step it removes is listed, done or not", () => {
@@ -203,11 +215,6 @@ describe("get started view (pure)", () => {
 		expect(view({ funds: "some" }, { hidden: true })).toEqual({ banner: true, steps: [], canHide: false })
 		expect(view({}, { hidden: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
 		expect(view({ funds: "some" }, { hidden: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
-	})
-
-	test("a hidden passkey card is gone, backup step included, and a funded one gets no banner", () => {
-		expect(view({ type: "passkey" }, { hidden: true })).toEqual({ banner: false, steps: [], canHide: false })
-		expect(view({ type: "passkey", funds: "some" }, { hidden: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
 	test("an imported profile shows no card and no banner, password or passkey, funded or not", () => {
@@ -224,15 +231,9 @@ describe("get started view (pure)", () => {
 		expect(view({}, { notFirst: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
 	})
 
-	test("a later passkey profile shows no card and no banner", () => {
-		expect(view({ type: "passkey" }, { notFirst: true })).toEqual({ banner: false, steps: [], canHide: false })
-	})
-
 	test("no card once every listed step is done; an unsaved phrase keeps it up, funded or not", () => {
 		const done = view({ feeJuice: "some", prestoReached: true }, { phraseSaved: true, aztecOpened: true })
 		expect(done).toEqual({ banner: false, steps: [], canHide: false })
-		const passkey = view({ type: "passkey", prestoReached: true }, { backupSaved: true, aztecOpened: true, feeJuiceHeld: true })
-		expect(passkey).toEqual({ banner: false, steps: [], canHide: false })
 		const funded = view({ funds: "some", feeJuice: "some", prestoReached: true }, { aztecOpened: true })
 		expect(funded).toEqual({
 			banner: false,

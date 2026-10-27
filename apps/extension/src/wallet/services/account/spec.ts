@@ -10,6 +10,9 @@ export const DEFAULT_ACCOUNT_NAME = "Account 1"
 
 export const DEFAULT_IMPORTED_ACCOUNT_NAME = "Imported account"
 
+/** What Import Account shows for a protected account file it cannot open, whatever the cause. */
+export const ACCOUNT_FILE_UNREADABLE = "Wrong file password, or the file is damaged."
+
 /** EntityStorage root for account rows. Frozen:
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const ACCOUNT_STORAGE_ROOT = "nulo:core:accounts"
@@ -144,7 +147,7 @@ export type Account = {
 	visible: boolean
 }
 
-/** A password profile's full-backup key material, read in one authenticated pass. */
+/** A profile's full-backup key material, read in one authenticated pass. */
 export type FullBackupKeys = {
 	/** Base64 master secret, the file's `master-key`. */
 	masterKey: string
@@ -163,22 +166,6 @@ export type FullBackupKeys = {
 	/** Imported-key rows that did not open, so travel as stored and will not restore; 0 when the
 	 *  DEK was replaced. */
 	unopenedImportedKeys: number
-}
-
-/** A passkey profile's full-backup key material and the slices it was counted over, read once. */
-export type PasskeyBackupKeys = {
-	/** The file's `master-key`. */
-	credentialId: string
-	/** The file's `imported-keys-dek-sealed`: the stored DEK, or a fresh one when it no longer opens. */
-	dekSealed: string
-	dekReplaced: boolean
-	/** Imported-key rows of `importedKeyRows` that do not open under the stored DEK; 0 when it was
-	 *  replaced. */
-	unopenedImportedKeys: number
-	/** The imported-keys slice the file carries, as stored. */
-	importedKeyRows: ImportedAccountKey[]
-	/** The account slice, read before the key rows. */
-	accounts: Account[]
 }
 
 /** Storage codec row schema — mirrors `Account` exactly. */
@@ -253,18 +240,33 @@ export type Methods = {
 
 	/**
 	 * Export one account as a portable file body (the NULO-ACCOUNT-EXPORT v1 envelope). Requires
-	 * the profile password (service-side auth — the caller cannot bypass it from a compromised
-	 * popup). `encrypt` picks the password-encrypted variant (default) vs the plaintext one.
+	 * the profile password, or for a passkey profile its passkey answer (service-side auth — the
+	 * caller cannot bypass it from a compromised popup). `encrypt` picks the password-encrypted
+	 * variant (default) vs the plaintext one. With `credentialData`, `password` is the file's own
+	 * password: refused below 8 characters, and the file is always encrypted.
 	 * @returns the file's string body (encrypted base64, or the plaintext JSON).
 	 */
-	exportAccount(profileId: string, chainId: number, address: string, password: string, encrypt: boolean): string
+	exportAccount(
+		profileId: string,
+		chainId: number,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): string
 
 	/**
 	 * Export an imported account a paused network reset holds only in its journal, by the address
-	 * the reset moves it to. Same password check and file as `exportAccount`; reads only.
+	 * the reset moves it to. Same credential check and file as `exportAccount`; reads only.
 	 * @returns the file's string body (encrypted base64, or the plaintext JSON).
 	 */
-	exportResetHeldAccount(profileId: string, address: string, password: string, encrypt: boolean): string
+	exportResetHeldAccount(
+		profileId: string,
+		address: string,
+		password: string,
+		encrypt: boolean,
+		credentialData?: PasskeyCredentialData,
+	): string
 
 	/**
 	 * Import an account from a NULO-ACCOUNT-EXPORT file body into `(profileId, chainId)`. Validates
@@ -283,18 +285,12 @@ export type Methods = {
 	previewImportAccount(fileBody: string, password: string): string
 
 	/**
-	 * A password profile's full-backup key material from one authenticated pass: master, entropy,
-	 * the account slice, and the imported-key rows re-sealed under a fresh per-backup key. Throws
-	 * unless `fence` names the open session both before the first read and after the last seal.
+	 * A profile's full-backup key material from one authenticated pass: master, entropy, the account
+	 * slice, and the imported-key rows re-sealed under a fresh per-backup key. A password profile
+	 * authenticates with `password`, a passkey profile with the page's answer for its own `prfSalt`.
+	 * Throws unless `fence` names the open session both before the first read and after the last seal.
 	 */
-	exportFullBackupKeys(fence: RunFence, password: string): FullBackupKeys
-
-	/**
-	 * A passkey profile's full-backup key material from the in-page ceremony's `credentialData`, with
-	 * the account and imported-key slices it was counted over. Throws unless `fence` names the open
-	 * session both before the first read and after the count.
-	 */
-	exportPasskeyBackupKeys(fence: RunFence, credentialData: PasskeyCredentialData): PasskeyBackupKeys
+	exportFullBackupKeys(fence: RunFence, password?: string, credentialData?: PasskeyCredentialData): FullBackupKeys
 
 	/** Backup the active profile's imported-account encrypted key rows (the dedicated slice). */
 	backupImportedKeys(): ImportedAccountKey[]
@@ -307,6 +303,7 @@ export type Methods = {
 }
 
 const RunFenceParamSchema = z.object({ profileId: z.string(), epoch: z.number(), session: z.number(), incarnation: z.string() })
+const PasskeyCredentialDataSchema = z.object({ id: z.string(), prf: z.string(), prfSalt: z.string() })
 
 /**
  * The argument tuple of every account RPC, checked at the port before the method runs. A trailing
@@ -321,15 +318,11 @@ export const AccountMethodSchemas = {
 	ensureDefaultAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
 	changeAccountName: z.tuple([z.string(), z.number(), z.string(), z.string()]),
 	changeAccountVisibility: z.tuple([z.string(), z.number(), z.string(), z.boolean()]),
-	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean()]),
-	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean()]),
+	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean(), PasskeyCredentialDataSchema.optional()]),
+	exportResetHeldAccount: z.tuple([z.string(), z.string(), z.string(), z.boolean(), PasskeyCredentialDataSchema.optional()]),
 	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
 	previewImportAccount: z.tuple([z.string(), z.string()]),
-	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
-	exportPasskeyBackupKeys: z.tuple([
-		RunFenceParamSchema,
-		z.object({ id: z.string(), prf: z.string(), userHandle: z.string().optional() }),
-	]),
+	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string().optional(), PasskeyCredentialDataSchema.optional()]),
 	backupImportedKeys: z.tuple([]),
 	restoreImportedKeys: z.tuple([z.array(z.unknown())]),
 	reconcileImportedAccounts: z.tuple([z.string()]),

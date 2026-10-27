@@ -16,6 +16,7 @@ import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { postAuthRoute } from "@/utils/own-window"
 import { authRequiredGate } from "./auth-guard"
+import { lockScreenProfile } from "./lock-screen-profile"
 import type { StartGrace } from "./start-grace"
 
 type AppStore = ReturnType<typeof useAppStore>
@@ -32,7 +33,11 @@ export function earlyDecision(to: RouteLocationNormalized, from: RouteLocationNo
 	// where an unlock would, so a replay that cancels the shell's push keeps an own window's route.
 	const back = from.name && from.name !== to.name ? { name: from.name } : postAuthRoute(appStore.pageAwaitingAuth)
 	if (to.name === "popup-register" && appStore.isRegistered) return { kind: "redirect", to: back }
-	if (to.name === "popup-auth" && appStore.isLogined) return { kind: "redirect", to: back }
+	// A page the lock screen leads to (Delete profile, a new profile, an import) has it behind: held
+	// there, Back from it in an unlocked window would land on the page again, so it goes where an
+	// unlock would.
+	if (to.name === "popup-auth" && appStore.isLogined)
+		return { kind: "redirect", to: from.meta.isAuthRequired === false ? postAuthRoute(appStore.pageAwaitingAuth) : back }
 	return undefined
 }
 
@@ -74,10 +79,9 @@ async function decideWithReads(
 	if (!appStore.profile && to.name !== "popup-register" && to.name !== "popup-import" && to.name !== "popup-profile-new") {
 		const profiles = await profileApi.getProfiles()
 		if (!profiles.length) return { name: "popup-register" }
-		const lastActiveId = await getLastActiveProfileId()
-		const lastActive = lastActiveId ? profiles.find((p) => p.id === lastActiveId) : undefined
+		const onLockScreen = lockScreenProfile(profiles, await getLastActiveProfileId())
 		// A boot run can select a profile while these reads are in flight; its choice stands.
-		if (!appStore.profile) appStore.profile = lastActive ?? profiles[0]
+		if (!appStore.profile) appStore.profile = onLockScreen
 	}
 
 	if (to.meta.requirePasswordProfile && appStore.profile?.type === "passkey") return { path: "/popup/settings/profile" }

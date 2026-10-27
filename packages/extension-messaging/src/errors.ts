@@ -532,23 +532,8 @@ export class RestoreTornError extends WalletError {
 }
 
 /**
- * Raised by `createPasskeyProfile` / `importPasskey` when the profile id
- * the caller pre-reserved was claimed by another writer between the
- * unlocked WebAuthn ceremony and the locked persistence step. Callers
- * should retry the entire flow with a freshly-generated id: the credential's
- * WebAuthn `userHandle` IS the profile id, so the id can never change after the ceremony.
- */
-export class ProfileIdConflictError extends WalletError {
-	public static readonly CODE = "PROFILE_ID_CONFLICT"
-
-	public constructor(message = "Profile id was claimed during WebAuthn prompt; retry with a new id.", details?: unknown) {
-		super(ProfileIdConflictError.CODE, message, details, "ProfileIdConflictError")
-	}
-}
-
-/**
  * A profile with the same wallet fingerprint (same recovery phrase → same master) already exists
- * on this device. Thrown by `importMnemonic` / `importPasskey` / `restore` unless the caller
+ * on this device. Thrown by `importMnemonic` / `restore` unless the caller
  * passes `allowDuplicate: true` — the UI catches this, shows the warn-and-confirm dialog, and
  * retries with the override (duplicates are a warned choice, never a hard block — owner policy).
  * `details.existingProfileName` names the colliding profile for the dialog copy; the error NEVER
@@ -563,15 +548,46 @@ export class DuplicateWalletError extends WalletError {
 }
 
 /**
- * A live, readable passkey profile on this device already holds the credential being imported or
- * restored: a hard refusal, never a warned duplicate. `details.existingProfileName` names that
- * profile for the notice; the error NEVER carries key material, the credential id or the user handle.
+ * A passkey profile made before 1.1, whose row holds no recovery phrase: this build lists it and
+ * deletes it, and every path that would open it or read its secrets refuses with this. Consumers
+ * `instanceof` it to show the profile's "set up again" state. NEVER surfaced verbatim to dApps.
  */
-export class PasskeyProfileExistsError extends WalletError {
-	public static readonly CODE = "PASSKEY_PROFILE_EXISTS"
+export class RetiredProfileError extends WalletError {
+	public static readonly CODE = "RETIRED_PROFILE"
+	public static readonly MESSAGE = "This profile was made with an earlier version and can't be opened"
 
-	public constructor(message = "Passkey profile already exists", details?: { existingProfileName?: string }) {
-		super(PasskeyProfileExistsError.CODE, message, details, "PasskeyProfileExistsError")
+	public constructor(message: string = RetiredProfileError.MESSAGE, details?: unknown) {
+		super(RetiredProfileError.CODE, message, details, "RetiredProfileError")
+	}
+}
+
+/**
+ * A profile's change of unlock method was saved, or may have been, and the session could not be
+ * reopened over it: the wallet locked, and the next unlock uses whatever method the profile now
+ * stores. Consumers `instanceof` it so a saved change never reads as "nothing changed". NEVER
+ * surfaced verbatim to dApps.
+ */
+export class UnlockMethodChangedError extends WalletError {
+	public static readonly CODE = "UNLOCK_METHOD_CHANGED"
+	public static readonly MESSAGE = "The unlock method changed. Unlock again to continue"
+
+	public constructor(message: string = UnlockMethodChangedError.MESSAGE, details?: unknown) {
+		super(UnlockMethodChangedError.CODE, message, details, "UnlockMethodChangedError")
+	}
+}
+
+/**
+ * A change of unlock method was refused, and nothing written, because the profile does not store
+ * the unlock its credential is for: the other kind, or another passkey or input. A caller that
+ * checked the credential against the profile first learns that the method was changed since.
+ * NEVER surfaced verbatim to dApps.
+ */
+export class StaleUnlockCredentialError extends WalletError {
+	public static readonly CODE = "STALE_UNLOCK_CREDENTIAL"
+	public static readonly MESSAGE = "The profile does not unlock with this credential"
+
+	public constructor(message: string = StaleUnlockCredentialError.MESSAGE, details?: unknown) {
+		super(StaleUnlockCredentialError.CODE, message, details, "StaleUnlockCredentialError")
 	}
 }
 
@@ -623,9 +639,10 @@ const REBUILT_AS = [
 	AccountAddressInconsistencyError,
 	RestoreTornError,
 	RecoveryModeError,
-	ProfileIdConflictError,
+	RetiredProfileError,
+	UnlockMethodChangedError,
+	StaleUnlockCredentialError,
 	DuplicateWalletError,
-	PasskeyProfileExistsError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
 	InvalidWalletArgumentsError,

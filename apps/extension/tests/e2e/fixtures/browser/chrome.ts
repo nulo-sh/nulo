@@ -280,6 +280,8 @@ export const chromeDriver: BrowserDriver = {
 	kind: "chrome",
 	scheme: SCHEME,
 	credentialOutlivesPage: false,
+	stopsBackgroundUnderOpenPage: true,
+	residentCredentialSlots: 3,
 	ownHosts: CHROME_OWN_HOSTS,
 	launch,
 	reinstallExtension,

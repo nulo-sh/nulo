@@ -15,6 +15,12 @@
  * On the sandbox it also pins the token, picks a Send fee payer and an app window's fee payer, so
  * the release's own maps meet the candidate's unlock, which seals them in place.
  *
+ * A release that seals its rows is read through its own services, as it reads them, and ends on
+ * Testnet with its second account selected: the popup opens there only on a selection it read,
+ * since without one it opens on the network's first account. Its endpoints move first onto loopback
+ * nodes that report each network's chain, through its own service, since its recording cannot be
+ * rewritten offline and must name no outside endpoint.
+ *
  * Not populated: the auth registry, a deleted profile, a restore, and the token list and prices
  * (the egress guard blocks both).
  *
@@ -25,6 +31,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
+import { STORES } from "@/wallet/storage/stores"
 import { walletChainId } from "@nulo/wallet-core/chain-id"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER } from "../fixtures/browser"
@@ -55,9 +62,12 @@ import {
 	navigateToTokenDetail,
 	pinFromTokenPage,
 	selectFeeMethod,
+	selectedAccount,
 	setDeveloperMode,
+	switchAccount,
 	switchToNetwork,
 	waitForFreshBalanceRow,
+	waitForShownAccount,
 	waitForToast,
 } from "../fixtures/helpers"
 import { openPlayground, setPgInputs, txHashOf } from "../fixtures/playground"
@@ -65,8 +75,12 @@ import { openSend } from "../fixtures/send-page"
 import { pollUntil } from "../fixtures/poll"
 import { reconnectPlayground, runApprovedPgCall } from "../fixtures/send"
 import { inPlaceUpdate, readLocalStorage, updateBuilds } from "../fixtures/update/in-place"
-import { expectReleasePreferences } from "../fixtures/update/preferences"
-import { writeRecording } from "../fixtures/update/recording"
+import { moveEndpointsToLoopback } from "../fixtures/update/loopback-endpoints"
+import { expectReleasePreferences, plaintextPreferences } from "../fixtures/update/preferences"
+import { recordingProblems, writeRecording } from "../fixtures/update/recording"
+import { type ReleaseTraits, releaseTraits } from "../fixtures/update/release"
+import { readRelease } from "../fixtures/update/read-release"
+import { isLoopbackUrl, loopbackOrigins, namedHostCount, type ReleasePreferences } from "../fixtures/update/release-reads"
 import { approveReleaseConnect } from "../fixtures/update/release-ui"
 import { BARRIERS, missingFamilies, shownOverlays, updateProblems } from "../fixtures/update/verify"
 import {
@@ -77,7 +91,7 @@ import {
 	gotoAccounts,
 	previewImport,
 } from "../helpers/account-io"
-import { accountRows } from "../helpers/identity-rows"
+import { accountRows, readNetworkRows } from "../helpers/identity-rows"
 import { answerUpdatedTerms } from "../helpers/legal-drivers"
 import { answerArrival } from "../helpers/network-arrival"
 
@@ -90,9 +104,24 @@ const SENT = D
 const SANDBOX = "Sandbox"
 const TESTNET_ACCOUNTS = [FIRST_ACCOUNT_NAME, "Second", "Imported"]
 const CONTACTS = ["Alice", "Bob"]
+const PROFILES = `${STORES.profiles.ref.root}@`
+/** The loopback nodes a sealing release's endpoints moved onto, stopped when the test ends. */
+const standIns: Array<{ stop: () => Promise<void> }> = []
 
 type ChainInfo = { chainId: string; version: string }
-type Populated = { before: Record<string, unknown>; chainInfo: ChainInfo; account: string; imported: string; incoming: number }
+type Populated = {
+	release: ReleaseTraits
+	before: Record<string, unknown>
+	chainInfo: ChainInfo
+	account: string
+	imported: string
+	incoming: number
+	/** The release's account selection and preference maps, as it reads them. */
+	selection: string
+	preferences: ReleasePreferences
+	/** A sealing release's loopback origins, which the replay's recording names. */
+	dials?: string[]
+}
 
 function randomAddress(): string {
 	for (;;) {
@@ -115,8 +144,14 @@ async function foreignAccountFile(): Promise<string> {
 	}
 }
 
-/** Resolves with the imported account's address. */
+/** Resolves with the imported account's address. A release whose new profile opens on another
+ *  network (Mainnet, once it seeds one) is switched to Testnet first. */
 async function populateTestnet(page: Page, accountFile: string): Promise<string> {
+	const header = await page.waitForFunction(
+		() => document.querySelector('[data-testid="network-button"]')?.textContent?.trim() || undefined,
+		{ timeout: 15_000 },
+	)
+	if ((await header.jsonValue()) !== "Testnet") await switchToNetwork(page, "Testnet")
 	await createAccount(page, "Second")
 	const imported = await previewImport(page, accountFile)
 	if (!imported) throw new Error("the release refused the foreign account file")
@@ -134,8 +169,10 @@ async function sandboxChainInfo(nodeUrl: string): Promise<ChainInfo> {
 	return { chainId: String(info.l1ChainId), version: String(info.rollupVersion) }
 }
 
-/** The release's selection: it stores it in plaintext and has no service to read it through. */
-async function releaseSelection(page: Page): Promise<string | undefined> {
+/** The release's selection, read as it keeps it: a plaintext release stores it in plaintext and has
+ *  no service to read it through; a sealing one reads it through its UI-preference service. */
+async function releaseSelection(page: Page, storage: ReleaseTraits["storage"]): Promise<string | undefined> {
+	if (storage === "sealed") return selectedAccount(page)
 	return page.evaluate(
 		async (key: string) => (await chrome.storage.local.get(key))[key] as string | undefined,
 		LEGACY_SELECTED_ACCOUNT_KEY,
@@ -144,7 +181,7 @@ async function releaseSelection(page: Page): Promise<string | undefined> {
 
 /** Adds the sandbox as a network, which activates it, and resolves with the account the switch
  *  derives there. */
-async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainInfo): Promise<string> {
+async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainInfo, release: ReleaseTraits): Promise<string> {
 	await setDeveloperMode(page, true)
 	await navigateByHash(page, "#/popup/settings/networks", 15_000)
 	await clickByTestId(page, "network-new-btn")
@@ -156,7 +193,7 @@ async function addSandboxNetwork(page: Page, nodeUrl: string, chainInfo: ChainIn
 	const chainId = walletChainId(Number(chainInfo.chainId), Number(chainInfo.version))
 	return pollUntil(
 		async () => {
-			const active = await releaseSelection(page)
+			const active = await releaseSelection(page, release.storage)
 			const onSandbox = (await accountRows(page, chainId)).some((row) => row.address === active)
 			return onSandbox ? active : undefined
 		},
@@ -183,22 +220,26 @@ async function receiveOnSandbox(cfg: AztecTestConfig, to: string): Promise<void>
 
 async function incomingCards(page: Page, atLeast: number): Promise<number> {
 	await navigateByHash(page, "#/popup/activity", 15_000)
-	await page.waitForFunction(
-		(n: number) => document.querySelectorAll('[data-testid="tx-incoming-card"]').length >= n,
+	// The count the wait saw: the list re-renders as its sync settles, so a later read can meet it empty.
+	const shown = await page.waitForFunction(
+		(n: number) => {
+			const cards = document.querySelectorAll('[data-testid="tx-incoming-card"]').length
+			return cards >= n ? cards : false
+		},
 		{ timeout: 180_000, polling: 1_000 },
 		atLeast,
 	)
-	return page.evaluate(() => document.querySelectorAll('[data-testid="tx-incoming-card"]').length)
+	return (await shown.jsonValue()) as number
 }
 
-async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile: string): Promise<Populated> {
+async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile: string, release: ReleaseTraits): Promise<Populated> {
 	await registerProfile(ctx)
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
 	const imported = await populateTestnet(page, accountFile)
 
 	const chainInfo = await sandboxChainInfo(cfg.nodeUrl)
-	const account = await addSandboxNetwork(page, cfg.nodeUrl, chainInfo)
+	const account = await addSandboxNetwork(page, cfg.nodeUrl, chainInfo, release)
 	await navigateByHash(page, "#/popup/general", 15_000)
 	const baseline = await captureBalanceBaseline(page, account, cfg.tokenAddress)
 	await importToken(page, cfg.tokenAddress)
@@ -215,16 +256,50 @@ async function populate(ctx: ExtensionContext, cfg: AztecTestConfig, accountFile
 	await pickPreferences(page)
 	await page.close()
 
-	const dapp = await connectPlayground(ctx, { chainInfo }, approveReleaseConnect)
+	const dapp = await connectPlayground(ctx, { chainInfo }, release.connect === "replaces-page" ? approveReleaseConnect : undefined)
 	await grantCapBundle(ctx, dapp, "transaction", async (ids) => {
 		if (!ids.includes(account)) throw new Error(`the capabilities window offers ${ids.join(", ")}, not ${account}`)
 		return [account]
 	})
 	await sendFromWallet(ctx, dapp, cfg, account)
 	await dapp.close()
+	const sealed = release.storage === "sealed" ? await endOnSecondAccount(ctx) : undefined
 	const before = await readLocalStorage(ctx)
-	expect(missingFamilies(before)).toEqual([])
-	return { before, chainInfo, account, imported, incoming }
+	expect(missingFamilies(before, release.storage)).toEqual([])
+	const selection = sealed?.selection ?? before[LEGACY_SELECTED_ACCOUNT_KEY]
+	if (typeof selection !== "string") throw new Error(`the release stores no account selection: ${String(selection)}`)
+	const preferences = sealed?.preferences ?? plaintextPreferences(before, soleProfileId(before))
+	return { release, before, chainInfo, account, imported, incoming, selection, preferences, dials: sealed?.dials }
+}
+
+function soleProfileId(entries: Record<string, unknown>): string {
+	const ids = Object.keys(entries).flatMap((key) => (key.startsWith(PROFILES) ? [key.slice(PROFILES.length)] : []))
+	if (ids.length !== 1) throw new Error(`the release stores ${ids.length} profiles, not one`)
+	return ids[0] as string
+}
+
+/** Moves the release's endpoints onto this machine and selects its second Testnet account, each
+ *  through its own UI or service, then reads the release through its own services: its selection,
+ *  its preference maps and the loopback origins its rows name. */
+async function endOnSecondAccount(
+	ctx: ExtensionContext,
+): Promise<{ selection: string | undefined; preferences: ReleasePreferences; dials: string[] }> {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/general", 30_000)
+	const networks = await readNetworkRows(page)
+	const moved = networks.flatMap((network) => network.endpoints.map((endpoint) => endpoint.rpcUrl)).filter((url) => !isLoopbackUrl(url))
+	standIns.push(await moveEndpointsToLoopback(page, networks))
+	await switchToNetwork(page, "Testnet")
+	await switchAccount(page, "Second")
+	const reads = await readRelease(page, await captureSoleProfileId(page))
+	await page.close()
+	const stored = await readLocalStorage(ctx)
+	if (namedHostCount({ reads, stored }, moved) > 0) throw new Error("the release still holds a host its endpoints moved off")
+	const second = reads.accounts.find(
+		(row) => row.name === "Second" && row.chainId === reads.networks.find((n) => n.kind === "testnet")?.chainId,
+	)
+	if (!second || reads.selection !== second.address) throw new Error("the release does not read its second Testnet account as selected")
+	return { selection: reads.selection, preferences: reads.preferences, dials: loopbackOrigins({ reads, stored }) }
 }
 
 /** Pins the sandbox token and picks Send's fee payer for a private send, each through the release's
@@ -286,9 +361,11 @@ async function verify(ctx: ExtensionContext, populated: Populated): Promise<void
 	expect(await shownOverlays(page, BARRIERS)).toEqual([])
 	await answerUpdatedTerms(page, populated.before)
 	await answerArrival(page, populated.before)
-	expect(populated.before[LEGACY_SELECTED_ACCOUNT_KEY], "the release's selection").toBe(populated.account)
-	expect(await getAccountAddress(page)).toBe(populated.before[LEGACY_SELECTED_ACCOUNT_KEY])
-	await expectReleasePreferences(ctx, page, populated.before, await captureSoleProfileId(page))
+	if (populated.release.storage === "plaintext") expect(populated.selection, "the release's selection").toBe(populated.account)
+	expect(await getAccountAddress(page)).toBe(populated.selection)
+	await waitForShownAccount(page, populated.selection, "the header shows the release's selection")
+	await expectReleasePreferences(ctx, page, populated.preferences, await captureSoleProfileId(page))
+	if (populated.release.storage === "sealed") await switchToNetwork(page, SANDBOX)
 
 	await navigateToTokenDetail(page)
 	const balances = await getTokenDetailBalances(page)
@@ -323,15 +400,24 @@ test.skipIf(!process.env.NULO_E2E_UPDATE_FROM || !aztecConfig)(
 		const record = process.env.NULO_E2E_UPDATE_RECORD === "1"
 		const builds = updateBuilds(BROWSER)
 		if (!builds) throw new Error("unreachable: skipIf guards")
+		const release = releaseTraits(builds.tag)
 		const accountFile = await foreignAccountFile()
-		await inPlaceUpdate({
-			builds,
-			populate: async (ctx) => {
-				const populated = await populate(ctx, cfg, accountFile)
-				if (record) writeRecording(builds.tag, BROWSER, populated.before)
-				return populated
-			},
-			verify,
-		})
+		try {
+			await inPlaceUpdate({
+				builds,
+				populate: async (ctx) => {
+					const populated = await populate(ctx, cfg, accountFile, release)
+					if (record) {
+						const recording = { tag: builds.tag, browser: BROWSER, entries: populated.before, dials: populated.dials }
+						expect(recordingProblems(recording, builds.tag, release.storage)).toEqual([])
+						writeRecording(builds.tag, BROWSER, populated.before, populated.dials)
+					}
+					return populated
+				},
+				verify,
+			})
+		} finally {
+			await Promise.all(standIns.splice(0).map((standIn) => standIn.stop()))
+		}
 	},
 )

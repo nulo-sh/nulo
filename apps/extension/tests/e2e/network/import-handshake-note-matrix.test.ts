@@ -1,8 +1,8 @@
 /**
- * The rest of the handshake-note import matrix. The passkey row is the one PR-lane restore of a
- * passkey backup the wallet made, through the real ceremony and into the PXE; smoke restores a
- * synthetic one. The Settings row reaches the same purge and import as the pooled row
- * (`import-handshake-note.test.ts`), differing only in where the delete starts, so CI skips it.
+ * The rest of the handshake-note import matrix. The passkey row is the one PR-lane restore, into
+ * the PXE, of a backup a passkey profile made. The Settings row reaches the same purge and import
+ * as the pooled row (`import-handshake-note.test.ts`), differing only in where the delete starts,
+ * so CI skips it.
  *
  * @requires-proverless — formal marker scanned by scripts/e2e/agent.sh; the projection gate exists
  * only in a proverless-armed build.

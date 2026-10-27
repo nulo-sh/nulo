@@ -5,12 +5,25 @@ import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `w${i + 1}`)
+// The worker's side of the session: a create opens it, a lock or a strict restart ends it.
+const worker = vi.hoisted(() => ({
+	active: undefined as { id: string } | undefined,
+	opens<T extends { id: string }>(profile: T): T {
+		this.active = profile
+		return profile
+	},
+}))
 const profileApi = vi.hoisted(() => ({
 	getProfiles: vi.fn(async () => [] as Array<{ name: string }>),
-	createProfile: vi.fn(async (): Promise<unknown> => ({ id: "p1", name: "Main", type: "password" })),
+	createProfile: vi.fn(async (): Promise<unknown> => worker.opens({ id: "p1", name: "Main", type: "password" })),
 	generateProfileId: vi.fn(),
-	createPasskeyProfile: vi.fn(async (): Promise<unknown> => ({ id: "k1", name: "Main", type: "passkey" })),
+	createPasskeyProfile: vi.fn(async (): Promise<unknown> => worker.opens({ id: "k1", name: "Main", type: "passkey" })),
 	exportMnemonic: vi.fn(async (): Promise<string[]> => []),
+	getActiveProfile: vi.fn(async () => worker.active),
+	subscribeActiveProfile: undefined as unknown as ProfileServiceClient["subscribeActiveProfile"],
+	onActiveProfileChanged: undefined as unknown as EventHandler<unknown>,
+	onConnected: undefined as unknown as EventHandler<void>,
+	onDisconnected: undefined as unknown as EventHandler<void>,
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrapActiveProfile = vi.hoisted(() => vi.fn(async (): Promise<boolean> => true))
@@ -19,11 +32,18 @@ const setLastActiveProfileId = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId }))
 const markGetStarted = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/utils/get-started", () => ({ markGetStarted }))
-// The background runs the passkey ceremony, as in Firefox's toolbar panel, so no ceremony is driven here.
+// By default the background runs the passkey ceremony, as in Firefox's toolbar panel, so no
+// ceremony is driven here; `surface.inPage` runs it in the page, through the mocked helper.
+const surface = vi.hoisted(() => ({ inPage: false }))
 vi.mock("@/utils/browser-surface", async (original) => ({
 	...(await original<typeof import("@/utils/browser-surface")>()),
-	closesOnFocusLoss: () => true,
+	closesOnFocusLoss: () => !surface.inPage,
 }))
+const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" }
+const createPasskeyProfileInPage = vi.hoisted(() =>
+	vi.fn(async () => ({ profile: worker.opens({ id: "k1", name: "Main", type: "passkey" }), credentialData: ANSWER })),
+)
+vi.mock("@/wallet/utils/create-passkey-profile", () => ({ createPasskeyProfileInPage }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
 }))
@@ -31,6 +51,8 @@ const routerPush = vi.fn()
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: routerPush }), useRoute: () => ({ meta: {} }) }))
 
 import { BrutalistTitle, Flex, Icon, Input, Text } from "@nulo/design"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { enterOn } from "../../../tests/helpers/credential-pins"
 import { pressOn } from "../../../tests/helpers/press-key"
 import { sendEvent } from "../../../tests/helpers/send-event"
@@ -41,6 +63,7 @@ import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { doneRoute } from "../steps"
 import Create from "./create.vue"
+import { useNotificationStore } from "@/stores/notification.store"
 
 const wrappers: VueWrapper[] = []
 
@@ -77,8 +100,16 @@ async function mountCreate() {
 const page = (w: VueWrapper) => w.get('[data-testid="onboarding-create-page"]')
 const choosePassword = (w: VueWrapper) => w.get('[data-testid="onboarding-method-password"]').trigger("click")
 
+// The production subscription runs over the faked worker, snapshot and reconnect included.
+profileApi.subscribeActiveProfile = ProfileServiceClient.prototype.subscribeActiveProfile
+
 beforeEach(() => {
 	vi.clearAllMocks()
+	surface.inPage = false
+	worker.active = undefined
+	profileApi.onActiveProfileChanged = new EventHandler()
+	profileApi.onConnected = new EventHandler()
+	profileApi.onDisconnected = new EventHandler()
 	profileApi.getProfiles.mockResolvedValue([])
 	profileApi.exportMnemonic.mockResolvedValue(WORDS)
 })
@@ -87,6 +118,15 @@ afterEach(() => {
 })
 
 describe("onboarding create", () => {
+	test("its notice closes when the page does", async () => {
+		const w = await mountCreate()
+		const notices = useNotificationStore()
+		expect(notices.clear).not.toHaveBeenCalled()
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+		expect(notices.clear).toHaveBeenCalledOnce()
+	})
+
 	test("a first profile: no name field, the drawn words, Passkey first and selected", async () => {
 		const w = await mountCreate()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
@@ -421,13 +461,108 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).not.toHaveBeenCalled()
 	})
 
-	test("a passkey wallet has no phrase to show and goes straight to Ready", async () => {
+	test("a passkey wallet reads its words once with the answer it was made from, before bootstrap, then shows them as step 3", async () => {
+		surface.inPage = true
 		const w = await mountCreate()
 		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
 		await flushPromises()
-		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("Main")
+		expect(createPasskeyProfileInPage).toHaveBeenCalledTimes(1)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledTimes(1)
+		expect(profileApi.exportMnemonic).toHaveBeenCalledWith("k1", undefined, ANSWER)
+		expect(profileApi.exportMnemonic.mock.invocationCallOrder[0]).toBeLessThan(bootstrapActiveProfile.mock.invocationCallOrder[0])
+		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "phrase", path: "passkey" })
+		expect(routerPush).not.toHaveBeenCalled()
+		await w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
+		await flushPromises()
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+	})
+
+	test("a passkey wallet whose words do not open reaches Ready, where Home keeps the reminder", async () => {
+		surface.inPage = true
+		profileApi.exportMnemonic.mockRejectedValueOnce(new Error("Passkey did not open this profile"))
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+	})
+
+	test("where the background ran the passkey, the page holds no answer: no read, and Ready", async () => {
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("Main", undefined, false)
 		expect(profileApi.exportMnemonic).not.toHaveBeenCalled()
 		expect(bootstrapActiveProfile).toHaveBeenCalledTimes(1)
 		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+	})
+
+	test("the link under the button takes a passkey the person already has, on the Passkey tab only", async () => {
+		const w = await mountCreate()
+		await w.get('[data-testid="onboarding-passkey-reuse"]').trigger("click")
+		await flushPromises()
+		expect(profileApi.createPasskeyProfile).toHaveBeenCalledExactlyOnceWith("Main", undefined, true)
+		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
+		const other = await mountCreate()
+		await choosePassword(other)
+		expect(other.find('[data-testid="onboarding-passkey-reuse"]').exists()).toBe(false)
+	})
+
+	const lock = () => {
+		worker.active = undefined
+		profileApi.onActiveProfileChanged.invoke(undefined)
+	}
+	const shown = (w: VueWrapper) => ({
+		words: w.findAll('[data-testid="onboarding-phrase-word"]').length,
+		copy: w.find('[data-testid="onboarding-phrase-copy"]').exists(),
+		form: w.find('[data-testid="onboarding-create-page"]').exists(),
+	})
+
+	const createPasskey = (w: VueWrapper) => w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+	const reusePasskey = (w: VueWrapper) => w.get('[data-testid="onboarding-passkey-reuse"]').trigger("click")
+
+	test.each([
+		{ name: "a password", path: "password", create: submitPassword },
+		{ name: "a new passkey", path: "passkey", create: createPasskey },
+		{ name: "an existing passkey", path: "passkey", create: reusePasskey },
+	] as const)("a lock after the words show takes them and Copy off the page, on $name wallet", async ({ path, create }) => {
+		surface.inPage = path === "passkey"
+		const w = await mountCreate()
+		await create(w)
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 24, copy: true, form: false })
+
+		lock()
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute(path))
+	})
+
+	test("a dropped worker connection, with no lock event, takes the words off the page", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(shown(w).words).toBe(24)
+
+		profileApi.onDisconnected.invoke()
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+	})
+
+	test("a lock during the last-profile write never shows the words, and leaves no Create to press", async () => {
+		const pending = defer<undefined>()
+		setLastActiveProfileId.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		expect(setLastActiveProfileId).toHaveBeenCalledWith("p1")
+
+		lock()
+		pending.resolve(undefined)
+		await flushPromises()
+		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
 	})
 })

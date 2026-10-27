@@ -38,7 +38,7 @@ describe("MigrationBarrier", () => {
 		expect(w.find("[data-testid='migration-blocked']").exists()).toBe(true)
 		expect(w.text()).toContain("UPDATE FAILED")
 		expect(w.text()).toContain(
-			"Your funds are safe. Your secret phrase still recovers your accounts. It does not recover imported accounts or passkey profiles. Keep the extension installed. A later update may be able to repair this.",
+			"Your funds are safe. Your recovery phrase still recovers your accounts. It does not recover imported accounts. Keep the extension installed. A later update may be able to repair this.",
 		)
 		expect(w.find("[data-testid='migration-blocked-detail']").text()).toContain("kaboom at v2")
 	})

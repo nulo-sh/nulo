@@ -6,7 +6,8 @@ import manifest from "../../manifest/manifest.config"
 import { extensionUrl, newPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { changePassword, lockWallet, navigateByHash, waitForToast } from "./fixtures/helpers"
+import { changePassword, lockWallet, navigateByHash, selectedAccount, waitForToast } from "./fixtures/helpers"
+import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 
 const ORIGINAL_PASSWORD = TEST_PASSWORD
 const NEW_PASSWORD = "NewTestPassword456!"
@@ -75,6 +76,63 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 	await page2.close()
+})
+
+// Each change is proved by the unlock that follows it, with the new method; that the old one no
+// longer opens the row is the unit layer's (`service.passkey-unlock.test.ts`). A change made leaves
+// the page for Settings.
+test("the unlock method changes to a passkey and back to a password", { timeout: 180_000 }, async ({ registeredExtensionPerTest }) => {
+	const page = await openPopup(registeredExtensionPerTest)
+	await waitForHash(page, "#/popup/general", 15_000)
+	const auth = await setupPasskeyVirtualAuth(registeredExtensionPerTest.browser, page)
+	const authSubmitEnabled = () =>
+		page.waitForFunction(() => document.querySelector<HTMLButtonElement>('[data-testid="auth-submit"]')?.disabled === false, {
+			timeout: 15_000,
+			polling: 200,
+		})
+
+	try {
+		const address = await selectedAccount(page)
+		await navigateByHash(page, "#/popup/settings/security/unlock-method")
+		await page.waitForSelector('[data-testid="unlock-method-use-passkey"]', { visible: true, timeout: 10_000 })
+		await clickByTestId(page, "unlock-method-use-passkey")
+		await page.waitForSelector('[data-testid="unlock-method-password-input"]', { visible: true, timeout: 5_000 })
+		await replaceInputValue(page, '[data-testid="unlock-method-password-input"]', ORIGINAL_PASSWORD)
+		await clickByTestId(page, "unlock-method-continue")
+		await waitForToast(page, "Now unlocks with your passkey", 60_000)
+		await waitForHash(page, "#/popup/settings", 15_000)
+		await navigateByHash(page, "#/popup/general")
+
+		await lockWallet(page)
+		await authSubmitEnabled()
+		expect(await page.$('[data-testid="auth-password-input"]'), "the lock screen still asks the old password").toBeNull()
+		await clickByTestId(page, "auth-submit")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await selectedAccount(page)).toBe(address)
+
+		await navigateByHash(page, "#/popup/settings/security/unlock-method")
+		await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 10_000 })
+		await clickByTestId(page, "unlock-method-use-password")
+		await page.waitForSelector('[data-testid="unlock-method-new-password-input"]', { visible: true, timeout: 60_000 })
+		await replaceInputValue(page, '[data-testid="unlock-method-new-password-input"]', NEW_PASSWORD)
+		await replaceInputValue(page, '[data-testid="unlock-method-new-password-confirm-input"]', NEW_PASSWORD)
+		await clickByTestId(page, "unlock-method-save")
+		await waitForToast(page, "Now unlocks with your password", 60_000)
+		await waitForHash(page, "#/popup/settings", 15_000)
+		await navigateByHash(page, "#/popup/general")
+
+		await lockWallet(page)
+		await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 15_000 })
+		await replaceInputValue(page, '[data-testid="auth-password-input"]', NEW_PASSWORD)
+		await clickByTestId(page, "auth-submit")
+		await waitForHash(page, "#/popup/general", 60_000)
+		expect(await selectedAccount(page)).toBe(address)
+
+		expect(registeredExtensionPerTest.pageErrors.filter((e) => !e.message.includes("Client disconnected"))).toEqual([])
+	} finally {
+		await auth.cleanup()
+		await page.close()
+	}
 })
 
 test("auto-lock TTL change persists across navigation", async ({ registeredExtensionPerTest }) => {

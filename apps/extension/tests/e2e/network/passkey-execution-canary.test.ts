@@ -1,11 +1,10 @@
 /**
  * Passkey execution canary — the passkey analog of `frozen-account-canary.test.ts`.
  *
- * The address KAT (key-vectors V3, reference-pinned) proves the passkey master DERIVES correctly;
- * it says nothing about executability. This file asserts a passkey-registered wallet operates
- * end-to-end against a live node, EXECUTION-ONLY by design (PRF secrets cannot be read back via
- * CDP, so a test-side formula cross-check is impossible — the V3 reference vector carries that
- * burden; see `implementations-plan/archive/key-model-v2-hardening/plan.md`, E2E coverage):
+ * The address KAT pins the accounts a recovery phrase derives, which is where a passkey profile's
+ * master comes from; it says nothing about executability. This file asserts a passkey-registered
+ * wallet operates end-to-end against a live node, EXECUTION-ONLY by design (PRF outputs cannot be
+ * read back via CDP, so the test cannot open the sealed master itself):
  *
  *   1. Register a passkey profile via the in-page (path A) ceremony against a virtual
  *      authenticator, create a second account, connect the playground, grant the transaction
@@ -14,8 +13,8 @@
  *      proof, node acceptance (mined).
  *   3. An authwit-CONSUMING tx as the named caller B (B's first tx — its own ctor) lands.
  *   4. A background restart later, the profile re-unlocks via a FRESH WebAuthn ceremony (passkey
- *      sessions are never silently restored), and the re-derived account still signs, proves, and
- *      lands a tx.
+ *      sessions are never silently restored), and the account the passkey opened again still
+ *      signs, proves, and lands a tx.
  *
  * Credential scope (load-bearing): the virtual authenticator — and therefore the credential and
  * its PRF seed — is scoped by the browser. On Chrome it belongs to the anchor popup page's
@@ -151,8 +150,8 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 				step("post-restart ceremony unlock ok")
 
 				// Reconnect the dApp and land a post-restart tx as A. The background rebuilds the
-				// account from the re-derived passkey master on this path and hard-throws on address
-				// drift, so an ok result pins BOTH re-derivation and execution.
+				// account from the master the passkey opened again and hard-throws on address drift, so
+				// an ok result pins BOTH the reopened master and execution.
 				await page.reload({ waitUntil: "domcontentloaded" })
 				await page.waitForSelector('[data-testid="pg-btn-connect"]', { visible: true, timeout: 30_000 })
 				await reconnectPlayground(ctx, page, "transaction", "passkey-canary:capsResult", { timeoutMs: 30_000 })
@@ -162,7 +161,7 @@ describe("passkey canary — the KDF-change execution gate, on both browsers", (
 					polling: 200,
 				})
 				await selectPgAccount(page, ownerA)
-				step("post-restart sendTx as A (re-derived passkey account, non-init path)")
+				step("post-restart sendTx as A (reopened passkey account, non-init path)")
 				const finalResult = await sendDefaultTx(ctx, page, aztecConfig!, "passkey-canary:finalResult", {
 					popupTimeoutMs: 180_000,
 					contentTimeoutMs: 30_000,

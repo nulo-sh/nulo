@@ -21,6 +21,15 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: true,
 			changes: ["You accepted a draft of these Terms. This version is the one in effect."],
 		},
+		{
+			version: "1.2",
+			effective: "27 October 2026",
+			material: true,
+			changes: [
+				"Passkey profiles now have a recovery phrase.",
+				"A full backup of a passkey profile is always protected with a file password.",
+			],
+		},
 	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },
@@ -80,6 +89,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["Only the default Testnet endpoint uses the Developer's provider account (§ 5.1)."],
 		},
+		{
+			version: "1.2.6",
+			effective: "27 October 2026",
+			material: false,
+			changes: [
+				"Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9).",
+			],
+		},
 	],
 }
 
@@ -92,7 +109,7 @@ export const RISK_POINTS: readonly RiskPoint[] = [
 	{ lead: "You hold the keys.", body: "Nobody else has them: not the developer, not a server, not anyone." },
 	{
 		lead: "Lose what protects your wallet and your money is gone.",
-		body: "Permanently. There is no reset and no support ticket. A passkey wallet has no recovery phrase to fall back on.",
+		body: "Permanently. There is no reset and no support ticket. Your recovery phrase or a full backup is the only way back.",
 	},
 	{ lead: "Sent is sent.", body: "A transaction cannot be cancelled, reversed or refunded by anyone." },
 	{ lead: "Nulo has not been audited, and Aztec is young.", body: "Use what you can afford to lose entirely." },

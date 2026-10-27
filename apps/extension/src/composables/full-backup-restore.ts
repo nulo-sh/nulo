@@ -3,14 +3,10 @@
  * callbacks, never a captured error-log object: the log's ref value is replaced at restore start.
  */
 
-import { asBase64CredentialId, asBase64MasterSecret, PasskeyCredential, verifyBackupMac } from "@nulo/wallet-crypto"
-import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
+import { asBase64MasterSecret, type PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChain } from "@/utils/full-backup-helpers"
-import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
-import type { ToastOptions } from "@/composables/toast"
-import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { RestoreSecret, RunFence } from "@/wallet/services/profile/client"
 import { admitRestoreOutcome, finishRestoreOutcome } from "@/utils/restore-outcome"
 import { sentenceName } from "@/utils/string"
@@ -96,15 +92,11 @@ export interface RestoreIo {
 /** A stage's terminal descriptor. "proceed" carries the stage's payload; everything else
  *  ends the restore and is rendered exactly once by applyOutcome. */
 export type StageFail = { kind: "fail"; title: string; message: string; status?: RestoreStatus }
-export type StageOutcome = { kind: "proceed" } | StageFail | { kind: "silent-reset" }
+export type StageOutcome = { kind: "proceed" } | StageFail
 
 /** Render a terminal outcome; returns true when the flow must stop. */
 export function applyOutcome(io: RestoreIo, o: StageOutcome): boolean {
 	if (o.kind === "proceed") return false
-	if (o.kind === "silent-reset") {
-		io.setStatus("")
-		return true
-	}
 	io.setStatus(o.status ?? "failed")
 	io.fillError("full_backup", o.title, o.message)
 	return true
@@ -125,11 +117,11 @@ export interface ProfileRestoreClient {
 	restore(
 		profile: unknown,
 		secret: RestoreSecret,
-		password: string,
-		credentialData: PasskeyCredentialData | undefined,
+		password: string | undefined,
 		allowDuplicate: boolean | undefined,
+		credentialData?: PasskeyCredentialData,
 	): Promise<{ id: string; restoreError?: unknown } | undefined>
-	finalizeRestore(profileId: string, password: string | undefined): Promise<{ fence: RunFence }>
+	finalizeRestore(profileId: string, password?: string, credentialData?: PasskeyCredentialData): Promise<{ fence: RunFence }>
 	deleteProfile(profileId: string): Promise<unknown>
 	disconnect(): void
 }
@@ -191,99 +183,36 @@ async function rollbackAndFail(
 	return { kind: "fail", title: "Import incomplete", message: CLEANUP_PENDING_MESSAGE }
 }
 
-/** Path A passkey-ceremony handoff. For passkey backups, the backup's `master-key` IS the
- *  credentialId (see `ProfileService.exportPlain` passkey return). Run the modal against
- *  that credentialId so the service receives `credentialData` and skips its own SW-window
- *  path. Without this the service throws `credentialData is required`. */
-export async function resolvePasskeyCredential(
-	profile: Pick<BackupProfile, "type">,
-	masterKey: string,
-	runCeremony: ((req: PasskeyRequest) => Promise<PasskeyCredentialData>) | undefined,
-	profileName: string,
-	openToast: (toast: ToastOptions) => void,
-): Promise<
-	({ kind: "proceed"; credentialData: PasskeyCredentialData | undefined } & Record<never, never>) | StageFail | { kind: "silent-reset" }
-> {
-	if (profile.type !== "passkey") return { kind: "proceed", credentialData: undefined }
-	if (!runCeremony) {
-		return { kind: "fail", title: "Can't import", message: "Passkey ceremony not wired — restart the popup and try again." }
-	}
-	try {
-		return {
-			kind: "proceed",
-			credentialData: await runCeremony({ mode: "get", credentialId: masterKey, step: "restore", profileName }),
-		}
-	} catch (err) {
-		// A cancel or an unconfirmed prompt leaves the form as it was, the chosen backup included, so
-		// Import asks for the passkey again: both pages disable Import while the status is "failed".
-		if (handleCancelOrUnconfirmed(err, openToast)) return { kind: "silent-reset" }
-		return { kind: "fail", title: "Couldn't authenticate", message: passkeyFailureCopy(err, errorMessageFromUnknown(err)) }
-	}
-}
-
 /** What a backup that is not the one the wallet exported shows, whichever check refused it. */
 export const INTEGRITY_FAILED = {
 	title: "Backup Integrity Check Failed",
 	message: "The backup file appears to be corrupted or has been tampered with. Please ensure you have the correct backup file.",
 } as const
 
-/** A passkey body restores only when the passkey that opens it made its check. Runs after the
- *  passkey answers and before anything is written. */
-export async function verifyPasskeyBody(
-	profile: Pick<BackupProfile, "type">,
-	credentialData: PasskeyCredentialData | undefined,
-	checksum: string,
-	mac: string | undefined,
-): Promise<{ kind: "proceed" } | StageFail> {
-	if (profile.type !== "passkey") return { kind: "proceed" }
-	const verified =
-		credentialData !== undefined &&
-		mac !== undefined &&
-		(await verifyBackupMac(await PasskeyCredential.create(credentialData), checksum, mac))
-	return verified ? { kind: "proceed" } : { kind: "fail", ...INTEGRITY_FAILED }
-}
-
 /**
- * Construct the profile-type-discriminated restore secret at the backup boundary:
- * `master-key` is a base64 plain master key for password profiles and the credentialId for
- * passkey profiles. Epoch-4 password blobs REQUIRE the `entropy` field (the recovery phrase
- * re-displays from it; the service verifies the words derive the master before sealing);
- * passkey blobs must NOT carry one. The imported-keys DEK carrier is likewise REQUIRED —
- * plaintext beside the plaintext master for password blobs, the sealed row blob for passkey
- * blobs (extras of the OTHER carrier are deliberately ignored — asymmetry preserved).
+ * The restore secret at the backup boundary, the same for both unlock methods: `master-key` is the
+ * base64 plain master, `entropy` the recovery phrase's entropy (the service checks the words
+ * derive the master before sealing) and `imported-keys-dek` the plaintext transfer key the
+ * backup's key rows are sealed under. Each is REQUIRED.
  */
 export function buildRestoreSecret(
-	profile: Pick<BackupProfile, "type">,
 	backup: Record<string, unknown>,
 	masterKey: string,
 ): ({ kind: "proceed"; restoreSecret: RestoreSecret } & Record<never, never>) | StageFail {
 	const entropyField = backup.entropy
-	if (profile.type === "password" && typeof entropyField !== "string") {
+	if (typeof entropyField !== "string") {
 		return { kind: "fail", title: "Can't import", message: "This backup is missing its recovery-phrase entropy." }
 	}
-	if (profile.type === "passkey" && entropyField !== undefined) {
-		return { kind: "fail", title: "Can't import", message: "A passkey backup must not carry an entropy field." }
-	}
-	// Epoch-4 shape: the service uses the carrier only inside the rewrap context (clone
-	// divergence: the restored row gets a FRESH dek; the backup's key rows rewrap onto it).
+	// The service uses the carrier only inside the rewrap context (clone divergence: the restored
+	// row gets a FRESH dek; the backup's key rows rewrap onto it).
 	const dekField = backup["imported-keys-dek"]
-	const dekSealedField = backup["imported-keys-dek-sealed"]
-	if (profile.type === "password" && typeof dekField !== "string") {
+	if (typeof dekField !== "string") {
 		return { kind: "fail", title: "Can't import", message: "This backup is missing its imported-keys key." }
 	}
-	if (profile.type === "passkey" && typeof dekSealedField !== "string") {
-		return { kind: "fail", title: "Can't import", message: "This backup is missing its imported-keys key." }
+	return {
+		kind: "proceed",
+		restoreSecret: { masterKey: asBase64MasterSecret(masterKey), entropy: entropyField, importedKeysDek: dekField },
 	}
-	const restoreSecret: RestoreSecret =
-		profile.type === "password"
-			? {
-					type: "password",
-					masterKey: asBase64MasterSecret(masterKey),
-					entropy: entropyField as string,
-					importedKeysDek: dekField as string,
-				}
-			: { type: "passkey", credentialId: asBase64CredentialId(masterKey), dekSealed: dekSealedField as string }
-	return { kind: "proceed", restoreSecret }
 }
 
 /** A network a tail registers into. The service re-validates the whole stored row it is handed,

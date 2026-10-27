@@ -1,7 +1,6 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import { describe, expect, test, vi } from "vitest"
+import { describe, expect, test } from "vitest"
 import { deriveBip39Seed } from "./mnemonic-master"
-import { PasskeyCredential } from "./passkey-credential"
 
 /**
  * Executable entropy accounting for the one lossy step in NULO-ACCOUNT-KDF v2: reducing a
@@ -101,23 +100,5 @@ describe("field-reduction entropy accounting", () => {
 	test("the mnemonic path feeds the reduce 64 bytes", async () => {
 		const seed = await deriveBip39Seed("abandon ".repeat(23).concat("about").split(" "))
 		expect(seed.length).toBe(64)
-	})
-
-	test("the passkey path asks HKDF for 512 bits before reducing", async () => {
-		// Binds the arithmetic above to the code: this is the exact parameter that was 256 before
-		// the entropy fix, and nothing else in the type system would notice it changing back.
-		const spy = vi.spyOn(globalThis.crypto.subtle, "deriveBits")
-		try {
-			const credential = await PasskeyCredential.create({
-				id: "dGVzdC1jcmVkZW50aWFsLWlk",
-				prf: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
-			})
-			await credential.deriveMasterSecret()
-			const widths = spy.mock.calls.map((call) => call[2])
-			expect(widths).toContain(512)
-			expect(widths).not.toContain(256)
-		} finally {
-			spy.mockRestore()
-		}
 	})
 })

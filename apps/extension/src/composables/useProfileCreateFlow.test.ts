@@ -14,19 +14,22 @@ vi.mock("@/utils/core", () => {
 })
 
 vi.mock("@/wallet/utils/create-passkey-profile", () => ({
-	createPasskeyProfileWithRetry: vi.fn(async () => ({ id: "p1", name: "Created", type: "passkey" })),
+	createPasskeyProfileInPage: vi.fn(async () => ({
+		profile: { id: "p1", name: "Created", type: "passkey" },
+		credentialData: { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" },
+	})),
 }))
 
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: vi.fn(() => false) }))
 
 import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { createPasskeyProfileWithRetry } from "@/wallet/utils/create-passkey-profile"
+import { createPasskeyProfileInPage } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { useProfileCreateFlow, type UseProfileCreateFlowOptions } from "./useProfileCreateFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
-const passkeyRetry = createPasskeyProfileWithRetry as unknown as ReturnType<typeof vi.fn>
+const passkeyRetry = createPasskeyProfileInPage as unknown as ReturnType<typeof vi.fn>
 
 function makeFlow(overrides: Partial<UseProfileCreateFlowOptions> = {}) {
 	const opts: UseProfileCreateFlowOptions = {
@@ -63,18 +66,22 @@ describe("useProfileCreateFlow", () => {
 		await flow.handleCreate()
 		expect(profileApi.createProfile).toHaveBeenCalledWith("MyProfile", "password123")
 		expect(opts.onCreated).toHaveBeenCalledTimes(1)
-		expect(opts.onCreated).toHaveBeenCalledWith({ id: "p1", name: "Created", type: "password" })
+		expect(opts.onCreated).toHaveBeenCalledWith({ id: "p1", name: "Created", type: "password" }, undefined)
 		expect(flow.isCreating.value).toBe(false)
 	})
 
-	test("passkey create delegates to createPasskeyProfileWithRetry then activates once", async () => {
+	// The phrase stage opens the new profile's recovery phrase with this answer, so no second prompt runs.
+	test("an in-page passkey create activates once and hands on the answer it was made from", async () => {
 		const { flow, opts } = makeFlow()
 		flow.profileName.value = "MyProfile"
 		flow.authMethod.value = "passkey"
 		await flow.handleCreate()
 		expect(passkeyRetry).toHaveBeenCalledTimes(1)
 		expect(passkeyRetry.mock.calls[0]?.[0]).toBe("MyProfile")
-		expect(opts.onCreated).toHaveBeenCalledTimes(1)
+		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith(
+			{ id: "p1", name: "Created", type: "passkey" },
+			{ id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" },
+		)
 	})
 
 	test("in Firefox's toolbar panel, passkey create goes to the background once, with no in-page ceremony", async () => {
@@ -84,10 +91,44 @@ describe("useProfileCreateFlow", () => {
 		flow.authMethod.value = "passkey"
 		await flow.handleCreate()
 		expect(profileApi.createPasskeyProfile).toHaveBeenCalledTimes(1)
-		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("MyProfile")
+		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("MyProfile", undefined, false)
 		expect(profileApi.generateProfileId).not.toHaveBeenCalled()
 		expect(passkeyRetry).not.toHaveBeenCalled()
-		expect(opts.onCreated).toHaveBeenCalledTimes(1)
+		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith({ id: "p1", name: "Created", type: "passkey" }, undefined)
+	})
+
+	describe("with a passkey the person already has", () => {
+		test("the page asks a discovery and confirms no credential an earlier create saved", async () => {
+			const { flow, opts } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(
+				new PasskeyUnconfirmedError("Y3JlZA==", "c2F2ZWQ=", new DOMException("no", "NotAllowedError")),
+			)
+			flow.profileName.value = "MyProfile"
+			await flow.handleCreate()
+			await flow.handleCreateWithExistingPasskey()
+			expect(passkeyRetry.mock.calls.at(-1)).toEqual(["MyProfile", expect.anything(), undefined, true])
+			expect(opts.onCreated).toHaveBeenCalledOnce()
+		})
+
+		test("in Firefox's toolbar panel the background asks it", async () => {
+			vi.mocked(closesOnFocusLoss).mockReturnValue(true)
+			const { flow } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			await flow.handleCreateWithExistingPasskey()
+			expect(profileApi.createPasskeyProfile).toHaveBeenCalledExactlyOnceWith("MyProfile", undefined, true)
+		})
+
+		test("on the Password tab it does nothing", async () => {
+			const { flow, opts } = makeFlow()
+			flow.authMethod.value = "password"
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await flow.handleCreateWithExistingPasskey()
+			expect(profileApi.createProfile).not.toHaveBeenCalled()
+			expect(passkeyRetry).not.toHaveBeenCalled()
+			expect(opts.onCreated).not.toHaveBeenCalled()
+		})
 	})
 
 	test("latch: two synchronous submits create only once", async () => {
@@ -176,6 +217,42 @@ describe("useProfileCreateFlow", () => {
 		expect(flow.isCreating.value).toBe(false)
 	})
 
+	test.each([
+		["a passkey the person already has", true, new PasskeyPrfError("Passkey PRF not available")],
+		["a new passkey", false, new PasskeyUnconfirmedError("Y3JlZA==", "c2FsdA==", new PasskeyPrfError("Passkey PRF not available"))],
+	])("%s that gives no PRF toasts the unlock's line and raises no notice", async (_case, existing, failure) => {
+		passkeyRetry.mockRejectedValueOnce(failure)
+		const { flow, opts } = makeFlow()
+		flow.profileName.value = "MyProfile"
+		flow.authMethod.value = "passkey"
+		await (existing ? flow.handleCreateWithExistingPasskey() : flow.handleCreate())
+		expect(opts.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "This passkey can't unlock Nulo." })
+		expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+		expect(flow.isCreating.value).toBe(false)
+	})
+
+	test.each(["password", "passkey"] as const)(
+		"a %s create that fails after the page left raises no notice and no toast",
+		async (method) => {
+			let reject!: (e: unknown) => void
+			const pending = () => new Promise<never>((_, r) => (reject = r))
+			if (method === "password") profileApi.createProfile.mockImplementationOnce(pending)
+			else passkeyRetry.mockImplementationOnce(pending)
+			const { flow, opts } = makeFlow()
+			flow.authMethod.value = method
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			const submitted = flow.handleCreate()
+			await flushPromises()
+			flow.dispose()
+			reject(new Error("boom"))
+			await submitted
+			expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+			expect(opts.openToast).not.toHaveBeenCalled()
+		},
+	)
+
 	test("password create failure notifies with isPasskey=false", async () => {
 		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
 		const { flow, opts } = makeFlow()
@@ -227,11 +304,9 @@ describe("useProfileCreateFlow", () => {
 	})
 
 	describe("passkey retry after a created-but-unconfirmed credential", () => {
-		const saved = { credentialId: "Y3JlZA==", userHandle: "saved-id" }
-		const notConfirmed = () =>
-			new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new DOMException("no", "NotAllowedError"))
-		const noPrf = () =>
-			new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new PasskeyPrfError("Passkey PRF not available"))
+		const saved = { credentialId: "Y3JlZA==", prfSalt: "c2F2ZWQ=" }
+		const notConfirmed = () => new PasskeyUnconfirmedError(saved.credentialId, saved.prfSalt, new DOMException("no", "NotAllowedError"))
+		const noPrf = () => new PasskeyUnconfirmedError(saved.credentialId, saved.prfSalt, new PasskeyPrfError("Passkey PRF not available"))
 
 		async function attempt(flow: ReturnType<typeof makeFlow>["flow"], name: string) {
 			flow.profileName.value = name
@@ -251,7 +326,7 @@ describe("useProfileCreateFlow", () => {
 
 		test("a cancel during the confirmation stays silent and keeps the credential for the retry", async () => {
 			const { flow, opts } = makeFlow()
-			passkeyRetry.mockRejectedValueOnce(new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new UserRejectedError()))
+			passkeyRetry.mockRejectedValueOnce(new PasskeyUnconfirmedError(saved.credentialId, saved.prfSalt, new UserRejectedError()))
 			await attempt(flow, "MyProfile")
 			expect(await attempt(flow, "MyProfile")).toEqual(saved)
 			expect(opts.openToast).not.toHaveBeenCalled()

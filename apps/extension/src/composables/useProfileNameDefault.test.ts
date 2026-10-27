@@ -85,6 +85,22 @@ describe("useProfileNameDefault · backup names", () => {
 		expect(field.profileName.value).toBe("")
 	})
 
+	test("a taken backup name is offered as the restore saves it, case-folded like the field, and submitted as shown", async () => {
+		const { d, field, list } = await mountWith(["Main", "main 1"])
+		d.offer("Main")
+		expect(field.profileName.value).toBe("Main 2")
+		expect(await resolveWith(d, list, ["Main", "main 1"], "Main")).toBe("Main 2")
+		expect(field.profileName.value).toBe("Main 2")
+	})
+
+	test("a profile added elsewhere since the offer: the submit writes the name it saves into the field", async () => {
+		const { d, field, list } = await mountWith(["Main"])
+		d.offer("Main")
+		expect(field.profileName.value).toBe("Main 1")
+		expect(await resolveWith(d, list, ["Main", "Main 1"], "Main")).toBe("Main 2")
+		expect([field.profileName.value, d.holdsOwnName()]).toEqual(["Main 2", false])
+	})
+
 	test("a backup picked before the list arrives keeps its name", async () => {
 		const field = useProfileNameField()
 		const list = makeList()
@@ -95,6 +111,17 @@ describe("useProfileNameDefault · backup names", () => {
 		expect(field.profileName.value).toBe("Alpha")
 		d.offer(null)
 		expect(field.profileName.value).toBe("Profile 2")
+	})
+
+	test("a taken backup name picked before the list arrives is suffixed once it does", async () => {
+		const field = useProfileNameField()
+		const list = makeList()
+		const d = useProfileNameDefault(field, list.listNames)
+		d.offer("Main")
+		expect(field.profileName.value).toBe("Main")
+		list.reads[0].resolve(["Main"])
+		await flushPromises()
+		expect(field.profileName.value).toBe("Main 1")
 	})
 })
 
@@ -115,7 +142,7 @@ describe("useProfileNameDefault · resolveName", () => {
 		expect(await name).toBe("Profile 2")
 	})
 
-	test("a late setup read after submit started writes nothing into the field", async () => {
+	test("a late setup read after submit started leaves the submitted name in the field", async () => {
 		const field = useProfileNameField()
 		const list = makeList()
 		const d = useProfileNameDefault(field, list.listNames)
@@ -124,7 +151,7 @@ describe("useProfileNameDefault · resolveName", () => {
 		expect(await name).toBe("Main")
 		list.reads[0].resolve(["Main", "Work"])
 		await flushPromises()
-		expect(field.profileName.value).toBe("")
+		expect(field.profileName.value).toBe("Main")
 		expect(d.nameFieldState.value).toBe("shown")
 	})
 

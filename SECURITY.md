@@ -27,12 +27,10 @@ These values are cryptographically bound. Changing any of them invalidates
 existing keys and profiles.
 
 - **KDF domain separator labels**
-  - `nulo:profile:v1` — WebAuthn PRF input label
-    (`packages/wallet-crypto/src/constants.ts:PASSKEY_PRF_LABEL`)
-  - `nulo:kdf:v1` — HKDF salt label
-    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_KDF_LABEL`)
-  - `nulo:master:v1` — HKDF info label
-    (`packages/wallet-crypto/src/passkey-credential.ts:PASSKEY_MASTER_LABEL`)
+  - `nulo:passkey-unlock:v1` — HKDF info label of a passkey profile's unlock key
+    (`packages/wallet-crypto/src/passkey-unlock-key.ts`)
+  - Kept as the record of passkey profiles made before 1.1: `nulo:profile:v1`
+    (WebAuthn PRF input), `nulo:kdf:v1` (HKDF salt) and `nulo:master:v1` (HKDF info)
 - **`AccountType.Nulo_v1 = 0`** — embedded in the Poseidon hash used to derive
   account secrets from the master secret. The numeric value is part of the
   hash input; renaming the enum is fine, but reassigning the numeric value
@@ -44,9 +42,8 @@ existing keys and profiles.
   WebAuthn `get` (both literals must match — they're the same crypto
   binding). Changing it invalidates every existing passkey credential.
   The host is deliberately content-less: WebAuthn lets every origin whose
-  registrable domain suffix-matches the RP ID assert with the credential
-  and evaluate its PRF, which is how the wallet master is derived — so the
-  RP host serves one static page with a strict CSP and no scripts, never
+  registrable domain suffix-matches the RP ID assert with the credential —
+  so the RP host serves one static page with a strict CSP and no scripts, never
   application code (`infra/passkey-rp/`: a Cloudflare Worker on a single
   custom domain, no `workers.dev` origin), every `*.passkey.nulo.sh`
   descendant stays unregistered in DNS, and the extension's own content
@@ -57,10 +54,11 @@ existing keys and profiles.
   ever challenges it) — the edge that already terminates the host's TLS,
   so no new trust root, and the page's CSP refuses any script a zone
   feature would inject; the README lists the dashboard settings to keep
-  off. The wallet holds no factor of its own: the master derives from the
-  passkey alone, which is what lets a fresh install recover the master and
-  every derived account from the passkey (imported keys come back only with
-  a full backup). Who may use the passkey for this RP ID is decided by the
+  off. A passkey profile's recovery phrase is sealed in the wallet's storage
+  under a key rebuilt from the passkey for that profile; the seed and every
+  key stay encrypted in the wallet's own storage, and nothing that leaves it
+  (a backup, an export) opens with the passkey alone. A fresh install
+  recovers from the recovery phrase or a full backup. Who may use the passkey for this RP ID is decided by the
   browser and the authenticator, not by the wallet, which adds no
   restriction beyond the measures above (known limit #597).
   - **Build-time gate** (`scripts/check-rp-id.ts`): single source
@@ -116,13 +114,11 @@ When a user unlocks a password profile under strict mode (the default):
    interaction shows the lock screen and the user re-authenticates (paying
    ~1s PBKDF2 again).
 
-This matches passkey profile behavior (which always requires fresh auth on
-SW death — see below): in strict mode both profile types behave the same way
-on SW death.
+Passkey profiles follow the same rules (see below).
 
 **Opt-out: lenient mode** — Settings → Lock → "Strict security mode" →
-toggle OFF (with a confirm dialog). A password-profile session opened from
-then on also persists a silent-restore bearer (`SessionSecretBox`,
+toggle OFF (with a confirm dialog). A session opened from then on, under
+either unlock, also persists a silent-restore bearer (`SessionSecretBox`,
 `packages/wallet-crypto/src/session-secret-box.ts`):
 
 1. The master secret and the profile's imported-keys key are wrapped together
@@ -145,7 +141,8 @@ browser keeps the bearer only for its session, but a copy taken during that
 time exposes both secrets for good: locking, expiry, turning strict mode on
 and changing the password do not rotate them. It reveals nothing about the
 password, because its token is random. The disable-confirm dialog warns that
-anyone who can read browser data can unlock the wallet without the password.
+anyone who can read browser data can unlock the wallet without the password
+or passkey.
 
 ### Threat model
 
@@ -167,9 +164,9 @@ anyone who can read browser data can unlock the wallet without the password.
   while a restarting worker is restoring the session. A bearer left behind
   stays readable until the session record is rewritten without it or deleted,
   or the browser exits, and `restore()` refuses it while strict mode is on.
-- **Toggle OFF mid-session**: no immediate effect. The next password-profile
-  session open writes the bearer: an unlock, a profile creation or import, or
-  a password change on the active profile.
+- **Toggle OFF mid-session**: no immediate effect. The next session open
+  writes the bearer: an unlock, a profile creation or import, or a change of
+  the active profile's password or unlock method.
 - **Stale bearer**: a session record left by a lenient session is untrusted by
   `restore()` while strict mode is ON — silentClose + lock screen on the next
   SW restart. A record left by the retired design (a non-empty `passhash`) is
@@ -184,15 +181,11 @@ anyone who can read browser data can unlock the wallet without the password.
 
 ## Session secret (passkey profiles)
 
-Passkey profiles **do not persist any session material**. When the service
-worker restarts, the user must re-perform WebAuthn PRF to re-derive the
-master secret. WebAuthn PRF requires a user gesture (passkey tap), which is
-impossible to satisfy silently — this is a hard API constraint, not a policy
-choice.
-
-**Passkey symmetry**: under strict-mode-ON (default), password profiles
-follow the same pattern. Under strict-mode-OFF the asymmetry returns and is
-documented above.
+A passkey profile's unlock opens its slots under the key its passkey rebuilds
+in place of the PBKDF2 key, and nothing derived from the passkey is persisted.
+Its session follows the rules above: under strict mode a worker restart asks
+for the passkey again; under lenient mode the bearer holds its master and
+imported-keys key.
 
 ## Content script injection
 

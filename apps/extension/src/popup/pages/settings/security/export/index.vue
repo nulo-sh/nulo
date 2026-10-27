@@ -15,40 +15,15 @@ const appStore = useAppStore()
 
 <template>
 	<SettingsPageShell title="Backup" :backTo="'/popup/settings'" gap="24">
-		<!-- Passkey profile -->
-		<template v-if="appStore.profile.type === 'passkey'">
-			<ItemsContainer title="Profile">
-				<SettingItem :title="appStore.profile.name" titleVariant="name" raw />
-			</ItemsContainer>
+		<ItemsContainer title="Profile to backup">
+			<SettingItem :title="appStore.profile.name" titleVariant="name" raw />
+		</ItemsContainer>
 
-			<Flex direction="column" gap="12" style="padding: 0 8px;">
-				<Text variant="body" height="150" color="tertiary">
-					To access your profile on a new device, the Passkey must be <Text variant="value" color="secondary">synced</Text> with
-					it or <Text variant="value" color="secondary">available on another device</Text> you own.
-				</Text>
-			</Flex>
-
-			<ItemsContainer title="Choose backup mode">
-				<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
-			</ItemsContainer>
-		</template>
-
-		<!-- Password profile -->
-		<template v-else>
-			<ItemsContainer title="Profile to backup">
-				<SettingItem :title="appStore.profile.name" titleVariant="name" raw />
-			</ItemsContainer>
-
-			<ItemsContainer title="Choose backup mode">
-				<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
-				<SettingItem title="Recovery Phrase" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
-				<SettingItem
-					title="Account"
-					to="/popup/settings/security/export/account"
-					data-testid="account-backup-link-btn"
-				/>
-			</ItemsContainer>
-		</template>
+		<ItemsContainer title="Choose backup mode">
+			<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
+			<SettingItem title="Recovery Phrase" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
+			<SettingItem title="Account" to="/popup/settings/security/export/account" data-testid="account-backup-link-btn" />
+		</ItemsContainer>
 
 		<ItemsContainer
 			description="Explore credentials management capabilities and options for resolving potential issues"

@@ -4,6 +4,8 @@
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStack } from "@/composables/usePopupStack"
 import { usePopupStore } from "@/stores/popup.store"
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("forgot_password")
@@ -14,6 +16,8 @@ const emit = defineEmits(["onClose"])
 const props = defineProps({
 	show: Boolean,
 })
+
+const isPasskeyProfile = computed(() => appStore.profile?.type === "passkey")
 
 const handleReset = () => {
 	popupStore.closeAll()
@@ -28,11 +32,14 @@ const handleReset = () => {
 				<Flex align="center" direction="column" gap="12">
 					<Flex align="center" gap="6">
 						<Icon name="help" size="18" color="primary" />
-						<Text variant="title-page" color="primary"> Lost your password? </Text>
+						<Text variant="title-page" color="primary" data-testid="forgot-title">
+							{{ isPasskeyProfile ? "Lost your passkey?" : "Lost your password?" }}
+						</Text>
 					</Flex>
 
 					<Text variant="body" color="body" height="140" align="center" style="padding: 0 12px">
-						Password recovery is not possible. Delete this profile, then re-import it with its recovery phrase.
+						{{ isPasskeyProfile ? "A lost passkey can't be recovered." : "Password recovery is not possible." }} Delete this
+						profile, then re-import it with its recovery phrase.
 					</Text>
 					<!-- Shown for every profile: while locked the wallet reads nothing about its accounts. -->
 					<Flex align="start" gap="6" :class="$style.warning" data-testid="forgot-imported-warning">

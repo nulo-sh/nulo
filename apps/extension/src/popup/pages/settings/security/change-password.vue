@@ -27,6 +27,7 @@ import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityT
 import { useAppStore } from "@/stores/app.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+import { leaveFor } from "@/utils/page-back"
 const appStore = useAppStore()
 
 const router = useRouter()
@@ -88,6 +89,27 @@ const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
 	handleChangePassword()
 }
+
+// Passwords typed under a session never outlive it.
+watch(
+	() => appStore.isLogined,
+	(logged) => {
+		if (logged) return
+		currentPassword.value = ""
+		newPassword.value = ""
+		repeatedNewPassword.value = ""
+		handlePasswordInput()
+	},
+)
+
+// A passkey profile has no password to change; the route guard sends one away on arrival, and a
+// change of unlock method made in another window sends this page the same way.
+watch(
+	() => appStore.profile?.type,
+	(type) => {
+		if (type === "passkey") leaveFor(router, "/popup/settings/profile")
+	},
+)
 
 onMounted(() => {
 	profileService = new ProfileServiceClient()

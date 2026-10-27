@@ -1,13 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { getRandomHex } from "@nulo/wallet-core/utils"
-import type {
-	Base64CredentialId,
-	Base64MasterSecret,
-	ImportedKeysDek,
-	PasskeyCredentialData,
-	SessionWrappedSecret,
-} from "@nulo/wallet-crypto"
+import type { Base64MasterSecret, ImportedKeysDek, PasskeyCredentialData, SessionWrappedSecret } from "@nulo/wallet-crypto"
 import type { Restored } from "@/wallet/base"
 import type { ExecutionFence } from "./profile-deletion-state"
 
@@ -23,48 +17,33 @@ export type ProfileType = "password" | "passkey"
  *  with the service worker, so the fence also names the worker that issued it. */
 export type RunFence = ExecutionFence & { incarnation: string }
 
-/**
- * Passkey full-backup material from ONE authenticated ceremony: the credentialId (the backup's
- * `master-key`) and the SEALED imported-keys DEK blob the backup carries verbatim. When the stored
- * slot no longer opens under the ceremony's wrap key, a FRESH DEK is sealed under that key and
- * carried instead (`dekReplaced: true`); the stored row is never modified. `unopened` counts the
- * imported-key rows that do not open under the stored DEK, and is 0 when it was replaced.
- */
-export type PasskeyBackupMaterial = { credentialId: string; dekSealed: string; dekReplaced: boolean; unopened: number }
-
 /** A finalized restore: the opened profile, and the fence of the session its finalize opened. */
 export type FinalizedRestore = { profile: ProfileInfo; fence: RunFence }
 
 /**
- * The secret half of a full-backup `restore()`, discriminated by profile type.
- * Replaces the old polymorphic `masterKey: string` slot, where a password profile
- * passed a base64 32-byte plain master key and a passkey profile passed a credential
- * id in the SAME parameter — a swap that type-checked and only failed at restore.
- * `ProfileService.restore` asserts `secret.type === profile.type` before branching.
+ * The secret body of a full backup, the same for every profile since passkey profiles have a
+ * recovery phrase: `restore` verifies `PBKDF2(words(entropy)) == masterKey` before sealing either
+ * (the backup checksum is integrity, not authenticity).
  */
-export type RestoreSecret =
-	| {
-			type: "password"
-			masterKey: Base64MasterSecret
-			/** Base64 of the 32-byte BIP-39 entropy behind the recovery phrase. REQUIRED for
-			 *  epoch-4 password backups; `restore` verifies `PBKDF2(words(entropy)) == masterKey`
-			 *  before sealing either (the backup checksum is integrity-not-auth). */
-			entropy: string
-			/** Base64 of the SOURCE profile's 32-byte imported-keys DEK, plaintext — the same trust
-			 *  envelope as the plaintext `masterKey` beside it. REQUIRED (epoch-4 shape). Used ONLY
-			 *  inside the TTL-bound rewrap context: `restore` mints a FRESH destination DEK for the
-			 *  new row (a restored clone must never share the source's DEK — clone divergence) and
-			 *  `restoreImportedKeys` rewraps the backup's key rows source→destination. */
-			importedKeysDek: string
-	  }
-	| {
-			type: "passkey"
-			credentialId: Base64CredentialId
-			/** The source profile's SEALED dek blob, verbatim (passkey backups carry no plaintext
-			 *  secrets) — the restore ceremony re-derives the same PRF wrap key to unseal it into
-			 *  the rewrap context. REQUIRED (epoch-4 shape). */
-			dekSealed: string
-	  }
+export type RestoreSecret = {
+	masterKey: Base64MasterSecret
+	/** Base64 of the 32-byte BIP-39 entropy behind the recovery phrase. */
+	entropy: string
+	/** Base64 of the backup's own 32-byte transfer key, which its imported-key rows are sealed
+	 *  under. Used ONLY inside the TTL-bound rewrap context: `restore` mints a FRESH destination DEK
+	 *  for the new row (a restored clone must never share the source's DEK) and
+	 *  `restoreImportedKeys` rewraps the backup's key rows source→destination. */
+	importedKeysDek: string
+}
+
+/** What a passkey unlock asks the passkey for: the credential, and the PRF input the profile's slots
+ *  open under. */
+export type PasskeyUnlockParams = { credentialId: string; prfSalt: string }
+
+/** A profile's unlock as a method change takes it: a password, or a passkey's answer. The current one
+ *  must open the profile (a passkey answer for its own `prfSalt`); a new one is a password of at
+ *  least 8 characters, or a new passkey answer at a fresh `prfSalt`. */
+export type UnlockCredential = { password: string } | { passkey: PasskeyCredentialData }
 
 export type ProfileInfo = {
 	/** Randomly generated id. */
@@ -73,6 +52,9 @@ export type ProfileInfo = {
 	name: string
 	/** Profile type. */
 	type: ProfileType
+	/** `true` for a passkey profile made before 1.1, whose row holds no recovery phrase: listed and
+	 *  deletable, never opened. A projection of the stored row's shape, never persisted. */
+	retired?: boolean
 	/** `true` while THIS profile's session is open WITHOUT its imported-keys DEK — recovery mode:
 	 *  the PXE store key and the dApp-session key take `HKDF(master ‖ dek)` and cannot be derived,
 	 *  so chain data and dApp sessions are unavailable until export + restore. A projection of the
@@ -80,15 +62,15 @@ export type ProfileInfo = {
 	recoveryMode?: boolean
 }
 
-export type Profile = Omit<ProfileInfo, "recoveryMode"> & {
+export type Profile = Omit<ProfileInfo, "recoveryMode" | "retired"> & {
 	/** 128-bit random incarnation generation (hex), minted fresh at EVERY row
 	 *  creation — including a same-id backup re-import. The PXE layer fences
 	 *  provisions/ops/clears on it so a deleted incarnation can never be
 	 *  resurrected in the offscreen document. Never reused, never
 	 *  derived from the id. */
 	pxeGeneration: string
-	/** The per-profile imported-keys DEK, sealed under the profile CREDENTIAL (password:
-	 *  EncryptionKey under the passhash; passkey: AES-GCM under the PRF-derived wrap key), AAD
+	/** The per-profile imported-keys DEK, sealed under the profile's unlock (password: EncryptionKey
+	 *  under the passhash; passkey: AES-GCM under the passkey unlock key), AAD
 	 *  `nulo:profile-imported-dek:v1`. The DEK — never the master — roots imported signing-key
 	 *  rows: a shared recovery phrase means a shared master, so master-rooted keys are readable by
 	 *  the sibling profile by construction. */
@@ -98,35 +80,38 @@ export type Profile = Omit<ProfileInfo, "recoveryMode"> & {
 	 *  only compare a candidate master against stored fingerprints. Negligible-marginal (not zero)
 	 *  same-device linkability, owner-accepted; see `wallet-fingerprint.ts`. */
 	walletFingerprint: string
+	/** Sealed under the profile's unlock: version-0 PBKDF2 frames under a password, version-1
+	 *  AES-GCM frames under a passkey unlock key (`profile-slots.ts`). */
+	guard: string
+	secret: string
+	/** Sealed 32-byte BIP-39 entropy (AAD-bound) — the recovery phrase re-displays from THIS; the
+	 *  master derives one-way from the words. */
+	entropy: string
+	/** HMAC over (this row's OWN storage id, the four sealed slots, the plaintext wallet
+	 *  fingerprint), keyed by HKDF(master‖dek) — v3. NOT master-only: the same-phrase attacker HOLDS
+	 *  the master, so a master-keyed tag is forgeable by them; forging v3 additionally requires the
+	 *  victim's DEK. The id binding kills whole-envelope swaps between profiles that share an unlock;
+	 *  the fingerprint binding makes blinding the duplicate guard a detectable tamper. Verified at
+	 *  every unlock AND bearer restore; a mismatch opens DERIVED-ONLY (imported accounts quarantine,
+	 *  no bearer) — never a profile block (imported material must not block derived funds). */
+	envelopeMac: string
 } & (
-		| {
-				type: "password"
-				guard: string
-				secret: string
-				/** Sealed 32-byte BIP-39 entropy (AAD-bound, PasswordSecretBox v2) — the recovery
-				 *  phrase re-displays from THIS; the master derives one-way from the words. */
-				entropy: string
-				/** HMAC over (this row's OWN storage id, the four sealed slots, the plaintext
-				 *  wallet fingerprint), keyed by HKDF(master‖dek) — v3. NOT master-only: the
-				 *  same-phrase attacker HOLDS the master, so a master-keyed tag is forgeable by
-				 *  them; forging v3 additionally requires the victim's DEK. The id binding kills
-				 *  whole-envelope swaps between same-password profiles; the fingerprint binding
-				 *  makes blinding the duplicate guard a detectable tamper. Verified at password
-				 *  unlock AND bearer restore; a mismatch opens DERIVED-ONLY (imported accounts
-				 *  quarantine, no bearer) — never a profile block (A4: imported material must
-				 *  not block derived funds). */
-				envelopeMac: string
-		  }
+		| { type: "password" }
 		| {
 				type: "passkey"
+				/** The passkey that unlocks this profile. */
 				credentialId: string
+				/** 32 random bytes (base64), this profile's own: the PRF input its passkey evaluates and the
+				 *  HKDF salt of its unlock key. A changed value opens nothing. */
+				prfSalt: string
 		  }
 	)
 
 /** What the profile RPCs return, never the stored row: a row carries sealed key material.
  *  `recoveryMode` is present only when true, so a persisted identity never carries the key. */
-export function toProfileInfo(profile: Pick<ProfileInfo, "id" | "name" | "type">, recoveryMode: boolean): ProfileInfo {
+export function toProfileInfo(profile: Pick<ProfileInfo, "id" | "name" | "type">, recoveryMode: boolean, retired = false): ProfileInfo {
 	const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
+	if (retired) info.retired = true
 	if (recoveryMode) info.recoveryMode = true
 	return info
 }
@@ -139,8 +124,8 @@ export function mintPxeGeneration(): string {
 export type Session = {
 	/** Profile id. */
 	profile: string
-	/** Random-token wrapped-secret silent-restore bearer (non-strict
-	 *  password profiles only). Replaces `passhash` — see `SessionSecretBox`.
+	/** Random-token wrapped-secret silent-restore bearer (any profile opened
+	 *  with its DEK, strict mode off). Replaces `passhash` — see `SessionSecretBox`.
 	 *  The token is random, not password-derived, so a session-store leak no
 	 *  longer exposes a password-equivalent value. */
 	bearer?: SessionWrappedSecret
@@ -201,22 +186,6 @@ export type Methods = {
 	getProfiles(): ProfileInfo[]
 
 	/**
-	 * Returns a freshly-generated profile id that is not currently in
-	 * storage — useful for PATH A passkey create flows that need to
-	 * bind the WebAuthn `userHandle` to a known id BEFORE the ceremony
-	 * runs (the credential's userHandle = profile id is the linkage
-	 * `recoverByCredentialId` / `importPasskey` rely on).
-	 *
-	 * Caller MUST follow the contract documented at
-	 * `ProfileRepository.generateUniqueId` — pair every use with a
-	 * locked re-verification before relying on the id. The id may be
-	 * claimed by a concurrent writer between this call and the
-	 * subsequent `createPasskeyProfile`; surface that conflict via
-	 * `ProfileIdConflictError`.
-	 */
-	generateProfileId(): string
-
-	/**
 	 * Creates and returns a new profile.
 	 * @param name Display name.
 	 * @param password Password for storage encryption.
@@ -224,18 +193,18 @@ export type Methods = {
 	createProfile(name: string, password: string): ProfileInfo
 
 	/**
-	 * Creates and returns a new passkey-backed profile.
+	 * Creates a passkey profile: a new recovery phrase, sealed under the unlock key the passkey's
+	 * answer rebuilds for the profile's own `prfSalt`, then signs in.
 	 *
 	 * @param name Display name.
-	 * @param credentialData OPTIONAL — PATH A. When present, the caller has
-	 *   already collected the WebAuthn credential via the in-page modal
-	 *   (`src/wallet/utils/passkey-ceremony.ts:runPasskeyCeremony`); the SW
-	 *   skips its window-opening dance and uses the supplied data.
-	 *   When absent, falls through to the legacy PATH B (SW opens a popup
-	 *   window). PATH B currently has no production callers but the
-	 *   plumbing is preserved for future SW/dApp-triggered flows.
+	 * @param credentialData PATH A: the page ran the create (`runPasskeyCeremony`), or the
+	 *   discovery get of a passkey the person already has, with a `prfSalt` it minted, which the
+	 *   answer reports and the row stores. Absent: PATH B, the background mints the input and the
+	 *   passkey window runs the step.
+	 * @param existing PATH B only: the window asks for a passkey the person already has instead of
+	 *   creating one.
 	 */
-	createPasskeyProfile(name: string, credentialData?: PasskeyCredentialData): ProfileInfo
+	createPasskeyProfile(name: string, credentialData?: PasskeyCredentialData, existing?: boolean): ProfileInfo
 
 	/**
 	 * Unlocks a profile with the specified id.
@@ -245,23 +214,21 @@ export type Methods = {
 	unlockProfile(id: string, password: string): ProfileInfo
 
 	/**
-	 * Unlocks a passkey-backed profile with the specified id.
+	 * Unlocks a passkey profile with the specified id. Throws `RetiredProfileError` for a passkey
+	 * profile made before 1.1.
 	 *
 	 * @param id Profile id.
-	 * @param credentialData OPTIONAL — PATH A. See `createPasskeyProfile` for
-	 *   the dual-path contract.
+	 * @param credentialData PATH A: the page's answer for {@link getPasskeyUnlockParams}. The
+	 *   profile opens only under its own credential and its own `prfSalt`. Absent: PATH B.
 	 */
 	unlockPasskeyProfile(id: string, credentialData?: PasskeyCredentialData): ProfileInfo
 
 	/**
-	 * Returns the WebAuthn `credentialId` bound to a passkey profile.
-	 * The popup needs this to run a targeted `navigator.credentials.get`
-	 * (allowedCredentials) for PATH A unlock — instead of a discovery
-	 * `get` that would let the user pick any of their passkeys, possibly
-	 * the wrong one. Throws if the profile is not passkey-typed or has
-	 * no credentialId.
+	 * What PATH A asks the passkey for to unlock profile `id`: its credential (an `allowCredentials`
+	 * `get`, never a discovery picker) and its PRF input. Throws `RetiredProfileError` for a passkey
+	 * profile made before 1.1, and when the profile is not passkey-typed.
 	 */
-	getPasskeyCredentialId(id: string): string
+	getPasskeyUnlockParams(id: string): PasskeyUnlockParams
 
 	/**
 	 * An opaque name for the open session, or `undefined` while locked.
@@ -307,20 +274,37 @@ export type Methods = {
 	changeProfilePassword(id: string, oldPassword: string, newPassword: string): ProfileInfo
 
 	/**
+	 * Throws unless `credential` opens profile `id` as {@link changeUnlockMethod} needs: its slots,
+	 * the recovery phrase's match with the master, and the imported-keys key and its record.
+	 * `InvalidPasswordError` for a wrong password, the change's own refusal otherwise. Opens no
+	 * session and writes nothing.
+	 */
+	verifyUnlockCredential(id: string, credential: UnlockCredential): void
+
+	/**
+	 * Throws unless `credential` opens profile `id` as an export needs: its slots and the recovery
+	 * phrase's match with the master, never the imported-keys key, so a profile in recovery mode
+	 * still passes. `InvalidPasswordError` for a wrong password, the passkey's own refusal for
+	 * another passkey. Opens no session and writes nothing; the export checks again.
+	 */
+	verifyExportCredential(id: string, credential: UnlockCredential): void
+
+	/**
+	 * Moves profile `id` from the unlock `current` opens it with to `next`, keeping its recovery
+	 * phrase, accounts and data. Refuses a profile whose imported-keys key no longer opens or no
+	 * longer matches its record, and with `StaleUnlockCredentialError` one that does not store the
+	 * unlock `current` is for. Throws `UnlockMethodChangedError` when the change was saved, or may
+	 * have been, but the profile could not be reopened: the wallet is then locked. An account
+	 * integrity block found on the reopen returns the profile with its session closed, behind the
+	 * integrity barrier.
+	 */
+	changeUnlockMethod(id: string, current: UnlockCredential, next: UnlockCredential): ProfileInfo
+
+	/**
 	 * Deletes a profile and returns the deleted profile.
 	 * @param id Profile id.
 	 */
 	deleteProfile(id: string): ProfileInfo
-
-	/**
-	 * Imports a passkey-backed profile using an existing credential and signs in. Throws
-	 * `PasskeyProfileExistsError` (naming it) when a live profile here already holds the credential.
-	 *
-	 * @param name Display name.
-	 * @param credentialData OPTIONAL — PATH A. See `createPasskeyProfile` for
-	 *   the dual-path contract.
-	 */
-	importPasskey(name: string, credentialData?: PasskeyCredentialData, allowDuplicate?: boolean): ProfileInfo
 
 	/**
 	 * Imports a profile from its 24-word recovery phrase and signs in. Validates on the
@@ -332,24 +316,27 @@ export type Methods = {
 	 * (warn-and-confirm, never a hard block; owner policy).
 	 * @param name Display name.
 	 * @param mnemonic 24-word recovery phrase.
-	 * @param password Password to encrypt the secrets.
+	 * @param password Password to encrypt the secrets, for a password profile.
 	 * @param allowDuplicate Confirmed duplicate override from the warn dialog.
+	 * @param credentialData For a passkey profile: the page's answer from a new passkey, or from one
+	 *   the person already has, at a fresh `prfSalt` the row then stores.
 	 */
-	importMnemonic(name: string, mnemonic: string[], password: string, allowDuplicate?: boolean): ProfileInfo
+	importMnemonic(
+		name: string,
+		mnemonic: string[],
+		password?: string,
+		allowDuplicate?: boolean,
+		credentialData?: PasskeyCredentialData,
+	): ProfileInfo
 
 	/**
-	 * Returns plain profile secret (base64). For passkey profiles, the
-	 * return value is the credentialId (not a base64 secret) — the
-	 * full-backup format uses it as the `master-key` field; the import
-	 * side re-runs the ceremony against that credentialId to recover
-	 * the actual master.
+	 * Returns the profile's master (base64), after the unlock opens its slots and the words↔master
+	 * pairing check passes.
 	 *
 	 * @param id Profile id.
-	 * @param password Password to decrypt the secret (password profiles only).
-	 * @param credentialData PATH A — required for passkey profiles. The
-	 *   caller (popup) has already collected the WebAuthn credential via
-	 *   the in-page `PasskeyCeremonyDialog`. Throws if missing for a
-	 *   passkey profile (no SW-driven window fallback).
+	 * @param password The password, for a password profile.
+	 * @param credentialData The page's passkey answer for {@link getPasskeyUnlockParams}, for a
+	 *   passkey profile.
 	 */
 	exportPlain(id: string, password?: string, credentialData?: PasskeyCredentialData): string
 
@@ -357,49 +344,37 @@ export type Methods = {
 	 * Returns the 24-word recovery phrase, re-encoded from the profile's stored entropy after
 	 * the words↔master pairing check (fails closed on a tampered row).
 	 * @param id Profile id.
-	 * @param password Password to decrypt the secrets.
+	 * @param password The password, for a password profile.
+	 * @param credentialData A passkey answer for the profile's own `prfSalt`, for a passkey profile:
+	 *   the reveal's prompt, or the create's answer handed to the phrase stage.
 	 */
-	exportMnemonic(id: string, password: string): string[]
+	exportMnemonic(id: string, password?: string, credentialData?: PasskeyCredentialData): string[]
 
 	/**
-	 * Restores a profile from a full-backup payload. Writes the profile to
-	 * storage and emits `onProfileAdded`. Does NOT open a session — that's
-	 * deferred to `finalizeRestore` so the caller can finish restoring
-	 * networks / accounts / etc. before `onActiveProfileChanged` fires.
+	 * Restores a profile from a full-backup payload as a password or passkey profile. Writes the
+	 * profile to storage and emits `onProfileAdded`. Does NOT open a session — that's deferred to
+	 * `finalizeRestore` so the caller can finish restoring networks / accounts / etc. before
+	 * `onActiveProfileChanged` fires.
 	 *
-	 * For passkey profiles, the recovered secret is retained server-side in
-	 * memory between this call and `finalizeRestore` so the caller does not
-	 * have to run a second WebAuthn ceremony.
-	 *
-	 * @param profile Source profile descriptor (id, name, type) from the backup.
-	 * @param secret Profile-type-discriminated: `{ type: "password", masterKey }`
-	 *                  carries the base64 32-byte plain master key; `{ type:
-	 *                  "passkey", credentialId }` carries the original credentialId
-	 *                  used to drive recovery. `secret.type` must equal
-	 *                  `profile.type` (asserted first). For passkey, the service
-	 *                  rejects (with `credentialId mismatch`) if `credentialData.id`
-	 *                  does not match `secret.credentialId`.
-	 * @param password New password (password profiles only).
-	 * @param credentialData PATH A — required for passkey profiles. The
-	 *   caller (popup) has already collected the WebAuthn credential via
-	 *   the in-page `PasskeyCeremonyDialog`. Returns
-	 *   `{...profile, restoreError}` if missing for a passkey profile (no
-	 *   SW-driven window fallback).
+	 * @param profile Source profile descriptor (id, name, type) from the backup; its `type`
+	 *   describes the source and selects nothing.
+	 * @param secret The backup's secret body.
+	 * @param password New password, for a password profile.
+	 * @param allowDuplicate Confirmed duplicate override from the warn dialog.
+	 * @param credentialData For a passkey profile: the page's answer at a fresh `prfSalt`, as for
+	 *   `importMnemonic`; `finalizeRestore` takes the same answer.
 	 */
 	restore(
 		profile: ProfileInfo,
 		secret: RestoreSecret,
 		password?: string,
-		credentialData?: PasskeyCredentialData,
 		allowDuplicate?: boolean,
+		credentialData?: PasskeyCredentialData,
 	): Restored<ProfileInfo>
 
 	/**
-	 * Opens the session for a profile previously created by `restore()`.
-	 * For password profiles, takes the SAME password supplied to `restore`
-	 * and re-derives the secret (one PBKDF2). For passkey profiles, consumes
-	 * the in-memory pending secret stashed by `restore` — no second WebAuthn
-	 * prompt.
+	 * Opens the session for a profile previously created by `restore()`, with the SAME password
+	 * (one PBKDF2) or passkey answer supplied to `restore`.
 	 *
 	 * Emits `onActiveProfileChanged` once the session is up. Idempotent: if
 	 * the session is already active for `id`, returns without re-opening.
@@ -407,9 +382,10 @@ export type Methods = {
 	 * name this restore's profile, never a same-id successor.
 	 *
 	 * @param id Profile id (from the `restore` return value).
-	 * @param password Password (password profiles only).
+	 * @param password The password `restore` sealed under, for a password profile.
+	 * @param credentialData The passkey answer `restore` sealed under, for a passkey profile.
 	 */
-	finalizeRestore(id: string, password?: string): FinalizedRestore
+	finalizeRestore(id: string, password?: string, credentialData?: PasskeyCredentialData): FinalizedRestore
 }
 
 export type Events = {

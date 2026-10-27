@@ -6,6 +6,7 @@ import {
 	PASSKEY_SERVICE_NAME,
 	PASSKEY_TIMEOUT,
 	type Methods,
+	type NewPasskeyDisplay,
 	type PasskeyCredentialData,
 	type PasskeyDisplay,
 	type PasskeyRequest,
@@ -78,22 +79,27 @@ export class PasskeyService extends Service<Methods> implements ServiceSpec<Meth
 		super(PASSKEY_SERVICE_NAME, logger)
 	}
 
-	/** PATH B create. `name` is the profile name, slugified into the credential label by
-	 *  `buildCreateOptions`. */
-	public async createKey(userHandle: string, name: string): Promise<PasskeyHandOver> {
-		return await this.openWindowAndWait({ mode: "create", userHandle, name, step: "create", profileName: name })
+	/** PATH B create, evaluating the PRF at `prfSalt`. */
+	public async createKey(userHandle: string, prfSalt: string, display: NewPasskeyDisplay): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "create", userHandle, prfSalt, ...display })
 	}
 
-	/** PATH B get: bound to `credentialId`, or a discovery `get` without one. */
-	public async getKey(credentialId: string | undefined, display: PasskeyDisplay): Promise<PasskeyHandOver> {
-		return await this.openWindowAndWait({ mode: "get", credentialId, ...display })
+	/** PATH B get, bound to `credentialId`, evaluating the PRF at `prfSalt`. */
+	public async getKey(credentialId: string, prfSalt: string, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "get", credentialId, prfSalt, ...display })
+	}
+
+	/** PATH B discovery get: any of the device's passkeys may answer, at `prfSalt`. */
+	public async discoverKey(prfSalt: string, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "discover", prfSalt, ...display })
 	}
 
 	/**
 	 * PATH A — wrap a `PasskeyCredentialData` (collected by the popup-side
 	 * in-page modal) into a `PasskeyCredential`. SW-internal collaborator
 	 * method; not exposed over RPC because `PasskeyCredential` carries
-	 * `CryptoKey` state that cannot cross the postMessage boundary.
+	 * `CryptoKey` state that cannot cross the postMessage boundary. Throws
+	 * when the output or its input is not 32 bytes.
 	 */
 	public async materializeCredential(data: PasskeyCredentialData): Promise<PasskeyCredential> {
 		return await PasskeyCredential.create(data)
@@ -112,6 +118,8 @@ export class PasskeyService extends Service<Methods> implements ServiceSpec<Meth
 		let credential: PasskeyCredential
 		try {
 			credential = await PasskeyCredential.create(result)
+			// An answer is used only for the input its request asked for.
+			if (!credential.unlockKeyFor(entry.request.prfSalt)) throw new Error("Passkey answered for another request")
 		} catch (err) {
 			this.logWarn("Passkey request could not be resolved")
 			// The step must not wait out the window's ceiling for an answer that cannot come.

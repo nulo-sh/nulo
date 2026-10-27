@@ -5,7 +5,7 @@ import { donePath, doneRoute, stepCells } from "./steps"
 describe("onboarding steps", () => {
 	test("only a password wallet's path carries the phrase step", () => {
 		expect(stepCells("password").map((cell) => cell.step)).toEqual(["terms", "wallet", "phrase", "ready"])
-		expect(stepCells("passkey").map((cell) => cell.step)).toEqual(["terms", "wallet", "ready"])
+		expect(stepCells("passkey").map((cell) => cell.step)).toEqual(["terms", "wallet", "phrase", "ready"])
 		expect(stepCells("import").map((cell) => cell.step)).toEqual(["terms", "wallet", "ready"])
 	})
 

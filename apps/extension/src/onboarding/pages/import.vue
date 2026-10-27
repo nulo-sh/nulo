@@ -14,7 +14,6 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { passkeyImportFailedNotice } from "@/utils/profile-flow-notices"
 import { doneRoute } from "../steps"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
@@ -22,10 +21,11 @@ import { restoreNoticeText, retryResultText } from "@/components/composite/impor
 import { useAppStore } from "@/stores/app.store"
 import { useNotificationStore } from "@/stores/notification.store"
 
-/** Components — L3 (composite) import forms + shared passkey dialog. */
+/** Components — L3 (composite) import forms. */
 import ImportFullBackupForm from "@/components/composite/import/ImportFullBackupForm.vue"
 import ImportMethodPicker from "@/components/composite/import/ImportMethodPicker.vue"
 import ImportSecretForm from "@/components/composite/import/ImportSecretForm.vue"
+import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 const router = useRouter()
@@ -60,17 +60,19 @@ const {
 	shakeName,
 	nameInputRef,
 	handleNameInput,
-	ceremonyRequest,
-	onCeremonyResolve,
-	onCeremonyReject,
 	selectedImportOption,
 	seedPhrase,
 	password,
 	repeatedPassword,
+	unlockMethod,
 	maxPasswordLength,
 	isImporting,
 	error,
 	isCopied,
+	ceremonyRequest,
+	onCeremonyResolve,
+	onCeremonyReject,
+	phraseVerdict,
 	isAllowedToImportBySeedPhrase,
 	selectedBackup,
 	decryptionPassword,
@@ -89,9 +91,10 @@ const {
 	pickBackupFile,
 	decryptBackup,
 	restoreBackup,
+	restoreBackupWithExistingPasskey,
 	showRestoreErrorLog,
 	handleImportSeed,
-	handleImportPasskey,
+	handleImportSeedWithExistingPasskey,
 	handlePasswordInput,
 	handleSecretInput,
 	handleCopyError,
@@ -111,7 +114,6 @@ const {
 			},
 		})
 	},
-	notifyImportFailed: (err) => notificationStore.create(passkeyImportFailedNotice(err)),
 	openToast,
 })
 
@@ -125,6 +127,7 @@ const fullBackupCta = readonly({
 
 onBeforeUnmount(() => {
 	dispose()
+	notificationStore.clear()
 	// Defense-in-depth: zero out secret material on unmount.
 	password.value = ""
 	repeatedPassword.value = ""
@@ -135,7 +138,7 @@ onBeforeUnmount(() => {
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
 		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Wallet" :class="$style.hero">
-			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase, passkey, or full backup.</Text>
+			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase or a full backup.</Text>
 		</OnboardingStepHeader>
 
 		<OnboardingProfileNameField
@@ -151,7 +154,6 @@ onBeforeUnmount(() => {
 			v-if="!selectedImportOption"
 			type="import"
 			@select="selectedImportOption = $event"
-			@passkey="handleImportPasskey"
 		/>
 
 		<ImportFullBackupForm
@@ -159,6 +161,7 @@ onBeforeUnmount(() => {
 			v-model:decryptionPassword="decryptionPassword"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
+			v-model:unlockMethod="unlockMethod"
 			:selectedBackup="selectedBackup"
 			:restoreStatus="restoreStatus"
 			:isRestoreHasErrors="isRestoreHasErrors"
@@ -179,8 +182,10 @@ onBeforeUnmount(() => {
 			v-model:seedPhrase="seedPhrase"
 			v-model:password="password"
 			v-model:repeatedPassword="repeatedPassword"
+			v-model:unlockMethod="unlockMethod"
 			:method="selectedImportOption"
 			:error="error"
+			:phraseVerdict="phraseVerdict"
 			:maxPasswordLength="maxPasswordLength"
 			@secretInput="handleSecretInput"
 			@passwordInput="handlePasswordInput"
@@ -198,17 +203,24 @@ onBeforeUnmount(() => {
 				>
 					Decrypt backup
 				</Button>
-				<Button
-					v-if="showsRestoreCta(fullBackupCta)"
-					variant="cta"
-					size="large"
-					:disabled="restoreCtaBlocked(fullBackupCta)"
-					:loading="restoreStatus === 'progress'"
-					data-testid="onboarding-submit-import"
-					@click="restoreBackup"
-				>
-					{{ restoreStatus === "progress" ? "Importing..." : "Import profile" }}
-				</Button>
+				<template v-if="showsRestoreCta(fullBackupCta)">
+					<Button
+						variant="cta"
+						size="large"
+						:disabled="restoreCtaBlocked(fullBackupCta)"
+						:loading="restoreStatus === 'progress'"
+						data-testid="onboarding-submit-import"
+						@click="restoreBackup"
+					>
+						{{ restoreStatus === "progress" ? "Importing..." : "Import profile" }}
+					</Button>
+					<PasskeyReuseLink
+						v-if="unlockMethod === 'passkey'"
+						testid="onboarding-import-backup-passkey-reuse"
+						:disabled="restoreCtaBlocked(fullBackupCta)"
+						@click="restoreBackupWithExistingPasskey"
+					/>
+				</template>
 				<Text
 					v-if="retryFailedAgain"
 					variant="body"
@@ -262,6 +274,12 @@ onBeforeUnmount(() => {
 			>
 				Import profile
 			</Button>
+			<PasskeyReuseLink
+				v-if="selectedImportOption === 'seed' && unlockMethod === 'passkey'"
+				testid="onboarding-import-passkey-reuse"
+				:disabled="!isAllowedToImportBySeedPhrase || isImporting"
+				@click="handleImportSeedWithExistingPasskey"
+			/>
 			<Button
 				variant="cta_outline"
 				size="large"
@@ -272,12 +290,7 @@ onBeforeUnmount(() => {
 			</Button>
 		</Flex>
 
-		<PasskeyCeremonyDialog
-			v-if="ceremonyRequest"
-			:request="ceremonyRequest"
-			@resolve="onCeremonyResolve"
-			@reject="onCeremonyReject"
-		/>
+		<PasskeyCeremonyDialog v-if="ceremonyRequest" :request="ceremonyRequest" @resolve="onCeremonyResolve" @reject="onCeremonyReject" />
 	</OnboardingPage>
 </template>
 

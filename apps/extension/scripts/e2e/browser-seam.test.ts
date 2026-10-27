@@ -197,7 +197,7 @@ function directReloads(source: string): number[] {
 	return lines
 }
 
-const BROWSER_FLAGS = new Set(["isFirefox", "BROWSER", "credentialOutlivesPage"])
+const BROWSER_FLAGS = new Set(["isFirefox", "BROWSER", "credentialOutlivesPage", "stopsBackgroundUnderOpenPage", "residentCredentialSlots"])
 
 /**
  * 1-based lines where a file asks which browser it is on. A shared helper that does is a second,
@@ -433,6 +433,7 @@ describe("browser seam guard", () => {
 		["the driver's kind", 'import { driver } from "./browser"\nif (driver.kind === "firefox") stub()'],
 		["a driver fact", 'import { credentialOutlivesPage } from "./browser"\nif (credentialOutlivesPage) stub()'],
 		["a driver fact on the driver", 'import { driver } from "./browser"\nif (driver.credentialOutlivesPage) stub()'],
+		["the background-stop fact", 'import { stopsBackgroundUnderOpenPage } from "./browser"\nif (stopsBackgroundUnderOpenPage) stub()'],
 		["the env var", 'const b = 1\nif (process.env.NULO_E2E_BROWSER === "firefox") stub()'],
 		["the env var by key", 'const b = 1\nif (process.env["NULO_E2E_BROWSER"] === "firefox") stub()'],
 	])("flags a browser test asked through %s", (_label, body) => {

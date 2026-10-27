@@ -94,7 +94,6 @@ describe("visibility", () => {
 	test.each([
 		["display-side-panel", { sidePanel: false }],
 		["hub-change-password", { passkey: true }],
-		["lock-strict-mode", { passkey: true }],
 		["developer-indicate-failures", { developerMode: false }],
 		["developer-debug", { developerMode: false }],
 		["developer-logs", { developerMode: false }],
@@ -104,9 +103,19 @@ describe("visibility", () => {
 		expect(visible({ ...shown, ...hiding })).not.toContain(id)
 	})
 
+	test("a passkey profile keeps Strict security mode, and its Unlock method row says Passkey", () => {
+		const passkey = { ...CHROME, passkey: true }
+		expect(visible(passkey)).toEqual(expect.arrayContaining(["lock-strict-mode", "hub-unlock-method"]))
+		expect(settingsRow("hub-unlock-method", passkey).description).toBe("Passkey")
+		expect(settingsRow("hub-unlock-method", CHROME).description).toBe("Password")
+		expect(settingsRow("hub-lock", passkey).description).toBe("Auto-lock, strict mode")
+		expect(find("strict", passkey)).toEqual([
+			["Safety", ["hub-lock"]],
+			["Lock", ["lock-strict-mode"]],
+		])
+	})
+
 	test("a context-dependent description resolves from the context", () => {
-		expect(settingsRow("hub-lock", CHROME).description).toBe("Auto-lock, strict mode")
-		expect(settingsRow("hub-lock", { ...CHROME, passkey: true }).description).toBe("Auto-lock")
 		expect(settingsRow("hub-proving", { ...CHROME, provingStatus: "Presto · update needed" }).description).toBe(
 			"Presto · update needed",
 		)
@@ -140,6 +149,6 @@ describe("the registry", () => {
 	test("exactly the Settings list's rows carry a link of their own", () => {
 		const linked = ALL.filter((id) => settingsRow(id).to !== undefined)
 		expect(linked).toEqual(ALL.filter((id) => SETTINGS_ROWS[id].page === "/popup/settings"))
-		expect(linked).toHaveLength(16)
+		expect(linked).toHaveLength(17)
 	})
 })

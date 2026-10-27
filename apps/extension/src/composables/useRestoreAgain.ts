@@ -10,7 +10,14 @@ import {
 import type { ToastOptions } from "@/composables/toast"
 import { FilePickCanceledError } from "@/utils/files"
 import { type Outcome, showSnack, type Snack } from "@/utils/snack"
-import { type BackupSelection, openSelection, readBackupFile } from "@/utils/full-backup-helpers"
+import {
+	AccountFileNotBackupError,
+	type BackupSelection,
+	openSelection,
+	type ProcessBackupResult,
+	readBackupFile,
+	unreadableSelection,
+} from "@/utils/full-backup-helpers"
 import { admitRestoreOutcome, readRestoreOutcome, type RestoreOutcome } from "@/utils/restore-outcome"
 import type { Network } from "@/wallet/services/network/spec"
 import type { RunFence } from "@/wallet/services/profile/client"
@@ -27,10 +34,13 @@ import {
 } from "./full-backup-restore"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import {
+	ACCOUNT_FILE_NOT_BACKUP,
 	DECRYPTION_FAILED,
+	EARLIER_PASSKEY_BACKUP,
 	errorLogWriters,
 	type FullBackupEnvelope,
 	hasRowsBeyondRetry,
+	refusedAsEarlierPasskey,
 	UNRECOGNIZED_BACKUP,
 	validateAndMigrateBackup,
 } from "./useFullBackupImport"
@@ -74,6 +84,9 @@ interface AgainRefs {
 	retryFailedAgain: Ref<boolean>
 	/** Set once the page leaves or unmounts: nothing that settles afterwards shows or routes. */
 	ended: Ref<boolean>
+	/** Advanced by each pick back from its chooser and by each run start: a pick the count passed
+	 *  while it read publishes nothing. */
+	picks: Ref<number>
 }
 
 type LogWriters = ReturnType<typeof errorLogWriters>
@@ -92,6 +105,7 @@ function createRefs(): AgainRefs {
 		retrying: shallowRef(null),
 		retryFailedAgain: ref(false),
 		ended: ref(false),
+		picks: ref(0),
 	}
 }
 
@@ -139,10 +153,27 @@ async function runStart(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	state.record.value = record
 }
 
+function showPicked(state: AgainRefs, opts: UseRestoreAgainOptions, { selection, parseError }: ProcessBackupResult, refused: boolean) {
+	if (refused) {
+		state.selectedBackup.value = unreadableSelection(selection.name)
+		return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
+	}
+	state.selectedBackup.value = selection
+	if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
+	if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
+		return opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
+	}
+	opts.clearError()
+}
+
 async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	if (busy(state) || state.ended.value) return
+	let pick: number | undefined
+	const overtaken = () => pick !== undefined && pick !== state.picks.value
 	try {
 		const file = await opts.pickFile()
+		if (busy(state) || state.ended.value) return
+		pick = ++state.picks.value
 		dropRun(state)
 		state.restoreStatus.value = null
 		state.decryptionPassword.value = ""
@@ -151,15 +182,11 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 			state.selectedBackup.value = null
 			return
 		}
-		const { selection, parseError } = await readBackupFile(file)
-		state.selectedBackup.value = selection
-		if (parseError) return opts.fillError("full_backup", parseError.title, parseError.tooltip)
-		if (selection.kind === "unreadable" || (selection.kind === "plain" && !selection.profileType)) {
-			return opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
-		}
-		opts.clearError()
+		const read = await readBackupFile(file)
+		const refused = read.selection.kind === "plain" && (await refusedAsEarlierPasskey(read.selection.backup))
+		if (!overtaken()) showPicked(state, opts, read, refused)
 	} catch (error) {
-		if (error instanceof FilePickCanceledError) return
+		if (error instanceof FilePickCanceledError || overtaken()) return
 		opts.fillError("full_backup", "Failed to read the backup file")
 		console.warn("[restore-again] the backup file could not be read", { error })
 	}
@@ -171,11 +198,21 @@ async function runDecrypt(state: AgainRefs, opts: UseRestoreAgainOptions) {
 	const stale = () => state.selectedBackup.value !== target
 	try {
 		const opened = await openSelection(target, state.decryptionPassword.value, stale)
-		if (opened.kind === "stale" || stale()) return
+		if (opened.kind === "stale") return
+		const refused = await refusedAsEarlierPasskey(opened.selection.backup)
+		if (stale()) return
+		if (refused) {
+			state.selectedBackup.value = unreadableSelection(target.name)
+			return opts.fillError("full_backup", EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message)
+		}
 		state.selectedBackup.value = opened.selection
 		opts.clearError()
-	} catch {
+	} catch (error) {
 		if (stale()) return
+		if (error instanceof AccountFileNotBackupError) {
+			state.selectedBackup.value = unreadableSelection(target.name)
+			return opts.fillError("full_backup", ACCOUNT_FILE_NOT_BACKUP.title, ACCOUNT_FILE_NOT_BACKUP.message)
+		}
 		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
 }
@@ -234,11 +271,12 @@ async function runRestore(state: AgainRefs, opts: UseRestoreAgainOptions, writer
 	opts.clearError()
 	dropRun(state)
 	state.restoreStatus.value = "progress"
+	// A pick still reading publishes nothing over the run.
+	state.picks.value++
 	try {
 		const validated = await validateAndMigrateBackup(selection.backup as FullBackupEnvelope)
 		if (state.ended.value) return
-		// Only the body this profile was restored from passes, and its import already checked it, so no
-		// passkey prompt runs again here.
+		// Only the body this profile was restored from passes.
 		if (validated.kind === "rejected" || validated.checksum !== record.backup) {
 			const refusal = validated.kind === "rejected" ? validated : RESTORE_AGAIN_OTHER_BACKUP
 			state.restoreStatus.value = "failed"

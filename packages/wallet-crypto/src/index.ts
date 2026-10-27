@@ -3,12 +3,12 @@
  *
  *   - `EncryptionKey`      — PBKDF2 + AES-GCM framed ciphertext.
  *   - `PasswordSecretBox`  — password-based wrap around `EncryptionKey`.
- *   - `PasskeyCredential`  — WebAuthn PRF → HKDF master-secret.
+ *   - `PasskeyCredential`  — a passkey's PRF answer → the profile's unlock key.
  *
  * Every chain is locked by test vectors at
- * `apps/extension/src/wallet/crypto/key-vectors.test.ts`. Those
- * vectors run as an extension integration test and MUST pass
- * byte-identically after any change here.
+ * `apps/extension/src/wallet/crypto/key-vectors.test.ts`, the passkey
+ * unlock key's at `src/passkey-unlock-key.test.ts`. Those vectors MUST
+ * pass byte-identically after any change here.
  *
  * No Chrome APIs, no Vue, no Node-specific I/O — only Web Crypto
  * (available in both browsers and jsdom), `@aztec-labs/foundation` math
@@ -23,7 +23,10 @@ export { derivePxeStoreKey, PXE_STORE_KDF_LABEL } from "./pxe-store-key"
 export { DAPP_SESSION_MAC_LABEL, deriveDappSessionMacKey } from "./dapp-session-mac-key"
 export { deriveRowKeys, keyedSegment, openRow, ROW_SEAL_LABELS, sealRow, type RowBinding, type RowKeys } from "./row-seal"
 export { EncryptionKey } from "./encryption-key"
+export { ACCOUNT_EXPORT_AAD_LABEL } from "./account-export-aad"
 export { PasswordSecretBox, PROFILE_AAD, type EncryptedProfileSecret, type Sealed } from "./password-secret-box"
+export { openPasskeySlots, sealPasskeySlots } from "./passkey-secret-box"
+export { derivePasskeyUnlockKey, newPrfSalt, PRF_BYTES } from "./passkey-unlock-key"
 export { computeEnvelopeMacV3, verifyEnvelopeMacV3, type MacEnvelopeV3 } from "./entropy-mac"
 export { sealImportedSigningKeyV2, unsealImportedSigningKeyV2 } from "./imported-account-key-box"
 export {
@@ -35,16 +38,13 @@ export {
 } from "./imported-keys-dek-box"
 export { computeWalletFingerprint } from "./wallet-fingerprint"
 export { SessionSecretBox, type SessionWrappedSecret } from "./session-secret-box"
-export { PASSKEY_BACKUP_MAC_LABEL, PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
-export { computeBackupMac, verifyBackupMac } from "./backup-mac"
-export { PASSKEY_PRF_LABEL } from "./constants"
+export { PasskeyCredential, type PasskeyCredentialData } from "./passkey-credential"
 export { zeroize } from "./zeroize"
 export {
 	type Base64Ciphertext,
 	type Base64CredentialId,
 	type Base64MasterSecret,
 	type Base64SecretPrf,
-	type HexUserHandle,
 	type ImportedKeysDek,
 	type MasterSecretBytes,
 	type Passhash,
@@ -52,7 +52,6 @@ export {
 	asBase64CredentialId,
 	asBase64MasterSecret,
 	asBase64SecretPrf,
-	asHexUserHandle,
 	asImportedKeysDek,
 	asMasterSecretBytes,
 	asPasshash,

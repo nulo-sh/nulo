@@ -2,5 +2,9 @@
   "prfB64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
   "credentialIdB64": "dGVzdC1jcmVkZW50aWFsLWlk",
   "hkdfOutputBytes": 64,
-  "expectedMasterHex": "23c252cf7215344c6fb3b35da3cf7be9ee99f92cae16ee1c235e26f5c4843e79"
+  "expectedMasterHex": "23c252cf7215344c6fb3b35da3cf7be9ee99f92cae16ee1c235e26f5c4843e79",
+  "prfInputLabel": "nulo:profile:v1",
+  "prfInputHex": "f6f32f8dc42319f72928a89b0206ad4ecf6a670ce532f9ce47ce9e7cb00211aa",
+  "backupMacChecksumInput": "hunter2",
+  "expectedBackupMacB64": "Euf6WPQjR3N5bM4XkXoIxwiJs8I2NJXloIwkJEbWJ2w="
 }

@@ -78,7 +78,6 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	},
 	"nulo:account-export:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:account-seed:v2": { kind: "label", reason: "a domain separator" },
-	"nulo:backup-mac:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:dappsession-mac:salt:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:dappsession-mac:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:dek-wrap:v1": { kind: "label", reason: "a domain separator" },
@@ -86,6 +85,7 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	"nulo:imported-account-key:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:kdf:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:master:v1": { kind: "label", reason: "a domain separator" },
+	"nulo:passkey-unlock:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row-seal:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:row-seal:aead:v1": { kind: "label", reason: "a domain separator" },
@@ -94,7 +94,6 @@ const NOT_LOCAL_STORAGE: Record<string, { kind: NotLocalKind; reason: string; fi
 	"nulo:profile-guard:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-imported-dek:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:profile-master:v2": { kind: "label", reason: "a domain separator" },
-	"nulo:profile:v1": { kind: "label", reason: "a domain separator" },
 	"nulo:pxe-store-salt:": { kind: "label", reason: "a domain separator", files: ["packages/wallet-crypto/src/pxe-store-key.ts"] },
 	"nulo:pxe-store:v2": { kind: "label", reason: "a domain separator" },
 	"nulo:session-wrap:v1": { kind: "label", reason: "a domain separator" },
@@ -309,7 +308,8 @@ describe("every nulo: key is registered", () => {
 		expect(files.length).toBeGreaterThan(500)
 		expect(files).toContain("apps/extension/src/wallet/services/profile/repository.ts")
 		expect(files.some((file) => file.startsWith("packages/wallet-core/src/"))).toBe(true)
-		expect(nuloLiterals(sources).some(({ file }) => file.endsWith(".vue"))).toBe(true)
+		// The SFCs are read; that a literal in one is found is the fixture test below.
+		expect(files.some((file) => file.endsWith(".vue"))).toBe(true)
 		expect(nuloLiterals(sources).filter(({ text }) => claimingShape(text)).length).toBeGreaterThan(40)
 	})
 })

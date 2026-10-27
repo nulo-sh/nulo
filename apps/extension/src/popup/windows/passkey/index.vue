@@ -13,9 +13,8 @@
  * PATH B — the passkey window the background opens for a step started in Firefox's toolbar panel,
  * which closes when the OS prompt takes focus. It runs the same `runPasskeyCeremony` as the
  * in-page dialog (PATH A), hands the result to the background, and stays open until the step it
- * started has ended: `waiting` → `finishing` → closed, or `failed` (the prompt failed; Try again),
- * `step-failed` (the step failed after the prompt, or the request is gone) or `step-exists` (an
- * import whose passkey already has a profile here).
+ * started has ended: `waiting` → `finishing` → closed, or `failed` (the prompt failed; Try again)
+ * or `step-failed` (the step failed after the prompt, or the request is gone).
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue"
 import { PasskeyServiceClient } from "@/wallet/services/passkey/client"
@@ -25,7 +24,7 @@ import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { classifyPasskeyFailure, PASSKEY_COPY, type PasskeyTitle, passkeyTag, stepFailedTitle } from "@/utils/passkey-copy"
 import PasskeyScreen from "@/components/composite/PasskeyScreen.vue"
 
-type WindowState = "waiting" | "finishing" | "failed" | "step-failed" | "step-exists"
+type WindowState = "waiting" | "finishing" | "failed" | "step-failed"
 
 const route = useRoute()
 
@@ -37,20 +36,18 @@ const request = shallowRef<PasskeyRequest>()
 const unconfirmed = shallowRef<PasskeyUnconfirmedError>()
 
 const tag = computed(() => (request.value ? passkeyTag(request.value.step, request.value.profileName) : ""))
-const tone = computed(() => (state.value === "step-failed" || state.value === "step-exists" ? "failed" : state.value))
+const tone = computed(() => (state.value === "step-failed" ? "failed" : state.value))
 const isFailure = computed(() => tone.value === "failed")
 const title = computed<PasskeyTitle>(() => {
 	if (state.value === "finishing") return PASSKEY_COPY.finishing.title
 	if (state.value === "failed") return PASSKEY_COPY.failed.title
 	if (state.value === "step-failed") return stepFailedTitle(windowStep(request.value))
-	if (state.value === "step-exists") return PASSKEY_COPY.profileExists.title
 	return PASSKEY_COPY.waiting.title
 })
 const body = computed(() => {
 	if (state.value === "finishing") return PASSKEY_COPY.finishing.body
 	if (state.value === "failed") return unconfirmed.value ? PASSKEY_COPY.failed.unconfirmedBody : PASSKEY_COPY.failed.body
 	if (state.value === "step-failed") return PASSKEY_COPY.stepFailedBody
-	if (state.value === "step-exists") return PASSKEY_COPY.profileExists.body
 	return PASSKEY_COPY.waiting.body
 })
 
@@ -58,9 +55,9 @@ const passkey = new PasskeyServiceClient()
 let controller: AbortController | undefined
 let busy = false
 
-/** The window only runs unlock, create and import; the dormant operation confirm reads as unlock. */
+/** The window only runs unlock and create. */
 function windowStep(req: PasskeyRequest | undefined) {
-	return req?.step === "create" || req?.step === "import" ? req.step : "unlock"
+	return req?.step === "create" ? "create" : "unlock"
 }
 
 /** `undefined` once the request is gone (answered, cancelled, replaced): nothing is left to retry. */
@@ -80,7 +77,7 @@ async function prompt(req: PasskeyRequest): Promise<PasskeyCredentialData | unde
 	const { signal } = controller
 	const saved = unconfirmed.value && classifyPasskeyFailure(unconfirmed.value) !== "no-prf" ? unconfirmed.value : undefined
 	try {
-		return saved ? await confirmMinted(saved.credentialId, saved.userHandle, signal) : await runPasskeyCeremony(req, signal)
+		return saved ? await confirmMinted(saved.credentialId, saved.prfSalt, signal) : await runPasskeyCeremony(req, signal)
 	} catch (err) {
 		// The window's own abort means it is closing: there is nothing left to show.
 		if (signal.aborted) return undefined
@@ -94,7 +91,7 @@ async function finishStep(id: string, data: PasskeyCredentialData): Promise<void
 	state.value = "finishing"
 	const outcome = await passkey.resolvePasskeyRequest(id, data).catch(() => "failed" as const)
 	if (outcome === "done") window.close()
-	else state.value = outcome === "exists" ? "step-exists" : "step-failed"
+	else state.value = "step-failed"
 }
 
 /** One attempt at a time: Try again does nothing while a prompt or the step's end is in flight. */

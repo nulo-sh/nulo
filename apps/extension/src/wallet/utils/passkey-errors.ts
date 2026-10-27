@@ -13,12 +13,13 @@ export class PasskeyPrfError extends Error {
 
 /**
  * A create minted a credential, then the assertion that reads its PRF failed (`cause`).
- * `confirmCreatedCredential(credentialId, userHandle)` finishes the step without minting another.
+ * `confirmMinted(credentialId, prfSalt)` finishes the step without minting another, at the input
+ * the create asked for.
  */
 export class PasskeyUnconfirmedError extends Error {
 	public constructor(
 		public readonly credentialId: string,
-		public readonly userHandle: string,
+		public readonly prfSalt: string,
 		cause: unknown,
 	) {
 		super("Passkey created but not confirmed", { cause })

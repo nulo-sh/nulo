@@ -82,7 +82,7 @@ export const HOW_AZTEC_WORKS_URL = "https://nulo.sh/how-aztec-works"
 /** What a balance read says about holding funds: `unknown` until it settles. */
 export type Holdings = "some" | "none" | "unknown"
 
-export type GetStartedItem = "phrase" | "backup" | "aztec" | "feeJuice" | "presto"
+export type GetStartedItem = "phrase" | "aztec" | "feeJuice" | "presto"
 
 export interface GetStartedInput {
 	type: "password" | "passkey" | undefined
@@ -117,20 +117,17 @@ export function combineHoldings(a: Holdings, b: Holdings): Holdings {
 	return "none"
 }
 
-type Ready = GetStartedInput & { type: "password" | "passkey"; flags: GetStartedFlags; prestoReached: boolean }
+type Ready = GetStartedInput & { flags: GetStartedFlags; prestoReached: boolean }
 
 /** Every step but the phrase, done or not; a hidden card, or a profile created while another
  *  existed, lists none. */
 function firstProfileSteps(i: Ready): GetStartedStep[] {
 	if (i.flags.notFirst || i.flags.hidden) return []
-	const steps: GetStartedStep[] = []
-	if (i.type === "passkey") steps.push({ item: "backup", done: i.flags.backupSaved })
-	steps.push(
+	return [
 		{ item: "aztec", done: i.flags.aztecOpened },
 		{ item: "feeJuice", done: i.flags.feeJuiceHeld || i.feeJuice === "some" },
 		{ item: "presto", done: i.flags.prestoOpened || i.prestoReached },
-	)
-	return steps
+	]
 }
 
 /**
@@ -142,12 +139,12 @@ export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
 	// A wallet the person brought in is an established one: Home asks nothing of it.
 	if (flags.imported) return { banner: false, steps: [], canHide: false }
-	// A password wallet's phrase step cannot be hidden: it stays in the card, and only once Hide has
-	// put the card away does a funded wallet's phrase become the banner, so the two never show together.
-	const banner = type === "password" && !flags.phraseSaved && funds === "some" && flags.hidden
+	// The phrase step cannot be hidden: it stays in the card, and only once Hide has put the card away
+	// does a funded wallet's phrase become the banner, so the two never show together.
+	const banner = !flags.phraseSaved && funds === "some" && flags.hidden
 	const steps: GetStartedStep[] = []
-	if (type === "password" && !banner) steps.push({ item: "phrase", done: flags.phraseSaved })
-	steps.push(...firstProfileSteps({ ...input, type, flags, prestoReached }))
+	if (!banner) steps.push({ item: "phrase", done: flags.phraseSaved })
+	steps.push(...firstProfileSteps({ ...input, flags, prestoReached }))
 	if (steps.every((step) => step.done)) return { banner, steps: [], canHide: false }
 	return { banner, steps, canHide: steps.some((step) => step.item !== "phrase") }
 }

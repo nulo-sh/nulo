@@ -47,7 +47,6 @@ const MAX_SESSION_TTL = 1440
 const sessionTtl = ref(defaultConfig.sessionTtl)
 const sessionTtlMinutes = ref(0)
 const strictSecurityMode = ref(defaultConfig.strictSecurityMode)
-const isPasskey = computed(() => appStore.profile?.type === "passkey")
 const strictRow = settingsRow("lock-strict-mode")
 const autoLockRow = settingsRow("lock-auto-lock")
 
@@ -100,8 +99,8 @@ function onStrictToggle(next) {
 		requestConfirm({
 			title: "Disable strict security?",
 			description:
-				"Skip password re-entry across browser restarts. Less secure. " +
-				"Anyone who can read browser data can unlock the wallet without your password.",
+				"From your next unlock, every profile on this device stays unlocked when Nulo restarts in the background, until auto-lock. Less secure. " +
+				"Anyone who can read browser data can unlock the wallet without your password or passkey.",
 			confirm_text: "Disable",
 			confirm_color: "red",
 			callback: async () => {
@@ -147,8 +146,11 @@ function landLockConfig({ ttl, strict }, updatedSince) {
 watch(
 	() => sessionTtlMinutes.value,
 	debounce(() => {
-		updateSessionTtl(Number(sessionTtlMinutes.value) * 60 * 1_000)
-		switch (Number(sessionTtlMinutes.value)) {
+		const minutes = Number(sessionTtlMinutes.value)
+		// Only whole minutes from 0 (never) to the maximum are a timeout: a stored negative expires
+		// every session the moment it opens.
+		if (Number.isInteger(minutes) && minutes >= 0 && minutes <= MAX_SESSION_TTL) updateSessionTtl(minutes * 60 * 1_000)
+		switch (minutes) {
 			case 0:
 				fillNotification("'0' means the wallet will never be locked automatically")
 				break
@@ -192,7 +194,6 @@ onBeforeUnmount(() => {
 		<template v-if="!isLoading">
 			<!-- Strict Security Mode -->
 			<SettingControlRow
-				v-if="!isPasskey"
 				:title="strictRow.title"
 				:description="strictRow.description"
 				align="center"

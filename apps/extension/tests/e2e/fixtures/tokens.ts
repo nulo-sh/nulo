@@ -1,9 +1,12 @@
 import type { Page } from "puppeteer"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
+import { TOKEN_BALANCE_SERVICE_NAME, type TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
+import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { reloadExtensionPage } from "./browser"
 import { clickByTestId, replaceInputValue, withTimeoutMessage } from "./dom"
 import { PollTimeoutError, pollUntil } from "./poll"
 import { readRowsOnAnyBuild } from "./sealed-rows"
+import { callService } from "./session"
 import { dropdownDiagnostic, openDropdown, waitForToast } from "./widgets"
 
 // ── Token ──────────────────────────────────────────────────────────────
@@ -262,14 +265,30 @@ function balanceRowsFor(balanceRows: BalanceRow[], account: string, tokenIds: Se
 	return balanceRows.filter((row) => row.account === account && typeof row.token === "number" && tokenIds.has(row.token))
 }
 
+/** Every balance row as the wallet reads it; on a build without the sealed-read seam, through its
+ *  token-balance service, whose rows name their token's row rather than its id. */
+const readBalanceRows = (page: Page): Promise<BalanceRow[]> =>
+	readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances", async () =>
+		(await callService<TokenBalanceInfo[]>(page, TOKEN_BALANCE_SERVICE_NAME, "getTokenBalances")).map(
+			({ account, token, publicBalance, privateBalance, updatedAt }) => ({
+				account,
+				token: token.id,
+				publicBalance,
+				privateBalance,
+				updatedAt,
+			}),
+		),
+	)
+
 /** The exact (account, token) join both balance waits share, re-resolved per call: another token's
  *  row with the same raw value must never satisfy a freshness/value acceptance, and after a restore
  *  the token row itself can land later than the first read. Tokens are read before balances, so a
  *  balance whose token lands between the two reads waits for the next poll. */
 async function readScopedBalanceRows(page: Page, account: string, tokenContract: string): Promise<BalanceRow[]> {
-	const tokenRows = (await readRowsOnAnyBuild(page, "tokens")).map(({ row }) => row)
-	const balanceRows = (await readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances")).map(({ row }) => row)
-	return balanceRowsFor(balanceRows, account, tokenIdsForContract(tokenRows, tokenContract))
+	const tokenRows = await readRowsOnAnyBuild(page, "tokens", () =>
+		callService<Record<string, unknown>[]>(page, TOKEN_SERVICE_NAME, "getTokens"),
+	)
+	return balanceRowsFor(await readBalanceRows(page), account, tokenIdsForContract(tokenRows, tokenContract))
 }
 
 /** Wait for a balance row for `account` that is both FRESH (`updatedAt` past the
@@ -367,7 +386,7 @@ export async function waitForFreshBalanceRow(
 		})
 		.then(async (counts) => ({
 			...counts,
-			balanceRows: (await readRowsOnAnyBuild<BalanceRow>(page, "tokenBalances")).map(({ row }) => ({
+			balanceRows: (await readBalanceRows(page)).map((row) => ({
 				account: `${row.account?.slice(0, 10)}…`,
 				updatedAt: row.updatedAt,
 			})),
