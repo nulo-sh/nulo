@@ -1,7 +1,7 @@
 ---
 plan: unit-flakes-3
 tier: light
-status: arc 1 implemented, review loop converged; delivery
+status: completed (PR #1271)
 issues: "#1122, #1244, #1198, #1215"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 78f5f9171
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-27.
+- **Status:** completed. One arc, PR #1271 against `dev`; its merge closes the plan.
+- **Shipped:** `proveAndSend` checks the cancel signal after the `proving` mark, so a cancel that won the journal lock first stops the send before its proof (#1122); the same-tick re-ask case holds the slot its claim needs; the `clearChain` case clears with its tokens gone (#1244); the auth-registry tx-update handler returns its promise and its suite awaits it (#1198); the seeder retry case waits for the marker (#1215). Each touched file passed 30/30 at retry 0 on the final head, with one red control per fix ([lessons/phase-3.md](lessons/phase-3.md), [lessons/phase-4.md](lessons/phase-4.md)).
+- **Dispositions:** #1122's "runner load" reading did not hold (F1, F2). The self-delivered abort was not built: it is an add-on to D1, and I1 holds. The type-roles digest re-pin (D8) was outside the plan's change map.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` holds 8183 of its 8192 bytes and nothing there is superseded; the gotchas are in [lessons/phase-0.md](lessons/phase-0.md) and [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # unit-flakes-3: four races in unit and composition tests, one of them in the send pipeline
 
