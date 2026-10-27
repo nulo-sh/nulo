@@ -256,7 +256,7 @@ const settleProfile = async () => {
 	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
 	appStore.profile = profile
-	settles++
+	settled = appStore.profile
 	if (!profile) router.push("/popup/register")
 }
 
@@ -274,17 +274,16 @@ const heldBack = () => {
 }
 
 /** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
- *  A person's selection here during the lookup stands; the screen's automatic one (`settleProfile`)
- *  gives way, as its storage read may have answered the pointer this pick replaced. */
+ *  A selection made here during the lookup stands, unless it is still the screen's automatic one
+ *  (`settled`), whose storage read may have answered the pointer this pick replaced. */
 let follows = 0
-let settles = 0
+let settled
 const followPick = async (id) => {
 	const follow = ++follows
-	const settlesAtStart = settles
 	const selectedAtStart = appStore.profile?.id
 	if (!id || id === selectedAtStart || appStore.isLogined || heldBack()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
-	const selectedHere = appStore.profile?.id !== selectedAtStart && settles === settlesAtStart
+	const selectedHere = appStore.profile?.id !== selectedAtStart && appStore.profile !== settled
 	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || selectedHere || heldBack()) return
 	appStore.profile = profile
 }

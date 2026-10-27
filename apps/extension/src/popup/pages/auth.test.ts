@@ -667,6 +667,31 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(selected()).toBe("pC")
 	})
 
+	test("a profile picked here after an automatic settle stands over another window's pick still loading", async () => {
+		elsewhere.picks.clear()
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		expect(selected()).toBe("pB")
+		// The chooser's pick, before its pointer write is heard: no newer follow supersedes the old one.
+		appStore.profile = { ...A }
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pA")
+	})
+
 	test("with no last active profile in the list, a selection it still holds stays; a last active one is selected", async () => {
 		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, B, C])
 		const kept = mountAuth({}, C)
