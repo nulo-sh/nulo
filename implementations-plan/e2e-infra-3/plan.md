@@ -110,7 +110,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **Validation gate:** `bun run lint`; `FeeSettingsCard.test.ts` green; `type-roles.test.ts` on both browsers green; the measurement in `lessons/phase-2.md`.
 
-## Phase 3: the picker answered by the session (#1222)
+## Phase 3: the picker answered by the session (#1222) ✓ (inconclusive: no change, #1222 commented)
 
 **Assumptions:** F6, F7; checks I1 and I2.
 1. Measure (scratch). Before you start: `trap` kills the two busy loops by pid on every exit.
