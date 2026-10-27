@@ -118,6 +118,11 @@ void accountRows.connect()
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
 const legalSheetShown = ref(undefined)
+/** The sheet never covers a page that needs no session, so only on one that does is its verdict news. */
+const legalSheetMark = computed(() => {
+	if (route.meta.isAuthRequired !== true || legalSheetShown.value === undefined) return undefined
+	return legalSheetShown.value ? "shown" : "hidden"
+})
 
 const settingHandlers = {
 	theme(value) {
@@ -608,7 +613,7 @@ onBeforeUnmount(() => {
 		:data-session-checked="appStore.isSessionChecked ? 'true' : undefined"
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
-		:data-legal-sheet="legalSheetShown === undefined ? undefined : legalSheetShown ? 'shown' : 'hidden'"
+		:data-legal-sheet="legalSheetMark"
 		data-testid="popup-shell"
 	>
 		<!-- Popup Teleport -->
