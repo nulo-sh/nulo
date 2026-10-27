@@ -15,3 +15,4 @@
   from the review too); accepted.
 - Opus diff review (opus, general-purpose): `findings`, four (section placement, a 301 link, a long comment line, a
   wording nit); all accepted, the section move left out of scope (plan D6) and filed at close-out.
+- Codex diff review round 2 (resumed): `clean`; agrees D6 stays out (independent defect, accurately referenced).

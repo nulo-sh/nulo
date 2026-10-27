@@ -16,7 +16,8 @@ base: 17f35c504
 Three sites say Dependabot "cannot read Bun's lockfile", so npm dependencies are bumped by hand. GitHub now lists
 Bun version updates as supported, so the stated reason may be stale; the manual bumps remain the right call for
 other reasons. This plan restates the reason as policy, with its source and the date it was read. It also corrects
-the plans standard's PR-title cap from 93 to 92 characters. Docs and one test-file comment only.
+the plans standard's PR-title cap from 93 to 92 characters. Docs and one test-file comment only. Over the light target
+(150 lines) by the review records.
 
 ## Outcome & Quality Bar
 
@@ -86,7 +87,7 @@ Exact edits (the implementer may re-wrap lines; the words are the contract):
 | D3 | The reasons named | E1: the age gate and the `bun pm diff` review with their exceptions named, the Aztec runbook, no Bun security updates (dated) | "every bump passes the gate": false for the CVE runbook, the Aztec excludes and a Bun-binary bump (both legs); "Dependabot would bypass the gate": unverified, so stated as untested (D5) |
 | D4 | Fix CLAUDE.md § Branching's "~93" | no edit | the brief's claim did not hold at `17f35c504` (Fact 6) |
 | D5 | Dependabot's `cooldown` beside the age gate | E1 names the gate under "untested": a bot-resolved lock that ignored `bunfig.toml` would pass CI's frozen install | silence: a reader equates `cooldown` with the gate (Opus 4) |
-| D6 | The CVE runbook and Aztec paragraph sit under § Binary dependencies | E1 names them by title, "further down this file"; E2 claims only the source and the untested points | move them into § Dependency policy (Opus review): right, and it fixes `bunfig.toml`'s and CLAUDE.md's older pointers too, but a third correction outside the lane: an issue at close-out |
+| D6 | The CVE runbook and Aztec paragraph sit under § Binary dependencies | E1 names them by title, "further down this file"; E2 claims only the source and the untested points | move them into § Dependency policy (Opus review): it also fixes `bunfig.toml`'s and CLAUDE.md's older pointers, but it is an independent defect that E1 now references accurately and this fix does not need (Codex round 2): an issue at close-out |
 
 ## Security & Adversarial Considerations
 
@@ -151,7 +152,7 @@ Accepted: "exceptions to the age gate". Opus diff review: `findings`. 1. Low, de
 Aztec paragraph sit under § Binary dependencies, so Fact 9 was wrong and E2's "says how" pointed at a section without
 them. Accepted as D6 (E1 names them by title; E2 claims less); the move itself is out of scope. 2. The link answered
 301: canonical URL taken. 3. A 123-character comment line: re-wrapped. 4. "the text `bun.lock`" read as a literal:
-"text-format". Fixes in the round-1 fix commit.
+"text-format". Fixes in `fd2c13d8f`. Codex round 2 (resumed): `clean`; it backs D6 (an independent defect, not needed here).
 
 ## Seeds
 
