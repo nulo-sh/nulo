@@ -102,6 +102,12 @@ export function permalinkFindings(docs: ReadonlyMap<string, Doc>, bases: Bases):
 	return findings
 }
 
+const FETCH_RETRY_PAUSE_MS = 3_000
+
+function pause(ms: number): void {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
 function ancestry(file: string, line: number, detail: string, fix: string): Finding {
 	return { rule: "permalink-ancestry", file, line, detail, fix }
 }
@@ -118,9 +124,16 @@ function prepareDev(ctx: Ctx): Finding | null {
 	if (ctx.env.GITHUB_ACTIONS === "true") {
 		const shallow = ctx.git("rev-parse", "--is-shallow-repository").stdout.trim() === "true"
 		const deepen = shallow ? ["--unshallow"] : []
-		const fetched = ctx.git("fetch", "--no-tags", "--filter=tree:0", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
+		// A runner's fetch sometimes dies in index-pack; one more try after a pause is the same remedy as
+		// re-running the job, and the whole stderr says why when both fail.
+		let fetched = ctx.git("fetch", "--no-tags", "--filter=tree:0", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
+		if (!fetched.ok) {
+			pause(FETCH_RETRY_PAUSE_MS)
+			fetched = ctx.git("fetch", "--no-tags", "--filter=tree:0", ...deepen, "origin", `+refs/heads/dev:${DEV_REF}`)
+		}
 		if (fetched.ok) return null
-		return ancestry(BASES_FILE, 1, `cannot fetch dev: ${fetched.stderr.trim().split("\n").pop() ?? "fetch failed"}`, "re-run the job")
+		const why = fetched.stderr.trim().split("\n").filter(Boolean).slice(-3).join(" | ") || "fetch failed"
+		return ancestry(BASES_FILE, 1, `cannot fetch dev: ${why}`, "re-run the job")
 	}
 	if (ctx.git("rev-parse", "--verify", "-q", `${DEV_REF}^{commit}`).ok) return null
 	return ancestry(BASES_FILE, 1, "origin/dev is not available locally", "git fetch origin dev")
