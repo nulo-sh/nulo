@@ -180,7 +180,7 @@ describe("recovery phrase — one reveal per press, none after the page left", (
 })
 
 describe("recovery phrase — a reveal clears Home's reminder", () => {
-	test("a reveal marks the profile it was asked for, even when another became active during the read", async () => {
+	test("a reveal settling after a profile switch shows no words and marks no profile", async () => {
 		const w = await mountAgreedWithPassword()
 		let settle: (words: string[]) => void = () => {}
 		exportMnemonic.mockImplementationOnce(() => new Promise<string[]>((r) => (settle = r)))
@@ -189,8 +189,9 @@ describe("recovery phrase — a reveal clears Home's reminder", () => {
 		useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
 		settle(["alpha", "bravo", "charlie"])
 		await flushPromises()
-		expect(storageSet()).toHaveBeenCalledTimes(1)
-		expect(storageSet()).toHaveBeenCalledWith({ "nulo:ui:getStartedPhraseSaved@p1": true })
+		expect(exportMnemonic).toHaveBeenCalledWith("p1", "password123")
+		expect(w.findComponent({ name: "RecoveryPhraseGrid" }).exists()).toBe(false)
+		expect(storageSet()).not.toHaveBeenCalled()
 	})
 
 	test("a wrong password marks nothing", async () => {
@@ -200,6 +201,64 @@ describe("recovery phrase — a reveal clears Home's reminder", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="unlock-error-text"]').exists()).toBe(true)
 		expect(storageSet()).not.toHaveBeenCalled()
+	})
+})
+
+describe("recovery phrase — a lock or a profile switch the page outlives ends the reveal", () => {
+	const ends: Array<[string, () => void]> = [
+		[
+			"a lock",
+			() => {
+				const app = useAppStore()
+				app.isLogined = false
+				app.isLogined = true
+			},
+		],
+		[
+			"a profile switch",
+			() => {
+				useAppStore().profile = { id: "p2", name: "Other", type: "password" } as never
+			},
+		],
+	]
+	const countdown = (w: VueWrapper) => w.findComponent({ name: "SecretCountdownClose" })
+	const agree = (w: VueWrapper) => w.get('[data-testid="agree-continue-btn"]').trigger("click")
+	const field = (w: VueWrapper) => w.get('[data-testid="unlock-password-input"] input').element as HTMLInputElement
+
+	test.each(ends)("%s after keep open: the page is back at its agreement, and the next reveal counts down", async (_label, end) => {
+		const w = await mountAgreedWithPassword()
+		useAppStore().isLogined = true
+		reveal(w).click()
+		await flushPromises()
+		countdown(w).vm.$emit("disableAutoClose")
+		await flushPromises()
+		expect(countdown(w).props("autoCloseDisabled")).toBe(true)
+
+		end()
+		await flushPromises()
+		expect(w.findComponent({ name: "RecoveryPhraseGrid" }).exists()).toBe(false)
+		await agree(w)
+		expect(field(w).value).toBe("")
+		await w.get('[data-testid="unlock-password-input"] input').setValue("password123")
+		reveal(w).click()
+		await flushPromises()
+		expect(w.findComponent({ name: "RecoveryPhraseGrid" }).props("words")).toEqual(["alpha", "bravo", "charlie"])
+		expect(countdown(w).props()).toMatchObject({ autoCloseDisabled: false, countdownLabel: "5:00" })
+	})
+
+	test.each(ends)("%s after a wrong password: the next agreement shows an empty field and no error", async (_label, end) => {
+		exportMnemonic.mockRejectedValueOnce(new Error("wrong password"))
+		const w = await mountAgreedWithPassword()
+		useAppStore().isLogined = true
+		reveal(w).click()
+		await flushPromises()
+		expect(w.find('[data-testid="unlock-error-text"]').exists()).toBe(true)
+
+		end()
+		await flushPromises()
+		await agree(w)
+		expect(field(w).value).toBe("")
+		expect(w.find('[data-testid="unlock-error-text"]').exists()).toBe(false)
 	})
 })
 

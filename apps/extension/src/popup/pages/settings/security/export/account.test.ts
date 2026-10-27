@@ -371,6 +371,22 @@ describe("a passkey profile's account file", () => {
 		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
 	})
 
+	test("a lock the page outlives drops the approval and the typed file password: the next file asks its passkey again", async () => {
+		const w = await approved()
+		const app = useAppStore()
+		app.isLogined = true
+		await typeFilePassword(w, "file-pass-1234")
+		expect(save(w).disabled).toBe(false)
+		app.isLogined = false
+		app.isLogined = true
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		await flushPromises()
+		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)
+		expect(save(w).disabled).toBe(true)
+	})
+
 	test("a profile switch drops the approval: the next file asks its passkey again", async () => {
 		const w = await approved()
 		expect(w.find('[data-testid="file-password"]').exists()).toBe(true)

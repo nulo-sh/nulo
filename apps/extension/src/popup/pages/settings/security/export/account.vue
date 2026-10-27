@@ -25,6 +25,7 @@ import { isNewPasswordValid } from "@/utils/password"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
+import { watchLockStart } from "@/popup/locked-state"
 
 /** Composables */
 import { createRunFence } from "@/composables/runFence"
@@ -155,6 +156,15 @@ watch(
 // So does its unlock changed from another window: the flow's steps and its file's copy follow it.
 watch(
 	() => appStore.profile?.type,
+	() => {
+		resetFlow()
+		applyQueryPreselect()
+	},
+)
+// A lock can leave this page mounted (an unlock from another window supersedes it before the
+// landing): what was typed or approved belongs to the session that ended.
+watchLockStart(
+	() => appStore.isLogined,
 	() => {
 		resetFlow()
 		applyQueryPreselect()
