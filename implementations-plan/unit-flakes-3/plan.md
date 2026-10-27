@@ -1,7 +1,7 @@
 ---
 plan: unit-flakes-3
 tier: light
-status: planned (Codex approve); arc 1 implementing
+status: arc 1 implemented; review loop
 issues: "#1122, #1244, #1198, #1215"
 driver: claude-code
 claude_model: opus
@@ -41,19 +41,19 @@ One arc, one PR against `dev`, closing #1122, #1244, #1198 and #1215. Recon: [re
 
 ## Architecture & Implementation (branch `worktree-unit-flakes-3` off `origin/dev`)
 
-### Phase 1: the two test-order fixes (#1244, #1215)
+### Phase 1: the two test-order fixes (#1244, #1215) ✓ (30/30 each; controls red)
 
 - `apps/extension/src/wallet/services/incoming-transfer/service.scenarios.test.ts`, case `clearChain wipes the public cursor + outbox rows too`: boot with `makeTokenStub([tokenA])`; assert the seeded cursor and outbox rows exist; then `tokens.getTokensRaw.mockResolvedValue([])` before `clearChain`, with one comment line (a chain purge runs the token service's subscriber first), and `await flushPromises()` after it, as the sibling at `:3364` does, so a rebuild that re-installs the scan is caught.
 - `apps/extension/src/wallet/services/token/seeder.status.test.ts`, case `accepted: counter reset, pass started…`: replace the `persist` wait and the read with `await vi.waitFor(async () => expect((await readMarker())[KEY]).toMatchObject({ attempts: 1, outcome: "seeded" }))`, then `expect(deps.persist).toHaveBeenCalledTimes(1)`.
 - **Gate:** `bun run lint`; `bun run typecheck:all`; each file 30/30 (§ Delivery). Red controls, run once each and not committed: for #1244 the old case with a `flushPromises()` before its read; for #1215 the old read with `markers.set` held after `persist`.
 
-### Phase 2: the reconcile handler returns its promise (#1198)
+### Phase 2: the reconcile handler returns its promise (#1198) ✓ (30/30; control red)
 
 - `apps/extension/src/wallet/services/auth-registry/service.ts:154-156`: `onTransactionUpdated.add((tx) => this.reconcileFromTx(tx).catch(() => {}))`. Production behaviour is unchanged: `EventHandler.invoke` drops the promise.
 - `apps/extension/src/wallet/services/auth-registry/service.test.ts`: the harness's `txUpdated` becomes `awaitedBus<unknown>()`; `emitTx` becomes `await h.txUpdated.dispatch(...)`; delete the "give its storage ops a beat" comment and the 10 ms sleep.
 - **Gate:** lint; typecheck; the file 30/30. Control: with the old fire-and-forget handler, `dispatch` resolves before the reconcile and the `Proven + Success` case reds (run once, then revert).
 
-### Phase 3: a cancel the journal took stops the send before its proof (#1122)
+### Phase 3: a cancel the journal took stops the send before its proof (#1122) ✓ (30/30 both files; [lessons/phase-3.md](lessons/phase-3.md))
 
 - `apps/extension/src/wallet/services/execution/execution-coordinator.ts` `proveAndSend`: `ctx.checkCancelled()` right after `markJournal({ stage: "proving" … })`. Update the frozen-sequence doc and the proof-gate comment, which name the cancel checkpoints around the hold.
 - `execution-coordinator.test.ts`: the order pins at `:103-117` and `:306-320` gain the new `checkCancelled`; the count-based throws at `:151`, `:168` and `:344` move one check later, and each asserts the step its name places it at was reached.
@@ -62,7 +62,7 @@ One arc, one PR against `dev`, closing #1122, #1244, #1198 and #1215. Recon: [re
 - Red controls, not committed, with the Phase 3 checkpoint applied: hold the cancel's first `getOperation`. Without the slot hold, release it once the gate is entered: red (`proveTx` called, the mid-prove order). With the hold, release it once the resumed send has queued behind the slot (`queued` written again after `pending`, or the `acquireTransferSlot` spy called); green with no wait reaching its deadline.
 - **Gate:** lint; typecheck; `execution-coordinator.test.ts` green; `service.composition.test.ts` 30/30; the new case red at the base copy.
 
-### Phase 4: whole-suite gates
+### Phase 4: whole-suite gates ✓ ([lessons/phase-4.md](lessons/phase-4.md))
 
 - `bun run test` and `bun run test:all`, both green at retry 0; `bun run check:plans` after staging plan files.
 
@@ -96,6 +96,7 @@ None. No rendered surface, copy or row changes. A cancelled send now stops befor
 | D5 | F4: return the promise, `awaitedBus` | Existing helper and handler shape |
 | D6 | F5: wait for the marker | The file's own pattern |
 | D7 | One arc, one PR, one commit per issue | About 150 diff lines; each commit reverts alone |
+| D8 | Deviation: re-pin `auth-registry/service.ts`'s digest in `apps/extension/scripts/type-roles/identifier-sites.expected.json` | Phase 2's edit reopened that attestation (`test:all` red); re-attested, the operations still run outside the execute window |
 
 ## Review verdicts
 
