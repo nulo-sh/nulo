@@ -83,18 +83,20 @@
 						<form class="signup" method="post" action="/api/subscribe" data-signup>
 							<label class="signup__label" for="email-hero">Get an email when Nulo is live</label>
 							<div class="signup__row">
-								<input
-									class="signup__field"
-									id="email-hero"
-									type="email"
-									name="email"
-									autocomplete="email"
-									maxlength="254"
-									required
-									placeholder="you@example.com"
-									aria-describedby="avail-hero"
-								/>
-								<button class="btn" type="submit">Notify me</button>
+								<span class="signup__fieldwrap">
+									<input
+										class="signup__field"
+										id="email-hero"
+										type="email"
+										name="email"
+										autocomplete="email"
+										maxlength="254"
+										required
+										placeholder="you@example.com"
+										aria-describedby="avail-hero"
+									/>
+								</span>
+								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Notify me</button>
 							</div>
 							<p class="signup__status" role="status" data-signup-status></p>
 							<div class="signup__trap" aria-hidden="true">
@@ -233,18 +235,20 @@
 						<form class="signup" method="post" action="/api/subscribe" data-signup>
 							<label class="signup__label" for="email-get">Get an email when Nulo is live</label>
 							<div class="signup__row">
-								<input
-									class="signup__field"
-									id="email-get"
-									type="email"
-									name="email"
-									autocomplete="email"
-									maxlength="254"
-									required
-									placeholder="you@example.com"
-									aria-describedby="avail-get print-get"
-								/>
-								<button class="btn" type="submit">Notify me</button>
+								<span class="signup__fieldwrap">
+									<input
+										class="signup__field"
+										id="email-get"
+										type="email"
+										name="email"
+										autocomplete="email"
+										maxlength="254"
+										required
+										placeholder="you@example.com"
+										aria-describedby="avail-get print-get"
+									/>
+								</span>
+								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Notify me</button>
 							</div>
 							<p class="signup__status" role="status" data-signup-status></p>
 							<div class="signup__trap" aria-hidden="true">
