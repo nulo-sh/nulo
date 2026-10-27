@@ -44,7 +44,7 @@ describe("phraseHint", () => {
 		[{ kind: "count", count: 23 }, "23 of 24 words"],
 		[{ kind: "count", count: 25 }, "25 words. A phrase has 24."],
 		[{ kind: "word", position: 5 }, "Word 5 is not in the word list."],
-		[{ kind: "checksum" }, "A word is wrong or out of order."],
+		[{ kind: "checksum" }, "This phrase does not check out. Check each word and its order."],
 		[{ kind: "empty" }, ""],
 		[{ kind: "pending" }, ""],
 	] as const)("%o reads %j", (verdict, line) => {

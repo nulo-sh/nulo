@@ -105,7 +105,7 @@ describe("ImportSecretForm", () => {
 		[{ kind: "count", count: 23 }, "23 of 24 words", false, "tertiary"],
 		[{ kind: "count", count: 25 }, "25 words. A phrase has 24.", false, "txt-danger"],
 		[{ kind: "word", position: 5 }, "Word 5 is not in the word list.", false, "txt-danger"],
-		[{ kind: "checksum" }, "A word is wrong or out of order.", false, "txt-danger"],
+		[{ kind: "checksum" }, "This phrase does not check out. Check each word and its order.", false, "txt-danger"],
 	])("the phrase's verdict %o reads %j under the field, with the check only when valid", (phraseVerdict, line, checked, color) => {
 		const wrapper = mount(ImportSecretForm, { props: baseProps({ method: "seed", phraseVerdict }), global: { stubs } })
 		const hint = wrapper.get("[data-testid=import-seed-hint]")
@@ -158,7 +158,7 @@ describe("ImportSecretForm — the import flow's own verdict", () => {
 	const VALID = `${"abandon ".repeat(23)}art`
 
 	it.each([
-		["a bad checksum", "abandon ".repeat(24).trim(), "A word is wrong or out of order.", true],
+		["a bad checksum", "abandon ".repeat(24).trim(), "This phrase does not check out. Check each word and its order.", true],
 		["a padded, double-spaced valid phrase", `  ${VALID.replaceAll(" ", "  ")} `, "Correct", false],
 	])("%s: the line and the button agree", async (_, phrase, line, disabled) => {
 		setActivePinia(createPinia())
