@@ -179,11 +179,22 @@ match them.
 
 ### Release notes
 
-The version's "Release notes" field, which Chrome's dashboard does not have. For 1.1.0, the first
-version in which passkey profiles have a recovery phrase:
+The version's "Release notes" field, which Chrome's dashboard does not have. It covers the span
+since the last version the store listed, not since the last tag: for 1.1.0 that is 0.31.0.0, so it
+names the 1.0.0 changes too, led by the one an existing user must act on.
 
 ```
-Passkey profiles now keep a recovery phrase. A passkey profile made with an earlier version needs to be set up again.
+The first stable Nulo V6, on Aztec's Alpha V6.
+
+• Alpha V6, Aztec's main network, is now the default; Testnet stays beside it. Testnet was reset with Aztec 6.0.0, so a profile from an earlier version is offered a Testnet reset when it opens.
+• Passkey profiles keep a recovery phrase their passkey unlocks. A passkey profile made with an earlier version needs to be set up again. After a phrase import or a backup restore you choose how to unlock.
+• Everything the wallet stores is encrypted under each profile's key: accounts, contacts, tokens, balances, activity, app sessions and networks.
+• Updated Terms and Privacy Policy, shown once for acceptance.
+• App windows read a multi-call transaction as rows, show what a grant reaches, and ask again when a fee rises above the approved figure.
+• Default tokens come from a signed list; a token off the list is flagged with a warning.
+• On Firefox, passkey steps run in a sidebar and Presto's loopback permission is asked in place.
+• Redrawn icons, a shield and a globe for private and public, settings search, and every page fits a 240 px window.
+• Over a hundred fixes across send, backup, connect, import and the activity view.
 ```
 
 ### Privacy policy text
