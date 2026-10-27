@@ -91,6 +91,7 @@ One comment on #1218 carries the dispositions table above with each reason, name
 | D9 | #1225 reuses `watchLockStart`; `start()` re-enables the countdown (alternative G) | the follower exists and is tested (`locked-state.test.ts:441-451`); a second reveal must not inherit "keep open" | Opus 7; first final pass 3 |
 | D10 | #1186: a comment, no change | the sentence is right at the base; the composition test pins the behaviour | both: agree |
 | D11 | The discovery log level waits for the `fpc/service.ts` arc | same file and same catch as OA-3's change; a warn line during a network reset is the whole consequence | lead; not yet audited |
+| D12 | Deviation: the chaos model cites `seed.vue` and `auth.vue` by line, which recon missed; arc 1 moves the three citations in `tests/e2e/helpers/profile-chaos/model.ts` | `profile-chaos-model.test.ts` requires each cited line to hold its fragment; a line number is upkeep, not a harness change | lead |
 
 ## Assumptions
 
@@ -116,7 +117,7 @@ One comment on #1218 carries the dispositions table above with each reason, name
 
 ### Arc 1
 
-**Phase 1 — the lock screen and the export pages.** Steps:
+**Phase 1 — the lock screen and the export pages.** ✓ Steps:
 1. Change `export/account.vue`, `export/seed.vue`, `useSecretCountdown.ts` and `auth.vue` as § Arc 1 says.
 2. Add tests:
    - `export/account.test.ts`: a lock while a file password and an approval are held. Expect every secret ref empty and the first step shown.
@@ -128,6 +129,8 @@ One comment on #1218 carries the dispositions table above with each reason, name
 4. Comment on #1218 (§ #1218) and on #1186 (D10).
 
 Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run audit:vue`. Pass: green; each regression case red against the base page or composable. Smoke e2e, from `apps/extension`, on an armed build: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`, then `bun run test:e2e -- auth-flows security security-backup account-import-export keyboard-guards --retry=0`. Chrome only: the arc touches no fixture, focus order, window, user activation or WebAuthn path; CI's required Firefox smoke lane runs on the PR. Layers: lint, typecheck, component, smoke.
+
+Gate run (at the code head, before the review loop): `bun run audit:vue` exit 0 (942 files, 15 940 tests; lint, `typecheck:all`, build), after one red run on `profile-chaos-model.test.ts` (D12). The nine regression cases red against the base sources (the two "keep open" seed cases also with only `start()` reverted); the first-profile control green. Smoke, armed Chrome build, retry 0: 6 files (`security` also matched `security-reset`), 23 tests, 3:36. Screenshots: `screenshots/arc1/`, from a scratch spec that also asserts, in the browser, the empty, masked field and the disabled Continue after the switch.
 
 ### Arc 2
 
