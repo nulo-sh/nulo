@@ -4,6 +4,7 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
 	"cache-control": "no-store",
 	"content-security-policy": "default-src 'none'; frame-ancestors 'none'",
 	"cross-origin-resource-policy": "same-origin",
+	"permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()",
 	"referrer-policy": "no-referrer",
 	"strict-transport-security": "max-age=63072000; includeSubDomains; preload",
 	"x-content-type-options": "nosniff",

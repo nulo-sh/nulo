@@ -2,7 +2,6 @@ export const RESEND_API = "https://api.resend.com"
 
 const DEFAULT_RETRY_WAIT_MS = 1000
 const MAX_RETRY_WAIT_MS = 2000
-const MAX_TIMING_PAD_MS = 2000
 
 /** What the handler needs from the runtime, injected so tests fake Resend and the clock. */
 export type Upstream = {
@@ -14,7 +13,7 @@ export type Upstream = {
 
 export type ContactConfig = { apiKey: string; segmentId: string; topicId: string; consentVersion: string }
 
-type Stage = "lookup" | "create" | "recheck"
+type Stage = "lookup" | "create" | "recheck" | "mirror"
 
 export type Outcome = { kind: "ok" } | { kind: "unavailable"; stage: Stage } | { kind: "failed"; stage: Stage; status: number }
 
@@ -44,7 +43,14 @@ async function call(up: Upstream, config: ContactConfig, method: "GET" | "POST",
 	for (let attempt = 1; ; attempt++) {
 		let response: Response
 		try {
-			const init = { method, headers: headersFor(config, body !== undefined), body, signal: AbortSignal.timeout(up.timeoutMs) }
+			// `manual`: Workers forward `Authorization` across a redirect to another host.
+			const init: RequestInit = {
+				method,
+				headers: headersFor(config, body !== undefined),
+				body,
+				redirect: "manual",
+				signal: AbortSignal.timeout(up.timeoutMs),
+			}
 			response = await up.fetch(`${RESEND_API}${path}`, init)
 		} catch {
 			throw new Unavailable()
@@ -78,12 +84,13 @@ export async function addContact(up: Upstream, config: ContactConfig, email: str
 	const path = `/contacts/${email}`
 	let stage: Stage = "lookup"
 	try {
-		const started = up.now()
 		const found = await call(up, config, "GET", path)
 		if (isOk(found)) {
-			// A new address costs a second round trip; waiting one lookup's length keeps a known address
-			// from answering measurably faster.
-			await up.sleep(Math.min(up.now() - started, MAX_TIMING_PAD_MS))
+			// A new address costs a second round trip, the create, which can also fail on Resend's shared
+			// rate limit. A known address makes a second read in its place, so neither its timing nor an
+			// upstream refusal an attacker induces tells the two apart.
+			stage = "mirror"
+			await call(up, config, "GET", path)
 			return { kind: "ok" }
 		}
 		if (found !== 404) return { kind: "failed", stage, status: found }

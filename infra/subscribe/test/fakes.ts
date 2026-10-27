@@ -12,7 +12,7 @@ export const IP = "203.0.113.77"
 export const UPSTREAM_TEXT = "resend-said-something-private"
 export const TEST_KEY = "test-key-not-a-secret"
 
-export type Recorded = { method: string; url: string; headers: Headers; body: string }
+export type Recorded = { method: string; url: string; headers: Headers; body: string; redirect: Request["redirect"] }
 
 /** A limiter enforcing the limit wrangler.jsonc declares for its binding. */
 export function limiter(name: string): RateLimit & { keys: string[] } {
@@ -55,7 +55,13 @@ export function fakeUpstream(answer: (request: Recorded, init: RequestInit) => A
 	const up: Upstream = {
 		async fetch(input, init) {
 			const request = new Request(input, init)
-			const recorded = { method: request.method, url: request.url, headers: request.headers, body: await request.text() }
+			const recorded = {
+				method: request.method,
+				url: request.url,
+				headers: request.headers,
+				body: await request.text(),
+				redirect: request.redirect,
+			}
 			requests.push(recorded)
 			return answer(recorded, init)
 		},
@@ -72,8 +78,11 @@ export function fakeUpstream(answer: (request: Recorded, init: RequestInit) => A
 export const reply = (status: number, headers: Record<string, string> = {}) =>
 	new Response(JSON.stringify({ statusCode: status, message: `${UPSTREAM_TEXT} ${NORMALIZED}`, name: "x" }), { status, headers })
 
-/** A Resend contact list with one contact per address, answering a duplicate create with `duplicateStatus`. */
-export function resendStore(duplicateStatus: number) {
+/**
+ * A Resend contact list with one contact per address. The docs leave a duplicate create unspecified,
+ * so it either errors with `duplicate` or, for `"upsert"`, overwrites the contact and succeeds.
+ */
+export function resendStore(duplicate: number | "upsert") {
 	const contacts = new Map<string, unknown>()
 	let createAttempts = 0
 	const answer = (request: Recorded): Response => {
@@ -84,7 +93,7 @@ export function resendStore(duplicateStatus: number) {
 		}
 		createAttempts++
 		const body = JSON.parse(request.body)
-		if (contacts.has(body.email)) return reply(duplicateStatus)
+		if (contacts.has(body.email) && duplicate !== "upsert") return reply(duplicate)
 		contacts.set(body.email, body)
 		return Response.json({ object: "contact", id: crypto.randomUUID() }, { status: 201 })
 	}

@@ -8,7 +8,7 @@ The `nulo-subscribe` Cloudflare Worker: it adds a nulo.sh visitor's email addres
 - **Why its own Worker.** `nulo-landing` keeps branch previews on, and a preview version sees its Worker's secrets: any pushed branch could read a key stored there. This Worker has no route, `workers_dev: false` and `preview_urls: false`, builds from `main` only, has zero runtime dependencies (plain `fetch` to `https://api.resend.com`, so no package in the bundle can read the secret; `test/deploy.test.ts` fails when the bundle holds anything but `src/`), keeps Workers Logs off, and never logs an address.
 - **What a preview build could still do.** A branch build of `nulo-landing` runs with that Worker's Workers Builds API token. If the token can edit every Worker in the account, a branch can redeploy `nulo-subscribe` with code that reads its secret. The owner checks the token (below). Separately, a preview version of the landing can call the binding with any `Origin` and any `CF-Connecting-IP`: that needs push access, so it is an insider risk, a known limit.
 - **Abuse controls before double opt-in.** The Origin check (cross-site posts and preview hosts), the per-IP and global rate limits, the honeypot and the 2 KB body cap are the only controls. Signup sends no email, so the form cannot be used to mail a third party; anyone can still enter someone else's address until double opt-in exists.
-- **Enumeration.** A new address, an address already on the list (in any state) and a filled honeypot get byte-identical answers. A known address also waits out one lookup's length so it is not a round trip faster than a new one.
+- **Enumeration.** A new address, an address already on the list (in any state) and a filled honeypot get byte-identical answers. A known address makes a second read where a new one makes its create, so it is not a round trip faster, and an attacker who saturates Resend's shared rate limit gets the same 503 for both.
 - **The key** is created by the owner in the Resend dashboard and pasted by the owner into the Cloudflare secret `RESEND_API_KEY`. It never passes through an agent, a chat, a file, a test or CI.
 
 ## Handler contract
@@ -27,12 +27,12 @@ In order; every refusal answers `{"ok":false}` with the status alone, never Rese
 | Honeypot | field `website` non-empty | the success answer; Resend is not called |
 | Address | after trimming and lowercasing the domain: not one `@`, a local part over 64 or the whole over 254 characters, a character outside RFC 5322 atext or one a URL path reserves or escapes (slash, `?`, `#`, `%`, `^`, pipe, backtick, braces), a non-ASCII or undotted domain, or a numeric last label | 400 |
 | Config | `RESEND_API_KEY`, `RESEND_SEGMENT_ID`, `RESEND_TOPIC_ID` or `CONSENT_VERSION` missing | 503 |
-| Lookup | `GET /contacts/{email}` answers 2xx: the address exists in some state | the success answer, **no write** |
+| Lookup | `GET /contacts/{email}` answers 2xx: the address exists in some state | a second read of it, then the success answer; **no write** |
 | Create | lookup 404: `POST /contacts` with `unsubscribed: false`, the segment, the topic with `subscription: "opt_in"`, properties `source: "landing"`, `consent_version`, `consented_at` (ISO 8601) | the success answer |
 | Duplicate | the create answers any other 4xx: the address is looked up again, and if it exists now (a concurrent first submission won), the success answer | else 502 |
-| Upstream | each request times out after 5 s; a 429 or 5xx is retried once after its `retry-after` (capped at 2 s) | a timeout, a network error or a second 429/5xx: 503; any other answer: 502 |
+| Upstream | each request times out after 5 s, never follows a redirect (Workers would forward `Authorization` to the new host), and a 429 or 5xx is retried once after its `retry-after` (capped at 2 s) | a timeout, a network error or a second 429/5xx: 503; any other answer, a 3xx included: 502 |
 
-The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: application/json` or `Sec-Fetch-Mode: cors`), else a `303` to `/subscribed` (a plain form post without JavaScript). Every response carries its own headers, since nothing here passes through the landing's `_headers`: `Cache-Control: no-store`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cross-Origin-Resource-Policy: same-origin`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` as the landing sets it, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. The only log lines are an upstream refusal's stage and status, and an unexpected error's name (never its message, which can quote the body).
+The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: application/json` or `Sec-Fetch-Mode: cors`), else a `303` to `/subscribed` (a plain form post without JavaScript). Every response carries its own headers, since nothing here passes through the landing's `_headers`: `Cache-Control: no-store`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cross-Origin-Resource-Policy: same-origin`, `Permissions-Policy` as the landing sets it, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` as the landing sets it, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. The only log lines are an upstream refusal's stage and status, and an unexpected error's name (never its message, which can quote the body).
 
 ## Owner checklist (Cloudflare dashboard)
 
@@ -41,6 +41,7 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 3. **Build tokens.** Inspect the Workers Builds API token of `nulo-landing` and of `nulo-subscribe` and narrow each to its own Worker. If Workers Builds cannot run on a narrowed token, turn off non-production builds on `nulo-landing`, or move `nulo-subscribe` to its own account.
 4. **Service binding** on `nulo-landing`: `SUBSCRIBE` → `nulo-subscribe` (the landing's change declares it in its `wrangler.jsonc`; add it in the dashboard if that deploy cannot).
 5. **No challenge** in front of `nulo.sh/api/*`: a challenge page answers in place of the Worker and breaks the form.
+6. **Acceptance, once the key is set and before the form is visible** (a fake cannot establish these): submit one address twice and see one contact and the same answer; submit it again with a different case in the local part and record whether Resend's lookup found it; submit six times from one browser within a minute and see the sixth refused, which shows `CF-Connecting-IP` reaches this Worker through the binding. Resend's answer to a duplicate create, a case variant included, goes into this README.
 
 ## Operations
 
@@ -58,7 +59,9 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 
 ## Known limits
 
-- **Honeypot timing.** A filled honeypot answers without calling Resend, so it is faster than a real submission; a bot that times both learns which field is the decoy.
+- **Honeypot timing.** A filled honeypot answers without calling Resend, so it is faster than a real submission, and it succeeds while the endpoint is failing; a bot that compares the two learns which field is the decoy. It learns nothing about any address.
+- **Residual timing.** A known address's second read and a new address's create are different calls; if Resend's create is much slower than its read, a known address still answers measurably faster.
+- **Resend's duplicate semantics are undocumented.** If a duplicate create upserts, a create retried after a 5xx that had in fact committed, or the losing create of two concurrent first submissions, rewrites the contact this same submission created a moment earlier, with the same values; no email has reached it yet, so no withdrawal can be lost. If Resend's lookup were case-sensitive while its create upserted case-insensitively, a case variant of a withdrawn address could re-subscribe it: the acceptance step above checks that before the form opens.
 - **A preview build of the landing** can call the binding with any `Origin` and `CF-Connecting-IP`. That needs push access to the repository: an insider risk.
 - **Suppressed addresses without a contact.** An address on the suppression list but not among the contacts is created as a new contact; the suppression still blocks every send to it.
 - **The rate limits are per Cloudflare location and approximate**, so a distributed burst can exceed the global 60 per minute; the daily count check and the kill switch are the backstop.

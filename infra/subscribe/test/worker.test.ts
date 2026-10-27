@@ -46,6 +46,7 @@ const EXPECTED_HEADERS = {
 	"cache-control": "no-store",
 	"content-security-policy": "default-src 'none'; frame-ancestors 'none'",
 	"cross-origin-resource-policy": "same-origin",
+	"permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()",
 	"referrer-policy": "no-referrer",
 	"strict-transport-security": "max-age=63072000; includeSubDomains; preload",
 	"x-content-type-options": "nosniff",
@@ -276,21 +277,29 @@ describe("Resend", () => {
 		const fresh = await snapshot(await run(json({ email: ADDRESS }), makeEnv(), fakeUpstream(resendStore(409).answer).up))
 		const upstream = fakeUpstream(() => Response.json({ object: "contact", email: NORMALIZED, ...state }))
 		const known = await snapshot(await run(json({ email: ADDRESS }), makeEnv(), upstream.up))
-		expect(upstream.requests.map((r) => r.method)).toEqual(["GET"])
+		expect(upstream.requests.map((r) => r.method)).toEqual(["GET", "GET"])
 		expect(known).toEqual(fresh)
 	})
 
-	test("a known address waits out its lookup's length, so it answers no faster than a new one", async () => {
-		let upstream: ReturnType<typeof fakeUpstream>
-		upstream = fakeUpstream(() => {
-			upstream.advance(140)
-			return Response.json({ object: "contact" })
-		})
-		await run(json({ email: ADDRESS }), makeEnv(), upstream.up)
-		expect(upstream.sleeps).toEqual([140])
-		const fresh = fakeUpstream(resendStore(409).answer)
-		await run(json({ email: ADDRESS }), makeEnv(), fresh.up)
-		expect(fresh.sleeps).toEqual([])
+	test("a known address makes as many round trips as a new one, so a saturated Resend answers both with the same 503", async () => {
+		let lookups = 0
+		const known = fakeUpstream(() => (++lookups === 1 ? Response.json({ object: "contact" }) : reply(429)))
+		const fresh = fakeUpstream((r) => (r.method === "GET" ? reply(404) : reply(429)))
+		for (const { up } of [known, fresh]) await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), up), 503)
+		expect(known.requests.map((r) => r.method)).toEqual(["GET", "GET", "GET"])
+		expect(fresh.requests.map((r) => r.method)).toEqual(["GET", "POST", "POST"])
+		expect(known.sleeps).toEqual(fresh.sleeps)
+	})
+
+	test("no request ever follows a redirect, so the key cannot be forwarded to another host", async () => {
+		const upstream = fakeUpstream(
+			() => new Response(null, { status: 307, headers: { location: "https://elsewhere.example/contacts" } }),
+		)
+		await expectRefusal(await run(json({ email: ADDRESS }), makeEnv(), upstream.up), 502)
+		const store = fakeUpstream(resendStore(409).answer)
+		await run(json({ email: ADDRESS }), makeEnv(), store.up)
+		for (const request of [...upstream.requests, ...store.requests]) expect(request.redirect).toBe("manual")
+		expect(upstream.requests.map((r) => r.url)).toEqual([`${RESEND_API}/contacts/${NORMALIZED}`])
 	})
 
 	test("a filled honeypot answers exactly like a new address and calls Resend not at all", async () => {
@@ -304,8 +313,8 @@ describe("Resend", () => {
 		expect(upstream.requests).toEqual([])
 	})
 
-	test.each([409, 422])(
-		"two concurrent first submissions of one address both succeed and leave one contact (duplicate create answered %i)",
+	test.each([409, 422, "upsert"] as const)(
+		"two concurrent first submissions of one address both succeed and leave one contact (duplicate create: %p)",
 		async (duplicate) => {
 			const store = resendStore(duplicate)
 			let release: () => void = () => {}
