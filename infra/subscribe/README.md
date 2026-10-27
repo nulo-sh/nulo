@@ -72,3 +72,9 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 ## Tests
 
 `bun run test` (`bun test`) fakes Resend through the injected `fetch` and pins every row above by status and body, the exact lookup and create requests, no write to a known address in any state, a concurrent duplicate pair leaving one contact, the retry, timeout and streaming-cap paths, the headers on every response, a console spy over every test, and (`test/deploy.test.ts`) the `wrangler.jsonc` pins and a `wrangler deploy --dry-run` bundle whose only inputs are `src/`. `bun run deploy:dry` bundles without credentials.
+
+## Operator scripts
+
+`scripts/broadcast-topic.ts <broadcast id> <name> <html file> <text file>` writes a broadcast draft whole over the API, name, both bodies and the launch topic in one request, and prints the broadcast back without its bodies plus whether each stored body equals its file. It runs as a keyed run from `ops.env.example` (the `my-stack` skill, Keyed runs). It is the one writer of a draft: a partial update from any client resets the fields it leaves out (the name, the text, the topic), so a client without the topic field never updates the draft. `bun test` covers it.
+
+`scripts/unsubscribe-test.ts send <draft id> <launch segment id>` proves the unsubscribe path on one real contact: it copies the draft's envelope and bodies into a broadcast scoped to the launch topic and to a one-contact "Launch test" segment holding the launch segment's earliest contact, verifies the copy, and sends it. After the click, `check <test segment id>` reads that contact's global flag and topic subscriptions, and `restore <test segment id>` puts it back. No address is ever on a command line; the log shows a masked one. Keyed runs, like the script above.
