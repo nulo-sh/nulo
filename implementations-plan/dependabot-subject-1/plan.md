@@ -102,7 +102,7 @@ which moves the head: required checks re-run and the watcher's head pin refuses 
 - **Supply chain**: Dependabot PRs still pass actionlint, `action-pins.test.ts` and every suite; `bunx commitlint` is untouched.
 - **Domain risks**: none of frontend, contracts, publishing or backend apply.
 
-## Phase 1 — skip, pin, document
+## Phase 1 — skip, pin, document ✓
 
 UI impact: none (CI and contributor docs only). Files: the five named above. Write the test first and watch the
 Dependabot row fail, then add the skip.
@@ -161,6 +161,14 @@ reworded. 5, plausible: a Dependabot push rewrites the title; recorded as Infere
 **Codex, final pass (resumed session): `approve`.** The fixes hold; it withdrew `--subject` as a condition on the
 new evidence and accepts the race as a cosmetic known limit. One wording fix taken: a Dependabot push *may* rewrite the
 title, so the step says to recheck after an update.
+
+**Post-implementation loop (arc 1, diff `b63e55fa6..83e133758`).** Codex round 1 (gpt-6.1-sol, high): `findings`,
+two low. (1) CLAUDE.md and `dependabot.test.ts` say Dependabot cannot read Bun's lockfile, while GitHub lists Bun
+>= 1.1.39 version updates as supported: rejected here (npm dependencies are out of this lane, the sentence predates the
+change, lockfileVersion 2 support unverified), filed at close-out. (2) The new describe comment claimed the range lint
+guards commits that land, but a squash drops every PR's commits: accepted, deleted. Opus diff review: `clean`, two
+notes: the README's 93 (outside the write scope, reported) and the Dependabot bullet's "because" (accepted: the case
+guess is why commits skip; the length is why the merger rewrites). Fixes in `0d4e93d1e`. Codex round 2: `clean`.
 
 ## Seeds
 
