@@ -405,7 +405,7 @@ describe("a passkey profile's account file", () => {
 		expect(save(w).disabled).toBe(true)
 	})
 
-	test("a lock during the passkey lookup opens no prompt; one while the prompt is up closes it", async () => {
+	test("a lock during the passkey lookup opens no prompt, and its reset cancels the page's ceremony", async () => {
 		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
 		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
 		const w = mountPage("passkey")
