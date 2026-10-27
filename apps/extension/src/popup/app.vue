@@ -8,6 +8,7 @@ import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
+import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
@@ -118,9 +119,14 @@ void accountRows.connect()
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
 const legalSheetShown = ref(undefined)
-/** The sheet never covers a page that needs no session, so only on one that does is its verdict news. */
+/** Marked only where the sheet may cover the page: anywhere else it is hidden whatever the acceptance. */
 const legalSheetMark = computed(() => {
-	if (route.meta.isAuthRequired !== true || legalSheetShown.value === undefined) return undefined
+	const coverable = legalSheetMayCover({
+		routeName: route.name,
+		routePath: route.path,
+		isAuthRequired: route.meta.isAuthRequired === true,
+	})
+	if (!coverable || legalSheetShown.value === undefined) return undefined
 	return legalSheetShown.value ? "shown" : "hidden"
 })
 
@@ -613,9 +619,8 @@ onBeforeUnmount(() => {
 		:data-session-checked="appStore.isSessionChecked ? 'true' : undefined"
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
-		:data-legal-sheet="legalSheetMark"
-		data-testid="popup-shell"
 	>
+		<div hidden data-testid="legal-sheet-verdict" :data-verdict="legalSheetMark" />
 		<!-- Popup Teleport -->
 		<div id="popup" />
 		<div id="tooltip" />

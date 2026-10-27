@@ -177,18 +177,18 @@ export async function isSheetPresent(page: Page): Promise<boolean> {
 }
 
 /**
- * The shell's verdict on the Terms sheet, once the sheet has read the acceptance status on a page that
- * needs a session. A reload into such a page's hash passes through the start location and the lock
- * screen first, and the shell marks no verdict on either.
+ * The shell's verdict on the Terms sheet, once the sheet has read the acceptance status on a page it
+ * may cover. A reload into such a page's hash passes through the start location and the lock screen
+ * first, and the shell marks no verdict on either. Read in the wait, so a mark that leaves after it
+ * cannot be read as none.
  */
 export async function legalSheetVerdict(page: Page): Promise<"shown" | "hidden"> {
-	const shell = sel("popup-shell")
-	await page.waitForFunction(
-		(s) => document.querySelector(s)?.hasAttribute("data-legal-sheet") === true,
+	const verdict = await page.waitForFunction(
+		(s) => document.querySelector(s)?.getAttribute("data-verdict") ?? false,
 		{ timeout: 15_000, polling: 100 },
-		shell,
+		sel("legal-sheet-verdict"),
 	)
-	return page.$eval(shell, (el) => el.getAttribute("data-legal-sheet") as "shown" | "hidden")
+	return (await verdict.jsonValue()) as "shown" | "hidden"
 }
 
 /** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage

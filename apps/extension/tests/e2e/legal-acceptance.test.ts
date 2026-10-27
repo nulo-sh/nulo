@@ -280,8 +280,8 @@ describe("popup: declining never locks a person out", () => {
 		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
 
-		// The update scenarios' answer: nothing rises over a current acceptance, and the check that
-		// says so catches a sheet that rises over one it was told is current.
+		// Over a current acceptance the answer finds no sheet; over a stale one it was told is
+		// current, it refuses.
 		const current = { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") }
 		await reloadWithLegalState(page, "current")
 		await answerUpdatedTerms(page, current)

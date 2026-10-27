@@ -2246,7 +2246,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(activeType(w)).toBe("fj")
 			expect(everEmittedSettings(w)).toEqual([])
 			expect(pendingOf(w)).toEqual(["true", "true", "true"])
-			// The e2e sweeps wait on the card's mark: with a saved pick, no Checking says the read runs.
+			// With a saved pick no Checking shows, so only the card's mark says the read runs.
 			const readPending = () => w.get('[data-testid="fee-settings-card"]').attributes("data-read-pending")
 			expect(readPending()).toBe("true")
 

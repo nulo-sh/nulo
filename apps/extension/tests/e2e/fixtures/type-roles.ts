@@ -12,6 +12,7 @@ import { fonts, MIN_MONO_PX, MIN_TEXT_PX, type TypeRole, typeRoleNames, typeRole
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { OVERRIDES } from "../../../scripts/type-roles/exceptions"
+import { withTimeoutMessage } from "./dom"
 import { ensureUnlocked, navigateByHash, readSessionRow } from "./helpers"
 
 type FontToken = (typeof fonts)[keyof typeof fonts]
@@ -756,17 +757,19 @@ export async function expectFitsNarrow(page: Page, label: string): Promise<void>
 	// A menu a press closed is still in the DOM for its leave.
 	await settleLayout(page)
 	// A success snack closes itself within seconds, unless a pointer or focus holds it, and Send's fee
-	// card ends its balance read; either changing mid-check would read as text the width hid.
+	// card ends its balance read, whose legs run at once under the store's 20 s bound each
+	// (`INIT_FETCH_TIMEOUT_MS`); either changing mid-check would read as text the width hid.
 	const held = await page.evaluate(() => {
 		const snack = document.querySelector('[data-testid="snackbar"][data-kind="success"]')
 		if (snack?.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur()
 		return snack?.matches(":hover") ?? false
 	})
 	if (held) await page.mouse.move(0, 0)
-	await page.waitForFunction(
-		() =>
-			!document.querySelector('[data-testid="snackbar"][data-kind="success"], [data-testid="fee-settings-card"][data-read-pending]'),
-		{ timeout: 15_000, polling: 100 },
+	const unsettled = '[data-testid="snackbar"][data-kind="success"], [data-testid="fee-settings-card"][data-read-pending]'
+	await withTimeoutMessage(
+		page.waitForFunction((s) => !document.querySelector(s), { timeout: 30_000, polling: 100 }, unsettled),
+		async () =>
+			`${label}: still on the page after 30 s: ${await page.evaluate((s) => [...document.querySelectorAll(s)].map((el) => el.getAttribute("data-testid")).join(", "), unsettled)}`,
 	)
 	await textFates(page, "record")
 	await atWidth(page, NARROW_WIDTH, async () => {
