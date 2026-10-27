@@ -582,13 +582,6 @@ export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 		},
 	},
 	{
-		issue: 1135,
-		pattern:
-			/^\["Failed to discover FPC 0x[0-9a-f]{64}",.*(?:PXE_STORE_KEY_MISSING|has no current incarnation|is being deleted — write rejected|"profile \w+ deleted")/,
-		kinds: ["log"],
-		source: "fpc",
-	},
-	{
 		issue: 1136,
 		pattern:
 			/^\["\[READ\] (?:getSyncedBlockHeader failed after \d+ms",.*not-yet-synchronized PXE|\w+ failed after \d+ms",.*chain was purged mid-operation)/,

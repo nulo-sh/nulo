@@ -115,6 +115,7 @@ vi.mock("@/utils/core", () => ({
 			assertRunFence: (fence: unknown) => assertRunFence(fence),
 			getPasskeyUnlockParams: vi.fn(async () => ({ credentialId: "cred", prfSalt: "c2FsdA==" })),
 			exportPlain: vi.fn(async () => "mk"),
+			onProfileUpdated: { add: vi.fn(), remove: vi.fn() },
 		},
 	},
 }))

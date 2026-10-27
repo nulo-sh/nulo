@@ -89,6 +89,13 @@ interface ExportCtx {
 	runs: RunFence
 	// The in-flight create, for the scrub's client teardown.
 	activeRun: ExportRun | null
+	// The session the published backup was made in. A password profile's file is sealed under the
+	// password that opened its keys there, which stays the profile's while that session stands: a
+	// password change reopens the session under the same lock as its commit.
+	madeIn: ProfileRunFence | null
+	// Counts the page's start-overs: a reset or a switch ends what a late answer may still say, a
+	// completed download does not.
+	resets: number
 	disposed: boolean
 	appStore: ReturnType<typeof useAppStore>
 	/** The page requires a session, so a profile is always active; read live, never cached. */
@@ -335,6 +342,7 @@ async function runBackup(ctx: ExportCtx) {
 		if (!isCurrent() || rejectOversizedBackup(ctx, result.pretty)) return
 
 		ctx.artifacts.compact = result.compact
+		ctx.madeIn = fence
 		state.backupStatus.value = "finished"
 		state.showRecommendation.value = true
 	} catch (err) {
@@ -353,6 +361,20 @@ function filePasswordBlocked(ctx: ExportCtx) {
 	return ctx.isPasskeyProfile.value && !isNewPasswordValid(state.password.value ?? "", state.repeatedPassword.value ?? "")
 }
 
+/** Whether a password profile's backup was made in the session still open, so the password it is
+ *  sealed under still opens the profile. The service answers under the lock a password change holds
+ *  from its commit through its reopen. A passkey profile's file takes a password of its own and never
+ *  asks. */
+async function madeInSessionStands(ctx: ExportCtx, madeIn: ProfileRunFence | null): Promise<boolean> {
+	if (ctx.isPasskeyProfile.value) return true
+	try {
+		await managers.profile.assertRunFence(madeIn as ProfileRunFence)
+		return true
+	} catch {
+		return false
+	}
+}
+
 async function runEncrypt(ctx: ExportCtx) {
 	const { state } = ctx
 	// Never mid-download: the plaintext file would land on disk while the page says it is encrypted.
@@ -361,6 +383,7 @@ async function runEncrypt(ctx: ExportCtx) {
 	state.isBusy.value = true
 	const isCurrent = ctx.runs.snapshot()
 	const plaintext = ctx.artifacts.compact
+	const madeIn = ctx.madeIn
 
 	state.backupStatus.value = "encrypting"
 	state.showRecommendation.value = false
@@ -368,6 +391,14 @@ async function runEncrypt(ctx: ExportCtx) {
 	try {
 		const sealed = await sealFullBackupText(plaintext as string, state.password.value as string)
 		if (!isCurrent()) return
+		// After the seal, so a change committed while the seal ran is caught too.
+		const stands = await madeInSessionStands(ctx, madeIn)
+		if (!isCurrent()) return
+		if (!stands) {
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to encrypt the backup" })
+			return
+		}
 		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
 		// overhead could in principle cross the line a plain file sits under).
 		// The text is pure ASCII, so string length IS the byte count here.
@@ -402,6 +433,14 @@ async function runDownload(ctx: ExportCtx) {
 	const filename = `NuloEncryptedBackup_${profileFileNameSegment(ctx.profile().name)}_${Math.floor(Date.now() / 1000)}.txt`
 
 	try {
+		// A change of password whose update this page never heard still leaves no file behind.
+		const stands = await madeInSessionStands(ctx, ctx.madeIn)
+		if (!isCurrent()) return
+		if (!stands) {
+			resetFlow(ctx)
+			ctx.openToast({ kind: "error", label: "Failed to download backup" })
+			return
+		}
 		// A file already requested still lands after a scrub; its toast and Home's flag are fenced.
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
 		if (!isCurrent()) return
@@ -435,11 +474,13 @@ function discardRun(ctx: ExportCtx) {
 	}
 	ctx.artifacts.compact = null
 	ctx.artifacts.sealed = null
+	ctx.madeIn = null
 	ctx.state.password.value = null
 	ctx.state.repeatedPassword.value = null
 }
 
 function resetFlow(ctx: ExportCtx) {
+	ctx.resets++
 	discardRun(ctx)
 	const { state } = ctx
 	state.isBusy.value = false
@@ -452,6 +493,20 @@ function resetFlow(ctx: ExportCtx) {
 	state.unopenedImportedKeys.value = 0
 	state.importsOnAddedNetworks.value = noAddedNetworkImports()
 	state.chainStateOmitted.value = false
+}
+
+/** An update of the password profile while the page holds its backup: a password change made elsewhere
+ *  reopens the session the backup was made in, a rename leaves it standing. Before a backup the prompt
+ *  refuses a replaced password itself, and a downloaded file left while its session stood. */
+async function followProfileUpdate(ctx: ExportCtx) {
+	const madeIn = ctx.madeIn
+	if (!madeIn) return
+	// A download that completes meanwhile ends the run, but the person must still hear that the file
+	// it saved opens with the replaced password.
+	const resets = ctx.resets
+	if ((await madeInSessionStands(ctx, madeIn)) || ctx.disposed || ctx.resets !== resets) return
+	resetFlow(ctx)
+	ctx.openToast({ kind: "info", label: "Profile password changed in another window." })
 }
 
 function createExportState(): ExportState {
@@ -488,6 +543,8 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		artifacts: { compact: null, sealed: null },
 		runs: createRunFence(),
 		activeRun: null,
+		madeIn: null,
+		resets: 0,
 		disposed: false,
 		appStore,
 		profile,
@@ -512,6 +569,7 @@ export function useFullBackupExport(opts: UseFullBackupExportOptions) {
 		downloadBackup: () => runDownload(ctx),
 		/** The scrub, then every flow ref back to its initial value. */
 		reset: () => resetFlow(ctx),
+		followProfileUpdate: () => followProfileUpdate(ctx),
 		dispose: () => {
 			ctx.disposed = true
 			discardRun(ctx)

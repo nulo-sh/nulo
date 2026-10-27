@@ -1005,15 +1005,18 @@ describe("O4, errors", () => {
 			source: "fpc",
 			text: `["Failed to discover FPC 0x${"ab".repeat(32)}",{"name":"PxeStoreKeyMissingError","message":"${message}"}]`,
 		})
-		expect(checkErrors([discovery("PXE_STORE_KEY_MISSING: no store key provisioned for profile x")], []).violations[0]?.known).toBe(
-			1135,
-		)
-		const deleted = discovery("pxe op rejected: profile x has no current incarnation (deleted or tombstoned)")
-		expect(checkErrors([deleted], []).violations[0]?.known).toBe(1135)
-		const fencedWrite = discovery("profile x is being deleted — write rejected (epoch 0 → 1)")
-		expect(checkErrors([fencedWrite], []).violations[0]?.known).toBe(1135)
-		const purged = discovery("profile x deleted")
-		expect(checkErrors([purged], []).violations[0]?.known).toBe(1135)
+		// A discovery a lock or a deletion interrupts logs nothing at error, so each of its refusals is an
+		// unfiled red.
+		for (const message of [
+			"PXE_STORE_KEY_MISSING: no store key provisioned for profile x",
+			"pxe op rejected: profile x has no current incarnation (deleted or tombstoned)",
+			"profile x is being deleted — write rejected (epoch 0 → 1)",
+			"profile x deleted",
+		]) {
+			const [refusal] = shown("O4 a discovery a lock interrupts", checkErrors([discovery(message)], []).violations)
+			expect(refusal?.oracle).toBe("O4")
+			expect(refusal?.known).toBeUndefined()
+		}
 		const read = (text: string) => ({ kind: "log" as const, level: "error" as const, source: "pxe", text })
 		const pxe = [
 			read(

@@ -61,6 +61,7 @@ const {
 	handleEncrypt,
 	downloadBackup,
 	reset,
+	followProfileUpdate,
 	dispose,
 } = useFullBackupExport({ runCeremony, leaveAfterPasskeyFailure })
 
@@ -84,6 +85,13 @@ const syncPendingReset = async () => {
 }
 managers.networkReset.onStaleNetworkChanged.add(syncPendingReset)
 void syncPendingReset()
+
+// An update of this password profile may be a change of its password made elsewhere; a change of its
+// unlock method is the type watcher's below.
+managers.profile.onProfileUpdated.add(onProfileUpdated)
+function onProfileUpdated(profile) {
+	if (profile?.id === appStore.profile?.id && profile.type === "password") void followProfileUpdate()
+}
 
 const handleAgree = () => {
 	if (pendingReset.value) return
@@ -150,6 +158,7 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	managers.networkReset.onStaleNetworkChanged.remove(syncPendingReset)
+	managers.profile.onProfileUpdated.remove(onProfileUpdated)
 	dispose()
 })
 </script>
