@@ -292,7 +292,8 @@ export type Methods = {
 	/**
 	 * Moves profile `id` from the unlock `current` opens it with to `next`, keeping its recovery
 	 * phrase, accounts and data. Refuses a profile whose imported-keys key no longer opens or no
-	 * longer matches its record. Throws `UnlockMethodChangedError` when the change was saved, or may
+	 * longer matches its record, and with `StaleUnlockCredentialError` one that does not store the
+	 * unlock `current` is for. Throws `UnlockMethodChangedError` when the change was saved, or may
 	 * have been, but the profile could not be reopened: the wallet is then locked. An account
 	 * integrity block found on the reopen returns the profile with its session closed, behind the
 	 * integrity barrier.

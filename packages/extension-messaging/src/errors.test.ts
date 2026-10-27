@@ -22,6 +22,7 @@ import {
 	OperationNotRecordedError,
 	OwnAccountIntentRefusalError,
 	RetiredProfileError,
+	StaleUnlockCredentialError,
 	UnlockMethodChangedError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -321,6 +322,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			code: "UNLOCK_METHOD_CHANGED",
 			rebuild: pass,
 		},
+		{
+			ctor: StaleUnlockCredentialError,
+			make: () => new StaleUnlockCredentialError(),
+			name: "StaleUnlockCredentialError",
+			code: "STALE_UNLOCK_CREDENTIAL",
+			rebuild: pass,
+		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
 		{
 			ctor: ImportedAccountUnusableError,
@@ -405,6 +413,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		["InvalidPasswordError", () => new InvalidPasswordError(), "Invalid profile password"],
 		["RetiredProfileError", () => new RetiredProfileError(), "This profile was made with an earlier version and can't be opened"],
 		["UnlockMethodChangedError", () => new UnlockMethodChangedError(), "The unlock method changed. Unlock again to continue"],
+		["StaleUnlockCredentialError", () => new StaleUnlockCredentialError(), "The profile does not unlock with this credential"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})

@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
 import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
+import { listOwnAccountRow } from "@/utils/account-rows"
 import { managers } from "@/utils/core"
 
 /** Composables */
@@ -68,9 +69,10 @@ const handleCreateAccount = async () => {
 
 		// The account is created either way; only SELECTING it moves the scope, so
 		// that part is re-checked after the creation RPC.
-		appStore.accounts.push(account)
+		listOwnAccountRow(appStore, account)
+		// The listed row: an event may hold a newer edit of it than the create's answer.
 		const selected = await appStore.commitScopeChange(() => {
-			appStore.account = account
+			appStore.account = appStore.accounts.find((a) => a.address === account.address) ?? account
 		})
 		if (!selected) {
 			openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
