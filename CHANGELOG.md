@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.2.0](https://github.com/nulo-sh/nulo/compare/v1.1.0...v1.2.0) (2026-10-27)
+
+
+### Features
+
+* **landing:** the launch email signup as the page's primary action ([#1242](https://github.com/nulo-sh/nulo/issues/1242)) ([dfba653](https://github.com/nulo-sh/nulo/commit/dfba6534030c8930582f3ad4e18b6a43c1715217))
+* **landing:** the signup answers in place, on the button ([#1256](https://github.com/nulo-sh/nulo/issues/1256)) ([7375e6e](https://github.com/nulo-sh/nulo/commit/7375e6e8e5f5f6a3cb033b240bc8c4f42f9966ae))
+
+
+### Bug Fixes
+
+* **ci:** the plans gate fetches dev unfiltered, past a git 2.56 index-pack abort ([#1247](https://github.com/nulo-sh/nulo/issues/1247)) ([bf7932c](https://github.com/nulo-sh/nulo/commit/bf7932c8ae5437b94837b298ffa05149e09ae1b0))
+
+
+### Misc
+
+* **landing:** host the launch email's mark image under `/email/` ([#1252](https://github.com/nulo-sh/nulo/issues/1252)) ([9a86059](https://github.com/nulo-sh/nulo/commit/9a86059c3a2b77ab9afcf44a86ab2fddc33d8b7d))
+* **landing:** the hero's second button says "See what the chain sees" ([#1261](https://github.com/nulo-sh/nulo/issues/1261)) ([9196a49](https://github.com/nulo-sh/nulo/commit/9196a49b577662611e9b0b1b20a9f4c374fa2139))
+* **landing:** the launch email's header is the brand lockup image ([#1254](https://github.com/nulo-sh/nulo/issues/1254)) ([188b31d](https://github.com/nulo-sh/nulo/commit/188b31dbf74d647dea1be0260efd6e2a70903def))
+* merge dev into the 1.1.0 sync branch so its checks run on dev's gate and landing ([a8df592](https://github.com/nulo-sh/nulo/commit/a8df5926f044e7b5a5e00cee4239684aa87d7d42))
+* re-baseline prerelease manifest to 1.1.0 ([60fa1cb](https://github.com/nulo-sh/nulo/commit/60fa1cb38f270c5ba4eef236b849b85723aeeb8a))
+* **subscribe:** keyed runs that write the launch draft whole and prove the unsubscribe path ([#1257](https://github.com/nulo-sh/nulo/issues/1257)) ([7cee422](https://github.com/nulo-sh/nulo/commit/7cee422c457b5bb4625dc72bebea6219e3ca9b90))
+* sync main → dev ([#1248](https://github.com/nulo-sh/nulo/issues/1248)) ([7506f77](https://github.com/nulo-sh/nulo/commit/7506f77b03c839b24d54ec0e583c31bc76aa46e3))
+* sync main → dev ([#1253](https://github.com/nulo-sh/nulo/issues/1253)) ([7be4360](https://github.com/nulo-sh/nulo/commit/7be4360fd02ce9f5b3bd6023619b1d64c04068c0))
+* sync main → dev ([#1258](https://github.com/nulo-sh/nulo/issues/1258)) ([9d18818](https://github.com/nulo-sh/nulo/commit/9d1881872e00f6a01ab16aecca63d647c1ecad9d))
+
+
+### Docs
+
+* **legal:** a website privacy notice, and the wallet policy points to it (1.2.7) ([#1246](https://github.com/nulo-sh/nulo/issues/1246)) ([7523772](https://github.com/nulo-sh/nulo/commit/75237726835aba994b66f0d78d6caea7ecb5aaa0))
+* **plans:** close mailing-list-1 with its outcome and archive it ([#1260](https://github.com/nulo-sh/nulo/issues/1260)) ([1f7c5f6](https://github.com/nulo-sh/nulo/commit/1f7c5f61c5c5924209538fb4fe2e3966fff12082))
+* **plans:** mailing-list-1 delivered through dev, the owner's answers recorded ([#1245](https://github.com/nulo-sh/nulo/issues/1245)) ([bbb81b8](https://github.com/nulo-sh/nulo/commit/bbb81b84aa604382897106a51b8a9e822e53877b))
+* **store:** the 1.1.0 release notes cover 0.31.0 to 1.1.0 ([#1251](https://github.com/nulo-sh/nulo/issues/1251)) ([232b00c](https://github.com/nulo-sh/nulo/commit/232b00cc59d59ddfcc5c0f4b31361686dfef2715))
+
 ## [1.1.0](https://github.com/nulo-sh/nulo/compare/v1.0.0...v1.1.0) (2026-10-27)
 
 
