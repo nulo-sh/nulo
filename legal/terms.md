@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.2 — effective «FILL: effective date»**
+**Version 1.2 — effective 27 October 2026**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -567,4 +567,4 @@ public feedback forms.
 |---|---|---|
 | 1.0 | Never in effect | A draft, replaced by 1.1 before it took effect. |
 | 1.1 | 26 October 2026 | First version in effect. |
-| 1.2 | «FILL: effective date» | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
+| 1.2 | 27 October 2026 | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |

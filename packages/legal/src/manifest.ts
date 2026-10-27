@@ -23,7 +23,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2",
-			effective: null,
+			effective: "27 October 2026",
 			material: true,
 			changes: [
 				"Passkey profiles now have a recovery phrase.",
@@ -91,7 +91,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.6",
-			effective: null,
+			effective: "27 October 2026",
 			material: false,
 			changes: [
 				"Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9).",
