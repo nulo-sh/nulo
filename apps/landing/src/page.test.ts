@@ -96,11 +96,11 @@ describe("the signup forms on the home page", () => {
 		}
 	})
 
-	it("hero: the availability line and the short small print, with nothing about Resend or the privacy notice", () => {
+	it("hero: the availability line and no small print, with nothing about Resend or the privacy notice", () => {
 		expect(text(element(hero, "p", 'id="avail-hero"'))).toBe(AVAILABILITY)
-		expect(text(element(hero, "p", 'id="print-hero"'))).toBe(PRINT)
+		expect(hero).not.toMatch(/signup__print|print-hero/)
 		expect(hero).not.toMatch(/Resend|privacy/i)
-		expect(startTags(hero, "input").find((a) => a.name === "email")?.["aria-describedby"]).toBe("avail-hero print-hero")
+		expect(startTags(hero, "input").find((a) => a.name === "email")?.["aria-describedby"]).toBe("avail-hero")
 	})
 
 	it("#get: the availability line and the full small print, linking the website privacy notice", () => {
