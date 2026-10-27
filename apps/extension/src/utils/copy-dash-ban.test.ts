@@ -271,6 +271,8 @@ function flat(text: string): string {
 }
 
 function scanScript(file: string, source: string, firstLine: number, out: Hit[]): void {
+	// A literal holds an em dash only if its code spells one or a `\u` escape.
+	if (!source.includes("—") && !source.includes("\\u")) return
 	const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 	const visit = (node: ts.Node): void => {
 		const text = literalText(node)
@@ -355,6 +357,8 @@ describe("copy dash ban (static)", () => {
 		["a static attribute hits", "x.vue", '<template><input placeholder="Search — or paste" /></template>', 1],
 		["a bound expression hits", "x.vue", `<template><Banner :text="'Retry — later'" /></template>`, 1],
 		["a thrown message hits", "x.ts", "throw new Error('Imported keys unavailable — unlock again')", 1],
+		["an escaped dash hits", "x.ts", "const m = 'Wrong chain \\u2014 retry'", 1],
+		["a character reference in a bound expression hits", "x.vue", `<template><Banner :text="'Retry &#8212; later'" /></template>`, 1],
 		["a console.warn argument is exempt", "x.ts", "console.warn('stale row — dropped', { id })", 0],
 		["a this.logWarn argument is exempt", "x.ts", "this.logWarn(`stale row — ${id}`)", 0],
 		["a log.warn argument is exempt", "x.ts", "log.warn('stale row — dropped')", 0],

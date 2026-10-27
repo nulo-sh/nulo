@@ -140,8 +140,13 @@ function notLocal({ text, file, extended }: Literal): boolean {
 	)
 }
 
+/** A file holds no finding unless it spells a key head, `useSyncedRef`, a store class or module, or an escape (`\`) that a
+ *  literal or a name decodes. */
+const MAY_HOLD = ["nulo:", "useSyncedRef", "\\", ...STORE_CLASSES, ...STORE_CLASS_MODULES]
+
 /** Each script of a file, with the line its content starts on, so a hit is reported at its file line. */
 function scriptsOf({ file, source }: Source): Array<{ sf: ts.SourceFile; startLine: number }> {
+	if (!MAY_HOLD.some((text) => source.includes(text))) return []
 	return parseSource(file, source).scripts.map((block) => ({
 		sf: ts.createSourceFile(file, block.content, ts.ScriptTarget.Latest, true),
 		startLine: block.startLine,
@@ -320,6 +325,7 @@ describe("the scan's own rules", () => {
 	test("an unregistered key fails; a registered root, a key under it and a listed non-local key pass", () => {
 		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", 'const k = "nulo:core:unregistered"'))).toHaveLength(1)
 		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", "const k = `nulo:core:planted@${id}`"))).toHaveLength(1)
+		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", 'const k = "\\x6eulo:core:unregistered"'))).toHaveLength(1)
 		const passing = 'const a = "nulo:core:accounts"; const b = `nulo:core:token-seeded@${id}`; const c = "nulo:journal:gc"'
 		expect(unregisteredLiterals(fixture("apps/extension/src/x.ts", passing))).toEqual([])
 	})

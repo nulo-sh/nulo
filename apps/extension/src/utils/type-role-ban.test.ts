@@ -343,7 +343,11 @@ function scanString(scan: Scan, tree: ts.SourceFile, node: ts.Node, context: Scr
 	scan.findings.push({ file: scan.file, rule: pick[0], text: normalize(pick[1]), at: context.at ?? nearestName(node.parent), line })
 }
 
+/** Every judged key and style string spells font, letter or transform in some case, unless an escape hides a letter. */
+const MAY_PICK = /font|letter|transform|\\/i
+
 function scanScript(scan: Scan, source: string, context: ScriptContext): void {
+	if (!MAY_PICK.test(source)) return
 	const tree = ts.createSourceFile("source.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 	const visit = (node: ts.Node): void => {
 		if (ts.isObjectLiteralExpression(node)) scanStyleKeys(scan, tree, node, context)
@@ -919,6 +923,11 @@ describe("type role ban rules", () => {
 		["a bound :style string with a font shorthand", "<template><span :style=\"'font: 700 12px serif'\">x</span></template>", ["face"]],
 		["a font: inherit style string passes", "<template><span :style=\"'font: inherit'\">x</span></template>", []],
 		[
+			"a bound :style key a character reference spells",
+			'<template><span :style="{ &#102;ontWeight: 600 }">x</span></template>',
+			["faceless"],
+		],
+		[
 			"a font shorthand after a font: inherit",
 			"<template><span :style=\"'font: inherit; font: 700 9px monospace'\">x</span></template>",
 			["face"],
@@ -933,8 +942,19 @@ describe("type role ban rules", () => {
 		["a weight key outside a component passes", "const s = { fontWeight: 600 }", []],
 		["a capitalize key passes", 'const s = { textTransform: "capitalize" }', []],
 		["upper case in a string", "const s = `text-transform: uppercase; color: ${c}`", ["case"]],
+		["a letter-spacing key", 'const s = { letterSpacing: "1px" }', ["tracking"]],
+		["an upper-case key", 'const s = { textTransform: "uppercase" }', ["case"]],
+		["an escaped key", 'const s = { "\\u0066ontSize": "9px" }', ["size"]],
+		["a family in upper case", 'const s = "FONT-FAMILY: serif"', ["face"]],
 	])("script: %s", (_case, source, rules) => {
 		expect(rulesOf("x.ts", source)).toEqual(rules)
+	})
+
+	test("every judged key and style-string pick spells a name the script check admits", () => {
+		const camel = (key: string): string => key.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase())
+		const keys = [...SCRIPT_KEYS, ...ROLE_PROPERTIES].flatMap((key) => [key, camel(key)])
+		const picks = [...STRING_PICKS.map(([, pattern]) => pattern.source), STRING_FONT.source]
+		expect([...keys, ...picks].filter((text) => !MAY_PICK.test(text))).toEqual([])
 	})
 
 	test.each([

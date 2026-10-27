@@ -81,13 +81,19 @@ function nameConstant(cls: string): { constant: string; file: string } {
 	return { constant: fileNameConstant(file, text), file }
 }
 
+/** A lookup reads every source, so a value is kept once found; a failed lookup throws at each call. */
+const constantValues = new Map<string, string>()
+
 function constantValue(constant: string): string {
+	const known = constantValues.get(constant)
+	if (known !== undefined) return known
 	const declarations = [...SOURCES.values()].flatMap((text) => [
 		...text.matchAll(new RegExp(`\\bexport const ${constant}\\s*=\\s*(.+)`, "g")),
 	])
 	const value = single(declarations, `\`export const ${constant}\``)[1] as string
 	const literal = /^"([^"]+)"\s*$/.exec(value.trim())
 	if (!literal) throw new Error(`${constant} is not a string literal: ${value}`)
+	constantValues.set(constant, literal[1] as string)
 	return literal[1] as string
 }
 
@@ -230,9 +236,13 @@ function resolveSource(file: string, text: string, expr: string): string | undef
 /** Every callee `sourceExprs` reads, so each file is parsed once. */
 const READ_CALLEES = new RegExp([LOGGER_CALL, ...INJECTED.map((inj) => inj.site)].map((re) => `(?:${re.source})`).join("|"))
 
+/** Every callee `READ_CALLEES` matches spells one of these names. A template's code is decoded, and no named reference
+ *  decodes to their letters, so only `&#` can hide one. */
+const CALLEE_NAMES = ["logger", "Lock", "ReadWriteGuard", "createPlaced", "LoggingTelemetrySink", "ClockTickerAdapter", "NuloAccount", "&#"]
+
 /** Every source expression in one file, with its line: logger calls, a service's own log calls, and the sources it supplies to a primitive. */
 function sourceExprs(file: string, text: string): { expr: string; line: number }[] {
-	const found = callsTo(file, text, READ_CALLEES)
+	const found = CALLEE_NAMES.some((name) => text.includes(name)) ? callsTo(file, text, READ_CALLEES) : []
 	const calls = found
 		.filter((call) => LOGGER_CALL.test(call.callee))
 		.map((call) => ({ expr: call.args[0]?.getText() ?? "", line: call.line }))
@@ -327,6 +337,35 @@ describe("log source filter: a primitive reached through a member", () => {
 	test("is read like a bare call", () => {
 		const text = 'helpers.createPlaced(a, b, c, logger, "fpc"); Accounts.NuloAccount.new(a, logger, "pxe")'
 		expect(fileSources("inline.ts", text)).toEqual({ sources: ["fpc", "pxe"], refused: [] })
+	})
+})
+
+describe("log source filter: a file that names no logger", () => {
+	test.each([
+		['new Lock("network", log)', "network"],
+		['new ReadWriteGuard("fpc", log)', "fpc"],
+		['h.createPlaced(a, b, c, log, "fpc")', "fpc"],
+		['new LoggingTelemetrySink(log, "fpc")', "fpc"],
+		['new ClockTickerAdapter(c, log, "fpc")', "fpc"],
+		['NuloAccount.new(a, log, "pxe")', "pxe"],
+	])("%s is read", (text, source) => {
+		expect(fileSources("inline.ts", text)).toEqual({ sources: [source], refused: [] })
+	})
+
+	test("a service that logs only through its helpers is read", () => {
+		const text =
+			'class S extends BaseService { static name = CONFIG_SERVICE_NAME; constructor() { super(CONFIG_SERVICE_NAME) } run() { this.logWarn("m") } }'
+		expect(fileSources("inline.ts", text)).toEqual({ sources: ["config"], refused: [] })
+	})
+
+	test("every logger call and primitive site spells a name the file check admits", () => {
+		const sites = [LOGGER_CALL, ...INJECTED.map((inj) => inj.site)]
+		expect(sites.filter((site) => !CALLEE_NAMES.some((name) => site.source.includes(name))).map(String)).toEqual([])
+	})
+
+	test("a template call that hides a letter behind a character reference is read", () => {
+		const text = '<template><span :title="&#108;ogger.log(&quot;fpc&quot;, l, &quot;m&quot;)" /></template>'
+		expect(fileSources("x.vue", text)).toEqual({ sources: ["fpc"], refused: [] })
 	})
 })
 
