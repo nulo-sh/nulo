@@ -38,6 +38,9 @@ type Reviewed = Finding & { why: string }
 const REVIEWED: Reviewed[] = []
 
 function scan(file: string, source: string): Finding[] {
+	// A file holds a finding only if it spells `useCssVars` or `v-bind`, or a template hides a letter
+	// behind a `&#` reference, which the compiler decodes.
+	if (!["useCssVars", "v-bind", "&#"].some((word) => source.includes(word))) return []
 	const calls = callsTo(file, source, HAND_CALL).map(() => ({ file, text: "useCssVars(…)" }))
 	if (!file.endsWith(".vue")) return calls
 	const vars = parse(source, { filename: file, sourceMap: false }).descriptor.cssVars
@@ -89,6 +92,12 @@ describe("css vars ban (static)", () => {
 			"a hand-written call in a composable, a comment before its arguments",
 			"x.ts",
 			'import { useCssVars } from "vue"\nexport const use = () => useCssVars /* why */ (() => ({}))',
+			["useCssVars(…)"],
+		],
+		[
+			"a hand-written call a template spells with a character reference",
+			"x.vue",
+			'<template><span :title="&#117;seCssVars(f)" /></template>',
 			["useCssVars(…)"],
 		],
 		["a comment and a string naming it", "x.ts", '// useCssVars()\nexport const hint = "useCssVars()"', []],

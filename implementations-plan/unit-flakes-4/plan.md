@@ -64,7 +64,7 @@ None. Only test files change.
 - Steps: do the change in § Architecture. Run the red/green proof as scratch, and do not commit the injection: inject a 20 ms real delay into `ensureInitialized` at the base (red) and on the fix (green), then remove it. Also mutate `expired` to report true after the first launch whenever a deadline is set, and confirm the 5 ms control goes red. Record both in `lessons/phase-1.md`.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && pass=0; for i in $(seq 30); do bun --bun vitest run src/wallet/services/account-state/service.test.ts --retry=0 >/dev/null 2>&1 && pass=$((pass+1)); done; echo "$pass/30"` prints `30/30`; red at the base and green on the fix. Layers: lint, typecheck, unit.
 
-### Phase 2 — #1112: the two scans parse only what can hold a finding
+### Phase 2 — #1112: the two scans parse only what can hold a finding ✓
 - Files: `apps/extension/src/utils/css-v-bind-ban.test.ts`, `apps/extension/src/utils/amount.callers.test.ts`.
 - Steps: do the change in § Architecture. Run the mutation proof as scratch: drop each disjunct in turn (`useCssVars`, `v-bind`, `&#` in `scan`; `balanceFormatted`, `&#` in `kinds`). Record which case goes red for each, then revert.
 - **Validation gate**: lint and typecheck as P1. Run 30 times at retry 0 with `--reporter=verbose`: `bun --bun vitest run src/utils/css-v-bind-ban.test.ts src/utils/amount.callers.test.ts --retry=0`. Pass: `30/30`, the two encoded cases green, the mutation proof red. Report each whole-tree case's maximum duration as a measurement, not a pass criterion. Layers: lint, typecheck, unit.
