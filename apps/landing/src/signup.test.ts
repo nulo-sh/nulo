@@ -3,31 +3,41 @@ import { SIGNUP_MESSAGES, type SignupView, submitSignup } from "./signup"
 
 type Call = { input: string; init: RequestInit; disabledInFlight: boolean }
 
-function view() {
+function element() {
 	const attributes = new Map<string, string>()
+	return {
+		attributes,
+		getAttribute: (name: string) => attributes.get(name) ?? null,
+		setAttribute: (name: string, value: string) => void attributes.set(name, value),
+		removeAttribute: (name: string) => void attributes.delete(name),
+	}
+}
+
+const busy = (v: SignupView) => v.button.getAttribute("aria-disabled") === "true"
+
+function view() {
+	const button = element()
+	const field = element()
 	const v = {
-		button: { disabled: false },
-		field: {
-			setAttribute: (name: string, value: string) => attributes.set(name, value),
-			removeAttribute: (name: string) => attributes.delete(name),
-		},
+		button,
+		field,
 		status: { textContent: "" as string | null, dataset: {} as DOMStringMap },
 		body: () => new URLSearchParams({ email: "someone@example.com", website: "" }),
 	} satisfies SignupView
-	return { v, attributes }
+	return { v, attributes: field.attributes }
 }
 
 function fakeFetch(answer: () => Promise<Response>, v: SignupView) {
 	const calls: Call[] = []
 	const fetchImpl = async (input: string, init: RequestInit) => {
-		calls.push({ input, init, disabledInFlight: v.button.disabled })
+		calls.push({ input, init, disabledInFlight: busy(v) })
 		return answer()
 	}
 	return { calls, fetchImpl }
 }
 
 describe("submitSignup", () => {
-	it("posts the form as urlencoded with Accept: application/json, disables the button in flight and announces success", async () => {
+	it("posts the form as urlencoded with Accept: application/json, marks the button disabled in flight and announces success", async () => {
 		const { v } = view()
 		const { calls, fetchImpl } = fakeFetch(async () => Response.json({ ok: true }), v)
 		await submitSignup(v, "/api/subscribe", fetchImpl)
@@ -39,7 +49,9 @@ describe("submitSignup", () => {
 		expect(new Headers(call.init.headers).get("accept")).toBe("application/json")
 		expect(String(call.init.body)).toBe("email=someone%40example.com&website=")
 		expect(call.disabledInFlight).toBe(true)
-		expect(v.button.disabled).toBe(false)
+		expect(busy(v)).toBe(false)
+		// A stalled connection ends in the retry error instead of a button held disabled.
+		expect(call.init.signal).toBeInstanceOf(AbortSignal)
 		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.subscribed)
 		expect(v.status.dataset.state).toBe("ok")
 	})
@@ -70,7 +82,7 @@ describe("submitSignup", () => {
 		expect(v.status.textContent).toBe(SIGNUP_MESSAGES.retry)
 		expect(v.status.dataset.state).toBe("error")
 		expect(attributes.has("aria-invalid")).toBe(false)
-		expect(v.button.disabled).toBe(false)
+		expect(busy(v)).toBe(false)
 	})
 
 	it("sends one request for a double submit while the first is in flight", async () => {
@@ -82,7 +94,11 @@ describe("submitSignup", () => {
 		expect(calls).toHaveLength(1)
 		resolve(Response.json({ ok: true }))
 		await first
-		expect(v.button.disabled).toBe(false)
+		expect(busy(v)).toBe(false)
+	})
+
+	it("no em dash joins two clauses in the messages", () => {
+		for (const message of Object.values(SIGNUP_MESSAGES)) expect(message).not.toContain("—")
 	})
 
 	it("empties the live region when a try starts, so a repeated message is announced again", async () => {

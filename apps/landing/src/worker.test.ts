@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import worker, { type Env, OWN_HEADERS } from "./worker"
+import worker, { type Env } from "./worker"
 
 const URL_BASE = "https://nulo.sh"
 
@@ -16,6 +17,14 @@ function binding(answer: (request: Request) => Promise<Response> = async () => R
 
 const post = (path = "/api/subscribe", headers: Record<string, string> = {}, body = "email=someone%40example.com&website=") =>
 	new Request(`${URL_BASE}${path}`, { method: "POST", headers, body })
+
+// Literal, not the module's own map, so dropping a header from it fails here.
+const OWN_HEADERS = {
+	"cache-control": "no-store",
+	"x-content-type-options": "nosniff",
+	"referrer-policy": "no-referrer",
+	"content-security-policy": "default-src 'none'",
+}
 
 function expectOwnHeaders(response: Response) {
 	for (const [name, value] of Object.entries(OWN_HEADERS)) expect(response.headers.get(name)).toBe(value)
@@ -100,5 +109,47 @@ describe("the landing Worker", () => {
 		expect(response.status).toBe(503)
 		expectOwnHeaders(response)
 		expect(await response.text()).toBe("")
+	})
+})
+
+describe("wrangler.jsonc", () => {
+	// Whole-line comments only, so dropping them leaves JSON.
+	const config = JSON.parse(
+		readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8")
+			.split("\n")
+			.filter((line) => !/^\s*\/\//.test(line))
+			.join("\n"),
+	)
+
+	it("runs the script for /api/* only, so every page stays a static asset with the index.html fallback", () => {
+		expect(config.main).toBe("src/worker.ts")
+		expect(config.assets).toEqual({
+			directory: "./dist",
+			not_found_handling: "single-page-application",
+			run_worker_first: ["/api/*"],
+		})
+	})
+
+	it("binds the subscribe Worker and nothing else: no secret, no var, no other binding", () => {
+		expect(config.services).toEqual([{ binding: "SUBSCRIBE", service: "nulo-subscribe" }])
+		const bindingKeys = [
+			"vars",
+			"kv_namespaces",
+			"d1_databases",
+			"r2_buckets",
+			"durable_objects",
+			"queues",
+			"ratelimits",
+			"secrets_store_secrets",
+			"ai",
+			"browser",
+			"hyperdrive",
+			"analytics_engine_datasets",
+			"send_email",
+			"workflows",
+			"secrets",
+		]
+		for (const key of bindingKeys) expect(config, key).not.toHaveProperty(key)
+		expect(config.assets).not.toHaveProperty("binding")
 	})
 })

@@ -91,7 +91,7 @@ describe("the signup forms on the home page", () => {
 			const traps = startTags(form, "input").filter((a) => a.name === "website")
 			expect(traps).toEqual([expect.objectContaining({ type: "text", tabindex: "-1", autocomplete: "off", "aria-hidden": "true" })])
 			expect(element(form, "div", 'class="signup__trap"')).toMatch(/^<div class="signup__trap" aria-hidden="true">/)
-			// The only other control a keyboard reaches is the email field, then the button.
+			// Nothing else in the form is taken out of the Tab order or given a place in it.
 			expect(startTags(form, "input").filter((a) => a.name !== "website" && "tabindex" in a)).toEqual([])
 		}
 	})
@@ -147,19 +147,17 @@ describe("the built site", () => {
 			.filter((f) => f.endsWith(ext))
 			.map((f) => join(OUT, f))
 
+	// The production build's two steps, the legal pages first so the scan covers them too; a sync
+	// spawn blocks vitest's own timeout, so each child gets one.
 	beforeAll(() => {
-		// A sync spawn blocks vitest's own timeout, so the child gets one.
-		const run = spawnSync(
-			"bun",
+		for (const args of [
+			["scripts/build-legal.ts"],
 			["--bun", "./node_modules/.bin/vite", "build", "--outDir", OUT, "--emptyOutDir", "--logLevel", "error"],
-			{
-				cwd: ROOT,
-				encoding: "utf8",
-				timeout: 120_000,
-			},
-		)
-		if (run.status !== 0) throw new Error(`vite build exited ${run.status}: ${run.error ?? run.stderr}`)
-	}, 130_000)
+		]) {
+			const run = spawnSync("bun", args, { cwd: ROOT, encoding: "utf8", timeout: 120_000 })
+			if (run.status !== 0) throw new Error(`bun ${args[0]} exited ${run.status}: ${run.error ?? run.stderr}`)
+		}
+	}, 250_000)
 
 	afterAll(() => rmSync(OUT, { recursive: true, force: true }))
 
@@ -174,7 +172,9 @@ describe("the built site", () => {
 
 	it("loads nothing from another origin: every resource reference in the HTML is this site's", () => {
 		const pages = files(".html")
-		expect(pages.length).toBeGreaterThanOrEqual(3)
+		for (const page of ["index.html", "how-aztec-works.html", "subscribed.html", "terms.html", "privacy.html"]) {
+			expect(pages).toContain(join(OUT, page))
+		}
 		for (const file of pages) {
 			const html = readFileSync(file, "utf8")
 			const refs = [

@@ -461,7 +461,7 @@ footer {
 	justify-content: center;
 }
 
-.signup__row .btn:disabled {
+.signup__row .btn[aria-disabled="true"] {
 	cursor: progress;
 	opacity: 0.6;
 }
@@ -504,9 +504,13 @@ footer {
 	color: var(--txt-danger);
 }
 
-/* Takes no room until it speaks; the live region itself stays in the tree so the first message is announced. */
+/* Empty, the live region leaves the layout but stays in the accessibility tree, so its first message is announced. */
 .signup__status:empty {
-	display: none;
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
 }
 
 /* The honeypot: off-screen rather than `display: none`, which form-filling bots skip. */

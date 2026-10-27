@@ -35,17 +35,22 @@ export async function postSignup(action: string, body: URLSearchParams, fetchImp
 	return typeof reply === "object" && reply !== null && (reply as { ok?: unknown }).ok === true ? "subscribed" : "retry"
 }
 
+type Attributes = Pick<Element, "getAttribute" | "setAttribute" | "removeAttribute">
+
 export interface SignupView {
-	readonly button: { disabled: boolean }
-	readonly field: { setAttribute(name: string, value: string): void; removeAttribute(name: string): void }
+	readonly button: Attributes
+	readonly field: Attributes
 	readonly status: { textContent: string | null; dataset: DOMStringMap }
 	body(): URLSearchParams
 }
 
-/** One request per form at a time: the disabled button is the lock, and it is released whatever the answer. */
+/**
+ * One request per form at a time: `aria-disabled` on the button is the lock, released whatever the
+ * answer. Not the `disabled` property, which would drop the focus of a keyboard user who pressed it.
+ */
 export async function submitSignup(view: SignupView, action: string, fetchImpl: Fetch): Promise<void> {
-	if (view.button.disabled) return
-	view.button.disabled = true
+	if (view.button.getAttribute("aria-disabled") === "true") return
+	view.button.setAttribute("aria-disabled", "true")
 	// Emptied first, so a repeated message is a change the live region announces again.
 	view.status.textContent = ""
 	view.field.removeAttribute("aria-invalid")
@@ -55,7 +60,7 @@ export async function submitSignup(view: SignupView, action: string, fetchImpl: 
 		view.status.dataset.state = outcome === "subscribed" ? "ok" : "error"
 		view.status.textContent = SIGNUP_MESSAGES[outcome]
 	} finally {
-		view.button.disabled = false
+		view.button.removeAttribute("aria-disabled")
 	}
 }
 
