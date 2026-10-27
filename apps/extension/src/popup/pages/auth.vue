@@ -250,14 +250,13 @@ const handleUnlockWallet = async () => {
  *  the route guard. */
 const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
-	const profiles = await managers.profile.getProfiles().catch(() => undefined)
-	// Read last: a pick another window writes meanwhile is either read here or reaches `followPick`
-	// after this settle applied, never lost between the two.
 	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
+	const profiles = await managers.profile.getProfiles().catch(() => undefined)
 	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
 	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
 	appStore.profile = profile
+	settles++
 	if (!profile) router.push("/popup/register")
 }
 
@@ -275,15 +274,18 @@ const heldBack = () => {
 }
 
 /** Another window's pick moves this screen too, so every window shows the profile an unlock opens.
- *  A selection made here during the lookup stands. */
+ *  A person's selection here during the lookup stands; the screen's automatic one (`settleProfile`)
+ *  gives way, as its storage read may have answered the pointer this pick replaced. */
 let follows = 0
+let settles = 0
 const followPick = async (id) => {
 	const follow = ++follows
+	const settlesAtStart = settles
 	const selectedAtStart = appStore.profile?.id
 	if (!id || id === selectedAtStart || appStore.isLogined || heldBack()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
-	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack())
-		return
+	const selectedHere = appStore.profile?.id !== selectedAtStart && settles === settlesAtStart
+	if (!profile || follow !== follows || isUnmounted || appStore.isLogined || selectedHere || heldBack()) return
 	appStore.profile = profile
 }
 const stopFollowingPicks = onLastActiveProfileChanged(followPick)

@@ -657,7 +657,7 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		appStore.profile = undefined
 		await flushPromises()
 
-		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		// On Firefox a read can still answer the pointer the pick replaced: the settle never sees "pC".
 		elsewhere.pick("pC")
 		await flushPromises()
 		releaseSettle()
