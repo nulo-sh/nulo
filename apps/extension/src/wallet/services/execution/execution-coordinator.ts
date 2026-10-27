@@ -316,7 +316,7 @@ export class ExecutionCoordinator {
 	 *  per-path and is preserved verbatim) and their slot/claim handling.
 	 *
 	 *  Sequence (frozen):
-	 *    checkCancelled → journal(proving) → prove → checkCancelled →
+	 *    checkCancelled → journal(proving) → checkCancelled → prove → checkCancelled →
 	 *    assertAuthorization → [offchain hook] → toTx → commit(submitting) →
 	 *    checkCancelled → assertLive + send → record → journal(succeeded)
 	 *
@@ -333,6 +333,8 @@ export class ExecutionCoordinator {
 	): Promise<{ txHash: TxHash; offchainOutput?: TOffchain }> {
 		ctx.checkCancelled()
 		await ctx.markJournal({ stage: "proving", enteredProveAt: Date.now() })
+		// A cancel that took the journal first refused this swallowed mark: stop before the proof.
+		ctx.checkCancelled()
 		const provedTx = await this.proveTxTask(ctx.pxe, ctx.txRequest, ctx.scopes, ctx.parentTask, ctx.journalId)
 		// Key checkpoint: if cancel fired during prove, this prevents
 		// submission. The proof artifact is dropped silently when this throws.

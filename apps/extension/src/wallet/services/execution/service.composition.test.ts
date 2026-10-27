@@ -403,9 +403,7 @@ describe("ExecutionService composition — cancel-mid-prove (in-process, no sand
 // simulating/proving/submitting — and must not wedge the slot for the next job.
 //
 // The slot holder is acquired directly via `lane.acquireSlot` — the SAME
-// primitive a live dapp-send holds while simulating/proving. `executeTransfer`
-// can't stand in: only the dapp-send path (dapp-send-executor.ts) touches the
-// per-(profile, chain) execution mutex, so a transfer never contends this slot.
+// primitive a live send holds while simulating/proving.
 describe("ExecutionService composition — cancel during queued-wait (in-process)", () => {
 	test("cancel a queued dapp-send waiting on the held slot → cancelled, never advances, slot not wedged", async () => {
 		const { service, journal, captureExecutionFence } = await makeHarness()
@@ -778,6 +776,34 @@ describe("ExecutionService composition — work runs only while the session that
 		expect(h.stages).not.toContain("submitting")
 		expect(h.proveTx).toHaveBeenCalledTimes(1)
 		expect(h.sendTx).not.toHaveBeenCalled()
+	}, 15_000)
+
+	test("a cancel holding the journal lock when the send reaches `proving` commits first; the send stops before its proof", async () => {
+		const h = await makeHarness()
+		const cancelWrite = h.parkJournalWrite((record) => record.progress.stage === "cancelled")
+		const transitions = vi.spyOn(h.journal, "transitionOperation")
+		// The account lookup runs after `simulating` is written, before the send's `proving` mark.
+		h.getAccountContract.mockImplementationOnce(async () => {
+			void h.service.cancelJob(h.getJournalId())
+			await waitFor(cancelWrite.isParked)
+			return { address: ACCOUNT }
+		})
+		let ended: unknown
+		const run = transfer(h).then((outcome) => {
+			ended = outcome
+		})
+		// The `proving` transition is queued behind the parked cancel on the transition lock.
+		await waitFor(() => transitions.mock.calls.some(([, progress]) => progress.stage === "proving"))
+		cancelWrite.release()
+		await waitFor(() => ended !== undefined || h.ctrl.entered)
+		const proofStarted = h.ctrl.entered
+		h.ctrl.release()
+		await run
+
+		expect(proofStarted).toBe(false)
+		expect(ended).toBeInstanceOf(JobCancelledError)
+		expect((await h.journal.getOperation(h.getJournalId()))?.progress.stage).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
 	}, 15_000)
 
 	test("a session that ends while `node.sendTx` is pending does not undo the send: the record succeeds", async () => {
@@ -1519,13 +1545,18 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 	test.each([
 		{ label: "× then accept", cancelFirst: true },
 		{ label: "accept then ×", cancelFirst: false },
-	])("$label in the same tick ends cancelled, never proved", async ({ cancelFirst }) => {
+	])("$label in the same tick while the send waits for the slot ends cancelled, never proved", async ({ cancelFirst }) => {
 		const h = await makeHarness()
 		const run = queuedTransfer(h)
 		const id = await asking(h)
+		// An earlier send holds the slot, so the accepted send cannot pass `pending` before the cancel
+		// lands; a cancel after the `proving` mark is the mid-prove cancel, which proves and drops.
+		const slot = await h.lane.tryTakeSlot("p1", NETWORK.chainId)
+		expect(slot).toBeDefined()
 		const cancel = () => h.service.cancelJob(id)
 		const accept = () => h.service.acceptQueuedFee(id, FEE)
 		await Promise.all(cancelFirst ? [cancel(), accept()] : [accept(), cancel()])
+		slot?.()
 		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
 		expect(await stageOf(h, id)).toBe("cancelled")
 		expect(h.proveTx).not.toHaveBeenCalled()
