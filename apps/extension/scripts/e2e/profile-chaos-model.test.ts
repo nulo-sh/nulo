@@ -29,6 +29,7 @@ import {
 	checkWrites,
 	emptyBindings,
 	type ErrorEntry,
+	type KnownFinding,
 	FAMILY_GROUPS,
 	type FamilyEntry,
 	familyOfKey,
@@ -955,33 +956,40 @@ describe("O4, errors", () => {
 		const [refired] = shown("O4 a fixed finding's line", checkErrors([gasRetry], []).violations)
 		expect(refired?.oracle).toBe("O4")
 		expect(refired?.known).toBeUndefined()
-		const disconnect = {
+		const forwarded = {
 			kind: "log" as const,
 			level: "error" as const,
 			source: "ui",
-			text: '[{"name":"Error","message":"Client disconnected"}]',
+			text: '["unhandled rejection",{"error":{"name":"Error","message":"Wallet locked"}}]',
 		}
-		expect(checkErrors([disconnect], []).violations[0]?.known).toBe(1132)
-		const elsewhere = checkErrors([{ ...disconnect, source: "profile" }], []).violations
-		expect(shown("O4 the disconnect line from another source", elsewhere)[0]?.known).toBeUndefined()
-		const refused = [
+		for (const line of [forwarded, { ...forwarded, text: '[{"name":"Error","message":"Client disconnected"}]' }]) {
+			expect(shown("O4 a fixed finding's ui line", checkErrors([line], []).violations)[0]?.known).toBeUndefined()
+		}
+		// The source and pairing rules, on a fixture finding: no filed finding pairs a page error now.
+		const fixture: KnownFinding[] = [
+			{ issue: 1, pattern: /^\["unhandled rejection",.*"Wallet locked"/, kinds: ["log"], source: "ui" },
 			{
-				kind: "log" as const,
-				level: "error" as const,
-				source: "ui",
-				text: '["unhandled rejection",{"error":{"name":"Error","message":"Wallet locked"}}]',
+				issue: 1,
+				pattern: /^Error: (?:Wallet|Profile) locked$/,
+				kinds: ["page-error"],
+				alongside: {
+					source: "ui",
+					text: (pageError) => forwarded.text.replace("Wallet locked", pageError.replace(/^Error: /, "")),
+				},
 			},
-			{ kind: "page-error" as const, page: "anchor", text: "Error: Wallet locked" },
-			{ kind: "page-error" as const, page: "second", text: "Error: Profile locked" },
 		]
+		const check = (entries: ErrorEntry[]) => checkErrors(entries, [], ALLOWED_ERRORS, fixture).violations
+		expect(shown("O4 the fixture's line from another source", check([{ ...forwarded, source: "profile" }]))[0]?.known).toBeUndefined()
+		const lockedPage = (page: string, text = "Error: Wallet locked"): ErrorEntry => ({ kind: "page-error", page, text })
 		// The second page's rejection has no forwarded line of its own, so nothing vouches for it.
-		expect(checkErrors(refused, []).violations.map((v) => v.known)).toEqual([1133, 1133, undefined])
-		const lockedPage = (page: string): ErrorEntry => ({ kind: "page-error", page, text: "Error: Wallet locked" })
-		const twice = checkErrors([refused[0] as ErrorEntry, lockedPage("anchor"), lockedPage("second")], []).violations
-		expect(shown("O4 two page errors beside one forwarded rejection", twice).map((v) => v.known)).toEqual([1133, 1133, undefined])
-		const unpaired = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked" }], []).violations
-		expect(shown("O4 a locked page error with no forwarded rejection beside it", unpaired)[0]?.known).toBeUndefined()
-		const otherRefusal = checkErrors([{ kind: "page-error", page: "anchor", text: "Error: Wallet locked while x" }], []).violations
+		const refused = check([forwarded, lockedPage("anchor"), lockedPage("second", "Error: Profile locked")])
+		expect(refused.map((v) => v.known)).toEqual([1, 1, undefined])
+		const twice = check([forwarded, lockedPage("anchor"), lockedPage("second")])
+		expect(shown("O4 two page errors beside one forwarded rejection", twice).map((v) => v.known)).toEqual([1, 1, undefined])
+		expect(
+			shown("O4 a locked page error with no forwarded rejection beside it", check([lockedPage("anchor")]))[0]?.known,
+		).toBeUndefined()
+		const otherRefusal = check([lockedPage("anchor", "Error: Wallet locked while x")])
 		expect(shown("O4 a refusal beside a filed one's text", otherRefusal)[0]?.known).toBeUndefined()
 		const discovery = (message: string) => ({
 			kind: "log" as const,
@@ -1038,7 +1046,7 @@ describe("bindings", () => {
 })
 
 describe("the run's verdict", () => {
-	const known: Violation = { oracle: "O4", message: "error log from ui: unclassified", known: 1132 }
+	const known: Violation = { oracle: "O4", message: "error log from pxe: unclassified", known: 432 }
 	const fresh: Violation = { oracle: "O1", message: "locked, but the service reports p active" }
 	const step = (r: Partial<StepOutcome> = {}): StepOutcome => ({ violations: [], incomplete: [], ...r })
 

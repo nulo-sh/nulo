@@ -560,20 +560,7 @@ export interface KnownFinding {
 	alongside?: { source: string; text: (pageError: string) => string }
 }
 
-const UNHANDLED_LOCKED = /^\["unhandled rejection",\{"error":\{"name":"Error","message":"(?:Wallet|Profile) locked"\}\}\]$/
-
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
-	{ issue: 1132, pattern: /^\[\{"name":"Error","message":"Client disconnected"\}\]$/, kinds: ["log"], source: "ui" },
-	{ issue: 1133, pattern: UNHANDLED_LOCKED, kinds: ["log"], source: "ui" },
-	{
-		issue: 1133,
-		pattern: /^Error: (?:Wallet|Profile) locked$/,
-		kinds: ["page-error"],
-		alongside: {
-			source: "ui",
-			text: (pageError) => `["unhandled rejection",{"error":{"name":"Error","message":"${pageError.replace(/^Error: /, "")}"}}]`,
-		},
-	},
 	{
 		issue: 432,
 		// A closed known limit: its entry stays while the issue does.
