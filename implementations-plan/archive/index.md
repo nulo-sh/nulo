@@ -450,3 +450,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [dependabot-subject-1](dependabot-subject-1/plan.md) — completed — skip the range lint on Dependabot's PRs; the merger lower-cases the title that lands (#1265; known limit #1266)
 - [unit-flakes-3](unit-flakes-3/plan.md) — completed — four unit and composition test races; a cancel that won the journal lock before the proving mark stops the send before its proof (#1271)
 - [docs-2](docs-2/plan.md) — completed — the manual npm bumps restated as policy with their source and the two untested points; the plans standard's PR-title cap at 92 (#1273; open item #1274)
+- [unit-flakes-5](unit-flakes-5/plan.md) — completed — four whole-tree guards skip the files that cannot hold a finding (#1270; known limit #1279)
