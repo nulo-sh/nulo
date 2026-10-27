@@ -62,7 +62,7 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 2. `tests/e2e/helpers/legal-drivers.ts`: `legalSheetVerdict(page)` waits for `popup-shell` to carry `data-legal-sheet` (15 s) and returns it. Its TSDoc says the shell marks no verdict on the start location or the lock screen, which a reload passes through. `answerUpdatedTerms` refuses `missing` first, before any page call, with its own error. `current` waits for the verdict, throws when it is `shown`, and then still asserts that no `legal-sheet` is in the page. `stale` is unchanged.
 3. `tests/e2e/legal-acceptance.test.ts` S7: after its banner check, `reloadWithLegalState(page, "current")`, and `answerUpdatedTerms(page, { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") })` resolves. Then `reloadWithLegalState(page, "stale")`, and the same call rejects with "raised the Terms sheet": the success control. Neither waits for Home, so the control proves the marker skips the reload's transient routes.
 4. `tests/e2e/fixtures/legal.ts` gains `updatedTermsAnswer(entries)`, the pure decision the helper branches on; `apps/extension/scripts/e2e/updated-terms.test.ts` (new) refuses no record and a malformed one, and answers `none` over `current` and `changed` over `stale`. It tests the fixture, not the helper: importing `helpers/legal-drivers` pulls the e2e fixture graph into `tsconfig.scripts.json`, which fails typecheck.
-5. `FeeSettingsCard.vue`: `:data-read-pending="readPending || undefined"`. `fixtures/type-roles.ts` `expectFitsNarrow`: after the snack wait, wait until no `fee-settings-card` carries it, with a one-line why. The bound comes from Phase 2's measurement.
+5. `FeeSettingsCard.vue`: `:data-read-pending="readPending || undefined"`. `fixtures/type-roles.ts` `expectFitsNarrow`: the snack wait also waits until no `fee-settings-card` carries it, one selector list with a 15 s bound (Phase 2: the slowest read 2.74 s; a second wait would cost about 47 ms per sweep on Firefox). `FeeSettingsCard.test.ts` pins the mark on the saved-pick loading path.
 6. Only if Phase 3 shows I1 and I2: `fixtures/browser/firefox.ts` `capabilities()` always adds the dismissal pref, in its own named const beside `permissionRequestPrefs` and out of `FIREFOX_LAUNCH_PREFS`; `scripts/e2e/firefox-driver.test.ts` pins both facts; `toolbar-panel.test.ts`'s comment and FIREFOX.md's panel row say that the session dismisses the picker.
 
 **Arc 2 change map** (once Phase 4 picks the route).
@@ -102,7 +102,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 - `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/updated-terms.test.ts`: each exits 0, with 3 tests.
 - `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/legal-acceptance.test.ts --retry=0`, then the same under `NULO_E2E_BROWSER=firefox`: green, with S7's duration recorded.
 
-## Phase 2: the fee read before the 240 px record (#1210)
+## Phase 2: the fee read before the 240 px record (#1210) ✓
 
 **Assumptions:** F4, F5.
 1. Measure (scratch): log the time from Send's arrival to the end of its read in `type-roles.test.ts`'s Send flow, 3 runs per browser. Set the bound at 5× the slowest or more, and record it with the numbers.
