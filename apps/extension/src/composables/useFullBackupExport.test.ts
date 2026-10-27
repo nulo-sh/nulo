@@ -444,6 +444,42 @@ describe("useFullBackupExport — encrypt and download superseded", () => {
 		await expectNothingPublished(api, opts, at)
 	})
 
+	it.each(["resolves", "rejects"] as const)("a download dropped while its session check runs, which then %s", async (settles) => {
+		const { api, opts } = setup("password")
+		await api.handleBackup()
+		await api.handleEncrypt()
+		const held = deferred<void>()
+		m.assertRunFence.mockReturnValueOnce(held.promise)
+		const download = api.downloadBackup()
+		await vi.waitFor(() => expect(m.assertRunFence).toHaveBeenCalledTimes(3))
+
+		api.reset()
+		plantSentinels(api)
+		const at = snapshot(opts)
+		if (settles === "resolves") held.resolve()
+		else held.reject(new Error("Session ended"))
+		await download
+		expect(m.downloadFile).not.toHaveBeenCalled()
+		await expectNothingPublished(api, opts, at)
+	})
+
+	it.each(["resolves", "rejects"] as const)("an update's session check dropped by a reset, which then %s", async (settles) => {
+		const { api, opts } = setup("password")
+		await api.handleBackup()
+		const held = deferred<void>()
+		m.assertRunFence.mockReturnValueOnce(held.promise)
+		const follow = api.followProfileUpdate()
+		await vi.waitFor(() => expect(m.assertRunFence).toHaveBeenCalledTimes(2))
+
+		api.reset()
+		plantSentinels(api)
+		const at = snapshot(opts)
+		if (settles === "resolves") held.resolve()
+		else held.reject(new Error("Session ended"))
+		await follow
+		await expectNothingPublished(api, opts, at)
+	})
+
 	it.each(["resolves", "rejects"] as const)("a requested download lands, and only its toast is dropped, when it %s", async (settles) => {
 		const { api, opts } = setup("password")
 		await api.handleBackup()
@@ -569,6 +605,6 @@ describe("useFullBackupExport — a current run", () => {
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
 	it("every await in the composable has a row above", () => {
 		const code = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
-		expect(code.match(/\bawait\b/g)).toHaveLength(14)
+		expect(code.match(/\bawait\b/g)).toHaveLength(16)
 	})
 })

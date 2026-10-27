@@ -578,9 +578,15 @@ describe("export/full.vue — a password profile's file opens with the password 
 		updates.listeners.clear()
 	})
 
-	it("a password changed elsewhere before Protect starts the page over, says so, and seals nothing", async () => {
+	/** From here on the service answers that the backup's session no longer stands, as after a
+	 *  password change, which reopens it. */
+	const sessionReopened = () => assertRunFence.mockRejectedValue(new SessionEndedError())
+
+	it("a password changed elsewhere before Protect starts the page over and says so, whatever name this window last heard", async () => {
 		const wrapper = await reachProtect()
-		updates.emit({ id: "p1", type: "password", name: "Test Profile" })
+		sessionReopened()
+		// Renamed elsewhere earlier: this window's store still holds the old name.
+		updates.emit({ id: "p1", type: "password", name: "Work" })
 		await expectStartedOver(wrapper)
 		expect(openToast).toHaveBeenCalledWith(CHANGED)
 		expect(seal).not.toHaveBeenCalled()
@@ -590,6 +596,7 @@ describe("export/full.vue — a password profile's file opens with the password 
 		const wrapper = await reachProtect()
 		await protectButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
+		sessionReopened()
 		updates.emit({ id: "p1", type: "password", name: "Test Profile" })
 		await expectStartedOver(wrapper)
 		expect(openToast).toHaveBeenCalledWith(CHANGED)
@@ -613,17 +620,53 @@ describe("export/full.vue — a password profile's file opens with the password 
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to encrypt the backup" })
 	})
 
-	it("a rename made elsewhere keeps the backup ready, and it seals and leaves under the prompt's password", async () => {
+	it("a Download after the backup's session ended, with no update heard, leaves no file and starts the page over", async () => {
 		const wrapper = await reachProtect()
-		updates.emit({ id: "p1", type: "password", name: "Renamed" })
-		useAppStore().profile = { id: "p1", type: "password", name: "Renamed" } as never
+		await protectButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
+		sessionReopened()
+		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
+		await expectStartedOver(wrapper)
+		expect(assertRunFence).toHaveBeenLastCalledWith(FENCE)
+		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to download backup" })
+	})
+
+	it("a rename made elsewhere keeps the backup ready, even to the name this window shows", async () => {
+		const wrapper = await reachProtect()
+		updates.emit({ id: "p1", type: "password", name: "Test Profile" })
 		await flushPromises()
 		await protectButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
 		expect(seal.mock.calls[0][1]).toBe("pass1234")
-		expect(assertRunFence).toHaveBeenLastCalledWith(FENCE)
 		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(openToast).not.toHaveBeenCalledWith(CHANGED)
+	})
+
+	it("before a backup and after its download, an update leaves the page as it is", async () => {
+		const wrapper = mountPage("password")
+		await wrapper.get("[data-testid='agree-continue-btn']").trigger("click")
+		await wrapper.get("[data-testid='unlock-password-input']").setValue("pass1234")
+		sessionReopened()
+		updates.emit({ id: "p1", type: "password", name: "Test Profile" })
+		await flushPromises()
+		expect((wrapper.get("[data-testid='unlock-password-input']").element as HTMLInputElement).value).toBe("pass1234")
+		expect(assertRunFence).not.toHaveBeenCalled()
+
+		assertRunFence.mockReset()
+		assertRunFence.mockResolvedValue(undefined)
+		await wrapper.get("[data-testid='unlock-submit-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await protectButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
+		await wrapper.get("[data-testid='download-backup-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='backup-close-btn']").exists()).toBe(true))
+		sessionReopened()
+		const checks = assertRunFence.mock.calls.length
+		updates.emit({ id: "p1", type: "password", name: "Test Profile" })
+		await flushPromises()
+		expect(wrapper.find("[data-testid='backup-close-btn']").exists()).toBe(true)
+		expect(assertRunFence).toHaveBeenCalledTimes(checks)
 		expect(openToast).not.toHaveBeenCalledWith(CHANGED)
 	})
 
