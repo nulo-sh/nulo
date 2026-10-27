@@ -46,7 +46,7 @@ export function phraseHint(verdict: PhraseVerdict): string {
 		case "word":
 			return `Word ${verdict.position} is not in the word list.`
 		case "checksum":
-			return "A word is wrong or out of order."
+			return "This phrase does not check out. Check each word and its order."
 		default:
 			return ""
 	}
