@@ -10,3 +10,4 @@
 - 2026-10-27: final gates on the head: lint, typecheck:all, test:all exit 0; #1131 replay 5/5 on a fresh armed build.
 - 2026-10-27: PR #1268 (arc 1) checks green; merged by the orchestrator as 2e524ef73. Arc 2 starts on `log-levels-1-popup`, synced onto dev.
 - 2026-10-27: phase 2.1 green (useProfileBootstrap.test.ts 29/29; the three new cases red on the base source).
+- 2026-10-27 phase 2.2 green (console-forwarding.test.ts 6/6; the disconnect cases red with the rule removed)

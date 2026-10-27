@@ -1,6 +1,7 @@
 import { CLIENT_DISCONNECTED_MESSAGE } from "@nulo/extension-messaging/errors"
 import { consoleMethods, LogLevel } from "@nulo/wallet-core/logger"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from "vitest"
+import { createApp, defineComponent, onMounted } from "vue"
 
 const { log, documentLogger } = vi.hoisted(() => {
 	const log = vi.fn()
@@ -8,7 +9,7 @@ const { log, documentLogger } = vi.hoisted(() => {
 })
 vi.mock("@/wallet/services/logger/client", () => ({ documentLogger }))
 
-import { installConsoleForwarding } from "./console-forwarding"
+import { forwardVueError, installConsoleForwarding } from "./console-forwarding"
 
 type Hooks = Record<string, (...args: unknown[]) => void>
 
@@ -54,5 +55,49 @@ describe("installConsoleForwarding", () => {
 		expect(log).toHaveBeenNthCalledWith(2, "ui", LogLevel.Error, "unhandled rejection", { error: other })
 		expect(disconnectEvent.preventDefault).toHaveBeenCalledTimes(1)
 		expect(otherEvent.preventDefault).not.toHaveBeenCalled()
+	})
+})
+
+describe("forwardVueError", () => {
+	let debug: MockInstance
+	let error: MockInstance
+	beforeEach(() => {
+		debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		error = vi.spyOn(console, "error").mockImplementation(() => undefined)
+	})
+	afterEach(() => {
+		debug.mockRestore()
+		error.mockRestore()
+	})
+
+	test("a client disconnect logs at debug, any other error at error, each with Vue's info", () => {
+		const disconnect = new Error(CLIENT_DISCONNECTED_MESSAGE)
+		const other = new Error("boom")
+		forwardVueError(disconnect, null, "mounted hook")
+		forwardVueError(other, null, "mounted hook")
+		expect(debug).toHaveBeenCalledExactlyOnceWith("vue error", { error: disconnect, info: "mounted hook" })
+		expect(error).toHaveBeenCalledExactlyOnceWith("vue error", { error: other, info: "mounted hook" })
+	})
+
+	test.each([
+		["a client disconnect makes no console.error", new Error(CLIENT_DISCONNECTED_MESSAGE), 0],
+		["control: another error makes one", new Error("boom"), 1],
+	])("as the app's errorHandler, an async onMounted that rejects: %s", async (_name, reason, errors) => {
+		const app = createApp(
+			defineComponent({
+				setup() {
+					onMounted(async () => {
+						throw reason
+					})
+					return () => null
+				},
+			}),
+		)
+		app.config.errorHandler = forwardVueError
+		app.mount(document.createElement("div"))
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		app.unmount()
+		expect(error).toHaveBeenCalledTimes(errors)
+		expect(debug).toHaveBeenCalledTimes(1 - errors)
 	})
 })

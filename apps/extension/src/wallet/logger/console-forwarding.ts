@@ -20,3 +20,12 @@ export function installConsoleForwarding(client: Extract<DocumentLogContext, "po
 		logger.log("ui", disconnect ? LogLevel.Debug : LogLevel.Error, "unhandled rejection", { error: e.reason })
 	}
 }
+
+/**
+ * A page's `app.config.errorHandler`. Vue hands it each error it ties to a component instead of
+ * printing it, so a disconnect that ends a torn-down page's call lands at debug, as above.
+ */
+export function forwardVueError(error: unknown, _instance: unknown, info: string): void {
+	if (isClientDisconnectRejection(error)) console.debug("vue error", { error, info })
+	else console.error("vue error", { error, info })
+}
