@@ -19,6 +19,20 @@ plan skips the range lint on Dependabot's PRs, whose commits the squash drops, a
 title that lands a documented step. The rule stays as it is for every human commit. Over the light target (150 lines) by
 the two audit legs' records.
 
+## Outcome
+
+- **Date:** 2026-10-27. Planned, audited and implemented in one session.
+- **Status:** completed, delivered as #1265 (one arc, into `dev`); the merge closes #1264 and archives this plan.
+- **Shipped:** the Dependabot skip in `pr-quick.yml` (`83e133758`); the five-row `commitlint` test in
+  `behavior-gating.test.ts`; CI.md and CLAUDE.md on the merger's title edit, the 92-character budget, and that CI
+  lints commits, never titles; review fixes in `0d4e93d1e`.
+- **Dropped or rejected:** issue options 2 and 3, a title-rewriting job, a live-title lint, `gh pr merge --subject`
+  (D2–D5). No `lessons.md` line: CLAUDE.md § Dependency policy now carries the gotcha, and the file sits at its budget.
+- **Known limits:** #1266.
+- **Open items:** #1267 (docs say Dependabot cannot read `bun.lock`; outside this lane). Outside the write scope:
+  `implementations-plan/README.md` § Post-implementation standard still says 93 characters.
+- **Seeds retired:** the `/goal` below is a record, not an instruction.
+
 ## Outcome & Quality Bar
 
 - **For whom**: the merger of the weekly Dependabot PR (the owner, or the orchestrator when the owner delegates one
@@ -170,7 +184,7 @@ guards commits that land, but a squash drops every PR's commits: accepted, delet
 notes: the README's 93 (outside the write scope, reported) and the Dependabot bullet's "because" (accepted: the case
 guess is why commits skip; the length is why the merger rewrites). Fixes in `0d4e93d1e`. Codex round 2: `clean`.
 
-## Seeds
+## Seeds (retired)
 
 Not run (orchestrator-owned). `/goal`: phase 1 ✓ with its gate pasted; the Codex loop converged; the PR into `dev`
 open with `Closes #1264` and the close-out on it; `bun run test:ci-gating` and `bun run lint:actions` exit 0.
