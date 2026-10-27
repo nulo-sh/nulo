@@ -5,9 +5,10 @@ import type { ToastState } from "@/composables/toast"
 import { createLockedState, watchLockStart } from "./locked-state"
 import { createScopeEpochHandlers } from "./scope-epoch"
 
-const p1 = { id: "p1" }
-const p2 = { id: "p2" }
-const p3 = { id: "p3" }
+type P = { id: string; name: string }
+const p1: P = { id: "p1", name: "Main" }
+const p2: P = { id: "p2", name: "Work" }
+const p3: P = { id: "p3", name: "Savings" }
 
 function shell(
 	profiles = [p1],
@@ -20,8 +21,7 @@ function shell(
 	const store = reactive({
 		isLogined: true,
 		open: "p1",
-		selected: p1 as { id: string } | undefined,
-		chooser: false,
+		selected: p1 as P | undefined,
 		lastActiveId,
 		routeName,
 		scopeEpoch: 0,
@@ -42,7 +42,7 @@ function shell(
 			toast.value = null
 		},
 	})
-	const locked = createLockedState<{ id: string }>({
+	const locked = createLockedState<P>({
 		closePopups: () => {
 			store.popups = 0
 		},
@@ -71,9 +71,6 @@ function shell(
 		},
 		readLastActiveId: readLastActiveId ?? (async () => store.lastActiveId),
 		routeName: () => store.routeName,
-		openChooser: () => {
-			store.chooser = true
-		},
 	})
 	return { store, toast, routes, onLocked, ...locked }
 }
@@ -117,7 +114,7 @@ describe("a session opened without a lock", () => {
 describe("the lock event", () => {
 	test("seals the popup before its profile lookup answers, and lands once it does", async () => {
 		const s = shell()
-		const lookup = deferred<{ id: string }[]>()
+		const lookup = deferred<P[]>()
 		const done = s.onLockEvent(
 			() => lookup.promise,
 			() => true,
@@ -134,7 +131,7 @@ describe("the lock event", () => {
 
 	test("a newer profile event supersedes the landing, never the seal", async () => {
 		const s = shell()
-		const lookup = deferred<{ id: string }[]>()
+		const lookup = deferred<P[]>()
 		let current = true
 		const done = s.onLockEvent(
 			() => lookup.promise,
@@ -212,7 +209,7 @@ describe("the lock event", () => {
 
 	test("a rejected lookup lands on the cached list", async () => {
 		const s = shell()
-		const lookup = deferred<{ id: string }[]>()
+		const lookup = deferred<P[]>()
 		const done = s.onLockEvent(
 			() => lookup.promise,
 			() => true,
@@ -231,14 +228,14 @@ describe("a list that no longer holds the selected profile", () => {
 		return s
 	}
 
-	test("the lock event selects the last active profile, else the only one, else lets the window choose", async () => {
+	test("the lock event selects the last active profile, else the only one, else the first by name", async () => {
 		const lastActive = shell([p1, p2, p3], { lastActiveId: "p3" })
 		await lastActive.onLockEvent(
 			async () => [p2, p3],
 			() => true,
 		)
 		expect(lastActive.store.selected).toEqual(p3)
-		expect([lastActive.routes, lastActive.store.chooser]).toEqual([["/popup/auth"], false])
+		expect(lastActive.routes).toEqual(["/popup/auth"])
 
 		const only = shell([p1, p2])
 		await only.onLockEvent(
@@ -252,8 +249,8 @@ describe("a list that no longer holds the selected profile", () => {
 			async () => [p2, p3],
 			() => true,
 		)
-		expect(none.store.selected).toBeUndefined()
-		expect([none.routes, none.store.chooser]).toEqual([["/popup/auth"], true])
+		expect(none.store.selected).toEqual(p3)
+		expect(none.routes).toEqual(["/popup/auth"])
 	})
 
 	test("the lock event keeps a selection the list still holds, and lands on register when the list is empty", async () => {
@@ -262,7 +259,7 @@ describe("a list that no longer holds the selected profile", () => {
 			async () => [p1, p2],
 			() => true,
 		)
-		expect([kept.store.selected, kept.store.chooser]).toEqual([p1, false])
+		expect(kept.store.selected).toEqual(p1)
 
 		const empty = shell()
 		await empty.onLockEvent(
@@ -278,7 +275,7 @@ describe("a list that no longer holds the selected profile", () => {
 			async () => [p2],
 			() => true,
 		)
-		expect([none.store.selected, none.store.chooser, none.routes]).toEqual([undefined, false, ["/popup/auth"]])
+		expect([none.store.selected, none.routes]).toEqual([undefined, ["/popup/auth"]])
 	})
 
 	test("a locked window's check closes its sheets and lands it as a lock does, and says the profile was followed", async () => {
@@ -313,7 +310,7 @@ describe("a list that no longer holds the selected profile", () => {
 		expect(s.routes).toEqual(["/popup/register"])
 	})
 
-	test("with no selection, a list that still holds profiles leaves the window and its chooser as they are", async () => {
+	test("with no selection, a list that still holds profiles leaves the window as it is", async () => {
 		const s = lockedShell([p2, p3])
 		s.store.selected = undefined
 		expect(
@@ -327,7 +324,7 @@ describe("a list that no longer holds the selected profile", () => {
 
 	test("the selection's deletion drops its sheets before any read answers, whoever lands the window", async () => {
 		const s = lockedShell([p1, p2], { routeName: "popup-settings-security-reset" })
-		const read = deferred<{ id: string }[]>()
+		const read = deferred<P[]>()
 		const check = s.onProfileDeleted(
 			"p1",
 			() => read.promise,
@@ -382,7 +379,7 @@ describe("a list that no longer holds the selected profile", () => {
 				() => true,
 			),
 		).toBe("followed")
-		expect([s.store.selected, s.routes, s.store.chooser, s.store.popups]).toEqual([p2, [], false, 1])
+		expect([s.store.selected, s.routes, s.store.popups]).toEqual([p2, [], 1])
 	})
 
 	test("a selection still listed, a lock, an unlock or another selection meanwhile, and a failed read change nothing", async () => {
@@ -395,7 +392,7 @@ describe("a list that no longer holds the selected profile", () => {
 		).toBe("present")
 
 		const unlocked = lockedShell()
-		const read = deferred<{ id: string }[]>()
+		const read = deferred<P[]>()
 		const pending = unlocked.checkSelection(
 			() => read.promise,
 			() => true,
@@ -405,7 +402,7 @@ describe("a list that no longer holds the selected profile", () => {
 		expect(await pending).toBe("superseded")
 
 		const moved = lockedShell([p1, p2, p3])
-		const movedRead = deferred<{ id: string }[]>()
+		const movedRead = deferred<P[]>()
 		const movedPending = moved.checkSelection(
 			() => movedRead.promise,
 			() => true,

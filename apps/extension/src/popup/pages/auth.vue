@@ -244,23 +244,19 @@ const handleUnlockWallet = async () => {
 	}
 }
 
-/** Selects the profile this screen opens on (`lockScreenProfile`). A selected profile that no
- *  longer exists, with none to presume, leaves the choice to the person in the profile chooser. The
- *  lookup waits for the service, so it can outlast this page or lose to an activation: a profile
- *  selected or opened meanwhile stands, as in the route guard. */
+/** Selects the profile this screen opens on (`lockScreenProfile`); with no last active profile in
+ *  the list, a selection the list still holds stays. The lookup waits for the service, so it can
+ *  outlast this page or lose to an activation: a profile selected or opened meanwhile stands, as in
+ *  the route guard. */
 const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
 	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	const profiles = await managers.profile.getProfiles().catch(() => undefined)
 	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
+	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
-	if (profile) {
-		appStore.profile = profile
-	} else if (!profiles.some((p) => p.id === selectedAtStart)) {
-		appStore.profile = undefined
-		if (profiles.length) popupStore.open("select_profile")
-		else router.push("/popup/register")
-	}
+	appStore.profile = profile
+	if (!profile) router.push("/popup/register")
 }
 
 /** An unlock here, or any profile's activation, holds the selection: the unlock's steps read it, and
@@ -307,11 +303,11 @@ onUnmounted(() => {
 	managers.profile.onProfileDeleted.remove(onProfileDeleted)
 })
 // Delete Profile clears the selection when its purge returns, which can be after this screen
-// settled, so a cleared selection settles again. An open chooser means this screen cleared it.
+// settled, so a cleared selection settles again.
 watch(
 	() => appStore.profile,
 	(profile) => {
-		if (!profile && !appStore.isLogined && !popupStore.isOpened("select_profile") && !heldBack()) void settleProfile()
+		if (!profile && !appStore.isLogined && !heldBack()) void settleProfile()
 	},
 )
 watch(selectionHeld, (held) => {
