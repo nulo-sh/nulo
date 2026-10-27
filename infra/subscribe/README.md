@@ -75,4 +75,4 @@ The success answer is `200 {"ok":true}` for a `fetch` caller (`Accept: applicati
 
 ## Operator scripts
 
-`scripts/broadcast-topic.ts <broadcast id>` scopes a broadcast to the launch topic over the API and prints the broadcast back without its bodies; it runs as a keyed run from `ops.env.example` (the `my-stack` skill, Keyed runs), last, after every edit of the draft, since an API update from any client can clear the topic. `bun test` covers it.
+`scripts/broadcast-topic.ts <broadcast id> <name> <html file> <text file>` writes a broadcast draft whole over the API, name, both bodies and the launch topic in one request, and prints the broadcast back without its bodies plus whether each stored body equals its file. It runs as a keyed run from `ops.env.example` (the `my-stack` skill, Keyed runs). It is the one writer of a draft: a partial update from any client resets the fields it leaves out (the name, the text, the topic), so a client without the topic field never updates the draft. `bun test` covers it.
