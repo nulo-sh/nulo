@@ -167,6 +167,7 @@ describe("onboarding import", () => {
 		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
+		await vi.waitFor(() => expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true))
 
 		await flow.handleImportSeed()
 

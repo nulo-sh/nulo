@@ -681,6 +681,65 @@ describe("verifyUnlockCredential", () => {
 	)
 })
 
+describe("verifyExportCredential", () => {
+	test("answers the profile's own passkey or password, refuses another, and opens nothing", async () => {
+		const env = await boot()
+		const { id } = await env.service.createProfile("P", PASSWORD)
+		const answer = await newAnswer()
+		const passkey = (await env.service.createPasskeyProfile("K", answer)).id
+		const serial = env.internals.sessionManager.peekLiveSerial()
+		const before = [await env.raw(id), await env.raw(passkey)]
+		await expect(env.service.verifyExportCredential(passkey, asPasskey(answer))).resolves.toBeUndefined()
+		await expect(env.service.verifyExportCredential(id, { password: PASSWORD })).resolves.toBeUndefined()
+		await expect(env.service.verifyExportCredential(passkey, asPasskey(await newAnswer("cred-other")))).rejects.toThrow(
+			PASSKEY_DID_NOT_OPEN,
+		)
+		await expect(env.service.verifyExportCredential(id, { password: "wrong-pass" })).rejects.toBeInstanceOf(InvalidPasswordError)
+		expect(env.internals.sessionManager.peekLiveSerial()).toBe(serial)
+		expect([await env.raw(id), await env.raw(passkey)]).toEqual(before)
+	}, 30_000)
+
+	test.each([
+		["a DEK slot that does not open", "dekSealed", "AAAA"],
+		["an envelope MAC that does not cover the DEK slot", "envelopeMac", Buffer.alloc(32, 7).toString("base64")],
+	] as const)(
+		"%s still passes, as the account export it guards does",
+		async (_, field, damaged) => {
+			const env = await boot()
+			const answer = await newAnswer()
+			const { id } = await env.service.createPasskeyProfile("K", answer)
+			await env.write(id, { ...(await env.row(id)), [field]: damaged })
+			await expect(env.service.verifyExportCredential(id, asPasskey(answer))).resolves.toBeUndefined()
+			expect(await env.service.exportPlain(id, undefined, answer)).toBeTruthy()
+		},
+		30_000,
+	)
+
+	test("a damaged pairing is refused", async () => {
+		const env = await boot()
+		const { id } = await env.service.createProfile("P", PASSWORD)
+		const sibling = (await env.service.createProfile("Q", PASSWORD)).id
+		await env.write(id, { ...(await env.row(id)), entropy: (await env.row(sibling)).entropy })
+		await expect(env.service.verifyExportCredential(id, { password: PASSWORD })).rejects.toThrow(/Profile storage corrupted/)
+	}, 30_000)
+
+	test.each(["a delete", "a password change"] as const)(
+		"%s during the check is refused, not answered from the old row",
+		async (change) => {
+			const env = await boot()
+			const { id } = await env.service.createProfile("P", PASSWORD)
+			const derive = EncryptionKey.getPasshash.bind(EncryptionKey)
+			vi.spyOn(EncryptionKey, "getPasshash").mockImplementationOnce(async (password) => {
+				if (change === "a delete") await env.service.deleteProfile(id)
+				else await env.service.changeProfilePassword(id, PASSWORD, "another-pass-1")
+				return derive(password)
+			})
+			await expect(env.service.verifyExportCredential(id, { password: PASSWORD })).rejects.toThrow(/Invalid profile id/)
+		},
+		30_000,
+	)
+})
+
 describe("the session bearer of a passkey profile", () => {
 	test("restores after a restart, and never once strict mode is on", async () => {
 		const lenient = await boot({ strict: false })
