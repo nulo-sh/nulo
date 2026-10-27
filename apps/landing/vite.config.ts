@@ -28,7 +28,7 @@ export default defineConfig({
 		rollupOptions: {
 			// Cloudflare serves `terms.html` at `/terms` and `terms/v1.0/index.html` at `/terms/v1.0/`,
 			// so extra HTML entries are the whole routing story. scripts/build-legal.ts writes the legal ones.
-			input: ["index.html", "how-aztec-works.html", ...legalPages].map((path) => resolve(here, path)),
+			input: ["index.html", "how-aztec-works.html", "subscribed.html", ...legalPages].map((path) => resolve(here, path)),
 		},
 	},
 })

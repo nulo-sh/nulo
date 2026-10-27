@@ -54,7 +54,7 @@
 				<a class="brand" href="/" aria-label="NULO home"><i aria-hidden="true"></i>NULO</a>
 				<nav aria-label="Main navigation">
 					<a href="#see">How it works</a>
-					<a class="btn" href="#get">Coming soon</a>
+					<a class="btn" href="#email-hero">Notify me</a>
 				</nav>
 			</div>
 		</header>
@@ -80,7 +80,28 @@
 						decide otherwise. Everything is recorded. What can be read is up to you.
 					</p>
 					<div class="cta">
-						<span class="soon">Available early November · Chrome and Firefox stores</span>
+						<form class="signup" method="post" action="/api/subscribe" data-signup>
+							<label class="signup__label" for="email-hero">Get an email when Nulo is live</label>
+							<div class="signup__row">
+								<input
+									class="signup__field"
+									id="email-hero"
+									type="email"
+									name="email"
+									autocomplete="email"
+									maxlength="254"
+									required
+									placeholder="you@example.com"
+									aria-describedby="avail-hero"
+								/>
+								<button class="btn" type="submit">Notify me</button>
+							</div>
+							<p class="signup__status" role="status" data-signup-status></p>
+							<div class="signup__trap" aria-hidden="true">
+								<label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" /></label>
+							</div>
+							<p class="signup__avail" id="avail-hero">Available early November · Chrome and Firefox stores</p>
+						</form>
 						<a class="btn ghost" href="#see">See what the camera sees</a>
 						<small>free · Nulo runs on desktop Chrome or Firefox</small>
 					</div>
@@ -208,8 +229,35 @@
 				<div class="wrap">
 					<p class="eb">nothing to see · everything to own</p>
 					<h2 id="final-title">Nothing to see.<br />Everything to own.</h2>
+					<div class="plate signup-plate">
+						<form class="signup" method="post" action="/api/subscribe" data-signup>
+							<label class="signup__label" for="email-get">Get an email when Nulo is live</label>
+							<div class="signup__row">
+								<input
+									class="signup__field"
+									id="email-get"
+									type="email"
+									name="email"
+									autocomplete="email"
+									maxlength="254"
+									required
+									placeholder="you@example.com"
+									aria-describedby="avail-get print-get"
+								/>
+								<button class="btn" type="submit">Notify me</button>
+							</div>
+							<p class="signup__status" role="status" data-signup-status></p>
+							<div class="signup__trap" aria-hidden="true">
+								<label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" /></label>
+							</div>
+							<p class="signup__avail" id="avail-get">Available early November · Chrome and Firefox stores</p>
+							<p class="signup__print" id="print-get">
+								One email at launch, then occasional updates. Unsubscribe in one click. Resend sends them for us; see the
+								<a href="/website-privacy">website privacy notice</a>.
+							</p>
+						</form>
+					</div>
 					<div class="cta">
-						<span class="soon">Available early November · Chrome and Firefox stores</span>
 						<a class="btn ghost" href="https://github.com/nulo-sh/nulo">Source on GitHub</a>
 						<small>Building on Aztec V6? Write to <a href="mailto:hello@nulo.sh">hello@nulo.sh</a></small>
 					</div>
@@ -224,6 +272,7 @@
 					<a href="https://github.com/nulo-sh/nulo">github</a> ·
 					<a href="https://github.com/nulo-sh/nulo/releases">releases</a> ·
 					<a href="/privacy">privacy</a> ·
+					<a href="/website-privacy">website&nbsp;privacy</a> ·
 					<a href="/terms">terms</a>
 				</span>
 				<span>early days</span>
