@@ -20,7 +20,11 @@ import { importedKey, readImportedAccounts } from "./imported-accounts"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfirm } from "@/composables/useConfirm"
+import { isAnyActivating } from "@/composables/useProfileBootstrap"
+import { readGetStarted } from "@/utils/get-started"
 const { openToast } = useToast()
+const { requestConfirm } = useConfirm()
 
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
@@ -112,12 +116,40 @@ const listsEveryImport = async () => {
 	return fresh?.accounts.every((account) => listed.has(importedKey(account))) ?? false
 }
 
-const handleReset = async () => {
-	if (!isReadyToReset.value || isResetting.value) return
+/** Neither revealed on this device nor brought in by an import, so the person may hold no copy of it.
+ *  A flag read that fails counts as never revealed; a retired profile has no phrase to reveal. */
+const phraseNeverRevealed = async (profile) => {
+	if (profile.retired) return false
+	const flags = await readGetStarted(profile.id).catch(() => undefined)
+	return !flags?.phraseSaved && !flags?.imported
+}
 
-	// Capture the id BEFORE awaiting — the delete emits onProfileDeleted, whose
-	// handlers may null appStore.profile mid-await.
-	const deletedId = appStore.profile.id
+/** Whether the page still offers to delete `profileId`: an unlock elsewhere moves the profile, and a
+ *  page left meanwhile asks and deletes nothing. */
+const stillOffers = (profileId) => !isUnmounted && isReadyToReset.value && !isResetting.value && appStore.profile?.id === profileId
+
+let isReadingFlags = false
+const handleReset = async () => {
+	if (!isReadyToReset.value || isResetting.value || isReadingFlags) return
+	const profileId = appStore.profile.id
+	isReadingFlags = true
+	const warn = await phraseNeverRevealed(appStore.profile).finally(() => {
+		isReadingFlags = false
+	})
+	if (!stillOffers(profileId)) return
+	if (!warn) return runDeletion(profileId)
+	requestConfirm({
+		title: "Delete this profile?",
+		description: "Its recovery phrase was never saved. Without it, or a backup, its accounts are gone for good.",
+		confirm_text: "Yes, delete profile",
+		confirm_color: "red",
+		irreversible: true,
+		callback: () => void runDeletion(profileId),
+	})
+}
+
+const runDeletion = async (deletedId) => {
+	if (!stillOffers(deletedId)) return
 
 	isResetting.value = true
 	if (!(await listsEveryImport())) {
@@ -151,12 +183,13 @@ const handleReset = async () => {
 
 	appStore.profiles = appStore.profiles.filter((p) => p.id !== deletedId)
 	// The lock this deletion causes lets another profile be unlocked before a long purge returns;
-	// that profile's session and route stand.
-	if (appStore.profile && appStore.profile.id !== deletedId) {
+	// that profile's session and route stand. One the lock screen only selected has neither.
+	if (appStore.profile && appStore.profile.id !== deletedId && (appStore.isLogined || isAnyActivating())) {
 		openToast({ kind: "success", label: "Profile deleted" })
 		return
 	}
-	appStore.profile = appStore.profiles.length && appStore.profiles[0]
+	// The lock screen picks the profile it opens on, never a list position, and may have already.
+	if (appStore.profile?.id === deletedId) appStore.profile = undefined
 	appStore.networks = []
 	appStore.network = null
 	appStore.accounts = []

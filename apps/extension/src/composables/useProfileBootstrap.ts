@@ -10,6 +10,7 @@
  * entire popup bootstrap here produces a leaky abstraction.
  */
 
+import { shallowReactive } from "vue"
 import { managers, initTransactionService } from "@/utils/core"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
@@ -59,8 +60,9 @@ export function supersedeProfileActivations(): void {
 }
 
 /** Profile ids of the event-driven activations (`bootstrapActiveProfile`), counted from entry to
- *  settlement. `inFlightBootstraps` cannot answer this: it clears before the final session read. */
-const activating = new Map<string, number>()
+ *  settlement. `inFlightBootstraps` cannot answer this: it clears before the final session read.
+ *  Reactive, so a wait can watch one settle. */
+const activating = shallowReactive(new Map<string, number>())
 
 async function trackActivation(profileId: string, run: () => Promise<boolean>): Promise<boolean> {
 	const epoch = supersessions
@@ -75,6 +77,16 @@ async function trackActivation(profileId: string, run: () => Promise<boolean>): 
 		if (left > 0) activating.set(profileId, left)
 		else activating.delete(profileId)
 	}
+}
+
+/** Whether an event-driven activation of `profileId` is still running. Reactive. */
+export function isActivating(profileId: string): boolean {
+	return activating.has(profileId)
+}
+
+/** Whether any event-driven activation is still running. Reactive. */
+export function isAnyActivating(): boolean {
+	return activating.size > 0
 }
 
 /** Whether an event-driven activation of a profile other than `profileId` is still running. */

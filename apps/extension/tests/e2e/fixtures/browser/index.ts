@@ -1,4 +1,6 @@
+import { basename } from "node:path"
 import type { Browser, Page, Target } from "puppeteer"
+import { acceptLists, PENDING_FILE_INPUT } from "../file-accept"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
 import { type BrowserKind, resolveBrowserKind } from "./selection"
@@ -315,7 +317,31 @@ export const openScratchPage = (browser: Browser, extensionId: string): Promise<
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
 export const doubleClick = (page: Page, x: number, y: number, gapMs: number): Promise<void> => driver.doubleClick(page, x, y, gapMs)
-export const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> => driver.pickFile(page, open, filePath)
+/** Answers the picker `open` asks for with `filePath`, once the picker's `accept` lists that file:
+ *  a person's chooser offers only the files it lists until they ask for every file. */
+export const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> =>
+	driver.pickFile(
+		page,
+		async () => {
+			await open()
+			await expectPickerLists(page, filePath)
+		},
+		filePath,
+	)
+
+async function expectPickerLists(page: Page, filePath: string): Promise<void> {
+	const pending = await page.waitForFunction(
+		(selector: string) => {
+			const inputs = document.querySelectorAll<HTMLInputElement>(selector)
+			return inputs.length > 0 && { accept: inputs[inputs.length - 1].accept }
+		},
+		{ timeout: 10_000 },
+		PENDING_FILE_INPUT,
+	)
+	const { accept } = (await pending.jsonValue()) as { accept: string }
+	await pending.dispose()
+	if (!acceptLists(accept, basename(filePath))) throw new Error(`the picker's accept "${accept}" does not list ${basename(filePath)}`)
+}
 export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promise<VirtualAuthenticator> =>
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)

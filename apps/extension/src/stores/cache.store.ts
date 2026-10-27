@@ -8,7 +8,9 @@ export interface ConfirmRequest {
 	title?: string
 	description?: string
 	confirm_text?: string
-	/** `"red"` picks the destructive pre-title; the button's look is `confirm_variant`. */
+	/** The action cannot be undone: the pre-title says so unless `pre_title` is set. */
+	irreversible?: boolean
+	/** `"red"` paints the confirm button red; its look is `confirm_variant`. */
 	confirm_color?: string
 	confirm_variant?: string
 	/** One button, no Cancel, no callback required. */

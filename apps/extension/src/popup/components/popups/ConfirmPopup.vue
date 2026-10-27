@@ -20,8 +20,6 @@ const props = defineProps({
 	show: Boolean,
 })
 
-/** `confirm_color: "red"` picks the pre-title only; the confirm button's look is `confirm_variant`. */
-const isDestructive = computed(() => cacheStore.confirm.confirm_color === "red")
 /** Informational use: one button, no Cancel, no callback required; cleared with the rest on close. */
 const isSingle = computed(() => cacheStore.confirm.single === true)
 
@@ -57,7 +55,7 @@ watch(
 				<Flex direction="column" align="center" gap="12" :class="$style.header">
 					<Icon name="warning" size="16" color="primary" />
 					<span :class="$style.pre_title" data-testid="confirm-pre-title">
-						{{ cacheStore.confirm.pre_title || (isDestructive ? 'Irreversible' : 'Action required') }}
+						{{ cacheStore.confirm.pre_title || (cacheStore.confirm.irreversible ? 'Irreversible' : 'Action required') }}
 					</span>
 					<h2 :class="$style.title" data-testid="confirm-title">
 						{{ cacheStore.confirm.title ? cacheStore.confirm.title : "Are you sure?" }}

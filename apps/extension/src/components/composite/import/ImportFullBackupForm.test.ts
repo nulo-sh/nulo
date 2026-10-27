@@ -39,10 +39,10 @@ const baseProps = (over = {}) => ({
 })
 
 describe("ImportFullBackupForm", () => {
-	it("renders a file picker with the placeholder description when no backup selected", () => {
+	it("renders a file picker whose hint names the .gz the export writes and the older shapes", () => {
 		const wrapper = mount(ImportFullBackupForm, { props: baseProps(), global: { stubs } })
 		expect(wrapper.text()).toContain("Choose a backup file")
-		expect(wrapper.text()).toContain(".json or .txt")
+		expect(wrapper.text()).toContain("Select a .gz, .json or .txt file")
 		expect(wrapper.find("[data-testid=import-full-backup-error]").exists()).toBe(false)
 	})
 

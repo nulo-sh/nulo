@@ -140,6 +140,7 @@ function handleDeleteContact(contact) {
 	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
 	requestConfirm({
 		confirm_color: "red",
+		irreversible: true,
 		confirm_text: "Yes, delete contact",
 		description: `Delete contact "${contact.name}"?`,
 		callback: async () => {

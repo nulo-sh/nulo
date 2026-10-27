@@ -27,7 +27,7 @@ describe("resolveBootSession", () => {
 		expect(await resolveBootSession(deps({ bootstrap: async () => false }))).toMatchObject({ kind: "active", stillActive: false })
 	})
 
-	test("no open session is a lock whose candidate is the last active profile, else the first, else none", async () => {
+	test("no open session is a lock whose candidate is the last active profile, else none: never a list position", async () => {
 		expect(await resolveBootSession(deps({ getActiveProfile: async () => undefined }))).toEqual({
 			kind: "locked",
 			profiles: [p1, p2],
@@ -35,7 +35,7 @@ describe("resolveBootSession", () => {
 		})
 		expect(
 			await resolveBootSession(deps({ getActiveProfile: async () => undefined, lastActiveProfileId: async () => "gone" })),
-		).toMatchObject({ candidate: p1 })
+		).toMatchObject({ candidate: undefined })
 		expect(await resolveBootSession(deps({ getProfiles: async () => [], getActiveProfile: async () => undefined }))).toEqual({
 			kind: "locked",
 			profiles: [],
@@ -53,12 +53,17 @@ describe("resolveBootSession", () => {
 		expect(await resolveBootSession(deps({ getActiveProfile: rejects }))).toMatchObject({ kind: "unreachable", candidate: p2 })
 	})
 
-	test("a rejecting last-active read is a preference lost, never an undecided check: the first profile stands in", async () => {
+	test("a rejecting last-active read is a preference lost, never an undecided check: the only profile stands in, else none", async () => {
 		expect(await resolveBootSession(deps({ getActiveProfile: async () => undefined, lastActiveProfileId: rejects }))).toEqual({
 			kind: "locked",
 			profiles: [p1, p2],
-			candidate: p1,
+			candidate: undefined,
 		})
+		expect(
+			await resolveBootSession(
+				deps({ getProfiles: async () => [p1], getActiveProfile: async () => undefined, lastActiveProfileId: rejects }),
+			),
+		).toMatchObject({ candidate: p1 })
 	})
 
 	test("an open session whose bootstrap throws is FAILED, never a lock", async () => {
