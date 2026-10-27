@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref } from "vue"
 
 export interface UseSecretCountdownOptions {
-	/** Auto-close window in ms. Each export page picks its own (key=2min, seed=5min). */
+	/** Auto-close window in ms. */
 	autoCloseMs: number
 	/** Called when the countdown reaches zero. The page wires its close handler here. */
 	onTimeout: () => void

@@ -46,7 +46,7 @@ describe("DisableAutoCloseLink", () => {
 		expect(el.hasAttribute("tabindex")).toBe(false)
 	})
 
-	it.each([["Enter"], [" "]] as const)("%j presses it, as a focused button", (key) => {
+	it.each([["Enter"], [" "]] as const)("nothing cancels %j, so it presses as a focused button", (key) => {
 		const w = mountLink()
 		const el = w.get("button").element as HTMLButtonElement
 		pressOn(el, key)

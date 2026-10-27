@@ -77,10 +77,9 @@ describe("OnboardingPhraseStep's auto-close", () => {
 	test("the Enter that pressed the link and lands on Do it later as a repeat leaves nothing; a fresh Enter leaves", async () => {
 		const w = mountStep()
 		pressOn(disableLink(w).element as HTMLElement, "Enter")
-		const exit = later(w).element as HTMLElement
-		expect(pressOn(exit, "Enter", { repeat: true })).toEqual([false])
+		expect(pressOn(document.activeElement as HTMLElement, "Enter", { repeat: true })).toEqual([false])
 		expect(w.emitted("later")).toBeUndefined()
-		pressOn(exit, "Enter")
+		pressOn(later(w).element as HTMLElement, "Enter")
 		expect(w.emitted("later")).toHaveLength(1)
 	})
 

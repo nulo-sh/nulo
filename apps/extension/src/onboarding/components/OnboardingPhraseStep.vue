@@ -102,11 +102,10 @@ onMounted(() => {
 			<OnboardingSkipLink
 				ref="later"
 				testid="onboarding-phrase-later"
-				:class="$style.later"
 				@keydown.enter="refuseRepeatEnter"
 				@click="emit('later')"
 			>
-				Do it later<span v-if="!isAutoCloseDisabled"> · {{ countdownLabel }}</span>
+				Do it later<span v-if="!isAutoCloseDisabled" :class="$style.time"> · {{ countdownLabel }}</span>
 			</OnboardingSkipLink>
 			<DisableAutoCloseLink v-if="!isAutoCloseDisabled" testid="onboarding-phrase-disable-auto-close" @click="keepOpen" />
 		</Flex>
@@ -119,7 +118,7 @@ onMounted(() => {
 	flex-shrink: 0;
 }
 
-.later {
+.time {
 	font-variant-numeric: tabular-nums;
 }
 
