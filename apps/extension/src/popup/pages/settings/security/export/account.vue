@@ -108,6 +108,7 @@ const resetFlow = () => {
 	fileStatus.value = ""
 	payload.value = ""
 	dropApproval()
+	onCeremonyReject(new Error("The account file flow started over"))
 }
 
 function dropApproval() {
@@ -212,6 +213,7 @@ const handleConfirmPasskey = async () => {
 	const { id: profileId, name } = appStore.profile
 	try {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
+		if (!isCurrent() || scope !== approvalScope()) return
 		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
 		if (!isCurrent() || scope !== approvalScope()) return
 		// An answer that cannot open the profile is refused here, never held until Save.

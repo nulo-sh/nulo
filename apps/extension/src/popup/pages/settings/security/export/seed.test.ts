@@ -16,8 +16,9 @@ vi.mock("vue-router", async (original) => ({
 const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast }) }))
 const runCeremony = vi.hoisted(() => vi.fn())
+const ceremonyReject = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/usePasskeyCeremony", () => ({
-	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony, onResolve: vi.fn(), onReject: vi.fn() }),
+	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony, onResolve: vi.fn(), onReject: ceremonyReject }),
 }))
 const surface = vi.hoisted(() => ({ inPanel: false }))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.inPanel }))
@@ -66,7 +67,7 @@ async function mountAgreedWithPassword() {
 const reveal = (w: VueWrapper) => w.get('[data-testid="unlock-submit-btn"]').element as HTMLElement
 
 beforeEach(() => {
-	vi.clearAllMocks()
+	vi.resetAllMocks()
 	real.router = undefined
 	surface.inPanel = false
 	installChromeStorage({}, { persist: false })
@@ -246,6 +247,50 @@ describe("recovery phrase — a lock or a profile switch the page outlives ends 
 		expect(countdown(w).props()).toMatchObject({ autoCloseDisabled: false, countdownLabel: "5:00" })
 	})
 
+	test.each(ends)("%s with no keep open: the first reveal's close timer goes with it", async (_label, end) => {
+		const w = await mountAgreedWithPassword()
+		useAppStore().isLogined = true
+		vi.useFakeTimers()
+		try {
+			reveal(w).click()
+			await flushPromises()
+			expect(w.findComponent({ name: "RecoveryPhraseGrid" }).exists()).toBe(true)
+			end()
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
+			expect(router.replace).not.toHaveBeenCalled()
+			expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(true)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test.each(ends)("%s during a reveal: the next press reveals at once, and the old answer releases nothing", async (_label, end) => {
+		const held: Array<(words: string[]) => void> = []
+		const hold = () => new Promise<string[]>((r) => held.push(r))
+		exportMnemonic.mockImplementationOnce(hold).mockImplementationOnce(hold)
+		const w = await mountAgreedWithPassword()
+		useAppStore().isLogined = true
+		reveal(w).click()
+		await flushPromises()
+		end()
+		await flushPromises()
+		await agree(w)
+		await w.get('[data-testid="unlock-password-input"] input').setValue("password123")
+		reveal(w).click()
+		await flushPromises()
+		expect(exportMnemonic).toHaveBeenCalledTimes(2)
+
+		held[0]?.(["old", "old", "old"])
+		await flushPromises()
+		reveal(w).click()
+		await flushPromises()
+		expect(exportMnemonic).toHaveBeenCalledTimes(2)
+		held[1]?.(["alpha", "bravo", "charlie"])
+		await flushPromises()
+		expect(w.findComponent({ name: "RecoveryPhraseGrid" }).props("words")).toEqual(["alpha", "bravo", "charlie"])
+	})
+
 	test.each(ends)("%s after a wrong password: the next agreement shows an empty field and no error", async (_label, end) => {
 		exportMnemonic.mockRejectedValueOnce(new Error("wrong password"))
 		const w = await mountAgreedWithPassword()
@@ -265,6 +310,40 @@ describe("recovery phrase — a lock or a profile switch the page outlives ends 
 describe("recovery phrase — a passkey profile", () => {
 	const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" }
 	const passkeyButton = (w: VueWrapper) => w.get('[data-testid="reveal-passkey-btn"]')
+	const lockOutlived = () => {
+		const app = useAppStore()
+		app.isLogined = false
+		app.isLogined = true
+	}
+
+	test("a lock during the passkey lookup opens no prompt", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const w = await mountAgreed("passkey")
+		useAppStore().isLogined = true
+		await passkeyButton(w).trigger("click")
+		lockOutlived()
+		answerLookup({ credentialId: "Y3JlZA==", prfSalt: "c2FsdA==" })
+		await flushPromises()
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="agree-continue-btn"]').exists()).toBe(true)
+	})
+
+	test("a lock while the prompt is up closes it, and a late answer opens nothing", async () => {
+		let answer: (data: typeof ANSWER) => void = () => {}
+		runCeremony.mockImplementationOnce(() => new Promise((r) => (answer = r)))
+		const w = await mountAgreed("passkey")
+		useAppStore().isLogined = true
+		await passkeyButton(w).trigger("click")
+		await flushPromises()
+		expect(runCeremony).toHaveBeenCalledTimes(1)
+		lockOutlived()
+		expect(ceremonyReject).toHaveBeenCalledTimes(1)
+		answer(ANSWER)
+		await flushPromises()
+		expect(exportMnemonic).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+	})
 
 	test("after the agreement the gate is Reveal with passkey under one sentence, with no password field", async () => {
 		const w = await mountAgreed("passkey")

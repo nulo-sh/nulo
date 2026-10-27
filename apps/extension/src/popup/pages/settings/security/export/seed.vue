@@ -72,9 +72,12 @@ const handleStart = () => {
 }
 
 /** A lock or a profile switch can leave this page mounted: what was typed or revealed belongs to the
- *  session and profile that ended, and a reveal still in flight is discarded. */
+ *  session and profile that ended. A reveal still in flight is discarded, its passkey prompt closed,
+ *  and the next press is not held behind it. */
 const resetReveal = () => {
 	revealFence.invalidate()
+	isRevealing = false
+	onCeremonyReject(new Error("The recovery phrase page started over"))
 	countdown.clear()
 	words.value = []
 	password.value = null
@@ -104,7 +107,7 @@ const handleUnlock = async () => {
 	} catch (error) {
 		if (isCurrent()) isWrongPassword.value = true
 	} finally {
-		isRevealing = false
+		if (isCurrent()) isRevealing = false
 	}
 }
 
@@ -118,14 +121,16 @@ const handlePasskeyReveal = async () => {
 	const { id: profileId, name } = appStore.profile
 	try {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
+		if (!isCurrent()) return
 		const credentialData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal", profileName: name })
+		if (!isCurrent()) return
 		const mnemonic = await managers.profile.exportMnemonic(profileId, undefined, credentialData)
 		if (isCurrent()) showWords(profileId, mnemonic)
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
 		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.revealFailed) })
 	} finally {
-		isRevealing = false
+		if (isCurrent()) isRevealing = false
 	}
 }
 
