@@ -3,7 +3,7 @@
 **Version 1.0 — effective «FILL: effective date»**
 
 This notice explains what happens to information when you visit `nulo.sh` or join its mailing list.
-The Nulo wallet itself is covered by the [Privacy Policy](../../legal/privacy.md); this notice adds nothing to
+The Nulo wallet itself is covered by the [Privacy Policy](../../../legal/privacy.md); this notice adds nothing to
 what the wallet does.
 
 > **The short version.** The website runs no analytics, no tracking and no third-party scripts, and
@@ -104,7 +104,7 @@ log (§ 3.3) expires on its own after 30 days.
 
 ## 4. Writing to me
 
-If you email hello@nulo.sh, the [Privacy Policy](../../legal/privacy.md) § 5.5 describes how I handle
+If you email hello@nulo.sh, the [Privacy Policy](../../../legal/privacy.md) § 5.5 describes how I handle
 correspondence.
 
 ## 5. Your rights

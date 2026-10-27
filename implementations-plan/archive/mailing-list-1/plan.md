@@ -19,6 +19,69 @@ the GTM session's mailing-list task of 2026-10-27; its owner decisions bind (mar
 `news.nulo.sh`, eu-west-1, double opt-in deferred). Over the light target (150 lines): four arcs on
 two vendors, and the audit record; nothing below restates the specification.
 
+## Outcome
+
+- **Date:** 2026-10-27. Planned, audited and delivered on the release day; closed the same day.
+- **Status:** closed with the `docs(plans)` PR that carries this close-out to `dev`. The four arcs
+  landed as three squash PRs plus the plan folder, two follow-ups after acceptance, and two promotes
+  to `main` (#1249 `2e296d7b1`; #1259). The merge archives the plan.
+- **Shipped:**
+  - **Arc `subscribe`, #1240, `00cb394a2`:** the `nulo-subscribe` Worker (`infra/subscribe`): every
+    refusal class, the honeypot's fake success, the per-IP and global limiters, one retry, and the
+    duplicate answered by a lookup before the create and a mirror read after it. Gates: lint,
+    typecheck:all, test:all (16 workspaces), test:ci-gating 686, test:release 341, lint:actions,
+    check:plans; `bun test` 30/30 at retry 0 (49 tests); the dry-run bundle holds `src/` only; the
+    audit gate 24 acknowledged, 0 unacknowledged.
+  - **Arcs `landing-plumbing` and `landing-form`, one PR, #1242, `dfba65340`:** option 1 of the
+    mockups, the hero without the small print on the owner's words; both forms, nav "Notify me",
+    `/subscribed`, the landing Worker forwarding `POST /api/subscribe` over `SUBSCRIBE`,
+    `form-action 'self'`, `og.png` recaptured. Gates: lint, typecheck:all, landing 131, test:all,
+    ci-gating 686, release 341, lint:actions, check:plans. Screenshots at 1440 and 390 (dark, the
+    only palette) of the hero, `#get`, success, both errors, `/subscribed` and `og-1200`, delivered
+    to the orchestrator and not committed.
+  - **Arc `notice`, #1246, `752377268`:** the website privacy notice 1.0 as signed, effective
+    27 October 2026; the wallet policy 1.2.7 as a patch; the "Website privacy" link in the nav and
+    the footer; `launch-legal` reads the notice; `CONSENT_VERSION` pinned to its version line.
+    Gates: lint, typecheck:all, legal 60, landing 137, test:all, ci-gating, release, check:plans,
+    no-local-paths, lint:actions; smoke `legal-acceptance` 14/14 on Chrome, 128 s.
+  - **The plan folder, #1245, `bbb81b84a`,** with A1 to A13 decided in `OWNER-ASKS.md`.
+  - **Promote #1249, `2e296d7b1`, 15:42Z,** carried them to `main` with #1247; the landing
+    redeployed at 15:43Z; the owner created `nulo-subscribe` and set the secret.
+  - **Acceptance on production, 2026-10-27.** Probes after the deploy: GET 405; a wrong or missing
+    Origin 403; a malformed body 400; the honeypot 200 as JSON and 303 to `/subscribed` as a form,
+    which is the no-JavaScript answer; `/subscribed` 200 HTML. The owner's own sign-up through the
+    hero form: one contact in the launch list, created 15:59:39Z, source landing, consent 1.0, the
+    topic `opt_in`, not unsubscribed.
+  - **After acceptance, on `dev`, carried by promote #1259:** #1256 `7375e6e8e`, the answer in place
+    on the button (option B of five, the owner's words in the PR); #1257 `7cee422c4`, two keyed-run
+    scripts under `infra/subscribe/scripts/`, the broadcast writer and the unsubscribe proof, both
+    unit-tested. The unsubscribe path was proven end to end: a copy of the launch draft sent to a
+    one-contact test segment, the owner's click set `unsubscribed`, the restore put the contact back.
+  - **Outside this repo:** the launch email draft `6cbb8fa7-2614-44f1-a1de-ec2531429389` in Resend
+    is final (bodies byte-identical to the approved render, the topic set, the wordmark served from
+    `nulo.sh/email/`), sent on the owner's words to the launch list only.
+- **Dispositions:**
+  - R1, the duplicate relay: not run; superseded by the lookup-then-mirror-read design, which assumes
+    no duplicate semantics.
+  - A13 (a), per-Worker build tokens: superseded for now by the owner's interim (b), non-production
+    builds off on `nulo-landing` (2026-10-27); #1235 stays open. The checklist's other dashboard
+    switches are the owner's record, not verified from here.
+  - The per-IP limit on production: 16 honeypot posts from one IP at one location (LHR) over 70 s
+    all answered 303, none 429. The code is as planned; the binding is documented as approximate,
+    per location and eventually consistent, so the budget refuses a slow script, not a fast one,
+    and the global cap is the same binding. Recorded on #1237; an exact counter is persistent
+    state, the owner's call.
+  - Not run on production: the second-egress line (one egress was available) and the real-browser
+    submission without JavaScript (its answer is the 303 probe above, and `page.test.ts`).
+  - No landing e2e suite, as the Quality Bar allowed.
+- **Lessons:** none promoted. The Resend write rule (a partial `PATCH /broadcasts/{id}` resets every
+  field it omits) lives in `infra/subscribe/README.md` § Operator scripts; the build-token reach in
+  #1235 and the Worker's README; `lessons.md` is at its budget and this plan supersedes nothing in it.
+- **Known limits:** #1237, #1238, #1239.
+- **Open items:** #1236 (double opt-in before the next campaign); #1235 (the owner, interim in
+  place); the go-day send.
+- **Seeds retired:** the `/goal` and `/loop` below.
+
 ## Outcome & Quality Bar
 
 - **For whom**: a visitor on a phone or a desktop who wants to know when Nulo is installable; later,
@@ -319,7 +382,7 @@ with `Known limits: #1237, #1238, #1239` and `Open items: #1236`, delete `STATUS
 `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/mailing-list-1/plan.md`
 succeeds: `agent-worktree done mailing-list-1 --merged`. The orchestrator notices the merge.
 
-## Seeds
+## Seeds (retired)
 
 ```
 /goal Every phase in implementations-plan/mailing-list-1/plan.md is marked ✓, each backed by its gate reported passing in the transcript; LESSONS_FILE=implementations-plan/mailing-list-1/lessons/phase-N.md printed per phase; the codex loop converged per arc and once across arcs (a resumed pass with no new material finding quoted); each arc's PR to `dev` is open or merged, opened only after the loops, and the close-out's archive move is its own commit (`git show --stat`); `bun run test:all` and `bun run lint` exit 0.

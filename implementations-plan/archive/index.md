@@ -215,6 +215,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet
 - [lock-ownership](lock-ownership/plan.md) — completed — ticketed lock release and two post-await ownership fixes
 - [mac-identity-binding](mac-identity-binding/plan.md) — completed — the envelope MAC binds the row's storage id and the wallet fingerprint
+- [mailing-list-1](mailing-list-1/plan.md) — completed — a launch mailing list on nulo.sh through Resend: the key in its own Worker, a website privacy notice, the signup on the landing
 - [mainnet-arrival-1](mainnet-arrival-1/plan.md) — completed — a default network a later build adds reaches every existing profile once: the offer record, the owner's arrival, a real in-place update on both browsers
 - [mainnet-seed-1](mainnet-seed-1/plan.md) — draft, held for the live pair — the Mainnet default network, its live pin check and the e2e on the real seed, in draft #1117 until v6 Mainnet serves the pinned pair (#80)
 - [method-metadata-registry](method-metadata-registry/plan.md) — completed — one wallet method descriptor table replaces six hand-synchronized tables
