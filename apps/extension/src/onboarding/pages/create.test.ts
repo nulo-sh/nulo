@@ -417,14 +417,18 @@ describe("onboarding create — the recovery phrase step", () => {
 		pending.resolve(undefined)
 		await flushPromises()
 		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
 	})
 
-	test("Do it later routes to Ready and marks nothing", async () => {
+	test("Do it later takes the words down, routes to Ready and marks nothing", async () => {
 		const w = await mountCreate()
 		await submitPassword(w)
 		await w.get('[data-testid="onboarding-phrase-later"]').trigger("click")
-		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
 		expect(markGetStarted).not.toHaveBeenCalled()
+		// The push is a mock that never lands, so this is the page while the route to Ready settles.
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(w.find('[data-testid="onboarding-create-page"]').exists()).toBe(false)
 	})
 
 	test("a repeat Enter on I saved it is cancelled, so it cannot press it", async () => {

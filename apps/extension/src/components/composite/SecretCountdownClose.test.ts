@@ -70,11 +70,7 @@ describe("composite/SecretCountdownClose", () => {
 
 	test("clicking the ghost link emits 'disableAutoClose'", async () => {
 		const w = factory()
-		const buttons = w.findAll("button")
-		// 2 buttons: close (testid'd) + ghost link
-		const ghost = buttons.find((b) => b.text() === "Disable auto-close")
-		expect(ghost).toBeTruthy()
-		await ghost!.trigger("click")
+		await w.get('[data-testid="disable-auto-close-btn"]').trigger("click")
 		expect(w.emitted("disableAutoClose")).toHaveLength(1)
 	})
 

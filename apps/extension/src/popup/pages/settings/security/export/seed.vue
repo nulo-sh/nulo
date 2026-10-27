@@ -31,7 +31,7 @@ const { openToast } = useToast()
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
-import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
+import { RECOVERY_PHRASE_AUTO_CLOSE_MS, RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
@@ -43,7 +43,6 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
-const AUTO_CLOSE_MS = 60_000 * 5
 const BACKUP_MENU = "/popup/settings/security/export"
 
 const isStarted = ref(false)
@@ -64,7 +63,7 @@ const handleClose = async () => {
 	leaveFor(router, BACKUP_MENU)
 }
 
-const countdown = useSecretCountdown({ autoCloseMs: AUTO_CLOSE_MS, onTimeout: handleClose })
+const countdown = useSecretCountdown({ autoCloseMs: RECOVERY_PHRASE_AUTO_CLOSE_MS, onTimeout: handleClose })
 
 const handleStart = () => {
 	isStarted.value = true
@@ -232,7 +231,7 @@ onBeforeUnmount(() => {
 				v-else
 				:countdownLabel="countdown.countdownLabel.value"
 				:autoCloseDisabled="countdown.isAutoCloseDisabled.value"
-				:progressDurationMs="AUTO_CLOSE_MS"
+				:progressDurationMs="RECOVERY_PHRASE_AUTO_CLOSE_MS"
 				@close="handleClose"
 				@disableAutoClose="countdown.disable"
 			/>

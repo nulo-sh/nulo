@@ -308,8 +308,8 @@ const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithRemi
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
-const REVEAL_PASSKEY = cite(SEED_PAGE, 108, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
-const REVEAL_CANCEL = cite(SEED_PAGE, 112, "handleCancelOrUnconfirmed(error, openToast)")
+const REVEAL_PASSKEY = cite(SEED_PAGE, 107, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
+const REVEAL_CANCEL = cite(SEED_PAGE, 111, "handleCancelOrUnconfirmed(error, openToast)")
 const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
 const SLOTS_BIND_PASSKEY = cite(SERVICE, 471, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
 const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 970, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
@@ -322,9 +322,9 @@ const RETIRED_RESEAL = cite(SERVICE, 1294, 'if (classifyProfileRow(profile).kind
 const RETIRED_FINALIZE = cite(SERVICE, 2584, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 377, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 142, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 155, "if (isMounted()) router.push(doneRoute(path.value))")
-const ONBOARDING_LATER = cite(ONBOARDING, 159, "router.push(doneRoute(path.value))")
+const ONBOARDING_PHRASE = cite(ONBOARDING, 145, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 158, "if (isMounted()) leavePhrase()")
+const ONBOARDING_LATER = cite(ONBOARDING, 175, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')

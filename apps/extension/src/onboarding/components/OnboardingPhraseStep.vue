@@ -4,12 +4,14 @@ import { vSnackFooter } from "@/composables/snackInset"
 import { useToast } from "@/composables/toast"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { useSecretClipboardCopy } from "@/composables/useSecretClipboardCopy"
+import { useSecretCountdown } from "@/composables/useSecretCountdown"
 
 /** Components */
+import DisableAutoCloseLink from "@/components/composite/DisableAutoCloseLink.vue"
 import RecoveryPhraseGrid from "@/components/composite/RecoveryPhraseGrid.vue"
 
 /** Utils */
-import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
+import { RECOVERY_PHRASE_AUTO_CLOSE_MS, RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 
 const props = defineProps<{ words: readonly string[]; path: "password" | "passkey" }>()
 const emit = defineEmits<{ saved: []; later: [] }>()
@@ -22,13 +24,28 @@ const body = computed(
 const { openToast } = useToast()
 const { isCopied, copySecret } = useSecretClipboardCopy({ toastLabel: "Recovery phrase copied", openToast })
 
+const {
+	countdownLabel,
+	isAutoCloseDisabled,
+	start: startCountdown,
+	disable: disableAutoClose,
+} = useSecretCountdown({ autoCloseMs: RECOVERY_PHRASE_AUTO_CLOSE_MS, onTimeout: () => emit("later") })
+
 const title = useTemplateRef<{ focus: (options?: FocusOptions) => void }>("title")
+const later = useTemplateRef<{ focus: () => void }>("later")
+
+/** The link leaves with the countdown; focus goes to the exit it timed, not to the page. */
+function keepOpen() {
+	disableAutoClose()
+	later.value?.focus()
+}
 
 onMounted(() => {
 	// A stage of Create, not a route: no router scroll reset runs, and focus must leave the Create
 	// button for an element no held Enter can press.
 	document.scrollingElement?.scrollTo(0, 0)
 	title.value?.focus({ preventScroll: true })
+	startCountdown()
 })
 </script>
 
@@ -82,7 +99,16 @@ onMounted(() => {
 					I saved it
 				</Button>
 			</div>
-			<OnboardingSkipLink testid="onboarding-phrase-later" @click="emit('later')">Do it later</OnboardingSkipLink>
+			<OnboardingSkipLink
+				ref="later"
+				testid="onboarding-phrase-later"
+				:class="$style.later"
+				@keydown.enter="refuseRepeatEnter"
+				@click="emit('later')"
+			>
+				Do it later<span v-if="!isAutoCloseDisabled"> · {{ countdownLabel }}</span>
+			</OnboardingSkipLink>
+			<DisableAutoCloseLink v-if="!isAutoCloseDisabled" testid="onboarding-phrase-disable-auto-close" @click="keepOpen" />
 		</Flex>
 	</OnboardingPage>
 </template>
@@ -91,6 +117,10 @@ onMounted(() => {
 .mark {
 	height: 18px;
 	flex-shrink: 0;
+}
+
+.later {
+	font-variant-numeric: tabular-nums;
 }
 
 .actions {
