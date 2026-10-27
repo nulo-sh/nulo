@@ -9,3 +9,4 @@
 - 2026-10-27 phase 2 green: lint, typecheck:all, both scans 30/30 at retry 0; five-disjunct mutation proof; tree cases 300/238 ms mean.
 - 2026-10-27 phase 3 green: permalinks.test.ts 30/30 on git 2.43 and 30/30 on git 2.56; mutation red; test:ci-gating and test:release exit 0.
 - 2026-10-27 review round 1: one demonstrated finding (v-/**/bind), fixed; P2 re-gated 30/30; codex round 2 next.
+- 2026-10-27 final gates on the final head: lint, typecheck:all, test:all, test:ci-gating (686/0), test:release (341/0) exit 0; delivery next.

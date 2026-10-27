@@ -102,6 +102,7 @@ None. Only test files change.
   It also confirmed that the pin cannot pass vacuously: without the fetch the verdict reads "not available locally".
 - **Codex final pass** (resumed session): conditional approve on one condition. A bare `<span>` is no template to the SFC parser, so wrap the CSS fixture in `<template>`. Applied, then **approve**.
 - **Review loop, round 1** (Codex gpt-6.1-sol high over the diff from the base; one Opus review alongside): both found the same demonstrated defect. Vue deletes CSS comments before it matches `v-bind`, so the pre-check skipped `v-/**/bind(x)`, a finding the base guard catches. Fixed: only the call search is pre-checked, Vue's `cssVars` read stays on every `.vue`, and a `v-/**/bind` case is added. Opus also flagged the pre-check comments for not saying why named references need no trigger: accepted. Everything else looked fine to both: the fake-timer scope, determinism, the pin not being vacuous, `--local`.
+- **Review loop, round 2** (Codex resumed with the fix): no material findings. The loop has converged.
 
 ## Delivery
 
