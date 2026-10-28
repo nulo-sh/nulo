@@ -114,16 +114,16 @@ describe("walletErrorFromPayload", () => {
 		expect((rebuilt.details as { capabilityType?: string })?.capabilityType).toBe("accounts")
 	})
 
-	test("DuplicateWalletError round-trips with code + existingProfileName preserved", () => {
+	test("DuplicateWalletError round-trips with code + every existingProfileNames entry preserved", () => {
 		// The dup-guard confirm-retry UX hinges on `instanceof` surviving the RPC boundary; a
 		// missing dispatch case flattens it to a generic Error and the dialog never shows.
-		const original = new DuplicateWalletError(undefined, { existingProfileName: "Main Profile" })
-		const rebuilt = walletErrorFromPayload(original.toPayload())
+		const original = new DuplicateWalletError(undefined, { existingProfileNames: ["Main Profile", "Savings"] })
+		const rebuilt = walletErrorFromPayload(JSON.parse(JSON.stringify(original.toPayload())))
 		expect(rebuilt).toBeInstanceOf(DuplicateWalletError)
 		expect(rebuilt).toBeInstanceOf(WalletError)
 		expect(rebuilt.code).toBe(DuplicateWalletError.CODE)
 		expect(rebuilt.message).toBe("A profile with this recovery phrase already exists")
-		expect((rebuilt.details as { existingProfileName?: string })?.existingProfileName).toBe("Main Profile")
+		expect((rebuilt.details as { existingProfileNames?: string[] })?.existingProfileNames).toEqual(["Main Profile", "Savings"])
 	})
 })
 
@@ -435,7 +435,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
 	})
 
-	const foreignDetails = { jobId: "j", existingProfileName: "n", capabilityType: "accounts", k: 1 }
+	const foreignDetails = { jobId: "j", existingProfileNames: ["n"], capabilityType: "accounts", k: 1 }
 	const payloadShapes: Array<[label: string, extra: { details?: unknown }]> = [
 		["foreign details", { details: foreignDetails }],
 		["message only (the operation-result channel)", {}],

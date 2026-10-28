@@ -7,6 +7,7 @@ import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
 	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
+	bindCeremonies,
 	bindProfile,
 	type Bindings,
 	carriedBy,
@@ -60,6 +61,7 @@ import {
 	coverageLine,
 	endsOf,
 	type ListedStep,
+	type PlannedStep,
 	plan,
 	planFromList,
 	startWorld,
@@ -91,6 +93,67 @@ function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 		const path = file.startsWith("apps/") ? join(import.meta.dirname, "../../../..", file) : join(import.meta.dirname, "../..", file)
 		return existsSync(path) && readFileSync(path, "utf8").split("\n")[Number(line) - 1]?.includes(fragment) ? [] : [source]
 	})
+}
+
+/** Whether `k` names a credential the authenticator held before the step. */
+const mintedBefore = (w: World, k: string | undefined): boolean => k !== undefined && Number(k.slice(1)) < w.next.credential
+
+/** The steps of a plan, each with the world it ran on. */
+const withBefore = (p: { start: "empty" | "pre-update"; steps: PlannedStep[] }): [PlannedStep, World][] => {
+	let w = startWorld(p.start)
+	return p.steps.map((s) => {
+		const before = w
+		w = s.expect.next
+		return [s, before]
+	})
+}
+
+type AnyParams = { credential?: string; method?: string; change?: string; current?: string; variant?: string; password?: string }
+
+/** The passkey choice, method change or account file variant a step draws, if any. */
+function newVariant(s: PlannedStep, before: World): string | undefined {
+	const p = s.params as AnyParams & { duplicate?: string }
+	const choice = (k: string | undefined) => (mintedBefore(before, k) ? "reuse" : "mint")
+	switch (s.action) {
+		case "createPasskey":
+			return `createPasskey:${choice(p.credential)}`
+		case "onboardingCreate":
+			return p.method === "passkey" ? `onboardingCreate:${choice(p.credential)}` : undefined
+		case "importPhrase":
+		case "importBackup":
+			return p.method === "passkey" ? `${s.action}:${choice(p.credential)}${p.duplicate === "decline" ? ":declined" : ""}` : undefined
+		case "changeUnlockMethod":
+			return `changeUnlockMethod:${p.change}:${p.current}`
+		case "exportAccountFile":
+			return p.password ? `exportAccountFile:passkey:${p.variant ?? "approve"}` : undefined
+		default:
+			return undefined
+	}
+}
+
+/** Whether the step makes the authenticator mint a credential, read from its params alone. */
+function mintsAt(s: PlannedStep, before: World): boolean {
+	const p = s.params as AnyParams
+	const fresh = p.credential !== undefined && Number(p.credential.slice(1)) === before.next.credential
+	switch (s.action) {
+		case "createPasskey":
+		case "onboardingCreate":
+			return fresh
+		case "importPhrase":
+			return p.method === "passkey" && fresh
+		case "importBackup":
+			return p.method === "passkey" && p.variant === "right" && fresh
+		case "changeUnlockMethod":
+			return p.change !== "password" && (p.current === "right" || p.current === "approve")
+		default:
+			return false
+	}
+}
+
+/** The credential a step's `other` must differ from: the profile it unlocks, or the open one. */
+function ownCredential(s: PlannedStep, before: World): string | undefined {
+	const ref = s.action === "unlockPasskey" ? s.params.target : before.session.kind === "open" ? before.session.ref : undefined
+	return before.profiles.find((x) => x.ref === ref)?.credential
 }
 
 /** A break fixture's violations go to the gate's output, so a reader sees each checker fail. */
@@ -184,6 +247,59 @@ describe("the planner", () => {
 	test("Firefox never draws a restart under a held page", () => {
 		for (const seed of SEEDS) {
 			expect(plan(seed, "empty", FIREFOX).steps.map((s) => s.action)).not.toContain("raceRestartDuringUnlock")
+		}
+	})
+
+	test.each([
+		["Chrome", CHROME],
+		["Firefox", FIREFOX],
+		["the network file", NETWORK],
+	])("every passkey choice, method change and account file variant is drawn within 1,000 seeds on %s", (_label, caps) => {
+		const drawn = new Set(SEEDS.flatMap((seed) => withBefore(plan(seed, "empty", caps)).flatMap(([s, w]) => newVariant(s, w) ?? [])))
+		const choices = ["mint", "reuse", "mint:declined", "reuse:declined"]
+		const expected = [
+			"createPasskey:mint",
+			"createPasskey:reuse",
+			"onboardingCreate:mint",
+			"onboardingCreate:reuse",
+			...choices.flatMap((c) => [`importPhrase:${c}`, `importBackup:${c}`]),
+			"changeUnlockMethod:passkey:right",
+			"changeUnlockMethod:passkey:wrong",
+			"changeUnlockMethod:new-passkey:approve",
+			"changeUnlockMethod:new-passkey:refuse",
+			"changeUnlockMethod:password:approve",
+			"changeUnlockMethod:password:refuse",
+			"changeUnlockMethod:password:other",
+			...["approve", "short", "refuse", "other"].map((v) => `exportAccountFile:passkey:${v}`),
+		]
+		expect(expected.filter((v) => !drawn.has(v))).toEqual([])
+	})
+
+	// A credential counted twice, or a mint left out, plans a create the authenticator cannot serve.
+	test.each([
+		["Chrome", CHROME],
+		["Firefox", FIREFOX],
+		["the network file", NETWORK],
+	])("the counter moves by one exactly at a mint, a declined import's included, and stays within the slots on %s", (_label, caps) => {
+		for (const start of ["empty", "pre-update"] as const) {
+			for (const seed of SEEDS) {
+				for (const [s, before] of withBefore(plan(seed, start, caps))) {
+					const moved = s.expect.next.next.credential - before.next.credential
+					expect(moved, `seed ${seed} step ${s.index} ${s.action}`).toBe(mintsAt(s, before) ? 1 : 0)
+					expect(s.expect.next.next.credential - 1).toBeLessThanOrEqual(caps.credentialSlots)
+				}
+			}
+		}
+	})
+
+	test("another credential is always one the authenticator holds and never the target's own", () => {
+		for (const seed of SEEDS) {
+			for (const [s, before] of withBefore(plan(seed, "empty", FIREFOX))) {
+				const other = (s.params as { other?: string }).other
+				if (other === undefined) continue
+				expect(mintedBefore(before, other), `seed ${seed} step ${s.index}`).toBe(true)
+				expect(other, `seed ${seed} step ${s.index}`).not.toBe(ownCredential(s, before))
+			}
 		}
 	})
 })
@@ -286,8 +402,99 @@ describe("a hand-trimmed list", () => {
 			[create, { action: "deleteProfile", params: { via: "forgot" } }],
 			"nothing for forgot",
 		],
+		[
+			"a reuse of a credential the authenticator never held",
+			[passkey, { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K3", double: false } }],
+			"K3 is neither minted nor the next credential",
+		],
+		[
+			"a passkey restore of a file that does not open",
+			[
+				passkey,
+				{ action: "exportBackup", params: { file: "F1", password: "S1" } },
+				{ action: "deleteProfile", params: { via: "settings" } },
+				{ action: "importBackup", params: { file: "F1", variant: "truncated", ref: "P2", method: "passkey", credential: "K1" } },
+			],
+			"the unlock choice shows only once the file opens",
+		],
+		[
+			"a phrase import naming both unlocks",
+			[
+				create,
+				{ action: "revealPhrase", params: { variant: "right" } },
+				{ action: "deleteProfile", params: { via: "settings" } },
+				{
+					action: "importPhrase",
+					params: { ref: "P2", phrase: "W1", name: "x", method: "passkey", credential: "K1", password: "S2" },
+				},
+			],
+			"a passkey unlock takes no password",
+		],
+		[
+			"a change to a password on a password profile",
+			[create, { action: "changeUnlockMethod", params: { change: "password", current: "approve", password: "S2" } }],
+			"password changes no open passkey profile",
+		],
+		[
+			"a change naming the profile's own credential as another",
+			[passkey, { action: "changeUnlockMethod", params: { change: "password", current: "other", password: "S1", other: "K1" } }],
+			"no other minted credential",
+		],
+		[
+			"a new passkey past the authenticator's storage",
+			[
+				passkey,
+				{ ...passkey, params: { ...passkey.params, ref: "P2", credential: "K2" } },
+				{ ...passkey, params: { ...passkey.params, ref: "P3", credential: "K3" } },
+				{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K4" } },
+			],
+			"the authenticator holds no more credentials",
+		],
+		[
+			"a passkey account file with no file password",
+			[passkey, { action: "exportAccountFile", params: { file: "F1", which: { derivedIndex: 0 } } }],
+			"takes a file password",
+		],
+		[
+			"a password account file with a file password",
+			[create, { action: "exportAccountFile", params: { file: "F1", which: { derivedIndex: 0 }, password: "S2" } }],
+			"takes no file password",
+		],
 	])("is refused at %s", (_label, list, message) => {
 		expect(() => planFromList(list as unknown as ListedStep[], "empty", CHROME)).toThrow(message)
+	})
+})
+
+describe("lists recorded before the passkey choice", () => {
+	const create = { action: "createPassword", params: { ref: "P1", name: "x", password: "S1", double: false } }
+
+	test("a phrase import with no method plans a password import", () => {
+		const w = planFromList(
+			[
+				create,
+				{ action: "revealPhrase", params: { variant: "right" } },
+				{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "y", password: "S2", duplicate: "confirm" } },
+			] as ListedStep[],
+			"empty",
+			CHROME,
+		).steps.at(-1)?.expect.next as World
+		expect(w.profiles.find((x) => x.ref === "P2")).toMatchObject({ method: "password", password: "S2", phrase: "W1" })
+		expect(w.next.credential).toBe(1)
+	})
+
+	test("a backup import with no method plans a password restore", () => {
+		const w = planFromList(
+			[
+				create,
+				{ action: "exportBackup", params: { file: "F1" } },
+				{ action: "deleteProfile", params: { via: "settings" } },
+				{ action: "importBackup", params: { file: "F1", variant: "right", ref: "P2", password: "S2" } },
+			] as ListedStep[],
+			"empty",
+			CHROME,
+		).steps.at(-1)?.expect.next as World
+		expect(w.profiles.find((x) => x.ref === "P2")).toMatchObject({ method: "password", password: "S2", phrase: "W1" })
+		expect(w.next.credential).toBe(1)
 	})
 })
 
@@ -418,13 +625,6 @@ describe("the model's clauses", () => {
 		expect(ends("importPhrase", {}, run([create]))).toEqual(["session"])
 	})
 
-	test("the planner mints no more passkey credentials than the authenticator holds", () => {
-		for (const seed of SEEDS.slice(0, 300)) {
-			const minted = plan(seed, "empty", CHROME).steps.filter((s) => s.action === "createPasskey").length
-			expect(minted, `seed ${seed}`).toBeLessThanOrEqual(CHROME.credentialSlots)
-		}
-	})
-
 	test("a race's outcomes share one successor state", () => {
 		const race = run([passkey, { action: "lock", params: {} }, { action: "raceLockDuringUnlock", params: {} }])
 		expect(race.session).toEqual({ kind: "locked" })
@@ -508,6 +708,153 @@ describe("the model's clauses", () => {
 
 	test("the catalog's names are its keys", () => {
 		for (const spec of CATALOG) expect(ACTIONS[spec.name]).toBe(spec)
+	})
+})
+
+describe("the passkey choices", () => {
+	const steps = (list: unknown[], caps = CHROME) => planFromList(list as ListedStep[], "empty", caps).steps
+	const last = (list: unknown[], caps = CHROME) => steps(list, caps).at(-1) as PlannedStep
+	const pw = { action: "createPassword", params: { ref: "P1", name: "x", password: "S1", double: false } }
+	const pk = { action: "createPasskey", params: { ref: "P1", name: "x", credential: "K1", double: false } }
+	const reveal = { action: "revealPhrase", params: { variant: "approve" } }
+	const toPassword = (current: string, other?: string) => ({
+		action: "changeUnlockMethod",
+		params: { change: "password", current, password: "S1", ...(other ? { other } : {}) },
+	})
+
+	test("a reuse takes a minted credential at a fresh profile, minting none", () => {
+		const second = { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K1", double: false } }
+		const step = last([pk, second])
+		expect(step.expect.next.profiles.map((x) => [x.ref, x.credential, x.phrase])).toEqual([
+			["P1", "K1", "W1"],
+			["P2", "K1", "W2"],
+		])
+		expect(step.expect.next.next.credential).toBe(2)
+		expect(step.expect.sources).toContain("code:src/wallet/utils/passkey-ceremony.ts:117")
+	})
+
+	test("a passkey phrase import mints or reuses, and a declined one still keeps its mint", () => {
+		const start = [pk, reveal]
+		const imported = (credential: string, duplicate: "confirm" | "decline") => ({
+			action: "importPhrase",
+			params: { ref: "P2", phrase: "W1", name: "y", method: "passkey", credential, duplicate },
+		})
+		const minted = last([...start, imported("K2", "confirm")])
+		expect(minted.expect.next.profiles.find((x) => x.ref === "P2")).toMatchObject({ method: "passkey", credential: "K2", phrase: "W1" })
+		expect(minted.expect.next.next.credential).toBe(3)
+		const reused = last([...start, imported("K1", "confirm")])
+		expect(reused.expect.next.profiles.find((x) => x.ref === "P2")?.credential).toBe("K1")
+		expect(reused.expect.next.next.credential).toBe(2)
+		const declined = last([...start, imported("K2", "decline")])
+		expect(declined.expect.outcomes).toEqual(["cancelled"])
+		expect(declined.expect.next.profiles.map((x) => x.ref)).toEqual(["P1"])
+		expect(declined.expect.next.next.credential).toBe(3)
+		expect(last([...start, imported("K1", "decline")]).expect.next.next.credential).toBe(2)
+	})
+
+	test("a restore takes the unlock the form chose, whatever its file was made with", () => {
+		const exported = [pw, { action: "exportBackup", params: { file: "F1" } }, { action: "deleteProfile", params: { via: "settings" } }]
+		const restore = { action: "importBackup", params: { file: "F1", variant: "right", ref: "P2", method: "passkey", credential: "K1" } }
+		const step = last([...exported, restore])
+		expect(step.expect.next.profiles.find((x) => x.ref === "P2")).toMatchObject({
+			method: "passkey",
+			credential: "K1",
+			phrase: "W1",
+			derived: 1,
+		})
+		expect(step.expect.next.profiles.find((x) => x.ref === "P2")?.password).toBeUndefined()
+		expect(step.expect.next.next).toMatchObject({ credential: 2, secret: 2 })
+	})
+
+	test("a password profile changes to a passkey only with its password, minting the next credential", () => {
+		const change = (current: string) => ({ action: "changeUnlockMethod", params: { change: "passkey", current, credential: "K1" } })
+		const right = last([pw, change("right")])
+		expect(right.expect.outcomes).toEqual(["committed"])
+		expect(right.expect.writes).toEqual([{ kind: "profile", ref: "P1" }])
+		const p1 = right.expect.next.profiles[0]
+		expect(p1).toMatchObject({ method: "passkey", credential: "K1", phrase: "W1", derived: 1 })
+		expect(p1.password).toBeUndefined()
+		expect(right.expect.next.next.credential).toBe(2)
+		expect(right.expect.next.session).toEqual({ kind: "open", ref: "P1", bearer: false })
+		const before = last([pw]).expect.next
+		expect(last([pw, change("wrong")]).expect).toMatchObject({ outcomes: ["refused"], writes: [], next: before })
+	})
+
+	test("a committed change keeps the session open on its profile, with a bearer only outside strict mode", () => {
+		const newPasskey = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }
+		const strict = last([pk, newPasskey])
+		expect(strict.expect.next.session).toEqual({ kind: "open", ref: "P1", bearer: false })
+		expect(strict.expect.next.profiles[0]).toMatchObject({ method: "passkey", credential: "K2" })
+		expect(strict.expect.next.next.credential).toBe(3)
+		const loose = last([pk, { action: "toggleStrict", params: {} }, newPasskey])
+		expect(loose.expect.next.session).toEqual({ kind: "open", ref: "P1", bearer: true })
+		const toPw = last([pk, { action: "toggleStrict", params: {} }, toPassword("approve")])
+		expect(toPw.expect.next.profiles[0]).toMatchObject({ method: "password", password: "S1", phrase: "W1" })
+		expect(toPw.expect.next.profiles[0].credential).toBeUndefined()
+		expect(toPw.expect.next.session).toEqual({ kind: "open", ref: "P1", bearer: true })
+		expect(toPw.expect.next.next).toMatchObject({ credential: 2, secret: 2 })
+	})
+
+	test("a refused or cancelled change keeps the row, the session and the counter", () => {
+		const two = [pk, { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K2", double: false } }]
+		const before = last(two).expect.next
+		const refuse = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "refuse", credential: "K3" } }
+		expect(last([...two, refuse]).expect).toMatchObject({ outcomes: ["cancelled"], writes: [], next: before })
+		expect(last([...two, toPassword("refuse")]).expect).toMatchObject({ outcomes: ["cancelled"], writes: [], next: before })
+		expect(last([...two, toPassword("other", "K1")]).expect).toMatchObject({ outcomes: ["refused"], writes: [], next: before })
+	})
+
+	test("a replaced credential stays held: it is another credential to the profile that left it", () => {
+		const changed = [pk, { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }]
+		const step = last([...changed, toPassword("other", "K1")])
+		expect(step.expect.outcomes).toEqual(["refused"])
+		expect(() => steps([...changed, toPassword("other", "K2")])).toThrow(/no other minted credential/)
+	})
+
+	test("a lock during the current passkey's prompt ends the session and writes nothing", () => {
+		const step = last([pk, { action: "raceLockDuringMethodChange", params: {} }])
+		expect(step.expect).toMatchObject({ outcomes: ["cancelled"], writes: [], settle: "lock" })
+		expect(step.expect.next.session).toEqual({ kind: "locked" })
+		expect(endsOf({ action: "raceLockDuringMethodChange", params: {} }, step.expect.next)).toEqual(["session"])
+		expect(endsOf({ action: "changeUnlockMethod", params: toPassword("approve").params } as ListedStep, step.expect.next)).toEqual([])
+		expect(() => steps([pw, { action: "raceLockDuringMethodChange", params: {} }])).toThrow(/open passkey profile/)
+	})
+
+	test("a passkey account file opens with its file password; a short one, a refused or another passkey makes none", () => {
+		const file = (variant?: string, other?: string) => ({
+			action: "exportAccountFile",
+			params: {
+				file: "F1",
+				which: { derivedIndex: 0 },
+				password: "S1",
+				...(variant ? { variant } : {}),
+				...(other ? { other } : {}),
+			},
+		})
+		const made = last([pk, file()])
+		expect(made.expect).toMatchObject({ outcomes: ["committed"], writes: [] })
+		expect(made.expect.next.files).toEqual([
+			{
+				ref: "F1",
+				kind: "account",
+				from: "P1",
+				method: "passkey",
+				password: "S1",
+				phrase: "W1",
+				imported: [],
+				derived: 0,
+				account: { derivedIndex: 0 },
+			},
+		])
+		expect(made.expect.next.next).toMatchObject({ file: 2, secret: 2 })
+		const short = last([pk, file("short")])
+		expect(short.expect).toMatchObject({ outcomes: ["refused"], writes: [] })
+		expect(short.expect.next.files).toEqual([])
+		expect(short.expect.next.next.secret).toBe(2)
+		const two = [pk, { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K2", double: false } }]
+		const before = last(two).expect.next
+		expect(last([...two, file("refuse")]).expect).toMatchObject({ outcomes: ["cancelled"], next: before })
+		expect(last([...two, file("other", "K1")]).expect).toMatchObject({ outcomes: ["refused"], next: before })
 	})
 })
 
@@ -677,6 +1024,121 @@ describe("O2, profile rows", () => {
 		r.listed[1].retired = true
 		r.rows[1].fields.push("prfSalt")
 		expect(shown("O2 a retired row given a key only a later row carries", checkProfiles(wr, r, both)).length).toBeGreaterThan(0)
+	})
+
+	describe("a passkey row's credential", () => {
+		const shared = world([pk, { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K1", double: false } }])
+		const K1 = "Y3JlZGVudGlhbC1vbmU="
+		const bound = () => {
+			const both = bind([
+				["P1", P1],
+				["P2", P2],
+			])
+			both.credentials.set("K1", K1)
+			return both
+		}
+		const row = (keyId: string, name: string, credentialId: string) => ({
+			keyId,
+			id: keyId,
+			name,
+			type: "passkey",
+			fields: [...PROFILE_ROW_FIELDS.passkey],
+			credentialId,
+		})
+		const reading = (second = K1): ProfileReading => ({
+			listed: [
+				{ id: P1, name: "Main", type: "passkey", retired: false },
+				{ id: P2, name: "y", type: "passkey", retired: false },
+			],
+			rows: [row(P1, "Main", K1), row(P2, "y", second)],
+		})
+
+		test("passes two rows naming the one credential the model gave both", () => {
+			expect(checkProfiles(shared, reading(), bound())).toEqual([])
+		})
+
+		test("fails a row naming another credential than its binding", () => {
+			const v = shown("O2 a row naming another credential", checkProfiles(shared, reading("b3RoZXI="), bound()))
+			expect(v.map((x) => x.message)).toEqual(["P2's row names another credential than K1"])
+		})
+
+		test("fails a passkey profile whose credential was never bound", () => {
+			const unbound = bind([
+				["P1", P1],
+				["P2", P2],
+			])
+			expect(shown("O2 an unbound credential", checkProfiles(shared, reading(), unbound)).length).toBe(2)
+		})
+	})
+})
+
+describe("the passkey's answers", () => {
+	const minted = [
+		{ kind: "create" as const, credential: "K1" as const },
+		{ kind: "get" as const, credential: "K1" as const, optional: true as const },
+	]
+	const reused = [{ kind: "get" as const, credential: "K1" as const }]
+	const bound = () => {
+		const b = emptyBindings()
+		b.credentials.set("K1", "a2V5LW9uZQ==")
+		return b
+	}
+	const named = { named: 0, prf: true }
+
+	test("a mint binds its credential from the create's answer, with or without the confirming get", () => {
+		const b = emptyBindings()
+		expect(bindCeremonies(b, { answers: [{ kind: "create", id: "bmV3" }], picks: [] }, minted)).toBeUndefined()
+		expect(b.credentials.get("K1")).toBe("bmV3")
+		const confirmed = emptyBindings()
+		const answers = [
+			{ kind: "create" as const, id: "bmV3" },
+			{ kind: "get" as const, id: "bmV3" },
+		]
+		expect(bindCeremonies(confirmed, { answers, picks: [] }, minted)).toBeUndefined()
+	})
+
+	test("a reuse passes on its own credential, picked from a request that named none", () => {
+		expect(bindCeremonies(bound(), { answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [named] }, reused)).toBeUndefined()
+	})
+
+	test.each([
+		["a reuse answered by another credential", { answers: [{ kind: "get", id: "b3RoZXI=" }], picks: [named] }, reused, bound()],
+		[
+			"a discovery the wallet narrowed itself",
+			{ answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [{ named: 1, prf: true }] },
+			reused,
+			bound(),
+		],
+		[
+			"a discovery asking no PRF output",
+			{ answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [{ named: 0, prf: false }] },
+			reused,
+			bound(),
+		],
+		["a mint that made no create", { answers: [], picks: [] }, minted, emptyBindings()],
+		[
+			"a mint answered with a credential already bound",
+			{ answers: [{ kind: "create", id: "a2V5LW9uZQ==" }], picks: [] },
+			[{ kind: "create", credential: "K2" }],
+			bound(),
+		],
+		[
+			"a second create past the step's one",
+			{
+				answers: [
+					{ kind: "create", id: "bmV3" },
+					{ kind: "create", id: "bmV4" },
+				],
+				picks: [],
+			},
+			minted,
+			emptyBindings(),
+		],
+		["a get for a credential no create minted", { answers: [{ kind: "get", id: "bmV3" }], picks: [] }, reused, emptyBindings()],
+	] as const)("fails %s", (label, seen, expected, b) => {
+		const wrong = bindCeremonies(b, seen as never, expected as never)
+		console.log(`[break] answers ${label}: ${wrong ?? "<none>"}`)
+		expect(wrong).toBeDefined()
 	})
 })
 
@@ -1021,6 +1483,15 @@ describe("O4, errors", () => {
 		expect(shown("O4 a retry line from another logger", otherLogger)[0]?.known).toBeUndefined()
 		const answered = checkErrors([retried("foundation:retry", "Error: 500 Internal Server Error")], []).violations
 		expect(shown("O4 a retry the node answered", answered)[0]?.known).toBeUndefined()
+		const methodFailed = (message: string) => ({
+			kind: "log" as const,
+			level: "error" as const,
+			source: "ui",
+			text: `["[unlock-method] change failed",{"error":{"name":"Error","message":"${message}"}}]`,
+		})
+		expect(checkErrors([methodFailed("Passkey did not open this profile")], []).violations[0]?.known).toBe(1178)
+		const otherFailure = checkErrors([methodFailed("The new password needs at least 8 characters")], []).violations
+		expect(shown("O4 a method change failing for another reason", otherFailure)[0]?.known).toBeUndefined()
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {
@@ -1271,6 +1742,71 @@ describe("O6, a restore of a deleted profile's backup", () => {
 	test("fails a restore deriving another wallet's accounts", () => {
 		const v = checkVerify(w, [reading("P2", ["0xb1"]), reading("P3", ["0xf9"])], b)
 		expect(shown("O6 a restore deriving another wallet than its deleted source", v).length).toBeGreaterThan(0)
+	})
+})
+
+describe("O6, profiles sharing a passkey and a passkey profile's imports", () => {
+	const w = world([
+		pw,
+		{ action: "exportAccountFile", params: { file: "F1", which: { derivedIndex: 0 } } },
+		{ action: "createPasskey", params: { ref: "P2", name: "y", credential: "K1", double: false } },
+		{ action: "importAccountFile", params: { file: "F1" } },
+		{ action: "createPasskey", params: { ref: "P3", name: "z", credential: "K1", double: false } },
+	])
+	const b = bind([
+		["P1", P1],
+		["P2", P2],
+		["P3", "cccc3333"],
+	])
+	b.addresses.set("P1", on(["0xa1"]))
+	b.addresses.set("P2", on(["0xb1"]))
+	b.addresses.set("P3", on(["0xc1"]))
+	const reading = (ref: "P1" | "P2" | "P3", over: object = {}) => ({
+		ref,
+		wrongRefused: true,
+		wrongWrote: [],
+		opened: true,
+		addresses: [{ P1: "0xa1", P2: "0xb1", P3: "0xc1" }[ref]],
+		chainId: CHAIN,
+		sentinels: ref === "P2" ? [{ file: "F1", now: "k1", imported: "k1" }] : [],
+		...over,
+	})
+
+	test("passes two profiles on one passkey deriving their own phrases' accounts, and a passkey profile's re-export", () => {
+		expect(w.profiles.filter((x) => x.credential === "K1").map((x) => x.ref)).toEqual(["P2", "P3"])
+		expect(checkVerify(w, [reading("P1"), reading("P2"), reading("P3")], b)).toEqual([])
+	})
+
+	test.each([
+		[
+			"a passkey profile's imported account missing from its re-export",
+			[reading("P1"), reading("P2", { sentinels: [] }), reading("P3")],
+		],
+		[
+			"a passkey profile's imported account re-exporting another key",
+			[reading("P1"), reading("P2", { sentinels: [{ file: "F1", now: "k2", imported: "k1" }] }), reading("P3")],
+		],
+	] as const)("fails %s", (label, readings) => {
+		expect(shown(`O6 ${label}`, checkVerify(w, readings as never, b)).length).toBeGreaterThan(0)
+	})
+
+	test("fails two profiles on one passkey deriving one account, each as first read", () => {
+		const keyed = bind([
+			["P1", P1],
+			["P2", P2],
+			["P3", "cccc3333"],
+		])
+		keyed.addresses.set("P1", on(["0xa1"]))
+		keyed.addresses.set("P2", on(["0xb1"]))
+		keyed.addresses.set("P3", on(["0xb1"]))
+		const found = shown(
+			"O6 two profiles on one passkey deriving one account",
+			checkVerify(w, [reading("P1"), reading("P2"), reading("P3", { addresses: ["0xb1"] })], keyed),
+		)
+		expect(found.map((v) => v.message)).toEqual([
+			`P2 and P3 hold different phrases but both derive 0xb1 on chain ${CHAIN}`,
+			`P3 and P2 hold different phrases but both derive 0xb1 on chain ${CHAIN}`,
+		])
 	})
 })
 

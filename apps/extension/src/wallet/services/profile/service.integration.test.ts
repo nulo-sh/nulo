@@ -3318,6 +3318,18 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			expect(dup.id).toBeDefined()
 		})
 
+		test("(g) a third import of one phrase names both profiles already on it", async () => {
+			const { service } = await makeService()
+			const words = await wordsForFill(0x32)
+			await service.importMnemonic("Savings", words, "pass1234")
+			await service.importMnemonic("Main", words, "pass1234", true)
+			await service.importMnemonic("Other", await wordsForFill(0x33), "pass1234")
+			const refused = await service.importMnemonic("Third", words, "pass1234").catch((err: unknown) => err)
+			expect(refused).toBeInstanceOf(DuplicateWalletError)
+			const names = ((refused as DuplicateWalletError).details as { existingProfileNames?: string[] }).existingProfileNames
+			expect([...(names ?? [])].sort()).toEqual(["Main", "Savings"])
+		})
+
 		// (h) clone divergence: a fresh destination dek — B cannot equal A's session dek.
 		test("(h) restoring a backup mints a FRESH dek (clone divergence — differs from the source)", async () => {
 			const { service } = await makeService()

@@ -229,6 +229,7 @@
     "ProfileRestoreClient": true,
     "ProjectedArgument": true,
     "PropType": true,
+    "RECOVERY_PHRASE_AUTO_CLOSE_MS": true,
     "RECOVERY_PHRASE_WARNINGS": true,
     "RESTORE_OUTCOME_LEASE_MS": true,
     "RESTORE_OUTCOME_ROOT": true,

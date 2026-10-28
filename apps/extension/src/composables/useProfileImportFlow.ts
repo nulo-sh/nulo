@@ -3,7 +3,6 @@ import { computed, type Ref, readonly, ref, watch } from "vue"
 import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
 import type { ToastOptions } from "@/composables/toast"
 import { useConfirm } from "@/composables/useConfirm"
-import { usePopupStore } from "@/stores/popup.store"
 import { type RestoreErrorNetworks, useFullBackupImport } from "@/composables/useFullBackupImport"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
@@ -15,6 +14,7 @@ import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo
 import { zeroize } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
 import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
+import { stringCompare } from "@/utils/string"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -91,10 +91,28 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 	return { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput }
 }
 
+/** The profiles a `DuplicateWalletError` names, A to Z as the chooser lists them. Its wire details
+ *  are unvalidated. */
+function duplicateNames(details: unknown): string[] {
+	const names = (details as { existingProfileNames?: unknown } | undefined)?.existingProfileNames
+	return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string").sort(stringCompare) : []
+}
+
+function duplicateDescription(names: readonly string[]): string {
+	const quoted = names.map((name) => `“${name}”`)
+	if (quoted.length === 0) {
+		return "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?"
+	}
+	if (quoted.length === 1) {
+		return `${quoted[0]} already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+	}
+	const list = `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`
+	return `${list} already use this recovery phrase. All of these profiles will hold the same accounts and funds. Add it anyway?`
+}
+
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
-	const popupStore = usePopupStore()
-	const { requestConfirm } = useConfirm()
+	const { askConfirm } = useConfirm()
 	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
 	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
 	const allowDuplicate = ref(false)
@@ -110,31 +128,10 @@ function useDuplicateConfirm() {
 			return await run()
 		} catch (err) {
 			if (!(err instanceof DuplicateWalletError)) throw err
-			const existing = (err.details as { existingProfileName?: string } | undefined)?.existingProfileName
-			const confirmed = await new Promise<boolean>((resolve) => {
-				let settled = false
-				const settle = (value: boolean) => {
-					if (settled) return
-					settled = true
-					stop()
-					resolve(value)
-				}
-				// A close without the callback is the dialog's only cancel signal; a confirm closes it
-				// too, after `settle(true)`, which `settled` keeps final.
-				const stop = watch(
-					() => popupStore.isOpened("confirm"),
-					(isOpen, wasOpen) => {
-						if (wasOpen && !isOpen) settle(false)
-					},
-				)
-				requestConfirm({
-					title: "You already have this wallet",
-					description: existing
-						? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-						: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
-					confirm_text: "Add anyway",
-					callback: () => settle(true),
-				})
+			const confirmed = await askConfirm({
+				title: "You already have this wallet",
+				description: duplicateDescription(duplicateNames(err.details)),
+				confirm_text: "Add anyway",
 			})
 			if (!confirmed) return undefined
 			allowDuplicate.value = true

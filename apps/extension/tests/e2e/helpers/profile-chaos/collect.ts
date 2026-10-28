@@ -236,6 +236,7 @@ export async function readProfiles(page: Page): Promise<ProfileReading> {
 					name: String(row.name),
 					type: String(row.type),
 					fields: Object.keys(row),
+					...(typeof row.credentialId === "string" ? { credentialId: row.credentialId } : {}),
 				}
 			})
 	})
