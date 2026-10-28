@@ -14,6 +14,7 @@ import { canonicalizeMnemonic, errorMessageFromUnknown, getEntropy } from "@nulo
 import { zeroize } from "@nulo/wallet-crypto"
 import { isNewPasswordValid } from "@/utils/password"
 import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
+import { stringCompare } from "@/utils/string"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -90,6 +91,25 @@ export function useImportErrorState(openToast: UseProfileImportFlowOptions["open
 	return { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput }
 }
 
+/** The profiles a `DuplicateWalletError` names, A to Z as the chooser lists them. Its wire details
+ *  are unvalidated. */
+function duplicateNames(details: unknown): string[] {
+	const names = (details as { existingProfileNames?: unknown } | undefined)?.existingProfileNames
+	return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string").sort(stringCompare) : []
+}
+
+function duplicateDescription(names: readonly string[]): string {
+	const quoted = names.map((name) => `“${name}”`)
+	if (quoted.length === 0) {
+		return "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?"
+	}
+	if (quoted.length === 1) {
+		return `${quoted[0]} already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+	}
+	const list = `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`
+	return `${list} already use this recovery phrase. All of these profiles will hold the same accounts and funds. Add it anyway?`
+}
+
 /** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
 function useDuplicateConfirm() {
 	const { askConfirm } = useConfirm()
@@ -108,12 +128,9 @@ function useDuplicateConfirm() {
 			return await run()
 		} catch (err) {
 			if (!(err instanceof DuplicateWalletError)) throw err
-			const existing = (err.details as { existingProfileName?: string } | undefined)?.existingProfileName
 			const confirmed = await askConfirm({
 				title: "You already have this wallet",
-				description: existing
-					? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
-					: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?",
+				description: duplicateDescription(duplicateNames(err.details)),
 				confirm_text: "Add anyway",
 			})
 			if (!confirmed) return undefined
