@@ -710,6 +710,25 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(appStore.profile?.id).toBe("pA")
 	})
 
+	test("a pick of the selected profile heard before a settle began does not stop it", async () => {
+		let fail!: () => void
+		unlockProfile.mockReturnValueOnce(new Promise((_resolve, reject) => (fail = () => reject(new Error("refused")))))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+
+		elsewhere.pick("pB")
+		elsewhere.pick("pA")
+		// The replayed settle reads a newer write whose event is still on its way.
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pC")
+		fail()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pC")
+	})
+
 	test("a stale pick naming a deleted selection does not stop the settle that follows the deletion", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A

@@ -247,15 +247,15 @@ const handleUnlockWallet = async () => {
 /** Selects the profile this screen opens on (`lockScreenProfile`); with no last active profile in
  *  the list, a selection the list still holds stays. The lookup waits for the service, so it can
  *  outlast this page or lose to an activation: a profile selected or opened meanwhile stands, as in
- *  the route guard, and so does a listed selection that another window's pick heard meanwhile names,
- *  as that pick is newer than the pointer read here. */
+ *  the route guard. So does a listed selection that the last pick heard during the reads names: that
+ *  pick may be newer than the pointer they read, and a newer write still sends its own event. */
 const settleProfile = async () => {
 	const selectedAtStart = appStore.profile?.id
 	const followsAtStart = follows
 	const lastActiveProfileId = await getLastActiveProfileId().catch(() => undefined)
 	const profiles = await managers.profile.getProfiles().catch(() => undefined)
 	if (!profiles || isUnmounted || appStore.isLogined || appStore.profile?.id !== selectedAtStart || heldBack()) return
-	if (follows !== followsAtStart && heard === selectedAtStart && profiles.some((p) => p.id === heard)) return
+	if (follows !== followsAtStart && lastHeard === selectedAtStart && profiles.some((p) => p.id === lastHeard)) return
 	if (!profiles.some((p) => p.id === lastActiveProfileId) && profiles.some((p) => p.id === selectedAtStart)) return
 	const profile = lockScreenProfile(profiles, lastActiveProfileId)
 	appStore.profile = profile
@@ -280,11 +280,11 @@ const heldBack = () => {
  *  A selection made here during the lookup stands, unless it is still the screen's automatic one
  *  (`settled`), whose storage read may have answered the pointer this pick replaced. */
 let follows = 0
-let heard
+let lastHeard
 let settled
 const followPick = async (id) => {
 	const follow = ++follows
-	heard = id
+	lastHeard = id
 	const selectedAtStart = appStore.profile?.id
 	if (!id || id === selectedAtStart || appStore.isLogined || heldBack()) return
 	const profile = (await managers.profile.getProfiles().catch(() => undefined))?.find((p) => p.id === id)
