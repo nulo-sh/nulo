@@ -9,16 +9,40 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 17f35c504
 trunk: dev
-status: approved (final Codex pass, 2026-10-27); arc 1 implementing
+status: completed; arc 1 delivered as #1301 with this close-out; arc 2 dropped (D13)
 issues: "#1157 (arc 1, its first phase), #1189 (arc 2's record)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed with arc 1, delivered as a stack on `dev`: #1301 (arc 1) and this close-out, awaiting the merge. Arc 2 dropped.
+- Shipped: #1301, part of #1157. The seeded profile chaos model now drives:
+  - a passkey chosen at phrase import and at restore, minted or reused, with a declined import counted;
+  - one passkey for several profiles;
+  - Settings → Unlock method every way, and a lock racing its prompt;
+  - a passkey profile's account file, with its re-export in `verifyAll`.
+
+  Every credential is bound from the authenticator's own answer, and each step's ceremonies are checked as a sequence. O2 checks a row's credential; O6 checks that different phrases derive different accounts. The launcher's `do` runs the seeded prologue and drains each command's answers. No product file changed.
+- Campaign (§ Campaign): at retry 0, 80 seeds and 2,000 steps on Chrome and Firefox (smoke 30, `pre-update` 5, network 5 per browser). No red on an unfiled finding and no new product finding; one harness red fixed (lessons/phase-1.md § 1.3). A smoke seed takes 54 s on Chrome and 76 s on Firefox, against 48 s and 70 s before. CI suites are unchanged: the chaos files skip unarmed.
+- Dropped: arc 2 (D13). It was a re-check wave on arc 1's head, not an acceptance gate (§ What did not hold). The owner's 2026-10-26 decision on #1189 counted wave 2 as the full-size wave and accepted the owner's own manual Testnet pass, and #1189 closed on 2026-10-27. The orchestrator dropped the wave as not worth its cost (12 agent-hours, a host-wide event). Its launcher fixes (F10, phase 2.1) are known limit #1306; [CHARTERS.md](CHARTERS.md) stays as the wave's record.
+- Did not hold: #1157's "passkey profiles under strict mode", already modelled; #1189's need for another wave (§ What did not hold).
+- Lessons: none promoted.
+  - `lessons.md` holds 8183 of its 8192 bytes, and the pruning pass found no superseded entry; its version-tied entries still hold (Vue 3.5.42, Vue Test Utils 2.4.11, Bun 1.4.2).
+  - The virtual-authenticator entry already covers arming a capture just before the press that triggers it (Firefox smoke 7008).
+  - The one new candidate stays in [lessons/phase-1.md](lessons/phase-1.md): a step's evidence starts at its own prologue, since a toast or a captured answer an earlier step left reads as the next one's.
+- Known limits: #1306.
+- Open items:
+  - #1157: phase 2 (the in-process sequence test) and its scenario list beyond the two arc 1 covers; commented, stays open.
+  - #1178: stays open; #1301's `KNOWN_FINDINGS` entry for it goes with its fix, #1302, in whichever of the two merges second; commented.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # chaos-3: the profile chaos model's passkey flows, then the fleet wave
 
 A test-only lane. Arc 1 teaches the seeded profile chaos model the flows the passkey change's third arc added: the unlock choice after a phrase import or a restore, the Unlock method page every way, one passkey for several profiles, and a passkey profile's account file. Arc 2 plans a fleet wave of agents and runs only on the orchestrator's resume. The Testnet pass is the owner's: its checklist lives on #1189, and nothing in this lane touches Testnet or a funded account.
 
-Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Arc 2's charters: [CHARTERS.md](CHARTERS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/` unless they start with `implementations-plan/` or `.claude/`; `E/` is `tests/e2e/`, `PC/` is `tests/e2e/helpers/profile-chaos/`.
+Recon: [recon.md](recon.md). Arc 2's charters: [CHARTERS.md](CHARTERS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are relative to `apps/extension/` unless they start with `implementations-plan/` or `.claude/`; `E/` is `tests/e2e/`, `PC/` is `tests/e2e/helpers/profile-chaos/`.
 
 ## What did not hold
 
@@ -55,7 +79,7 @@ Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Arc 2's chart
 - I2. In an extension tab, the import, restore, account file and Unlock method pages run their passkey card in the page on both browsers (1.2): they move to their own window only where the surface closes on focus loss (`unlock-method.vue:255`).
 - I3. The new actions add no error line beyond #1178's; any other is a finding (1.3).
 
-**Asks:** none for the owner (no surface changes). For the orchestrator (OWNER-ASKS.md): whether #1189 closes now by the owner's decision, and whether arc 2 runs (D13); whether #1178's fix lands before 1.3 (D10); arc 1 changes what the launcher's `do` draws.
+**Asks:** none for the owner (no surface changes). The orchestrator's are answered: #1189 closed on 2026-10-27; arc 2 dropped (D13); #1178's fix did not land first, so arc 1 carries its entry (D10); the launcher's `do` draws the new catalog.
 
 ## Decision ledger
 
@@ -75,7 +99,7 @@ The owner: "Please, do test a LOT this." (#1127). The orchestrator's lane brief 
 | D10 | `KNOWN_FINDINGS` gets each #1178 error line a run meets, its pattern exact. Of the drawn variants only Unlock method's `other` answer reaches one (`unlock-method.vue:173`, after `service.ts:501-502`); a wrong password, a refused prompt and the account file's refusals at Confirm log none. If #1178's fix merges first, no entry | lower weights for the refusals; an allowlist entry; entries for lines no run meets | the archived D26: a filed finding the runs keep meeting stays red and named, never green (Opus 6) |
 | D11 | Seeds 7001 to 7030 (smoke), 7101 to 7105 (`pre-update`), 7201 to 7205 (network) | reusing the campaign's 5001+ | the catalog change redraws every seed; new numbers keep the archived tables true |
 | D12 | Arc 1's PR says "Part of #1157"; the close-out comments on #1157 with what shipped and that phase 2 and the scenario list stay | closing #1157 and filing phase 2 anew | the common brief: an issue whose fix is left out gets a comment and stays open; no twin |
-| D13 | Arc 2 is planned in full and runs only on the orchestrator's resume. It is a re-check wave on arc 1's head after the S3 fixes, not #1189's acceptance (§ What did not hold) | running it now; dropping it | the lane brief; its cost (12 agent-hours, a host-wide event) is the orchestrator's call |
+| D13 | Arc 2 is planned in full and runs only on the orchestrator's resume. **Dropped** by the orchestrator on 2026-10-28 (Outcome). It is a re-check wave on arc 1's head after the S3 fixes, not #1189's acceptance (§ What did not hold) | running it now; dropping it | the lane brief; its cost (12 agent-hours, a host-wide event) is the orchestrator's call |
 | D14 | Accessibility: none; no product file changes. A driver that needs a missing testid adds it, which is not a UI change | | CLAUDE.md § testid preservation |
 | D15 | CH6 leaves the fleet: a session starts from `empty` (`E/helpers/chaos-session/serve.ts:653`), so no agent can reach a profile made before the update; the `pre-update` seeds cover it | a `pre-update` session start | a start with its own replay contract is a launcher feature for one charter (Codex 7) |
 | D16 | The launcher's `do` runs the prologue a seeded step runs before its driver (`beforeDriver` in `PC/drivers.ts`, called by `PC/run.ts` and `E/helpers/chaos-session/serve.ts`): stale notices dismissed, the capture installed | a dismissal and a capture in each driver; leaving `do` as it was | found by 1.2's launcher check: a refused `do unlockPasskey` left its toast, and the next `do`'s settle read it as its own refusal while the wallet opened (O1 red); one prologue for both callers keeps them equal |
@@ -127,7 +151,7 @@ Gate: fast layers; the model test; `NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=7001 NU
 **1.3 ✓ The seeded runs and the docs.** Rewrite README § Passkey profiles for the new flows (what is modelled, D1's narrowing, the slots). Run the campaign at retry 0: smoke 7001 to 7030 per browser (three parallel `seeded` batches of ten per browser, `bun apps/extension/scripts/e2e/chaos-session.ts seeded --browser <b> --seed <first> --runs 10`), `pre-update` 7101 to 7105 per browser (`NULO_E2E_UPDATE_FROM=v0.31.0`, the candidate built from the committed head), network 7201 to 7205 per browser (`NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=7201 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/profile-chaos.test.ts` from the repository root, one at a time, the smoke dist rebuilt after). Triage every red by CHARTERS.md § Triage, class first; file each product finding with its seed and step; fix every harness red and rerun its seed.
 Gate: fast layers; every seed green, or red only on filed findings, or incomplete only for a planned restart's log window; the table (seed, outcome, time, coverage, findings met) in this plan; each new action's per-seed time measured.
 
-**Arc 2 (the fleet wave; on the orchestrator's resume only).**
+**Arc 2 (the fleet wave; dropped, D13).**
 
 **2.1 ✗ Launcher fixes and the brief.** Fix F10's four defects in `scripts/e2e/chaos-session.ts` and `E/helpers/chaos-session/`: refuse a capture of a Chrome page without focus as a refusal the session survives; answer every discovery that no `passkey other` narrowed at once with an `incomplete` line, on both browsers; the same for a create on a full Chrome authenticator and a ceremony on a non-anchor Chrome page. Check CHARTERS.md's brief, which carries wave 2's traps, against the fixed behaviour.
 Gate: fast layers; the launcher's unit tests with one case per fix and a success control; one 10-minute session per browser replays to the same end.
@@ -173,6 +197,7 @@ Each finding was checked against the tree before its disposition; detail in less
 - **Arc 1, Codex round 1** (over `17f35c504..4d089cf89`): reject; 4 findings, all accepted. The launcher's `do` never drained the capture, so an earlier command's answer failed a later `do` and its PRF outputs missed the leak scan: `check()` drains every page first. O6 had no clause that different phrases derive different accounts, which a wallet keying accounts by a shared credential breaks: `checkStrangers`, with a break fixture. The passkey account file and its re-export checked no answer: `fileCeremonies`, and the re-export drains the unlock first. Three comments that restated their line went, and a stale one was corrected.
 - **Arc 1, Opus round 1:** conditional approve; 7 findings. Four match Codex's. Accepted besides: `changeUnlockMethod` checked its answers on an outcome the model forbids, so a wallet error read as the driver's (now `checkAnswers`, moved beside `answeredCredentials`); `verifyAll` tried only the newest other credential, never a replaced one, against D8's reason (now it tries every one, dismissing the last refusal's toast first); the page's order (password checked, then a passkey made) is cited; `PASSKEY_REFUSAL` is defined once; the counter comment is corrected; `pickDiscovered` states that it stays armed; § Campaign no longer lists a variant D4 never draws. Rejected: none.
 - **Arc 1, Codex round 2** (over `4d089cf89..5c94644f4`): approve, no new material finding; every fix verified, 91 citations hold. One comment nit accepted (a doc that restated `otherRefused`).
+- **Cross-arc pass:** not run. With arc 2 dropped the plan is single-arc, so arc 1's loop (Codex round 1 reject, Opus round 1, Codex round 2 approve) ran over the whole diff from `17f35c504`.
 - **Outline B** (cheapest-first: one action per path, credentials from the row, a reuse only with one credential held, the in-process test as a phase): rejected by both audits and here: it binds by the write under test, never meets a reuse among several credentials, duplicates four drivers, and its in-process phase is outside the lane (D12).
 
 ## Campaign
@@ -305,7 +330,7 @@ The seeds did not meet an onboarding reuse, a change to password refused on Fire
 | 7204 | red-filed | 61 s | 25/25 | `families[create=3 account=1 method=3 backup=4 lock=2 unlock=2 window=2 strict=1 phrase=4 edit=1 dapp=1 verify=1]` | #1136 |
 | 7205 | red-filed | 100 s | 25/25 | `families[restart=3 backup=3 create=6 method=1 phrase=3 window=2 unlock=2 account=1 delete=2 dapp=1 verify=1]` | #1131, #1136 |
 
-## Seeds (draft; finalized after approval)
+## Seeds (retired)
 
 ```
 /goal Arc <N> of implementations-plan/chaos-3/plan.md is done: every phase of the arc marked ✓ with its validation gate reported passing in the transcript, LESSONS_FILE=implementations-plan/chaos-3/lessons/phase-<N>.md printed, the Codex loop converged (a resumed pass with no new material point quoted), the arc's PR open against its base with its checks green, `bun run test` and `bun run lint` exit 0.
