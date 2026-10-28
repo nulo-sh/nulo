@@ -7,3 +7,19 @@
 - **`otherCredentials` changed meaning (D8):** every minted credential but the target's own. The unlock, reveal and account-file `other` variants now also draw a replaced or a declined credential.
 - **verifyAll's passkey re-export** protects the re-exported file under the imported file's own password, not a fresh one: that password is already a needle and opens the original, so no new run state is needed. The property checked is unchanged (the re-export carries the imported signing key).
 - **Gate ordering.** `typecheck:all` covers the drivers, so the 1.1 gate ran once 1.2's drivers compiled; the model test (30/30) does not import them.
+
+## 1.2, drivers, collectors, checkers
+
+- **I1 holds** on Firefox: a discovery narrowed to one credential (`pickDiscovered`) answers at once with three credentials held (list a), and the answer's `rawId` is the planned credential's. **I2 holds**: the import, restore, account file and Unlock method pages ran their passkey card in the anchor tab on both browsers.
+- **Seven hand lists** under `~/.cache/nulo-backlog/chaos-3/lists/`, each run at retry 0 on both browsers on the final 1.2 code:
+  - (a) three passkey profiles, a phrase import reusing the second's credential, `verifyAll`: green on both.
+  - (b) a passkey phrase import declined at the duplicate warning (its mint kept), creates up to the three slots, one reusing the declined import's credential, a refused unlock by another credential: green on both.
+  - (c) an account file imported into a password profile, a change to a passkey, `verifyAll`'s passkey re-export: green on both.
+  - (d) strict off, a passkey to new passkey change, a restart, the replaced credential refused, the new one opening: incomplete on both, only the planned restart's log window.
+  - (e) every `changeUnlockMethod` variant and the race: red on both, only #1178's Unlock method line (`known[#1178=1]`), as D10 predicted.
+  - (f) every passkey account file variant, the file imported into a password profile: green on both.
+  - (g), added because (a)-(f) left two variants undriven: onboarding's reuse after every profile was deleted, a passkey restore minting and one reusing (with a duplicate confirmed), a passkey phrase import minting: green on both.
+- **The launcher's `do` lacked the seeded step's prologue (D16).** The launcher check's first Chrome session went red: `do unlockPasskey` with another credential left its refusal toast, and the next `do unlockPasskey` settled on it at once, reported `refused`, and the wallet opened behind it (O1: "open, but p0 shows /popup/auth"). Seeded runs never met it: `runOne` dismisses notices first. Fixed by one prologue, `beforeDriver`, for both callers; the per-driver capture installs became redundant and went. Rerun: both browsers, every command dispatched, outcomes as named (refused, then committed), no finding, no incomplete line.
+- **`changeUnlockMethod`'s param is `change`, not `to`:** the launcher's `do` validates a `to` as a profile symbol and would refuse `new-passkey`.
+- **The answer-sequence check is pure** (`bindCeremonies` in `checkers.ts`) so the model test breaks it: another credential, a discovery the wallet narrowed itself or without PRF input, a missing create, a create on a bound id, an extra create, a get on an unminted credential.
+- **Gate.** Model test 249 green; `scripts/e2e/chaos-session.test.ts` and `chaos-seed.test.ts` green; seeds 7001-7003: Chrome red (7001, 7003) only on #1131 and incomplete (7002) only at its planned restart, Firefox green (7001) and red (7002, 7003) only on #1131; `account-import-export.test.ts` and `backup-imported-account.test.ts` green on Chrome.

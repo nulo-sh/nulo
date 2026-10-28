@@ -234,12 +234,13 @@ export interface ParamsMap {
 	/** A passkey reveal held at its prompt while another window locks. */
 	raceLockDuringReveal: Record<string, never>
 	/**
-	 * Settings → Unlock method. `passkey` (from a password, `current` right or wrong) and
-	 * `new-passkey` (from a passkey, `current` approve or refuse) mint `credential`; `password` (from a
-	 * passkey, `current` approve, refuse or `other`) sets `password`. Every new passkey's prompt approves.
+	 * Settings → Unlock method. A change to `passkey` (from a password, `current` right or wrong) or to
+	 * a `new-passkey` (from a passkey, `current` approve or refuse) mints `credential`; one to `password`
+	 * (from a passkey, `current` approve, refuse or `other`) sets `password`. Every new passkey's prompt
+	 * approves. Not `to`, which the agent session reads as a profile.
 	 */
 	changeUnlockMethod: {
-		to: "passkey" | "new-passkey" | "password"
+		change: "passkey" | "new-passkey" | "password"
 		current: "right" | "wrong" | "approve" | "refuse" | "other"
 		credential?: CredentialRef
 		password?: SecretRef
@@ -1461,8 +1462,8 @@ const raceLockDuringReveal: ActionSpec<"raceLockDuringReveal"> = {
 
 type MethodChange = ParamsMap["changeUnlockMethod"]
 
-const CHANGES_FROM: Record<MethodChange["to"], Method> = { passkey: "password", "new-passkey": "passkey", password: "passkey" }
-const CURRENT_ANSWERS: Record<MethodChange["to"], readonly MethodChange["current"][]> = {
+const CHANGES_FROM: Record<MethodChange["change"], Method> = { passkey: "password", "new-passkey": "passkey", password: "passkey" }
+const CURRENT_ANSWERS: Record<MethodChange["change"], readonly MethodChange["current"][]> = {
 	passkey: ["right", "wrong"],
 	"new-passkey": ["approve", "refuse"],
 	password: ["approve", "refuse", "other"],
@@ -1470,7 +1471,7 @@ const CURRENT_ANSWERS: Record<MethodChange["to"], readonly MethodChange["current
 
 /** The page checks the current unlock before it asks anything new, so only a change whose current
  *  unlock opens the profile reaches the new passkey's prompt. */
-const changeMints = (p: MethodChange): boolean => p.to !== "password" && (p.current === "right" || p.current === "approve")
+const changeMints = (p: MethodChange): boolean => p.change !== "password" && (p.current === "right" || p.current === "approve")
 
 /** The fields a change names beside its current answer: the next credential for a passkey, a fresh
  *  password for a password, another minted credential for `other`. */
@@ -1479,7 +1480,7 @@ function changeFieldsInvalid(w: World, open: ModelProfile, p: MethodChange, caps
 		const why = otherInvalid(w, open.ref, "other", p.other)
 		if (why) return why
 	} else if (p.other) return "only `other` names a credential"
-	if (p.to === "password") {
+	if (p.change === "password") {
 		if (p.credential) return "a change to a password takes no credential"
 		return p.password ? freshRefs(w, { secret: p.password }) : "a change to a password takes one"
 	}
@@ -1496,8 +1497,8 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 	weight: 3,
 	invalid: (w, p, caps) => {
 		const open = openProfile(w)
-		if (open?.method !== CHANGES_FROM[p.to]) return `${p.to} changes no open ${CHANGES_FROM[p.to]} profile`
-		if (!CURRENT_ANSWERS[p.to].includes(p.current)) return `${p.current} answers no change to ${p.to}`
+		if (open?.method !== CHANGES_FROM[p.change]) return `${p.change} changes no open ${CHANGES_FROM[p.change]} profile`
+		if (!CURRENT_ANSWERS[p.change].includes(p.current)) return `${p.current} answers no change to ${p.change}`
 		return changeFieldsInvalid(w, open, p, caps)
 	},
 	params: (rng, w, caps) => {
@@ -1506,10 +1507,10 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 		const r = reserve(w)
 		if (open.method === "password")
 			return canMint(w, caps)
-				? { to: "passkey", current: chance(rng, 0.25) ? "wrong" : "right", credential: r.credential() }
+				? { change: "passkey", current: chance(rng, 0.25) ? "wrong" : "right", credential: r.credential() }
 				: undefined
 		if (canMint(w, caps) && chance(rng, 0.4))
-			return { to: "new-passkey", current: chance(rng, 0.25) ? "refuse" : "approve", credential: r.credential() }
+			return { change: "new-passkey", current: chance(rng, 0.25) ? "refuse" : "approve", credential: r.credential() }
 		const other = pick(rng, otherCredentials(w, open.ref))
 		const current = pick(rng, [
 			"approve",
@@ -1518,26 +1519,26 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 			...(other ? (["other"] as const) : []),
 		] as const) as MethodChange["current"]
 		return current === "other"
-			? { to: "password", current, password: r.secret(), other }
-			: { to: "password", current, password: r.secret() }
+			? { change: "password", current, password: r.secret(), other }
+			: { change: "password", current, password: r.secret() }
 	},
 	expect: (w, p) => {
 		if (p.current === "wrong") return unchanged(w, "refused", [METHOD_VERIFY_REFUSES, METHOD_WRONG_PASSWORD])
-		const checks = p.to === "new-passkey" ? METHOD_CHECKS_PASSKEY : METHOD_CHECKS_HELD
+		const checks = p.change === "new-passkey" ? METHOD_CHECKS_PASSKEY : METHOD_CHECKS_HELD
 		if (p.current === "refuse") return unchanged(w, "cancelled", [checks, METHOD_CANCEL, PROMPT_DISMISSED])
 		if (p.current === "other") return unchanged(w, "refused", [checks, SLOTS_BIND_PASSKEY, METHOD_VERIFY_REFUSES])
 		const next = clone(w)
 		const { password: _password, credential: _credential, ...kept } = openProfile(w) as ModelProfile
 		const changed: ModelProfile =
-			p.to === "password"
+			p.change === "password"
 				? { ...kept, method: "password", password: p.password }
 				: { ...kept, method: "passkey", credential: p.credential }
 		next.profiles = next.profiles.map((x) => (x.ref === changed.ref ? changed : x))
-		bump(next, p.to === "password" ? { secret: 1 } : { credential: 1 })
+		bump(next, p.change === "password" ? { secret: 1 } : { credential: 1 })
 		next.session = sessionFor(next, changed.ref)
 		const sources = [
-			p.to === "passkey" ? METHOD_VERIFY_REFUSES : checks,
-			...(p.to === "password" ? [] : [METHOD_NEW_PASSKEY]),
+			p.change === "passkey" ? METHOD_VERIFY_REFUSES : checks,
+			...(p.change === "password" ? [] : [METHOD_NEW_PASSKEY]),
 			METHOD_CHANGE,
 			METHOD_CHANGE_WRITES,
 			METHOD_CHANGE_REOPENS,

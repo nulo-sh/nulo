@@ -6,7 +6,8 @@ import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet } from "../../fixtures/passkey"
 import { lockFromAnotherWindow } from "../../fixtures/session"
 import type { CredentialRef, ModelProfile, ParamsMap } from "./model"
-import { answeredCredentials, type Ceremony, capturePrf, minted } from "./prf-capture"
+import type { Ceremony } from "./checkers"
+import { answeredCredentials, minted } from "./prf-capture"
 import { credentialId, type Driven, type RunState, secretFor, wrongSecret } from "./state"
 import { openRoute, type Signal, settle, timed, unlockAttemptEnded, watchPromptAbort } from "./ui"
 
@@ -16,7 +17,7 @@ const ROUTE = "#/popup/settings/security/unlock-method"
 const CHANGE_MS = 90_000
 const LOCK_MS = 30_000
 
-const DONE: Record<Change["to"], string> = {
+const DONE: Record<Change["change"], string> = {
 	passkey: "Now unlocks with your passkey",
 	"new-passkey": "Now unlocks with your new passkey",
 	password: "Now unlocks with your password",
@@ -34,10 +35,10 @@ const OUTCOMES = { committed: "committed", cancelled: "cancelled", refused: "ref
 
 /** The answers a change's page must show, each by the credential it names. */
 function ceremoniesOf(p: Change, current: CredentialRef | undefined): Ceremony[] {
-	const asked: Ceremony[] = current && p.to !== "passkey" ? [{ kind: "get", credential: current }] : []
+	const asked: Ceremony[] = current && p.change !== "passkey" ? [{ kind: "get", credential: current }] : []
 	if (p.current === "other") return [{ kind: "get", credential: p.other as CredentialRef }]
 	if (p.current === "wrong" || p.current === "refuse") return []
-	return p.to === "password" ? asked : [...asked, ...minted(p.credential as CredentialRef)]
+	return p.change === "password" ? asked : [...asked, ...minted(p.credential as CredentialRef)]
 }
 
 /** Presses `button` with the current passkey's prompt answered as `p` says, then settles on `signals`. */
@@ -60,7 +61,7 @@ async function pressAnswered(s: RunState, p: Change, button: string, signals: Si
 	return press()
 }
 
-const committed = (p: Change): Signal => ({ label: "committed", text: DONE[p.to] })
+const committed = (p: Change): Signal => ({ label: "committed", text: DONE[p.change] })
 
 async function toPassword(s: RunState, p: Change): Promise<Driven> {
 	const page = s.anchor
@@ -89,13 +90,12 @@ async function toPasskey(s: RunState, open: ModelProfile, p: Change): Promise<Dr
 export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Change): Promise<Driven> {
 	const page = s.anchor
 	const t0 = Date.now()
-	await capturePrf(page)
 	await openRoute(page, ROUTE)
-	const first = p.to === "passkey" ? "unlock-method-use-passkey" : "unlock-method-new-passkey"
+	const first = p.change === "passkey" ? "unlock-method-use-passkey" : "unlock-method-new-passkey"
 	await page.waitForSelector(`[data-testid="${first}"]`, { visible: true, timeout: 15_000 })
 	let driven: Driven
-	if (p.to === "passkey") driven = await toPasskey(s, open, p)
-	else if (p.to === "password") driven = await toPassword(s, p)
+	if (p.change === "passkey") driven = await toPasskey(s, open, p)
+	else if (p.change === "password") driven = await toPassword(s, p)
 	else driven = await pressAnswered(s, p, "unlock-method-new-passkey", [committed(p), ...REFUSALS])
 	if (driven.settle.reached) await answeredCredentials(s, page, ceremoniesOf(p, open.credential))
 	if (driven.outcome === "committed" && driven.settle.reached)
@@ -110,7 +110,6 @@ export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Cha
 export async function raceLockDuringMethodChange(s: RunState): Promise<Driven> {
 	const page = s.anchor
 	const t0 = Date.now()
-	await capturePrf(page)
 	await openRoute(page, ROUTE)
 	await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 15_000 })
 	const hold = await holdNextGet(page)

@@ -6,13 +6,11 @@
  * opens on its own is not watched; the run's ceremonies all run on its own pages.
  */
 import type { Page } from "puppeteer"
+import { type Answer, bindCeremonies, type Ceremony, type DiscoveryRequest } from "./checkers"
 import type { CredentialRef } from "./model"
 import type { RunState } from "./state"
 
-type Answer = { kind: "get" | "create"; id: string }
-/** The wallet's own discovery request, as `pickDiscovered` found it before narrowing it. */
-type Pick = { named: number; prf: boolean }
-type CaptureProbe = Window & { __chaosPrf?: string[]; __chaosAnswers?: Answer[]; __chaosPicks?: Pick[] }
+type CaptureProbe = Window & { __chaosPrf?: string[]; __chaosAnswers?: Answer[]; __chaosPicks?: DiscoveryRequest[] }
 
 /** Wraps the page's `navigator.credentials` once per document; a hook a driver installs later wraps
  *  this one, so every answer still passes through it. */
@@ -49,7 +47,7 @@ export async function capturePrf(page: Page): Promise<void> {
 
 /** What `page` captured, leaving its lists empty. A page that is gone, or a document that replaced
  *  the watched one, gives nothing. */
-async function takeAll(page: Page): Promise<{ prf: string[]; answers: Answer[]; picks: Pick[] }> {
+async function takeAll(page: Page): Promise<{ prf: string[]; answers: Answer[]; picks: DiscoveryRequest[] }> {
 	return page
 		.evaluate(() => {
 			const probe = window as CaptureProbe
@@ -96,51 +94,17 @@ export async function pickDiscovered(page: Page, credentialId: string): Promise<
 	}, credentialId)
 }
 
-/** One ceremony a step expects, in order: `optional` where the wallet may skip it, as the get that
- *  confirms a create whose answer carried no PRF output. */
-export interface Ceremony {
-	kind: Answer["kind"]
-	credential: CredentialRef
-	optional?: true
-}
-
 /** A mint's ceremonies: the create, and the get that may confirm it. */
 export const minted = (credential: CredentialRef): Ceremony[] => [
 	{ kind: "create", credential },
 	{ kind: "get", credential, optional: true },
 ]
 
-/**
- * Checks the answers `page` received since the last drain against `expected`, binding each credential
- * a create minted to its answer's id and checking every other against its binding; every PRF output
- * goes to the run. Throws on a discovery the wallet asked naming a credential or without the PRF
- * input, an answer out of order or by another credential, a missing one, or one past the sequence.
- */
+/** Checks the answers `page` received since the last drain against `expected` (`bindCeremonies`),
+ *  sending every PRF output to the run first; throws what it found wrong. */
 export async function answeredCredentials(s: RunState, page: Page, expected: readonly Ceremony[]): Promise<void> {
 	const { prf, answers, picks } = await takeAll(page)
 	for (const value of prf) s.prf.add(value)
-	for (const pick of picks)
-		if (pick.named || !pick.prf)
-			throw new Error(`the wallet's discovery named ${pick.named} credential(s)${pick.prf ? "" : " and asked no PRF output"}`)
-	const seen = answers.map((a) => `${a.kind}:${a.id}`).join(" ")
-	let i = 0
-	for (const want of expected) {
-		const got = answers[i]
-		if (got?.kind === want.kind && answeredBy(s, want, got)) {
-			i++
-			continue
-		}
-		if (!want.optional) throw new Error(`expected a ${want.kind} answered by ${want.credential}; the page saw [${seen}]`)
-	}
-	if (i < answers.length) throw new Error(`the page saw answers past the step's ceremonies: [${seen}]`)
-}
-
-/** Whether `got` is `want`'s credential; a create's answer for an unbound credential binds it. */
-function answeredBy(s: RunState, want: Ceremony, got: Answer): boolean {
-	const bound = s.bindings.credentials.get(want.credential)
-	if (bound) return bound === got.id
-	if (want.kind !== "create") throw new Error(`${want.credential} answered a get before any create minted it`)
-	if ([...s.bindings.credentials.values()].includes(got.id)) throw new Error(`a create answered with a credential already bound`)
-	s.bindings.credentials.set(want.credential, got.id)
-	return true
+	const wrong = bindCeremonies(s.bindings, { answers, picks }, expected)
+	if (wrong) throw new Error(wrong)
 }

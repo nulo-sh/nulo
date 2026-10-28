@@ -21,7 +21,7 @@ import { callService } from "../../fixtures/session"
 import { openPopup } from "../../fixtures/wallet-pages"
 import { checkLeaks, checkSettle, findNeedles, type LeakHit, type SettleReading, type Violation } from "../profile-chaos/checkers"
 import { drainLogs, readProfiles, readSession, scanStorage } from "../profile-chaos/collect"
-import { DRIVERS } from "../profile-chaos/drivers"
+import { beforeDriver, DRIVERS } from "../profile-chaos/drivers"
 import {
 	ACTIONS,
 	type ActionName,
@@ -657,6 +657,7 @@ class Session {
 		const refs = this.seedSecrets(params)
 		// Where a driver that threw left the wallet is unknown, so no later `do` starts from it.
 		this.doWorld = undefined
+		await beforeDriver(this.s)
 		const driven = await (DRIVERS[step.action] as Drive)(this.s, step.params, step, before)
 		const allowed = step.expect.outcomes.includes(driven.outcome)
 		this.doWorld = allowed ? step.expect.next : undefined

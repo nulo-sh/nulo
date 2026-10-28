@@ -31,7 +31,7 @@ import {
 	live,
 } from "./model"
 import { drainBeforeStop, restartBackground } from "./restart"
-import { bindProfile } from "./checkers"
+import { bindProfile, type Ceremony } from "./checkers"
 import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
 	activeProfileId,
@@ -54,10 +54,11 @@ import {
 	unlockAttemptEnded,
 	waitForRoute,
 	anchorAdvanced,
+	dismissNotices,
 	watchPromptAbort,
 } from "./ui"
 import { verifyAll } from "./verify"
-import { answeredCredentials, type Ceremony, capturePrf, drainPrf, minted, pickDiscovered } from "./prf-capture"
+import { answeredCredentials, capturePrf, drainPrf, minted, pickDiscovered } from "./prf-capture"
 import { changeUnlockMethod, raceLockDuringMethodChange } from "./unlock-method"
 import { exportFullBackup, pickEarlierBackup, restoreFile } from "./backups"
 import { editRowDuringUnlock as editRow, tamperedUnlock as tamperSlot } from "./tamper"
@@ -70,6 +71,13 @@ const LOCK_MS = 30_000
 const EDIT_MS = 30_000
 
 const nextOf = (step: PlannedStep): World => step.expect.next
+
+/** What every driver may assume of the anchor, so every caller runs it first: no notice an earlier
+ *  step left, whose text a settle would take for this step's, and the passkey's answers captured. */
+export async function beforeDriver(s: RunState): Promise<void> {
+	await dismissNotices(s.anchor)
+	await capturePrf(s.anchor)
+}
 
 /** The profile the model holds open before the step. */
 function openBefore(before: World): ModelProfile {
@@ -173,7 +181,6 @@ function learnWords(s: RunState, phrase: PhraseRef | undefined, words: string[])
 const createPasskey: Drivers["createPasskey"] = async (s, p, step, before) => {
 	await openCreateForm(s, before)
 	const page = s.anchor
-	await capturePrf(page)
 	if (live(before).length) await replaceInputValue(page, '[data-testid="register-name-input"]', p.name)
 	await clickByTestId(page, "register-method-passkey")
 	const press = await passkeyPress(s, page, before, p.credential, { submit: "register-submit-btn", reuse: "register-passkey-reuse" })
@@ -413,7 +420,6 @@ function passwordInputs(s: RunState, p: ParamsMap["importPhrase"]): Record<strin
 const importPhrase: Drivers["importPhrase"] = async (s, p, step, before) => {
 	await openImport(s, before)
 	const page = s.anchor
-	await capturePrf(page)
 	await clickByTestId(page, "import-option-seed")
 	await page.waitForSelector('[data-testid="import-seed-input"] input', { visible: true, timeout: 10_000 })
 	const passkey = p.method === "passkey"
@@ -464,7 +470,6 @@ const importEarlierBackup: Drivers["importEarlierBackup"] = async (s, _p, _step,
 const importBackup: Drivers["importBackup"] = async (s, p, step, before) => {
 	const file = before.files.find((f) => f.ref === p.file) as ModelFile
 	await openImport(s, before)
-	await capturePrf(s.anchor)
 	const credential = p.credential as CredentialRef
 	const passkey = p.method === "passkey"
 	const reused = passkey && isMinted(before, credential) ? credentialId(s, credential) : undefined

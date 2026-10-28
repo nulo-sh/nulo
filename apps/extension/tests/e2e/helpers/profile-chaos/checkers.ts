@@ -230,6 +230,59 @@ export function checkProfiles(w: World, r: ProfileReading, b: Bindings, fields: 
 	return out
 }
 
+// ── the passkey's answers ───────────────────────────────────────────────
+
+/** One answer a page received: its kind and credential id, base64 as the wallet stores it. */
+export type Answer = { kind: "get" | "create"; id: string }
+/** The wallet's own discovery request, as the browser's pick found it before narrowing it. */
+export type DiscoveryRequest = { named: number; prf: boolean }
+
+/** One ceremony a step expects, in order: `optional` where the wallet may skip it, as the get that
+ *  confirms a create whose answer carried no PRF output. */
+export interface Ceremony {
+	kind: Answer["kind"]
+	credential: CredentialRef
+	optional?: true
+}
+
+/**
+ * Matches a step's answers to `expected`, binding each credential a create minted to its answer's id
+ * and checking every other against its binding, never against a row. What is wrong, or undefined:
+ * a discovery that named a credential or asked no PRF output, an answer out of order or by another
+ * credential, one missing, or one past the sequence.
+ */
+export function bindCeremonies(
+	b: Bindings,
+	seen: { answers: readonly Answer[]; picks: readonly DiscoveryRequest[] },
+	expected: readonly Ceremony[],
+): string | undefined {
+	const asked = seen.picks.find((pick) => pick.named || !pick.prf)
+	if (asked) return `the wallet's discovery named ${asked.named} credential(s)${asked.prf ? "" : " and asked no PRF output"}`
+	const shown = seen.answers.map((a) => `${a.kind}:${a.id}`).join(" ")
+	let i = 0
+	for (const want of expected) {
+		const by = matchAnswer(b, want, seen.answers[i])
+		if (typeof by === "string") return by
+		if (by) i++
+		else if (!want.optional) return `expected a ${want.kind} answered by ${want.credential}; the page saw [${shown}]`
+	}
+	return i < seen.answers.length ? `the page saw answers past the step's ceremonies: [${shown}]` : undefined
+}
+
+/** Whether `got` is `want`'s answer: its kind, and its credential (`answeredBy`). */
+const matchAnswer = (b: Bindings, want: Ceremony, got: Answer | undefined): boolean | string =>
+	got?.kind === want.kind ? answeredBy(b, want, got) : false
+
+/** Whether `got` is `want`'s credential; a create's answer for an unbound credential binds it. */
+function answeredBy(b: Bindings, want: Ceremony, got: Answer): boolean | string {
+	const bound = b.credentials.get(want.credential)
+	if (bound) return bound === got.id
+	if (want.kind !== "create") return `${want.credential} answered a get before any create minted it`
+	if ([...b.credentials.values()].includes(got.id)) return "a create answered with a credential already bound"
+	b.credentials.set(want.credential, got.id)
+	return true
+}
+
 // ── O3: what each action wrote ──────────────────────────────────────────
 
 /**

@@ -7,6 +7,7 @@ import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
 	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
+	bindCeremonies,
 	bindProfile,
 	type Bindings,
 	carriedBy,
@@ -106,7 +107,7 @@ const withBefore = (p: { start: "empty" | "pre-update"; steps: PlannedStep[] }):
 	})
 }
 
-type AnyParams = { credential?: string; method?: string; to?: string; current?: string; variant?: string; password?: string }
+type AnyParams = { credential?: string; method?: string; change?: string; current?: string; variant?: string; password?: string }
 
 /** The passkey choice, method change or account file variant a step draws, if any. */
 function newVariant(s: PlannedStep, before: World): string | undefined {
@@ -121,7 +122,7 @@ function newVariant(s: PlannedStep, before: World): string | undefined {
 		case "importBackup":
 			return p.method === "passkey" ? `${s.action}:${choice(p.credential)}${p.duplicate === "decline" ? ":declined" : ""}` : undefined
 		case "changeUnlockMethod":
-			return `changeUnlockMethod:${p.to}:${p.current}`
+			return `changeUnlockMethod:${p.change}:${p.current}`
 		case "exportAccountFile":
 			return p.password ? `exportAccountFile:passkey:${p.variant ?? "approve"}` : undefined
 		default:
@@ -142,7 +143,7 @@ function mintsAt(s: PlannedStep, before: World): boolean {
 		case "importBackup":
 			return p.method === "passkey" && p.variant === "right" && fresh
 		case "changeUnlockMethod":
-			return p.to !== "password" && (p.current === "right" || p.current === "approve")
+			return p.change !== "password" && (p.current === "right" || p.current === "approve")
 		default:
 			return false
 	}
@@ -430,12 +431,12 @@ describe("a hand-trimmed list", () => {
 		],
 		[
 			"a change to a password on a password profile",
-			[create, { action: "changeUnlockMethod", params: { to: "password", current: "approve", password: "S2" } }],
+			[create, { action: "changeUnlockMethod", params: { change: "password", current: "approve", password: "S2" } }],
 			"password changes no open passkey profile",
 		],
 		[
 			"a change naming the profile's own credential as another",
-			[passkey, { action: "changeUnlockMethod", params: { to: "password", current: "other", password: "S1", other: "K1" } }],
+			[passkey, { action: "changeUnlockMethod", params: { change: "password", current: "other", password: "S1", other: "K1" } }],
 			"no other minted credential",
 		],
 		[
@@ -444,7 +445,7 @@ describe("a hand-trimmed list", () => {
 				passkey,
 				{ ...passkey, params: { ...passkey.params, ref: "P2", credential: "K2" } },
 				{ ...passkey, params: { ...passkey.params, ref: "P3", credential: "K3" } },
-				{ action: "changeUnlockMethod", params: { to: "new-passkey", current: "approve", credential: "K4" } },
+				{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K4" } },
 			],
 			"the authenticator holds no more credentials",
 		],
@@ -717,7 +718,7 @@ describe("the passkey choices", () => {
 	const reveal = { action: "revealPhrase", params: { variant: "approve" } }
 	const toPassword = (current: string, other?: string) => ({
 		action: "changeUnlockMethod",
-		params: { to: "password", current, password: "S1", ...(other ? { other } : {}) },
+		params: { change: "password", current, password: "S1", ...(other ? { other } : {}) },
 	})
 
 	test("a reuse takes a minted credential at a fresh profile, minting none", () => {
@@ -765,7 +766,7 @@ describe("the passkey choices", () => {
 	})
 
 	test("a password profile changes to a passkey only with its password, minting the next credential", () => {
-		const change = (current: string) => ({ action: "changeUnlockMethod", params: { to: "passkey", current, credential: "K1" } })
+		const change = (current: string) => ({ action: "changeUnlockMethod", params: { change: "passkey", current, credential: "K1" } })
 		const right = last([pw, change("right")])
 		expect(right.expect.outcomes).toEqual(["committed"])
 		expect(right.expect.writes).toEqual([{ kind: "profile", ref: "P1" }])
@@ -779,7 +780,7 @@ describe("the passkey choices", () => {
 	})
 
 	test("a committed change keeps the session open on its profile, with a bearer only outside strict mode", () => {
-		const newPasskey = { action: "changeUnlockMethod", params: { to: "new-passkey", current: "approve", credential: "K2" } }
+		const newPasskey = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }
 		const strict = last([pk, newPasskey])
 		expect(strict.expect.next.session).toEqual({ kind: "open", ref: "P1", bearer: false })
 		expect(strict.expect.next.profiles[0]).toMatchObject({ method: "passkey", credential: "K2" })
@@ -796,14 +797,14 @@ describe("the passkey choices", () => {
 	test("a refused or cancelled change keeps the row, the session and the counter", () => {
 		const two = [pk, { action: "createPasskey", params: { ref: "P2", name: "y", credential: "K2", double: false } }]
 		const before = last(two).expect.next
-		const refuse = { action: "changeUnlockMethod", params: { to: "new-passkey", current: "refuse", credential: "K3" } }
+		const refuse = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "refuse", credential: "K3" } }
 		expect(last([...two, refuse]).expect).toMatchObject({ outcomes: ["cancelled"], writes: [], next: before })
 		expect(last([...two, toPassword("refuse")]).expect).toMatchObject({ outcomes: ["cancelled"], writes: [], next: before })
 		expect(last([...two, toPassword("other", "K1")]).expect).toMatchObject({ outcomes: ["refused"], writes: [], next: before })
 	})
 
 	test("a replaced credential stays held: it is another credential to the profile that left it", () => {
-		const changed = [pk, { action: "changeUnlockMethod", params: { to: "new-passkey", current: "approve", credential: "K2" } }]
+		const changed = [pk, { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }]
 		const step = last([...changed, toPassword("other", "K1")])
 		expect(step.expect.outcomes).toEqual(["refused"])
 		expect(() => steps([...changed, toPassword("other", "K2")])).toThrow(/no other minted credential/)
@@ -1067,6 +1068,76 @@ describe("O2, profile rows", () => {
 			])
 			expect(shown("O2 an unbound credential", checkProfiles(shared, reading(), unbound)).length).toBe(2)
 		})
+	})
+})
+
+describe("the passkey's answers", () => {
+	const minted = [
+		{ kind: "create" as const, credential: "K1" as const },
+		{ kind: "get" as const, credential: "K1" as const, optional: true as const },
+	]
+	const reused = [{ kind: "get" as const, credential: "K1" as const }]
+	const bound = () => {
+		const b = emptyBindings()
+		b.credentials.set("K1", "a2V5LW9uZQ==")
+		return b
+	}
+	const named = { named: 0, prf: true }
+
+	test("a mint binds its credential from the create's answer, with or without the confirming get", () => {
+		const b = emptyBindings()
+		expect(bindCeremonies(b, { answers: [{ kind: "create", id: "bmV3" }], picks: [] }, minted)).toBeUndefined()
+		expect(b.credentials.get("K1")).toBe("bmV3")
+		const confirmed = emptyBindings()
+		const answers = [
+			{ kind: "create" as const, id: "bmV3" },
+			{ kind: "get" as const, id: "bmV3" },
+		]
+		expect(bindCeremonies(confirmed, { answers, picks: [] }, minted)).toBeUndefined()
+	})
+
+	test("a reuse passes on its own credential, picked from a request that named none", () => {
+		expect(bindCeremonies(bound(), { answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [named] }, reused)).toBeUndefined()
+	})
+
+	test.each([
+		["a reuse answered by another credential", { answers: [{ kind: "get", id: "b3RoZXI=" }], picks: [named] }, reused, bound()],
+		[
+			"a discovery the wallet narrowed itself",
+			{ answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [{ named: 1, prf: true }] },
+			reused,
+			bound(),
+		],
+		[
+			"a discovery asking no PRF output",
+			{ answers: [{ kind: "get", id: "a2V5LW9uZQ==" }], picks: [{ named: 0, prf: false }] },
+			reused,
+			bound(),
+		],
+		["a mint that made no create", { answers: [], picks: [] }, minted, emptyBindings()],
+		[
+			"a mint answered with a credential already bound",
+			{ answers: [{ kind: "create", id: "a2V5LW9uZQ==" }], picks: [] },
+			[{ kind: "create", credential: "K2" }],
+			bound(),
+		],
+		[
+			"a second create past the step's one",
+			{
+				answers: [
+					{ kind: "create", id: "bmV3" },
+					{ kind: "create", id: "bmV4" },
+				],
+				picks: [],
+			},
+			minted,
+			emptyBindings(),
+		],
+		["a get for a credential no create minted", { answers: [{ kind: "get", id: "bmV3" }], picks: [] }, reused, emptyBindings()],
+	] as const)("fails %s", (label, seen, expected, b) => {
+		const wrong = bindCeremonies(b, seen as never, expected as never)
+		console.log(`[break] answers ${label}: ${wrong ?? "<none>"}`)
+		expect(wrong).toBeDefined()
 	})
 })
 
