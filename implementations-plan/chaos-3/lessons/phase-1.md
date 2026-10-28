@@ -11,7 +11,7 @@
 ## 1.2, drivers, collectors, checkers
 
 - **I1 holds** on Firefox: a discovery narrowed to one credential (`pickDiscovered`) answers at once with three credentials held (list a), and the answer's `rawId` is the planned credential's. **I2 holds**: the import, restore, account file and Unlock method pages ran their passkey card in the anchor tab on both browsers.
-- **Seven hand lists** under `~/.cache/nulo-backlog/chaos-3/lists/`, each run at retry 0 on both browsers on the final 1.2 code:
+- **Seven hand lists** in the lane's scratch directory outside the repository, each run at retry 0 on both browsers on the final 1.2 code:
   - (a) three passkey profiles, a phrase import reusing the second's credential, `verifyAll`: green on both.
   - (b) a passkey phrase import declined at the duplicate warning (its mint kept), creates up to the three slots, one reusing the declined import's credential, a refused unlock by another credential: green on both.
   - (c) an account file imported into a password profile, a change to a passkey, `verifyAll`'s passkey re-export: green on both.
