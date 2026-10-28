@@ -98,7 +98,7 @@ Pass: exit 0 on each; the new case red at step 1 and green at step 2; in the cap
 
 ## UI impact
 
-- **The notice card, popup and onboarding tab** (`NotificationManager.vue`): a string wider than the card breaks at the card's edge and stays inside it (OA-1 (a), pictures `1232-today-*` → `1232-a-*`). Every notice with ordinary text renders as today. **Owner sign-off: pending** (OA-1); the PR stays a draft until the orchestrator quotes the owner's words in its body.
+- **The notice card, popup and onboarding tab** (`NotificationManager.vue`): a string wider than the card breaks at the card's edge and stays inside it (OA-1 (a), pictures `1232-today-*` → `1232-a-*`). Every notice with ordinary text renders as today. **Owner sign-off: recorded. Decision page 89, "A notice whose text is wider than its card", P89-01 = A, signed 2026-10-28 09:50 UTC; in chat the same morning: "p89 sgned."**
 
 ## Delivery
 
