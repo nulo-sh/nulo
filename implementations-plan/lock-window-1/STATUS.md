@@ -21,3 +21,4 @@
 2026-10-28T00:44:18Z [Phase 3] review round 1: Codex changes requested, Opus changes requested; popup revert fixed, wording taken
 2026-10-28T00:46:11Z [Phase 3] review round 2: Codex approve with nits (both taken); loop converged
 2026-10-28T00:50:39Z [Phase 3] final gates at 4bbc970d3: lint, typecheck:all, test:all (179 s), check:plans green
+2026-10-28T01:00:32Z [cross-arc] Codex r1 changes requested (hand-off fence, fixed on a2 as 501d8e4ac), r2 approve; gates at the restacked tip green

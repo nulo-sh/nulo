@@ -293,6 +293,8 @@ Round 2 `approve with nits`: every fix verified (the handlers and the discovery 
 
 **Arc 3, Opus** (`general-purpose`, beside round 1): `changes requested`. The same popup revert (should-fix) and the same delete wording (should-fix; the popup closes with "FPC was deleted" and its disconnect fails the pending call), both taken above. Nits: the debug line also covers a removed network, now "its network was reset or removed"; the comment's "every writer", taken with Codex (3). Not taken: a test that pins the re-read inside the lock (no ordering a unit case can drive tells the two apart without reaching into the lock), and the hidden popup's late error flash on its next open (older than this change, and no screen shows it closed).
 
+**Cross-arc pass, Codex** (fresh session, net diff from d1165460c, with the standard's two rules verbatim): round 1 `changes requested`. (1) New profile's hand-off kept going past an `end-flow` that landed during its pointer write: its `unless` and the check after it read the route only, so the ended hand-off selected the created profile and pushed the lock screen over the shell's landing (reproduced in memory). Verified; fixed on arc 2's layer: the hand-off's `left()` reads the fence too, with a test red against the previous helper. (2) Nit: a narrating test-helper comment, deleted. Round 2 `approve`: both verified, no regression across the arcs. Seams checked sound: the fence moves before arc 1's synchronous resets run, the own window is released before the lock, and arc 3's re-read and the popup's captured rename keep a concurrent rename. Gates at the restacked tip: lint, `typecheck:all`, `test:all` (184 s) pass.
+
 ## Seeds
 
 Not run; the orchestrator spawns each arc.

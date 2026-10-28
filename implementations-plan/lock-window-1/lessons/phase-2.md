@@ -5,3 +5,4 @@
 - The landing's `router.push` is not awaited, so a completion that settles before it commits still reads its own route name: a route check cannot tell it the flow is over, a synchronous fence can.
 - Scenario B takes one of two paths, by whether the shell bootstrapped the restored profile before the kill; both showed up within two runs.
 - Consults: the amendment review (Codex, `changes requested`, three findings accepted); arc 2 Codex round 1 `changes requested`, round 2 `approve with nits`; Opus `approve with nits`. The arc's prompts asked about comments in their own words, not with the standard's two verbatim rules; the cross-arc pass carries them.
+- The cross-arc pass found one more await in New profile's hand-off that read only the route; a fence added to a flow has to reach every check after every await, the `unless` callbacks included.
