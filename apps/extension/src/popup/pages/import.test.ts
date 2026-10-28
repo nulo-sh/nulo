@@ -400,7 +400,6 @@ describe("popup import — in its own window", () => {
 })
 
 describe("popup import — a completion the shell took over", () => {
-	/** Starts a completion whose wait the test settles. */
 	async function startHeld() {
 		const wait = deferred<Awaited<ReturnType<typeof completeImportWithRecovery>>>()
 		vi.mocked(completeImportWithRecovery).mockReturnValueOnce(wait.promise)

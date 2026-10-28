@@ -94,8 +94,8 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
 	// A person who left the page meanwhile is not moved: the shell places the activation's outcome.
 	// So with a flow the shell ended, whose navigation away may not have committed yet.
-	const left = () => router.currentRoute.value.name !== "popup-profile-new"
-	if (left() || !flowLive()) return
+	const left = () => router.currentRoute.value.name !== "popup-profile-new" || !flowLive()
+	if (left()) return
 	const anotherOpens = () =>
 		appStore.isLogined ||
 		isActivatingOtherThan(profile.id) ||
