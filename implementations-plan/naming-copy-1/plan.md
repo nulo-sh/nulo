@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 0a659726c
 trunk: dev
-status: arc 1 phases green; Codex fix loop next
+status: arc 1 green, fix loop converged; PR next
 issues: "#1328"
 post_implementation_hardening: not scheduled
 ---
@@ -111,6 +111,7 @@ One arc, one PR, no stack: branch `worktree-naming-copy-1` → `dev`. Title: `fe
 
 Each finding was checked against the tree; detail in lessons/phase-0.md.
 
+- **Arc 1, Codex fix loop round 1** (fresh session, net diff from `0a659726c`): approve, no findings. **Opus diff review beside it:** conditional approve, 2 findings, both accepted: the Fee Juice decode fixture's fourth parameter is `message_leaf_index`, a Field, as the bundled artifact declares it; one test name states its added assertion. **Round 2 (resumed):** approve; the fix verified, no regression.
 - **Codex, round 3 (resumed):** approve; the three fixes verified, no new material defect.
 - **Codex, round 2 (resumed):** conditional approve; 3 conditions, all accepted: a second mutant (counting `pending`) for (e)'s absence check; no timing estimate, since `waitForExecuteApprovable` does not wait for the fee estimate (`tests/e2e/fixtures/popups.ts:381-388`), and each before labelled with what it spans; (c)'s order written out.
 - **Codex, round 1:** conditional approve; 5 findings, all accepted. The capture can picture pending rows (I2, D6; then demonstrated by the base run). "Every new case red on base" cannot hold for absence checks (Phase 1 step 4). Two more component cases: two of three, and the token list landing (step 3 b, c). The security text claimed too much (Security, "What the sentence trusts"). `afterTheCalls` checks exact order (D4).
