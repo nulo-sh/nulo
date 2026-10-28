@@ -12,17 +12,19 @@ import { isPrestoProbeNoise } from "../../fixtures/wallet-pages"
 import { readFace } from "./page-face"
 import {
 	type ErrorEntry,
-	FAMILY_GROUPS,
-	type FamilyEntry,
 	type LeakHit,
 	MIN_NEEDLE,
 	type Needle,
 	pageErrorText,
 	type ProfileReading,
+	SEALED_PREFIXES,
+	SLOT_FRAMES,
 	type SessionReading,
 	type StoredEntry,
 	type StructureReading,
 } from "./checkers"
+
+export { SEALED_PREFIXES } from "./checkers"
 
 /** A page the run holds open; the anchor is the one it drives. */
 export interface RunPage {
@@ -64,31 +66,6 @@ export async function readCensus(page: Page): Promise<StoredEntry[]> {
 		const all = await chrome.storage.local.get(null)
 		return Promise.all(Object.entries(all).map(([key, value]) => entry(key, value)))
 	})
-}
-
-/** The roots whose rows must be seal envelopes. */
-export const SEALED_PREFIXES: readonly string[] = (Object.values(FAMILY_GROUPS) as FamilyEntry[])
-	.filter((e) => e.sealed && e.ref.startsWith("root:"))
-	.map((e) => `${e.ref.slice("root:".length)}@`)
-
-/** Each kind of profile row's sealed fields, a base64 frame of a fixed version byte and length: a
- *  password row's slots and DEK are `EncryptionKey` frames, a passkey row's `sealFrame`s under its
- *  unlock key, and a retired row holds only its DEK's. A passkey row is retired when it holds no
- *  `prfSalt`, as the wallet's classifier reads it. */
-const SLOT_FRAMES: Record<string, Record<string, { version: number; length: number }>> = {
-	password: {
-		guard: { version: 0, length: 37 },
-		secret: { version: 0, length: 61 },
-		entropy: { version: 0, length: 61 },
-		dekSealed: { version: 0, length: 61 },
-	},
-	passkey: {
-		guard: { version: 1, length: 37 },
-		secret: { version: 1, length: 61 },
-		entropy: { version: 1, length: 61 },
-		dekSealed: { version: 1, length: 61 },
-	},
-	retired: { dekSealed: { version: 1, length: 61 } },
 }
 
 /**

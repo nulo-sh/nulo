@@ -532,7 +532,7 @@ function checkChange(key: string, entry: StoredEntry, change: Change, ctx: Write
 }
 
 /** Each create leaves its profile's row; each delete, after its purge, leaves no row its profile owns. */
-function checkLifecycle(ctx: WriteContext): Violation[] {
+export function checkLifecycle(ctx: WriteContext): Violation[] {
 	const out: Violation[] = []
 	for (const scope of ctx.contract) {
 		if (scope.kind !== "create" && scope.kind !== "delete") continue
@@ -548,12 +548,16 @@ function checkLifecycle(ctx: WriteContext): Violation[] {
 	return out
 }
 
-export function checkWrites(ctx: WriteContext): Violation[] {
-	const changes = changedEntries(ctx.before, ctx.after).flatMap(({ key, entry, change }) => {
+/** Each change between `before` and `after` the action's contract does not allow. */
+export function checkChanges(ctx: WriteContext): Violation[] {
+	return changedEntries(ctx.before, ctx.after).flatMap(({ key, entry, change }) => {
 		const v = checkChange(key, entry, change, ctx)
 		return v ? [{ ...v, detail: change }] : []
 	})
-	return [...changes, ...checkLifecycle(ctx)]
+}
+
+export function checkWrites(ctx: WriteContext): Violation[] {
+	return [...checkChanges(ctx), ...checkLifecycle(ctx)]
 }
 
 // ── O4: errors ──────────────────────────────────────────────────────────
@@ -1030,6 +1034,31 @@ export interface Needle {
 export interface LeakHit {
 	where: string
 	needle: string
+}
+
+/** The roots whose rows must be seal envelopes. */
+export const SEALED_PREFIXES: readonly string[] = (Object.values(FAMILY_GROUPS) as FamilyEntry[])
+	.filter((e) => e.sealed && e.ref.startsWith("root:"))
+	.map((e) => `${e.ref.slice("root:".length)}@`)
+
+/** Each kind of profile row's sealed fields, a base64 frame of a fixed version byte and length: a
+ *  password row's slots and DEK are `EncryptionKey` frames, a passkey row's `sealFrame`s under its
+ *  unlock key, and a retired row holds only its DEK's. A passkey row is retired when it holds no
+ *  `prfSalt`, as the wallet's classifier reads it. */
+export const SLOT_FRAMES: Record<string, Record<string, { version: number; length: number }>> = {
+	password: {
+		guard: { version: 0, length: 37 },
+		secret: { version: 0, length: 61 },
+		entropy: { version: 0, length: 61 },
+		dekSealed: { version: 0, length: 61 },
+	},
+	passkey: {
+		guard: { version: 1, length: 37 },
+		secret: { version: 1, length: 61 },
+		entropy: { version: 1, length: 61 },
+		dekSealed: { version: 1, length: 61 },
+	},
+	retired: { dekSealed: { version: 1, length: 61 } },
 }
 
 export interface StructureReading {
