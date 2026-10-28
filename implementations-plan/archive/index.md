@@ -446,3 +446,8 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [npm-release-1](npm-release-1/plan.md) — completed — `@nulo-sh/*` 0.3.0 on the Aztec 6.0.0 peers: the READMEs, the rehearsal and the approved digests (#1109)
 - [passkey-unlock-1](passkey-unlock-1/plan.md) — completed — a passkey profile keeps a 24-word recovery phrase sealed under a key its passkey rebuilds, as a password profile's under its password: the unlock choice after an import or a restore, the Unlock method page, file passwords on every backup and account file, stamp 0 re-cut, Terms 1.2 and Privacy 1.2.6 (#1127; known limit #1151)
 - [passkey-chaos-1](passkey-chaos-1/plan.md) — completed — seeded model-based profile chaos on Chrome and Firefox, agent chaos sessions, and an 80-seed campaign with a 12-agent wave around the passkey change (#1190, #1189; known limit #1151)
+- [unit-flakes-4](unit-flakes-4/plan.md) — completed — three unit tests that read the host's speed or git's version (#1269)
+- [dependabot-subject-1](dependabot-subject-1/plan.md) — completed — skip the range lint on Dependabot's PRs; the merger lower-cases the title that lands (#1265; known limit #1266)
+- [unit-flakes-3](unit-flakes-3/plan.md) — completed — four unit and composition test races; a cancel that won the journal lock before the proving mark stops the send before its proof (#1271)
+- [docs-2](docs-2/plan.md) — completed — the manual npm bumps restated as policy with their source and the two untested points; the plans standard's PR-title cap at 92 (#1273; open item #1274)
+- [unit-flakes-5](unit-flakes-5/plan.md) — completed — four whole-tree guards skip the files that cannot hold a finding (#1270; known limit #1279)
