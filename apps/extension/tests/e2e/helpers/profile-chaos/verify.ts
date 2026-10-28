@@ -25,7 +25,6 @@ const REFUSED = [PASSKEY_COPY.unlockFailed, PASSKEY_COPY.noPrf, PASSKEY_COPY.not
 	hash: "/popup/auth",
 }))
 
-/** Whether the lock screen refuses `p` answered by `other`. */
 async function otherRefused(s: RunState, other: CredentialRef): Promise<boolean> {
 	const page = s.anchor
 	// The last attempt's refusal toast would read as this one's.

@@ -32,3 +32,4 @@
 ## Review loop
 
 - 2026-10-28, round 1: Codex (gpt-6.1-sol, high) reject, 4 findings; Opus conditional approve, 7 findings, 4 shared. Every claim was checked against the tree, and all were accepted. The fixes were checked with the model test (250), the launcher sequence create → lock → unlock → create on both browsers (each `do` committed, no violation), and lists (a), (c), (d), (e), (f) on both browsers. Their results match 1.2: (d) is incomplete only at its planned restart, and (e) is red only on #1178.
+- 2026-10-28, round 2: Codex approve, no new material finding; one comment nit applied. The loop converged after two rounds.
