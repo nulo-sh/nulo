@@ -17,3 +17,8 @@
 2026-10-28T00:18:18Z [Phase 2] review round 1: Codex changes requested (2), Opus approve with nits; folded
 2026-10-28T00:20:00Z [Phase 2] review round 2: Codex approve with nits (latch nit taken); loop converged
 2026-10-28T00:29:20Z [Phase 2] final gates at 68442891d: lint, typecheck:all, test:all green; scenario B green (terminal=lock, 25 180 ms); replay green
+2026-10-28T00:34:11Z [Phase 3] gate at b5a77ef0d: lint, typecheck:all, test:all (151 s) green; 3 regression cases red on the base service, controls green
+2026-10-28T00:44:18Z [Phase 3] review round 1: Codex changes requested, Opus changes requested; popup revert fixed, wording taken
+2026-10-28T00:46:11Z [Phase 3] review round 2: Codex approve with nits (both taken); loop converged
+2026-10-28T00:50:39Z [Phase 3] final gates at 4bbc970d3: lint, typecheck:all, test:all (179 s), check:plans green
+2026-10-28T01:00:32Z [cross-arc] Codex r1 changes requested (hand-off fence, fixed on a2 as 501d8e4ac), r2 approve; gates at the restacked tip green
