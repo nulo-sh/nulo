@@ -1,7 +1,7 @@
 ---
 plan: log-levels-2
 tier: light (the orchestrator's call; Opus Plan leg added)
-status: phase 1 green; review loop next
+status: completed; delivered as one PR with this close-out
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +13,20 @@ base: origin/dev at 210d02f1f
 trunk: dev
 issues: [1296]
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed, delivered as the single PR `fix(popup): a stale-network or arrival read that a lock ends logs at debug` on `dev`, with this close-out as its final commits; awaiting the merge.
+- Shipped: the fix for #1296.
+  - a stale-network refresh whose session a lock or profile switch ended resolves at debug; the shell reports a live failure with `logCallFailure`, as it does the resume's;
+  - a network-arrival read a newer read superseded logs its failure at debug and leaves the newer arrival; a live failure goes through `logCallFailure` (a disconnect at debug, else error, where it was warn).
+- Did not hold: the lane brief's typed lock refusal. The worker throws a plain `Error("Profile locked")`; both demotions key on the supersede, as the siblings' do.
+- Deviation: the stale read moved to a module-level `syncActiveIfStale`, to keep `useStaleNetwork` within the 80-line budget ([lessons/phase-1.md](lessons/phase-1.md)).
+- Lessons: none promoted to `lessons.md`, which holds 8191 of its 8192 bytes with no entry superseded; the candidates stay in [lessons/phase-1.md](lessons/phase-1.md).
+- Known limits: none new. #1304 now also covers the two lines, by a comment there.
+- Open items: none.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # log-levels-2: the last two popup reads that log a lock's refusal above debug
 
@@ -95,7 +109,7 @@ Validation gate:
 - Pass criteria: every command exits 0. Each regression case (both debug cases, the arrival control's `error` pin, the wiring pin) fails on the base copy of its source file (`git show 210d02f1f:<path>`) and passes after. The stale control passes on both, since base already rejects. The resume's existing cases pass unchanged.
 - Layers: lint, typecheck, unit, smoke e2e (Chrome). Firefox not run: no fixture, focus, window, activation or WebAuthn change.
 
-### Phase 2: close-out
+### Phase 2: close-out ✓
 
 2.1 Comment on #1304: the same order now also applies to `stale-network refresh failed` and `network arrival read failed` (a red chaos run included); its reopen condition covers them.
 2.2 Close-out per the Post-implementation section.
@@ -119,6 +133,7 @@ Round 1, run in parallel on the draft. Every finding was checked against the tre
 - **Codex** (gpt-6.1-sol, high): reject, on one gate defect: the stale control already passes on base, so "each new case fails on base" could never be met. Also: the lock-control citation (`useLockWallet.ts:58-59`); the demotion covers any failure of a superseded read, not a lock refusal alone; the arrival supersede case asserts the newer arrival survives. Design (D1 to D3, the session as the stale signal, warn→error) approved.
 - **Opus** (Plan): conditional approve. The smoke gate needs the armed build from the tree under test; the chaos checker fails a run on an `error` but only counts a `warn`, so D3 makes a live arrival failure red a chaos run (kept, see Inferences); the ordering inference is provable from the code (now cited); four citation and wording nits; the stale harness overrides.
 - Round 2, Codex resumed on the revised plan: `VERDICT: approve`. On the chaos consequence: a timeout merits that signal, an observed `Profile locked` merits reopening #1304, and keeping `warn` only to avoid a red run would weaken the policy.
+- Review loop over `210d02f1f..HEAD`. Round 1: Codex (fresh session, gpt-6.1-sol, high) `VERDICT: clean`; the Opus diff review clean, with one comment fix (`whileLive`'s doc said "a switch" where only a profile switch ends a session), accepted in `b66431b19`. Round 2 (Codex resumed): `VERDICT: clean`.
 
 ## Seeds (not run; orchestrator-owned)
 

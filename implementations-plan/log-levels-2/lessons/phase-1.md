@@ -5,3 +5,5 @@
 - In zsh a `$t` holding several paths is one argument (`lessons.md`, Agent tooling): the first red/green run matched no file. Rerun with literal paths.
 - Red/green at 982c271c6: the four regression cases (stale debug, arrival debug, arrival `error` pin, wiring pin) fail with the base copies of the three sources and pass after; the stale control passes on both.
 - Gate: `lint`, `typecheck:all`, `test` (947 files), `test:all` exit 0. Armed Chrome smoke build, then `stale-network.test.ts` + `network-arrival.test.ts` at retry 0: 7 passed, 2 skipped (the env-gated captures block), 101 s.
+- Review loop: Codex round 1 clean; the Opus diff review clean with one comment fix (`b66431b19`); Codex round 2 clean.
+- `origin/dev` merged at `f1b0c9c91` (an unrelated notice-card fix and its archive line); no conflict.
