@@ -251,7 +251,7 @@ watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()
-		if (active && !isDappWindow(route.name)) void stale.resume(active)
+		if (active && !isDappWindow(route.name)) stale.resume(active).catch((error) => logCallFailure("stale-network resume failed", error))
 	},
 )
 

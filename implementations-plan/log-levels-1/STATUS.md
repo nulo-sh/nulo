@@ -12,3 +12,4 @@
 - 2026-10-27: phase 2.1 green (useProfileBootstrap.test.ts 29/29; the three new cases red on the base source).
 - 2026-10-27: phase 2.2 green (console-forwarding.test.ts 6/6; the disconnect cases red with the rule removed)
 - 2026-10-27: phase 2.3: #1216 named on diagnostic run 18 (`getStaleNetwork` from the network-switch run); fixed, network-switch.test.ts 18/18. Phase 2.4: known findings for #1132 and #1133 removed, model test 209/209.
+- 2026-10-28: gate attempt 1: #1132 replay 12/12 green (after `logCallFailure`); `security.test.ts` red on run 35 with a second unhandled `Profile locked`, named as `stale.resume`'s `getPendingReset` and fixed; the 60-run count restarts.

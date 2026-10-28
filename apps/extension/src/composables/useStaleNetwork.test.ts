@@ -571,3 +571,36 @@ describe("runsUnattended", () => {
 		expect(runsUnattended(view({ accounts: [], switchToSeedNode: true }))).toBe(false)
 	})
 })
+
+describe("a resume whose session a lock ends", () => {
+	const refuseNextPendingRead = (w: ReturnType<typeof fakeWorker>) => {
+		let refuse!: (error: Error) => void
+		const read = new Promise<PendingReset | null>((_, reject) => (refuse = reject))
+		;(w.client.getPendingReset as ReturnType<typeof vi.fn>).mockImplementationOnce(() => read)
+		return refuse
+	}
+
+	test("the read it refuses resolves the resume, logged at debug", async () => {
+		const w = fakeWorker()
+		const refuse = refuseNextPendingRead(w)
+		const { stale } = harness(w)
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		const resumed = stale.resume("p1")
+		stale.clear()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(resumed).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("stale-network resume ended with its session", { error: refusal })
+		debug.mockRestore()
+	})
+
+	test("control: a resume whose session lasts still rejects", async () => {
+		const w = fakeWorker()
+		const refuse = refuseNextPendingRead(w)
+		const { stale } = harness(w)
+		const resumed = stale.resume("p1")
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(resumed).rejects.toBe(refusal)
+	})
+})

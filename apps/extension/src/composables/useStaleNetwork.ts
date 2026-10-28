@@ -142,6 +142,17 @@ class Session {
 	}
 }
 
+/** `run`'s failure rejects while `live` holds. Once a lock or a switch has ended the session, the
+ *  worker refuses its reads, and the failure resolves at debug. */
+async function whileLive(live: () => boolean, run: Promise<void>): Promise<void> {
+	try {
+		await run
+	} catch (error) {
+		if (live()) throw error
+		console.debug("stale-network resume ended with its session", { error })
+	}
+}
+
 export function useStaleNetwork(deps: StaleNetworkDeps) {
 	/** The view of the network whose reset another document runs, or a paused one this one resumed. */
 	const observed: Ref<StaleNetworkView | null> = ref(null)
@@ -212,10 +223,7 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		await s.hold(deps.onCompleted(now.networkId, () => live(s)))
 	}
 
-	/** At each unlock and reconnect of `profileId`: resumes a paused reset on any network, shows a
-	 *  run in flight, and finishes and announces a completion no popup took. */
-	const resume = async (profileId: string) => {
-		const s = session
+	const resumeIn = async (s: Session, profileId: string) => {
 		const pending = await deps.client.getPendingReset()
 		const paused = pending && !pending.running ? await deps.client.getStaleNetwork(pending.networkId) : null
 		if (!live(s)) return
@@ -225,6 +233,13 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 		// A run pending at the unlock announces its own completion, once its account load ends: the
 		// worker writes the notice before the completion reaches this popup.
 		if (!pending) await takeNotice(s, profileId)
+	}
+
+	/** At each unlock and reconnect of `profileId`: resumes a paused reset on any network, shows a
+	 *  run in flight, and finishes and announces a completion no popup took. */
+	const resume = (profileId: string) => {
+		const s = session
+		return whileLive(() => live(s), resumeIn(s, profileId))
 	}
 
 	/** Re-reads the active network's view while it is stale: adding, renaming or deleting a network
