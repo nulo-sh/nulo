@@ -25,6 +25,7 @@ export interface LockedBootDeps<R extends { kind: string }> {
 	decide: (result: R) => LockLandingAction
 	act: {
 		lock: (result: R) => void
+		endFlow: (result: R) => void
 		selectAndAuth: (result: R) => void
 		settle: () => void
 	}
@@ -40,6 +41,7 @@ export async function reconcileLockedBoot<R extends { kind: string }>(deps: Lock
 	if (deps.readEventSeq() !== eventSeqAtStart) return { kind: "event-superseded" }
 	const action = deps.decide(result)
 	if (action === "lock") deps.act.lock(result)
+	else if (action === "end-flow") deps.act.endFlow(result)
 	else if (action === "select-and-auth") deps.act.selectAndAuth(result)
 	else if (action === "settle") deps.act.settle()
 	return result

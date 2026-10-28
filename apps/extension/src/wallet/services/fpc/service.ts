@@ -198,6 +198,11 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 					this.logDebug("Protocol FPC discovery stopped: its session ended")
 					return
 				}
+				// So does a reset or a removal of its network since the mark; a failed read leaves the failure logged.
+				if (!(await this.networkService.isNetworkLive(network.id, since).catch(() => true))) {
+					this.logDebug("Protocol FPC discovery stopped: its network was reset or removed")
+					return
+				}
 				this.logWarn(`getFpcs: Failed to discover FPC ${item.instance.address.toString()}:`, err)
 				this.logError(`Failed to discover FPC ${item.instance.address.toString()}`, err)
 			}
@@ -394,7 +399,10 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		}
 
 		return await this.lock.withLock(async () => {
-			const next: StoredFpc = { ...existing, address }
+			// The row's writers take this lock, and a profile's last keyless sweep follows its locked
+			// purge: a rename since the checks stays, and a row removed since them is not written back.
+			const current = requireOwnedRow(await this.storage.get(id), profile.id)
+			const next: StoredFpc = { ...current, address }
 			await this.storage.set(id, next)
 			const decorated = this.decorate(next, protocols)
 			this.emit("onFpcUpdated", decorated)
