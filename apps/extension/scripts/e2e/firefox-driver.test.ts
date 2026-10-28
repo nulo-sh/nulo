@@ -277,6 +277,15 @@ describe("an add-on page's URL in targets()", () => {
 		expect(trackContexts(late, open, closed)).toEqual([late])
 	})
 
+	test("a tree read opens its tabs, never Firefox's own windows nor a tab already closed", () => {
+		const tree = (...contexts: { context: string; "moz:scope": string }[]) =>
+			JSON.stringify({ type: "success", id: 7, result: { contexts } })
+		const open = new Set<string>()
+		trackContexts(tree({ context: "t", "moz:scope": "content" }, { context: "c", "moz:scope": "chrome" }), open, new Set(["gone"]))
+		trackContexts(tree({ context: "gone", "moz:scope": "content" }), open, new Set(["gone"]))
+		expect([...open]).toEqual(["t"])
+	})
+
 	test("a real destroy arriving after the one the driver reported is not handed on", () => {
 		const open = new Set(["w"])
 		const destroyed = event("browsingContext.contextDestroyed", { context: "w", parent: null })

@@ -197,7 +197,10 @@ function directReloads(source: string): number[] {
 	return lines
 }
 
-/** Puppeteer's page calls that Firefox 157 and later refuse on an extension page; `bringToFront`, `setViewport` and `viewportOf` replace them. */
+/**
+ * Puppeteer's page calls the seam's `bringToFront`, `setViewport` and `viewportOf` replace: Firefox 157
+ * and later refuse the first two on an extension page, and `viewport()` misses a resize made around Puppeteer.
+ */
 const DRIVER_PAGE_CALLS = new Set(["bringToFront", "setViewport", "viewport"])
 
 /** 1-based lines of `x.bringToFront(…)`, `x.setViewport(…)` and `x.viewport()` calls made from the test process. */

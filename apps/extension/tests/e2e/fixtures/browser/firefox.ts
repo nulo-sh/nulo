@@ -479,13 +479,14 @@ async function setViewport(page: Page, viewport: Viewport | null): Promise<void>
 	if (read === "gone") throw new Error(`setViewport: no such window ${contextIdOf(page)}`)
 	const match = typeof read === "string" ? /^(\d+)x(\d+)$/.exec(read) : null
 	if (!match) throw new Error(`setViewport: ${outcome.exceptionDetails?.text ?? JSON.stringify(read)}`)
+	// Recorded before the wait: the tab already has the size, whether or not the page reads it in time.
+	viewports.set(page, viewport)
 	const [width, height] = [Number(match[1]), Number(match[2])]
 	await page
 		.waitForFunction((w, h) => innerWidth === w && innerHeight === h, { timeout: VIEWPORT_SETTLE_MS, polling: 50 }, width, height)
 		.catch((err: unknown) => {
 			throw new Error(`setViewport: the page did not read ${width}×${height} within ${VIEWPORT_SETTLE_MS} ms`, { cause: err })
 		})
-	viewports.set(page, viewport)
 }
 
 /** Firefox reports a closed window as a missing browsing context per BiDi command, and as `no such window` on the classic channel. */
