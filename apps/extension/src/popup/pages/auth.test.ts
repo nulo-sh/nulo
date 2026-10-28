@@ -54,7 +54,7 @@ const elsewhere = vi.hoisted(() => {
 	return {
 		picks,
 		deletions,
-		pick: (id: string) => {
+		pick: (id: string | undefined) => {
 			for (const listener of picks) listener(id)
 		},
 		delete: (id: string) => {
@@ -694,6 +694,52 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		releasePick()
 		await flushPromises()
 		expect(selected()).toBe("pA")
+	})
+
+	test("a pick of the selected profile another window makes while a settle reads keeps it", async () => {
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pB")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([A, B]))))
+		const { appStore } = mountAuth({}, A)
+		await flushPromises()
+
+		// The settle read the pointer this pick replaced.
+		elsewhere.pick("pA")
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pA")
+	})
+
+	test("a stale pick naming a deleted selection does not stop the settle that follows the deletion", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("pB")
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([B, C]))))
+		elsewhere.delete("pA")
+		await flushPromises()
+		elsewhere.pick("pA")
+		release()
+		await flushPromises()
+		expect(appStore.profile?.id).toBe("pB")
+	})
+
+	test("with nothing selected, a pointer event with no id does not stop the settle", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+
+		let release!: () => void
+		vi.mocked(managers.profile.getProfiles).mockReturnValueOnce(new Promise((resolve) => (release = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+		elsewhere.pick(undefined)
+		release()
+		await flushPromises()
+		expect(selected()).toBe("pB")
 	})
 
 	test("with no last active profile in the list, a selection it still holds stays; a last active one is selected", async () => {
