@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { type ConsoleMessage, type Page, TimeoutError } from "puppeteer"
-import { extensionUrl, gotoExtensionPage, newPage } from "./browser"
+import { bringToFront, extensionUrl, gotoExtensionPage, newPage, setViewport } from "./browser"
 import { isFrameDetachError, patchPagePolling } from "./dom"
 import type { ExtensionContext } from "./extension"
 import { type LegalSeed, LEGAL_ACCEPTANCE_KEY, legalSeedValue } from "./legal"
@@ -56,8 +56,8 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 
 	const page = await newPage(ctx.browser)
 	patchPagePolling(page)
-	await page.setViewport({ width: 720, height: 900 })
-	await page.bringToFront()
+	await setViewport(page, { width: 720, height: 900 })
+	await bringToFront(page)
 
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
@@ -137,12 +137,12 @@ export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
 /** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
 async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
 	// depth against rAF throttling. Combined with `--disable-renderer-
 	// backgrounding` it prevents Chrome from suspending the offscreen
 	// renderer.
-	await page.bringToFront()
+	await bringToFront(page)
 	recordPageErrors(ctx, page)
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 }

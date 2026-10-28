@@ -60,6 +60,7 @@ interface ContextInfo {
 	parent?: string | null
 	url?: unknown
 	timestamp?: unknown
+	"moz:scope"?: unknown
 }
 
 interface IncomingMessage {
@@ -81,7 +82,10 @@ export function trackContexts(raw: string, open: Set<string>, closed: Set<string
 	// Cheap pre-filter: this runs on every message, and almost none mention a context tree or a commit.
 	if (!raw.includes("browsingContext.context") && !raw.includes(COMMITTED) && !raw.includes('"contexts"')) return [raw]
 	const message = JSON.parse(raw) as IncomingMessage
-	for (const info of message.result?.contexts ?? []) open.add(info.context)
+	// A tree read in Firefox's own scope lists its browser windows, which no tab or handle ever names.
+	for (const info of message.result?.contexts ?? []) {
+		if (info["moz:scope"] !== "chrome" && !closed.has(info.context)) open.add(info.context)
+	}
 	if (!message.params) return [raw]
 	if (message.method === COMMITTED) return [raw, ...addonUrlUpdate(message.params, open)]
 	if (message.params.parent) return [raw]

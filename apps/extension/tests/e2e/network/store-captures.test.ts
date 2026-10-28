@@ -17,7 +17,7 @@ import { resolve } from "node:path"
 import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { interceptRpc, isFirefox } from "../fixtures/browser"
+import { interceptRpc, isFirefox, setViewport } from "../fixtures/browser"
 import {
 	clickByTestId,
 	type ExtensionContext,
@@ -370,7 +370,7 @@ async function captureSecurity(page: Page): Promise<void> {
 }
 
 async function frameWindow(page: Page): Promise<Page> {
-	await page.setViewport(VIEWPORT)
+	await setViewport(page, VIEWPORT)
 	await page.emulateMediaFeatures(REDUCED_MOTION)
 	return page
 }
@@ -403,7 +403,7 @@ describe.skipIf(!process.env.STORE_CAPTURES || isFirefox)("store captures", () =
 			ctx = await launchExtension()
 			await interceptRpc(ctx.browser, ctx.extensionId, PRICE_HOST, { kind: "refuse" })
 			const page = await gotoPopupImport(ctx)
-			await page.setViewport(VIEWPORT)
+			await setViewport(page, VIEWPORT)
 			await page.emulateMediaFeatures(REDUCED_MOTION)
 			await stageWallet(page, chain)
 			await receive(page, chain)

@@ -1,5 +1,5 @@
 import { basename } from "node:path"
-import type { Browser, Page, Target } from "puppeteer"
+import type { Browser, Page, Target, Viewport } from "puppeteer"
 import { acceptLists, PENDING_FILE_INPUT } from "../file-accept"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
@@ -158,6 +158,19 @@ export interface BrowserDriver {
 		backgroundDown?: boolean,
 	): Promise<ArmedInterception>
 	/**
+	 * Select `page`'s tab and focus its window. Firefox 157 and later refuse Puppeteer's
+	 * `bringToFront` on an extension page.
+	 */
+	bringToFront(page: Page): Promise<void>
+	/**
+	 * Size `page`'s viewport, or with `null` give it its window's size. Firefox 157 and later refuse
+	 * Puppeteer's `setViewport` on an extension page; Firefox's resize resolves once the page reads
+	 * the size, and refuses `deviceScaleFactor`, `isMobile`, `isLandscape` and `hasTouch` by name.
+	 */
+	setViewport(page: Page, viewport: Viewport | null): Promise<void>
+	/** The viewport last set on `page`, by `setViewport` or by Puppeteer's `newPage`; `null` once reset, or never set. */
+	viewportOf(page: Page): Viewport | null
+	/**
 	 * Runs before every scripted click. The suite clicks from inside the page, which — unlike a
 	 * person's click — neither focuses the window nor, on every browser, counts as a user gesture.
 	 */
@@ -314,6 +327,9 @@ export const holdRpcInterception = (
 	mode: RpcInterception,
 ): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
+export const bringToFront = (page: Page): Promise<void> => driver.bringToFront(page)
+export const setViewport = (page: Page, viewport: Viewport | null): Promise<void> => driver.setViewport(page, viewport)
+export const viewportOf = (page: Page): Viewport | null => driver.viewportOf(page)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
 export const doubleClick = (page: Page, x: number, y: number, gapMs: number): Promise<void> => driver.doubleClick(page, x, y, gapMs)

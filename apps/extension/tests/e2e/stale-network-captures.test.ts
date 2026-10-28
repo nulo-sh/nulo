@@ -10,7 +10,7 @@
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { isFirefox } from "./fixtures/browser"
+import { isFirefox, setViewport } from "./fixtures/browser"
 import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import {
 	closeStuckPopup,
@@ -83,7 +83,7 @@ describe.skipIf(!CAPTURES_ENABLED || isFirefox)("stale-network captures", () => 
 		}
 
 		const page = await openPopup(ctx)
-		await page.setViewport(CAPTURE_VIEWPORT)
+		await setViewport(page, CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
 		// A new profile starts on Mainnet; every takeover below is Testnet's.
 		await switchToNetwork(page, "Testnet")

@@ -280,8 +280,7 @@ describe("popup: declining never locks a person out", () => {
 		await page.waitForSelector('[data-testid="send-submit"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="send-legal-banner"]')).toBeNull()
 
-		// Over a current acceptance the answer finds no sheet; over a stale one it was told is
-		// current, it refuses.
+		// The stale reload is the control: told the acceptance is current, the answer must refuse.
 		const current = { [LEGAL_ACCEPTANCE_KEY]: legalSeedValue("current") }
 		await reloadWithLegalState(page, "current")
 		await answerUpdatedTerms(page, current)

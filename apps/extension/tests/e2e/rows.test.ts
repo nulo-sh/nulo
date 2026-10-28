@@ -5,7 +5,16 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
-import { extensionUrl, interceptRpc, openScratchPage, prepareKeys, stopBackground, waitForNewTab } from "./fixtures/browser"
+import {
+	bringToFront,
+	extensionUrl,
+	interceptRpc,
+	openScratchPage,
+	prepareKeys,
+	setViewport,
+	stopBackground,
+	waitForNewTab,
+} from "./fixtures/browser"
 import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	addContact,
@@ -96,7 +105,7 @@ async function openHomeWithRow(ctx: ExtensionContext, { priced = true } = {}): P
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page, TOKENS_LAND_MS)
 	await waitForHomeReminders(page)
-	await page.bringToFront()
+	await bringToFront(page)
 	return page
 }
 
@@ -448,7 +457,7 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 	await navigateToSettings(page, "networks")
 	const firstName = await page.$eval(sel("network-row"), (el) => el.getAttribute("data-network-name"))
 	await openNetworkDetail(page, firstName ?? "")
-	await page.bringToFront()
+	await bringToFront(page)
 
 	await tabTo(page, "network-detail-rename", 12)
 	for (const key of ["Enter", SPACE] as const) {
@@ -493,7 +502,7 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 			w.__logsClicks = (w.__logsClicks ?? 0) + 1
 		})
 	})
-	await page.bringToFront()
+	await bringToFront(page)
 
 	await tabTo(page, "settings-logs-open", 20)
 	const ring = await page.$eval(sel("settings-logs-row"), (el) => {
@@ -741,7 +750,7 @@ async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
 	const short = await readReceiptChip(page)
 	const fits = 360 + Math.ceil(short.need - short.space)
 	for (const width of [fits, fits - 1]) {
-		await page.setViewport({ width, height: 600 })
+		await setViewport(page, { width, height: 600 })
 		await page.evaluate((w: number) => document.documentElement.style.setProperty("--base-width", `${w}px`), width)
 		await settledRows(page, 5)
 		const receipt = await readReceiptChip(page)
@@ -756,7 +765,7 @@ async function expectReceiptFitsFromItsWidth(page: Page): Promise<void> {
 		expect(receipt.gaps.sepToChip).toBeCloseTo(6, 1)
 	}
 	await page.evaluate(() => document.documentElement.style.removeProperty("--base-width"))
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 }
 
 /** Opens a surface by its hash and waits for the rows on screen to leave: the hash changes before
@@ -809,7 +818,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		at: now - 3_000,
 	})
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
-	await page.bringToFront()
+	await bringToFront(page)
 
 	for (const theme of ["dark", "light"] as const) {
 		await navigateToSettings(page, "display")
@@ -1069,7 +1078,7 @@ test("a dApp's long function name and host never widen Home or History, named or
 	await seedTransaction(page, scope, { hash: DAPP_CALL_HASH, amount: "0", method: LONG_METHOD, dapp: SHORT_APP, at: now - 1_000 })
 	await seedTransaction(page, scope, { hash: DAPP_TRANSFER_HASH, amount: "2500000", transferType: 2, dapp: LONG_HOST, at: now - 2_000 })
 	await seedUsdQuoteAndReload(page)
-	await page.bringToFront()
+	await bringToFront(page)
 
 	// The reload's start-up navigation lands on Home and overrides a hash set before it settles, and
 	// a hash Home is already on remounts nothing: Home is read where the reload lands, its rows awaited.
@@ -1261,7 +1270,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	for (const [i, hash] of HOME_ROWS.entries()) await seedTransaction(page, scope, { hash, amount: "1500000", at: now - i * 1_000 })
 	await seedTokenRow(page, scope, TOKEN_PAGE_ID)
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
-	await page.bringToFront()
+	await bringToFront(page)
 	await waitForHomeReminders(page)
 	await settledRows(page, HOME_ROWS.length)
 
@@ -1302,7 +1311,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 	await page.evaluate(() => history.back())
 	await waitForHash(page, "#/popup/general", 10_000)
 	for (const width of [360, 480]) {
-		await page.setViewport({ width, height: 900 })
+		await setViewport(page, { width, height: 900 })
 		await settledRows(page, HOME_ROWS.length)
 		const top = await scrollPinned(page, "home", 0, "0")
 		const end = await scrollPinned(page, "home", top.maxScroll, "1")
@@ -1312,7 +1321,7 @@ test("Home's hero stays fixed over a scrolling middle: a scrim drawn in the midd
 		expect(Math.abs(end.navBottom - end.viewport)).toBeLessThanOrEqual(0.5)
 	}
 
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 	await settledRows(page, HOME_ROWS.length)
 	await scrollPinned(page, "home", 0, "0")
 	await page.$eval(`${sel("tx-card")} [data-row-target]`, (el) => (el as HTMLElement).focus())

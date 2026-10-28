@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { BROWSER, extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
+import { BROWSER, extensionUrl, gotoExtensionPage, newPage, setViewport } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
@@ -193,7 +193,7 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 
 	// At the popup's width the row has no room to spare: the default network's name still shows
 	// whole, and the lock chip stands as tall as the network chip beside it.
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 	const row = await page.evaluate(() => {
 		const name = document.querySelector<HTMLElement>('[data-testid="network-name"]')
 		const range = document.createRange()

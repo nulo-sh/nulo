@@ -84,6 +84,10 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 - **D4** (#1222) If Phase 3 shows a material difference, the session dismisses pickers. Rejected, by the panel rule: a longer bound; skipping the cancel half on a timeout. The cancel still proves activation, because no picker is asked for without it. An inconclusive Phase 3 ships nothing: #1222 gets a comment with the numbers and stays open.
 - **D5** #1222 stays in arc 1 (Opus), because Phase 4 can stop arc 2. Codex preferred all of it in arc 2, to avoid a mechanism that arc 2 replaces; it accepted arc 1 if Phase 3 shows a benefit while arc 2 is uncertain. That is D4's condition. The swap in arc 2 is two lines, with its own arming check.
 - **D6** (#1111) `bringToFront` is the classic switch, which Marionette itself uses to focus. `setViewport` mirrors Firefox's own resize, and Phase 4 picks the route. Rejected: a classic window rect (it includes the chrome, it moves focus, and its minimum widths are unverified).
+- **D7** (#1111, Phase 4) `setViewport` on Firefox runs Firefox's own resize body over BiDi `script.callFunction` on a chrome context. Rejected: `chromeScript`, which resizes as well but switches windows, so a page focused before the call loses focus (`lessons/phase-4.md`).
+- **D8** (delivery) Arc 2's branch is `e2e-infra-3-a2`, the orchestrator's name, not `e2e-infra-3-seam`.
+- **D9** (review) Arc 2's first Codex round and the Opus leg read Phases 4-5 while the Phase 5 runs held the worktree, before the pin commit existed; the pin and its docs enter round 2. The rounds' cap is unchanged.
+- **D10** (#1111, Phase 6) The pin holds at 153.0.4, and arc 2 ships the seam without it. The #1111 finding named two refused commands; on 158.0 Firefox refuses every root BiDi command that does not opt in to privileged scope, and one full smoke run there failed 35 tests on `input.setFiles` (`pickFile`), a page-scoped `network.addIntercept` (`interceptHealth`) and a new `content_security_policy.sandbox: null` from `getManifest()` (`lessons/phase-6.md`). Absorbing the first two needs driver mechanisms this change map never named, so they stop here as a plan change: #1111 stays open with the inventory. Rejected: moving the pin with those specs skipped on Firefox (a weakened gate).
 
 ## Security & Adversarial Considerations
 
@@ -130,7 +134,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 - The update replay from v1.0.0 (`tests/e2e/README.md` § In-place update; the candidate from `scripts/e2e/build-update-candidate.sh`), once per browser with `NULO_E2E_RETRY=0`: green.
 - `bun run check:plans` after staging.
 
-## Phase 4: the seam's Firefox route (spike, #1111)
+## Phase 4: the seam's Firefox route (spike, #1111) ✓ (route B, D7; lessons/phase-4.md)
 
 **Assumptions:** F8, F9; checks I3. A scratch file, never committed; results in `lessons/phase-4.md`.
 1. On 158 (`FIREFOX_PATH`): a classic switch to a popup page and to a dApp page refuses nothing, and `document.hasFocus()` is then true there.
@@ -139,13 +143,13 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **Validation gate:** one route passes all of it on both revisions, or arc 2 stops and #1111 stays open with the measurements.
 
-## Phase 5: the seam, its callers and the ban
+## Phase 5: the seam, its callers and the ban ✓ (lessons/phase-5.md)
 
 1. Arc-2 items 1 to 3, on 153. Commit per item.
 
 **Validation gate:** lint, typecheck, `test:all`; `browser-seam.test.ts` green, and red on a planted direct call; the full smoke suite once per browser at retry 0; the Chrome network suite once with `NULO_E2E_RETRY=0`; all green.
 
-## Phase 6: the pin on Firefox 158
+## Phase 6: the pin on Firefox 158 ✗ (held, D10; lessons/phase-6.md)
 
 1. Arc-2 item 4, with the arming probe repeated on 158 when the capability replaces the pref. Commit.
 
@@ -155,7 +159,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 One `gh stack` against `dev`; no labels at creation.
 - **Arc 1** `worktree-e2e-infra-3`, Phases 1-3: `test(e2e): wait for the terms verdict, the fee read and the session's picker cancel` (83), with `Closes #1123` and `Closes #1210`, plus `Closes #1222` only if item 6 shipped (else the title drops its last clause).
-- **Arc 2** `e2e-infra-3-seam`, Phases 4-6: `test(e2e): bringToFront and setViewport go through the driver; firefox 158` (74), with `Closes #1111`.
+- **Arc 2** `e2e-infra-3-seam`, Phases 4-6: `test(e2e): bringToFront and setViewport go through the driver; firefox 158` (74), with `Closes #1111`. As shipped (D8, D10): `e2e-infra-3-a2`, `test(e2e): bringToFront and setViewport go through the driver` (61), and #1111 stays open.
 - **Close-out** `e2e-infra-3-close-out`, docs only.
 
 Each body gives the path, what held, the gates with their counts, each browser's suite wall-clock before and after (the e2e-testing skill, § Runtime budget) and `UI impact: none`. No parallel lanes: arc 2 edits arc 1's files.
@@ -164,7 +168,7 @@ Each body gives the path, what held, the gates with their counts, each browser's
 
 The plan plus `implementations-plan/README.md` § Post-implementation standard at `78f5f9171`. Plan-specific values:
 - **Step 1:** absent (`code_review: off`).
-- **Step 2:** per arc, at its boundary, over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus `general-purpose` review runs beside round 1. Hard stop at three rounds. Then one fresh Codex pass over `origin/dev...` the top arc, for cross-arc issues.
+- **Step 2:** per arc, at its boundary, over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus `general-purpose` review runs beside round 1. Hard stop at three rounds. Then one fresh Codex pass over `origin/dev...` the top arc, for cross-arc issues. Run over `git diff 0d5b1967c~1..HEAD`: arc 1 had landed on `dev` as `0d5b1967c`, so `origin/dev...` would have left it out.
 - **Step 3:** `gh stack submit --auto`, `gh pr edit` each body, `gh pr checks <n> --watch`. Never merge.
 - **Step 4:** the close-out layer. Merge `origin/dev` and read `index.md` and `lessons.md`. Write the Outcome. Promote lessons after a dedupe (the file is near its budget). Delete `STATUS.md`. `git mv` the plan into `archive/` in its own commit.
 - **Step 5:** once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/e2e-infra-3/plan.md` succeeds, run `agent-worktree done e2e-infra-3 --merged`.
@@ -181,11 +185,17 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 1 Opus (general-purpose) | `conditional approve`, six low: the verdict read after its wait; the fee bound under the store's 20 s; `hidden` on routes the sheet never covers; `popup-shell` as every element's nearest testid; two caller-naming comments; an unverified residual | the first five (`5c7aef1d7`) | the residual: a same-identity `recommit` and app-window cards set no mark; unverified, and #1210 is the Send path |
 | Arc 1 Codex r2 (resumed; ran on `gpt-6-astra` by a resume mistake) | `conditional approve`, low: Send's forced read can take 20 s + 20 s | the 50 s bound (`e8a22a626`) | a controlled-delay e2e: the sequential path is pinned by `balances.store.test.ts` |
 | Arc 1 Codex r3 (resumed, `gpt-6.1-sol`, high) | `approve`: both rounds' fixes re-verified, no regression | — | — |
+| Arc 2 Codex r1 (`gpt-6.1-sol`, high; Phases 4-5, D9) | `approve`, one low: the chrome-scope tree read enters the shim's open contexts, and the close watch then reports Firefox's windows closed on every tick | the shim opens only content contexts never seen closed, with a test (`441d62d70`) | — |
+| Arc 2 Opus (general-purpose; Phases 4-5) | `conditional approve`: the same tree-read leak (medium, diagnostics); the ban's comment claimed Firefox refuses `viewport()`; a timed-out resize left the record stale | all three (`441d62d70`) | `.call`/`.bind` call shapes the ban misses: low, not worth a rule |
+| Arc 2 Codex r2 (resumed, `gpt-6.1-sol`, high) | `approve`: the fixes close the leak without hiding a real close; the 158 claims match its source and the run; no doc still moves the pin with the seam alone | — | — |
+| Cross-arc Codex (fresh, `gpt-6.1-sol`, high; `0d5b1967c~1..HEAD`) | `conditional approve`, three low, all records: the plan's cross-arc range, the `/goal` seed still asking for Phase 6, the index entry | all three | — |
+| Arc 2 Codex r3 (resumed, `gpt-6.1-sol`, high; with the standard's two rules and its adversarial ask, which r1 and r2 lacked) | `approve`, one low: name the resize's `includeInactive` flag | taken (`676e728d1`) | — |
+| Cross-arc Codex r2 (resumed, same rules) | `approve`: the record fixes verified; one low, a control's comment that restated its assertions | taken (`676e728d1`) | — |
 
 Light tier with both legs: the resumed final pass is the approval gate's verdict.
 
 ## Seeds (not run; the orchestrator drives this lane)
 
-`/goal Phases 1-6 of implementations-plan/e2e-infra-3/plan.md are ✓, each gate reported in the transcript; each arc's Codex loop converged (a resumed pass with no new material finding, quoted), then the cross-arc pass; the stack's PRs exist with their Closes lines, and the close-out archived the plan.`
+`/goal Phases 1-5 of implementations-plan/e2e-infra-3/plan.md are ✓ and Phase 6's hold is recorded (D10), each gate reported in the transcript; each arc's Codex loop converged (a resumed pass with no new material finding, quoted), then the cross-arc pass; the stack's PRs exist with their Closes lines, and the close-out archived the plan.`
 
 `/loop 15m Drive implementations-plan/e2e-infra-3 forward per its plan.md; never merge; stop after the PRs' checks report.`

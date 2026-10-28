@@ -2,4 +2,4 @@
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
-- [e2e-infra-3](e2e-infra-3/plan.md) — arc 1 in review — the Terms verdict, the fee check and the picker cancel as product states; a driver seam and Firefox 158
+- [e2e-infra-3](e2e-infra-3/plan.md) — arc 2 in review — the Terms verdict and the fee check as product states (landed); bringToFront and setViewport on the driver, the Firefox pin held at 153

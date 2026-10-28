@@ -12,7 +12,7 @@
 import { randomUUID } from "node:crypto"
 import type { KeyInput, Page } from "puppeteer"
 import { expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, newPage, prepareClick } from "./fixtures/browser"
+import { extensionUrl, gotoExtensionPage, newPage, prepareClick, setViewport } from "./fixtures/browser"
 import { readEditorStyles } from "./fixtures/code-editor"
 import { clickByTestId, type ExtensionContext, test } from "./fixtures/extension"
 import { pollUntil } from "./fixtures/poll"
@@ -300,7 +300,7 @@ async function selectAcross(page: Page, line: ShownLine): Promise<Pick<ShownLine
 
 async function openLogs(ctx: ExtensionContext): Promise<Page> {
 	const page = await newPage(ctx.browser)
-	await page.setViewport({ width: 900, height: 700 })
+	await setViewport(page, { width: 900, height: 700 })
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html#/windows/logger"))
 	await page.waitForFunction(
 		(id) => !!document.querySelector(`[data-testid="${id}"]`)?.shadowRoot?.querySelector(".cm-content"),
