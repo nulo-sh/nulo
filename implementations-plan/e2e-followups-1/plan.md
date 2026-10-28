@@ -126,7 +126,7 @@ UI impact: none on every arc (test files, fixtures and e2e docs only).
 - **Empty-start control:** rebuild the armed smoke build (the e2e-testing skill, § Build-armed tests: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<b>` in `apps/extension`), then `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=8101 NULO_E2E_CHAOS_RUNS=1 env -u EXTENSION_PATH bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0`.
 - **Pass:** each test exits green. The two red copies now pass their start and first open. At least one `unlocks` seed per browser unlocks `P2`, read from its record. A red seed is triaged from its record (README § Chaos runs). A fault in this arc's files is fixed, and the batch reruns. A product finding is filed after a dedupe, named in the PR and not fixed; that seed counts as red-filed, and the gate still passes. Log each seed's outcome and wall-clock in lessons/phase-1.md.
 
-## Phase 2: the picker triage (#1222)
+## Phase 2: the picker triage (#1222) ✓ (branch (a) traced; no code, D10)
 
 1. Write stage 1. Run it 20 times on the host's natural load, then 10 times with its process tree under `taskset -c` on four CPUs: `cd apps/extension && NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/_probe-picker.test.ts --retry=0` on the armed smoke build. Grep the job logs of the last 100 Firefox smoke PR runs for `the picker's input clicked and cancelled` (`gh api repos/nulo-sh/nulo/actions/jobs/<id>/logs`).
 2. Run stage 2 only on stage 1's trigger: its 10-and-10 control first, then the same batches until a miss or 30 more runs.
@@ -163,6 +163,7 @@ Each PR body states: the path, what held, the gates with counts and outcomes, ea
 - **D7** #1300's arc never edits product code. H1 maps to (a) only: (b) cannot come from a stall (F10, Opus). An H1 result is reported, not worked around in the test. Rejected: a sampler in the hidden background page, whose timers Firefox clamps (Opus), and which dies with the case's own restart (Codex r2).
 - **D8** Arcs 2 and 3 open a PR only when a change ships; A2's messages count (orchestrator's call).
 - **D9** On no reproduction, #1300 closes as not planned with its evidence and a ledger row, as the lane brief directs. It gets no `known-limit` label, since nothing shows its conditions are unsupported (Codex r1). #1222 stays open (A1).
+- **D10** Arc 2 traced branch (a), but its change cannot ship alone: Firefox's `pickFile` fills the pending input only because a focused window's native picker never answers, so dismissal removes the input first and the toolbar-panel restore case fails (lessons/phase-2.md). The dismissal and the pick are one `BrowserDriver` change, on #1111's ground; arc 2 ships no code, its record goes into arc 3's PR, and #1222 stays open with the trace. Rejected: shipping the dismissal with a pick that sets files before the `cancel` (a race, not a fix).
 
 ## Post-implementation
 
