@@ -1176,6 +1176,23 @@ describe("send page — a token the picker imported", () => {
 		}
 	})
 
+	test("a row picked while the report's re-read is out is the later choice: the import is not picked over it", async () => {
+		const OTHER = { ...TOKEN, id: 8, contract: `0x${"d".repeat(64)}`, symbol: "OTH" }
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore, reads } = await heldAfterMount()
+		const picked = report(w, NEW)
+		cacheStore.activeTokenIdx = OTHER.id
+		await flushPromises()
+		await amountInput(w).setValue("2")
+		reads[0]?.resolve([TOKEN, OTHER, NEW])
+		await picked
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(OTHER.id)
+		expect(cardSymbol(w)).toBe("OTH")
+		expect(amountText(w)).toBe("2")
+		w.unmount()
+	})
+
 	test("a USD session still ends on the swap, its amount cleared", async () => {
 		const chainId = CHAIN_IDS.TESTNET
 		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }

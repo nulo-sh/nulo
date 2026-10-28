@@ -570,10 +570,12 @@ watch(isEstimating, (estimating) => {
 let keepAmountFor
 async function pickAddedToken(token) {
 	const epoch = appStore.scopeEpoch
+	const current = cacheStore.activeTokenIdx
 	const listed = () => tokens.value.some((t) => t.id === token.id)
 	if (!listed()) await reloadTokens().catch(onReadFailed)
-	// Only a token the list holds can be active: any other leaves the card with no token.
-	if (cancelled || appStore.scopeEpoch !== epoch || !listed() || cacheStore.activeTokenIdx === token.id) return
+	// Only a token the list holds can be active: any other leaves the card with no token. A token
+	// picked while the list was read is the later choice, and keeps its own amount.
+	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
 	keepAmountFor = token.id
 	cacheStore.activeTokenIdx = token.id
 }
