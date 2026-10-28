@@ -287,6 +287,8 @@ cd apps/extension && NULO_PROFILE_CHAOS_RUNS=50 NULO_PROFILE_CHAOS_SEED=9001 \
 
 - `NULO_PROFILE_CHAOS_SEED` is the first seed (random when unset; the test's name shows it). A red seed prints its step, its violations and the plan, symbols only, and replays from its seed alone.
 
+`src/wallet/services/profile/profile-chaos-scenarios.composition.test.ts` runs, on the same harness, the scenarios whose window sits inside one service call: a hold at a passkey answer (`StepHooks.onAnswer`), a row changed or planted around the log (`plant`), strict mode turned on at a restore's MAC check, a stop after a method change's row write. Each is a planned list whose scenario step names the model steps its schedule makes (their writes, the last one's world), so O1-O7 judge it like any other step. A sequence held at a passkey answer or a MAC check has a control, the same hold with the fault absent; each has a break fixture that turns it red, the guard it rests on spied away or the opposite outcome forced. The seeded plans above are untouched: `planFrom` only plans a list from a world a harness write made.
+
 ### Agent sessions
 
 `scripts/e2e/chaos-session.ts` gives an agent, or a person, one isolated and instrumented wallet to drive by testid. `start` copies the armed smoke dist (`dist/<browser>`), spawns `chaos-session.test.ts` on it in its own process group and prints the session's directory once the wallet serves; `cmd` sends one command and prints its result; `stop` ends the session. From the repository root:
