@@ -116,6 +116,9 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 - **Final pass, fresh Codex session**: `approve`. No blocking finding; the regression is red and both controls green on the base, all three green after, by trace; existing cases `:523`, `:653`, `:675`, `:699` hold. Accepted, wording only: Fact 2 records a hold only when it reaches `heldBack()`; F3's "next Tab starts at the top" is unmeasured; F2's invariant scoped to the settle; `lint:actions` before each push.
 
+- **Arc 1, round 1** (Codex over `2ed82cef2..0964d0488`): one finding, accepted: the `settleProfile` TSDoc said the heard pick is newer than the read; it may be. Opus diff review, same round: two findings, accepted. The same comment also hung off "as in the route guard"; rewritten. No test failed if `follows !== followsAtStart` was dropped; a held-replay case now does (mutation-checked). `heard` renamed `lastHeard`.
+- **Arc 1, round 2** (Codex resume over `0964d0488..9de3bbcf6`): `clean`.
+
 ## Seeds
 
 `/goal` Arc <n> of implementations-plan/lock-followups-1/plan.md built, its red-first tests reported failing (or, for controls, passing) on the base and passing after, its gate passing in the transcript, its Codex loop converged (a resumed pass with no new material finding quoted), its PR open on the lane's stack with `Closes #<issue>`.
