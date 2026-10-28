@@ -9,10 +9,26 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 2914b9699
 trunk: dev
-status: arc 1 merged (#1324); arc 2 implemented, its review loop next
+status: closed (arc 1 #1324; arc 2 and the close-out one PR, awaiting the merge)
 issues: "#1157 (its Possible fix phase 2 and the scenario list's in-process items)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed. Arc 1 merged as #1324; arc 2 and this close-out ship as one PR (D21), awaiting the merge.
+- Shipped: part of #1157, its phase 2 and the scenario list's in-process items.
+  - #1324: `src/wallet/services/profile/profile-chaos.composition.test.ts` drives 22 of the catalog's actions in process, over the real `ProfileService`, `ContactService` and `ConfigStore`, and judges every step with O1-O7. Every unit run drives seed 8001 and four hand lists; `NULO_PROFILE_CHAOS_RUNS` and `NULO_PROFILE_CHAOS_SEED` arm a long mode.
+  - Arc 2: `profile-chaos-scenarios.composition.test.ts` runs every item of the lane's scenario list as a planned sequence on the same harness (2.1, D19, D20). Each item has a break fixture, and each item held at a passkey answer or a MAC check has a control. The harness gains `StepHooks.onAnswer`, `onBoot`, `drive` and `allowed`, plus `plant`; the model gains `planFrom`, and every e2e seed plans byte-identically. The model test's four fixed-work planning cases share one 180 s budget, which closes #1327 (D22).
+  - No product file changed, and no product fault came up.
+- Budget: the two composition files took 18.5, 18.0 and 14.6 s together in three extension-suite runs at retry 0, under the 30 s the plan states.
+- Lessons: none promoted.
+  - `lessons.md` holds 8191 of its 8192 bytes, and the pruning pass found no superseded entry. The Bun 1.4.2, Vue 3.5.42, Vue Test Utils 2.4.11 and zod 4.6.7 entries still hold. The four Aztec entries name 6.0.0-rc.1 while the line is 6.0.0; they were not re-checked here.
+  - The candidates stay in [lessons/phase-2.md](lessons/phase-2.md): a one-shot HMAC spy catches whichever verify comes first; a logged write that changes nothing is never recorded; and fixed planning work sits near vitest's 5 s default under load (#1327).
+- Known limits: none. Every item of the scenario list landed in process.
+- Open items: #1157 stays open for its browser scenarios. Each needs an extension window, a file pick or the network; they are listed in its close-out comment.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 ## Goal
 
@@ -104,7 +120,7 @@ Gate: `T` with no filter three times, each green; the file's duration in each (�
 Not taken: the degraded unlock and rekey refusals outside a restart (INT:3167, :3219, :3245; PU:295-311). Landed beyond the list above (D20): (i) two profiles on one credential with their salts swapped: neither opens; (h) a delete during the held change refuses it, and the second change's case is the stale refusal. Each item held at a passkey answer or a MAC check has a control (the same hold, the fault absent); each break fixture spies the guard away or forces the opposite outcome.
 Gate: `T src/wallet/services/profile/profile-chaos-scenarios.composition.test.ts` green; each break fixture red; recorded in lessons/phase-2.md.
 
-**2.2 Record.** Docs; each product finding filed (D14); the #1157 comment drafted for the close-out.
+**2.2 ✓ Record.** Docs; each product finding filed (D14); the #1157 comment drafted for the close-out.
 Gate: as 1.3's, with both files' durations (≤ 30 s together).
 
 ## Security & Adversarial Considerations

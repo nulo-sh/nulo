@@ -41,3 +41,11 @@ Codex (`gpt-6.1-sol`, high, read-only): reject, 5 findings. Opus beside it: cond
 Codex, resumed over `955a2f7fd..d2439bb67`: approve, no new finding. It reran both composition files: 81 passed, 1 skipped, 13.8 s together. The loop converged in two rounds.
 
 - `resume-codex.sh`'s third argument is the codex directory (round 1's `CODEX_DIR`), not the working directory. Given the worktree, a first resume wrote its files into the worktree root and fell back to the default model. It was stopped, and those files were removed.
+
+## Final gates
+
+At retry 0 on the head rebased onto `dev` (0a659726c), loads 70-190:
+- `bun run test:all`: 3/3 exit 0, wall 199, 189 and 166 s.
+- Extension unit suite with a JSON report: 3/3, 16,257 passed, 0 failed. Composition files: 17.1 + 1.4, 16.8 + 1.2 and 13.8 + 0.8 s. The model test took 47-79 s.
+- `bun run lint` and `bun run typecheck:all`: exit 0.
+- Smoke e2e on Chrome: 6/6 shards green, 274-354 s each. These ran on 955a2f7fd, before the rebase and before review round 1. The later commits change no file a smoke test imports except a doc comment in `model.ts`, and `dev`'s #1326 was green on its own CI.
