@@ -149,6 +149,7 @@ Each finding was checked against the tree; detail in lessons/phase-0.md.
 - **Arc 1, Codex round 2 (resumed):** conditional approve; 3 findings, all accepted: readings run before the first check, a write's strict mode is read as it lands, a comment.
 - **Arc 1, Codex round 3 (resumed):** approve. **Fresh session over the net diff:** reject; 2 findings and a comment, all accepted: unlock parameters must name the profile's own credential (O2), a first sighting's words must derive its master (O6). Round 2 (resumed): approve.
 - **Arc 2, Codex round 1:** reject; 5 findings, all accepted (lessons/phase-2.md § Review, round 1). O7's plant exemption hid wallet writes; a reveal's no-write was unenforced (`silent`); the retired-row break threw before the unlock; the swapped-salt break was a control; comments. **Opus, beside it:** conditional approve; 6 findings, all accepted: loose break patterns, the same retired-row break, docs that overclaimed controls, a break that patched both workers, the plant exemption, comments. Its latent note (a span's `before` reaches planning only) is recorded and left alone.
+- **Arc 2, Codex round 2 (resumed):** approve; no new finding. The loop converged.
 
 ## Seeds
 

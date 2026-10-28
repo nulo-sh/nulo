@@ -35,3 +35,9 @@ Codex (`gpt-6.1-sol`, high, read-only): reject, 5 findings. Opus beside it: cond
 - Comments (Codex 5, Opus 6): header cut to one sentence; `flipLast`'s doc deleted; `onMacVerify`, `parkAfterWrite`, `plantP2` and `planFrom` docs corrected; `sessionManagerOf`'s dead branch removed.
 - Not changed: a span's `before` patch reaches planning only. The driver and the checkers get the previous step's world, so the drivers bind P2 and K2 by hand (Opus, latent). This is harmless in these sequences, and changing it would change `runPlan`.
 - Run after the fixes: 39/39 at retry 0, 0.65 s of tests; typecheck exit 0.
+
+## Review, round 2
+
+Codex, resumed over `955a2f7fd..d2439bb67`: approve, no new finding. It reran both composition files: 81 passed, 1 skipped, 13.8 s together. The loop converged in two rounds.
+
+- `resume-codex.sh`'s third argument is the codex directory (round 1's `CODEX_DIR`), not the working directory. Given the worktree, a first resume wrote its files into the worktree root and fell back to the default model. It was stopped, and those files were removed.
