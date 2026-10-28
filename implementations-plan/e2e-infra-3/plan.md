@@ -121,7 +121,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **Validation gate:** the arming probe and the paired numbers in `lessons/phase-3.md`; if item 6 shipped, `cd apps/extension && bun --bun vitest run scripts/e2e/firefox-driver.test.ts` and `toolbar-panel.test.ts` on Firefox are green.
 
-## Arc 1 gate (after Phase 3, on the final head)
+## Arc 1 gate (after Phase 3, on the final head) ✓ (`e8a22a626`; results in lessons/phase-3.md)
 
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`: each exits 0.
 - `legal-acceptance`, `type-roles` and (if item 6 shipped) `toolbar-panel`: three runs each per browser at `--retry=0`, every run green, counts and per-file durations recorded.

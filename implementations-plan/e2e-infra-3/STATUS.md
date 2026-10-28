@@ -7,3 +7,4 @@
 - 2026-10-27 Phase 1 done: verdict marker scoped to session routes after a traced lock-screen pass (D1 amended); S7 red-proven and green 10/10. Phase 2 next.
 - 2026-10-27 Phase 2 done: read mark on the fee card, waited out with the snack (bound 15 s, slowest read 2.74 s). Phase 3 next.
 - 2026-10-27 Phase 3 done, inconclusive: the arming holds (CID probe), but contended click-to-cancel is 11 ms median native vs 13 ms dismissed; no change, #1222 commented. Arc 1 gate next.
+- 2026-10-28 arc 1 review converged (Codex r3 approve) and its gate green on e8a22a626; PR next.
