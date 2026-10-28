@@ -7,8 +7,8 @@
  */
 import type { Page } from "puppeteer"
 import { type Answer, bindCeremonies, type Ceremony, type DiscoveryRequest } from "./checkers"
-import type { CredentialRef } from "./model"
-import type { RunState } from "./state"
+import type { CredentialRef, PlannedStep } from "./model"
+import type { Driven, RunState } from "./state"
 
 type CaptureProbe = Window & { __chaosPrf?: string[]; __chaosAnswers?: Answer[]; __chaosPicks?: DiscoveryRequest[] }
 
@@ -74,7 +74,8 @@ export async function drainPrf(s: RunState, page: Page): Promise<void> {
  * The browser's pick in its passkey chooser, as a person makes it: the next `get` on `page` is
  * narrowed to `credentialId` (base64, as a row stores it), but only when the wallet's own request
  * names no credential and asks for the PRF output; any other request passes untouched, and
- * `answeredCredentials` fails the step on it.
+ * `answeredCredentials` fails the step on it. It stays armed until the page's next `get`, so a press
+ * that never asks leaves it for a later one.
  */
 export async function pickDiscovered(page: Page, credentialId: string): Promise<void> {
 	await page.evaluate((id: string) => {
@@ -107,4 +108,16 @@ export async function answeredCredentials(s: RunState, page: Page, expected: rea
 	for (const value of prf) s.prf.add(value)
 	const wrong = bindCeremonies(s.bindings, { answers, picks }, expected)
 	if (wrong) throw new Error(wrong)
+}
+
+/** `answeredCredentials`, once the step settled on an outcome the model allows: any other outcome
+ *  is the oracles' to report, and its answers cannot match the step's. */
+export async function checkAnswers(
+	s: RunState,
+	page: Page,
+	step: PlannedStep,
+	driven: Driven,
+	expected: readonly Ceremony[],
+): Promise<void> {
+	if (driven.settle.reached && step.expect.outcomes.includes(driven.outcome)) await answeredCredentials(s, page, expected)
 }

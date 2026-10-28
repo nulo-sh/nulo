@@ -10,18 +10,35 @@ import { answerWithCredential } from "../../fixtures/passkey"
 import { derivedAddresses, reexportImported } from "./accounts-io"
 import type { RETIRED_REFUSALS, VerifyReading } from "./checkers"
 import { readCensus } from "./collect"
-import { live, type ModelFile, type ModelProfile, otherCredentials, type World } from "./model"
+import { type CredentialRef, live, type ModelFile, type ModelProfile, otherCredentials, type World } from "./model"
 import { expireRelease } from "./pre-update"
 import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
-import { authSubmitReady, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
+import { authSubmitReady, dismissNotices, firstSignal, HOME, openRoute, pickOnLockScreen, timed, typePasswordAndSubmit } from "./ui"
 import { waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId } from "../../fixtures/dom"
 
 const STEP_MS = 60_000
 
-/** A wrong secret for `p`: another password, or a passkey the authenticator holds other than `p`'s
- *  own (a replaced or a declined one included), else a refused prompt. Resolves whether the lock
- *  screen refused it. */
+const REFUSED = [PASSKEY_COPY.unlockFailed, PASSKEY_COPY.noPrf, PASSKEY_COPY.notConfirmed].map((text) => ({
+	label: "refused",
+	text,
+	hash: "/popup/auth",
+}))
+
+/** Whether the lock screen refuses `p` answered by `other`. */
+async function otherRefused(s: RunState, other: CredentialRef): Promise<boolean> {
+	const page = s.anchor
+	// The last attempt's refusal toast would read as this one's.
+	await dismissNotices(page)
+	await authSubmitReady(page)
+	await answerWithCredential(page, credentialId(s, other))
+	await clickByTestId(page, "auth-submit")
+	return (await firstSignal(page, [...REFUSED, HOME], STEP_MS)).label === "refused"
+}
+
+/** Wrong secrets for `p`: another password, or each passkey the authenticator holds other than
+ *  `p`'s own, a replaced or a declined one included, else a refused prompt. Resolves whether the
+ *  lock screen refused every one. */
 async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boolean> {
 	const page = s.anchor
 	if (p.method === "password") {
@@ -30,24 +47,15 @@ async function wrongAttempt(s: RunState, p: ModelProfile, w: World): Promise<boo
 			(await firstSignal(page, [{ label: "refused", testid: "error-text", hash: "/popup/auth" }, HOME], STEP_MS)).label === "refused"
 		)
 	}
+	const others = otherCredentials(w, p.ref)
+	for (const other of others) if (!(await otherRefused(s, other))) return false
+	if (others.length || !s.auth) return true
 	await authSubmitReady(page)
-	const other = otherCredentials(w, p.ref).at(-1)
-	if (other) {
-		await answerWithCredential(page, credentialId(s, other))
-		await clickByTestId(page, "auth-submit")
-	} else if (s.auth) {
-		const allow = await s.auth.refuseNextStep(page)
-		await clickByTestId(page, "auth-submit")
-		await firstSignal(page, [{ label: "refused", text: PASSKEY_COPY.notConfirmed }], STEP_MS)
-		await allow()
-		return (await page.evaluate(() => location.hash)).includes("/popup/auth")
-	}
-	const refusals = [PASSKEY_COPY.unlockFailed, PASSKEY_COPY.noPrf, PASSKEY_COPY.notConfirmed].map((text) => ({
-		label: "refused",
-		text,
-		hash: "/popup/auth",
-	}))
-	return (await firstSignal(page, [...refusals, HOME], STEP_MS)).label === "refused"
+	const allow = await s.auth.refuseNextStep(page)
+	await clickByTestId(page, "auth-submit")
+	await firstSignal(page, [{ label: "refused", text: PASSKEY_COPY.notConfirmed }], STEP_MS)
+	await allow()
+	return (await page.evaluate(() => location.hash)).includes("/popup/auth")
 }
 
 async function rightAttempt(s: RunState, p: ModelProfile): Promise<boolean> {

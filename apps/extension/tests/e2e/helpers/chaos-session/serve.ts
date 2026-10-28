@@ -34,7 +34,7 @@ import {
 	type World,
 } from "../profile-chaos/model"
 import { RESTART_MS, replaceBackground } from "../profile-chaos/restart"
-import { checkStepLogs, homesOf, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
+import { checkStepLogs, drainPages, homesOf, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
 import { startRun } from "../profile-chaos/start"
 import type { Drive, RunState } from "../profile-chaos/state"
 import { backgroundServing } from "../profile-chaos/ui"
@@ -729,6 +729,9 @@ class Session {
 		const incomplete = (reason: string) => lines.push({ kind: "incomplete", n, verb, reason })
 		await this.saveDownloads(incomplete)
 		await this.learnShownPhrases()
+		// A command's passkey answers end at its checks: their PRF outputs become needles, and no
+		// later `do` reads them as its own.
+		await drainPages(s)
 		const needles = await needlesOf(s)
 		let restarted = ends.includes("background")
 		const origin = await backgroundOrigin(s.ctx)

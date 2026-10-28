@@ -4,7 +4,6 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { decryptAccountExport } from "@nulo/aztec-runtime/account"
-import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { readActiveNetwork } from "../../fixtures/networks"
 import { answerWithCredential } from "../../fixtures/passkey"
@@ -13,9 +12,10 @@ import { exportAccountBody, openAccountExport, previewImport } from "../account-
 import { armDownloadCapture, readCapturedDownload } from "../download-capture"
 import { refusesShortPassword, shortFilePassword } from "./backups"
 import type { ChainAddresses } from "./checkers"
-import type { FileRef, ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
+import type { CredentialRef, FileRef, ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
+import { answeredCredentials, capturePrf, drainPrf } from "./prf-capture"
 import { type Driven, type RunState, credentialId, profileId, secretFor } from "./state"
-import { type Signal, settle, timed } from "./ui"
+import { PASSKEY_REFUSAL, type Signal, settle, timed } from "./ui"
 
 const ACCOUNT_MS = 120_000
 /** Derived accounts' type in `Account.type`; an imported account has another. */
@@ -57,12 +57,6 @@ async function exportRowName(s: RunState, open: ModelProfile, which: ParamsMap["
 }
 
 const APPROVED: Signal = { label: "approved", testid: "account-file-password-input" }
-/** The account page's passkey failures, by the toast each one shows. */
-const PASSKEY_REFUSAL: Signal[] = [
-	{ label: "cancelled", text: PASSKEY_COPY.notConfirmed },
-	{ label: "refused", text: PASSKEY_COPY.noPrf },
-	{ label: "refused", text: PASSKEY_COPY.unlockFailed },
-]
 
 /** Past the agree gate, Confirm with passkey answered as `p` says: the page asks the file password
  *  once the answer opened the profile. */
@@ -158,8 +152,12 @@ export async function reexportImported(s: RunState, owner: ModelProfile, file: M
 		const password = secretFor(s, owner.password as never)
 		return (await exportedKey(await exportAccountBody(s.anchor, name, true, password), password)).signingKey
 	}
+	// The unlock before it is drained, so the only answer checked is the re-export's own.
+	await capturePrf(s.anchor)
+	await drainPrf(s, s.anchor)
 	const made = await passkeyFile(s, name, { password: file.password as SecretRef })
 	if (!("body" in made)) throw new Error(`${owner.ref}'s passkey did not approve re-exporting ${file.ref}`)
+	await answeredCredentials(s, s.anchor, [{ kind: "get", credential: owner.credential as CredentialRef }])
 	return (await exportedKey(made.body, made.password)).signingKey
 }
 

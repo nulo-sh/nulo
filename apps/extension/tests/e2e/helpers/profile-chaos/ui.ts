@@ -3,6 +3,7 @@
  * state reached within a bound, and a miss reports the route and the loading testids on screen.
  */
 import type { Page } from "puppeteer"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { openProfileChooser, pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
@@ -26,6 +27,13 @@ export interface Signal {
 	/** `storage.local` holds no such key. */
 	noLocalKey?: string
 }
+
+/** A passkey prompt's failures, by the toast each one shows (`passkeyFailureCopy`). */
+export const PASSKEY_REFUSAL: Signal[] = [
+	{ label: "cancelled", text: PASSKEY_COPY.notConfirmed },
+	{ label: "refused", text: PASSKEY_COPY.noPrf },
+	{ label: "refused", text: PASSKEY_COPY.unlockFailed },
+]
 
 export async function firstSignal(page: Page, signals: readonly Signal[], boundMs: number): Promise<{ label?: string; elapsedMs: number }> {
 	const t0 = Date.now()

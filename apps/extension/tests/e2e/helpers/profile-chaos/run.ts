@@ -123,7 +123,7 @@ const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'\\<>]+/gi
 const LOOPBACK_ORIGIN = /^[a-z][a-z0-9+.-]*:\/\/(localhost|127\.0\.0\.1|\[::1\])(?![\w.-])(:\d+)?/i
 
 /** The PRF outputs every page of the run captured since the last drain. */
-async function drainPages(s: RunState): Promise<void> {
+export async function drainPages(s: RunState): Promise<void> {
 	for (const page of [s.anchor, ...s.extras.map((e) => e.page)]) await drainPrf(s, page)
 }
 

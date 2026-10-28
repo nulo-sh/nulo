@@ -42,6 +42,7 @@ import {
 	HOME,
 	isLocked,
 	openRoute,
+	PASSKEY_REFUSAL,
 	pressUntilGone,
 	pickOnLockScreen,
 	pressTwice,
@@ -58,7 +59,7 @@ import {
 	watchPromptAbort,
 } from "./ui"
 import { verifyAll } from "./verify"
-import { answeredCredentials, capturePrf, drainPrf, minted, pickDiscovered } from "./prf-capture"
+import { answeredCredentials, capturePrf, checkAnswers, drainPrf, minted, pickDiscovered } from "./prf-capture"
 import { changeUnlockMethod, raceLockDuringMethodChange } from "./unlock-method"
 import { exportFullBackup, pickEarlierBackup, restoreFile } from "./backups"
 import { editRowDuringUnlock as editRow, tamperedUnlock as tamperSlot } from "./tamper"
@@ -86,13 +87,6 @@ function openBefore(before: World): ModelProfile {
 	if (!p) throw new Error("the step needs an open profile and the model holds none")
 	return p
 }
-
-/** The lock screen's passkey failures, by the toast each one shows (`passkeyFailureCopy`). */
-const PASSKEY_REFUSAL: { label: string; text: string }[] = [
-	{ label: "cancelled", text: PASSKEY_COPY.notConfirmed },
-	{ label: "refused", text: PASSKEY_COPY.noPrf },
-	{ label: "refused", text: PASSKEY_COPY.unlockFailed },
-]
 
 // ── create ──────────────────────────────────────────────────────────────
 
@@ -143,11 +137,6 @@ async function passkeyPress(
 	if (!isMinted(before, credential)) return links.submit
 	await pickDiscovered(page, credentialId(s, credential))
 	return links.reuse
-}
-
-/** Checks a passkey step's answers once it settled on an outcome the model allows. */
-async function checkAnswers(s: RunState, page: Page, step: PlannedStep, driven: Driven, expected: Ceremony[]): Promise<void> {
-	if (driven.settle.reached && step.expect.outcomes.includes(driven.outcome)) await answeredCredentials(s, page, expected)
 }
 
 async function bindOpened(s: RunState, ref: ModelProfile["ref"], before?: World): Promise<void> {
@@ -408,7 +397,6 @@ async function answerDuplicate(
 	return settle(page, done, { home: "committed", refused: "refused" }, boundMs)
 }
 
-/** The import form's password fields, filled with `p`'s password. */
 function passwordInputs(s: RunState, p: ParamsMap["importPhrase"]): Record<string, string> {
 	const password = secretFor(s, p.password as never)
 	return {
@@ -479,7 +467,20 @@ const importBackup: Drivers["importBackup"] = async (s, p, step, before) => {
 	return driven
 }
 
-const exportAccountFile: Drivers["exportAccountFile"] = async (s, p, _step, before) => exportAccount(s, openBefore(before), p)
+/** A passkey profile's file asks one passkey: its own, the other one the step answers with, or
+ *  none the authenticator refused. */
+function fileCeremonies(open: ModelProfile, p: ParamsMap["exportAccountFile"]): Ceremony[] {
+	if (p.variant === "refuse") return []
+	const credential = p.variant === "other" ? p.other : open.credential
+	return [{ kind: "get", credential: credential as CredentialRef }]
+}
+
+const exportAccountFile: Drivers["exportAccountFile"] = async (s, p, step, before) => {
+	const open = openBefore(before)
+	const driven = await exportAccount(s, open, p)
+	if (open.method === "passkey") await checkAnswers(s, s.anchor, step, driven, fileCeremonies(open, p))
+	return driven
+}
 
 const importAccountFileDriver: Drivers["importAccountFile"] = async (s, p, _step, before) =>
 	importAccountFile(s, before.files.find((f) => f.ref === p.file) as ModelFile)
@@ -710,7 +711,7 @@ export const DRIVERS: Drivers = {
 	editRowDuringUnlock: async (s, p, _step, before) => editRow(s, p, profileOf(before, before.selected as never) as ModelProfile),
 	tamperedUnlock: async (s, p, _step, before) => tamperSlot(s, p, profileOf(before, p.target) as ModelProfile),
 	raceLockDuringReveal,
-	changeUnlockMethod: async (s, p, _step, before) => changeUnlockMethod(s, openBefore(before), p),
+	changeUnlockMethod: async (s, p, step, before) => changeUnlockMethod(s, openBefore(before), p, step),
 	raceLockDuringMethodChange: async (s) => raceLockDuringMethodChange(s),
 	dappWhileLocked: networkOnly,
 	dappDuringHeldUnlock: networkOnly,

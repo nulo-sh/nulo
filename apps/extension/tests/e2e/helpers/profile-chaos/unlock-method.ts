@@ -5,9 +5,9 @@ import { waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet } from "../../fixtures/passkey"
 import { lockFromAnotherWindow } from "../../fixtures/session"
-import type { CredentialRef, ModelProfile, ParamsMap } from "./model"
+import type { CredentialRef, ModelProfile, ParamsMap, PlannedStep } from "./model"
 import type { Ceremony } from "./checkers"
-import { answeredCredentials, minted } from "./prf-capture"
+import { checkAnswers, minted } from "./prf-capture"
 import { credentialId, type Driven, type RunState, secretFor, wrongSecret } from "./state"
 import { openRoute, type Signal, settle, timed, unlockAttemptEnded, watchPromptAbort } from "./ui"
 
@@ -87,7 +87,7 @@ async function toPasskey(s: RunState, open: ModelProfile, p: Change): Promise<Dr
 
 /** One change from the page, from wherever the last step left the anchor; a change made leaves for
  *  Settings, and the step waits until it has. */
-export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Change): Promise<Driven> {
+export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Change, step: PlannedStep): Promise<Driven> {
 	const page = s.anchor
 	const t0 = Date.now()
 	await openRoute(page, ROUTE)
@@ -97,7 +97,7 @@ export async function changeUnlockMethod(s: RunState, open: ModelProfile, p: Cha
 	if (p.change === "passkey") driven = await toPasskey(s, open, p)
 	else if (p.change === "password") driven = await toPassword(s, p)
 	else driven = await pressAnswered(s, p, "unlock-method-new-passkey", [committed(p), ...REFUSALS])
-	if (driven.settle.reached) await answeredCredentials(s, page, ceremoniesOf(p, open.credential))
+	await checkAnswers(s, page, step, driven, ceremoniesOf(p, open.credential))
 	if (driven.outcome === "committed" && driven.settle.reached)
 		await page.waitForFunction(() => !location.hash.includes("/unlock-method"), { timeout: CHANGE_MS, polling: 100 })
 	driven.settle.elapsedMs = Date.now() - t0

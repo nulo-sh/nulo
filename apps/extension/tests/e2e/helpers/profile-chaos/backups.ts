@@ -27,7 +27,6 @@ export function shortFilePassword(s: RunState, ref: SecretRef): string {
 	return value
 }
 
-/** A file password section and the button it enables. */
 export type FilePasswordForm = { field: "backup-encrypt-password" | "account-file-password"; button: string }
 
 const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "protect-password-btn" }

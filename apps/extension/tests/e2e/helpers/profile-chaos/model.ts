@@ -371,6 +371,9 @@ const METHOD_CHANGE_WRITES = cite(SERVICE, 1501, "await this.repo.set(original.i
 const METHOD_CHANGE_REOPENS = cite(SERVICE, 1519, "await this.openSessionVerified(replacement, secret, dek)")
 const METHOD_VERIFY_REFUSES = cite(SERVICE, 1352, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 const METHOD_WRONG_PASSWORD = cite(UNLOCK_METHOD, 191, "if (isCurrent()) isWrongPassword.value = true")
+/** A password profile's change checks the password before it makes a passkey, so a wrong one mints none. */
+const METHOD_PASSWORD_FIRST = cite(UNLOCK_METHOD, 188, "await managers.profile.verifyUnlockCredential(id, { password: typed })")
+const METHOD_THEN_MINTS = cite(UNLOCK_METHOD, 195, "const next = await nextPasskey()")
 const METHOD_NEW_PASSKEY = cite(UNLOCK_METHOD, 144, "const nextPasskey = () => newPasskey.ask(")
 const METHOD_CHECKS_PASSKEY = cite(UNLOCK_METHOD, 207, "await managers.profile.verifyUnlockCredential(id, { passkey: current })")
 const METHOD_CHECKS_HELD = cite(UNLOCK_METHOD, 219, "verifyUnlockCredential(appStore.profile.id, { passkey: answer })")
@@ -523,7 +526,7 @@ function drawCredential(rng: Rng, w: World, caps: Caps): CredentialRef | undefin
 	return reused && (!fresh || chance(rng, 0.35)) ? reused : fresh
 }
 
-/** What a passkey choice adds to a step's sources, and to the counter: a mint takes the next number. */
+/** A passkey choice's step on the counter: a mint takes the next number, a reuse none. */
 const minting = (w: World, credential: CredentialRef | undefined): { credential: number } => ({
 	credential: credential !== undefined && !isMinted(w, credential) ? 1 : 0,
 })
@@ -1523,7 +1526,8 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 			: { change: "password", current, password: r.secret() }
 	},
 	expect: (w, p) => {
-		if (p.current === "wrong") return unchanged(w, "refused", [METHOD_VERIFY_REFUSES, METHOD_WRONG_PASSWORD])
+		if (p.current === "wrong")
+			return unchanged(w, "refused", [METHOD_PASSWORD_FIRST, METHOD_VERIFY_REFUSES, METHOD_WRONG_PASSWORD, METHOD_THEN_MINTS])
 		const checks = p.change === "new-passkey" ? METHOD_CHECKS_PASSKEY : METHOD_CHECKS_HELD
 		if (p.current === "refuse") return unchanged(w, "cancelled", [checks, METHOD_CANCEL, PROMPT_DISMISSED])
 		if (p.current === "other") return unchanged(w, "refused", [checks, SLOTS_BIND_PASSKEY, METHOD_VERIFY_REFUSES])
@@ -1537,7 +1541,7 @@ const changeUnlockMethod: ActionSpec<"changeUnlockMethod"> = {
 		bump(next, p.change === "password" ? { secret: 1 } : { credential: 1 })
 		next.session = sessionFor(next, changed.ref)
 		const sources = [
-			p.change === "passkey" ? METHOD_VERIFY_REFUSES : checks,
+			...(p.change === "passkey" ? [METHOD_PASSWORD_FIRST, METHOD_THEN_MINTS] : [checks]),
 			...(p.change === "password" ? [] : [METHOD_NEW_PASSKEY]),
 			METHOD_CHANGE,
 			METHOD_CHANGE_WRITES,

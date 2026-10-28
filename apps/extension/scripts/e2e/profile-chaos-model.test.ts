@@ -1811,6 +1811,25 @@ describe("O6, profiles sharing a passkey and a passkey profile's imports", () =>
 	] as const)("fails %s", (label, readings) => {
 		expect(shown(`O6 ${label}`, checkVerify(w, readings as never, b)).length).toBeGreaterThan(0)
 	})
+
+	test("fails two profiles on one passkey deriving one account, each as first read", () => {
+		const keyed = bind([
+			["P1", P1],
+			["P2", P2],
+			["P3", "cccc3333"],
+		])
+		keyed.addresses.set("P1", on(["0xa1"]))
+		keyed.addresses.set("P2", on(["0xb1"]))
+		keyed.addresses.set("P3", on(["0xb1"]))
+		const found = shown(
+			"O6 two profiles on one passkey deriving one account",
+			checkVerify(w, [reading("P1"), reading("P2"), reading("P3", { addresses: ["0xb1"] })], keyed),
+		)
+		expect(found.map((v) => v.message)).toEqual([
+			`P2 and P3 hold different phrases but both derive 0xb1 on chain ${CHAIN}`,
+			`P3 and P2 hold different phrases but both derive 0xb1 on chain ${CHAIN}`,
+		])
+	})
 })
 
 describe("O7, leaks", () => {

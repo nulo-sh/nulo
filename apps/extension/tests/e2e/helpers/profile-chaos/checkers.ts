@@ -269,7 +269,6 @@ export function bindCeremonies(
 	return i < seen.answers.length ? `the page saw answers past the step's ceremonies: [${shown}]` : undefined
 }
 
-/** Whether `got` is `want`'s answer: its kind, and its credential (`answeredBy`). */
 const matchAnswer = (b: Bindings, want: Ceremony, got: Answer | undefined): boolean | string =>
 	got?.kind === want.kind ? answeredBy(b, want, got) : false
 
@@ -880,7 +879,7 @@ export interface VerifyReading {
 	 *  place, once the profile opened. */
 	lost?: string[]
 	/** Each imported account's signing key as exported now, beside the one it was imported with.
-	 *  A password profile must show exactly the files the model says it imported. */
+	 *  An opened profile must show exactly the files the model says it imported. */
 	sentinels: { file: string; now: string; imported: string }[]
 	/** A retired profile's probe: what its lock screen shows, and how each call that would open or
 	 *  export it answered (`retired` for the wallet's retired refusal, else the call's own outcome). */
@@ -943,6 +942,19 @@ function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings)
 	return out
 }
 
+/** Profiles on different phrases derive different accounts, two on one passkey included. */
+function checkStrangers(w: World, p: ModelProfile, r: VerifyReading, b: Bindings): Violation[] {
+	const first = r.addresses[0]
+	if (first === undefined || p.phrase === undefined) return []
+	return w.profiles
+		.filter((x) => x.phrase !== undefined && x.phrase !== p.phrase)
+		.filter((x) => {
+			const theirs = b.addresses.get(x.ref)
+			return theirs?.chainId === r.chainId && theirs.addresses[0] === first
+		})
+		.map((x) => violation("O6", `${r.ref} and ${x.ref} hold different phrases but both derive ${first} on chain ${r.chainId}`))
+}
+
 function checkSentinels(p: ModelProfile, r: VerifyReading): Violation[] {
 	const want = [...p.imported].sort().join(",")
 	const got = r.sentinels
@@ -973,7 +985,7 @@ function checkVerifyOne(w: World, r: VerifyReading, b: Bindings): Violation[] {
 				out.push(violation("O6", `${r.ref}'s account ${i} moved from ${a} to ${r.addresses[i]} on chain ${r.chainId}`))
 		})
 	for (const m of r.lost ?? []) out.push(violation("O3", m))
-	return [...out, ...checkSiblings(w, p, r, b), ...checkSentinels(p, r)]
+	return [...out, ...checkSiblings(w, p, r, b), ...checkStrangers(w, p, r, b), ...checkSentinels(p, r)]
 }
 
 export function checkVerify(w: World, readings: readonly VerifyReading[], b: Bindings): Violation[] {
