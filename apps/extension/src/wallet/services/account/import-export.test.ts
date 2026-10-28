@@ -33,6 +33,7 @@ import {
 	serializeAccountExport,
 } from "@nulo/aztec-runtime/account"
 import { asImportedKeysDek, type PasskeyCredentialData, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { InvalidPasswordError } from "@nulo/extension-messaging/errors"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -86,7 +87,7 @@ async function build(withBalances = false) {
 			// exportPlain(id, password) → base64 master iff the password is right (service-side auth).
 			exportPlain: async (id: string, password?: string, credentialData?: PasskeyCredentialData) => {
 				opens("exportPlain", id, password, credentialData)
-				if (!authorized(password, credentialData)) throw new Error("Invalid password")
+				if (!authorized(password, credentialData)) throw new InvalidPasswordError()
 				return MASTER_B64
 			},
 			// exportImportedKeysDek(id, password) → fresh-auth DEK for the account-export path.
@@ -189,7 +190,8 @@ describe("AccountService import/export", () => {
 	test("export requires the profile password (service-side auth)", async () => {
 		const { account } = await build()
 		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
-		await expect(account.exportAccount("p1", CHAIN, addrFor(SK), "wrong-pass", false)).rejects.toThrow()
+		// The page words a wrong password from its type, so the export must not flatten it.
+		await expect(account.exportAccount("p1", CHAIN, addrFor(SK), "wrong-pass", false)).rejects.toBeInstanceOf(InvalidPasswordError)
 		const body = await account.exportAccount("p1", CHAIN, addrFor(SK), "correct-pass", false)
 		expect(body).toContain("nulo-account-export")
 	})

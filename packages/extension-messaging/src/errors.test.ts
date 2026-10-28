@@ -23,6 +23,8 @@ import {
 	OwnAccountIntentRefusalError,
 	RetiredProfileError,
 	StaleUnlockCredentialError,
+	PasskeyNotOpenedError,
+	SameUnlockMethodError,
 	UnlockMethodChangedError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -329,6 +331,20 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			code: "STALE_UNLOCK_CREDENTIAL",
 			rebuild: pass,
 		},
+		{
+			ctor: PasskeyNotOpenedError,
+			make: () => new PasskeyNotOpenedError(),
+			name: "PasskeyNotOpenedError",
+			code: "PASSKEY_NOT_OPENED",
+			rebuild: pass,
+		},
+		{
+			ctor: SameUnlockMethodError,
+			make: () => new SameUnlockMethodError(),
+			name: "SameUnlockMethodError",
+			code: "SAME_UNLOCK_METHOD",
+			rebuild: pass,
+		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
 		{
 			ctor: ImportedAccountUnusableError,
@@ -414,6 +430,8 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		["RetiredProfileError", () => new RetiredProfileError(), "This profile was made with an earlier version and can't be opened"],
 		["UnlockMethodChangedError", () => new UnlockMethodChangedError(), "The unlock method changed. Unlock again to continue"],
 		["StaleUnlockCredentialError", () => new StaleUnlockCredentialError(), "The profile does not unlock with this credential"],
+		["PasskeyNotOpenedError", () => new PasskeyNotOpenedError(), "Passkey did not open this profile"],
+		["SameUnlockMethodError", () => new SameUnlockMethodError(), "A password profile changes its password, not its unlock method"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})

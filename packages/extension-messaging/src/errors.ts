@@ -592,6 +592,30 @@ export class StaleUnlockCredentialError extends WalletError {
 }
 
 /**
+ * A passkey answer opened no slot of the profile it was asked for: another passkey, or a slot
+ * changed in storage. The passkey's refusal, which no screen may read as a wrong password.
+ */
+export class PasskeyNotOpenedError extends WalletError {
+	public static readonly CODE = "PASSKEY_NOT_OPENED"
+	public static readonly MESSAGE = "Passkey did not open this profile"
+
+	public constructor(message: string = PasskeyNotOpenedError.MESSAGE, details?: unknown) {
+		super(PasskeyNotOpenedError.CODE, message, details, "PasskeyNotOpenedError")
+	}
+}
+
+/** A change of unlock method asked a password profile for a new password, which only a password
+ *  change sets. Nothing was written. */
+export class SameUnlockMethodError extends WalletError {
+	public static readonly CODE = "SAME_UNLOCK_METHOD"
+	public static readonly MESSAGE = "A password profile changes its password, not its unlock method"
+
+	public constructor(message: string = SameUnlockMethodError.MESSAGE, details?: unknown) {
+		super(SameUnlockMethodError.CODE, message, details, "SameUnlockMethodError")
+	}
+}
+
+/**
  * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
  * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
  * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
@@ -642,6 +666,8 @@ const REBUILT_AS = [
 	RetiredProfileError,
 	UnlockMethodChangedError,
 	StaleUnlockCredentialError,
+	PasskeyNotOpenedError,
+	SameUnlockMethodError,
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,

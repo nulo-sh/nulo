@@ -15,3 +15,4 @@
 - 2026-10-28: gate attempt 1: #1132 replay 12/12 green (after `logCallFailure`); `security.test.ts` red on run 35 with a second unhandled `Profile locked`, named as `stale.resume`'s `getPendingReset` and fixed; the 60-run count restarts.
 - 2026-10-28: arc 2 gate green on the head (unit layers; #1132 12/12; #1133 Firefox 3/3; security.test.ts 60/60 Chrome + 1 Firefox; network seed 1001 no red). Review loop next.
 - 2026-10-28: arc 2 review: Codex round 1 one finding plus the Opus leg's (fixed in 2db8f931c), round 2 clean. Reviewed head: lint, typecheck:all, test (943 files), check:plans green; security.test.ts 8/8 and #1132 replay 3/3 on a fresh armed build. PR next.
+- 2026-10-28: arc 3 starts on `log-levels-1-credentials`, stacked on PR #1297. Phase 3.1 green (errors 218, profile service 524, account import-export 22; the two exportPlain refusal cases red on the base service).

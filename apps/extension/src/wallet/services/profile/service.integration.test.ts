@@ -21,6 +21,7 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { LoggerStore } from "@/wallet/logger"
+import { LogLevel } from "@nulo/wallet-core/logger"
 import { ServiceCollection } from "@/wallet/base"
 import { Service } from "@nulo/extension-messaging/background"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -28,6 +29,7 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyNotOpenedError,
 	RestoreTornError,
 	RecoveryModeError,
 	RetiredProfileError,
@@ -375,10 +377,14 @@ describe("ProfileService integration", () => {
 			expect(exported.length).toBeGreaterThan(0)
 		}, 30_000)
 
-		test("exportPlain with wrong password throws with InvalidPasswordError's legacy message", async () => {
-			const { service } = await makeService()
+		test("exportPlain refuses a wrong password as InvalidPasswordError, with its legacy message and no error line", async () => {
+			const { logger, service } = await makeService()
 			const profile = await service.createProfile("P", "pass1234")
-			await expect(service.exportPlain(profile.id, "wrong")).rejects.toThrow(/Invalid profile password/)
+			const log = vi.spyOn(logger, "log")
+			const refusal = service.exportPlain(profile.id, "wrong")
+			await expect(refusal).rejects.toBeInstanceOf(InvalidPasswordError)
+			await expect(refusal).rejects.toThrow(/Invalid profile password/)
+			expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toEqual([])
 		}, 30_000)
 
 		test("exportPlain + exportMnemonic REJECT a tombstoned profile — no secret exfil mid-delete", async () => {
@@ -430,7 +436,7 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 
 		test("exportPlain refuses another credential's answer, even one carrying this credential's output, and the same credential's at another input", async () => {
-			const { service } = await makeService()
+			const { logger, service } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
 			const { credentialId, prfSalt } = await service.getPasskeyUnlockParams(profile.id)
 			const ownOutput = await fakePasskeyAnswer(credentialId, prfSalt)
@@ -439,7 +445,12 @@ describe("ProfileService integration", () => {
 				{ ...ownOutput, id: asBase64CredentialId("cred-OTHER") },
 				await fakePasskeyAnswer(credentialId, freshPrfSalt()),
 			]) {
-				await expect(service.exportPlain(profile.id, undefined, answer)).rejects.toThrow("Passkey did not open this profile")
+				const log = vi.spyOn(logger, "log")
+				const refusal = service.exportPlain(profile.id, undefined, answer)
+				await expect(refusal).rejects.toBeInstanceOf(PasskeyNotOpenedError)
+				await expect(refusal).rejects.toThrow("Passkey did not open this profile")
+				expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toEqual([])
+				log.mockRestore()
 			}
 			expect(await service.exportPlain(profile.id, undefined, ownOutput)).toMatch(/\S/)
 		}, 30_000)
@@ -600,6 +611,19 @@ describe("ProfileService integration", () => {
 			// And change-password refuses too — it must NOT reseal + rewrite the MAC into a
 			// bearer-valid-but-unrecoverable profile.
 			await expect(service.changeProfilePassword(a.id, "shared-pass1", "new-pass12")).rejects.toThrow()
+		}, 30_000)
+
+		test("control: exportPlain still flattens a transplanted row's failure and logs it at error", async () => {
+			const { api, logger, service } = await makeService()
+			const a = await service.createProfile("A", "shared-pass1")
+			await service.lockActiveProfile()
+			const b = await service.createProfile("B", "shared-pass1")
+			await service.lockActiveProfile()
+			await writeRow(api, a.id, { ...(await readRow(api, a.id)), entropy: (await readRow(api, b.id)).entropy })
+			const log = vi.spyOn(logger, "log")
+			const failure = await service.exportPlain(a.id, "shared-pass1").catch((e: unknown) => e)
+			expect((failure as Error).constructor).toBe(Error)
+			expect(log.mock.calls.filter(([, level]) => level === LogLevel.Error)).toHaveLength(1)
 		}, 30_000)
 
 		test("a WHOLE-envelope swap between same-password profiles is rejected at unlock (identity binding)", async () => {
