@@ -460,3 +460,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [release-prep-1.2.0](release-prep-1.2.0/plan.md) — completed — v1.1.0 pinned and recorded, and the update replay's passkey case follows a reviewed `passkey` trait, so the 1.2.0 promote updates from v1.1.0 (#1314, closes #1312; open item #1313)
 - [log-levels-2](log-levels-2/plan.md) — completed — a stale-network refresh or a network-arrival read that a lock ends logs its refusal at debug (#1296)
 - [docs-3](docs-3/plan.md) — completed — SECURITY.md's dependency paragraphs moved into § Dependency policy, byte for byte, and its strict-mode residual list corrected (#1318, closes #1186 and #1274; known limits #1316, #1317)
+- [lock-followups-1](lock-followups-1/plan.md) — completed — a settle keeps a selection that a newer pick in another window names (#1320, closes #1281; known limit #1315), and Disable auto-close on the Settings phrase screen hands focus to Close (closes #1282)
