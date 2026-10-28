@@ -449,6 +449,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [unit-flakes-4](unit-flakes-4/plan.md) — completed — three unit tests that read the host's speed or git's version (#1269)
 - [dependabot-subject-1](dependabot-subject-1/plan.md) — completed — skip the range lint on Dependabot's PRs; the merger lower-cases the title that lands (#1265; known limit #1266)
 - [unit-flakes-3](unit-flakes-3/plan.md) — completed — four unit and composition test races; a cancel that won the journal lock before the proving mark stops the send before its proof (#1271)
+- [notice-overflow-1](notice-overflow-1/plan.md) — completed — a string wider than the notice card breaks inside it (`overflow-wrap: anywhere`), shipped as a draft until the owner signs (#1232; known limit #1275)
 - [docs-2](docs-2/plan.md) — completed — the manual npm bumps restated as policy with their source and the two untested points; the plans standard's PR-title cap at 92 (#1273; open item #1274)
 - [lock-ux-1](lock-ux-1/plan.md) — completed — a confirm before auto-lock never, the onboarding phrase's 5-minute close, every duplicate-phrase profile named, the account file's saved state, the lock screen's first-by-name pick (#1158, #1192, #1207, #1208, #1228; open items #1281 #1282)
 - [unit-flakes-5](unit-flakes-5/plan.md) — completed — four whole-tree guards skip the files that cannot hold a finding (#1270; known limit #1279)
@@ -457,3 +458,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [chaos-3](chaos-3/plan.md) — completed — the profile chaos model drives passkey imports and restores, Unlock method changes, shared passkeys and passkey account files; arc 2's fleet wave dropped (#1301, part of #1157; known limit #1306)
 - [e2e-infra-3](e2e-infra-3/plan.md) — completed — the Terms verdict and the fee check as product states; bringToFront and setViewport on the driver, the Firefox pin held at 153
 - [release-prep-1.2.0](release-prep-1.2.0/plan.md) — completed — v1.1.0 pinned and recorded, and the update replay's passkey case follows a reviewed `passkey` trait, so the 1.2.0 promote updates from v1.1.0 (#1314, closes #1312; open item #1313)
+- [docs-3](docs-3/plan.md) — completed — SECURITY.md's dependency paragraphs moved into § Dependency policy, byte for byte, and its strict-mode residual list corrected (#1318, closes #1186 and #1274; known limits #1316, #1317)
