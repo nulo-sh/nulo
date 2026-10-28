@@ -25,6 +25,8 @@ export interface CreateActivationDeps {
 	openToast: (toast: ToastOptions) => void
 	/** The profile selected when the page opened, which only the shell's activations change. */
 	selectedOnEntry: string | undefined
+	/** False once the shell ended this page's flow (`popup/opening-flow.ts`): its landing owns the window. */
+	flowLive: () => boolean
 }
 
 /**
@@ -45,9 +47,10 @@ export async function activateCreatedProfile(profile: ProfileInfo, deps: CreateA
 	}
 }
 
-async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: CreateActivationDeps): Promise<void> {
+async function openCreatedProfile(profile: ProfileInfo, { appStore, router, flowLive }: CreateActivationDeps): Promise<void> {
+	// An ended flow stays ended: the same profile opening again later is the shell's, not this page's.
 	const assertActive = () => {
-		if (!appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
+		if (!flowLive() || !appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
 	}
 	await awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, {
 		deadlineCovers: "start",
@@ -87,10 +90,11 @@ async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: Cr
  * for an open session.
  */
 async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivationDeps, failure: unknown): Promise<void> {
-	const { appStore, router, openToast, selectedOnEntry } = deps
+	const { appStore, router, openToast, selectedOnEntry, flowLive } = deps
 	console.warn("created profile did not open", { reason: activationFailureReason(failure) })
 	// A person who left the page meanwhile is not moved: the shell places the activation's outcome.
-	const left = () => router.currentRoute.value.name !== "popup-profile-new"
+	// So with a flow the shell ended, whose navigation away may not have committed yet.
+	const left = () => router.currentRoute.value.name !== "popup-profile-new" || !flowLive()
 	if (left()) return
 	const anotherOpens = () =>
 		appStore.isLogined ||
@@ -108,6 +112,7 @@ async function handOffCreatedProfile(profile: ProfileInfo, deps: CreateActivatio
 	}
 	// Awaited: until the page has left, the caller's latch must hold, or Create could run again.
 	const leaving = await router.push(target)
+	if (!flowLive()) return
 	openToast({ kind: "error", label: "Something went wrong", sub: "Open the wallet again to unlock your new profile." })
 	if (leaving) throw leaving
 }

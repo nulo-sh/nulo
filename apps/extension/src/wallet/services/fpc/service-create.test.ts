@@ -1,9 +1,10 @@
 /**
- * FPC creation fences: `addFpc` and the `getFpcs` protocol-discovery writes
+ * FPC write fences: `addFpc` and the `getFpcs` protocol-discovery writes
  * capture the deletion fence and a network liveness mark at their entry and
  * assert both flush against the row write — a deletion, network delete or
  * reset completing during the PXE work must never land a row. The discovery,
  * which no user action asks for, is also bound to its session: a lock refuses it.
+ * An address edit writes over the row as it stands once its PXE checks end.
  *
  * A purge or sweep is awaited while a registration is parked, so one that
  * waited on the registration times the case out instead of racing a timer.
@@ -371,6 +372,35 @@ describe("FPC creation fences", () => {
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
+	test("getFpcs discovery: a network reset during a registration ends the discovery at debug, with no warn or error line", async () => {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		setPxe(h, {
+			registerContract: async () => {
+				reached.resolve()
+				await gate.promise
+			},
+		})
+		const logged = spyLogs(h)
+
+		const run = h.service.getFpcs(1)
+		try {
+			await reached.promise
+			h.reservations.reserve()
+			await h.service.clearChainState("p1", 1)
+			h.reservations.release()
+		} finally {
+			gate.resolve()
+		}
+
+		await run
+		expect(logged.warn).toEqual([])
+		expect(logged.error).toEqual([])
+		expect(logged.debug).toContain("Protocol FPC discovery stopped: its network was reset or removed")
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
 	test("getFpcs discovery: a registration that fails while its session is live is still logged at error", async () => {
 		const h = await makeHarness()
 		setPxe(h, {
@@ -383,7 +413,31 @@ describe("FPC creation fences", () => {
 		await h.service.getFpcs(1)
 		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its session ended")
+		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: a liveness read that fails after a registration failure leaves that failure at error", async () => {
+		const h = await makeHarness()
+		setPxe(h, {
+			registerContract: async () => {
+				throw new Error("node unreachable")
+			},
+		})
+		// Each item reads liveness before its registration, then again in its failure path.
+		const network = (h.service as unknown as { networkService: { isNetworkLive: (id: string, since?: number) => Promise<boolean> } })
+			.networkService
+		const isNetworkLive = network.isNetworkLive
+		let reads = 0
+		network.isNetworkLive = async (id, since) => {
+			if (++reads % 2 === 0) throw new Error("storage unreadable")
+			return isNetworkLive(id, since)
+		}
+		const logged = spyLogs(h)
+
+		await h.service.getFpcs(1)
+		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
+		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 	})
 
 	test("getFpcs discovery: admitted while its network is reserved, it registers nothing and stores NO row", async () => {
@@ -512,5 +566,61 @@ describe("FpcService.getFpcImpl — only the protocol PrivateFPC can pay", () =>
 		await plant(h, row("f-custom", FpcType.DefaultSponsoredFpc, "0xcafe"))
 		const fpc = await h.service.getFpcImpl("f-custom")
 		expect(fpc.infoData.isProtocol).toBe(false)
+	})
+})
+
+describe("FpcService.updateFpcAddress — the write lands on the row as it stands", () => {
+	const OLD = `0x${"11".repeat(32)}`
+	const NEW = `0x${"22".repeat(32)}`
+
+	/** Only NEW waits on the gate, so the row's creation at OLD completes. */
+	async function withUserRow(gate?: Promise<void>) {
+		const h = await makeHarness()
+		const reached = deferred<void>()
+		setPxe(h, {
+			getContractInstance: async (address: { toString(): string }) => {
+				if (gate && address.toString() === NEW) {
+					reached.resolve()
+					await gate
+				}
+				return { currentContractClassId: "c1" }
+			},
+			getContractArtifact: async () => SPONSOR_ARTIFACT,
+		})
+		const { id } = await h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, OLD, "Mine")
+		return { h, id, reached: reached.promise }
+	}
+
+	test("a rename landing during the address check survives the edit", async () => {
+		const gate = deferred<void>()
+		const { h, id, reached } = await withUserRow(gate.promise)
+
+		const edit = h.service.updateFpcAddress(id, NEW)
+		await reached
+		await h.service.updateFpc(id, "Renamed")
+		gate.resolve()
+
+		await expect(edit).resolves.toMatchObject({ name: "Renamed", address: NEW })
+		expect(await h.service.getFpc(id)).toMatchObject({ name: "Renamed", address: NEW })
+	})
+
+	test("a delete landing during the address check rejects the edit and brings no row back", async () => {
+		const gate = deferred<void>()
+		const { h, id, reached } = await withUserRow(gate.promise)
+
+		const edit = h.service.updateFpcAddress(id, NEW)
+		await reached
+		await h.service.deleteFpc(id)
+		gate.resolve()
+
+		await expect(edit).rejects.toThrow(/^Invalid id$/)
+		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("an edit with nothing concurrent stores the new address under the same name", async () => {
+		const { h, id } = await withUserRow()
+
+		await expect(h.service.updateFpcAddress(id, NEW)).resolves.toMatchObject({ name: "Mine", address: NEW })
+		expect(await fpcRowCount(h.api)).toBe(1)
 	})
 })
