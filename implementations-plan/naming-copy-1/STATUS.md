@@ -5,3 +5,4 @@
 - 2026-10-28: base capture run on Chrome (2 passed; shots show pending rows). Codex r1 conditional approve (5 accepted); Opus conditional approve (6 accepted, 2 rejected); plan revised. Final Codex pass next.
 - 2026-10-28: Codex r2 conditional approve (3 accepted); r3 approve. Plan committed; arc 1 next (auto-continue).
 - 2026-10-28: phase 1 gate green (lint, typecheck:all, test, test:all; red on base and on both mutants logged).
+- 2026-10-28: phase 2 gate green (Chrome and Firefox, 2 passed each; captures read; times logged).

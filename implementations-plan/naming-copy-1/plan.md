@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 0a659726c
 trunk: dev
-status: arc 1 phase 1 green; phase 2 next
+status: arc 1 phases green; Codex fix loop next
 issues: "#1328"
 post_implementation_hardening: not scheduled
 ---
@@ -60,6 +60,7 @@ post_implementation_hardening: not scheduled
 - D4. Placement: the line's own element right after the `<ol>`; the advice keeps the closing place its prop documents (F8). `afterTheCalls` then asserts the exact sibling order: list, line, advice when the line shows; list, advice otherwise (a list-or-line check would pass a line drawn below the advice). Panel: both agree.
 - D5. Role: `caption`, `secondary`, the old mark's (signed off in `archive/execute-popup-readability/OWNER-ASKS.md` row C), `height="130"` (I1); the lane brief names a `Text` caption and says the mockup (body, tertiary) is not a spec. Panel: both agree; no open owner question.
 - D6. No new e2e scenario (F5). The multicall spec's shot waits for the decode and asserts the sentence (I2): the shot pictures the window a person approves, and the assertion is the one proof that a real decode through the PXE's artifact on an unlisted token reaches the summary as `decoded` (the component tests feed a decode by hand). Not taken: rerunning until a capture lands decoded (Opus 5), which hides a race the base run shows in both cases. Panel: Codex proposed the wait; Opus's rerun rejected on the base evidence.
+- D8. Deviation (Phase 2 step 4): only the after pair is committed (`screenshots/`); the base pair pictures pending rows, the race D6 fixes, so it is no "before" of the change.
 - D7. Fee-raised window (F7): it changes with the card, since its header promises the request reads as it did at approval; the PR names both windows. Panel: both agree; not an owner question.
 
 ## Phases and gates
@@ -73,7 +74,7 @@ post_implementation_hardening: not scheduled
 
 **Validation gate:** `cd apps/extension && bun --bun vitest run src/popup/windows/execute`, then from the root `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`. Pass: exit 0 each; step 4's logs show every positive assertion red on the base copy and every absence check red at that assertion on its mutant. Layers: lint, typecheck, unit, component.
 
-### Phase 2 — the spec waits, captures ⬜
+### Phase 2 — the spec waits, captures ✓
 
 1. Run the spec on Firefox before editing it: `NULO_E2E_BROWSER=firefox NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/tx-sendTx-multicall.test.ts`; record its case times. This is the spec change's before; Chrome's before, recorded at the base (`lessons/phase-0.md`), spans the whole change.
 2. In the spec, after `waitForExecuteContent`, wait (60 s bound) until no `execute-op-summary-args-pending` shows, then expect `execute-op-summary-unchecked` to read "Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do."
