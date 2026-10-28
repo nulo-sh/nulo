@@ -49,3 +49,4 @@ At retry 0 on the head rebased onto `dev` (0a659726c), loads 70-190:
 - Extension unit suite with a JSON report: 3/3, 16,257 passed, 0 failed. Composition files: 17.1 + 1.4, 16.8 + 1.2 and 13.8 + 0.8 s. The model test took 47-79 s.
 - `bun run lint` and `bun run typecheck:all`: exit 0.
 - Smoke e2e on Chrome: 6/6 shards green, 274-354 s each. These ran on 955a2f7fd, before the rebase and before review round 1. The later commits change no file a smoke test imports except a doc comment in `model.ts`, and `dev`'s #1326 was green on its own CI.
+- Smoke e2e on Firefox: 8/8 shards green, 292-495 s each, on the rebased head 872f2cf99.
