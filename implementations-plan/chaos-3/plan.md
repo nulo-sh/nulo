@@ -124,7 +124,7 @@ Gate: `bun run lint`, `bun run typecheck:all`; `cd apps/extension && for i in $(
 **1.2 ✓ Drivers, collectors, checkers.** Write the drivers, `answeredCredentials`, the capture, the O2 clauses, D8, D6's re-export and #1178's entries. Add break fixtures: a row naming another credential fails O2, a missing binding fails it too, and the honest row passes. Run single seeds on the armed smoke dist; read each new action's step in the record. Check I1 and I2 on both browsers. Write six hand lists (`NULO_E2E_CHAOS_ACTIONS`) in the lane's scratch directory outside the repository and record each in `lessons/phase-1.md`: (a) three passkey profiles, a reuse of the second's credential at import, `verifyAll`; (b) a passkey phrase import declined at the duplicate warning, then creates up to the slot bound; (c) an account file imported into a password profile, a change to a passkey, `verifyAll` (the re-export); (d) strict off, a passkey to new passkey change, a restart, a lock, the replaced credential refused, the new one opening; (e) each `changeUnlockMethod` variant and the race; (f) each passkey account file variant, the file imported into a password profile. In one launcher session per browser (`chaos-session.ts start`), with explicit parameters: `do createPasskey` P1 on K1, P2 reusing K1, P3 on K2; `do lock`; `do unlockPasskey` P2 with `other` K2, refused; `do unlockPasskey` P2 approved, opened; then `oracle`: every command dispatched, each outcome as named, no `incomplete` line.
 Gate: fast layers; the model test; `NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=7001 NULO_E2E_CHAOS_RUNS=3 bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0` (smoke env as README § Profile chaos) on Chrome and under `NULO_E2E_BROWSER=firefox`; lists (a) to (f) on both; `bun run test:e2e -- tests/e2e/account-import-export.test.ts --retry=0` on Chrome (the shared helper's callers). Pass: each list runs every step on both browsers, which covers every new action and variant; the seeds are a smoke run; no red but a filed finding.
 
-**1.3 ✗ The seeded runs and the docs.** Rewrite README § Passkey profiles for the new flows (what is modelled, D1's narrowing, the slots). Run the campaign at retry 0: smoke 7001 to 7030 per browser (three parallel `seeded` batches of ten per browser, `bun apps/extension/scripts/e2e/chaos-session.ts seeded --browser <b> --seed <first> --runs 10`), `pre-update` 7101 to 7105 per browser (`NULO_E2E_UPDATE_FROM=v0.31.0`, the candidate built from the committed head), network 7201 to 7205 per browser (`NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=7201 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/profile-chaos.test.ts` from the repository root, one at a time, the smoke dist rebuilt after). Triage every red by CHARTERS.md § Triage, class first; file each product finding with its seed and step; fix every harness red and rerun its seed.
+**1.3 ✓ The seeded runs and the docs.** Rewrite README § Passkey profiles for the new flows (what is modelled, D1's narrowing, the slots). Run the campaign at retry 0: smoke 7001 to 7030 per browser (three parallel `seeded` batches of ten per browser, `bun apps/extension/scripts/e2e/chaos-session.ts seeded --browser <b> --seed <first> --runs 10`), `pre-update` 7101 to 7105 per browser (`NULO_E2E_UPDATE_FROM=v0.31.0`, the candidate built from the committed head), network 7201 to 7205 per browser (`NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=7201 NULO_E2E_CHAOS_RUNS=5 NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/profile-chaos.test.ts` from the repository root, one at a time, the smoke dist rebuilt after). Triage every red by CHARTERS.md § Triage, class first; file each product finding with its seed and step; fix every harness red and rerun its seed.
 Gate: fast layers; every seed green, or red only on filed findings, or incomplete only for a planned restart's log window; the table (seed, outcome, time, coverage, findings met) in this plan; each new action's per-seed time measured.
 
 **Arc 2 (the fleet wave; on the orchestrator's resume only).**
@@ -171,6 +171,136 @@ Each finding was checked against the tree before its disposition; detail in less
 - **Opus, round 1:** conditional approve; 9 findings. Accepted: findings 1 and 2 (as Codex 1 and 3); the launcher's `do` installs no capture, so each driver does (§ Shape); the probe list verbatim, a canary under `$HOME`, the CLI's `--permission-mode default` rechecked (CHARTERS.md); D7's salt clause dropped as O7's; D10 narrowed to the lines a run meets; `World.minted` dropped for the counter (D2) and optional fields as `onboardingCreate` (D3); `PC/network-drivers.ts` in the map; hand lists carry per-action coverage and the network command arms the file (1.2, 1.3); every un-narrowed discovery refused (2.1). Rejected: none. It preferred Outline A.
 - **Codex, final fresh pass:** conditional approve; 3 conditions, all accepted: a step's ceremonies checked as the sequence its action names (D1, `answeredCredentials`); an absent `method` keeps password semantics, with two legacy replay controls (§ Model, 1.1); the launcher check made executable with explicit parameters and two credentials (1.2). No finding against F1 to F10; Outline A kept. Resumed over the fixes: approve, no regression.
 - **Outline B** (cheapest-first: one action per path, credentials from the row, a reuse only with one credential held, the in-process test as a phase): rejected by both audits and here: it binds by the write under test, never meets a reuse among several credentials, duplicates four drivers, and its in-process phase is outside the lane (D12).
+
+## Campaign
+
+Phase 1.3, at retry 0: 80 seeds, 2,000 steps, every step run. Smoke Chrome 7001-7030 and Firefox 7001-7015 ran at `780b3e6d3`; the rest at `ef0b0fb4d`, which changes only how the passkey account file is read (lessons/phase-1.md § 1.3). The smoke seeds ran as six `seeded` batches of five per browser, three at a time, rather than three of ten; the seed set is the same.
+
+- **Verdicts:** no seed is red on an unfiled finding. One harness red, Firefox smoke 7008 step 17, was fixed and the seed rerun on both browsers clean (its row is the rerun). Every incomplete step is a planned restart's log window (`RESTART_LOG_GAP`); no unplanned restart.
+- **Findings met:** #1131, #1132, #1133, #1136, and #1178 on the changes it covers. None new; no suspected weakness.
+- **Outcomes:** smoke Chrome 2 green, 13 red-filed, 15 incomplete (restart only); smoke Firefox 4, 16, 10; `pre-update` Chrome 1, 3, 1; `pre-update` Firefox 0, 5, 0; network 5 red-filed on each browser (#1136 meets every network seed).
+
+Wall-clock per seed, launch included, on a host shared with other lanes:
+
+| suite | Chrome | Firefox |
+|---|---|---|
+| smoke | 47 s (30 seeds, 1,425 s of batch time) | 69 s (2,066 s) |
+| network | 82 s (5 seeds in 412 s, sandbox included) | 115 s (577 s) |
+| smoke, 7001-7005 at `17f35c504`'s harness, then at head, both browsers at once | 48 s, then 54 s | 70 s, then 76 s |
+
+The new actions and choices take 3.6 s of a Chrome seed's 32.9 s of step time and 5.9 s of a Firefox seed's 50.7 s (smoke and `pre-update`, 35 seeds each). Each one's step time, checks included:
+
+| step | Chrome n, mean | Firefox n, mean |
+|---|---|---|
+| `changeUnlockMethod` to passkey, password right / wrong | 20, 1,070 ms / 9, 456 ms | 16, 958 ms / 10, 712 ms |
+| `changeUnlockMethod` to a new passkey, approved / refused | 10, 463 ms / 1, 238 ms | 12, 807 ms / 1, 586 ms |
+| `changeUnlockMethod` to password, approved / refused / other | 4, 1,356 ms / 3, 52 ms / 0 | 4, 1,545 ms / 0 / 2, 541 ms |
+| `raceLockDuringMethodChange` | 7, 249 ms | 9, 531 ms |
+| `createPasskey` mint / reuse | 35, 751 ms / 21, 551 ms | 39, 1,661 ms / 18, 1,510 ms |
+| `onboardingCreate` mint | 7, 2,185 ms | 8, 3,199 ms |
+| `importPhrase` with a passkey, mint / reuse | 1, 1,270 ms / 5, 452 ms | 1, 2,199 ms / 3, 1,504 ms |
+| `importBackup` with a passkey, mint / reuse | 4, 2,356 ms / 2, 2,414 ms | 4, 3,547 ms / 0 |
+| `exportAccountFile` from a passkey profile, approve / short / refuse / other | 4, 2,007 / 1, 806 / 4, 1,691 / 1, 1,823 ms | 5, 2,831 / 1, 1,395 / 3, 2,206 / 1, 2,310 ms |
+
+The seeds did not meet an onboarding reuse, a change to a new passkey answered by another credential, a change to password refused on Firefox or answered by another credential on Chrome, or a passkey restore reusing a credential on Firefox; lists (a) to (g) ran each on both browsers (1.2). The coverage column is each seed's `families[...]` count; the full line is in each record.
+
+| Chrome smoke seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7001 | red-filed | 44 s | 25/25 | `families[create=6 account-file=3 strict=2 method=2 window=1 unlock=1 delete=4 phrase=3 lock=1 edit=1 verify=1]` | #1131 |
+| 7002 | incomplete (restart only) | 28 s | 25/25 | `families[create=4 race=1 unlock=5 strict=1 phrase=1 method=2 account-file=1 lock=2 window=1 verify=3 restart=1 backup=2 ceremony=1]` | none |
+| 7003 | red-filed | 32 s | 25/25 | `families[create=5 lock=2 backup=3 strict=1 race=1 unlock=2 edit=2 verify=2 delete=1 account-file=3 account=1 method=1 window=1]` | #1131 |
+| 7004 | incomplete (restart only) | 29 s | 25/25 | `families[restart=2 create=5 backup=3 window=4 phrase=1 lock=2 edit=1 unlock=3 race=2 delete=1 verify=1]` | none |
+| 7005 | green | 44 s | 25/25 | `families[backup=7 create=5 phrase=1 lock=2 race=1 strict=1 delete=2 method=4 edit=1 verify=1]` | none |
+| 7006 | incomplete (restart only) | 26 s | 25/25 | `families[create=5 method=1 race=2 verify=2 lock=4 restart=1 switch=1 delete=1 unlock=4 tamper=1 backup=1 account-file=1 edit=1]` | none |
+| 7007 | incomplete (restart only) | 29 s | 25/25 | `families[backup=7 create=3 lock=2 race=2 unlock=5 window=1 ceremony=2 switch=1 delete=1 verify=1]` | none |
+| 7008 | red-filed | 39 s | 25/25 | `families[restart=5 backup=3 create=2 method=1 phrase=4 ceremony=1 account=1 race=2 lock=1 unlock=2 window=1 delete=1 verify=1]` | #1131 |
+| 7009 | incomplete (restart only) | 37 s | 25/25 | `families[backup=5 create=5 edit=1 delete=2 method=2 strict=1 restart=2 unlock=2 phrase=1 account-file=2 lock=1 verify=1]` | none |
+| 7010 | incomplete (restart only) | 38 s | 25/25 | `families[create=5 strict=1 lock=1 method=3 edit=1 backup=3 window=1 switch=3 delete=1 restart=3 unlock=1 race=1 verify=1]` | none |
+| 7011 | incomplete (restart only) | 20 s | 25/25 | `families[create=4 method=2 window=2 delete=1 restart=1 tamper=2 verify=3 race=1 backup=3 strict=1 lock=1 unlock=2 phrase=1 account=1]` | none |
+| 7012 | red-filed | 21 s | 25/25 | `families[restart=2 create=4 lock=2 account=1 method=2 phrase=1 window=1 tamper=4 switch=1 race=2 verify=2 unlock=2 ceremony=1]` | #1131 |
+| 7013 | incomplete (restart only) | 21 s | 25/25 | `families[create=4 race=2 backup=3 strict=6 phrase=1 verify=2 lock=1 restart=1 unlock=2 method=1 ceremony=1 edit=1]` | none |
+| 7014 | red-filed | 23 s | 25/25 | `families[create=2 edit=3 window=1 tamper=1 unlock=3 method=2 backup=3 restart=2 lock=1 race=1 ceremony=3 switch=2 verify=1]` | #1133 |
+| 7015 | red-filed | 41 s | 25/25 | `families[backup=5 create=5 lock=2 delete=2 verify=6 method=1 phrase=1 restart=1 unlock=2]` | #1131 |
+| 7016 | incomplete (restart only) | 29 s | 25/25 | `families[create=5 edit=2 backup=3 lock=3 verify=2 restart=2 delete=1 phrase=1 method=3 switch=2 unlock=1]` | none |
+| 7017 | red-filed | 39 s | 25/25 | `families[create=4 restart=1 unlock=4 strict=1 window=3 tamper=1 delete=2 phrase=3 account=1 backup=2 verify=3]` | #1131 |
+| 7018 | red-filed | 28 s | 25/25 | `families[restart=1 create=5 race=4 tamper=2 delete=3 phrase=3 backup=2 edit=2 unlock=1 account-file=1 verify=1]` | #1131 |
+| 7019 | incomplete (restart only) | 34 s | 25/25 | `families[create=3 backup=4 window=2 tamper=1 method=2 delete=2 unlock=3 race=1 restart=2 lock=1 ceremony=2 switch=1 verify=1]` | none |
+| 7020 | green | 47 s | 25/25 | `families[create=3 backup=7 delete=2 account=2 method=1 unlock=1 account-file=2 verify=2 race=2 edit=2 window=1]` | none |
+| 7021 | red-filed | 50 s | 25/25 | `families[create=5 backup=5 race=2 phrase=2 account=1 verify=3 restart=2 ceremony=1 delete=2 unlock=1 method=1]` | #1131 |
+| 7022 | incomplete (restart only) | 34 s | 25/25 | `families[create=5 restart=4 ceremony=1 verify=2 unlock=3 account=2 backup=2 window=2 strict=1 lock=1 account-file=1 delete=1]` | none |
+| 7023 | red-filed | 30 s | 25/25 | `families[restart=1 create=6 delete=2 backup=1 unlock=2 race=1 account-file=3 strict=2 method=1 lock=2 edit=1 phrase=1 window=1 verify=1]` | #1131 |
+| 7024 | incomplete (restart only) | 33 s | 25/25 | `families[create=4 account=2 phrase=3 window=4 restart=4 account-file=1 unlock=2 lock=2 verify=2 backup=1]` | none |
+| 7025 | incomplete (restart only) | 31 s | 25/25 | `families[restart=3 create=4 method=2 phrase=3 account=1 window=1 tamper=1 race=1 unlock=4 verify=3 backup=2]` | none |
+| 7026 | red-filed | 20 s | 25/25 | `families[restart=1 create=5 phrase=2 account=1 strict=2 lock=1 delete=1 switch=2 unlock=2 edit=2 race=1 window=1 method=1 backup=1 ceremony=1 verify=1]` | #1131 |
+| 7027 | red-filed | 43 s | 25/25 | `families[backup=1 create=5 restart=3 unlock=1 phrase=2 lock=2 tamper=1 account=1 race=1 method=1 edit=1 account-file=1 strict=1 delete=2 verify=2]` | #1131 |
+| 7028 | incomplete (restart only) | 28 s | 25/25 | `families[backup=1 create=4 restart=3 unlock=6 window=3 strict=1 verify=2 race=1 account-file=1 phrase=1 method=1 account=1]` | none |
+| 7029 | red-filed | 31 s | 25/25 | `families[create=5 strict=1 method=1 phrase=1 account=1 race=2 unlock=2 delete=3 backup=3 tamper=1 restart=2 account-file=1 lock=1 verify=1]` | #1131 |
+| 7030 | incomplete (restart only) | 20 s | 25/25 | `families[create=2 account=2 strict=1 phrase=4 restart=2 tamper=2 unlock=1 race=3 lock=1 window=1 method=1 backup=1 switch=1 ceremony=1 edit=1 verify=1]` | none |
+
+| Firefox smoke seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7001 | green | 62 s | 25/25 | `families[create=6 account-file=3 strict=2 method=2 window=1 unlock=1 delete=4 phrase=3 lock=1 edit=1 verify=1]` | none |
+| 7002 | red-filed | 57 s | 25/25 | `families[create=4 race=2 unlock=4 strict=1 phrase=1 method=2 account-file=1 lock=1 window=1 verify=3 restart=2 backup=1 edit=2]` | #1131 |
+| 7003 | red-filed | 58 s | 25/25 | `families[create=4 lock=2 backup=4 strict=1 race=1 unlock=5 edit=1 verify=2 restart=1 delete=1 phrase=1 ceremony=1 switch=1]` | #1131 |
+| 7004 | red-filed | 48 s | 25/25 | `families[restart=2 create=5 backup=3 window=4 phrase=1 lock=2 edit=1 unlock=3 race=2 delete=1 verify=1]` | #1133 |
+| 7005 | green | 42 s | 25/25 | `families[backup=6 create=3 phrase=2 lock=3 race=1 strict=1 delete=2 method=4 window=1 switch=1 verify=1]` | none |
+| 7006 | red-filed | 51 s | 25/25 | `families[create=5 method=3 race=2 verify=3 lock=1 restart=1 switch=1 delete=2 unlock=3 tamper=1 edit=1 backup=1 strict=1]` | #1131 |
+| 7007 | red-filed | 53 s | 25/25 | `families[backup=8 create=4 lock=3 race=1 switch=1 delete=1 verify=2 account-file=2 unlock=1 account=1 phrase=1]` | #1131 |
+| 7008 | incomplete (restart only) | 49 s | 25/25 | `families[restart=3 backup=2 create=3 method=1 phrase=2 delete=3 unlock=3 ceremony=1 edit=3 window=1 account-file=1 lock=1 verify=1]` | none |
+| 7009 | red-filed | 62 s | 25/25 | `families[backup=5 create=5 edit=1 delete=2 method=2 strict=1 restart=2 unlock=2 phrase=1 account-file=2 lock=1 verify=1]` | #1131 |
+| 7010 | incomplete (restart only) | 52 s | 25/25 | `families[create=5 strict=1 lock=1 method=3 edit=1 backup=3 window=1 switch=3 delete=1 restart=3 unlock=1 race=1 verify=1]` | none |
+| 7011 | incomplete (restart only) | 40 s | 25/25 | `families[create=5 method=1 window=5 delete=1 restart=1 tamper=2 verify=3 race=1 account=2 unlock=2 phrase=1 backup=1]` | none |
+| 7012 | red-filed | 53 s | 25/25 | `families[restart=2 create=4 lock=2 account=1 method=2 phrase=1 window=1 tamper=3 switch=1 ceremony=3 verify=2 unlock=2 backup=1]` | #1131, #1133 |
+| 7013 | incomplete (restart only) | 48 s | 25/25 | `families[create=4 race=2 backup=3 strict=6 phrase=1 verify=2 lock=1 restart=1 unlock=2 method=1 window=1 edit=1]` | none |
+| 7014 | red-filed | 35 s | 25/25 | `families[create=3 edit=4 window=1 tamper=1 unlock=3 method=3 backup=3 restart=1 lock=1 race=1 delete=1 phrase=1 account=1 verify=1]` | #1131, #1178 |
+| 7015 | red-filed | 64 s | 25/25 | `families[backup=5 create=5 lock=2 delete=2 verify=6 method=1 phrase=1 restart=1 unlock=2]` | #1131 |
+| 7016 | incomplete (restart only) | 40 s | 25/25 | `families[create=5 edit=3 backup=3 lock=3 verify=2 restart=1 delete=1 phrase=2 method=2 unlock=1 account-file=1 race=1]` | none |
+| 7017 | red-filed | 55 s | 25/25 | `families[create=5 restart=3 unlock=6 strict=1 window=3 backup=2 phrase=1 race=1 verify=2 delete=1]` | #1131 |
+| 7018 | red-filed | 51 s | 25/25 | `families[restart=3 create=6 race=1 tamper=3 delete=3 lock=2 switch=1 unlock=1 phrase=1 account-file=2 account=1 verify=1]` | #1131 |
+| 7019 | incomplete (restart only) | 36 s | 25/25 | `families[create=3 backup=4 window=2 tamper=2 method=1 delete=3 switch=2 unlock=1 race=2 phrase=1 account=1 verify=2 restart=1]` | none |
+| 7020 | green | 57 s | 25/25 | `families[create=3 backup=9 delete=2 account=1 method=1 unlock=5 window=1 ceremony=1 lock=1 verify=1]` | none |
+| 7021 | green | 49 s | 25/25 | `families[create=4 backup=2 race=2 phrase=2 account=1 verify=2 window=2 account-file=1 lock=2 unlock=3 tamper=2 ceremony=1 delete=1]` | none |
+| 7022 | incomplete (restart only) | 59 s | 25/25 | `families[create=5 restart=3 ceremony=1 window=3 verify=2 unlock=3 account=2 backup=2 strict=1 lock=1 account-file=1 delete=1]` | none |
+| 7023 | red-filed | 46 s | 25/25 | `families[restart=1 create=6 delete=2 backup=1 unlock=5 ceremony=1 lock=2 strict=1 edit=2 method=1 verify=2 race=1]` | #1131 |
+| 7024 | incomplete (restart only) | 53 s | 25/25 | `families[create=4 account=2 phrase=3 window=4 restart=4 account-file=1 unlock=2 lock=2 verify=2 backup=1]` | none |
+| 7025 | red-filed | 57 s | 25/25 | `families[restart=3 create=4 method=2 phrase=2 account=1 window=1 tamper=1 race=1 unlock=5 verify=3 backup=1 lock=1]` | #1131 |
+| 7026 | red-filed | 36 s | 25/25 | `families[restart=2 create=6 phrase=2 account=1 strict=2 lock=3 delete=4 switch=1 window=1 verify=2 unlock=1]` | #1131 |
+| 7027 | red-filed | 63 s | 25/25 | `families[backup=1 create=5 restart=3 unlock=1 phrase=2 lock=2 tamper=1 account=1 race=1 method=1 edit=1 account-file=1 strict=1 delete=2 verify=2]` | #1131 |
+| 7028 | red-filed | 57 s | 25/25 | `families[backup=1 create=4 restart=3 unlock=3 window=2 strict=1 verify=3 race=2 account-file=2 phrase=1 method=2 lock=1]` | #1131, #1178 |
+| 7029 | incomplete (restart only) | 45 s | 25/25 | `families[create=5 strict=1 method=1 phrase=1 account=1 race=1 ceremony=1 unlock=2 delete=3 backup=3 tamper=1 restart=2 account-file=1 lock=1 verify=1]` | none |
+| 7030 | incomplete (restart only) | 36 s | 25/25 | `families[create=2 account=2 strict=1 phrase=3 restart=2 tamper=2 unlock=1 race=2 ceremony=1 lock=1 window=2 method=1 backup=3 switch=1 verify=1]` | none |
+
+| Chrome pre-update seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7101 | red-filed | 36 s | 25/25 | `families[unlock=5 create=3 account-file=3 account=2 lock=2 window=1 backup=1 delete=2 strict=2 method=3 verify=1]` | #1131, #1132 |
+| 7102 | incomplete (restart only) | 36 s | 25/25 | `families[create=2 phrase=2 restart=2 unlock=4 backup=2 account=2 window=1 method=1 account-file=2 delete=1 edit=2 lock=2 race=1 verify=1]` | none |
+| 7103 | green | 43 s | 25/25 | `families[create=3 account=2 method=2 backup=5 lock=1 verify=4 window=1 account-file=3 edit=1 unlock=1 delete=1 switch=1]` | none |
+| 7104 | red-filed | 34 s | 25/25 | `families[unlock=2 restart=3 delete=2 verify=4 create=4 lock=1 ceremony=1 tamper=2 backup=5 switch=1]` | #1131 |
+| 7105 | red-filed | 35 s | 25/25 | `families[unlock=3 delete=3 create=4 restart=3 backup=2 account=1 phrase=1 method=2 verify=3 lock=1 tamper=2]` | #1131, #1132 |
+
+| Firefox pre-update seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7101 | red-filed | 46 s | 25/25 | `families[unlock=5 create=3 account-file=3 account=2 lock=2 window=1 backup=1 delete=2 strict=2 method=3 verify=1]` | #1131, #1132 |
+| 7102 | red-filed | 49 s | 25/25 | `families[create=2 phrase=2 restart=2 unlock=4 backup=2 account=2 window=1 method=1 account-file=2 delete=1 edit=2 lock=2 race=1 verify=1]` | #1132 |
+| 7103 | red-filed | 51 s | 25/25 | `families[create=3 account=2 method=2 edit=2 delete=1 unlock=3 phrase=1 strict=1 restart=2 lock=1 backup=3 verify=2 tamper=2]` | #1131 |
+| 7104 | red-filed | 53 s | 25/25 | `families[unlock=2 restart=2 delete=3 verify=2 create=4 lock=1 ceremony=1 tamper=3 backup=5 window=2]` | #1131 |
+| 7105 | red-filed | 60 s | 25/25 | `families[unlock=2 delete=3 create=5 restart=3 backup=2 account=1 phrase=1 method=2 verify=2 switch=1 tamper=1 account-file=1 edit=1]` | #1131, #1132 |
+
+| Chrome network seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7201 | red-filed | 55 s | 25/25 | `families[restart=2 create=2 phrase=3 lock=3 dapp=2 account=1 unlock=3 tamper=1 window=1 backup=3 edit=1 delete=2 verify=1]` | #1132, #1136 |
+| 7202 | red-filed | 60 s | 25/25 | `families[create=4 restart=2 dapp=2 backup=3 delete=1 restore-held=1 unlock=2 account=1 phrase=1 edit=2 strict=1 lock=1 verify=3 method=1]` | #1132, #1136 |
+| 7203 | red-filed | 32 s | 25/25 | `families[create=5 window=1 tamper=1 delete=1 phrase=2 account=2 lock=3 restart=2 unlock=2 backup=3 method=1 strict=1 verify=1]` | #1136 |
+| 7204 | red-filed | 45 s | 25/25 | `families[create=3 account=2 method=1 backup=6 lock=2 unlock=3 restart=4 phrase=1 strict=1 delete=1 verify=1]` | #1132, #1136 |
+| 7205 | red-filed | 42 s | 25/25 | `families[restart=3 backup=3 create=6 method=1 phrase=3 window=2 unlock=2 account=1 delete=2 dapp=1 verify=1]` | #1132, #1136 |
+
+| Firefox network seed | outcome | time | steps | families | findings met |
+|---|---|---|---|---|---|
+| 7201 | red-filed | 72 s | 25/25 | `families[restart=1 create=4 phrase=2 lock=2 dapp=2 account=2 switch=1 delete=2 backup=3 method=1 account-file=2 tamper=1 window=1 verify=1]` | #1131, #1136 |
+| 7202 | red-filed | 82 s | 25/25 | `families[create=4 restart=2 dapp=2 backup=3 delete=1 restore-held=1 unlock=2 account=1 phrase=1 edit=2 strict=1 lock=1 verify=3 method=1]` | #1136 |
+| 7203 | red-filed | 61 s | 25/25 | `families[create=5 window=1 tamper=1 delete=1 phrase=2 account=2 lock=3 restart=2 unlock=2 backup=3 method=1 strict=1 verify=1]` | #1131, #1136 |
+| 7204 | red-filed | 61 s | 25/25 | `families[create=3 account=1 method=3 backup=4 lock=2 unlock=2 window=2 strict=1 phrase=4 edit=1 dapp=1 verify=1]` | #1136 |
+| 7205 | red-filed | 100 s | 25/25 | `families[restart=3 backup=3 create=6 method=1 phrase=3 window=2 unlock=2 account=1 delete=2 dapp=1 verify=1]` | #1131, #1136 |
 
 ## Seeds (draft; finalized after approval)
 
