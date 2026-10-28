@@ -233,15 +233,37 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(supersedeProfileActivations).not.toHaveBeenCalled()
 	})
 
+	test("an ended flow's tail stays ended when the same profile opens again before it resumes", async () => {
+		const pointer = deferred<undefined>()
+		vi.mocked(setLastActiveProfileId).mockReturnValueOnce(pointer.promise)
+		const store = makeAppStore()
+		const { router, openToast, state, flow } = start(store)
+		bootstrapped(store, "created")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(setLastActiveProfileId).toHaveBeenCalledWith("created")
+
+		endFlow(store, flow)
+		bootstrapped(store, "created")
+		router.currentRoute.value.name = "popup-settings"
+		pointer.resolve(undefined)
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(accountInstance.getAccounts).not.toHaveBeenCalled()
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+	})
+
 	test("a hand-off whose navigation settles after the shell ended the flow shows no toast", async () => {
+		// The restart rejects the tail's call while the shell still reads the session open.
+		accountInstance.getAccounts.mockRejectedValueOnce(new Error("disconnected"))
 		const store = makeAppStore()
 		const { router, openToast, state, flow } = start(store)
 		const navigation = deferred<undefined>()
 		router.push.mockReturnValueOnce(navigation.promise)
-		store.profile = created
-		store.bootstrapFailure = { profileId: "created", message: "boom" }
+		bootstrapped(store, "created")
 		await vi.advanceTimersByTimeAsync(0)
-		expect(router.push).toHaveBeenCalledWith("/popup/auth")
+		expect(router.push).toHaveBeenCalledWith("/popup/general")
 
 		endFlow(store, flow)
 		navigation.resolve(undefined)

@@ -69,7 +69,8 @@ const completeImport = async (profile) => {
 	await setLastActiveProfileId(profile.id)
 	const outcome = await completeImportWithRecovery({
 		waitForActive: (ms) => awaitProfileActivation(appStore, profile.id, ms),
-		recover: async () => (await hydrateKnownProfile())?.id === profile.id && appStore.isLogined,
+		// A page that went recovers nothing: its hydrate could start a bootstrap over a later unlock.
+		recover: async () => !isUnmounted && flowLive() && (await hydrateKnownProfile())?.id === profile.id && appStore.isLogined,
 		timeoutMs: 30_000,
 	})
 	// A page that went, or whose flow the shell ended, no longer owns the window: the shell's landing does.

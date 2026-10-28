@@ -385,6 +385,14 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				const probePre = await readDisconnectProbe(page2)
 				expect(probePre?.disconnectedAt ?? null).toBeNull()
 
+				// Latched from before the kill: Home at any moment after it fails the scenario, not only at the end.
+				await page2.evaluate(() => {
+					const w = window as unknown as { __sawHome?: boolean }
+					w.__sawHome = false
+					setInterval(() => {
+						if (window.location.hash.split("?")[0] === "#/popup/general") w.__sawHome = true
+					}, 100)
+				})
 				console.warn("[sw-crash] B: killing while held at account-state (post-finalize)")
 				await stopBackground(ctx2)
 				await clearRestoreGate(page2)
@@ -437,6 +445,7 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				}
 				console.warn(`[sw-crash] B: terminal=${terminal} landing=${landing}`)
 				expect(landing).toBe("lock")
+				expect(await page2.evaluate(() => (window as unknown as { __sawHome?: boolean }).__sawHome)).toBe(false)
 				// The retained profile must never present the torn screen: assert
 				// its testid absent once the route settles.
 				await page2.waitForFunction(() => window.location.hash.length > 2, { timeout: 60_000, polling: 200 }).catch(() => {})

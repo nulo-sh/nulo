@@ -487,6 +487,17 @@ describe("popup import — the activation wait", () => {
 		expect(nav.push).toHaveBeenCalledWith("/popup/general")
 	})
 
+	test("a page that went before the 30 s bound recovers nothing and routes nowhere", async () => {
+		const { done } = await startImport()
+		const w = wrappers.pop() as VueWrapper
+		w.unmount()
+		await vi.advanceTimersByTimeAsync(30_000)
+		await done
+
+		expect(boot.hydrate).not.toHaveBeenCalled()
+		expect(nav.push).not.toHaveBeenCalled()
+	})
+
 	test("with no signal the wait holds to its 30 s bound, then recovers", async () => {
 		const { done } = await startImport()
 		await vi.advanceTimersByTimeAsync(29_999)

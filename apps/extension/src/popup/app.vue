@@ -417,8 +417,8 @@ const settleUndecidedBoot = (outcome, candidate, pageEstablished) => {
 }
 
 /** No open session. Which way the shell goes is `decideLockLanding` over the shell's state at
- *  action time; `reconcileLockedBoot` fences the `lock` action against an unlock that landed
- *  through the event path while the lookup was in flight. */
+ *  action time; `reconcileLockedBoot` fences the `lock` and `end-flow` actions against an unlock
+ *  that landed through the event path while the lookup was in flight. */
 const lockLandingState = (result, pageEstablished) => ({
 	hasProfile: !!appStore.profile,
 	onAuthRequiredRoute: !!route.meta.isAuthRequired,

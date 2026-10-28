@@ -13,3 +13,5 @@
 - 2026-10-27 — arc 1 final gates at 5d38398d1: lint, typecheck:all, test:all (extension 942 files, 15 948 tests) and the smoke specs on an armed Chrome build (6 files, 23 tests, 3:43) pass; origin/dev moved only on CI, no merge.
 - 2026-10-27 — the owner answered every ask ("ok go with your proposals, fix all."); plan amended: OA-2 widened to New profile and the first create (arc 2), arc 3 for OA-3 and D11; #1218 closes at the close-out.
 2026-10-27T23:52:22Z [Phase 2] amendment review folded (Codex changes requested; 3 findings accepted: D16, D17, I4); base action list red at step 4 (Home with no session)
+2026-10-28T00:05:09Z [Phase 2] gate at b99cd9609: lint, typecheck:all, test:all (149 s) green; scenario B green (terminal=errors-continue landing=lock; scenario 21 758 ms, file 61 529 ms; base 25 969 / 70 299); #1138 action-list replay green on the fix, red on the base
+2026-10-28T00:18:18Z [Phase 2] review round 1: Codex changes requested (2), Opus approve with nits; folded

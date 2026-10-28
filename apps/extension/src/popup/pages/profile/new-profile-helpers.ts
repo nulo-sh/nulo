@@ -47,9 +47,10 @@ export async function activateCreatedProfile(profile: ProfileInfo, deps: CreateA
 	}
 }
 
-async function openCreatedProfile(profile: ProfileInfo, { appStore, router }: CreateActivationDeps): Promise<void> {
+async function openCreatedProfile(profile: ProfileInfo, { appStore, router, flowLive }: CreateActivationDeps): Promise<void> {
+	// An ended flow stays ended: the same profile opening again later is the shell's, not this page's.
 	const assertActive = () => {
-		if (!appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
+		if (!flowLive() || !appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
 	}
 	await awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, {
 		deadlineCovers: "start",
