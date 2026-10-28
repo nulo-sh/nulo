@@ -6,6 +6,6 @@
 - 2026-10-28 Opus Plan: conditional approve (9); Codex r2: conditional approve (3 new); all folded, see the audit table.
 - 2026-10-28 Codex final: conditional approve (3); all folded; resumed for verification.
 - 2026-10-28 Codex final resumed: approve. Plan committed; arc 1 starts.
-- 2026-10-28 Phase 1 gate: pass at a0d3cae52 (lint, typecheck:all, model test, test:all; 28 seed runs and both controls green on Chrome and Firefox at retry 0; lessons/phase-1.md).
+- 2026-10-28 Phase 1 gate: pass at a0d3cae52 (lint, typecheck:all, model test, test:all; 13 seeds and two controls per browser, 30 tests, green at retry 0; lessons/phase-1.md).
 - 2026-10-28 arc 1 review loop: Codex r1 conditional approve (1), Opus conditional approve (2), both fixed; Codex r2 approve.
-- 2026-10-28 arc 1 final gates: pass at e0aaede3d (lint, typecheck:all, test:all; 28 seed runs and both controls per the plan, green on Chrome and Firefox at retry 0).
+- 2026-10-28 arc 1 final gates: pass at e0aaede3d (lint, typecheck:all, test:all; 13 seeds and two controls per browser, 30 tests, green at retry 0).
