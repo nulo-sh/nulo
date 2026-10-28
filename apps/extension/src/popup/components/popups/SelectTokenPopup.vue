@@ -1,14 +1,9 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
-/**
- * The Send token picker. Lists the active account's tokens on the active chain in the same order
- * as Home and Holdings (pinned, then by value), with a search box once the list outgrows Home's
- * budget. The balance client connects on show and is torn down on hide — the popup stays mounted.
- */
+/** The Send token picker. It stays mounted, so its balance client connects on show and disconnects on hide. */
 
 /** Components */
-import ListStatusMessage from "@/components/composite/ListStatusMessage.vue"
-import SearchField from "@/components/composite/SearchField.vue"
+import TokenList from "@/popup/components/modules/holdings/TokenList.vue"
 
 /** Services */
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -16,9 +11,6 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 
 /** Utils */
 import { managers } from "@/utils/core"
-import { HOME_TOKEN_ROWS, orderTokenRows } from "@/utils/token-order"
-import { dashIfBlank } from "@/utils/string"
-import { matchesQuery } from "@/utils/token-search"
 
 /** Composables */
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
@@ -43,7 +35,6 @@ const props = defineProps({
 const router = useRouter()
 
 const rows = ref([])
-const query = ref("")
 const balancesState = ref("loading")
 const loadError = computed(() => balancesState.value === "unavailable")
 
@@ -57,13 +48,7 @@ const pins = usePinnedTokens({
 	knownContracts: () => new Set(rows.value.map((tb) => tb.token.contract)),
 })
 
-const searchable = computed(() => rows.value.length > HOME_TOKEN_ROWS)
-const listed = computed(() => {
-	// A query typed while the box was shown must not keep filtering once the box is gone.
-	const matching = searchable.value ? rows.value.filter((tb) => matchesQuery(tb.token, query.value)) : rows.value
-	return orderTokenRows(matching, { pinnedContracts: pins.pinnedContracts.value, fiatOf })
-})
-const noResults = computed(() => rows.value.length > 0 && listed.value.length === 0)
+const isFlaggedAddress = (address) => prices.isFlagged({ chainId: appStore.network?.chainId, contract: address })
 
 const activeScope = () => {
 	const account = appStore.account?.address
@@ -92,6 +77,19 @@ const handleSelectToken = (id) => {
 	emit("onClose")
 }
 
+/** The opener's `{ onAdded }`, kept on show: closing a popup deletes its payload. */
+let request
+const openAddToken = (address) => {
+	const opener = request
+	popupStore.open("new_token", {
+		address,
+		onAdded: (token) => {
+			opener?.onAdded?.(token)
+			emit("onClose")
+		},
+	})
+}
+
 const handleManageTokens = () => {
 	router.push("/popup/settings/tokens")
 	popupStore.closeAll()
@@ -109,16 +107,20 @@ const load = () => {
 // The hide disconnects the port, which rejects a read in flight; the next show's first connect is
 // again the one its load opens.
 const close = () => {
+	request = undefined
 	balances.reset()
 	rows.value = []
-	query.value = ""
 	balancesState.value = "loading"
 	tokenBalanceService.disconnect()
 }
 
 watch(
 	() => props.show,
-	() => (props.show ? load() : close()),
+	() => {
+		if (!props.show) return close()
+		request = popupStore.getPayload("select_token")
+		return load()
+	},
 )
 watch(
 	() => [appStore.account?.address, appStore.network?.chainId],
@@ -146,28 +148,26 @@ onBeforeUnmount(() => {
 			</PopupHeader>
 
 			<Flex wide direction="column" gap="24" :class="$style.wrapper">
-				<SearchField v-if="searchable" v-model="query" placeholder="Search tokens" testid="select-token-search" />
-
-				<ItemsContainer>
-					<span v-if="loadError" :class="$style.error" data-testid="select-token-error">Couldn't load tokens</span>
-					<ListStatusMessage v-else-if="noResults" variant="no-results" testid="select-token-no-results" />
-					<SettingItem
-						v-for="tb in listed"
-						:key="tb.id"
-						@click="handleSelectToken(tb.token.id)"
-						:title="dashIfBlank(tb.token.symbol)"
-						:icon="tb.token.id === cacheStore.activeTokenIdx ? 'square-check' : 'square'"
-						:iconFillColor="tb.token.id === cacheStore.activeTokenIdx ? 'primary' : 'tertiary'"
-						iconBgColor="transparent"
-						data-testid="select-token-row"
-						:data-symbol="tb.token.symbol"
-						:data-selected="tb.token.id === cacheStore.activeTokenIdx ? 'true' : 'false'"
-					>
-						<template v-if="prices.isFlagged(tb.token)" #description>
-							<span data-testid="select-token-flagged" :class="$style.flagged">Flagged as a scam</span>
-						</template>
-					</SettingItem>
-				</ItemsContainer>
+				<span v-if="loadError" :class="$style.error" data-testid="select-token-error">Couldn't load tokens</span>
+				<!-- An unread list holds no rows, so it would offer to add a token the person holds. -->
+				<TokenList
+					v-else-if="balancesState === 'loaded'"
+					:rows
+					:pinnedContracts="pins.pinnedContracts.value"
+					:fiatOf
+					testidPrefix="select-token"
+					label="Your tokens"
+					placeholder="Search or paste an address"
+					:sortable="false"
+					selectable
+					:selectedId="cacheStore.activeTokenIdx"
+					:isFlagged="isFlaggedAddress"
+					:class="$style.list"
+					@pick="handleSelectToken"
+					@addToken="openAddToken"
+				>
+					<template #add-note>It joins your list on {{ appStore.network?.name }} and is picked for this send.</template>
+				</TokenList>
 
 				<ItemsContainer>
 					<SettingItem
@@ -190,9 +190,9 @@ onBeforeUnmount(() => {
 	composes: body from "./popup-shared.module.css";
 }
 
-/* The description slot's caption role, in the danger colour Home's flagged row uses. */
-.flagged {
-	color: var(--txt-danger);
+/* The list's sticky search paints the sheet's colour, not the page's. */
+.list {
+	--token-list-bg: var(--nulo-surface);
 }
 
 .error {

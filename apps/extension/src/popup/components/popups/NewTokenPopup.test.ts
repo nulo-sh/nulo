@@ -71,19 +71,19 @@ vi.mock("@/wallet/services/task/spec", () => ({
 	ContentKind: { Step: 0, BalanceUpdate: 1, ExecuteOperation: 2, Transfer: 3, RevokeAuthwits: 4 },
 }))
 
+const appState = {
+	profile: { id: "p1" },
+	network: { id: "net-1", chainId: 1 },
+	account: { address: "0xacct" },
+	scopeEpoch: 0,
+}
 vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => ({
-		profile: { id: "p1" },
-		network: { id: "net-1", chainId: 1 },
-		account: { address: "0xacct" },
-	}),
+	useAppStore: () => appState,
 }))
-const cacheStoreState = { preselectedTokenAddressToAdd: "" }
-vi.mock("@/stores/cache.store", () => ({
-	useCacheStore: () => cacheStoreState,
-}))
+// As the real store does, a close deletes the popup's payload.
+const payloads = new Map<string, unknown>()
 vi.mock("@/stores/popup.store", () => ({
-	usePopupStore: () => ({ popups: { new_token: { order: 1 } } }),
+	usePopupStore: () => ({ popups: { new_token: { order: 1 } }, getPayload: (target: string) => payloads.get(target) }),
 }))
 
 vi.mock("@/composables/toast", () => ({
@@ -176,9 +176,18 @@ function makeBalanceUpdateTask(tbId: number, opts: { finished?: boolean; error?:
 	}
 }
 
+/** The order the close and the opener's report arrive in. */
+const seen: string[] = []
+
 async function mountAndOpen(showRef = ref(false)) {
 	const w = mount(NewTokenPopup, {
-		props: { show: showRef.value },
+		props: {
+			show: showRef.value,
+			onOnClose: () => {
+				seen.push("close")
+				payloads.delete("new_token")
+			},
+		},
 		global: { stubs: STUBS },
 	})
 	// Trigger the watcher by flipping show=false → true so the popup
@@ -218,7 +227,9 @@ beforeEach(() => {
 	taskServiceMock.connect.mockReset().mockResolvedValue(undefined)
 	taskServiceMock.disconnect.mockReset()
 	openToastMock.mockReset()
-	cacheStoreState.preselectedTokenAddressToAdd = ""
+	payloads.clear()
+	seen.splice(0)
+	appState.scopeEpoch = 0
 	vi.useRealTimers()
 })
 
@@ -512,5 +523,109 @@ describe("NewTokenPopup", () => {
 		await flushPromises()
 		expect(taskServiceMock.connect.mock.calls.length).toBe(connectCallsAfterFirst)
 		expect(tokenServiceMock.addToken).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("NewTokenPopup — the opener's payload", () => {
+	const onAdded = vi.fn((token: unknown) => {
+		seen.push("added")
+		return token
+	})
+	beforeEach(() => {
+		onAdded.mockClear()
+	})
+
+	async function openWithPayload() {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true, contract: validHex, chainId: 1 })
+		tokenServiceMock.addToken.mockResolvedValueOnce(defaultTokenInfo())
+		return w
+	}
+	/** Submits and lands the balance row; the task's outcome is the caller's. */
+	async function submitToWait(w: ReturnType<typeof mount>) {
+		tokenBalanceServiceMock.getTokenBalances.mockResolvedValueOnce([])
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		for (const h of balanceAddedHandlers) h(makeTb({ id: 100, account: "0xacct" }))
+	}
+	const finish = (error?: string) => {
+		for (const h of taskUpdatedHandlers) h(makeBalanceUpdateTask(100, { finished: true, error }))
+	}
+
+	test("the payload's address fills the field, ready to import", async () => {
+		payloads.set("new_token", { address: validHex })
+		const w = await mountAndOpen()
+		const input = w.findAll('[data-testid="token-address-input"]').find((el) => el.element.tagName === "INPUT")
+		expect((input?.element as HTMLInputElement | undefined)?.value).toBe(validHex)
+		expect(submitBtn(w).attributes("disabled")).toBeUndefined()
+	})
+
+	test.each([
+		["the balance read", (_w: ReturnType<typeof mount>) => finish()],
+		["a balance read that failed", (_w: ReturnType<typeof mount>) => finish("PXE down")],
+		[
+			"the wait timing out",
+			async () => {
+				await vi.advanceTimersByTimeAsync(30_000)
+			},
+		],
+	])("after %s the opener hears of the token once, after the close", async (_, outcome) => {
+		vi.useFakeTimers()
+		const w = await openWithPayload()
+		await submitToWait(w)
+		await outcome(w)
+		await flushPromises()
+		expect(onAdded.mock.calls).toEqual([[defaultTokenInfo()]])
+		expect(seen).toEqual(["close", "added"])
+	})
+
+	test("a token already synced is reported at once, after the close", async () => {
+		const w = await openWithPayload()
+		tokenBalanceServiceMock.getTokenBalances.mockResolvedValueOnce([makeTb({ updatedAt: 1700_000_000_000 })])
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(onAdded.mock.calls).toEqual([[defaultTokenInfo()]])
+		expect(seen).toEqual(["close", "added"])
+	})
+
+	test("a refusal reports nothing", async () => {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: false })
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a close mid wait reports nothing, then or later", async () => {
+		const w = await openWithPayload()
+		await submitToWait(w)
+		await w.setProps({ show: false })
+		await flushPromises()
+		finish()
+		await flushPromises()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a token added on another chain reports nothing", async () => {
+		payloads.set("new_token", { address: validHex, onAdded })
+		const w = await mountAndOpen()
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true, contract: validHex, chainId: 999 })
+		tokenServiceMock.addToken.mockResolvedValueOnce(defaultTokenInfo({ chainId: 999 }))
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		expect(w.emitted("onClose")).toBeTruthy()
+		expect(onAdded).not.toHaveBeenCalled()
+	})
+
+	test("a scope that moved during the wait gets no report, though the add still closes", async () => {
+		const w = await openWithPayload()
+		await submitToWait(w)
+		appState.scopeEpoch += 1
+		finish()
+		await flushPromises()
+		expect(w.emitted("onClose")).toBeTruthy()
+		expect(onAdded).not.toHaveBeenCalled()
 	})
 })

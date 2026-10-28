@@ -1,8 +1,4 @@
-/**
- * The Send picker over chain-scoped balance rows: the shared order, the search box past Home's
- * budget, the filter, selection writing the TOKEN id, the scope fence on a slow fetch, a fetch
- * rejected by the hide, the retry and the reconnect re-read, and the teardown on hide / unmount.
- */
+/** The Send picker drawn by the real `TokenList` and `TokenCard`, over service clients the test drives. */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
@@ -26,7 +22,6 @@ const H = vi.hoisted(() => {
 	return {
 		getTokenBalances: vi.fn(),
 		balanceDisconnect: vi.fn(),
-		priceDisconnect: vi.fn(),
 		balanceAdded: makeEvent(),
 		balanceUpdated: makeEvent(),
 		balanceDeleted: makeEvent(),
@@ -38,6 +33,9 @@ const H = vi.hoisted(() => {
 		cache: { activeTokenIdx: undefined as number | undefined },
 		routerPush: vi.fn(),
 		closeAll: vi.fn(),
+		popupOpen: vi.fn(),
+		payload: { current: undefined as unknown },
+		flagged: { current: [] as { chainId: number; address: string }[] },
 	}
 })
 
@@ -60,14 +58,19 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 vi.mock("@/wallet/services/price/client", () => ({
 	PriceServiceClient: vi.fn(function () {
 		return {
-			disconnect: H.priceDisconnect,
+			// Per client: every row's card holds one beside the picker's own.
+			disconnect: vi.fn(),
 			onQuotesUpdated: H.quotesUpdated,
 			onConnected: H.priceConnected,
-			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS, flaggedTokens: flaggedKeysOf([TEST_FLAGGED]) })),
+			getQuotes: vi.fn(async () => ({
+				quotes: {},
+				pricedTokens: TEST_PRICED_TOKENS,
+				flaggedTokens: flaggedKeysOf([TEST_FLAGGED, ...H.flagged.current]),
+			})),
 			refreshIfStale: vi.fn().mockImplementation(async () => ({
 				quotes: H.quotes.current,
 				pricedTokens: TEST_PRICED_TOKENS,
-				flaggedTokens: flaggedKeysOf([TEST_FLAGGED]),
+				flaggedTokens: flaggedKeysOf([TEST_FLAGGED, ...H.flagged.current]),
 			})),
 		}
 	}),
@@ -80,7 +83,13 @@ vi.mock("@/stores/cache.store", async () => {
 	return { useCacheStore: () => store }
 })
 vi.mock("@/stores/popup.store", () => ({
-	usePopupStore: () => ({ len: 1, popups: { select_token: { order: 1 } }, closeAll: H.closeAll }),
+	usePopupStore: () => ({
+		len: 1,
+		popups: { select_token: { order: 1 } },
+		closeAll: H.closeAll,
+		open: H.popupOpen,
+		getPayload: (target: string) => (target === "select_token" ? H.payload.current : undefined),
+	}),
 }))
 vi.mock("vue-router", async (importOriginal) => {
 	const mod = await importOriginal<typeof import("vue-router")>()
@@ -105,6 +114,13 @@ const STUBS = {
 	},
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
+	Icon: { template: "<i />" },
+	Skeleton: { template: '<i data-testid="stub-skeleton" />' },
+	// `custom` hands the slot its href and navigate, as the real RouterLink does.
+	RouterLink: {
+		template: '<slot v-if="custom" :href="to" :navigate="() => {}" /><a v-else :href="to"><slot /></a>',
+		props: { to: [String, Object], custom: Boolean },
+	},
 }
 
 const CHAIN = CHAIN_IDS.TESTNET
@@ -146,6 +162,18 @@ async function mountOpen(rows: ReturnType<typeof row>[]) {
 	return wrapper
 }
 
+/** The picker's own price client: the first one built after `before` clients existed. */
+const pickerPrices = (before: number) =>
+	vi.mocked(PriceServiceClient).mock.results[before]?.value as unknown as { disconnect: { mock: { calls: unknown[] } } }
+
+/** A curve point no row holds. */
+const UNLISTED = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+const OFF_CURVE = "0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583"
+const search = async (wrapper: ReturnType<typeof mount>, query: string) => {
+	await wrapper.find('[data-testid="select-token-search"]').setValue(query)
+	await flushPromises()
+}
+
 describe("SelectTokenPopup", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -156,9 +184,11 @@ describe("SelectTokenPopup", () => {
 			ev.clear()
 		H.quotes.current = {}
 		H.cache.activeTokenIdx = undefined
+		H.payload.current = undefined
+		H.flagged.current = []
 		H.store.current = createAppStoreHarness()
 		H.store.current.account = { address: ACCOUNT }
-		H.store.current.network = { id: "net-main", chainId: CHAIN }
+		H.store.current.network = { id: "net-main", name: "Testnet", chainId: CHAIN }
 	})
 
 	test("rows follow the shared order: the priced token first, then held tokens by name, an empty row last", async () => {
@@ -169,6 +199,9 @@ describe("SelectTokenPopup", () => {
 			row(1, "PRICED", { contract: TEST_USDC }),
 			row(2, "ALPHA"),
 		])
+		expect(rowSymbols(wrapper)).toEqual(["PRICED", "ALPHA", "ZED"])
+		expect(wrapper.get('[data-testid="select-token-fold"]').text()).toContain("1 empty")
+		await wrapper.get('[data-testid="select-token-fold"]').trigger("click")
 		expect(rowSymbols(wrapper)).toEqual(["PRICED", "ALPHA", "ZED", "EMPTY"])
 		expect(H.getTokenBalances).toHaveBeenCalledWith(undefined, ACCOUNT)
 	})
@@ -177,13 +210,14 @@ describe("SelectTokenPopup", () => {
 	test("in a window document the hidden picker reads the cache and never asks for a refresh, whatever the route is by then; in the popup it refreshes", async () => {
 		const asked = () => {
 			type Calls = { mock: { calls: unknown[] } }
-			const client = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as unknown as {
+			const client = vi.mocked(PriceServiceClient).mock.results[built]?.value as unknown as {
 				getQuotes: Calls
 				refreshIfStale: Calls
 			}
 			return [client.getQuotes.mock.calls.length, client.refreshIfStale.mock.calls.length]
 		}
 		H.getTokenBalances.mockResolvedValue([row(2, "ALPHA"), row(1, "PRICED", { contract: TEST_USDC })])
+		let built = vi.mocked(PriceServiceClient).mock.results.length
 		captureWindowDocument("#/windows/execute?requestId=r1")
 		window.location.hash = "#/popup/auth"
 		try {
@@ -204,6 +238,7 @@ describe("SelectTokenPopup", () => {
 			window.location.hash = ""
 		}
 
+		built = vi.mocked(PriceServiceClient).mock.results.length
 		const popup = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await flushPromises()
 		expect(asked()).toEqual([1, 1])
@@ -218,8 +253,8 @@ describe("SelectTokenPopup", () => {
 		const contract = `0x${TEST_FLAGGED.address.slice(2).toUpperCase()}`
 		const wrapper = await mountOpen([row(1, "SCAM", { contract }), row(2, "ALPHA")])
 		const lines = wrapper.findAll('[data-testid="select-token-row"]').map((el) => {
-			const line = el.find('[data-testid="setting-description"]')
-			return [el.attributes("data-symbol"), line.exists() ? line.get('[data-testid="select-token-flagged"]').text() : null]
+			const line = el.find('[data-testid="select-token-flagged"]')
+			return [el.attributes("data-symbol"), line.exists() ? line.text() : null]
 		})
 		expect(lines).toEqual([
 			["ALPHA", null],
@@ -231,7 +266,7 @@ describe("SelectTokenPopup", () => {
 		const wrapper = await mountOpen([row(1, "   ", { contract: "0xblank" }), row(2, "ALPHA")])
 		const titles = wrapper
 			.findAll('[data-testid="select-token-row"]')
-			.map((el) => [el.attributes("data-symbol"), el.attributes("data-title")])
+			.map((el) => [el.attributes("data-symbol"), el.get('[data-testid="token-symbol"]').text()])
 		expect(titles).toEqual([
 			["   ", "—"],
 			["ALPHA", "ALPHA"],
@@ -243,12 +278,22 @@ describe("SelectTokenPopup", () => {
 		expect(rowSymbols(wrapper)).toEqual(["HERE"])
 	})
 
-	test("the search box appears only past Home's budget", async () => {
-		const three = await mountOpen([row(1, "A"), row(2, "B"), row(3, "C")])
-		expect(three.find('[data-testid="select-token-search"]').exists()).toBe(false)
+	test("the search box shows with one row, for a paste", async () => {
+		const one = await mountOpen([row(1, "A")])
+		expect(one.get('[data-testid="select-token-search"]').attributes("placeholder")).toBe("Search or paste an address")
+		expect(one.text()).toContain("Your tokens")
+	})
 
-		const four = await mountOpen([row(1, "A"), row(2, "B"), row(3, "C"), row(4, "D")])
-		expect(four.find('[data-testid="select-token-search"]').exists()).toBe(true)
+	test("no list, so no search and no add row, before the snapshot's read lands", async () => {
+		let release: (rows: ReturnType<typeof row>[]) => void = () => {}
+		H.getTokenBalances.mockImplementation(() => new Promise((resolve) => (release = resolve)))
+		const wrapper = mount(SelectTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await wrapper.setProps({ show: true })
+		await flushPromises()
+		expect(wrapper.find('[data-testid="select-token-search"]').exists()).toBe(false)
+		release([row(1, "A")])
+		await flushPromises()
+		expect(wrapper.find('[data-testid="select-token-search"]').exists()).toBe(true)
 	})
 
 	test("search filters by symbol and shows the no-results line on a miss", async () => {
@@ -259,17 +304,6 @@ describe("SelectTokenPopup", () => {
 		await wrapper.find('[data-testid="select-token-search"]').setValue("zzz")
 		expect(rowSymbols(wrapper)).toEqual([])
 		expect(wrapper.find('[data-testid="select-token-no-results"]').exists()).toBe(true)
-	})
-
-	test("a query stops filtering once a deletion shrinks the list under the search threshold", async () => {
-		const wrapper = await mountOpen([row(1, "ALPHA"), row(2, "BETA"), row(3, "GAMMA"), row(4, "DELTA")])
-		await wrapper.find('[data-testid="select-token-search"]').setValue("delta")
-		expect(rowSymbols(wrapper)).toEqual(["DELTA"])
-
-		H.balanceDeleted.emit(row(4, "DELTA"))
-		await nextTick()
-		expect(wrapper.find('[data-testid="select-token-search"]').exists()).toBe(false)
-		expect(rowSymbols(wrapper)).toEqual(["ALPHA", "BETA", "GAMMA"])
 	})
 
 	test("selecting a row writes the TOKEN id (not the balance row id), marks it selected, and closes", async () => {
@@ -482,7 +516,8 @@ describe("SelectTokenPopup", () => {
 		await flushPromises()
 		H.balanceAdded.emit(row(2, "MINE"))
 		await nextTick()
-		expect(rowSymbols(wrapper)).toEqual(["MINE"])
+		// The list waits for the read: shown alone, the add would read as the whole list.
+		expect(rowSymbols(wrapper)).toEqual([])
 		release([row(1, "A")])
 		await flushPromises()
 		expect(rowSymbols(wrapper)).toEqual(["A", "MINE"])
@@ -490,11 +525,12 @@ describe("SelectTokenPopup", () => {
 	})
 
 	test("hiding clears the list and query and disconnects the balance client; unmount tears down prices", async () => {
+		const before = vi.mocked(PriceServiceClient).mock.results.length
 		const wrapper = await mountOpen([row(1, "A"), row(2, "B"), row(3, "C"), row(4, "D")])
 		await wrapper.find('[data-testid="select-token-search"]').setValue("a")
 		await wrapper.setProps({ show: false })
 		expect(H.balanceDisconnect).toHaveBeenCalledTimes(1)
-		expect(H.priceDisconnect).not.toHaveBeenCalled()
+		expect(pickerPrices(before).disconnect.mock.calls).toHaveLength(0)
 
 		// Re-open: the list is fetched fresh and the query is gone.
 		H.getTokenBalances.mockResolvedValue([row(1, "A"), row(2, "B"), row(3, "C"), row(4, "D")])
@@ -504,7 +540,7 @@ describe("SelectTokenPopup", () => {
 		expect((wrapper.find('[data-testid="select-token-search"]').element as HTMLInputElement).value).toBe("")
 
 		wrapper.unmount()
-		expect(H.priceDisconnect).toHaveBeenCalledTimes(1)
+		expect(pickerPrices(before).disconnect.mock.calls).toHaveLength(1)
 	})
 
 	test("a balance added or updated while open counts only when it belongs to the active scope", async () => {
@@ -515,6 +551,123 @@ describe("SelectTokenPopup", () => {
 		H.balanceUpdated.emit({ ...row(1, "A"), token: { ...row(1, "A").token, symbol: "A2" }, account: OTHER_ACCOUNT })
 		await nextTick()
 		expect(rowSymbols(wrapper)).toEqual(["A", "MINE"])
+	})
+})
+
+describe("SelectTokenPopup — paste to add", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		installChromeStorage()
+		for (const ev of [H.balanceAdded, H.balanceUpdated, H.balanceDeleted, H.balanceConnected, H.quotesUpdated, H.priceConnected])
+			ev.clear()
+		H.quotes.current = {}
+		H.cache.activeTokenIdx = undefined
+		H.payload.current = undefined
+		H.flagged.current = []
+		H.store.current = createAppStoreHarness()
+		H.store.current.account = { address: ACCOUNT }
+		H.store.current.network = { id: "net-main", name: "Testnet", chainId: CHAIN }
+	})
+
+	const addRow = (wrapper: ReturnType<typeof mount>) => wrapper.find('[data-testid="select-token-add-token"]')
+
+	test("an address no row holds offers the add with its note; the press hands New token the address and a report that picks and closes", async () => {
+		const onAdded = vi.fn()
+		H.payload.current = { onAdded }
+		const wrapper = await mountOpen([row(1, "ALPHA")])
+		await search(wrapper, ` ${UNLISTED} `)
+		expect(rowSymbols(wrapper)).toEqual([])
+		expect(wrapper.get('[data-testid="select-token-add-token-address"]').text()).toBe("0x04…7a")
+		expect(wrapper.text()).toContain("It joins your list on Testnet and is picked for this send.")
+		expect(wrapper.find('[data-testid="select-token-add-token-flagged"]').exists()).toBe(false)
+
+		await addRow(wrapper).trigger("click")
+		expect(H.popupOpen).toHaveBeenCalledTimes(1)
+		const [target, payload] = H.popupOpen.mock.calls[0] as [string, { address: string; onAdded: (t: unknown) => void }]
+		expect([target, payload.address]).toEqual(["new_token", UNLISTED])
+		expect(wrapper.emitted("onClose")).toBeUndefined()
+
+		const token = { id: 42, contract: UNLISTED }
+		payload.onAdded(token)
+		expect(onAdded.mock.calls).toEqual([[token]])
+		expect(wrapper.emitted("onClose")).toHaveLength(1)
+	})
+
+	test("the report keeps the opener of the show it was offered in, not the payload a later show carries", async () => {
+		const first = vi.fn()
+		H.payload.current = { onAdded: first }
+		const wrapper = await mountOpen([row(1, "ALPHA")])
+		await search(wrapper, UNLISTED)
+		await addRow(wrapper).trigger("click")
+		const payload = H.popupOpen.mock.calls[0]?.[1] as { onAdded: (t: unknown) => void }
+		await wrapper.setProps({ show: false })
+		H.payload.current = { onAdded: vi.fn() }
+		payload.onAdded({ id: 42 })
+		expect(first).toHaveBeenCalledTimes(1)
+	})
+
+	test("a held address, in either case, narrows to its row, marked when current, and offers no add; the press picks it", async () => {
+		const held = UNLISTED
+		H.cache.activeTokenIdx = 5
+		const wrapper = await mountOpen([row(5, "HELD", { contract: held }), row(6, "ALPHA")])
+		for (const q of [held, `0x${held.slice(2).toUpperCase()}`]) {
+			await search(wrapper, q)
+			expect(rowSymbols(wrapper)).toEqual(["HELD"])
+			expect(wrapper.get('[data-testid="select-token-row"]').attributes("aria-current")).toBe("true")
+			expect(addRow(wrapper).exists()).toBe(false)
+		}
+		H.cache.activeTokenIdx = 6
+		await search(wrapper, held)
+		await wrapper.get('[data-testid="select-token-row"]').trigger("click")
+		expect(H.cache.activeTokenIdx).toBe(5)
+		expect(wrapper.emitted("onClose")).toHaveLength(1)
+		expect(H.popupOpen).not.toHaveBeenCalled()
+	})
+
+	test("a held address whose balance is empty stays behind the fold, and still offers no add", async () => {
+		const wrapper = await mountOpen([row(5, "HELD", { contract: UNLISTED, publicBalance: "0" }), row(6, "ALPHA")])
+		await search(wrapper, UNLISTED)
+		expect(rowSymbols(wrapper)).toEqual([])
+		expect(addRow(wrapper).exists()).toBe(false)
+		await wrapper.get('[data-testid="select-token-fold"]').trigger("click")
+		expect(rowSymbols(wrapper)).toEqual(["HELD"])
+	})
+
+	test("hex that is no address finds nothing; a prefix and plain text filter; none offers the add", async () => {
+		const wrapper = await mountOpen([row(1, "ALPHA", { contract: "0x12ab" }), row(2, "BETA", { contract: "0x34cd" })])
+		await search(wrapper, OFF_CURVE)
+		expect(wrapper.find('[data-testid="select-token-no-results"]').exists()).toBe(true)
+		expect(addRow(wrapper).exists()).toBe(false)
+		await search(wrapper, "0x12")
+		expect(rowSymbols(wrapper)).toEqual(["ALPHA"])
+		await search(wrapper, "beta tok")
+		expect(rowSymbols(wrapper)).toEqual(["BETA"])
+		expect(addRow(wrapper).exists()).toBe(false)
+	})
+
+	test("an address the signed list flags, pasted in mixed case, carries the flag line on an add that stays pressable", async () => {
+		H.flagged.current = [{ chainId: CHAIN, address: UNLISTED }]
+		const wrapper = await mountOpen([row(1, "ALPHA")])
+		await search(wrapper, `0x${UNLISTED.slice(2, 30).toUpperCase()}${UNLISTED.slice(30)}`)
+		expect(wrapper.get('[data-testid="select-token-add-token-flagged"]').text()).toBe("Flagged as a scam")
+		const button = addRow(wrapper)
+		expect(button.attributes("disabled")).toBeUndefined()
+		const flagId = wrapper.get('[data-testid="select-token-add-token-flagged"]').attributes("id")
+		expect(button.attributes("aria-describedby")?.split(" ")).toContain(flagId)
+		await button.trigger("click")
+		expect(H.popupOpen).toHaveBeenCalledTimes(1)
+	})
+
+	test("New token opening over the picker leaves its query, its add row and the current token", async () => {
+		H.cache.activeTokenIdx = 1
+		const wrapper = await mountOpen([row(1, "ALPHA")])
+		await search(wrapper, UNLISTED)
+		await addRow(wrapper).trigger("click")
+		await flushPromises()
+		expect((wrapper.get('[data-testid="select-token-search"]').element as HTMLInputElement).value).toBe(UNLISTED)
+		expect(addRow(wrapper).exists()).toBe(true)
+		expect(H.cache.activeTokenIdx).toBe(1)
+		expect(wrapper.emitted("onClose")).toBeUndefined()
 	})
 })
 

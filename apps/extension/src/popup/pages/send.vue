@@ -250,6 +250,14 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** A never-synced row holds placeholder zeroes; a failed refresh keeps the last balance it read. */
+const balanceState = computed(() => {
+	const row = tokenBalance.value
+	if (row && row.updatedAt !== 0) return "read"
+	if (row ? row.syncFailure : balancesState.value === "unavailable") return "unavailable"
+	return "loading"
+})
+
 /** The line under the amount names only a balance the wallet read: a row never synced holds a zero
  *  placeholder, which the token card draws as loading. */
 const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
@@ -556,14 +564,29 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
+/** An imported token's id: the token watch's next run keeps the amount for it. */
+let keepAmountFor
+async function pickAddedToken(token) {
+	const epoch = appStore.scopeEpoch
+	const current = cacheStore.activeTokenIdx
+	const listed = () => tokens.value.some((t) => t.id === token.id)
+	if (!listed()) await reloadTokens().catch(onReadFailed)
+	// Only a token the list holds can be active: any other leaves the card with no token. A token
+	// picked while the list was read is the later choice, and keeps its own amount.
+	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
+	keepAmountFor = token.id
+	cacheStore.activeTokenIdx = token.id
+}
+
 watch(
 	() => cacheStore.activeTokenIdx,
-	() => {
+	(id) => {
 		closeReview()
 		initSendType()
 		initReceiverType()
 
-		amountTerm.value = null
+		if (id !== keepAmountFor) amountTerm.value = null
+		keepAmountFor = undefined
 	},
 )
 
@@ -812,7 +835,13 @@ onBeforeUnmount(() => {
 				<div :class="$style.section">
 					<span :class="$style.section_label">Select Asset</span>
 					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
-					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
+					<SelectTokenCard
+						:token="activeToken"
+						:loading="tokensLoading"
+						:failed="tokensFailed"
+						:onTokenAdded="pickAddedToken"
+						@retry="retryTokens"
+					/>
 				</div>
 
 				<!-- Section: Transaction Amount -->
@@ -827,6 +856,7 @@ onBeforeUnmount(() => {
 						:token="activeToken"
 						:tokenBalanceByType
 						:balanceRawByType="balanceRaw ?? null"
+						:balanceState
 						:liveQuote
 						:proxyTicker
 						:exceedsBalance

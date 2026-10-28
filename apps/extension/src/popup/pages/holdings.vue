@@ -33,10 +33,8 @@ import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/compo
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
 const activeChainId = () => appStore.network?.chainId
@@ -62,6 +60,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 const usdRateOf = (tb: TokenBalanceInfo) => prices.quoteFor(tb.token.chainId, tb.token.contract)?.usd
+const isFlaggedAddress = (address: string) => prices.isFlagged({ chainId: activeChainId(), contract: address })
 
 const showFiatValues = ref(true)
 const dustThresholdUsd = ref(0)
@@ -108,10 +107,7 @@ const awaitingPrices = computed(
 	() => showFiatValues.value && !error.value && (isLoading.value || awaitingFirstPriceAnswer(rows.value, prices)),
 )
 
-const openAddToken = (address: string) => {
-	cacheStore.preselectedTokenAddressToAdd = address
-	popupStore.open("new_token")
-}
+const openAddToken = (address: string) => popupStore.open("new_token", { address })
 
 const summary = useTemplateRef<ComponentPublicInstance>("summary")
 const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
@@ -220,6 +216,7 @@ onBeforeUnmount(() => {
 				:fiatOf="fiatOf"
 				:usdRateOf="usdRateOf"
 				:dustThresholdUsd="dustThresholdUsd"
+				:isFlagged="isFlaggedAddress"
 				@addToken="openAddToken"
 			/>
 		</Flex>

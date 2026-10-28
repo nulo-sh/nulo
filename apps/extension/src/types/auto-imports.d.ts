@@ -355,6 +355,7 @@ declare global {
   const parseEncryptedBackup: typeof import('../utils/full-backup-helpers').parseEncryptedBackup
   const parseFeePickUpdate: typeof import('../utils/fee-picks').parseFeePickUpdate
   const parseRawBalance: typeof import('../utils/token-amount').parseRawBalance
+  const parseSide: typeof import('../utils/token-amount').parseSide
   const parseTransferIntent: typeof import('../utils/transfer-intent').parseTransferIntent
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
   const passkeyTag: typeof import('../utils/passkey-copy').passkeyTag
@@ -1227,6 +1228,7 @@ declare module 'vue' {
     readonly parseEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['parseEncryptedBackup']>
     readonly parseFeePickUpdate: UnwrapRef<typeof import('../utils/fee-picks')['parseFeePickUpdate']>
     readonly parseRawBalance: UnwrapRef<typeof import('../utils/token-amount')['parseRawBalance']>
+    readonly parseSide: UnwrapRef<typeof import('../utils/token-amount')['parseSide']>
     readonly parseTransferIntent: UnwrapRef<typeof import('../utils/transfer-intent')['parseTransferIntent']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
     readonly passkeyTag: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyTag']>
