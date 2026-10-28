@@ -5,5 +5,4 @@ export const RECOVERY_PHRASE_WARNINGS: readonly string[] = [
 	"Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire.",
 ]
 
-/** One bound for every screen that shows the recovery phrase. */
 export const RECOVERY_PHRASE_AUTO_CLOSE_MS = 5 * 60_000
