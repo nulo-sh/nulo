@@ -11,6 +11,13 @@ describe("OnboardingSkipLink", () => {
 		expect(w.text()).toBe("Do it later")
 	})
 
+	test("a page can hand it focus", () => {
+		const w = mount(OnboardingSkipLink, { props: { testid: "onboarding-other-skip" }, attachTo: document.body })
+		w.vm.focus()
+		expect(document.activeElement).toBe(w.element)
+		w.unmount()
+	})
+
 	test("a click emits once", async () => {
 		const w = mount(OnboardingSkipLink, { props: { testid: "onboarding-other-skip" } })
 		await w.trigger("click")

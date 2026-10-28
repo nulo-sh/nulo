@@ -536,13 +536,13 @@ export class RestoreTornError extends WalletError {
  * on this device. Thrown by `importMnemonic` / `restore` unless the caller
  * passes `allowDuplicate: true` — the UI catches this, shows the warn-and-confirm dialog, and
  * retries with the override (duplicates are a warned choice, never a hard block — owner policy).
- * `details.existingProfileName` names the colliding profile for the dialog copy; the error NEVER
+ * `details.existingProfileNames` names every colliding profile for the dialog copy; the error NEVER
  * carries key material.
  */
 export class DuplicateWalletError extends WalletError {
 	public static readonly CODE = "DUPLICATE_WALLET"
 
-	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileName?: string }) {
+	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileNames?: string[] }) {
 		super(DuplicateWalletError.CODE, message, details, "DuplicateWalletError")
 	}
 }

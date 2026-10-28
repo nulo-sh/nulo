@@ -2324,19 +2324,19 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * The duplicate-phrase guard: compare the candidate master's fingerprint against every live
-	 * row. Soft by owner policy — a match throws the typed `DuplicateWalletError` (profile NAME
-	 * only, never key material) unless the caller carries the confirmed `allowDuplicate`
+	 * row. Soft by owner policy — a match throws the typed `DuplicateWalletError` (every matching
+	 * profile's NAME, never key material) unless the caller carries the confirmed `allowDuplicate`
 	 * override. Returns the fingerprint for the row being built. Callers run this UNDER the same
 	 * lock as the row commit (check→write atomicity).
 	 */
 	private async assertNotDuplicateWallet(master: MasterSecretBytes, allowDuplicate: boolean): Promise<string> {
 		const fingerprint = await computeWalletFingerprint(master)
 		if (!allowDuplicate) {
-			const clash = (await this.repo.getAll()).find(
+			const clashes = (await this.repo.getAll()).filter(
 				(p) => !this.deletionState.isReserved(p.id) && p.walletFingerprint === fingerprint,
 			)
-			if (clash) {
-				throw new DuplicateWalletError(undefined, { existingProfileName: clash.name })
+			if (clashes.length > 0) {
+				throw new DuplicateWalletError(undefined, { existingProfileNames: clashes.map((p) => p.name) })
 			}
 		}
 		return fingerprint

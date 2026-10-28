@@ -10,6 +10,7 @@
 import type { StoredShapeName } from "@/wallet/storage/stored-shapes"
 import { cite } from "./citations"
 import {
+	type CredentialRef,
 	type Expectation,
 	type ModelFile,
 	type ModelProfile,
@@ -42,6 +43,8 @@ export interface Bindings {
 	names: Map<ProfileRef, string>
 	/** Each profile's derived account addresses, by index, as first read on the chain it stood on. */
 	addresses: Map<ProfileRef, ChainAddresses>
+	/** Each credential's id as the wallet stores it, learnt from the answer that minted it. */
+	credentials: Map<CredentialRef, string>
 }
 
 /** Derived addresses read on one chain: an address takes its chain's L1 id, so two readings
@@ -51,7 +54,7 @@ export interface ChainAddresses {
 	addresses: string[]
 }
 
-export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map() })
+export const emptyBindings = (): Bindings => ({ profiles: new Map(), names: new Map(), addresses: new Map(), credentials: new Map() })
 
 /** Binds `ref` to `id`. A full-backup restore keeps the backed-up profile's id, so a deleted
  *  profile's id comes back under the ref that restored it: `deleted` names the refs whose id a new
@@ -168,8 +171,9 @@ export function checkSession(w: World, r: SessionReading, b: Bindings): Violatio
 export interface ProfileReading {
 	/** `profile.getProfiles`, with whether each is listed as retired. */
 	listed: { id: string; name: string; type: string; retired: boolean }[]
-	/** Every stored profile row: its key's id and the row's id, name, type and field names. */
-	rows: { keyId: string; id: string; name: string; type: string; fields: string[] }[]
+	/** Every stored profile row: its key's id and the row's id, name, type, field names and, on a
+	 *  passkey row, the credential it names. */
+	rows: { keyId: string; id: string; name: string; type: string; fields: string[]; credentialId?: string }[]
 }
 
 export type RowKind = "password" | "passkey" | "retired"
@@ -204,7 +208,15 @@ function checkLiveProfile(p: ModelProfile, r: ProfileReading, b: Bindings, field
 	const want = [...fields[rowKind(p)]].sort().join(",")
 	const got = [...row.fields].sort().join(",")
 	if (want !== got) out.push(violation("O2", `${p.ref}'s row holds the fields [${got}], not [${want}]`))
-	return out
+	return [...out, ...checkCredential(p, row, b)]
+}
+
+/** A passkey row names the credential its profile was given, as bound from the answer that minted it. */
+function checkCredential(p: ModelProfile, row: ProfileReading["rows"][number], b: Bindings): Violation[] {
+	if (p.method !== "passkey" || p.retired || !p.credential) return []
+	const bound = b.credentials.get(p.credential)
+	if (!bound) return [violation("O2", `${p.ref}'s credential ${p.credential} was never bound`)]
+	return row.credentialId === bound ? [] : [violation("O2", `${p.ref}'s row names another credential than ${p.credential}`)]
 }
 
 export function checkProfiles(w: World, r: ProfileReading, b: Bindings, fields: RowFields = PROFILE_ROW_FIELDS): Violation[] {
@@ -216,6 +228,58 @@ export function checkProfiles(w: World, r: ProfileReading, b: Bindings, fields: 
 		if (!expected.has(x.keyId))
 			out.push(violation("O2", `a profile row for ${x.keyId} is stored but the model holds no such live profile`))
 	return out
+}
+
+// ── the passkey's answers ───────────────────────────────────────────────
+
+/** One answer a page received: its kind and credential id, base64 as the wallet stores it. */
+export type Answer = { kind: "get" | "create"; id: string }
+/** The wallet's own discovery request, as the browser's pick found it before narrowing it. */
+export type DiscoveryRequest = { named: number; prf: boolean }
+
+/** One ceremony a step expects, in order: `optional` where the wallet may skip it, as the get that
+ *  confirms a create whose answer carried no PRF output. */
+export interface Ceremony {
+	kind: Answer["kind"]
+	credential: CredentialRef
+	optional?: true
+}
+
+/**
+ * Matches a step's answers to `expected`, binding each credential a create minted to its answer's id
+ * and checking every other against its binding, never against a row. What is wrong, or undefined:
+ * a discovery that named a credential or asked no PRF output, an answer out of order or by another
+ * credential, one missing, or one past the sequence.
+ */
+export function bindCeremonies(
+	b: Bindings,
+	seen: { answers: readonly Answer[]; picks: readonly DiscoveryRequest[] },
+	expected: readonly Ceremony[],
+): string | undefined {
+	const asked = seen.picks.find((pick) => pick.named || !pick.prf)
+	if (asked) return `the wallet's discovery named ${asked.named} credential(s)${asked.prf ? "" : " and asked no PRF output"}`
+	const shown = seen.answers.map((a) => `${a.kind}:${a.id}`).join(" ")
+	let i = 0
+	for (const want of expected) {
+		const by = matchAnswer(b, want, seen.answers[i])
+		if (typeof by === "string") return by
+		if (by) i++
+		else if (!want.optional) return `expected a ${want.kind} answered by ${want.credential}; the page saw [${shown}]`
+	}
+	return i < seen.answers.length ? `the page saw answers past the step's ceremonies: [${shown}]` : undefined
+}
+
+const matchAnswer = (b: Bindings, want: Ceremony, got: Answer | undefined): boolean | string =>
+	got?.kind === want.kind ? answeredBy(b, want, got) : false
+
+/** Whether `got` is `want`'s credential; a create's answer for an unbound credential binds it. */
+function answeredBy(b: Bindings, want: Ceremony, got: Answer): boolean | string {
+	const bound = b.credentials.get(want.credential)
+	if (bound) return bound === got.id
+	if (want.kind !== "create") return `${want.credential} answered a get before any create minted it`
+	if ([...b.credentials.values()].includes(got.id)) return "a create answered with a credential already bound"
+	b.credentials.set(want.credential, got.id)
+	return true
 }
 
 // ── O3: what each action wrote ──────────────────────────────────────────
@@ -562,6 +626,12 @@ export interface KnownFinding {
 
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{
+		issue: 1178,
+		pattern: /^\["\[unlock-method\] change failed",\{"error":\{"name":"Error","message":"Passkey did not open this profile"\}\}\]$/,
+		kinds: ["log"],
+		source: "ui",
+	},
+	{
 		issue: 432,
 		// A closed known limit: its entry stays while the issue does.
 		pattern:
@@ -782,7 +852,7 @@ export interface VerifyReading {
 	 *  place, once the profile opened. */
 	lost?: string[]
 	/** Each imported account's signing key as exported now, beside the one it was imported with.
-	 *  A password profile must show exactly the files the model says it imported. */
+	 *  An opened profile must show exactly the files the model says it imported. */
 	sentinels: { file: string; now: string; imported: string }[]
 	/** A retired profile's probe: what its lock screen shows, and how each call that would open or
 	 *  export it answered (`retired` for the wallet's retired refusal, else the call's own outcome). */
@@ -820,13 +890,11 @@ function checkRetired(r: VerifyReading): Violation[] {
 	return out
 }
 
-/** Profiles that must derive the same accounts: those sharing a phrase or a credential. */
-/** Profiles that share `p`'s phrase or credential, deleted ones included: a restore must derive the
- *  addresses its source derived before that source was deleted. */
+/** Profiles that share `p`'s phrase, deleted ones included: a restore must derive the addresses its
+ *  source derived before that source was deleted. A shared credential is no sibling: each profile
+ *  on it holds its own phrase. */
 function siblings(w: World, p: ModelProfile): ModelProfile[] {
-	return w.profiles.filter(
-		(x) => x.ref !== p.ref && ((p.phrase && x.phrase === p.phrase) || (p.credential && x.credential === p.credential)),
-	)
+	return w.profiles.filter((x) => x.ref !== p.ref && p.phrase !== undefined && x.phrase === p.phrase)
 }
 
 function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings): Violation[] {
@@ -847,8 +915,21 @@ function checkSiblings(w: World, p: ModelProfile, r: VerifyReading, b: Bindings)
 	return out
 }
 
+/** Profiles on different phrases derive different accounts, two on one passkey included. */
+function checkStrangers(w: World, p: ModelProfile, r: VerifyReading, b: Bindings): Violation[] {
+	const first = r.addresses[0]
+	if (first === undefined || p.phrase === undefined) return []
+	return w.profiles
+		.filter((x) => x.phrase !== undefined && x.phrase !== p.phrase)
+		.filter((x) => {
+			const theirs = b.addresses.get(x.ref)
+			return theirs?.chainId === r.chainId && theirs.addresses[0] === first
+		})
+		.map((x) => violation("O6", `${r.ref} and ${x.ref} hold different phrases but both derive ${first} on chain ${r.chainId}`))
+}
+
 function checkSentinels(p: ModelProfile, r: VerifyReading): Violation[] {
-	const want = (p.method === "password" ? [...p.imported] : []).sort().join(",")
+	const want = [...p.imported].sort().join(",")
 	const got = r.sentinels
 		.map((s) => s.file)
 		.sort()
@@ -877,7 +958,7 @@ function checkVerifyOne(w: World, r: VerifyReading, b: Bindings): Violation[] {
 				out.push(violation("O6", `${r.ref}'s account ${i} moved from ${a} to ${r.addresses[i]} on chain ${r.chainId}`))
 		})
 	for (const m of r.lost ?? []) out.push(violation("O3", m))
-	return [...out, ...checkSiblings(w, p, r, b), ...checkSentinels(p, r)]
+	return [...out, ...checkSiblings(w, p, r, b), ...checkStrangers(w, p, r, b), ...checkSentinels(p, r)]
 }
 
 export function checkVerify(w: World, readings: readonly VerifyReading[], b: Bindings): Violation[] {
