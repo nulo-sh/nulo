@@ -351,7 +351,7 @@ const RETIRED_EXPORTS = cite(SERVICE, 527, 'if (classifyProfileRow(profile).kind
 const RETIRED_LISTED = cite(SERVICE, 2404, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1292, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_FINALIZE = cite(SERVICE, 2586, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 382, 'data-testid="auth-delete-retired"')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 145, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 158, "if (isMounted()) leavePhrase()")
