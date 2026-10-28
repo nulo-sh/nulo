@@ -156,6 +156,13 @@ Two low fixes taken: recon's reuse map named the sorted check; Fact 2 said "befo
 the persisted bearer is removed"). Its suggested "before the removal completes" replaces "runs" in E2. Over the light
 target (150 lines) by these audit records.
 
+**Post-implementation loop (arc 1, diff `09848b46a..90280264c`).** Codex round 1 (gpt-6.1-sol, high, fresh session):
+`clean`; rebuilt E1 byte for byte, traced E2. Opus diff review: `clean`. 1. Needs unsupported conditions: the profile
+lock's 5-minute watchdog (`packages/wallet-core/src/utils/lock.ts:5`) releasing within the milliseconds between
+`open()`'s strict read (`session-manager.ts:299`) and its commit, while a toggle lands there too, would let `open()`
+store a bearer under strict ON. Disposition: a closed `known-limit` issue at close-out (same class as #443), no doc
+change. 2. Nit: "removal" twice; "before it completes" rejected, as "it" would bind to the worker. Converged in one round.
+
 ## Seeds
 
 Not run (orchestrator-owned). `/goal`: phases 1 and 2 ✓ with their gates pasted; the Codex loop converged; the PR into

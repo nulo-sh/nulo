@@ -7,3 +7,4 @@
 - 2026-10-28: Codex final pass (resumed): approve; two low consistency fixes applied. Plan committed; arc 1 next (auto-continue).
 - 2026-10-28: arc 1 phase 1 gate green: byte-exact rebuild cmp clean, headings unchanged, five leads between § Dependency policy and § GitHub Actions; lint 0; test:ci-gating 691 pass.
 - 2026-10-28: arc 1 phase 2 gate green: cited profile tests 3 files / 163 pass; lint 0; negative grep absent, positive grep 1. typecheck:all and test:all run on the final head.
+- 2026-10-28: review loop converged in round 1 (Codex clean, Opus clean). Final-head gates: typecheck:all 0, test:all 0.
