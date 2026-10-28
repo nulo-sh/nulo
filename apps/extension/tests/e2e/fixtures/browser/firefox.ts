@@ -2,13 +2,14 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import type { Browser, ElementHandle, Page, Target, Viewport } from "puppeteer"
+import type { Browser, Page, Target, Viewport } from "puppeteer"
 import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
 import { E2E_FIREFOX_REVISION } from "./firefox-revision"
 import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
+import { answerPageRequests } from "./firefox-answer-requests"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
@@ -29,7 +30,7 @@ import { PollTimeoutError, pollUntil } from "../poll"
 
 const SCHEME = "moz-extension://"
 
-/** Extension-page WebAuthn landed in Firefox 150; 153 is the line this suite is exercised on. */
+/** Extension-page WebAuthn landed in Firefox 150; 153 is the shipped manifest's `strict_min_version`. */
 const MIN_MAJOR = 153
 
 interface LaunchContext {
@@ -456,29 +457,46 @@ function bidiSendOf(page: Page): BiDiSend {
 	return async (method, params) => (await send.call(session, method, params)).result
 }
 
+type BiDiArgument = { type: "null" } | { type: "number"; value: number } | { type: "string"; value: string }
+
 /**
- * Firefox 157 and later refuse BiDi `setViewport` on an extension page, so the resize runs from
- * Firefox's own scope, over BiDi on a window of Firefox's own: `chromeScript` would switch windows,
- * which takes focus from the page holding it.
+ * Calls `declaration` in the oldest of Firefox's own windows over BiDi and resolves with what it
+ * returns. Unlike `chromeScript`, it switches no window, so the page holding focus keeps it. A throw
+ * rejects with its message.
  */
-async function setViewport(page: Page, viewport: Viewport | null): Promise<void> {
-	const size = tabSize(viewport)
+async function callInFirefoxScope(page: Page, declaration: string, args: BiDiArgument[]): Promise<unknown> {
 	const send = bidiSendOf(page)
 	const tree = (await send("browsingContext.getTree", { "moz:scope": "chrome", maxDepth: 0 })) as { contexts?: { context: string }[] }
 	const scope = tree.contexts?.[0]?.context
-	if (!scope) throw new Error("setViewport: Firefox lists no window of its own")
-	const number = (value: number | undefined) => (value === undefined ? { type: "null" } : { type: "number", value })
+	if (!scope) throw new Error("Firefox lists no window of its own")
 	const outcome = (await send("script.callFunction", {
-		functionDeclaration: RESIZE_TAB,
+		functionDeclaration: declaration,
 		target: { context: scope },
-		arguments: [{ type: "string", value: contextIdOf(page) }, number(size?.width), number(size?.height)],
+		arguments: args,
 		awaitPromise: false,
 		resultOwnership: "none",
 	})) as { result?: { value?: unknown }; exceptionDetails?: { text?: string } }
-	const read = outcome.result?.value
+	if (outcome.exceptionDetails) throw new Error(outcome.exceptionDetails.text ?? "the call threw")
+	return outcome.result?.value
+}
+
+/**
+ * Firefox 157 and later refuse BiDi `setViewport` on an extension page, so the resize runs from
+ * Firefox's own scope.
+ */
+async function setViewport(page: Page, viewport: Viewport | null): Promise<void> {
+	const size = tabSize(viewport)
+	const number = (value: number | undefined): BiDiArgument => (value === undefined ? { type: "null" } : { type: "number", value })
+	const read = await callInFirefoxScope(page, RESIZE_TAB, [
+		{ type: "string", value: contextIdOf(page) },
+		number(size?.width),
+		number(size?.height),
+	]).catch((err: unknown) => {
+		throw new Error(`setViewport: ${err instanceof Error ? err.message : String(err)}`)
+	})
 	if (read === "gone") throw new Error(`setViewport: no such window ${contextIdOf(page)}`)
 	const match = typeof read === "string" ? /^(\d+)x(\d+)$/.exec(read) : null
-	if (!match) throw new Error(`setViewport: ${outcome.exceptionDetails?.text ?? JSON.stringify(read)}`)
+	if (!match) throw new Error(`setViewport: ${JSON.stringify(read)}`)
 	// Recorded before the wait: the tab already has the size, whether or not the page reads it in time.
 	viewports.set(page, viewport)
 	const [width, height] = [Number(match[1]), Number(match[2])]
@@ -707,6 +725,8 @@ const stopBackground = (browser: Browser): Promise<void> =>
  * Firefox refuses a file picker without a user gesture, and an evaluated click is not one, so no
  * chooser event ever comes. The wallet appends its `<input type="file">` to the body before asking
  * for the picker and removes it on `change`, so the file goes straight into that pending input.
+ * Over the classic channel: Firefox 157 and later refuse BiDi `input.setFiles` on an extension page.
+ * The window it selects is the one the opening click's `prepareClick` selected.
  */
 async function pickFile(page: Page, open: () => Promise<void>, filePath: string): Promise<void> {
 	// An abandoned pick leaves its input behind, and the file would go to that dead request.
@@ -715,10 +735,7 @@ async function pickFile(page: Page, open: () => Promise<void>, filePath: string)
 	})
 	await open()
 	await page.waitForSelector(PENDING_FILE_INPUT, { timeout: 10_000 })
-	// Re-queried: the suite's pages replace `waitForSelector` with one that returns no handle.
-	const input = await page.$(PENDING_FILE_INPUT)
-	if (!input) throw new Error("pickFile: the click opened no file input")
-	await (input as ElementHandle<HTMLInputElement>).uploadFile(filePath)
+	await classicSessionFor(page.browser()).setFileInput(contextIdOf(page), PENDING_FILE_INPUT, filePath)
 }
 
 export interface SessionAuthenticator extends VirtualAuthenticator {
@@ -959,6 +976,17 @@ export const firefoxDriver: BrowserDriver = {
 	waitForTarget,
 	waitForNewTab,
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
+	answerRequests: (page, answers) =>
+		answerPageRequests(
+			(declaration, args) =>
+				callInFirefoxScope(
+					page,
+					declaration,
+					args.map((value) => ({ type: "string", value })),
+				),
+			contextIdOf(page),
+			answers,
+		),
 	bringToFront,
 	setViewport,
 	viewportOf: viewports.of,

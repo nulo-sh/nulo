@@ -198,12 +198,13 @@ function directReloads(source: string): number[] {
 }
 
 /**
- * Puppeteer's page calls the seam's `bringToFront`, `setViewport` and `viewportOf` replace: Firefox 157
- * and later refuse the first two on an extension page, and `viewport()` misses a resize made around Puppeteer.
+ * Puppeteer's page calls the seam's `bringToFront`, `setViewport`, `viewportOf`, `pickFile` and
+ * `answerRequests` replace: Firefox 157 and later refuse every one but `viewport()` on an extension
+ * page, and `viewport()` misses a resize made around Puppeteer.
  */
-const DRIVER_PAGE_CALLS = new Set(["bringToFront", "setViewport", "viewport"])
+const DRIVER_PAGE_CALLS = new Set(["bringToFront", "setViewport", "viewport", "uploadFile", "setRequestInterception"])
 
-/** 1-based lines of `x.bringToFront(…)`, `x.setViewport(…)` and `x.viewport()` calls made from the test process. */
+/** 1-based lines of the `DRIVER_PAGE_CALLS` calls made from the test process. */
 function directPageCalls(source: string): number[] {
 	const file = ts.createSourceFile("scan.ts", source, ts.ScriptTarget.Latest, true)
 	const lines: number[] = []
@@ -376,7 +377,7 @@ describe("browser seam", () => {
 		expect(found.reload).toEqual(RELOAD_DEBT)
 	})
 
-	test("no direct bringToFront, setViewport or viewport() on a page — use the seam's bringToFront(), setViewport(), viewportOf()", () => {
+	test("no direct page call the seam replaces — use its bringToFront(), setViewport(), viewportOf(), pickFile(), answerRequests()", () => {
 		expect(found.pageCall).toEqual([])
 	})
 })
@@ -488,6 +489,8 @@ describe("browser seam guard", () => {
 		["viewport", "const own = page.viewport()"],
 		["setViewport by key", 'await page["setViewport"](null)'],
 		["bringToFront on a chained receiver", "await fresh.popup.bringToFront().catch(() => {})"],
+		["uploadFile", "await input.uploadFile(path)"],
+		["setRequestInterception", "await page.setRequestInterception(true)"],
 	])("flags a direct %s on a page", (_, body) => {
 		expect(directPageCalls(inAsync(body))).toEqual([2])
 	})

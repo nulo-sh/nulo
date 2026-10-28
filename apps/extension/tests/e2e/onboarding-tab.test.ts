@@ -1,6 +1,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import {
+	type AnsweredRequests,
 	extensionUrl,
 	gotoExtensionPage,
 	isFirefox,
@@ -18,7 +19,13 @@ import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
-import { interceptHealth, PRESTO_HTTPS_HEALTH_URL, PRESTO_MINIMAL_HEALTH } from "./fixtures/presto"
+import {
+	interceptHealth,
+	PRESTO_DETAILED_HEALTH,
+	PRESTO_HTTP_HEALTH_URL,
+	PRESTO_HTTPS_HEALTH_URL,
+	PRESTO_MINIMAL_HEALTH,
+} from "./fixtures/presto"
 
 const TEST_PASSWORD = "OnboardingTest_!23"
 
@@ -209,11 +216,30 @@ describe("onboarding tab", () => {
 		expect(page.isClosed()).toBe(false)
 	})
 
-	test("the harness can answer the HTTPS health probe before any TLS handshake", async ({ freshExtensionPerTest: extension }) => {
+	test("the harness answers each page's health probes as that page armed them, before any TLS handshake", async ({
+		freshExtensionPerTest: extension,
+	}) => {
 		const page = await openOnboarding(extension)
-		await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
-		const body = await page.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
-		expect(body).toEqual(PRESTO_MINIMAL_HEALTH)
+		const other = await openScratchPage(extension.browser, extension.extensionId)
+		const answered = await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
+		const otherAnswered = await interceptHealth(other, { https: { status: 200, body: PRESTO_DETAILED_HEALTH }, http: "refused" })
+		const bodyOf = (from: Page) => from.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
+
+		expect(await bodyOf(page)).toEqual(PRESTO_MINIMAL_HEALTH)
+		expect(await bodyOf(other)).toEqual(PRESTO_DETAILED_HEALTH)
+		const refused = await page.evaluate(
+			async (url) =>
+				fetch(url).then(
+					() => "answered",
+					(err: unknown) => (err instanceof TypeError ? "rejected" : String(err)),
+				),
+			PRESTO_HTTP_HEALTH_URL,
+		)
+		expect(refused).toBe("rejected")
+		const hitsOf = async (of: AnsweredRequests) => [await of.hits(PRESTO_HTTPS_HEALTH_URL), await of.hits(PRESTO_HTTP_HEALTH_URL)]
+		expect(await hitsOf(answered)).toEqual([1, 1])
+		expect(await hitsOf(otherAnswered)).toEqual([1, 0])
+		await other.close()
 		await page.close()
 	})
 

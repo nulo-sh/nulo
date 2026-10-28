@@ -66,6 +66,17 @@ export interface HeldInterception extends ArmedInterception {
  * The documents hosting the PXE — Chrome's offscreen document, Firefox's background-page frame —
  * and each one's own `visibilityState`. Visibility is what keeps a document's timers unthrottled.
  */
+/** How `answerRequests` answers a request: a JSON body with its status, or a refused connection. */
+export type RequestAnswer = { status: number; body: unknown } | "refused"
+
+export interface AnsweredRequests {
+	/**
+	 * How many requests for `url` the page has sent since the answer was armed, answered or not.
+	 * Rejects once any answer has failed, or once the answer is no longer armed.
+	 */
+	hits(url: string): Promise<number>
+}
+
 export interface PxeHostState {
 	count: number
 	visibility: string[]
@@ -157,6 +168,12 @@ export interface BrowserDriver {
 		mode: RpcInterception,
 		backgroundDown?: boolean,
 	): Promise<ArmedInterception>
+	/**
+	 * Answer the requests `page` itself sends for each exact URL in `answers`, before any connection
+	 * starts; every other request goes out. Lives as long as the page, once per page. Firefox 157 and
+	 * later refuse Puppeteer's page interception on an extension page.
+	 */
+	answerRequests(page: Page, answers: ReadonlyMap<string, RequestAnswer>): Promise<AnsweredRequests>
 	/**
 	 * Select `page`'s tab and focus its window. Firefox 157 and later refuse Puppeteer's
 	 * `bringToFront` on an extension page.
@@ -326,6 +343,8 @@ export const holdRpcInterception = (
 	fromOrigin: string,
 	mode: RpcInterception,
 ): Promise<HeldInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
+export const answerRequests = (page: Page, answers: ReadonlyMap<string, RequestAnswer>): Promise<AnsweredRequests> =>
+	driver.answerRequests(page, answers)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const bringToFront = (page: Page): Promise<void> => driver.bringToFront(page)
 export const setViewport = (page: Page, viewport: Viewport | null): Promise<void> => driver.setViewport(page, viewport)
