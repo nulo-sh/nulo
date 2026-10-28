@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { deferred } from "@nulo/wallet-core/utils"
 import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 const fpcServiceMock = {
@@ -255,6 +256,36 @@ describe("EditFpcPopup — duplicate addresses", () => {
 		pressEnterOnInput()
 		await flushPromises()
 		expect(fpcServiceMock.updateFpcAddress).toHaveBeenCalledWith("fpc-1", FRESH)
+	})
+
+	test("a rename from another window during an address save stays: the save renames nothing", async () => {
+		const saved = deferred<undefined>()
+		fpcServiceMock.updateFpcAddress.mockReturnValueOnce(saved.promise)
+		const w = await mountShown()
+		await addressState(w, FRESH)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpcAddress).toHaveBeenCalledWith("fpc-1", FRESH)
+
+		fpcServiceMock.onFpcUpdated.invoke({ ...FPC, name: "Renamed" })
+		saved.resolve(undefined)
+		await flushPromises()
+
+		expect(fpcServiceMock.updateFpc).not.toHaveBeenCalled()
+	})
+
+	test("a new name and a new address the person typed both save, the address first", async () => {
+		const w = await mountShown()
+		await typeName(w, "Mine")
+		await addressState(w, FRESH)
+		pressEnterOnInput()
+		await flushPromises()
+
+		expect(fpcServiceMock.updateFpcAddress).toHaveBeenCalledWith("fpc-1", FRESH)
+		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Mine")
+		expect(fpcServiceMock.updateFpcAddress.mock.invocationCallOrder[0]).toBeLessThan(
+			fpcServiceMock.updateFpc.mock.invocationCallOrder[0] ?? 0,
+		)
 	})
 
 	test("a rename beside an untouched address another row also holds saves", async () => {
