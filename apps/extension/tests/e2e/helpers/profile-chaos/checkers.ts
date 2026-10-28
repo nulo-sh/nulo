@@ -626,12 +626,6 @@ export interface KnownFinding {
 
 export const KNOWN_FINDINGS: readonly KnownFinding[] = [
 	{
-		issue: 1178,
-		pattern: /^\["\[unlock-method\] change failed",\{"error":\{"name":"Error","message":"Passkey did not open this profile"\}\}\]$/,
-		kinds: ["log"],
-		source: "ui",
-	},
-	{
 		issue: 432,
 		// A closed known limit: its entry stays while the issue does.
 		pattern:
