@@ -14,6 +14,18 @@ function deferred<T>() {
 	return { promise, resolve, reject }
 }
 
+function spyLevels() {
+	const spies = {
+		debug: vi.spyOn(console, "debug").mockImplementation(() => undefined),
+		warn: vi.spyOn(console, "warn").mockImplementation(() => undefined),
+		error: vi.spyOn(console, "error").mockImplementation(() => undefined),
+	}
+	const restore = () => {
+		for (const spy of Object.values(spies)) spy.mockRestore()
+	}
+	return { ...spies, restore }
+}
+
 function setup(over: { profileId?: string | undefined } = {}) {
 	const client = {
 		getNetworkArrival: vi.fn(async (): Promise<Network | null> => network("mn")),
@@ -94,12 +106,34 @@ describe("useNetworkArrival", () => {
 		expect(state.arrived.value).toBeNull()
 	})
 
-	test("a failed read shows no arrival", async () => {
+	test("a failed read shows no arrival, logged at error", async () => {
 		const { state, client } = setup()
 		await state.refresh()
-		client.getNetworkArrival.mockRejectedValueOnce(new Error("worker restarting"))
+		const failure = new Error("worker restarting")
+		client.getNetworkArrival.mockRejectedValueOnce(failure)
+		const { error, warn, restore } = spyLevels()
 		await state.refresh()
 		expect(state.arrived.value).toBeNull()
+		expect(error).toHaveBeenCalledExactlyOnceWith("network arrival read failed", { error: failure })
+		expect(warn).not.toHaveBeenCalled()
+		restore()
+	})
+
+	test("a superseded read's refusal logs at debug and leaves the newer read's arrival", async () => {
+		const { state, client } = setup()
+		const slow = deferred<Network | null>()
+		client.getNetworkArrival.mockReturnValueOnce(slow.promise)
+		const first = state.refresh()
+		await state.refresh()
+		const { debug, error, warn, restore } = spyLevels()
+		const refusal = new Error("Profile locked")
+		slow.reject(refusal)
+		await first
+		expect(debug).toHaveBeenCalledExactlyOnceWith("network arrival read superseded", { error: refusal })
+		expect(warn).not.toHaveBeenCalled()
+		expect(error).not.toHaveBeenCalled()
+		expect(state.arrived.value?.id).toBe("mn")
+		restore()
 	})
 
 	test("staying answers it and clears it, and a read begun before the answer cannot bring it back", async () => {

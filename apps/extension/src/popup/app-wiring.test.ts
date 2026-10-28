@@ -12,11 +12,13 @@ describe("the shell's lock and failure wiring", () => {
 		expect(app).toContain("onLocked: endScopeOnLock,")
 	})
 
-	test("every switch run and resume has a handler", () => {
+	test("every switch run, resume and stale refresh has a handler", () => {
 		expect(app.match(/\bswitchNetwork\(\)/g)).toHaveLength(1)
 		expect(app).toMatch(/switchRun = switchNetwork\(\)\s*(?:\/\/[^\n]*\s*)?switchRun\.catch\(\(error\) => logCallFailure\(/)
 		expect(app.match(/\bstale\.resume\(/g)).toHaveLength(1)
 		expect(app).toContain("stale.resume(profileId).catch((error) => logCallFailure(")
+		expect(app.match(/\bstale\.refresh\(/g)).toHaveLength(1)
+		expect(app).toContain("stale.refresh().catch((error) => logCallFailure(")
 	})
 
 	test.each(["./index.ts", "../onboarding/index.ts"])("%s installs the Vue error handler", (path) => {
