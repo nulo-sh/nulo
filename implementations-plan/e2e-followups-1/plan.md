@@ -110,7 +110,7 @@ Test code only. The parked tab keeps a virtual authenticator's credential alive 
 
 UI impact: none on every arc (test files, fixtures and e2e docs only).
 
-## Phase 1: the pre-update start from every release (#1313)
+## Phase 1: the pre-update start from every release (#1313) ✓
 
 1. Make change-map items 1-7. Commit per item group (model and tests; populate, bind and first opens; start and spec).
 2. Make item 8. Commit.
