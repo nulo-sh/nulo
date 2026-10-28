@@ -25,11 +25,11 @@ tree wins — fix the skill in the same PR.
 Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`). The reference for Firefox — the geckodriver + BiDi hybrid, each behaviour that differs and where it is absorbed, the debugging order — is [`apps/extension/tests/e2e/FIREFOX.md`](../../../apps/extension/tests/e2e/FIREFOX.md). What this skill needs you to hold:
 
 - **A browser difference goes on `BrowserDriver`** (`fixtures/browser/index.ts`), with a Chrome implementation next to the Firefox one. `scripts/e2e/browser-seam.test.ts` rejects a scheme literal, a direct `browser.close()` / `newPage()` / `waitForTarget()`, and any `isFirefox`/`BROWSER` branch under `fixtures/**` or `helpers/**`. A test file may use `isFirefox` to skip itself whole (`describe.skipIf(isFirefox)(CHROME_ONLY.<reason>, …)`), to keep a test headless Chrome cannot set up off Chrome (`describe.skipIf(!isFirefox)(FIREFOX_ONLY.<reason>, …)`), or to state a real difference in an expectation.
-- **Open, navigate, reload and click through the helpers**: `newPage`, `gotoExtensionPage`, `reloadExtensionPage`, `clickByTestId`/`clickSelector`, `pickFileByTestId`. Each hides a Firefox failure mode that does not look like its cause (a page in a window the wallet opened, a stranded context, a missing user gesture, an unfocused window).
+- **Open, navigate, reload, focus, size and click through the helpers**: `newPage`, `gotoExtensionPage`, `reloadExtensionPage`, `bringToFront`, `setViewport`/`viewportOf`, `clickByTestId`/`clickSelector`, `pickFileByTestId`. Each hides a Firefox failure mode that does not look like its cause (a page in a window the wallet opened, a stranded context, a command Firefox refuses on an extension page, a missing user gesture, an unfocused window).
 - **A Chrome-only file is a capability statement, not a quarantine.** The set is two files: `backup-restore-sw-restart` kills the background under an open extension page (Firefox leaves an event page running while one is open), and `import-dead-rpc` redirects over CDP Fetch. The two execution canaries run on both browsers — the passkey one moves its post-kill ceremony to a fresh popup where the driver's `credentialOutlivesPage` says the credential survives the anchor page. Adding a Chrome-only file is the owner's call.
 - **`bun run typecheck` checks the e2e tree** (`apps/extension/tsconfig.e2e.json`): it loads Node's types and no Bun types, so a `Bun` global is an error, as it would be at run time. A call form chrome-types leaves out goes in `tests/e2e/chrome-api.d.ts`, never under a `@ts-` directive. Types prove no timing: a spec still has to run.
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
-- **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
+- **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 and 158.0 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
 - **Never navigate away from an extension page while it loads a route.** Firefox rejects the departing document's in-flight import (or the CSS preload before it) and the relay records it; Chrome recorded nothing for a cut import. So `waitForLockScreen` observes the popup's own redirect and never reloads (FIREFOX.md).
 - **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call or file picker opened in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
 
@@ -730,16 +730,16 @@ the pattern.
 - **A mouse drag can select nothing.** Chrome 152 starts no selection from a press between a
   glyph's middle and about half a pixel right of it, and a drag of one single move leaves a bare
   caret: press a quarter in from a character's outer edge and move in steps
-  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 keeps the text a drag ends on
-  even inside a `user-select: none` control, so a selection test bans only the controls a drag
-  crosses (`FIREFOX.md`).
+  (`navigation.test.ts`'s `textEdge` and `dragSelect`). Firefox 153 and 158 keep the text a drag
+  ends on even inside a `user-select: none` control, so a selection test bans only the controls a
+  drag crosses (`FIREFOX.md`).
 - **Chrome's created windows keep the launch size.** The launch passes `--window-size=400,600`
   (`fixtures/browser/chrome.ts:40`); under it `windows.create` honours `left` and `top` but not
   `width` or `height` (popups 400×600, normal windows 500×600), while `windows.update` honours
   sizes. A spec that measures a created window launches with `fixedWindowSize: false`
   (`network/window-placement.test.ts:46`). Headless Chrome also moves focus only when it creates a
-  window: `windows.update({ focused: true })` and `bringToFront()` fire no `onFocusChanged`. Firefox
-  honours sizes and focus.
+  window: `windows.update({ focused: true })` and the seam's `bringToFront` fire no
+  `onFocusChanged`. Firefox honours sizes and focus.
 - **An approval window's page can have no viewport.** `waitForPopup` wraps approval windows with
   `target.asPage()` (`fixtures/popups.ts:62`). On that path the page is created by
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;

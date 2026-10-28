@@ -86,6 +86,8 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 - **D6** (#1111) `bringToFront` is the classic switch, which Marionette itself uses to focus. `setViewport` mirrors Firefox's own resize, and Phase 4 picks the route. Rejected: a classic window rect (it includes the chrome, it moves focus, and its minimum widths are unverified).
 - **D7** (#1111, Phase 4) `setViewport` on Firefox runs Firefox's own resize body over BiDi `script.callFunction` on a chrome context. Rejected: `chromeScript`, which resizes as well but switches windows, so a page focused before the call loses focus (`lessons/phase-4.md`).
 - **D8** (delivery) Arc 2's branch is `e2e-infra-3-a2`, the orchestrator's name, not `e2e-infra-3-seam`.
+- **D9** (review) Arc 2's first Codex round and the Opus leg read Phases 4-5 while the Phase 5 runs held the worktree, before the pin commit existed; the pin and its docs enter round 2. The rounds' cap is unchanged.
+- **D10** (#1111, Phase 6) The pin holds at 153.0.4, and arc 2 ships the seam without it. The #1111 finding named two refused commands; on 158.0 Firefox refuses every root BiDi command that does not opt in to privileged scope, and one full smoke run there failed 35 tests on `input.setFiles` (`pickFile`), a page-scoped `network.addIntercept` (`interceptHealth`) and a new `content_security_policy.sandbox: null` from `getManifest()` (`lessons/phase-6.md`). Absorbing the first two needs driver mechanisms this change map never named, so they stop here as a plan change: #1111 stays open with the inventory. Rejected: moving the pin with those specs skipped on Firefox (a weakened gate).
 
 ## Security & Adversarial Considerations
 
@@ -147,7 +149,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **Validation gate:** lint, typecheck, `test:all`; `browser-seam.test.ts` green, and red on a planted direct call; the full smoke suite once per browser at retry 0; the Chrome network suite once with `NULO_E2E_RETRY=0`; all green.
 
-## Phase 6: the pin on Firefox 158
+## Phase 6: the pin on Firefox 158 ✗ (held, D10; lessons/phase-6.md)
 
 1. Arc-2 item 4, with the arming probe repeated on 158 when the capability replaces the pref. Commit.
 
@@ -157,7 +159,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 One `gh stack` against `dev`; no labels at creation.
 - **Arc 1** `worktree-e2e-infra-3`, Phases 1-3: `test(e2e): wait for the terms verdict, the fee read and the session's picker cancel` (83), with `Closes #1123` and `Closes #1210`, plus `Closes #1222` only if item 6 shipped (else the title drops its last clause).
-- **Arc 2** `e2e-infra-3-seam`, Phases 4-6: `test(e2e): bringToFront and setViewport go through the driver; firefox 158` (74), with `Closes #1111`.
+- **Arc 2** `e2e-infra-3-seam`, Phases 4-6: `test(e2e): bringToFront and setViewport go through the driver; firefox 158` (74), with `Closes #1111`. As shipped (D8, D10): `e2e-infra-3-a2`, `test(e2e): bringToFront and setViewport go through the driver` (61), and #1111 stays open.
 - **Close-out** `e2e-infra-3-close-out`, docs only.
 
 Each body gives the path, what held, the gates with their counts, each browser's suite wall-clock before and after (the e2e-testing skill, § Runtime budget) and `UI impact: none`. No parallel lanes: arc 2 edits arc 1's files.
@@ -183,6 +185,8 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 1 Opus (general-purpose) | `conditional approve`, six low: the verdict read after its wait; the fee bound under the store's 20 s; `hidden` on routes the sheet never covers; `popup-shell` as every element's nearest testid; two caller-naming comments; an unverified residual | the first five (`5c7aef1d7`) | the residual: a same-identity `recommit` and app-window cards set no mark; unverified, and #1210 is the Send path |
 | Arc 1 Codex r2 (resumed; ran on `gpt-6-astra` by a resume mistake) | `conditional approve`, low: Send's forced read can take 20 s + 20 s | the 50 s bound (`e8a22a626`) | a controlled-delay e2e: the sequential path is pinned by `balances.store.test.ts` |
 | Arc 1 Codex r3 (resumed, `gpt-6.1-sol`, high) | `approve`: both rounds' fixes re-verified, no regression | — | — |
+| Arc 2 Codex r1 (`gpt-6.1-sol`, high; Phases 4-5, D9) | `approve`, one low: the chrome-scope tree read enters the shim's open contexts, and the close watch then reports Firefox's windows closed on every tick | the shim opens only content contexts never seen closed, with a test (`441d62d70`) | — |
+| Arc 2 Opus (general-purpose; Phases 4-5) | `conditional approve`: the same tree-read leak (medium, diagnostics); the ban's comment claimed Firefox refuses `viewport()`; a timed-out resize left the record stale | all three (`441d62d70`) | `.call`/`.bind` call shapes the ban misses: low, not worth a rule |
 
 Light tier with both legs: the resumed final pass is the approval gate's verdict.
 
