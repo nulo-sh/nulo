@@ -598,6 +598,7 @@
     "parseEncryptedBackup": true,
     "parseFeePickUpdate": true,
     "parseRawBalance": true,
+    "parseSide": true,
     "parseTransferIntent": true,
     "passkeyFailureCopy": true,
     "passkeyTag": true,

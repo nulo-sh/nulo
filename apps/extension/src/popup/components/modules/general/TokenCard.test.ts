@@ -242,6 +242,49 @@ describe("TokenCard — the row is a link", () => {
 	})
 })
 
+describe("TokenCard — a picker's option", () => {
+	async function mountOption(selected: boolean) {
+		const router = makeRouter()
+		await router.push("/popup/send")
+		const push = vi.spyOn(router, "push")
+		const w = mount(TokenCard, {
+			props: {
+				tokenBalance: { id: 42, token: tokenInfo, account: "0xacct", publicBalance: "0", privateBalance: "0", updatedAt: 1 },
+				pickPrefix: "select-token",
+				selected,
+			} as never,
+			global: { stubs: STUBS, plugins: [router] },
+		})
+		return { w, push, row: w.find('[data-testid="select-token-row"]') }
+	}
+
+	test("a native button that picks the token id and never navigates", async () => {
+		const { w, push, row } = await mountOption(false)
+		expect(row.element.tagName).toBe("BUTTON")
+		expect(row.attributes("type")).toBe("button")
+		expect(w.find("a").exists()).toBe(false)
+		await row.trigger("click")
+		await flushPromises()
+		expect(w.emitted("pick")).toEqual([[1]])
+		expect(push).not.toHaveBeenCalled()
+		const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })
+		row.element.dispatchEvent(space)
+		await flushPromises()
+		expect(space.defaultPrevented).toBe(false)
+		expect(push).not.toHaveBeenCalled()
+	})
+
+	test("the current token says so, the others do not", async () => {
+		const current = (await mountOption(true)).row
+		expect(current.attributes("data-selected")).toBe("true")
+		expect(current.attributes("aria-current")).toBe("true")
+		expect(current.attributes("data-symbol")).toBe("TST")
+		const other = (await mountOption(false)).row
+		expect(other.attributes("data-selected")).toBe("false")
+		expect(other.attributes("aria-current")).toBeUndefined()
+	})
+})
+
 describe("TokenCard — hostile rows", () => {
 	test("a malformed balance renders a dash with no split and never throws", async () => {
 		const w = factory({ updatedAt: 1, publicBalance: "1.5", privateBalance: "0" })

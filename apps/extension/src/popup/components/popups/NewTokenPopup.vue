@@ -19,9 +19,9 @@ const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
-const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 const { order, depth } = usePopupStack("new_token")
 
 const props = defineProps({
@@ -80,6 +80,16 @@ const BALANCE_WAIT_TIMEOUT_MS = 30_000
 
 // Holds the active wait so popup-close can abort it.
 let activeBalanceWait = null
+
+/** The opener's `{ address, onAdded }`, kept on show: closing a popup deletes its payload. */
+let request
+
+const closeAdded = (token, label, submittingEpoch) => {
+	const onAdded = request?.onAdded
+	openToast({ kind: "success", label })
+	emit("onClose")
+	if (appStore.scopeEpoch === submittingEpoch) onAdded?.(token)
+}
 
 /**
  * Subscribe to the two service streams BEFORE addToken is called, so we
@@ -177,6 +187,7 @@ const handleAddToken = async () => {
 	const submittingNetworkId = appStore.network.id
 	const submittingChainId = appStore.network.chainId
 	const submittingAccount = appStore.account.address
+	const submittingEpoch = appStore.scopeEpoch
 
 	let balanceWait = null
 
@@ -221,8 +232,7 @@ const handleAddToken = async () => {
 		const existing = await tokenBalanceService.getTokenBalances(newToken.id, submittingAccount)
 		if (existing.length > 0 && (existing[0].updatedAt ?? 0) > 0) {
 			balanceWait.abort()
-			openToast({ kind: "success", label: "Token added" })
-			emit("onClose")
+			closeAdded(newToken, "Token added", submittingEpoch)
 			return
 		}
 
@@ -238,16 +248,13 @@ const handleAddToken = async () => {
 
 		switch (outcome) {
 			case "success":
-				openToast({ kind: "success", label: "Token added" })
-				emit("onClose")
+				closeAdded(newToken, "Token added", submittingEpoch)
 				break
 			case "timeout":
-				openToast({ kind: "success", label: "Token added. Balance will appear in a moment" })
-				emit("onClose")
+				closeAdded(newToken, "Token added. Balance will appear in a moment", submittingEpoch)
 				break
 			case "error":
-				openToast({ kind: "success", label: "Token added. Couldn't load balance. We'll retry automatically." })
-				emit("onClose")
+				closeAdded(newToken, "Token added. Couldn't load balance. We'll retry automatically.", submittingEpoch)
 				break
 			case "aborted":
 				// Popup was dismissed by the user mid-wait. Bg keeps refreshing.
@@ -274,13 +281,12 @@ usePopupEntity(
 			// Cleared again on open: a disconnect rejection can repopulate the error after hide reset it.
 			error.value = null
 			phase.value = "idle"
+			request = popupStore.getPayload("new_token")
 			tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
-			if (cacheStore.preselectedTokenAddressToAdd) {
-				contractTerm.value = cacheStore.preselectedTokenAddressToAdd
-				cacheStore.preselectedTokenAddressToAdd = ""
-			}
+			if (request?.address) contractTerm.value = request.address
 		},
 		onHide: () => {
+			request = undefined
 			activeBalanceWait?.abort()
 			activeBalanceWait = null
 			form.reset()

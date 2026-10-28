@@ -2,9 +2,10 @@
  * WebDriver classic against geckodriver's HTTP port.
  *
  * Puppeteer drives Firefox over BiDi, and BiDi has neither a WebAuthn module nor window handles.
- * The two capabilities this suite cannot do without — a virtual authenticator that answers a PRF
- * ceremony, and a handle on a window the extension opened itself — exist only on this channel, so
- * both channels stay open against the same session for the life of a launch.
+ * The capabilities this suite cannot do without — a virtual authenticator that answers a PRF
+ * ceremony, a handle on a window the extension opened itself, and, from Firefox 157, a file set on an
+ * extension page's input — exist only on this channel, so both channels stay open against the same
+ * session for the life of a launch.
  */
 
 import { pollUntil } from "../poll"
@@ -30,6 +31,9 @@ export interface VirtualAuthenticatorOptions {
 	isUserVerified: boolean
 	extensions?: string[]
 }
+
+/** The key WebDriver classic names an element reference under. */
+const WEB_ELEMENT = "element-6066-11e4-a52e-4f735466cecf"
 
 export class WebDriverError extends Error {
 	constructor(
@@ -184,6 +188,21 @@ export class WebDriverSession {
 		return this.exclusive(async () => {
 			await this.switchToWindow(handle)
 			await this.send("POST", "/refresh", {})
+		})
+	}
+
+	/**
+	 * Gives the first file input `selector` matches in `handle`'s page the file at `path`, as a pick
+	 * does: Firefox sets the file and fires `input` and `change`. Element Send Keys neither focuses nor
+	 * scrolls a file input while `moz:webdriverClick` keeps its default.
+	 */
+	setFileInput(handle: string, selector: string, path: string): Promise<void> {
+		return this.exclusive(async () => {
+			await this.switchToWindow(handle)
+			const found = (await this.send("POST", "/element", { using: "css selector", value: selector })) as Record<string, string>
+			const element = found[WEB_ELEMENT]
+			if (!element) throw new Error(`setFileInput: no element reference for ${selector}`)
+			await this.send("POST", `/element/${element}/value`, { text: path })
 		})
 	}
 

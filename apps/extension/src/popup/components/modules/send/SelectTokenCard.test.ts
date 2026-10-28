@@ -102,11 +102,13 @@ describe("send/SelectTokenCard", () => {
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
-	test("loaded with a token: a tap, Enter and Space each open the token picker", async () => {
-		const { w, popupStore } = mountCard({ token: TOKEN })
+	test("loaded with a token: a tap, Enter and Space each open the token picker, handing it the page's report", async () => {
+		const onTokenAdded = vi.fn()
+		const { w, popupStore } = mountCard({ token: TOKEN, onTokenAdded })
 		expect(trigger(w).attributes()).toMatchObject({ "data-state": "ready", role: "button", tabindex: "0" })
 		for (const act of ["click", "keydown.enter", "keydown.space"]) await trigger(w).trigger(act)
-		expect(vi.mocked(popupStore.open).mock.calls).toEqual([["select_token"], ["select_token"], ["select_token"]])
+		const open = ["select_token", { onAdded: onTokenAdded }]
+		expect(vi.mocked(popupStore.open).mock.calls).toEqual([open, open, open])
 	})
 
 	test("loaded with no token: the empty copy, and a tap opens the import popup", async () => {
@@ -156,7 +158,7 @@ describe("send/SelectTokenCard — a load that failed", () => {
 		await w.setProps({ loading: false })
 		expect(trigger(w).attributes("data-state")).toBe("ready")
 		await trigger(w).trigger("click")
-		expect(popupStore.open).toHaveBeenCalledWith("select_token")
+		expect(popupStore.open).toHaveBeenCalledWith("select_token", { onAdded: undefined })
 		expect(w.emitted("retry")).toBeUndefined()
 	})
 })

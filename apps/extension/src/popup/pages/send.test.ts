@@ -158,9 +158,10 @@ const STUBS = {
 		inheritAttrs: false,
 	},
 	SelectTokenCard: {
+		name: "SelectTokenCard",
 		template:
 			"<div data-testid=\"stub-token-card\" :data-loading=\"loading ? 'true' : 'false'\" :data-failed=\"failed ? 'true' : 'false'\" :data-symbol=\"token?.symbol\" @click=\"$emit('retry')\" />",
-		props: ["token", "loading", "failed"],
+		props: ["token", "loading", "failed", "onTokenAdded"],
 		emits: ["retry"],
 	},
 	RecipientField: {
@@ -712,6 +713,55 @@ describe("send page — an amount over the balance says so", () => {
 	})
 })
 
+describe("send page — the balance beside Max", () => {
+	const corner = (w: W) => {
+		const figure = w.find('[data-testid="send-amount-balance"]')
+		if (figure.exists()) return figure.text()
+		return w.find('[data-testid="send-amount-balance-loading"]').exists() ? "skeleton" : "nothing"
+	}
+	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
+	const FRESH = { ...BALANCE, privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+
+	test("a row walks from unsynced to read: a skeleton, nothing on a failed first sync, then the zero it read, kept past a later failure", async () => {
+		mocks.getTokenBalances.mockResolvedValue([])
+		const { w } = await mountSend({ realAmountCard: true })
+		expect(corner(w)).toBe("skeleton")
+
+		balanceAdded().invoke(FRESH)
+		await flushPromises()
+		expect(corner(w)).toBe("skeleton")
+
+		const failure = { at: 1, message: "PXE down" }
+		balanceUpdated().invoke({ ...FRESH, syncFailure: failure })
+		await flushPromises()
+		expect(corner(w)).toBe("nothing")
+
+		balanceUpdated().invoke({ ...FRESH, updatedAt: 2 })
+		await flushPromises()
+		expect(corner(w)).toBe("0 TST")
+
+		balanceUpdated().invoke({ ...FRESH, updatedAt: 2, syncFailure: failure })
+		await flushPromises()
+		expect(corner(w)).toBe("0 TST")
+		w.unmount()
+	})
+
+	test("with no row, a refused balance read draws nothing until a read lands", async () => {
+		mocks.getTokenBalances.mockResolvedValue([])
+		const { w } = await mountSend({ realAmountCard: true })
+		balanceConnected().invoke()
+		mocks.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(corner(w)).toBe("nothing")
+
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		expect(corner(w)).toBe("skeleton")
+		w.unmount()
+	})
+})
+
 describe("send page — the estimate follows the amount the balance covers", () => {
 	const fee = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("feeEstimate")
 	const estimating = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("isEstimating")
@@ -1018,6 +1068,153 @@ describe("send page — the sheet on the popup stack", () => {
 		expect((w.get('[data-testid="stub-recipient"]').element as HTMLInputElement).value).toBe(DESTINATION)
 		expect(strip(w).attributes("data-to")).toBe("public")
 		expect(submit(w).attributes("data-action")).toBe("review")
+		w.unmount()
+	})
+})
+
+describe("send page — a token the picker imported", () => {
+	/** Two decimals, so a 6-place amount typed for `TOKEN` is cut on the swap. */
+	const NEW = { ...TOKEN, id: 9, contract: `0x${"9".repeat(64)}`, symbol: "NEW", decimals: 2 }
+	const NEW_BALANCE = { id: "b9", account: ACCOUNT, token: NEW, privateBalance: "500", publicBalance: "0", updatedAt: 2 }
+	const amountInput = (w: W) => w.get('[data-testid="send-amount-input"]')
+	const amountText = (w: W) => (amountInput(w).element as HTMLInputElement).value
+	const cardSymbol = (w: W) => w.get('[data-testid="stub-token-card"]').attributes("data-symbol")
+	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
+	/** What New token hands the picker's opener once the add is done. */
+	const report = (w: W, token: unknown) =>
+		(w.findComponent({ name: "SelectTokenCard" }).props("onTokenAdded") as (t: unknown) => Promise<void>)(token)
+	/** Mounted on `TOKEN` with an amount typed, every token read held from the next one on. */
+	async function heldAfterMount() {
+		const { w, appStore, cacheStore } = await mountSend({ realAmountCard: true })
+		const reads = holdReads<unknown[]>(mocks.getTokens)
+		await amountInput(w).setValue("1.5")
+		return { w, appStore, cacheStore, reads }
+	}
+
+	test("the swap keeps the recipient and the amount, cut to the new token's places with the hint, and asks the fee again", async () => {
+		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await amountInput(w).setValue("1.123456")
+		await feeCard(w, SPONSOR)
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(1)
+
+		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
+		balanceAdded().invoke(NEW_BALANCE)
+		tokenAdded().invoke(NEW)
+		await flushPromises()
+		await report(w, NEW)
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(NEW.id)
+		expect(amountText(w)).toBe("1.12")
+		expect(w.get('[data-testid="send-amount-clamp-hint"]').text()).toBe("NEW supports 2 decimals")
+		expect((w.get('[data-testid="stub-recipient"]').element as HTMLInputElement).value).toBe(DESTINATION)
+
+		await estimateLands()
+		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
+		const asked = mocks.estimateTransferFee.mock.calls[1]
+		expect([asked?.[2], asked?.[3], asked?.[6]]).toEqual([NEW.id, NEW.contract, 112n])
+		w.unmount()
+	})
+
+	test("a report before the list's own re-read lands still picks the token, once its re-read lands", async () => {
+		const { w, cacheStore, reads } = await heldAfterMount()
+		tokenAdded().invoke(NEW)
+		const picked = report(w, NEW)
+		reads[0]?.resolve([TOKEN, NEW])
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(TOKEN.id)
+		reads[1]?.resolve([TOKEN, NEW])
+		await picked
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(NEW.id)
+		expect(cardSymbol(w)).toBe("NEW")
+		expect(amountText(w)).toBe("1.5")
+		w.unmount()
+	})
+
+	test.each([
+		[
+			"the page closed",
+			async ({ w, reads }: Awaited<ReturnType<typeof heldAfterMount>>) => {
+				w.unmount()
+				reads[0]?.resolve([TOKEN, NEW])
+			},
+		],
+		[
+			"the scope moved",
+			async ({ appStore, reads }: Awaited<ReturnType<typeof heldAfterMount>>) => {
+				appStore.scopeEpoch += 1
+				reads[0]?.resolve([TOKEN, NEW])
+			},
+		],
+		[
+			"its re-read refused",
+			async ({ reads }: Awaited<ReturnType<typeof heldAfterMount>>) => reads[0]?.reject(new Error("port closed")),
+		],
+		[
+			"its re-read superseded by a later one, which lists it",
+			async ({ reads }: Awaited<ReturnType<typeof heldAfterMount>>) => {
+				tokenAdded().invoke(NEW)
+				reads[0]?.resolve([TOKEN, NEW])
+				await flushPromises()
+				reads[1]?.resolve([TOKEN, NEW])
+			},
+		],
+	])("a report whose token is not listed, with %s, picks nothing and keeps the listed token", async (_, settle) => {
+		const page = await heldAfterMount()
+		const picked = report(page.w, NEW)
+		await settle(page)
+		await picked
+		await flushPromises()
+		expect(page.cacheStore.activeTokenIdx).toBe(TOKEN.id)
+		if (page.w.exists()) {
+			expect(cardSymbol(page.w)).toBe("TST")
+			expect(amountText(page.w)).toBe("1.5")
+			page.w.unmount()
+		}
+	})
+
+	test("a row picked while the report's re-read is out is the later choice: the import is not picked over it", async () => {
+		const OTHER = { ...TOKEN, id: 8, contract: `0x${"d".repeat(64)}`, symbol: "OTH" }
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore, reads } = await heldAfterMount()
+		const picked = report(w, NEW)
+		cacheStore.activeTokenIdx = OTHER.id
+		await flushPromises()
+		await amountInput(w).setValue("2")
+		reads[0]?.resolve([TOKEN, OTHER, NEW])
+		await picked
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(OTHER.id)
+		expect(cardSymbol(w)).toBe("OTH")
+		expect(amountText(w)).toBe("2")
+		w.unmount()
+	})
+
+	test("a USD session still ends on the swap, its amount cleared", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		const added = { ...NEW, chainId }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		price.onQuotesUpdated.invoke({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+		})
+		await nextTick()
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC"))
+
+		mocks.getTokens.mockResolvedValue([priced, added])
+		await report(w, added)
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(added.id)
+		expect(w.find('[data-testid="send-amount-fiat-input"]').exists()).toBe(false)
+		expect(amountText(w)).toBe("")
 		w.unmount()
 	})
 })

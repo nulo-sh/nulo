@@ -75,7 +75,6 @@ vi.mock("@/utils/hero-ruler", () => ({
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { useAppStore } from "@/stores/app.store"
-import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import Holdings from "./holdings.vue"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
@@ -195,8 +194,8 @@ describe("holdings page", () => {
 		await w.find('[data-testid="holdings-search"]').setValue(address)
 		await w.find('[data-testid="holdings-add-token"]').trigger("click")
 
-		expect(useCacheStore().preselectedTokenAddressToAdd).toBe(address)
 		expect(usePopupStore().isOpened("new_token")).toBe(true)
+		expect(usePopupStore().getPayload("new_token")).toEqual({ address })
 	})
 
 	test("live events: a delete from any chain removes its row, an add replaces a listed row, an update for an unseen row waits for the next read", async () => {

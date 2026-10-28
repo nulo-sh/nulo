@@ -215,7 +215,10 @@ test("a web page can fetch no extension file, the injected content script includ
 // step that rewrote it would widen `connect-src` past what `src/manifest.test.ts` pins.
 test("the loaded manifest carries the source's extension-page policy", async ({ extension }) => {
 	const popup = await openPopup(extension)
-	const loaded = await popup.evaluate(() => chrome.runtime.getManifest().content_security_policy)
+	const loaded = await popup.evaluate(() => chrome.runtime.getManifest().content_security_policy as Record<string, unknown>)
 	await popup.close()
-	expect(loaded).toEqual((manifest as { content_security_policy: unknown }).content_security_policy)
+	const source = (manifest as { content_security_policy: Record<string, unknown> }).content_security_policy
+	// Firefox 158's schema adds an optional `sandbox` and reports it unset as `null`.
+	const { sandbox, ...named } = loaded
+	expect(sandbox === null && !("sandbox" in source) ? named : loaded).toEqual(source)
 })
