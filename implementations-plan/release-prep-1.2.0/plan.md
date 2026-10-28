@@ -70,7 +70,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 - **Gate**, before step 4: Phase 1's commands, plus `bun run test:all` and `bun run check:plans` after staging. Pass: exit 0.
 4. Run the review loop (§ Post-implementation) over the arc diff. Then `git push -u origin worktree-release-prep-1.2.0`, with no PR. Stop and report `LEAD_BLOCKED` with A1.
 
-### Phase 4: the passkey trait, under A1(b)
+### Phase 4: the passkey trait, under A1(b) ✓ (ca1a8b24c; gates green; four runs green, all four replay cases on both browsers: [lessons/phase-4.md](lessons/phase-4.md))
 1. Add `passkey: "retired" | "unlocks"` to `ReleaseTraits`: whether a passkey profile the release made is one the candidate retires or one its passkey still unlocks. Pin `v0.31.0` and `v1.0.0` `retired`, `v1.1.0` `unlocks` (D5).
 2. In case 3, keep the update checks. Under `retired`, keep today's check verbatim. Under `unlocks`, require `auth-submit` enabled, no `auth-setup-again` and no overlay. Where the driver's `credentialOutlivesPage` holds, press it, reach `#/popup/general`, and check the profile rows still equal the release's (D6). The title names both.
 3. Run the committed-recording test in `update-recording.test.ts` over every sealing tag in `RELEASE_TRAITS`; each must have its recording (D2).
