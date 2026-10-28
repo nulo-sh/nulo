@@ -83,7 +83,7 @@ Every gate, from the repo root: `bun run lint`, `bun run typecheck:all`, `bun ru
 3. Run the gate. Pass also: the three cases green, and the existing cases green unchanged, among them `auth.test.ts:523`, `:653`, `:675` and `:699`.
 4. Smoke e2e, Chrome: `auth-flows.test.ts`, `security-reset.test.ts`. Layers: lint, typecheck, component, smoke.
 
-**Phase 2, arc 2 (#1282)** (`SecretCountdownClose.vue`, `SecretCountdownClose.test.ts`).
+**Phase 2, arc 2 (#1282) ✓** (`SecretCountdownClose.vue`, `SecretCountdownClose.test.ts`).
 1. Write two cases, mounted with `attachTo: document.body` and a parent that flips `autoCloseDisabled` on the emit, each wrapper unmounted after its test; run them on the base: both must fail.
    - "a keyboard press of Disable auto-close hands focus to Close": `pressOn(link, "Enter")`; expect `document.activeElement` to be Close and the link gone.
    - "the Enter that pressed the link, repeating on Close, closes nothing; a fresh Enter closes": the repeat goes to `document.activeElement` and returns `[false]` with no `close` emitted; a fresh Enter emits `close` once (success control).
