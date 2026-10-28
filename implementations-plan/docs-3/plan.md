@@ -13,9 +13,22 @@ base: 210d02f1f
 
 # docs-3 — two SECURITY.md corrections (#1186, #1274)
 
-#1274: five dependency paragraphs sit at the end of § Binary dependencies, where pointers to § Dependency policy do
+#1274: five dependency paragraphs sat at the end of § Binary dependencies, where pointers to § Dependency policy did
 not lead. #1186: #1142 had already fixed the passkey sentences; checking the same section found one clause the code
 does not support. Docs only, one file (`SECURITY.md`); evidence and search trails in `recon.md`.
+
+## Outcome
+
+- **Date:** 2026-10-28. Planned, audited and implemented in one session.
+- **Status:** completed, delivered as #1318 (one arc, into `dev`); its merge closes #1186 and #1274 and archives this plan.
+- **Shipped:** the five dependency paragraphs in SECURITY.md § Dependency policy, byte for byte (`6d01e09ea`); the
+  strict-mode residual list corrected (`90280264c`).
+- **Dropped or rejected:** #1186's quoted sentences needed no change (#1142 had fixed them; D1); edits inside the
+  moved text (D4); a "the race is closed" sentence (D5); "or restore" in the bearer-writing list (D7). No `lessons.md`
+  line: the one general point (a displaced lock holder keeps writing) is already there.
+- **Known limits:** #1316 (D6), #1317 (the watchdog race, post-implementation loop).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 ## Outcome & Quality Bar
 
@@ -163,7 +176,7 @@ lock's 5-minute watchdog (`packages/wallet-core/src/utils/lock.ts:5`) releasing 
 store a bearer under strict ON. Disposition: a closed `known-limit` issue at close-out (same class as #443), no doc
 change. 2. Nit: "removal" twice; "before it completes" rejected, as "it" would bind to the worker. Converged in one round.
 
-## Seeds
+## Seeds (retired)
 
 Not run (orchestrator-owned). `/goal`: phases 1 and 2 ✓ with their gates pasted; the Codex loop converged; the PR into
 `dev` open with `Closes #1186`, `Closes #1274` and the close-out on it; `bun run check:plans` and `bun run lint` exit 0.
