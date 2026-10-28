@@ -1,7 +1,7 @@
 ---
 plan: lock-window-1
 tier: mid
-status: approved; arc 1 merged (#1272); amended for the owner's answers (2026-10-27); arcs 2-3 and the close-out in progress
+status: completed; arc 1 merged (#1272), arcs 2-3 delivered (#1289, #1291) with this close-out
 issues: "#1183 #1225 (arc 1, merged), #1138 (arc 2), #1218 (arc 3, closed by the close-out); #1186 did not hold"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,22 @@ base: origin/dev at 78f5f9171 (arcs 2-3: origin/dev at d1165460c, arc 1 merged)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed, delivered as a stack on `dev`: #1272 (arc 1, merged as d1165460c), then #1289 (arc 2), #1291 (arc 3) and this close-out, awaiting the merge.
+- Shipped:
+  - #1272: on a profile switch the lock screen's password field is empty and masked; on a lock the Account and Recovery phrase backup pages go back to their first step, and Recovery phrase also on a switch; a second reveal's countdown is never shown disabled. Closes #1183 and #1225.
+  - #1289: a worker restart over an import or a profile create that had opened its session ends the flow on the lock screen and releases its own window; the completions stop at a synchronous fence once the shell ended them. Closes #1138. The #1138 action-list replay is red on the base and green on the fix.
+  - #1291: a fee payer's address edit re-reads its row under the service's lock, and the Edit popup keeps a rename another window made meanwhile; a protocol discovery that a network reset or removal ended logs at debug.
+- Kept as recorded exceptions: the other #1218 sites, background writes that record work already done and writes a person or a dApp asked for (D1-D4; the owner, OA-1: A), stated in #1218's dispositions comment.
+- Did not hold: #1186 (D10), answered on the issue.
+- Superseded: the poller fence and KL-2 (alternative F); the seeder's session guard (alternative E); the issue's seed 1003 replay, replaced by a hand-trimmed action list (Phase 2, step 6).
+- Lessons: none promoted. `lessons.md` holds 8183 of its 8192 bytes and none of its entries is superseded; the candidates stay in [lessons/phase-2.md](lessons/phase-2.md) and [lessons/phase-3.md](lessons/phase-3.md).
+- Known limits: #1293 (KL-3), #1294 (KL-4).
+- Open items: none from this lane. #1218 closes when this stack lands (OA-1 A recorded, OA-3 and D11 built).
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # lock-window-1: screens that outlive a lock, and writes that do
 
@@ -201,10 +217,10 @@ Final gates (at 4bbc970d3, `dev` unchanged since arc 2's merge): lint, `typechec
 
 No copy or layout changes. Every line above has the owner's sign-off (2026-10-27: "ok go with your proposals, fix all."). Each PR body carries its screenshots where a screen changes.
 
-## Known limits (filed closed at the close-out)
+## Known limits (filed closed)
 
-- KL-3: an import still before its finalize, or a New profile before its create, in a popup whose shell another window's unlock marked open, is unmounted by a restart (OA-2 showed it to the owner for the import; D14 extends it). Reopen on a report.
-- KL-4: a lock inside `persistToken`'s own window still lands the seeded token row. Reopen if the campaign meets O3 on a seeder-written `tokens` row.
+- KL-3 (#1293): an import still before its finalize, or a New profile before its create, in a popup whose shell another window's unlock marked open, is unmounted by a restart (OA-2 showed it to the owner for the import; D14 extends it). Reopen on a report.
+- KL-4 (#1294): a lock inside `persistToken`'s own window still lands the seeded token row. Reopen if the campaign meets O3 on a seeder-written `tokens` row.
 - (KL-2 was withdrawn with the poller fence, alternative F.)
 
 ## Delivery
