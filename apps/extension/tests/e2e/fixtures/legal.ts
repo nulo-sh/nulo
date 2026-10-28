@@ -1,4 +1,4 @@
-import { LEGAL_ACCEPTANCE_KEY, LEGAL_MANIFEST, applyAcceptance, currentVersion } from "@nulo/legal"
+import { LEGAL_ACCEPTANCE_KEY, LEGAL_MANIFEST, acceptanceStatus, applyAcceptance, currentVersion } from "@nulo/legal"
 
 /**
  * The acceptance state a launch starts from. `keep` leaves storage alone, which is what a relaunch
@@ -16,6 +16,15 @@ export function legalSeedValue(seed: Exclude<LegalSeed, "keep">): unknown {
 	const current = applyAcceptance(null, "onboarding", Date.UTC(2026, 0, 1), LEGAL_MANIFEST)
 	if (seed === "current") return current
 	return { ...current, termsVersion: STALE_TERMS_VERSION }
+}
+
+/** What an in-place update meets, given the release's storage `entries`: the changed-Terms sheet when
+ *  its acceptance predates this build's newest material Terms, else nothing. Every recording holds an
+ *  acceptance, so `entries` without a readable one is refused. */
+export function updatedTermsAnswer(entries: Record<string, unknown>): "none" | "changed" {
+	const status = acceptanceStatus(entries[LEGAL_ACCEPTANCE_KEY])
+	if (status === "missing") throw new Error("the release's storage holds no readable Terms acceptance")
+	return status === "current" ? "none" : "changed"
 }
 
 export { LEGAL_ACCEPTANCE_KEY, currentVersion }

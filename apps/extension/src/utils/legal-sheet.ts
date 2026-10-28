@@ -18,14 +18,19 @@ export interface LegalSheetContext {
 }
 
 /**
- * Dismissal is per version: a newer Terms version published mid-session asks again. A dApp or
- * passkey window (`windows-*`) is its own app instance whose route IS its pending request, so
- * covering or navigating it would abandon that request.
+ * Whether the sheet may cover the route at all, whatever the acceptance says. A dApp or passkey
+ * window (`windows-*`) is its own app instance whose route IS its pending request, so covering or
+ * navigating it would abandon that request.
  */
+export function legalSheetMayCover(route: Pick<LegalSheetContext, "routeName" | "routePath" | "isAuthRequired">): boolean {
+	if (!route.isAuthRequired) return false
+	if (typeof route.routeName === "string" && route.routeName.startsWith("windows-")) return false
+	return !NEVER_COVERED_PATHS.some((prefix) => route.routePath.startsWith(prefix))
+}
+
+/** Dismissal is per version: a newer Terms version published mid-session asks again. */
 export function shouldShowLegalSheet(ctx: LegalSheetContext): boolean {
 	if (ctx.status !== "missing" && ctx.status !== "stale") return false
-	if (!ctx.isAuthRequired) return false
-	if (typeof ctx.routeName === "string" && ctx.routeName.startsWith("windows-")) return false
-	if (NEVER_COVERED_PATHS.some((prefix) => ctx.routePath.startsWith(prefix))) return false
+	if (!legalSheetMayCover(ctx)) return false
 	return ctx.dismissedVersion !== ctx.termsVersion
 }

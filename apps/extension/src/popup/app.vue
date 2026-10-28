@@ -8,6 +8,7 @@ import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
+import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
@@ -119,6 +120,16 @@ void accountRows.connect()
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
 const legalSheetShown = ref(undefined)
+/** Marked only where the sheet may cover the page: anywhere else it is hidden whatever the acceptance. */
+const legalSheetMark = computed(() => {
+	const coverable = legalSheetMayCover({
+		routeName: route.name,
+		routePath: route.path,
+		isAuthRequired: route.meta.isAuthRequired === true,
+	})
+	if (!coverable || legalSheetShown.value === undefined) return undefined
+	return legalSheetShown.value ? "shown" : "hidden"
+})
 
 const settingHandlers = {
 	theme(value) {
@@ -617,6 +628,7 @@ onBeforeUnmount(() => {
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
 	>
+		<div hidden data-testid="legal-sheet-verdict" :data-verdict="legalSheetMark" />
 		<!-- Popup Teleport -->
 		<div id="popup" />
 		<div id="tooltip" />
