@@ -10,3 +10,4 @@
 - 2026-10-28 arc 1 review loop: Codex r1 conditional approve (1), Opus conditional approve (2), both fixed; Codex r2 approve.
 - 2026-10-28 arc 1 final gates: pass at e0aaede3d (lint, typecheck:all, test:all; 13 seeds and two controls per browser, 30 tests, green at retry 0).
 - 2026-10-28 Phase 2: branch (a) traced (focused picker never answers; 5/5 at base, 20/20 fixed by dismissal), but the dismissal breaks Firefox pickFile (restore case 2/2 red, base 5/5 green); no code, D10; #1222 stays open.
+- 2026-10-28 Phase 3: 10 of 10 shard runs green at retry 0 (750-950 s each; no reopen over 1.6 s, no visible gap over 200 ms, B's cap the seed's every run); D7 no red: A2's two messages ship (forced once each), ledger row 65 open, #1300 to close as not planned.

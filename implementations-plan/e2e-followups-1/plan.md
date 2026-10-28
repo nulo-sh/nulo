@@ -134,7 +134,7 @@ UI impact: none on every arc (test files, fixtures and e2e docs only).
 
 **Validation gate:** every run's outcome, wall-clock and click-to-`cancel` time is in lessons/phase-2.md. Branch (a) keeps e2e-infra-3's bar: the base missed past the bound under the reproducing condition, and the fix then needs 20 runs under it with no miss and every click-to-`cancel` under 1 s, then `bun run test:ci-gating`, `cd apps/extension && bun --bun vitest run scripts/e2e/firefox-driver.test.ts`, the toolbar-panel file and the full Firefox smoke suite once at `--retry=0`, all green. The other branches need the comment posted and `git status --porcelain` empty.
 
-## Phase 3: the heavy-shard triage (#1300)
+## Phase 3: the heavy-shard triage (#1300) ✓ (no reproduction in 10 runs; A2 ships)
 
 1. Write the probe. Check it on one run: a planted 2 s busy loop in the popup shows as a gap, and a quiet run shows none over 1 s.
 2. Run 10 fresh times from the repo root: `NULO_E2E_BROWSER=firefox NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 VITE_NULO_FEE_MULTIPLIER=10 NULO_E2E_OPENPOPUP_LOG=1 NODE_OPTIONS=--dns-result-order=ipv4first taskset -c <four free CPUs> bun run e2e:agent <the probe copy> tests/e2e/network/concurrent-sendtx-confirm.test.ts`. Four CPUs match the CI runner. Split the runs across tool calls under two hours each. Run the profile only on a red, or on a gap over 5 s that has no stack.
