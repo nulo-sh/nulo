@@ -155,7 +155,7 @@ Final gates after the review loop (head before this record): lint, `typecheck:al
 
 ### Arc 2
 
-**Phase 2 — the landing for an import and a new profile.** Steps:
+**Phase 2 — the landing for an import and a new profile.** ✓ Steps:
 1. Change `lock-landing.ts`, `app.vue`, `opening-flow.ts`, `import.vue`, `profile/new.vue`, `new-profile-helpers.ts` and the chaos driver as § Arc 2 says.
 2. In `lock-landing.test.ts`, add: an import that holds a session ends its flow (`end-flow`); New profile (the first create's route too) that holds a session ends its flow; either holding none settles, so an own import window keeps its flow; a page that needs no session and opens none (Register) settles while holding one (the control); an auth-required page that holds a session still locks. The existing cases stay.
 3. In `pages/import.test.ts`, add: a completion that resolves after the flow was ended, the page still mounted (the landing's navigation pending), releases no window, shows no toast and pushes no route; the same after the page unmounted; a mounted completion with its flow live does all three (the control).
@@ -174,6 +174,8 @@ Final gates after the review loop (head before this record): lint, `typecheck:al
 Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, then `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-sw-restart.test.ts` (Chrome; the scenario is Chrome-only), and the step 6 replay: `NULO_E2E_BROWSER=chrome NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1138 NULO_E2E_CHAOS_ACTIONS=<the list's file> NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/profile-chaos.test.ts`, from the repo root. Pass: green; the replay red on the base and green on the fix. Record the scenario's runtime before and after. Layers: unit, component, network e2e. New profile is proven at the unit layer: its landing is the pure decision, and its completion's stop is the helper's, both unit-tested; a restart in its last second has no deterministic e2e hold point.
 
 Base run (d1165460c plus the amendment, Chrome, retry 0): scenario B passes (scenario 25 969 ms, file 70 299 ms); the action list is red at step 4, `restoreHeld`'s driver could not finish: "the popup holds Home while the worker holds no session" at `#/popup/general`.
+
+Final gates (at 68442891d, `origin/dev` merged; Chrome, retry 0): lint, `typecheck:all`, `test:all` (173 s) pass. Scenario B passes on both paths across two runs: the errors screen's Continue, then the lock screen (scenario 21 758 ms, file 61 529 ms), and the landing's `end-flow` straight to the lock screen (scenario 25 180 ms, file 78 050 ms, scenario A, which the arc does not touch, 52 s against 39 s on the base run, so the spread is the shared host's load). The action-list replay is green on the fix (no violation; the step's log gap across its planned restart is the harness's exemption), red on the base. No scenario added. ✓
 
 ### Arc 3
 
