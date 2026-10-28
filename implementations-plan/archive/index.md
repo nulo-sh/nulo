@@ -452,3 +452,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [docs-2](docs-2/plan.md) — completed — the manual npm bumps restated as policy with their source and the two untested points; the plans standard's PR-title cap at 92 (#1273; open item #1274)
 - [unit-flakes-5](unit-flakes-5/plan.md) — completed — four whole-tree guards skip the files that cannot hold a finding (#1270; known limit #1279)
 - [lock-window-1](lock-window-1/plan.md) — completed — the lock screen and backup pages drop what a session left; a restart over an opening import or create lands on the lock screen; a fee payer's address edit keeps a concurrent rename (#1272, #1289, #1291; known limits #1293, #1294)
+- [log-levels-1](log-levels-1/plan.md) — completed — a refusal a lock, purge or wrong credential causes logs at debug, a real failure on the same path at error, and every lock refusal has a handler (#1268, #1297, #1302; known limits #1299, #1304; open item #1296)
