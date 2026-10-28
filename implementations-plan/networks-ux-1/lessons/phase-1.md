@@ -36,3 +36,22 @@ Every run at retry 0, `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun ru
 - Opus's repeated press: a case sends a click with `detail: 2` and a repeat Enter to the Switch, and a repeat Enter to both forms of the row's link. Each of the three guards, removed alone, fails it (`expected [ true ] to deeply equal [ false ]` for the link). One mutation run first matched two lines and never applied; check the diff before reading a mutation's green.
 - Codex's retry finding: the test now resets to Alpha V6 when the chip names another network. A normal run does not take that path; `switchToNetwork` is the suite's own helper for it.
 - After rebuilding both armed builds: `settings-crud.test.ts` 9/9 at retry 0, Chrome 15.1 s (first test 5.7 s), Firefox 24.6 s (first test 9.3 s). Root lint and the extension typecheck exit 0.
+
+## Review, round 2
+
+- Codex resumed with the fix diff: approve, no findings. Its probes confirmed a first Enter still opens both row forms, a keyboard click (`detail: 0`) still activates, the bail-out's removal is safe, and the Alpha V6 reset closes its retry path. The loop converged.
+- D8's leftover, a late second click opening the row it just activated, is known limit #1330 (closed as not planned).
+
+## 1.4 Final gates on the head
+
+At `fce5509cc` with `origin/dev` (`0a659726c`) already merged, host load near 90-125:
+- Root `bun run audit:vue`: exit 0 in 166 s (typecheck:all, 16226 extension tests passed, lint, build).
+- Root `bun run test:all`: exit 0 in 168 s, 14 workspaces. The chaos-model timeout of the first gate run (`scripts/e2e/profile-chaos-model.test.ts`, untouched by this arc) did not recur.
+- `bun run --cwd apps/extension build-storybook`: exit 0.
+- The full smoke suite on each armed build (rebuilt after `audit:vue`'s unarmed `build`), in CI's three shards at the config's retries. No `(retry xN)` marker in any shard.
+
+  | shard | Chrome | Firefox |
+  |---|---|---|
+  | 1/3 | 98 passed, 7 skipped, 612 s | 80 passed, 5 skipped, 922 s |
+  | 2/3 | 101 passed, 10 skipped, 678 s | 95 passed, 1 skipped, 1113 s |
+  | 3/3 | 74 passed, 10 skipped, 593 s | 101 passed, 18 skipped, 776 s |

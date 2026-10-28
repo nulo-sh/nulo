@@ -11,3 +11,5 @@
 - 2026-10-28: 1.2 green: index.test.ts red at base (5 failed, 6 passed), green after (11 passed); the focus case fails without the handoff; lint, typecheck:all and the UI bans pass.
 - 2026-10-28: 1.3 green: settings-crud red on the base builds (both browsers, 1 failed | 8 passed), green on the head builds (9/9, four runs each); the probe fails without the pointer-through rule; Firefox first test median +2.6 s, Chrome within noise; light and dark captures.
 - 2026-10-28: arc review round 1: Codex conditional approve (3 findings: 2 accepted, 1 argued with a different fix), Opus conditional approve (4 findings, all accepted); fixes in, red first; settings-crud 9/9 on both armed builds at retry 0. Codex round 2 next.
+- 2026-10-28: Codex arc round 2 approve, no findings: the loop converged. Final gates next.
+- 2026-10-28: 1.4 green: audit:vue, test:all, build-storybook exit 0; the full smoke suite green in three shards on each armed build, no retried test. Known limit #1330 filed and closed.
