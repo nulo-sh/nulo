@@ -74,7 +74,7 @@ Arc 1 makes a lock screen keep its selection when a settle's stale pointer read 
 
 Every gate, from the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run audit:vue`. Pass: every command exits 0. Smoke e2e: build the armed extension (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, or `build:firefox`), then from `apps/extension` run `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/<file> --retry=0` (Firefox: add `NULO_E2E_BROWSER=firefox`). No arc adds an e2e scenario: the component layer drives the exact interleaving, which an e2e run cannot schedule.
 
-**Phase 1, arc 1 (#1281)** (`auth.vue`, `auth.test.ts`, `tests/e2e/helpers/profile-chaos/model.ts`).
+**Phase 1, arc 1 (#1281) ✓** (`auth.vue`, `auth.test.ts`, `tests/e2e/helpers/profile-chaos/model.ts`).
 1. Write three cases in "the profile it shows follows other windows" and run them on the base: the regression must fail, both controls must pass.
    - Regression, "a pointer write naming the selection during a settle's reads keeps it": before `mountAuth({}, A)`, mock the pointer read to answer `pB` and the list to be deferred, holding `pA` and `pB`; `pick("pA")`; release; expect `pA`.
    - Control, "a stale event naming a deleted selection does not stop its settle": A selected; the list (without `pA`) deferred after `delete("pA")`, the pointer read answering `pB`; `pick("pA")`; release; expect `pB`.
