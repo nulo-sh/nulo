@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
@@ -139,7 +139,12 @@ beforeEach(() => {
 	})
 	installChromeStorage({}, { persist: false })
 })
-afterEach(() => vi.unstubAllGlobals())
+// A page left mounted still hears picks and deletions, and its reads would take a later test's answers.
+const mounted: VueWrapper[] = []
+afterEach(() => {
+	for (const wrapper of mounted.splice(0)) wrapper.unmount()
+	vi.unstubAllGlobals()
+})
 
 /** Minimal Input stub that keeps v-model wiring alive so the submit gate
  *  (`isAllowedToContinue`) opens once a password is typed. */
@@ -169,6 +174,7 @@ function mountAuth(provide: Record<string, unknown> = {}, selectedAtMount?: Prof
 			},
 		},
 	})
+	mounted.push(wrapper)
 	const appStore = useAppStore()
 	if (!selectedAtMount) appStore.profile = { id: "p1", name: "P", type: "password" } as never
 	return { wrapper, appStore }
@@ -644,8 +650,6 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 	})
 
 	test("a pick another window makes while an automatic settle reads is the one that stands", async () => {
-		// Pages earlier tests left mounted still hear picks; their reads would take the held answers.
-		elsewhere.picks.clear()
 		const { appStore } = mountAuth()
 		await flushPromises()
 		const selected = () => appStore.profile?.id
@@ -668,7 +672,6 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 	})
 
 	test("a profile picked here after an automatic settle stands over another window's pick still loading", async () => {
-		elsewhere.picks.clear()
 		const { appStore } = mountAuth()
 		await flushPromises()
 		const selected = () => appStore.profile?.id
