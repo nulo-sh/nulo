@@ -17,3 +17,4 @@
 - 2026-10-28: arc 2 review: Codex round 1 one finding plus the Opus leg's (fixed in 2db8f931c), round 2 clean. Reviewed head: lint, typecheck:all, test (943 files), check:plans green; security.test.ts 8/8 and #1132 replay 3/3 on a fresh armed build. PR next.
 - 2026-10-28: arc 3 starts on `log-levels-1-credentials`, stacked on PR #1297. Phase 3.1 green (errors 218, profile service 524, account import-export 22; the two exportPlain refusal cases red on the base service).
 - 2026-10-28: phases 3.2 and 3.3 green (credential-refusal 9; composables, settings/security, onboarding and import pages 1594; payload-ban 59; the import wrap's cause case red without the cause). 3.3 traced to a chaos build that predates #1221: no change.
+- 2026-10-28: arc 3 gate green (unit layers; Chrome security + passkey-backup + security-backup 11/11; Firefox passkey-backup 2/2). Review loop next.
