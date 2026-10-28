@@ -236,7 +236,7 @@ NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1 NULO_E2E_CHAOS_RUNS=5 NULO_E2E_MIGRATION_
 - `NULO_E2E_CHAOS_ACTIONS` replays a hand-trimmed list instead: a JSON array of `{ action, params }` or a path to one, such as a record's `plan`.
 - Each run writes its replay record to `.e2e-state/profile-chaos/<browser>-<seed>-<launch>.json`: the plan, the bindings, and each step's outcome and evidence. Every URL and secret in the record is masked.
 - A seed is **green** only when every step ran with complete evidence. A planned restart leaves its step **incomplete**: the logs of the background it stops cannot be read. A violation turns the seed **red** and stops it, unless it is an instance of a filed finding (`KNOWN_FINDINGS`): that keeps the seed red, names the issue, and lets the run go on.
-- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). Every launch is guarded, so the stand-in's refusal of a node call outside the run is accepted on both files (`GUARDED_NODE_REFUSAL`). A restore that a planned restart fails reports its failure at error; that exact line is accepted only during a step that ends the background on purpose.
+- What the harness cannot drive is stated in the model's capabilities, never skipped in a driver. A driver that implements only part of the catalog names its actions in `Caps.actions`: the planner draws only those, closes with `verifyAll` only when it is one, and refuses a hand list that names another. Chrome's virtual authenticator keeps three credentials per run, so the planner mints no more there (`residentCredentialSlots`). Every launch is guarded, so the stand-in's refusal of a node call outside the run is accepted on both files (`GUARDED_NODE_REFUSAL`). A restore that a planned restart fails reports its failure at error; that exact line is accepted only during a step that ends the background on purpose.
 
 `network/profile-chaos.test.ts` runs the same catalog against the sandbox and the playground, plus a dApp that asks to connect while the wallet is locked or while a passkey unlock is held, and a restore held at `service-restore` or `account-state` that a lock, a restart or a delete meets. Every profile a step opens for the first time goes on Local Network first. The restore gate exists only in a proverless build:
 
@@ -270,6 +270,22 @@ A passkey profile keeps a recovery phrase its passkey unlocks, and the catalog d
 - The earlier passkey backup the wallet's tests pin is refused at the pick, and a held one whose phrase field was made a number is refused once it opens, each under the title `EARLIER_TITLE` names.
 - Two faults reach stored rows, each put back byte for byte after its step unless the wallet wrote the row meanwhile: a row field changed while an unlock waits at its prompt, and a slot's tag byte flipped before an unlock. A lock while a reveal waits at its prompt must end the prompt with the page.
 - O7 adds every PRF output a page of the run received (`prf-capture.ts`) and each stored `prfSalt` value, allowed only in its own row. A passkey profile's phrase is learnt where a screen shows it, or from the first backup of it the run opens; logs and files already read are searched again for it then.
+
+#### In process
+
+`src/wallet/services/profile/profile-chaos.composition.test.ts` drives the same catalog in the unit suite, over the real `ProfileService`, `ContactService` and `ConfigStore` and one `FakeBrowserApi` per worker (`tests/helpers/profile-chaos-in-process.ts`, under [`COMPOSITION-TESTS.md`](../COMPOSITION-TESTS.md)). Its caps name the 22 actions it drives (`IN_PROCESS_ACTIONS`); accounts, account files, backups, abandoned ceremonies and the locks that meet a reveal's or a method change's prompt stay with the browser files.
+
+- Each action makes the service calls its page makes, in the page's order: the passkey's parameters before every prompt, a create or an import from the lock screen, a race or a row edit between the parameters and the unlock. A restart snapshots both storage areas and the alarms, resets the fake, restores them and boots a fresh worker; a write the stopped worker still tries is refused and reported.
+- Every storage write a worker makes is logged with its value before and after and the strict mode in force as it lands, and `console.*` reaches the newest worker's logger as the background's hook routes it. Every reading runs before the first check. O7 searches each write as it lands, then the storage, the step's log lines of every level and its write log; a typed wrong password is a needle too. O3 judges every logged `storage.local` transition, reverted ones included, once the step has bound its new ids, and anything a reading or a stopped worker wrote. O1 also judges every session row written: no legacy passhash, no bearer while strict. O1, O2 and O5 read as the browser run does, with no pages, and every passkey parameter read must name the profile's own credential (O2). O4 fails on any warn or error log `IN_PROCESS_ALLOWED` does not name.
+- O6: at its first sighting a profile's words derive its master (`exportPlain`) and its session secret is that master as a field element; the open profile's session secret stays the first sighting's after every step; at `verifyAll` each profile's master and session secret equal its first sighting's, and profiles on one phrase share a master while profiles on two never do.
+- Every unit run drives seed 8001 and four hand lists, which between them drive all 22 actions; a test checks that. A break fixture per reader shows each oracle can fail. The long mode runs consecutive seeds; CI sets neither variable:
+
+```bash
+cd apps/extension && NULO_PROFILE_CHAOS_RUNS=50 NULO_PROFILE_CHAOS_SEED=9001 \
+  bun --bun vitest run --retry=0 src/wallet/services/profile/profile-chaos.composition.test.ts -t "long mode"
+```
+
+- `NULO_PROFILE_CHAOS_SEED` is the first seed (random when unset; the test's name shows it). A red seed prints its step, its violations and the plan, symbols only, and replays from its seed alone.
 
 ### Agent sessions
 
