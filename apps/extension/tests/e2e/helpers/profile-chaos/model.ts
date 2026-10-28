@@ -1685,8 +1685,15 @@ export function plan(seed: number, start: StartState, caps: Caps, length = ACTIO
  * leave, and the first one that cannot run there is refused by name.
  */
 export function planFromList(list: readonly ListedStep[], start: StartState, caps: Caps, seed = Number.NaN): Plan {
-	let w = startWorld(start)
-	const steps: PlannedStep[] = list.map((listed, index) => {
+	return { seed, start, caps, steps: planFrom(startWorld(start), list, caps) }
+}
+
+/** `list` planned from `from`, its steps numbered from `first`: an in-process sequence goes on from
+ *  a world holding a row no action makes. */
+export function planFrom(from: World, list: readonly ListedStep[], caps: Caps, first = 0): PlannedStep[] {
+	let w = from
+	return list.map((listed, at) => {
+		const index = first + at
 		const spec = ACTIONS[listed.action] as ActionSpec<ActionName> | undefined
 		if (!spec) throw new Error(`step ${index}: unknown action ${String(listed.action)}`)
 		if (!drives(caps, listed.action)) throw new Error(`step ${index} (${listed.action}) is outside the run's actions`)
@@ -1696,7 +1703,6 @@ export function planFromList(list: readonly ListedStep[], start: StartState, cap
 		w = step.expect.next
 		return step
 	})
-	return { seed, start, caps, steps }
 }
 
 export const familyOf = (action: ActionName): Family => ACTIONS[action].family

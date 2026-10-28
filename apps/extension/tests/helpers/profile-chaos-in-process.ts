@@ -175,7 +175,18 @@ export interface StepHooks {
 	afterDriver?: (run: InProcessRun, step: PlannedStep) => Promise<void>
 	/** Runs on each worker once it has booted. */
 	onWorker?: (worker: Worker) => void
+	/** Runs on each worker once its config and services exist, before they start. */
+	onBoot?: (worker: Worker) => void
+	/** Runs inside the passkey service's `materializeCredential`, before it answers: the moment a
+	 *  service call holds its passkey answer and has not used it. */
+	onAnswer?: (run: InProcessRun, data: PasskeyCredentialData) => Promise<void>
+	/** A sequence's own driver for the step at that index, in place of the catalog's. */
+	drive?: Readonly<Record<number, ScenarioDrive>>
+	/** Warn and error logs a sequence accepts, beside `IN_PROCESS_ALLOWED`. */
+	allowed?: readonly InProcessAllowed[]
 }
+
+export type ScenarioDrive = (run: InProcessRun, step: PlannedStep, before: World) => Promise<Outcome>
 
 export class InProcessRun {
 	worker!: Worker
@@ -196,6 +207,8 @@ export class InProcessRun {
 	logs: { worker: number; log: Log }[] = []
 	/** Every wrong secret a driver typed. */
 	readonly wrong: string[] = []
+	/** `needle|where` pairs a harness write put there (`plant`): O7 judges what the wallet writes. */
+	readonly planted = new Set<string>()
 	/** Needles each write held at once, with the needles known then. */
 	writeHits: LeakHit[] = []
 	findings: Violation[] = []
@@ -306,12 +319,18 @@ async function boot(run: InProcessRun): Promise<Worker> {
 	run.sinkTo(worker.logger)
 	const services = new ServiceCollection()
 	services.add(
-		svc(PASSKEY_SERVICE_NAME, { materializeCredential: async (data: PasskeyCredentialData) => PasskeyCredential.create(data) }),
+		svc(PASSKEY_SERVICE_NAME, {
+			materializeCredential: async (data: PasskeyCredentialData) => {
+				await run.hooks.onAnswer?.(run, data)
+				return PasskeyCredential.create(data)
+			},
+		}),
 	)
 	worker.profiles = new ProfileService(worker.config, worker.logger, worker.api)
 	worker.contacts = new ContactService(worker.logger, worker.api)
 	services.add(worker.profiles)
 	services.add(worker.contacts)
+	run.hooks.onBoot?.(worker)
 	await services.start()
 	worker.profiles.setDeletionDelegate(purge(local))
 	run.hooks.onWorker?.(worker)
@@ -321,7 +340,7 @@ async function boot(run: InProcessRun): Promise<Worker> {
 /** A stopped worker and a fresh one over what it left: both storage areas and the alarm list
  *  survive, its listeners do not (`fakeBrowser.reset()` drops every one), and a write it still
  *  tries is refused and reported. */
-async function restart(run: InProcessRun): Promise<void> {
+export async function restart(run: InProcessRun): Promise<void> {
 	const local = await fakeBrowser.storage.local.get()
 	const session = await fakeBrowser.storage.session.get()
 	const alarms = await fakeBrowser.alarms.getAll()
@@ -339,7 +358,7 @@ async function restart(run: InProcessRun): Promise<void> {
 
 // ── what the run binds ──────────────────────────────────────────────────
 
-const boundId = (run: InProcessRun, ref: ProfileRef): string => {
+export const boundId = (run: InProcessRun, ref: ProfileRef): string => {
 	const id = run.bindings.profiles.get(ref)
 	if (!id) throw new Error(`${ref} was never bound`)
 	return id
@@ -367,7 +386,7 @@ const credentialOf = (run: InProcessRun, ref: CredentialRef | undefined): string
 }
 
 /** What the page hands the worker once `ref` answered at `prfSalt`. */
-async function answer(run: InProcessRun, ref: CredentialRef | undefined, prfSalt: string): Promise<PasskeyCredentialData> {
+export async function answer(run: InProcessRun, ref: CredentialRef | undefined, prfSalt: string): Promise<PasskeyCredentialData> {
 	const data = await fakePasskeyAnswer(credentialOf(run, ref), prfSalt)
 	run.prf.add(data.prf)
 	return data
@@ -375,7 +394,7 @@ async function answer(run: InProcessRun, ref: CredentialRef | undefined, prfSalt
 
 /** A new passkey's answer at a fresh input: the authenticator mints `ref`, or picks it when it already
  *  holds it ("Use a passkey I already have"). */
-async function newPasskey(run: InProcessRun, before: World, ref: CredentialRef | undefined): Promise<PasskeyCredentialData> {
+export async function newPasskey(run: InProcessRun, before: World, ref: CredentialRef | undefined): Promise<PasskeyCredentialData> {
 	if (!ref) throw new Error("a passkey choice names its credential")
 	if (!isMinted(before, ref)) {
 		if (run.bindings.credentials.has(ref)) throw new Error(`${ref} is minted twice`)
@@ -385,7 +404,7 @@ async function newPasskey(run: InProcessRun, before: World, ref: CredentialRef |
 }
 
 /** The words a phrase was first read as; a later reading must be the same words. */
-async function learnWords(run: InProcessRun, ref: PhraseRef | undefined, words: string[]): Promise<void> {
+export async function learnWords(run: InProcessRun, ref: PhraseRef | undefined, words: string[]): Promise<void> {
 	if (!ref) return
 	const known = run.phrases.get(ref)
 	if (!known) run.phrases.set(ref, { words, entropy: await getEntropy(words) })
@@ -396,7 +415,7 @@ async function learnWords(run: InProcessRun, ref: PhraseRef | undefined, words: 
 const deletedRefs = (w: World): Set<ProfileRef> => new Set(w.profiles.filter((p) => p.deleted).map((p) => p.ref))
 
 /** Binds a profile a step made; its master, session secret and words are read once the step ends. */
-function made(run: InProcessRun, step: PlannedStep, before: World, ref: ProfileRef, id: string, unlock: Unlock): void {
+export function made(run: InProcessRun, step: PlannedStep, before: World, ref: ProfileRef, id: string, unlock: Unlock): void {
 	bindProfile(run.bindings, ref, id, deletedRefs(before))
 	run.knownIds.add(id)
 	run.sightings.push({ ref, id, unlock, phrase: profileOf(step.expect.next, ref)?.phrase })
@@ -432,11 +451,11 @@ async function learnSalts(run: InProcessRun): Promise<void> {
 
 /** A rejection the driver lists for its variant; any other fails the step by its class. */
 type Refusal = (e: unknown) => boolean
-const is =
+export const is =
 	(cls: abstract new (...args: never[]) => Error): Refusal =>
 	(e) =>
 		e instanceof cls
-const says =
+export const says =
 	(message: string): Refusal =>
 	(e) =>
 		e instanceof Error && e.message === message
@@ -447,7 +466,7 @@ export class UnlistedRejection extends Error {
 	}
 }
 
-async function attempt(call: () => Promise<unknown>, refusals: readonly Refusal[] = [], as: Outcome = "refused"): Promise<Outcome> {
+export async function attempt(call: () => Promise<unknown>, refusals: readonly Refusal[] = [], as: Outcome = "refused"): Promise<Outcome> {
 	try {
 		await call()
 		return "committed"
@@ -489,7 +508,7 @@ async function unlockParams(run: InProcessRun, p: ModelProfile): Promise<{ prfSa
 }
 
 /** What `k` answers at `p`'s parameters. */
-async function answerAt(run: InProcessRun, p: ModelProfile, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
+export async function answerAt(run: InProcessRun, p: ModelProfile, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
 	const { prfSalt } = await unlockParams(run, p)
 	return answer(run, k, prfSalt)
 }
@@ -693,6 +712,12 @@ function edited(run: InProcessRun, raw: string, field: ParamsMap["editRowDuringU
 	else row[field] = randomBytes(field === "prfSalt" ? 32 : 16).toString("base64url")
 	if (field === "prfSalt") run.salts.set(`forged/prf-salt-${run.salts.size}`, { value: row.prfSalt as string })
 	return JSON.stringify(row)
+}
+
+/** Stores `value` at `key` around the log, as a row the wallet did not write. */
+export async function plant(run: InProcessRun, key: string, value: string): Promise<void> {
+	await run.worker.raw.storage.local.set({ [key]: value })
+	for (const needle of findNeedles(`${key}\n${value}`, needlesOf(run))) run.planted.add(`${needle}|local:${key}`)
 }
 
 /** Runs `step` with the stored row of `id` changed by `change`, written around the log as anything
@@ -1202,13 +1227,13 @@ async function checkStep(run: InProcessRun, step: PlannedStep | undefined, befor
 			.map((p) => p.ref),
 	)
 	const homes = new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
-	const leaks = dedupe([...run.writeHits, ...hits])
+	const leaks = dedupe([...run.writeHits, ...hits]).filter((h) => !run.planted.has(`${h.needle}|${h.where}`))
 	return [
 		...checkSession(next, session, run.bindings),
 		...checkProfiles(next, profiles, run.bindings),
 		...checkWriteLog(run, step, before, censuses),
 		...checkLeaks(leaks, { ...structure, exports: [] }, passkeyIds, homes),
-		...checkLogs(run, step, IN_PROCESS_ALLOWED),
+		...checkLogs(run, step, [...IN_PROCESS_ALLOWED, ...(run.hooks.allowed ?? [])]),
 		...(step?.action === "verifyAll" ? checkMasters(before, run.verified, run.seen) : []),
 		...openSecret,
 	]
@@ -1232,7 +1257,10 @@ async function runStep(run: InProcessRun, step: PlannedStep, before: World): Pro
 	const violations: Violation[] = []
 	let outcome: Outcome | undefined
 	try {
-		outcome = await (DRIVERS[step.action as InProcessAction] as Drive<InProcessAction>)(run, step.params as never, step, before)
+		const own = run.hooks.drive?.[step.index]
+		outcome = own
+			? await own(run, step, before)
+			: await (DRIVERS[step.action as InProcessAction] as Drive<InProcessAction>)(run, step.params as never, step, before)
 		await run.hooks.afterDriver?.(run, step)
 		// A config write's listeners run `void`ed work under the facade lock; one locked read waits for it.
 		if (wroteConfig(run)) await run.profiles.getActiveProfile()
@@ -1259,8 +1287,9 @@ const maskViolation = (v: Violation, needles: readonly Needle[]): Violation => (
 
 /** Runs `plan` on a fresh graph, stopping at the first step that breaks a property. */
 export async function runPlan(plan: Plan, hooks: StepHooks = {}): Promise<RunReport> {
-	for (const action of plan.steps.map((s) => s.action))
-		if (!(IN_PROCESS_ACTIONS as readonly string[]).includes(action)) throw new Error(`${action} has no in-process driver`)
+	for (const { action, index } of plan.steps)
+		if (!(IN_PROCESS_ACTIONS as readonly string[]).includes(action) && !hooks.drive?.[index])
+			throw new Error(`${action} has no in-process driver`)
 	const local = (chrome.storage as { local?: unknown }).local
 	const run = new InProcessRun(hooks)
 	const consoles = consoleMethods.map(([method, level]) => {
