@@ -1,8 +1,8 @@
 ---
 plan: release-prep-1.2.0
 tier: light
-status: approved by the final Codex pass; arc 1 running
-issues: "none (the lane brief names no issue; one is filed in Phase 3)"
+status: arc 1 at its stop after Phase 3 (A1 open); no PR
+issues: "#1312 (filed in Phase 3: replay case 3 refuses v1.1.0; not closed here)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -42,7 +42,7 @@ v1.1.0 shipped on 2026-10-27, and nobody did the release runbook's post-release 
 - I2. A sealed row other than an endpoint that names an outside URL with a provider's key would reach the public repo unseen (F8). No such row is traced; plausible but unverified, the same exposure as the committed v1.0.0 recording.
 
 **Asks** (to the orchestrator, through the report; not a product question):
-- A1. Case 3 refuses v1.1.0 (F7). Choose (a) ship the fixtures as they are and give case 3 to a test lane (the Phase 3 issue), or (b) extend this lane to teach case 3 a reviewed per-release passkey trait and the unlock path for a 1.1 row. Working assumption: neither until answered. Arc 1 stops after Phase 3, with its branch pushed and no PR.
+- A1. Case 3 refuses v1.1.0 (F7). Choose (a) ship the fixtures as they are and give case 3 to a test lane (#1312), or (b) extend this lane to teach case 3 a reviewed per-release passkey trait and the unlock path for a 1.1 row. Working assumption: neither until answered. Arc 1 stops after Phase 3, with its branch pushed and no PR.
 
 ## Architecture & Implementation (arc 1, branch `worktree-release-prep-1.2.0`)
 
@@ -63,7 +63,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 6. Poll each run's log in a bounded loop inside one tool call. A rerun is allowed once, only for a flake with a filed issue or a host-load stall; the PR body lists both runs.
 - **Gate:** both live runs pass. On both browsers, cases 1, 2 and 4 report passed (a skipped case 2 is not a pass), and case 3 fails at `update-replay.test.ts:689`. A red a pin or a trait answers sends the arc back to Phase 1: commit the fix, rebuild both candidates, and restart Phase 2. A recording-only red is answered by deleting the untracked file and repeating step 3. A red the scenario causes is a second refusal: report it, do not patch it. A Chrome live run that did not pass end to end leaves no recording: delete the file (F6).
 
-### Phase 3: check and commit the recording, file the refusal
+### Phase 3: check and commit the recording, file the refusal ✓ (#1312 filed; gate green; review loop clean at round 1: [lessons/phase-3.md](lessons/phase-3.md))
 1. Check the recording: `tag` `v1.1.0`; `browser` `chrome`; `dials` all loopback; no `nulo:e2e:` keys; plaintext URLs counted (never listed), all loopback.
 2. Commit: `test(e2e): record v1.1.0's storage for the update replay`.
 3. Dedupe (`gh issue list --state all --search "update replay passkey"`). File one issue with the sections `## What happens`, `## Where`, `## Impact`, `## Possible fix`, `## Record`: case 3 encodes pre-1.1 passkey rows and refuses v1.1.0, with both browsers' failure lines. Its Possible fix names A1(b), and that the committed-recording unit pin (`update-recording.test.ts:62-69`) covers v1.0.0 only. Labels: `bug`, `lane:e2e-followups`.
@@ -107,11 +107,12 @@ None. The lane changes test files only and touches no screen.
 
 - **Round 1, Opus Plan leg:** conditional approve. Accepted: D3 pre-empts the scope call (now A1 and a stop); I2 overstated (F8); D2 outside scope; dev merge after the reruns; F6's two consequences; the gate named a screenshot that no fixture takes, and let a skipped case 2 pass; rerun wording; PR-body items (F2's command, `isImmutable`, browser versions, the CRS hosts). Rejected: draft PR (D3); recording after A1 (Alternatives).
 - **Round 1, Codex** (gpt-6.1-sol, high; the first call failed "model at capacity", the retry ran): reject. Blocking: D3 overrides "stop and report"; the close-out invalidates the final-head runs. Also D2 scope and its plaintext-only check, and F4/F7/I1 wording. All accepted as above.
+- **Arc 1 review loop, round 1:** Codex `clean`; the Opus review's four wording findings accepted ([lessons/phase-3.md](lessons/phase-3.md)).
 - **Final Codex pass** (resumed session): conditional approve. Conditions, both accepted: a pin or trait fix during Phase 2 returns to Phase 1 (commit, rebuild, restart); the PR opens as a draft and turns ready only once its pushed head equals the tested SHA. Confirmation resume: **approve**.
 
 ## Delivery
 
-- **Arc 1** = Phases 1-4, one PR against `dev`, opened as a draft only in Phase 4 and marked ready only at the tested head. Title: `test(e2e): the update scenarios run from v1.1.0` (47 characters). `Closes #<the Phase 3 issue>` under A1(b), else `Refs #<it>`. No label: `apps/extension/**` trips both e2e filters.
+- **Arc 1** = Phases 1-4, one PR against `dev`, opened as a draft only in Phase 4 and marked ready only at the tested head. Title: `test(e2e): the update scenarios run from v1.1.0` (47 characters). `Closes #1312` under A1(b), else `Refs #1312`. No label: `apps/extension/**` trips both e2e filters.
 - **Body:** the two digests and the three checks (F2's full command); `isImmutable: false`; the traits with their deciding files; every run with its commit, clean status, browser version, outcome and per-file duration; the recording's UTC date and its 7-day expiry; case 3's failure lines and the issue; the arrival sentence (F5); F8's limit. No e2e envelope: no scenario is added or changed.
 
 ## Post-implementation
@@ -120,7 +121,7 @@ Execution contract: this plan plus `implementations-plan/README.md` § Post-impl
 - **Diff review:** `code_review: off`; absent.
 - **Review loop**, in Phase 3 over the arc diff from `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus `general-purpose` review beside round 1; hard stop at three rounds; each round in `lessons/phase-3.md` and under Review verdicts.
 - **Delivery:** `gh pr create --base dev --draft`; Phase 4 steps 4-5 then make it ready at the tested head. One rerun for a known flake. Never merge.
-- **Close-out** as the PR's final commits, after the `origin/dev` merge in Phase 4: the `## Outcome` block (`Known limits:`, `Open items:` with the Phase 3 issue under A1(a)); lessons within 8 KiB; `STATUS.md` deleted; `git mv implementations-plan/release-prep-1.2.0 implementations-plan/archive/release-prep-1.2.0` in its own commit, the index line to `archive/index.md`; `bun run check:plans` green after staging.
+- **Close-out** as the PR's final commits, after the `origin/dev` merge in Phase 4: the `## Outcome` block (`Known limits:`, `Open items:` with #1312 under A1(a)); lessons within 8 KiB; `STATUS.md` deleted; `git mv implementations-plan/release-prep-1.2.0 implementations-plan/archive/release-prep-1.2.0` in its own commit, the index line to `archive/index.md`; `bun run check:plans` green after staging.
 - **Teardown after the merge** (standing authorization): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/release-prep-1.2.0/plan.md` succeeds, run `agent-worktree done release-prep-1.2.0 --merged`; relay a refusal, never force. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
 
 ## Seeds (draft)
