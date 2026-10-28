@@ -15,8 +15,9 @@
  * the bump's own reset does not.
  *
  * The third registers a passkey profile on the release and updates it. Failure mode: the candidate
- * offers that row an unlock, or rewrites it, instead of Set up again; only a real update carries a
- * row the release itself wrote.
+ * rewrites that row, offers a retired one an unlock instead of Set up again, or retires one its
+ * passkey still opens (the release's `passkey` trait says which it is); only a real update carries
+ * a row the release itself wrote.
  *
  * The first case also exports the updated profile's full backup, encrypted, and the fourth registers
  * a passkey profile on the candidate and exports its backup under a file password. Failure mode: a
@@ -45,7 +46,7 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
-import { BROWSER } from "./fixtures/browser"
+import { BROWSER, credentialOutlivesPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import type { HeldNode } from "./fixtures/egress-guard"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
@@ -72,7 +73,7 @@ import {
 } from "./fixtures/update/in-place"
 import { expectReleasePreferences, plaintextPreferences } from "./fixtures/update/preferences"
 import { type PinnedBackup, type Recording, readRecording, recordingProblems, writePinnedBackup } from "./fixtures/update/recording"
-import { releaseTraits } from "./fixtures/update/release"
+import { type ReleaseTraits, releaseTraits } from "./fixtures/update/release"
 import { readSealedRelease } from "./fixtures/update/read-release"
 import {
 	firstAccount,
@@ -90,6 +91,7 @@ import { downloadPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./
 import { answerUpdatedTerms } from "./helpers/legal-drivers"
 import { readyToast } from "@/components/stale-network/copy"
 import { answerArrival } from "./helpers/network-arrival"
+import { authSubmitReady } from "./helpers/profile-chaos/ui"
 import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration-registry"
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
@@ -623,6 +625,30 @@ async function throughTheReset(
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }
 
+const profileRows = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
+
+/** The lock screen a release-made passkey profile opens on after the update, as its trait says. */
+async function expectPasskeyOpening(ctx: ExtensionContext, before: Record<string, unknown>, passkey: ReleaseTraits["passkey"]) {
+	const page = await openPopup(ctx)
+	await waitForHash(page, "#/popup/auth", 30_000)
+	if (passkey === "retired") {
+		await page.waitForSelector('[data-testid="auth-setup-again"]', { visible: true, timeout: 30_000 })
+		expect(await page.$('[data-testid="auth-submit"]')).toBeNull()
+		expect(await shownOverlays(page)).toEqual([])
+	} else {
+		await authSubmitReady(page)
+		expect(await page.$('[data-testid="auth-setup-again"]')).toBeNull()
+		expect(await shownOverlays(page)).toEqual([])
+		// Chrome's credential died with the release's page, which the update closed.
+		if (credentialOutlivesPage) {
+			await clickByTestId(page, "auth-submit")
+			await waitForHash(page, "#/popup/general", 60_000)
+			expect(profileRows(await readLocalStorage(ctx))).toEqual(profileRows(before))
+		}
+	}
+	await page.close()
+}
+
 describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 	test("the recorded release storage updates in place, through the reset once Testnet's seed has moved", {
 		timeout: 300_000,
@@ -666,12 +692,13 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		})
 	})
 
-	test("a passkey profile the release made opens, after the update, on Set up again and nothing else", {
+	test("a passkey profile the release made opens, after the update, on Set up again if retired, else on its passkey", {
 		timeout: 300_000,
 		retry: 0,
 	}, async () => {
+		const pair = builds()
 		await inPlaceUpdate({
-			builds: builds(),
+			builds: pair,
 			populate: async (ctx) => {
 				const page = await openPopup(ctx)
 				await setupPasskeyVirtualAuth(ctx.browser, page)
@@ -682,14 +709,8 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 			verify: async (ctx, before) => {
 				const after = await readLocalStorage(ctx)
 				expect(await updateProblems(before, after)).toEqual([])
-				const profiles = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
-				expect(profiles(after)).toEqual(profiles(before))
-				const page = await openPopup(ctx)
-				await waitForHash(page, "#/popup/auth", 30_000)
-				await page.waitForSelector('[data-testid="auth-setup-again"]', { visible: true, timeout: 30_000 })
-				expect(await page.$('[data-testid="auth-submit"]')).toBeNull()
-				expect(await shownOverlays(page)).toEqual([])
-				await page.close()
+				expect(profileRows(after)).toEqual(profileRows(before))
+				await expectPasskeyOpening(ctx, before, releaseTraits(pair.tag).passkey)
 			},
 		})
 	})

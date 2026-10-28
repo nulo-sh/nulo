@@ -31,14 +31,19 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
  * the release keeps its profile's rows, its account selection and its preference maps as plaintext
  * a test can parse, or `sealed` behind the worker, readable only through its services once
  * unlocked. `connect`: whether its emoji check replaces the connect window's page or opens a window
- * of its own.
+ * of its own. `passkey`: whether a passkey profile it made is one the candidate retires, offering
+ * only Set up again, or one its passkey still unlocks, as the row its `newPasskeyRow` writes decides.
  */
-export type ReleaseTraits = { storage: "plaintext" | "sealed"; connect: "replaces-page" | "own-window" }
+export type ReleaseTraits = {
+	storage: "plaintext" | "sealed"
+	connect: "replaces-page" | "own-window"
+	passkey: "retired" | "unlocks"
+}
 
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
-	"v0.31.0": { storage: "plaintext", connect: "replaces-page" },
-	"v1.0.0": { storage: "sealed", connect: "own-window" },
-	"v1.1.0": { storage: "sealed", connect: "own-window" },
+	"v0.31.0": { storage: "plaintext", connect: "replaces-page", passkey: "retired" },
+	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired" },
+	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks" },
 }
 
 /** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */
