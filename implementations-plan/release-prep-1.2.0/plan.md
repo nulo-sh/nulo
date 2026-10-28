@@ -48,12 +48,12 @@ v1.1.0 shipped on 2026-10-27, and nobody did the release runbook's post-release 
 
 Files: `apps/extension/tests/e2e/fixtures/update/release.ts` (two entries) and `apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json` (new, written by the scenario). Nothing else outside this plan folder. Scratch files stay outside the repository.
 
-### Phase 1: the pins
+### Phase 1: the pins ✓ (956fc686e; lint, typecheck:all, the two unit files green)
 1. Add `"v1.1.0"` to `RELEASE_DIGESTS` with the F2 digests, and to `RELEASE_TRAITS` as `{ storage: "sealed", connect: "own-window" }`.
 2. Commit: `test(e2e): pin v1.1.0's zips and traits for the update scenarios`. Make no other commit until Phase 3; plan and status edits stay uncommitted until then.
 - **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e/release-build.test.ts scripts/e2e/update-recording.test.ts`. Pass: all exit 0.
 
-### Phase 2: record and run, retry 0, one run at a time, no commit
+### Phase 2: record and run, retry 0, one run at a time, no commit ✓ (both live runs passed; cases 1, 2, 4 passed and case 3 failed at `:689` on both browsers: [lessons/phase-2.md](lessons/phase-2.md))
 Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording or the pinned backups.
 1. From the repo root, run `bash apps/extension/scripts/e2e/build-update-candidate.sh chrome`, then `... firefox`. Run `bun scripts/e2e/install-firefox.ts` from `apps/extension`. Note the browser versions.
 2. Before each run, `git status --porcelain -- apps/extension` must be empty, except `?? …/v1.1.0.storage.json` after step 3.
