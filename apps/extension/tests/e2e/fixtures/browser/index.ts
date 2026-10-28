@@ -62,10 +62,6 @@ export interface HeldInterception extends ArmedInterception {
 	holding: () => boolean
 }
 
-/**
- * The documents hosting the PXE — Chrome's offscreen document, Firefox's background-page frame —
- * and each one's own `visibilityState`. Visibility is what keeps a document's timers unthrottled.
- */
 /** How `answerRequests` answers a request: a JSON body with its status, or a refused connection. */
 export type RequestAnswer = { status: number; body: unknown } | "refused"
 
@@ -77,6 +73,10 @@ export interface AnsweredRequests {
 	hits(url: string): Promise<number>
 }
 
+/**
+ * The documents hosting the PXE — Chrome's offscreen document, Firefox's background-page frame —
+ * and each one's own `visibilityState`. Visibility is what keeps a document's timers unthrottled.
+ */
 export interface PxeHostState {
 	count: number
 	visibility: string[]

@@ -28,7 +28,8 @@ const ARM = `function (slot, id, answersJson) {
 		const response = Cc["@mozilla.org/network/replaced-http-response;1"].createInstance(Ci.nsIReplacedHttpResponse);
 		response.responseStatus = how.status;
 		response.setResponseHeader("Content-Type", "application/json", false);
-		response.responseBody = how.body;
+		// A byte string, so the text goes in as UTF-8, as BiDi's own override encodes it.
+		response.responseBody = String.fromCharCode(...new TextEncoder().encode(how.body));
 		channel.QueryInterface(Ci.nsIHttpChannelInternal).setResponseOverride(response);
 	};
 	const observer = {

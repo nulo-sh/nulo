@@ -222,11 +222,13 @@ describe("onboarding tab", () => {
 		const page = await openOnboarding(extension)
 		const other = await openScratchPage(extension.browser, extension.extensionId)
 		const answered = await interceptHealth(page, { https: { status: 200, body: PRESTO_MINIMAL_HEALTH }, http: "refused" })
-		const otherAnswered = await interceptHealth(other, { https: { status: 200, body: PRESTO_DETAILED_HEALTH }, http: "refused" })
+		// A body outside ASCII proves both drivers send the bytes `JSON.stringify` names, as UTF-8.
+		const otherBody = { ...PRESTO_DETAILED_HEALTH, note: "präsent ✓" }
+		const otherAnswered = await interceptHealth(other, { https: { status: 200, body: otherBody }, http: "refused" })
 		const bodyOf = (from: Page) => from.evaluate(async (url) => (await fetch(url)).json(), PRESTO_HTTPS_HEALTH_URL)
 
 		expect(await bodyOf(page)).toEqual(PRESTO_MINIMAL_HEALTH)
-		expect(await bodyOf(other)).toEqual(PRESTO_DETAILED_HEALTH)
+		expect(await bodyOf(other)).toEqual(otherBody)
 		const refused = await page.evaluate(
 			async (url) =>
 				fetch(url).then(
