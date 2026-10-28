@@ -1,12 +1,5 @@
-/**
- * Composition test: the profile chaos scenarios whose window is inside one service call, driven over
- * the in-process harness (`tests/helpers/profile-chaos-in-process.ts`). Each sequence plans its
- * steps from the catalog, so O1-O7 judge every step against the model; a scenario step runs its own
- * schedule (a hold at a passkey answer, a row changed around the log, a stop after a write) and
- * reads as the model steps whose effects it makes. Each never-happens assertion has a break
- * fixture: the guard it rests on spied away turns the sequence red. See
- * `apps/extension/tests/COMPOSITION-TESTS.md`.
- */
+/** Composition test: the profile chaos scenarios whose window sits inside one service call, as planned
+ *  sequences on `tests/helpers/profile-chaos-in-process.ts` (`apps/extension/tests/COMPOSITION-TESTS.md`). */
 import { randomBytes, randomUUID } from "node:crypto"
 import { PasskeyNotOpenedError, StaleUnlockCredentialError } from "@nulo/extension-messaging/errors"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -61,6 +54,8 @@ interface Span {
 	before?: (w: World) => World
 	/** The world after them, where the schedule ends otherwise than the steps in order. */
 	after?: (w: World) => World
+	/** The named step writes nothing, whatever its catalog action may: only the others' writes are allowed. */
+	silent?: boolean
 }
 
 function build(parts: readonly (ListedStep | Span)[]): Plan {
@@ -79,7 +74,7 @@ function build(parts: readonly (ListedStep | Span)[]): Plan {
 				...last.expect,
 				outcomes: span.outcomes ?? named.expect.outcomes,
 				next,
-				writes: planned.flatMap((s) => s.expect.writes),
+				writes: planned.flatMap((s, i) => (span.silent && i === (span.as ?? 0) ? [] : s.expect.writes)),
 				sources: planned.flatMap((s) => s.expect.sources),
 			},
 		} as PlannedStep)
@@ -173,7 +168,6 @@ async function rewriteRow(r: InProcessRun, ref: `P${number}`, change: (row: Reco
 	}
 }
 
-/** The base64 value with its last byte changed. */
 const flipLast = (b64: string): string => {
 	const bytes = Buffer.from(b64, "base64")
 	bytes[bytes.length - 1] ^= 0x01
@@ -189,9 +183,9 @@ function replace(target: object, method: string, body: (original: (...args: neve
 
 type SessionManagerView = { strictSecurityMode: boolean; isActive: (id: string) => boolean }
 const sessionManagerOf = (r: InProcessRun | Worker): SessionManagerView =>
-	("profiles" in r ? (r.profiles as unknown as { sessionManager: SessionManagerView }) : r).sessionManager
+	(r.profiles as unknown as { sessionManager: SessionManagerView }).sessionManager
 
-/** The first HMAC verify after the call, as `verifyEnvelopeMacV3` makes it, replaced by `body`. */
+/** The first HMAC verify after the call, whichever call makes it, replaced by `body`. */
 function onMacVerify(body: (verify: () => Promise<boolean>) => Promise<boolean>): { reached: () => void } {
 	const subtle = globalThis.crypto.subtle
 	const verify = subtle.verify.bind(subtle)
@@ -277,7 +271,7 @@ describe("a prfSalt rewritten between the answer and the row's re-read", () => {
 				),
 				2,
 				"O5",
-				/ended committed|editRowDuringUnlock/,
+				/ended committed/,
 			),
 		RUN_MS,
 	)
@@ -306,31 +300,59 @@ function heldReveal(meanwhile: (r: InProcessRun) => Promise<void>, refusals: Ret
 
 const fenceBroken = (r: InProcessRun, broken: boolean) => replace(r.profiles, "profileFenceBroken", () => async () => broken)
 
+/** A write of `ref`'s row and its restore, both through the worker's logged storage. */
+async function writeBack(r: InProcessRun, ref: `P${number}`): Promise<void> {
+	const key = rowKey(r, ref)
+	const was = (await r.worker.raw.storage.local.get(key))[key] as string
+	await r.worker.api.storage.local.set({ [key]: JSON.stringify({ ...JSON.parse(was), name: "Rewritten" }) })
+	await r.worker.api.storage.local.set({ [key]: was })
+}
+
 describe("a reveal's fence after its prompt answered", () => {
+	const REVEAL_ONLY: Span = { steps: [REVEAL], silent: true }
+
+	test(
+		"control: the same hold with nothing else happening returns the words",
+		async () => {
+			const v = heldReveal(async () => {})
+			green(await run([CREATE_PK, REVEAL_ONLY], { onAnswer: v.h.onAnswer, drive: { 1: v.drive } }))
+		},
+		RUN_MS,
+	)
+
 	test(
 		"a prfSalt rewritten there: the words the answer opened are returned and nothing is written",
 		async () => {
 			const v = heldReveal(async (r) => {
 				v.setUndo(await rewriteRow(r, "P1", (row) => (row.prfSalt = freshPrfSalt())))
 			})
-			green(await run([CREATE_PK, REVEAL], { onAnswer: v.h.onAnswer, drive: { 1: v.drive } }))
+			green(await run([CREATE_PK, REVEAL_ONLY], { onAnswer: v.h.onAnswer, drive: { 1: v.drive } }))
 		},
 		RUN_MS,
 	)
 
-	const lockThere = (onTop?: (r: InProcessRun) => void) => {
+	const lockThere = (onTop?: (r: InProcessRun) => Promise<void> | void) => {
 		const v = heldReveal(async (r) => {
 			await r.profiles.lockActiveProfile()
-			onTop?.(r)
+			await onTop?.(r)
 		})
-		return run([CREATE_PK, { steps: [REVEAL, LOCK], outcomes: ["committed"] }], { onAnswer: v.h.onAnswer, drive: { 1: v.drive } })
+		return run([CREATE_PK, { steps: [REVEAL, LOCK], outcomes: ["committed"], silent: true }], {
+			onAnswer: v.h.onAnswer,
+			drive: { 1: v.drive },
+		})
 	}
 
 	test("a lock there: the wallet stays locked, nothing is written, the words are returned", async () => green(await lockThere()), RUN_MS)
 
 	test(
 		"break: a reveal gated on the open session is refused after the lock",
-		async () => redAt(await lockThere((r) => fenceBroken(r, true)), 1, "O5", /lists for no variant/),
+		async () => redAt(await lockThere((r) => fenceBroken(r, true)), 1, "O5", /lists for no variant: Error \[Invalid profile id\]/),
+		RUN_MS,
+	)
+
+	test(
+		"break: a reveal that writes its row and restores it",
+		async () => redAt(await lockThere((r) => writeBack(r, "P1")), 1, "O3", /changed for \S+, outside the action's contract/),
 		RUN_MS,
 	)
 
@@ -349,7 +371,7 @@ describe("a reveal's fence after its prompt answered", () => {
 
 	test(
 		"break: with the fence spied away, a deleted profile's words are returned",
-		async () => redAt(await deleteThere((r) => fenceBroken(r, false)), 1, "O5", /ended committed|expects/),
+		async () => redAt(await deleteThere((r) => fenceBroken(r, false)), 1, "O5", /ended committed/),
 		RUN_MS,
 	)
 })
@@ -403,7 +425,9 @@ describe("a flipped dekSealed byte", () => {
 			redAt(
 				await run(parts, {
 					drive: { 4: restartFlipped(true) },
-					onWorker: (w) => replace(w.profiles, "unsealTrustedDekHoldingLock", () => async () => new Uint8Array(randomBytes(32))),
+					onWorker: (w) => {
+						if (w.n > 1) replace(w.profiles, "unsealTrustedDekHoldingLock", () => async () => new Uint8Array(randomBytes(32)))
+					},
 					allowed: [MAC_CLOSES, DERIVED_ONLY],
 				}),
 				5,
@@ -418,7 +442,7 @@ describe("a flipped dekSealed byte", () => {
 
 const RETIRED_FIELDS = ["id", "name", "pxeGeneration", "dekSealed", "walletFingerprint", "type", "credentialId"]
 
-/** P2, a row an earlier build left, planted from P1's row: its base fields, then `slots` of P1's. */
+/** P2 planted from P1's row: the fields a retired row keeps under a new id and name, then `slots` of P1's. */
 async function plantP2(r: InProcessRun, slots: readonly string[]): Promise<string> {
 	const p1 = await storedRow(r, "P1")
 	const id = randomUUID()
@@ -446,9 +470,10 @@ describe("a retired row naming a live row's credential", () => {
 					const retiredId = await plantP2(r, [])
 					bindProfile(r.bindings, "P2", retiredId)
 					r.knownIds.add(retiredId)
-					onTop?.(r, retiredId)
 					const p1 = profileOf(before, "P1") as ModelProfile
-					return attempt(async () => r.profiles.unlockPasskeyProfile(boundId(r, "P1"), await answerAt(r, p1, p1.credential)))
+					const data = await answerAt(r, p1, p1.credential)
+					onTop?.(r, retiredId)
+					return attempt(() => r.profiles.unlockPasskeyProfile(boundId(r, "P1"), data))
 				},
 			},
 		})
@@ -457,19 +482,17 @@ describe("a retired row naming a live row's credential", () => {
 
 	test(
 		"break: an unlock that found its row by credential reaches the retired one",
-		async () =>
-			redAt(
-				await scenario((r, retiredId) =>
-					replace(
-						r.profiles,
-						"snapshotForUnlock",
-						(original) => async (_id: string, kind: "passkey") => original(retiredId as never, kind as never),
-					),
-				),
-				2,
-				"O5",
-				/lists for no variant: RetiredProfileError/,
-			),
+		async () => {
+			let redirected = false
+			const report = await scenario((r, retiredId) =>
+				replace(r.profiles, "snapshotForUnlock", (original) => async (_id: string, kind: "passkey") => {
+					redirected = true
+					return original(retiredId as never, kind as never)
+				}),
+			)
+			expect(redirected).toBe(true)
+			redAt(report, 2, "O5", /lists for no variant: RetiredProfileError/)
+		},
 		RUN_MS,
 	)
 })
@@ -488,13 +511,14 @@ describe("a retired row given the slots only the live row holds", () => {
 	}
 	const UNLOCK_P2: ListedStep = { action: "unlockPasskey", params: { target: "P2", variant: "approve" } }
 
-	const scenario = (hooks: StepHooks = {}) =>
+	const scenario = (hooks: StepHooks = {}, afterPlant?: (r: InProcessRun, id: string) => Promise<void>) =>
 		run([CREATE_PK, TOGGLE_STRICT, LOCK, { steps: [UNLOCK_P2], before: withProfile(TRANSPLANT), after: noBearer }], {
 			...hooks,
 			allowed: [DERIVED_ONLY],
 			drive: {
 				3: async (r, step, before) => {
 					const id = await plantP2(r, ["guard", "secret", "entropy", "envelopeMac", "prfSalt"])
+					await afterPlant?.(r, id)
 					const data = await answer(r, "K1", (await storedRow(r, "P1")).prfSalt as string)
 					made(r, step, before, "P2", id, { data })
 					return attempt(async () => r.profiles.unlockPasskeyProfile(id, await answerAt(r, TRANSPLANT, "K1")))
@@ -505,6 +529,22 @@ describe("a retired row given the slots only the live row holds", () => {
 	test(
 		"it opens to the live row's master with no trusted DEK and no bearer, the live row unchanged",
 		async () => green(await scenario()),
+		RUN_MS,
+	)
+
+	test(
+		"break: a wallet write that keeps the planted row's salt is a leak, though a plant put it there first",
+		async () =>
+			redAt(
+				await scenario({}, async (r, id) => {
+					const key = `${PROFILE_ROW}${id}`
+					const row = JSON.parse((await r.worker.raw.storage.local.get(key))[key] as string)
+					await r.worker.api.storage.local.set({ [key]: JSON.stringify({ ...row, name: "Rewritten" }) })
+				}),
+				3,
+				"O7",
+				/P1\/prf-salt-\d+ found in local:/,
+			),
 		RUN_MS,
 	)
 
@@ -565,9 +605,38 @@ describe("two profiles on one credential with their prfSalt values swapped", () 
 	)
 
 	test(
-		"break: unswapped, the unlock opens",
+		"control: unswapped, the unlock opens",
 		async () =>
-			redAt(await run(parts, { drive: { 3: swapped("P1", false), 4: swapped("P2", false) } }), 3, "O5", /ended committed|expects/),
+			green(
+				await run([CREATE_PK, CREATE_P2, LOCK, { action: "unlockPasskey", params: { target: "P1", variant: "approve" } }], {
+					drive: { 3: swapped("P1", false) },
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"break: an unlock that falls back to the other row on its credential opens it with the swapped input",
+		async () => {
+			let fellBack = false
+			const report = await run(parts, {
+				drive: {
+					3: async (r, step, before) => {
+						const sibling = await storedRow(r, "P2")
+						replace(r.profiles, "openSlots", (original) => async (row: { prfSalt: string }, key: unknown) => {
+							const own = await original(row as never, key as never)
+							if (own) return own
+							fellBack = true
+							return original({ ...sibling, prfSalt: row.prfSalt } as never, key as never)
+						})
+						return swapped("P1", true)(r, step, before)
+					},
+				},
+				allowed: [accept(/DEK\/MAC failed at passkey unlock/, "tamperedUnlock", "the sibling's slots under P1's MAC")],
+			})
+			expect(fellBack).toBe(true)
+			redAt(report, 3, "O5", /ended committed/)
+		},
 		RUN_MS,
 	)
 })
@@ -591,6 +660,15 @@ describe("strict mode turned on during a passkey unlock and during a bearer rest
 					drive: { 3: u.drive },
 				}),
 			)
+		},
+		RUN_MS,
+	)
+
+	test(
+		"control: the same hold with strict mode left off persists a bearer",
+		async () => {
+			const u = heldUnlock(async () => {}, [])
+			green(await run([CREATE_PK, TOGGLE_STRICT, LOCK, UNLOCK], { onAnswer: u.h.onAnswer, drive: { 3: u.drive } }))
 		},
 		RUN_MS,
 	)
@@ -676,7 +754,7 @@ describe("strict mode turned on during a passkey unlock and during a bearer rest
 
 // ── a stop between a method change's write and its reopen ───────────────
 
-/** Parks the worker's next write of `key` once it has landed, as a stop at that instruction would. */
+/** Parks the worker's next write of `key` for good, as a stop there would: after it lands when `landed`. */
 function parkAfterWrite(r: InProcessRun, key: string, landed: boolean): Promise<void> {
 	const area = r.worker.api.storage.local
 	const set = area.set
@@ -800,6 +878,18 @@ describe("a method change held at its new passkey's answer", () => {
 	}
 
 	test(
+		"control: the same hold with nothing else happening commits the change",
+		async () =>
+			green(
+				await run(
+					[CREATE_PK, NEW_PASSKEY("K2")],
+					heldChange("K2", "now", async () => {}, []),
+				),
+			),
+		RUN_MS,
+	)
+
+	test(
 		"a second window's change lands: the held change is stale and the second one stands",
 		async () => green(await secondChange()),
 		RUN_MS,
@@ -807,7 +897,7 @@ describe("a method change held at its new passkey's answer", () => {
 
 	test(
 		"break: with the commit's row check spied away, the held change overwrites the second",
-		async () => redAt(await secondChange(unchangedRow), 1, "O5", /ended committed|expects/),
+		async () => redAt(await secondChange(unchangedRow), 1, "O5", /ended committed/),
 		RUN_MS,
 	)
 
@@ -866,7 +956,7 @@ describe("a method change held at its new passkey's answer", () => {
 
 	test(
 		"break: with the commit's row check spied away, the change writes the deleted profile's row back",
-		async () => redAt(await deleteThere(unchangedRow), 1, "O5", /ended committed|expects/),
+		async () => redAt(await deleteThere(unchangedRow), 1, "O5", /ended committed/),
 		RUN_MS,
 	)
 })

@@ -20,3 +20,18 @@ No product fault. Every scenario ran as recon.md § Scenario map traced it. One 
 - A one-shot spy on `crypto.subtle.verify` catches the first HMAC verify after it is installed, whichever call makes it. Install it at the instruction the scenario names, not at the step's start.
 - `ConfigStore` does not watch storage, so strict mode turned on for a booting worker goes through that worker's own config (`StepHooks.onBoot`), not a storage write.
 - A row planted around the log holds needles (a slot, a salt) in a place no wallet write put them. `plant` records them, so O7 reads only what the wallet writes.
+
+## Review, round 1
+
+Codex (`gpt-6.1-sol`, high, read-only): reject, 5 findings. Opus beside it: conditional approve, 6 findings and a latent note. Each was checked against the tree; all accepted.
+
+- O7: the `planted` filter also hid the wallet's own writes of a planted needle (Codex 1, Opus 5). It now exempts storage hits only. Fixture: the transplant's row rewritten by a logged write that keeps P1's salt. Before the fix it reds on O2 alone; after, on O7 too.
+- The reveal's "nothing is written" rested on nothing: the catalog lets a reveal write its profile (Codex 2). A span's `silent` drops the named step's writes. Fixture: a logged write and restore of the row during the hold reds on O3.
+- The retired-row break threw in the page's parameter read, before the unlock (Codex 3, Opus 2). The answer now comes first, and the fixture checks the spy ran.
+- The swapped-salt "break" removed the fault instead of a guard (Codex 4, Opus 3). It is now the control. The break is an `openSlots` that falls back to the other row on the credential, at the answered salt; it opens P2's slots for P1.
+- Two break patterns matched any failure on their step (Opus 1). A spy that throws a `TypeError` passed them. They now name their exact message, and the four `|expects` alternatives are gone.
+- The DEK-trusted break patched the first worker too, so its run diverged from step 3 (Opus 4). It now patches only the restarted worker.
+- Docs overclaimed controls and breaks (Opus 3). Added controls for the reveal hold, the strict-mode unlock hold and the change hold. The README and the plan now say which items have a control, and that a break either spies a guard away or forces the opposite outcome.
+- Comments (Codex 5, Opus 6): header cut to one sentence; `flipLast`'s doc deleted; `onMacVerify`, `parkAfterWrite`, `plantP2` and `planFrom` docs corrected; `sessionManagerOf`'s dead branch removed.
+- Not changed: a span's `before` patch reaches planning only. The driver and the checkers get the previous step's world, so the drivers bind P2 and K2 by hand (Opus, latent). This is harmless in these sequences, and changing it would change `runPlan`.
+- Run after the fixes: 39/39 at retry 0, 0.65 s of tests; typecheck exit 0.

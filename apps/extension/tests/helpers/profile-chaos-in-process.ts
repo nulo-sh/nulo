@@ -207,7 +207,7 @@ export class InProcessRun {
 	logs: { worker: number; log: Log }[] = []
 	/** Every wrong secret a driver typed. */
 	readonly wrong: string[] = []
-	/** `needle|where` pairs a harness write put there (`plant`): O7 judges what the wallet writes. */
+	/** `needle|where` pairs a harness write put in storage (`plant`); a wallet write of one is still a leak. */
 	readonly planted = new Set<string>()
 	/** Needles each write held at once, with the needles known then. */
 	writeHits: LeakHit[] = []
@@ -1227,7 +1227,7 @@ async function checkStep(run: InProcessRun, step: PlannedStep | undefined, befor
 			.map((p) => p.ref),
 	)
 	const homes = new Map(needles.flatMap((n) => (n.home ? [[n.name, n.home] as const] : [])))
-	const leaks = dedupe([...run.writeHits, ...hits]).filter((h) => !run.planted.has(`${h.needle}|${h.where}`))
+	const leaks = dedupe([...run.writeHits, ...hits.filter((h) => !run.planted.has(`${h.needle}|${h.where}`))])
 	return [
 		...checkSession(next, session, run.bindings),
 		...checkProfiles(next, profiles, run.bindings),

@@ -1688,8 +1688,7 @@ export function planFromList(list: readonly ListedStep[], start: StartState, cap
 	return { seed, start, caps, steps: planFrom(startWorld(start), list, caps) }
 }
 
-/** `list` planned from `from`, its steps numbered from `first`: an in-process sequence goes on from
- *  a world holding a row no action makes. */
+/** `list` planned from the world `from`, its steps numbered from `first`. */
 export function planFrom(from: World, list: readonly ListedStep[], caps: Caps, first = 0): PlannedStep[] {
 	let w = from
 	return list.map((listed, at) => {
