@@ -532,7 +532,7 @@ function checkChange(key: string, entry: StoredEntry, change: Change, ctx: Write
 }
 
 /** Each create leaves its profile's row; each delete, after its purge, leaves no row its profile owns. */
-function checkLifecycle(ctx: WriteContext): Violation[] {
+export function checkLifecycle(ctx: WriteContext): Violation[] {
 	const out: Violation[] = []
 	for (const scope of ctx.contract) {
 		if (scope.kind !== "create" && scope.kind !== "delete") continue
