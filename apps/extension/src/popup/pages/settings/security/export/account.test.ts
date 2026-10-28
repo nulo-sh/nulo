@@ -35,9 +35,12 @@ vi.mock("@/utils/core", () => ({
 		profile: { getPasskeyUnlockParams: passkey.getPasskeyUnlockParams, verifyExportCredential: passkey.verifyExportCredential },
 	},
 }))
+const ceremonyReject = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/usePasskeyCeremony", async () => {
 	const { ref } = await import("vue")
-	return { usePasskeyCeremony: () => ({ request: ref(null), runCeremony: passkey.runCeremony, onResolve: vi.fn(), onReject: vi.fn() }) }
+	return {
+		usePasskeyCeremony: () => ({ request: ref(null), runCeremony: passkey.runCeremony, onResolve: vi.fn(), onReject: ceremonyReject }),
+	}
 })
 const downloadFile = vi.hoisted(() => vi.fn(async (_opts: { data: string; filename: string }) => undefined))
 vi.mock("@/utils", async (importOriginal) => ({
@@ -86,6 +89,7 @@ function mountPage(profileType = "password") {
 			components: { SubPageHeader, Icon },
 			stubs: {
 				FilePasswordSection: {
+					name: "FilePasswordSection",
 					props: ["password", "repeatedPassword", "testid"],
 					emits: ["update:password", "update:repeatedPassword"],
 					template:
@@ -202,6 +206,19 @@ describe("account file export", () => {
 		])
 		expect(exportAccount).not.toHaveBeenCalled()
 		expect(networkReset.getStaleNetwork).toHaveBeenCalledWith("tn")
+	})
+
+	test("a lock the page outlives drops the typed password and the made file: the next file starts at the agreement", async () => {
+		const w = await readyStage()
+		const app = useAppStore()
+		app.isLogined = true
+		expect(w.find('[data-testid="account-file-ready-banner"]').exists()).toBe(true)
+		app.isLogined = false
+		app.isLogined = true
+		await flushPromises()
+		expect(w.find('[data-testid="account-file-ready-banner"]').exists()).toBe(false)
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		expect((w.get('[data-testid="unlock-password-input"]').element as HTMLInputElement).value).toBe("")
 	})
 
 	test("a profile switch drops the previous profile's held rows and its flow, and reads the new profile's", async () => {
@@ -456,6 +473,40 @@ describe("a passkey profile's account file", () => {
 		useAppStore().network = { id: "n2", chainId: 8 } as never
 		await flushPromises()
 		expect(w.find('[data-testid="account-file-protected-banner"]').exists()).toBe(true)
+	})
+
+	test("a lock the page outlives drops the approval and the typed file password: the next file asks its passkey again", async () => {
+		const w = await approved()
+		const app = useAppStore()
+		app.isLogined = true
+		await typeFilePassword(w, "file-pass-1234")
+		expect(save(w).disabled).toBe(false)
+		app.isLogined = false
+		app.isLogined = true
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		await flushPromises()
+		expect(passkey.runCeremony).toHaveBeenCalledTimes(2)
+		expect(w.findComponent({ name: "FilePasswordSection" }).props()).toMatchObject({ password: "", repeatedPassword: "" })
+		expect(save(w).disabled).toBe(true)
+	})
+
+	test("a lock during the passkey lookup opens no prompt, and its reset cancels the page's ceremony", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const w = mountPage("passkey")
+		await flushPromises()
+		const app = useAppStore()
+		app.isLogined = true
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		app.isLogined = false
+		app.isLogined = true
+		answerLookup({ credentialId: "cred", prfSalt: "salt" })
+		await flushPromises()
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
+		expect(ceremonyReject).toHaveBeenCalledTimes(1)
 	})
 
 	test("a profile switch drops the approval: the next file asks its passkey again", async () => {
