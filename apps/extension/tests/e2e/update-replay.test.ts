@@ -15,8 +15,9 @@
  * the bump's own reset does not.
  *
  * The third registers a passkey profile on the release and updates it. Failure mode: the candidate
- * offers that row an unlock, or rewrites it, instead of Set up again; only a real update carries a
- * row the release itself wrote.
+ * rewrites that row, offers a retired one an unlock instead of Set up again, or retires one its
+ * passkey still opens (the release's `passkey` trait says which it is); only a real update carries
+ * a row the release itself wrote.
  *
  * The first case also exports the updated profile's full backup, encrypted, and the fourth registers
  * a passkey profile on the candidate and exports its backup under a file password. Failure mode: a
@@ -31,7 +32,7 @@
  * branch a default install takes. Its second case moves the network and account rows only: a sealed
  * row of another root names its chain inside its envelope, so the reset's purge never meets one.
  *
- * Runtime: estimated 2 min per case per browser; measured 12 to 47 s, with the release cached.
+ * Runtime: estimated 2 min per case per browser; measured 8 to 47 s, with the release cached.
  */
 import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
@@ -45,7 +46,7 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { STORES } from "@/wallet/storage/stores"
-import { BROWSER } from "./fixtures/browser"
+import { BROWSER, extensionUrl, gotoExtensionPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import type { HeldNode } from "./fixtures/egress-guard"
 import { type ExtensionContext, clickByTestId, launchExtension, openPopup, test, waitForHash } from "./fixtures/extension"
@@ -72,7 +73,7 @@ import {
 } from "./fixtures/update/in-place"
 import { expectReleasePreferences, plaintextPreferences } from "./fixtures/update/preferences"
 import { type PinnedBackup, type Recording, readRecording, recordingProblems, writePinnedBackup } from "./fixtures/update/recording"
-import { releaseTraits } from "./fixtures/update/release"
+import { type ReleaseTraits, releaseTraits } from "./fixtures/update/release"
 import { readSealedRelease } from "./fixtures/update/read-release"
 import {
 	firstAccount,
@@ -90,6 +91,7 @@ import { downloadPasskeyBackup, exportBackupFile, openEncryptedBackup } from "./
 import { answerUpdatedTerms } from "./helpers/legal-drivers"
 import { readyToast } from "@/components/stale-network/copy"
 import { answerArrival } from "./helpers/network-arrival"
+import { authSubmitReady } from "./helpers/profile-chaos/ui"
 import { BACKUP_SLICE_REGISTRY } from "@/wallet/services/backup/backup-migration-registry"
 import { backupProblems } from "@/wallet/storage/stored-shapes/backups"
 import {
@@ -623,6 +625,35 @@ async function throughTheReset(
 	expect(await unreadRows(await readLocalStorage(ctx))).toEqual([])
 }
 
+const profileRows = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
+
+async function expectPasskeyOpening(
+	ctx: ExtensionContext,
+	anchor: Page,
+	before: Record<string, unknown>,
+	passkey: ReleaseTraits["passkey"],
+) {
+	if (passkey === "retired") {
+		await anchor.close()
+		const page = await openPopup(ctx)
+		await waitForHash(page, "#/popup/auth", 30_000)
+		await page.waitForSelector('[data-testid="auth-setup-again"]', { visible: true, timeout: 30_000 })
+		expect(await page.$('[data-testid="auth-submit"]')).toBeNull()
+		expect(await shownOverlays(page)).toEqual([])
+		await page.close()
+		return
+	}
+	await gotoExtensionPage(anchor, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
+	await waitForHash(anchor, "#/popup/auth", 30_000)
+	await authSubmitReady(anchor)
+	expect(await anchor.$('[data-testid="auth-setup-again"]')).toBeNull()
+	expect(await shownOverlays(anchor)).toEqual([])
+	await clickByTestId(anchor, "auth-submit")
+	await waitForHash(anchor, "#/popup/general", 60_000)
+	expect(profileRows(await readLocalStorage(ctx))).toEqual(profileRows(before))
+	await anchor.close()
+}
+
 describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 	test("the recorded release storage updates in place, through the reset once Testnet's seed has moved", {
 		timeout: 300_000,
@@ -666,30 +697,27 @@ describe.skipIf(!process.env.NULO_E2E_UPDATE_FROM)("update replay", () => {
 		})
 	})
 
-	test("a passkey profile the release made opens, after the update, on Set up again and nothing else", {
+	test("a passkey profile the release made opens, after the update, on Set up again if retired, else on its passkey", {
 		timeout: 300_000,
 		retry: 0,
 	}, async () => {
+		const pair = builds()
 		await inPlaceUpdate({
-			builds: builds(),
+			builds: pair,
 			populate: async (ctx) => {
-				const page = await openPopup(ctx)
-				await setupPasskeyVirtualAuth(ctx.browser, page)
-				await registerPasskeyProfile(page)
-				await page.close()
-				return await readLocalStorage(ctx)
+				const anchor = await openPopup(ctx)
+				await setupPasskeyVirtualAuth(ctx.browser, anchor)
+				await registerPasskeyProfile(anchor)
+				// Chrome's credential dies with this tab and the update closes every extension page, so the
+				// tab waits off the extension until the candidate runs.
+				await anchor.goto("about:blank")
+				return { anchor, before: await readLocalStorage(ctx) }
 			},
-			verify: async (ctx, before) => {
+			verify: async (ctx, { anchor, before }) => {
 				const after = await readLocalStorage(ctx)
 				expect(await updateProblems(before, after)).toEqual([])
-				const profiles = (stored: Record<string, unknown>) => rowsOf(stored, STORES.profiles.ref.root)
-				expect(profiles(after)).toEqual(profiles(before))
-				const page = await openPopup(ctx)
-				await waitForHash(page, "#/popup/auth", 30_000)
-				await page.waitForSelector('[data-testid="auth-setup-again"]', { visible: true, timeout: 30_000 })
-				expect(await page.$('[data-testid="auth-submit"]')).toBeNull()
-				expect(await shownOverlays(page)).toEqual([])
-				await page.close()
+				expect(profileRows(after)).toEqual(profileRows(before))
+				await expectPasskeyOpening(ctx, anchor, before, releaseTraits(pair.tag).passkey)
 			},
 		})
 	})

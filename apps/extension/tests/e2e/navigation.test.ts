@@ -14,6 +14,7 @@ import {
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 import { pollUntil } from "./fixtures/poll"
+import { bringToFront } from "./fixtures/browser"
 
 test("settings page shows all sections", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
@@ -171,7 +172,7 @@ test("a drag selects the text around a control and none of the control's own but
 }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
-	await page.bringToFront()
+	await bringToFront(page)
 	await page.waitForSelector('[data-testid="balance-amount"]:not([aria-busy])', { visible: true, timeout: 15_000 })
 	const hero = await textOf(page, "balance-amount")
 
@@ -528,7 +529,7 @@ test("History's and Settings' titles sit 10px below the header with 28px under t
 		await seedTransaction(page, scope, { hash: `0x${(0x10 + i).toString(16).repeat(32)}`, amount: "1500000", at: now - i * 1_000 })
 	}
 	await seedUsdQuoteAndReload(page)
-	await page.bringToFront()
+	await bringToFront(page)
 
 	for (const { tab, hash, wrapper } of pages) {
 		await clickNavTab(page, tab)

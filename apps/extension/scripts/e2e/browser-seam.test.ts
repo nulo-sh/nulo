@@ -197,6 +197,25 @@ function directReloads(source: string): number[] {
 	return lines
 }
 
+/**
+ * Puppeteer's page calls the seam's `bringToFront`, `setViewport` and `viewportOf` replace: Firefox 157
+ * and later refuse the first two on an extension page, and `viewport()` misses a resize made around Puppeteer.
+ */
+const DRIVER_PAGE_CALLS = new Set(["bringToFront", "setViewport", "viewport"])
+
+/** 1-based lines of `x.bringToFront(…)`, `x.setViewport(…)` and `x.viewport()` calls made from the test process. */
+function directPageCalls(source: string): number[] {
+	const file = ts.createSourceFile("scan.ts", source, ts.ScriptTarget.Latest, true)
+	const lines: number[] = []
+	const visit = (node: ts.Node): void => {
+		const member = ts.isCallExpression(node) ? calledMember(node) : undefined
+		if (member && DRIVER_PAGE_CALLS.has(member.name)) lines.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1)
+		ts.forEachChild(node, visit)
+	}
+	ts.forEachChild(file, visit)
+	return lines
+}
+
 const BROWSER_FLAGS = new Set(["isFirefox", "BROWSER", "credentialOutlivesPage", "stopsBackgroundUnderOpenPage", "residentCredentialSlots"])
 
 /**
@@ -293,6 +312,7 @@ function scan() {
 	const page: string[] = []
 	const branch: string[] = []
 	const reload: Record<string, number> = {}
+	const pageCall: string[] = []
 	const visited: string[] = []
 	for (const { rel, source } of e2eSources(E2E_ROOT)) {
 		visited.push(rel)
@@ -305,8 +325,9 @@ function scan() {
 		page.push(...found.page.map((n) => `${rel}:${n}`))
 		const reloads = directReloads(source).length
 		if (reloads) reload[rel] = reloads
+		if (!rel.startsWith("fixtures/browser/")) pageCall.push(...directPageCalls(source).map((n) => `${rel}:${n}`))
 	}
-	return { scheme, close, worker, wait, page, branch, reload, visited }
+	return { scheme, close, worker, wait, page, branch, reload, pageCall, visited }
 }
 
 /**
@@ -353,6 +374,10 @@ describe("browser seam", () => {
 
 	test("no new direct page.reload — use the seam's reloadExtensionPage()", () => {
 		expect(found.reload).toEqual(RELOAD_DEBT)
+	})
+
+	test("no direct bringToFront, setViewport or viewport() on a page — use the seam's bringToFront(), setViewport(), viewportOf()", () => {
+		expect(found.pageCall).toEqual([])
 	})
 })
 
@@ -455,6 +480,20 @@ describe("browser seam guard", () => {
 		expect(directReloads(inAsync("await page.evaluate(() => chrome.runtime.reload())"))).toEqual([])
 		expect(directReloads(inAsync("await page.evaluate(() => window.location.reload())"))).toEqual([])
 		expect(directReloads(inAsync('await page.evaluate(() => window["location"].reload())'))).toEqual([])
+	})
+
+	test.each([
+		["bringToFront", "await page.bringToFront()"],
+		["setViewport", "await popup.setViewport({ width: 240, height: 600 })"],
+		["viewport", "const own = page.viewport()"],
+		["setViewport by key", 'await page["setViewport"](null)'],
+		["bringToFront on a chained receiver", "await fresh.popup.bringToFront().catch(() => {})"],
+	])("flags a direct %s on a page", (_, body) => {
+		expect(directPageCalls(inAsync(body))).toEqual([2])
+	})
+
+	test("leaves the seam's own calls alone", () => {
+		expect(directPageCalls(inAsync("await bringToFront(page)\nawait setViewport(page, viewportOf(page))"))).toEqual([])
 	})
 
 	test("leaves the words alone outside a target test", () => {

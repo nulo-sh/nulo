@@ -11,7 +11,7 @@ import {
 	test,
 	waitForHash,
 } from "../fixtures/extension"
-import { reloadExtensionPage } from "../fixtures/browser"
+import { reloadExtensionPage, setViewport } from "../fixtures/browser"
 import { navigateByHash } from "../fixtures/navigation"
 import { PLAYGROUND_TEST_URL, requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { closeReview, openReviewFromStrip, shotSend } from "../fixtures/send-page"
@@ -145,7 +145,7 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 	await requestPgBundle(pg, "transaction-listed", { tokenAddress: aztecConfig!.tokenAddress })
 	const win = await opened
 	try {
-		await win.setViewport(WINDOW)
+		await setViewport(win, WINDOW)
 		await waitCapabilitiesReady(win)
 		await sweepWindow(win, "windows-capabilities", [
 			"a connect request (network)",
@@ -369,7 +369,7 @@ async function openExecute(ctx: Connected, { button, inputs, ready, details }: R
 	await clickByTestId(ctx.playgroundPage, button)
 	const win = await opened
 	try {
-		await win.setViewport(WINDOW)
+		await setViewport(win, WINDOW)
 		await waitForExecuteContent(win, 60_000)
 		if (details) {
 			await win.waitForSelector(sel("execute-op-summary"), { visible: true, timeout: 60_000 })

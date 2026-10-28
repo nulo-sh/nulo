@@ -25,7 +25,7 @@ import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
 import { queuedFeeCap } from "@/wallet/services/execution/queued-fee-cap"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
-import { stopBackground } from "../fixtures/browser"
+import { bringToFront, stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import {
@@ -458,7 +458,7 @@ test.skipIf(!hasConfig)(
 			await startSend(burst.page, b)
 			expect(await waitForEstimate(burst.page)).toBe("ready")
 
-			await playground.bringToFront()
+			await bringToFront(playground)
 			await setPgInput(playground, "tokenAddress", config.tokenAddress)
 			await setPgInput(playground, "recipient", config.minterAddress)
 			await setPgInput(playground, "amount", "1")
@@ -525,7 +525,7 @@ test.skipIf(!hasConfig)(
 			const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "33", destination: to(), fee: "sponsored" }
 			const aHash = await fireIntoHeldWindow(burst, a)
 
-			await playground.bringToFront()
+			await bringToFront(playground)
 			await setPgInput(playground, "tokenAddress", config.tokenAddress)
 			await setPgInput(playground, "recipient", config.minterAddress)
 			await setPgInput(playground, "amount", "1")

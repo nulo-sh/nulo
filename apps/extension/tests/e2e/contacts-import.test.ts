@@ -54,6 +54,7 @@ import {
 } from "./helpers/contacts"
 import { shotSend } from "./fixtures/send-page"
 import { pressEscape, SPACE } from "./helpers/pointer-probes"
+import { bringToFront } from "./fixtures/browser"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
@@ -246,7 +247,7 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		expect(await book(page)).toEqual({ ...seeded, Erin: ADDR.f })
 
 		await pickContactsFile(page, changes)
-		await page.bringToFront()
+		await bringToFront(page)
 		// The first Tab enters the popup at its first row.
 		expect(await tabWalk(page, 1)).toEqual(["import-contact-target Alice"])
 		for (const [key, selected] of [

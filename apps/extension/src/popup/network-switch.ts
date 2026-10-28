@@ -84,9 +84,15 @@ async function loadAccounts(deps: NetworkSwitchDeps, scope: NetworkSwitchScope, 
 	await deps.syncTransactions()
 }
 
-export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): () => Promise<void> {
+export type NetworkSwitchHandler = (() => Promise<void>) & {
+	/** Ends the run in flight: it writes nothing past its next guard, and a failure it meets resolves at debug. */
+	supersede: () => void
+}
+
+/** A live run's failure rejects; a superseded or drifted run's failure resolves, logged at debug. */
+export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwitchHandler {
 	const fence = createRunFence()
-	return async () => {
+	const run = async () => {
 		// begin() BEFORE the not-ready return: bootstrap's transitional
 		// `network = undefined` write must supersede an in-flight run even
 		// though this invocation itself does nothing.
@@ -94,18 +100,24 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): () => Promi
 		const scope = deps.getScope()
 		if (!scope) return
 		const guard = () => isCurrent() && deps.liveScopeMatches(scope)
+		try {
+			deps.syncNetworkStatus()
 
-		deps.syncNetworkStatus()
+			// A quarantined chain's accounts are never loaded: the Header empties and the takeover shows.
+			const stale = await deps.syncStaleNetwork(scope.networkId)
+			if (!guard()) return
+			if (stale) {
+				deps.clearAccounts()
+				if (runsUnattended(stale)) await deps.resetUnattended(stale, guard)
+				return
+			}
 
-		// A quarantined chain's accounts are never loaded: the Header empties and the takeover shows.
-		const stale = await deps.syncStaleNetwork(scope.networkId)
-		if (!guard()) return
-		if (stale) {
-			deps.clearAccounts()
-			if (runsUnattended(stale)) await deps.resetUnattended(stale, guard)
-			return
+			await loadAccounts(deps, scope, guard)
+		} catch (error) {
+			// The worker refuses a read whose session a lock ended, and nothing reads a superseded run.
+			if (guard()) throw error
+			console.debug("network switch superseded", { error })
 		}
-
-		await loadAccounts(deps, scope, guard)
 	}
+	return Object.assign(run, { supersede: () => fence.invalidate() })
 }

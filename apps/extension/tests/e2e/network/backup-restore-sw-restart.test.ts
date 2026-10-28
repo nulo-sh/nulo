@@ -385,6 +385,24 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				const probePre = await readDisconnectProbe(page2)
 				expect(probePre?.disconnectedAt ?? null).toBeNull()
 
+				// Latched on every committed URL from before the kill: Home at any moment after it fails the
+				// scenario, not only at the end. The router writes through `history`, which fires no event.
+				await page2.evaluate(() => {
+					const w = window as unknown as { __sawHome?: boolean }
+					w.__sawHome = false
+					const seen = () => {
+						if (window.location.hash.split("?")[0] === "#/popup/general") w.__sawHome = true
+					}
+					for (const method of ["pushState", "replaceState"] as const) {
+						const write = history[method].bind(history)
+						history[method] = (...args: Parameters<History["pushState"]>) => {
+							write(...args)
+							seen()
+						}
+					}
+					window.addEventListener("hashchange", seen)
+					window.addEventListener("popstate", seen)
+				})
 				console.warn("[sw-crash] B: killing while held at account-state (post-finalize)")
 				await stopBackground(ctx2)
 				await clearRestoreGate(page2)
@@ -404,26 +422,40 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 					.catch(() => null)
 				expect(sawRollback).toBeNull()
 
-				// The import page finishes against the NEW worker (the in-flight
-				// account-state RPC rejects and is RECORDED as skip errors, not
-				// fatal). Accept either terminal shape: the errors screen's
-				// Continue, or a clean finish.
-				const terminal = await withTimeoutMessage(
+				// The restart drops the session finalize opened, so the shell ends the import and lands on
+				// the lock screen. Before the shell marked that session open, the import page stays and
+				// finishes against the NEW worker (the in-flight account-state RPC rejects and is RECORDED
+				// as skip errors, not fatal), and its completion lands on the lock screen. Home over no
+				// session is never a terminal shape.
+				const readTerminal = (extra: boolean) =>
 					page2
 						.waitForFunction(
-							() => {
+							(withImport: boolean) => {
+								const routes: Record<string, string> = { "#/popup/general": "home", "#/popup/auth": "lock" }
+								const route = routes[window.location.hash.split("?")[0]]
+								if (route || !withImport) return route ?? null
 								if (document.querySelector('[data-testid="import-full-backup-continue-btn"]')) return "errors-continue"
-								const s = document.querySelector("[data-restore-stage]")?.getAttribute("data-restore-stage")
-								return s === "finished" ? "finished" : null
+								return document.querySelector('[data-restore-stage="finished"]') ? "finished" : null
 							},
 							{ timeout: 300_000, polling: 250 },
+							extra,
 						)
-						.then((h) => h.jsonValue()),
+						.then((h) => h.jsonValue())
+				const terminal = await withTimeoutMessage(
+					readTerminal(true),
 					async () => `post-finalize crash: the import never reached a terminal state (stage=${await readStage(page2)})`,
 				)
-				if (terminal === "errors-continue") {
-					await clickByTestId(page2, "import-full-backup-continue-btn")
+				let landing = terminal
+				if (terminal === "errors-continue" || terminal === "finished") {
+					if (terminal === "errors-continue") await clickByTestId(page2, "import-full-backup-continue-btn")
+					landing = await withTimeoutMessage(
+						readTerminal(false),
+						async () => "post-finalize crash: the import's completion never landed",
+					)
 				}
+				console.warn(`[sw-crash] B: terminal=${terminal} landing=${landing}`)
+				expect(landing).toBe("lock")
+				expect(await page2.evaluate(() => (window as unknown as { __sawHome?: boolean }).__sawHome)).toBe(false)
 				// The retained profile must never present the torn screen: assert
 				// its testid absent once the route settles.
 				await page2.waitForFunction(() => window.location.hash.length > 2, { timeout: 60_000, polling: 200 }).catch(() => {})

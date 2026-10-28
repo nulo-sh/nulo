@@ -3,6 +3,8 @@ import { E2E_WALLET_CLOCK_VALUES } from "@/e2e/wallet-clocks"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, replaceInputValue, waitForHash, withTimeoutMessage } from "./dom"
 import { navigateByHash } from "./navigation"
+import { pollUntil } from "./poll"
+import { callService } from "./session"
 import { acceptConfirmPopup } from "./widgets"
 
 /** Lock the wallet via the Header lock button, then wait for the lock screen.
@@ -305,21 +307,21 @@ export async function reopenAndRecoverAfterImport(page: Page, password = TEST_PA
 	await page.waitForFunction(() => window.location.hash.includes("/popup/general"), { timeout: 30_000 })
 }
 
-/** Opens the lock screen's profile chooser. The lock screen opens it by itself when it has no
- *  profile to open on, as after the last active one was deleted, so this waits for the screen to
- *  settle on a profile or on the chooser, and presses the profile only in the first case: a press
- *  with the chooser up lands on its dimmer and closes it. */
+/** Opens the lock screen's profile chooser once the screen names a profile the service still lists:
+ *  right after a delete it can name the deleted one until it settles, and a chooser pressed open
+ *  then is closed by the landing that follows. */
 export async function openProfileChooser(page: Page): Promise<void> {
-	const settled = await page.waitForFunction(
-		() => {
-			if (document.querySelector<HTMLElement>('[data-testid="select-profile-new-btn"]')?.checkVisibility()) return "chooser"
-			return document.querySelector('[data-testid="auth-profile"]')?.getAttribute("data-profile-name") ? "profile" : false
+	await pollUntil(
+		async () => {
+			const shown = await page.$eval('[data-testid="auth-profile"]', (el) => el.getAttribute("data-profile-name")).catch(() => null)
+			if (!shown) return false
+			const listed = await callService<{ name: string }[]>(page, "profile", "getProfiles")
+			return listed.some((p) => p.name === shown)
 		},
-		{ timeout: 15_000, polling: 100 },
+		(settled) => settled,
+		{ label: "the lock screen names a listed profile", timeoutMs: 15_000, intervalMs: 100 },
 	)
-	const on = await settled.jsonValue()
-	await settled.dispose()
-	if (on === "profile") await clickByTestId(page, "auth-profile")
+	await clickByTestId(page, "auth-profile")
 	await page.waitForSelector('[data-testid="select-profile-new-btn"]', { visible: true, timeout: 10_000 })
 }
 

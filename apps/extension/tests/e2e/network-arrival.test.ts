@@ -10,7 +10,7 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION } from "@/utils/chain-ids"
-import { interceptRpc, isFirefox, stopBackground } from "./fixtures/browser"
+import { interceptRpc, isFirefox, setViewport, stopBackground } from "./fixtures/browser"
 import { MAINNET_NODE_HOST } from "./fixtures/egress-guard"
 import { waitForSelectedAccount } from "./fixtures/accounts"
 import { clickByTestId, type ExtensionContext, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
@@ -143,7 +143,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
 	test("the arrival over Home, dark and light", { timeout: 300_000, retry: 0 }, async ({ registeredExtension: ctx }) => {
 		const page = await openPopup(ctx)
-		await page.setViewport(CAPTURE_VIEWPORT)
+		await setViewport(page, CAPTURE_VIEWPORT)
 		await waitForHash(page, "#/popup/general", 30_000)
 		await seedNetworkArrival(page)
 		await reloadWithLegalState(page, "current")
@@ -158,7 +158,7 @@ describe.skipIf(!CAPTURES || isFirefox)("network arrival captures", () => {
 	}) => {
 		await onMainnetRollup(ctx, ALPHA_ROLLUP_VERSION, async () => {
 			const page = await openPopup(ctx)
-			await page.setViewport(CAPTURE_VIEWPORT)
+			await setViewport(page, CAPTURE_VIEWPORT)
 			await waitForHash(page, "#/popup/general", 30_000)
 			await page.waitForSelector('[data-testid="network-button"][data-status="invalidchain"]', { visible: true, timeout: 30_000 })
 			await capture(page, "fresh-mainnet-home")

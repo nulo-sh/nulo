@@ -8,17 +8,20 @@ import NetworkArrival from "@/components/network-arrival/NetworkArrival.vue"
 
 /** Utils */
 import { managers, isServiceReady } from "@/utils/core"
+import { legalSheetMayCover } from "@/utils/legal-sheet"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
+import { ownWindowRoute, postAuthRoute, releaseOwnWindow } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
 import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
+import { endOpeningFlows, isOpeningRoute } from "./opening-flow"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
+import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
@@ -118,6 +121,16 @@ void accountRows.connect()
 const intervalId = ref(null)
 /** The Terms sheet's verdict; undefined while it has none. */
 const legalSheetShown = ref(undefined)
+/** Marked only where the sheet may cover the page: anywhere else it is hidden whatever the acceptance. */
+const legalSheetMark = computed(() => {
+	const coverable = legalSheetMayCover({
+		routeName: route.name,
+		routePath: route.path,
+		isAuthRequired: route.meta.isAuthRequired === true,
+	})
+	if (!coverable || legalSheetShown.value === undefined) return undefined
+	return legalSheetShown.value ? "shown" : "hidden"
+})
 
 const settingHandlers = {
 	theme(value) {
@@ -234,11 +247,13 @@ watch(
 	[() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id, () => appStore.networks],
 	() => void networkArrival.refresh(),
 )
+/** No caller awaits a resume, so its failure is reported here. */
+const resumeStale = (profileId) => stale.resume(profileId).catch((error) => logCallFailure("stale-network resume failed", error))
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()
-		if (active && !isDappWindow(route.name)) void stale.resume(active)
+		if (active && !isDappWindow(route.name)) void resumeStale(active)
 	},
 )
 
@@ -282,12 +297,19 @@ watch(
 	() => appStore.network,
 	() => {
 		switchRun = switchNetwork()
+		// Only a completed reset awaits a run, so its failure is reported here.
+		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
-watchLockStart(() => appStore.isLogined, onLocked)
+/** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
+const endScopeOnLock = () => {
+	onLocked()
+	switchNetwork.supersede()
+}
+watchLockStart(() => appStore.isLogined, endScopeOnLock)
 
 /** The popup's locked state, entered from the lock event and from a boot-time session check
  *  that finds no session under an authenticated page (a worker restart). */
@@ -296,7 +318,7 @@ const lockedState = createLockedState({
 		popupStore.closeAll()
 		notificationStore.clear()
 	},
-	onLocked,
+	onLocked: endScopeOnLock,
 	markLocked: () => {
 		supersedeProfileActivations()
 		appStore.isLogined = false
@@ -316,7 +338,6 @@ const lockedState = createLockedState({
 	},
 	readLastActiveId: getLastActiveProfileId,
 	routeName: () => route.name,
-	openChooser: () => popupStore.open("select_profile"),
 })
 
 /** Sequence token for profile events. Handlers await service round-trips, and under load a
@@ -416,14 +437,16 @@ const settleUndecidedBoot = (outcome, candidate, pageEstablished) => {
 }
 
 /** No open session. Which way the shell goes is `decideLockLanding` over the shell's state at
- *  action time; `reconcileLockedBoot` fences the `lock` action against an unlock that landed
- *  through the event path while the lookup was in flight. */
+ *  action time; `reconcileLockedBoot` fences the `lock` and `end-flow` actions against an unlock
+ *  that landed through the event path while the lookup was in flight. */
 const lockLandingState = (result, pageEstablished) => ({
 	hasProfile: !!appStore.profile,
 	onAuthRequiredRoute: !!route.meta.isAuthRequired,
 	isPasskeyRoute: !!route.meta.isPasskeyInteraction,
 	hasCandidate: !!result.candidate,
 	pageEstablished,
+	holdsSession: appStore.isLogined,
+	onOpeningRoute: isOpeningRoute(route.name),
 })
 const lockLandingActions = {
 	selectAndAuth: (result) => {
@@ -434,6 +457,12 @@ const lockLandingActions = {
 	lock: (result) => {
 		appStore.isSessionChecked = true
 		lockedState.enter(result.profiles)
+	},
+	// Kept, an own window's flow would survive the lock screen and its unlock would reopen the form.
+	endFlow: (result) => {
+		endOpeningFlows()
+		void releaseOwnWindow()
+		lockLandingActions.lock(result)
 	},
 	settle: () => {
 		appStore.isSessionChecked = true
@@ -482,7 +511,7 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	if (!isCurrent()) return
 	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
 	// A worker restart drops a running reset without a word; its journal resumes here.
-	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void resumeStale(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */
@@ -609,6 +638,7 @@ onBeforeUnmount(() => {
 		:data-service-ready="isServiceReady ? 'true' : undefined"
 		:data-arrivals-seeded="arrivalsSeeded ? 'true' : undefined"
 	>
+		<div hidden data-testid="legal-sheet-verdict" :data-verdict="legalSheetMark" />
 		<!-- Popup Teleport -->
 		<div id="popup" />
 		<div id="tooltip" />

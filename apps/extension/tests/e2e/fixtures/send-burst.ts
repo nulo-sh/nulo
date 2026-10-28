@@ -9,6 +9,7 @@ import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSend
 import { openSend, readSendView, submitSend, waitForSendGone } from "./send-page"
 import { PollTimeoutError, pollUntil } from "./poll"
 import { readSealedRows } from "./sealed-rows"
+import { bringToFront } from "./browser"
 
 export type Side = "public" | "private"
 
@@ -31,7 +32,7 @@ export type EstimateState = "ready" | "failed" | "queued" | "estimating"
  * background tab never finishes the token sheet's close transition.
  */
 export async function startSend(page: Page, send: BurstSend): Promise<void> {
-	await page.bringToFront()
+	await bringToFront(page)
 	await openSend(page)
 	await selectSendToken(page, send.token)
 	await setActiveSendType(page, "send-from-type", send.from)
@@ -112,7 +113,7 @@ export async function expectEstimateQueued(page: Page, windowMs: number): Promis
 
 /** Confirms the filled send the way the footer offers it and waits for the page to leave. */
 export async function confirmSend(page: Page): Promise<void> {
-	await page.bringToFront()
+	await bringToFront(page)
 	const { action } = await readSendView(page)
 	await submitSend(page, { expect: action ?? "send" })
 	await waitForSendGone(page, 30_000)

@@ -84,6 +84,7 @@ declare global {
   const PROFILE_IMPORTED_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_IMPORTED_ROOT
   const PROFILE_NOT_FIRST_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_NOT_FIRST_ROOT
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
+  const RECOVERY_PHRASE_AUTO_CLOSE_MS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_AUTO_CLOSE_MS
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
@@ -307,7 +308,9 @@ declare global {
   const leaveFor: typeof import('../utils/page-back').leaveFor
   const leavePanelFor: typeof import('../utils/own-window').leavePanelFor
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
+  const legalSheetMayCover: typeof import('../utils/legal-sheet').legalSheetMayCover
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
+  const logCredentialFailure: typeof import('../utils/credential-refusal').logCredentialFailure
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
@@ -953,6 +956,7 @@ declare module 'vue' {
     readonly PROFILE_IMPORTED_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_IMPORTED_ROOT']>
     readonly PROFILE_NOT_FIRST_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_NOT_FIRST_ROOT']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
+    readonly RECOVERY_PHRASE_AUTO_CLOSE_MS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_AUTO_CLOSE_MS']>
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
@@ -1176,7 +1180,9 @@ declare module 'vue' {
     readonly leaveFor: UnwrapRef<typeof import('../utils/page-back')['leaveFor']>
     readonly leavePanelFor: UnwrapRef<typeof import('../utils/own-window')['leavePanelFor']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
+    readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
+    readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>

@@ -74,7 +74,14 @@ function start(store: ReturnType<typeof makeAppStore>, selectedOnEntry?: string)
 	const router = { push: vi.fn(), currentRoute: { value: { name: "popup-profile-new" as string } } }
 	const openToast = vi.fn()
 	const state: { outcome: unknown } = { outcome: "pending" }
-	const deps = { appStore: store as unknown as AppStoreLike, router: router as unknown as RouterLike, openToast, selectedOnEntry }
+	const flow = { live: true }
+	const deps = {
+		appStore: store as unknown as AppStoreLike,
+		router: router as unknown as RouterLike,
+		openToast,
+		selectedOnEntry,
+		flowLive: () => flow.live,
+	}
 	activateCreatedProfile(created, deps).then(
 		() => {
 			state.outcome = "resolved"
@@ -83,7 +90,14 @@ function start(store: ReturnType<typeof makeAppStore>, selectedOnEntry?: string)
 			state.outcome = e
 		},
 	)
-	return { router, openToast, state }
+	return { router, openToast, state, flow }
+}
+
+/** The shell's `end-flow` over this page: the flow ends, then the lock clears the session; the
+ *  landing's navigation is still pending, so the route still names New profile. */
+function endFlow(store: ReturnType<typeof makeAppStore>, flow: { live: boolean }) {
+	flow.live = false
+	store.isLogined = false
 }
 
 /** The unlock-screen hand-off: the created profile selected and recorded as last active. */
@@ -198,6 +212,83 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(openToast).not.toHaveBeenCalled()
 		expect(setLastActiveProfileId).not.toHaveBeenCalled()
 		expect(supersedeProfileActivations).not.toHaveBeenCalled()
+	})
+
+	test("a restart the shell lands during the created profile's tail: no route and no toast, its landing pending", async () => {
+		const accounts = deferred<{ address: string; index: number; visible: boolean }[]>()
+		accountInstance.getAccounts.mockReturnValueOnce(accounts.promise)
+		const store = makeAppStore()
+		const { router, openToast, state, flow } = start(store)
+		bootstrapped(store, "created")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(accountInstance.getAccounts).toHaveBeenCalledTimes(1)
+
+		endFlow(store, flow)
+		accounts.resolve([{ address: "0xACC", index: 0, visible: true }])
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+		expect(supersedeProfileActivations).not.toHaveBeenCalled()
+	})
+
+	test("an ended flow's tail stays ended when the same profile opens again before it resumes", async () => {
+		const pointer = deferred<undefined>()
+		vi.mocked(setLastActiveProfileId).mockReturnValueOnce(pointer.promise)
+		const store = makeAppStore()
+		const { router, openToast, state, flow } = start(store)
+		bootstrapped(store, "created")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(setLastActiveProfileId).toHaveBeenCalledWith("created")
+
+		endFlow(store, flow)
+		bootstrapped(store, "created")
+		router.currentRoute.value.name = "popup-settings"
+		pointer.resolve(undefined)
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(accountInstance.getAccounts).not.toHaveBeenCalled()
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+	})
+
+	test("a hand-off the shell ended during its pointer write records, selects and routes nothing", async () => {
+		const store = makeAppStore({ profile: { id: "locked" } })
+		const { router, openToast, state, flow } = start(store, "locked")
+		vi.mocked(setLastActiveProfileId).mockImplementationOnce(async (_id, options) => {
+			// Another window opens the profile selected before; a restart then ends this flow.
+			bootstrapped(store, "locked")
+			endFlow(store, flow)
+			expect(options?.unless?.()).toBe(true)
+		})
+		store.bootstrapFailure = { profileId: "created", message: "boom" }
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(store.profile).toEqual({ id: "locked" })
+		expect(router.push).not.toHaveBeenCalled()
+		expect(openToast).not.toHaveBeenCalled()
+	})
+
+	test("a hand-off whose navigation settles after the shell ended the flow shows no toast", async () => {
+		// The restart rejects the tail's call while the shell still reads the session open.
+		accountInstance.getAccounts.mockRejectedValueOnce(new Error("disconnected"))
+		const store = makeAppStore()
+		const { router, openToast, state, flow } = start(store)
+		const navigation = deferred<undefined>()
+		router.push.mockReturnValueOnce(navigation.promise)
+		bootstrapped(store, "created")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(router.push).toHaveBeenCalledWith("/popup/general")
+
+		endFlow(store, flow)
+		navigation.resolve(undefined)
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(state.outcome).toBe("resolved")
+		expect(openToast).not.toHaveBeenCalled()
 	})
 
 	test("another profile open when the created one never starts: its home and the toast, nothing recorded", async () => {

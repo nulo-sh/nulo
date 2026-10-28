@@ -1,6 +1,16 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
+import {
+	extensionUrl,
+	gotoExtensionPage,
+	isFirefox,
+	newPage,
+	openScratchPage,
+	prepareKeys,
+	setViewport,
+	viewportOf,
+	waitForTarget,
+} from "./fixtures/browser"
 import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
 import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
@@ -68,8 +78,8 @@ describe("onboarding tab", () => {
 	}) => {
 		const page = await openOnboarding(extension)
 		// Short enough that the create step scrolls, so a step that kept its offset would show it.
-		const viewport = page.viewport()
-		await page.setViewport({ width: 1280, height: 480 })
+		const viewport = viewportOf(page)
+		await setViewport(page, { width: 1280, height: 480 })
 
 		// Click create on welcome
 		await clickByTestId(page, "onboarding-welcome-create")
@@ -92,7 +102,7 @@ describe("onboarding tab", () => {
 		// A password wallet sees its words before Ready, from the top of the step.
 		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
 		expect(await page.evaluate(() => document.scrollingElement?.scrollTop)).toBe(0)
-		if (viewport) await page.setViewport(viewport)
+		await setViewport(page, viewport)
 		expect(await readProfileNames(page)).toEqual(["Main"])
 		const words = await readRecoveryWords(page, "onboarding-phrase")
 		expect(words).toHaveLength(24)

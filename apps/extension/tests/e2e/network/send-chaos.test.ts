@@ -26,6 +26,7 @@ import {
 	waitForTransfersTerminal,
 	waitForTxsMined,
 } from "../fixtures/send-burst"
+import { bringToFront } from "../fixtures/browser"
 
 const enabled = aztecConfig !== undefined && process.env.NULO_E2E_CHAOS === "1"
 /** Read at load, so a value that is not a seed fails the file before the burst fixture funds anything. */
@@ -71,7 +72,7 @@ function plan(seed: number, burst: Burst): Action[] {
 /** The playground's default sendTx, approved and left to run; its result is collected at the end. */
 async function fireDappSend(burst: Burst, playground: Page): Promise<void> {
 	const config = aztecConfig as AztecTestConfig
-	await playground.bringToFront()
+	await bringToFront(playground)
 	await setPgInput(playground, "tokenAddress", config.tokenAddress)
 	await setPgInput(playground, "recipient", config.minterAddress)
 	await setPgInput(playground, "amount", "1")

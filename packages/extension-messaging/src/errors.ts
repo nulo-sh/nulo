@@ -536,13 +536,13 @@ export class RestoreTornError extends WalletError {
  * on this device. Thrown by `importMnemonic` / `restore` unless the caller
  * passes `allowDuplicate: true` — the UI catches this, shows the warn-and-confirm dialog, and
  * retries with the override (duplicates are a warned choice, never a hard block — owner policy).
- * `details.existingProfileName` names the colliding profile for the dialog copy; the error NEVER
+ * `details.existingProfileNames` names every colliding profile for the dialog copy; the error NEVER
  * carries key material.
  */
 export class DuplicateWalletError extends WalletError {
 	public static readonly CODE = "DUPLICATE_WALLET"
 
-	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileName?: string }) {
+	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileNames?: string[] }) {
 		super(DuplicateWalletError.CODE, message, details, "DuplicateWalletError")
 	}
 }
@@ -588,6 +588,30 @@ export class StaleUnlockCredentialError extends WalletError {
 
 	public constructor(message: string = StaleUnlockCredentialError.MESSAGE, details?: unknown) {
 		super(StaleUnlockCredentialError.CODE, message, details, "StaleUnlockCredentialError")
+	}
+}
+
+/**
+ * A passkey answer opened no slot of the profile it was asked for: another passkey, or a slot
+ * changed in storage. The passkey's refusal, which no screen may read as a wrong password.
+ */
+export class PasskeyNotOpenedError extends WalletError {
+	public static readonly CODE = "PASSKEY_NOT_OPENED"
+	public static readonly MESSAGE = "Passkey did not open this profile"
+
+	public constructor(message: string = PasskeyNotOpenedError.MESSAGE, details?: unknown) {
+		super(PasskeyNotOpenedError.CODE, message, details, "PasskeyNotOpenedError")
+	}
+}
+
+/** A change of unlock method asked a password profile for a new password, which only a password
+ *  change sets. Nothing was written. */
+export class SameUnlockMethodError extends WalletError {
+	public static readonly CODE = "SAME_UNLOCK_METHOD"
+	public static readonly MESSAGE = "A password profile changes its password, not its unlock method"
+
+	public constructor(message: string = SameUnlockMethodError.MESSAGE, details?: unknown) {
+		super(SameUnlockMethodError.CODE, message, details, "SameUnlockMethodError")
 	}
 }
 
@@ -642,6 +666,8 @@ const REBUILT_AS = [
 	RetiredProfileError,
 	UnlockMethodChangedError,
 	StaleUnlockCredentialError,
+	PasskeyNotOpenedError,
+	SameUnlockMethodError,
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,

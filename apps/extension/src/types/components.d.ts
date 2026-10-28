@@ -32,6 +32,7 @@ declare module 'vue' {
     DappIdentityBlock: typeof import('./../components/composite/DappIdentityBlock.vue')['default']
     DappStatusStrip: typeof import('./../components/composite/DappStatusStrip.vue')['default']
     DetailsTable: typeof import('./../components/composite/capabilities/DetailsTable.vue')['default']
+    DisableAutoCloseLink: typeof import('./../components/composite/DisableAutoCloseLink.vue')['default']
     DottedTerm: typeof import('./../components/composite/DottedTerm.vue')['default']
     DropdownDivider: typeof import('./../components/ui/Dropdown/DropdownDivider.vue')['default']
     DropdownItem: typeof import('./../components/ui/Dropdown/DropdownItem.vue')['default']

@@ -19,6 +19,10 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
 		chrome: "b226ac904484577a30a0dee7c5ef80b6a48e107148d81c959c488bc2659d00a9",
 		firefox: "66d380bfe2ba002558343324f5dce4c3521b2e75fa2ce58f84c0f38d972dd8d1",
 	},
+	"v1.1.0": {
+		chrome: "bcc66cb0960359a8a70fe7693086faff82af4718cf2429d7fb0ac79ffc261117",
+		firefox: "388fadfb24c86fae309605a64077924a5a384574429fa2a2fa7aa35e37e1a762",
+	},
 }
 
 /**
@@ -27,13 +31,19 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
  * the release keeps its profile's rows, its account selection and its preference maps as plaintext
  * a test can parse, or `sealed` behind the worker, readable only through its services once
  * unlocked. `connect`: whether its emoji check replaces the connect window's page or opens a window
- * of its own.
+ * of its own. `passkey`: whether a passkey profile it made is one the candidate retires, offering
+ * only Set up again, or one its passkey still unlocks, as the row its `newPasskeyRow` writes decides.
  */
-export type ReleaseTraits = { storage: "plaintext" | "sealed"; connect: "replaces-page" | "own-window" }
+export type ReleaseTraits = {
+	storage: "plaintext" | "sealed"
+	connect: "replaces-page" | "own-window"
+	passkey: "retired" | "unlocks"
+}
 
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
-	"v0.31.0": { storage: "plaintext", connect: "replaces-page" },
-	"v1.0.0": { storage: "sealed", connect: "own-window" },
+	"v0.31.0": { storage: "plaintext", connect: "replaces-page", passkey: "retired" },
+	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired" },
+	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks" },
 }
 
 /** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */

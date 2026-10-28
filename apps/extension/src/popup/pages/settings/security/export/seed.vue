@@ -31,11 +31,12 @@ const { openToast } = useToast()
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
-import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
+import { RECOVERY_PHRASE_AUTO_CLOSE_MS, RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
+import { watchLockStart } from "@/popup/locked-state"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -43,7 +44,6 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
-const AUTO_CLOSE_MS = 60_000 * 5
 const BACKUP_MENU = "/popup/settings/security/export"
 
 const isStarted = ref(false)
@@ -64,10 +64,25 @@ const handleClose = async () => {
 	leaveFor(router, BACKUP_MENU)
 }
 
-const countdown = useSecretCountdown({ autoCloseMs: AUTO_CLOSE_MS, onTimeout: handleClose })
+const countdown = useSecretCountdown({ autoCloseMs: RECOVERY_PHRASE_AUTO_CLOSE_MS, onTimeout: handleClose })
 
 const handleStart = () => {
 	isStarted.value = true
+}
+
+/** A lock or a profile switch can leave this page mounted: what was typed or revealed belongs to the
+ *  session and profile that ended. A reveal still in flight is discarded, its passkey prompt closed,
+ *  and the next press is not held behind it. */
+const resetReveal = () => {
+	revealFence.invalidate()
+	isRevealing = false
+	onCeremonyReject(new Error("The recovery phrase page started over"))
+	countdown.clear()
+	words.value = []
+	password.value = null
+	isWrongPassword.value = false
+	isUnlocked.value = false
+	isStarted.value = false
 }
 
 const showWords = (profileId, mnemonic) => {
@@ -83,7 +98,7 @@ const handleUnlock = async () => {
 
 	isRevealing = true
 	const isCurrent = revealFence.begin()
-	// The words belong to the profile asked for, even if another becomes active during the read.
+	// The read asks for the profile the reveal began under; a switch during it discards the answer.
 	const profileId = appStore.profile.id
 	try {
 		const mnemonic = await managers.profile.exportMnemonic(profileId, password.value)
@@ -91,7 +106,7 @@ const handleUnlock = async () => {
 	} catch (error) {
 		if (isCurrent()) isWrongPassword.value = true
 	} finally {
-		isRevealing = false
+		if (isCurrent()) isRevealing = false
 	}
 }
 
@@ -105,14 +120,16 @@ const handlePasskeyReveal = async () => {
 	const { id: profileId, name } = appStore.profile
 	try {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
+		if (!isCurrent()) return
 		const credentialData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal", profileName: name })
+		if (!isCurrent()) return
 		const mnemonic = await managers.profile.exportMnemonic(profileId, undefined, credentialData)
 		if (isCurrent()) showWords(profileId, mnemonic)
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
 		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.revealFailed) })
 	} finally {
-		isRevealing = false
+		if (isCurrent()) isRevealing = false
 	}
 }
 
@@ -125,6 +142,9 @@ const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e) || isPasskeyProfile.value) return
 	handleUnlock()
 }
+
+watch(() => appStore.profile?.id, resetReveal)
+watchLockStart(() => appStore.isLogined, resetReveal)
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // reveal moves to its own window first. A failed move keeps the page where it is.
@@ -232,7 +252,7 @@ onBeforeUnmount(() => {
 				v-else
 				:countdownLabel="countdown.countdownLabel.value"
 				:autoCloseDisabled="countdown.isAutoCloseDisabled.value"
-				:progressDurationMs="AUTO_CLOSE_MS"
+				:progressDurationMs="RECOVERY_PHRASE_AUTO_CLOSE_MS"
 				@close="handleClose"
 				@disableAutoClose="countdown.disable"
 			/>

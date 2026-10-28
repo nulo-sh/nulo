@@ -2,7 +2,7 @@ import type { Browser } from "puppeteer"
 import { describe, expect } from "vitest"
 import { SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { MIGRATION_FIXTURE_HOLD_KEY } from "@/e2e/migration-fixture"
-import { extensionUrl, gotoExtensionPage, isFirefox, newPage, stopBackground } from "./fixtures/browser"
+import { extensionUrl, gotoExtensionPage, isFirefox, newPage, setViewport, stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, recordPageErrors, replaceInputValue, waitForServiceReady } from "./fixtures/extension"
 import {
@@ -281,7 +281,7 @@ describe("background death and cold respawn", () => {
 			// `openPopup` would wait for the Ready the hold withholds.
 			const raw = await newPage(ctx.browser)
 			recordPageErrors(ctx, raw)
-			await raw.setViewport({ width: 360, height: 600 })
+			await setViewport(raw, { width: 360, height: 600 })
 			await gotoExtensionPage(raw, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
 			await raw.waitForSelector('[data-testid="migration-updating"]', { timeout: 10_000 })
 			await waitForHash(raw, "#/popup/auth", 10_000)

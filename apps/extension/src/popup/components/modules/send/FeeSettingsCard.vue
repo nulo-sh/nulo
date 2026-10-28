@@ -378,6 +378,7 @@ onBeforeUnmount(() => {
 		data-testid="fee-settings-card"
 		:data-origin="originPrivacy"
 		:data-sponsor-funding="sponsorFunding"
+		:data-read-pending="readPending || undefined"
 	>
 		<!-- A method the dApp asked for: shown, never a choice. -->
 		<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
