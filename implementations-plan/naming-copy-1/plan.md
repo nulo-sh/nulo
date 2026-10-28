@@ -9,10 +9,19 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 0a659726c
 trunk: dev
-status: arc 1 green, fix loop converged; PR next
+status: completed (delivered in #1332, awaiting merge)
 issues: "#1328"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-28. **Status:** completed; delivered in #1332, which closes #1328 when it merges.
+- **Shipped:** `uncheckedCallsLine` in `call-surface.ts`; the summary's one caption line under the numbered calls, in the owner's four forms, testid `execute-op-summary-unchecked`; the per-row ". Named by the app." suffix removed; its unit table and component cases, each positive one red on the base and each absence check red on a mutant; the multicall spec's shot now waits for the decodes and asserts the line; light and dark captures in `screenshots/`.
+- **Dispositions:** the base capture pair is not committed (D8: it pictures pending rows, not the old suffix). Opus's "rerun the capture until decoded" rejected (D6). One unrelated red on the final head, `profile-chaos-model.test.ts` timing out near its 5 s default under host load, is #1327's, which this plan neither owns nor touches.
+- **Lessons:** the capture race is the existing `lessons.md` line "match screenshot state exactly"; its technique went to the `e2e-testing` skill's `NULO_E2E_SHOT_DIR` row.
+- **Known limits:** none. **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are a record, not instructions.
 
 ## Goal
 
@@ -97,7 +106,7 @@ post_implementation_hardening: not scheduled
 
 ## Delivery
 
-One arc, one PR, no stack: branch `worktree-naming-copy-1` → `dev`. Title: `feat(execute): one line under the calls says which ones Nulo cannot check` (75 characters). Body: what and why, the UI impact line with the sign-off quote, the red and green runs, the gates, the spec's case times per browser before and after, one run each, with what each before spans (D6), the captures before and after linked by permalink at the arc's commit, `Closes #1328`. Opened without labels after the Codex loop converges. The close-out is the PR's final commits. No parallel lanes.
+One arc, one PR, no stack: branch `worktree-naming-copy-1` → `dev`. Title: `feat(execute): one line under the calls says which ones nulo cannot check` (73 characters). Body: what and why, the UI impact line with the sign-off quote, the red and green runs, the gates, the spec's case times per browser before and after, one run each, with what each before spans (D6), the captures before and after linked by permalink at the arc's commit, `Closes #1328`. Opened without labels after the Codex loop converges. The close-out is the PR's final commits. No parallel lanes.
 
 ## Post-implementation
 
