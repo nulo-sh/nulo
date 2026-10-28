@@ -1,7 +1,7 @@
 ---
 plan: firefox-pin-1
 tier: light
-status: approved
+status: completed; delivered as one PR, which carries this close-out
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,10 +14,28 @@ issues: "#1111"
 budget: two Explore recon agents (sonnet); one Codex audit (gpt-6.1-sol, high) with its resume; one Opus Plan leg
 post_implementation_hardening: not scheduled
 ---
+## Outcome
+
+- **Date:** 2026-10-28.
+- **Status:** delivered as one PR against `dev`, the one that carries this close-out. Its merge closes the plan.
+- **Shipped:** the e2e suite's Firefox pin moves to `stable_158.0`, Puppeteer 25.14.0's own (closes #1111). Four Firefox 158 differences are absorbed:
+  - the file pick, over classic Send Keys (D1);
+  - a page's request answering, as `BrowserDriver.answerRequests` with its two-page contract test (D2);
+  - the manifest's `sandbox: null` (D3);
+  - the fractional scroll end, as an exact probe of the browser's own end (D7; the orchestrator approved it as a plan amendment on 2026-10-28).
+  The seam ban gains two calls (D4) and FIREFOX.md records each difference. Gates: the full Firefox smoke three times at retry 0 on 158; Chrome smoke; the Firefox network suite on 158 ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dispositions:**
+  - The Chrome double-arm guard was rejected: no caller arms twice, and Puppeteer already refuses a request handled twice.
+  - The conditional capability swap for #1222 never triggered: `dev` carried no pref-based dismissal.
+  - The plan's claim that an evaluated click opens no picker was false and is corrected. Behaviour is unchanged.
+- **Known limits:** #1329 (D6).
+- **Open items:** #1222, which the PR references with what remains: a Firefox pick that answers the picker itself, so dismissal (on 158, `unhandledPromptBehavior: { file: "dismiss" }`) can ship.
+- **Lessons:** none promoted. `lessons.md` is at 8191 of its 8192 B budget and nothing in it is superseded. The four differences live where browser differences belong, in `apps/extension/tests/e2e/FIREFOX.md`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # firefox-pin-1: the e2e suite on Puppeteer's Firefox 158
 
-One arc, one PR. The suite's Firefox pin moves from `stable_153.0.4` to `stable_158.0`, the revision Puppeteer 25.14.0 pins, once the driver absorbs the three refusals #1111's 2026-10-28 comment lists. Test files, fixtures, e2e scripts and e2e docs only; no product file, no workflow. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: none ([OWNER-ASKS.md](OWNER-ASKS.md)). `E` = `apps/extension/tests/e2e`, `B` = `E/fixtures/browser`.
+One arc, one PR. The suite's Firefox pin moves from `stable_153.0.4` to `stable_158.0`, the revision Puppeteer 25.14.0 pins, once the driver absorbs the three refusals #1111's 2026-10-28 comment lists. Test files, fixtures, e2e scripts and e2e docs only; no product file, no workflow. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: one, D7, answered by the orchestrator ([OWNER-ASKS.md](OWNER-ASKS.md)). `E` = `apps/extension/tests/e2e`, `B` = `E/fixtures/browser`.
 
 ## What held
 
