@@ -104,6 +104,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 - **Arc 1192, round 2** (Codex resume over `6ca25aa57..212584dc1`): `clean`.
 - **Arc 1208, round 1** (Codex over `f5ae44a44..b931e502e`): `clean`. Opus diff review, same round: one finding, accepted: the two-name test fed names that code-unit order sorts the same way as `stringCompare`, so it could not prove the chooser's collation; the fixture's case now differs. Noted, not taken: no test proves a reserved row is left out of the names, a gap older than this arc.
 - **Arc 1208, round 2** (Codex resume over `b931e502e..6ee1a67d7`): `clean`.
+- **Arc 1207, round 1** (Codex over `44d1f1e36..c2c51634b`): two findings. Accepted: the focus watcher sat among the handlers; moved after them. Rejected: delete the template's `Steps 4-6` marker, since every stage of the template carries one. Opus diff review, same round: three. Accepted: the protected stage's Download did not refuse a repeat Enter, as Full Backup's does (a failed download re-enables it); added, with a test. The watcher placement (already fixed). Rejected on proportion: clearing the sealed payload once downloaded (page-scoped, cleared at unmount and every reset).
+- **Arc 1207, round 2** (Codex resume over `c2c51634b..5b5c07bc1`): `clean`.
 
 ## Seeds (draft; run none until the orchestrator spawns an arc)
 
