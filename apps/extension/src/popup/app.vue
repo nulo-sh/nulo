@@ -11,10 +11,11 @@ import { managers, isServiceReady } from "@/utils/core"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { pointToolbarAtSidebar } from "@/utils/browser-surface"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
+import { ownWindowRoute, postAuthRoute, releaseOwnWindow } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
 import { resolveBootSession } from "./boot-session"
 import { decideLockLanding, decideUnreachableLanding, isEstablishedAtDecision } from "./lock-landing"
+import { endOpeningFlows, isOpeningRoute } from "./opening-flow"
 import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
@@ -415,14 +416,16 @@ const settleUndecidedBoot = (outcome, candidate, pageEstablished) => {
 }
 
 /** No open session. Which way the shell goes is `decideLockLanding` over the shell's state at
- *  action time; `reconcileLockedBoot` fences the `lock` action against an unlock that landed
- *  through the event path while the lookup was in flight. */
+ *  action time; `reconcileLockedBoot` fences the `lock` and `end-flow` actions against an unlock
+ *  that landed through the event path while the lookup was in flight. */
 const lockLandingState = (result, pageEstablished) => ({
 	hasProfile: !!appStore.profile,
 	onAuthRequiredRoute: !!route.meta.isAuthRequired,
 	isPasskeyRoute: !!route.meta.isPasskeyInteraction,
 	hasCandidate: !!result.candidate,
 	pageEstablished,
+	holdsSession: appStore.isLogined,
+	onOpeningRoute: isOpeningRoute(route.name),
 })
 const lockLandingActions = {
 	selectAndAuth: (result) => {
@@ -433,6 +436,12 @@ const lockLandingActions = {
 	lock: (result) => {
 		appStore.isSessionChecked = true
 		lockedState.enter(result.profiles)
+	},
+	// Kept, an own window's flow would survive the lock screen and its unlock would reopen the form.
+	endFlow: (result) => {
+		endOpeningFlows()
+		void releaseOwnWindow()
+		lockLandingActions.lock(result)
 	},
 	settle: () => {
 		appStore.isSessionChecked = true

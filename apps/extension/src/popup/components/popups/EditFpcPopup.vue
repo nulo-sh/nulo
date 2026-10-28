@@ -123,14 +123,17 @@ const handleUpdateFpc = async () => {
 
 	isFpcUpdateInProgress.value = true
 	processingError.value.show = false
+	// The name as the person left it at the press: a rename from another window during the address
+	// check updates the row this compares against, and must not read as this save's rename.
+	const rename = nameChanged.value ? nameTerm.value : undefined
 	try {
 		// Address change first. It goes to PXE for validation; if it
 		// rejects, we abort before persisting any name change.
 		if (addressChanged.value) {
 			await fpcService.updateFpcAddress(cacheStore.fpcToEditIdx, addressTerm.value)
 		}
-		if (nameChanged.value) {
-			await fpcService.updateFpc(cacheStore.fpcToEditIdx, nameTerm.value)
+		if (rename !== undefined) {
+			await fpcService.updateFpc(cacheStore.fpcToEditIdx, rename)
 		}
 		emit("onClose")
 		openToast({ kind: "success", label: "FPC is updated" })

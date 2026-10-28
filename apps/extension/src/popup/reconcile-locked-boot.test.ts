@@ -18,6 +18,7 @@ function shell(opts: { decide?: () => LockLandingAction; current?: () => boolean
 		decide: opts.decide ?? (() => "lock"),
 		act: {
 			lock: () => state.calls.push("lock"),
+			endFlow: () => state.calls.push("end-flow"),
 			selectAndAuth: () => state.calls.push("select-and-auth"),
 			settle: () => state.calls.push("settle"),
 		},
@@ -71,6 +72,7 @@ describe("reconcileLockedBoot", () => {
 			decide: () => "lock",
 			act: {
 				lock: () => state.calls.push("lock"),
+				endFlow: () => state.calls.push("end-flow"),
 				selectAndAuth: () => state.calls.push("s"),
 				settle: () => state.calls.push("settle"),
 			},
@@ -118,6 +120,19 @@ describe("reconcileLockedBoot", () => {
 		c.lookup.resolve(locked)
 		await c.run
 		expect(c.state.calls).toEqual([])
+
+		const d = shell({ decide: () => "end-flow" })
+		d.lookup.resolve(locked)
+		await d.run
+		expect(d.state.calls).toEqual(["end-flow"])
+	})
+
+	test("an unlock event in flight fences the end of a flow as it fences a lock", async () => {
+		const { state, lookup, run } = shell({ decide: () => "end-flow" })
+		state.eventSeq += 1
+		lookup.resolve(locked)
+		expect(await run).toEqual({ kind: "event-superseded" })
+		expect(state.calls).toEqual([])
 	})
 
 	test("a non-locked result passes through untouched", async () => {
