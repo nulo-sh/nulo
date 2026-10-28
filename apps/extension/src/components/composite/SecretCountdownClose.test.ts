@@ -1,6 +1,8 @@
 import { Button as ButtonBase } from "@nulo/design"
-import { describe, expect, test } from "vitest"
-import { mount } from "@vue/test-utils"
+import { afterEach, describe, expect, test } from "vitest"
+import { mount, type VueWrapper } from "@vue/test-utils"
+import { nextTick } from "vue"
+import { pressOn } from "../../../tests/helpers/press-key"
 import Button from "@/components/ui/Button.vue"
 import SecretCountdownClose from "./SecretCountdownClose.vue"
 
@@ -13,6 +15,26 @@ const factory = (props: Record<string, unknown> = {}) =>
 		props: { progressDurationMs: 120_000, ...props },
 		global: { stubs: STUBS },
 	})
+
+const attached: VueWrapper[] = []
+afterEach(() => {
+	for (const w of attached.splice(0)) w.unmount()
+})
+
+/** Attached, so focus moves as in a page, with the page's answer to the link: auto-close turns off. */
+function mountOnPage() {
+	const w: VueWrapper = mount(SecretCountdownClose, {
+		props: {
+			progressDurationMs: 120_000,
+			countdownLabel: "1:30",
+			onDisableAutoClose: () => w.setProps({ autoCloseDisabled: true }),
+		},
+		global: { stubs: STUBS },
+		attachTo: document.body,
+	})
+	attached.push(w)
+	return w
+}
 
 describe("composite/SecretCountdownClose", () => {
 	test("renders the Close button with the canonical testid", () => {
@@ -83,5 +105,23 @@ describe("composite/SecretCountdownClose", () => {
 		expect(close.find("button > div").exists()).toBe(true)
 		const bare = mount(Button, { props: { variant: "cta_outline" } })
 		expect([...close.classes()].sort()).toEqual([...bare.classes()].sort())
+	})
+
+	test("a keyboard press of Disable auto-close hands focus to Close", async () => {
+		const w = mountOnPage()
+		pressOn(w.get('[data-testid="disable-auto-close-btn"]').element as HTMLElement, "Enter")
+		await nextTick()
+		expect(w.find('[data-testid="disable-auto-close-btn"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="close-btn"]').element)
+	})
+
+	test("the Enter that pressed the link, repeating on Close, closes nothing; a fresh Enter closes", async () => {
+		const w = mountOnPage()
+		pressOn(w.get('[data-testid="disable-auto-close-btn"]').element as HTMLElement, "Enter")
+		await nextTick()
+		expect(pressOn(document.activeElement as HTMLElement, "Enter", { repeat: true })).toEqual([false])
+		expect(w.emitted("close")).toBeUndefined()
+		pressOn(w.get('[data-testid="close-btn"]').element as HTMLElement, "Enter")
+		expect(w.emitted("close")).toHaveLength(1)
 	})
 })
