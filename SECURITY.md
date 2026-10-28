@@ -630,6 +630,65 @@ development requires bun ≥1.4 (`bun run --parallel` scripts), and
 **Lockfile is text (`bun.lock`)** — reviewable in PR diffs, no binary
 opacity.
 
+**CVE-on-Friday runbook.** When an advisory drops for a package newer than
+the 7-day gate window:
+1. Identify the patched version from the advisory.
+2. Confirm `bun audit` flags it.
+3. Open a hand PR:
+   - Edit `bunfig.toml`: temporarily add the package name to
+     `minimumReleaseAgeExcludes`.
+   - Run `bun update <pkg>` (or `bun add <pkg>@<version>`).
+   - Run `bun run audit:vue` + `bun run test:e2e`.
+   - Commit the lockfile + bunfig change.
+4. **Remove the exclude in the same PR, once `bun.lock` holds the patched
+   version.** The gate applies whenever `bun install` RESOLVES a version.
+   A frozen install never resolves, so CI and deploys need no exclude:
+   prove it before committing, with the exclude deleted,
+   `bun install --frozen-lockfile --force` must still succeed. An exclude
+   left in place "until the window passes" exempts every FUTURE version of
+   that name for days, which is the exposure the gate exists to prevent.
+
+   **What removing it costs, until the version is 7 days old:** editing the
+   `package.json` of a workspace re-resolves that workspace's dependency
+   tree, and a young version in it is gated again even though it is locked
+   — the install fails with `was published within minimum release age`
+   (verified on Bun 1.4.2 with a one-line edit to
+   `apps/extension/package.json` while a dependency was three days old). Workspaces that do not reach
+   the young version are unaffected, and so is an install that changes
+   nothing. So for that week, a dependency change in an affected workspace
+   either waits, or is resolved with the exclude added **locally and not
+   committed**: the lockfile it writes is the same, and the frozen install
+   proves it. Commit an exclude across PRs only when a later PR of the same
+   series must re-resolve the young version; date it, and remove it there.
+5. PR description must cite the CVE and link the advisory.
+
+**Bun bug oven-sh/bun#25305 — closed on Bun 1.4.** On 1.3.x, `bun update --latest`
+did not apply `minimumReleaseAge` to transitive deps (workaround was
+deleting `bun.lock` first). Verified fixed on 1.4.0 with a
+positive-control mock-registry probe: when a gated update actually
+re-resolves, direct AND transitive candidates are both held to the gate
+(matrix: `implementations-plan/archive/bun-1.4-bump/plan.md#age-gate-probe`). One
+nuance remains by design: update never re-gates versions already in
+`bun.lock` — evicting an already-locked too-young version takes a
+deliberate lockfile regeneration.
+
+**`bun pm scan`** is a plugin system for third-party scanners (Socket,
+Snyk, etc.), not a built-in tool. Not configured today; revisit if/when
+we pick a scanner.
+
+**`@aztec-labs/*` and `@aztec-foundation/*` outside this policy.** Exact-pinned, bumped manually with
+the class-id + address invariant fixtures (`CLAUDE.md`, Account-address
+freeze).
+
+**Bun-version sync trap.** Bumping `package.json#packageManager` (the
+Bun version) does NOT touch the versions the workflows pin themselves:
+`.github/actions/setup-bun/action.yml` and the `bun-version:` literals
+in a few jobs. CI still passes, because those jobs run their own pinned
+Bun, NOT the new `packageManager` version. The discrepancy is silent:
+there's no CI step that verifies the pinned values match. Move every pin
+site together on a Bun bump (the list is in `CLAUDE.md`, Dependency
+policy) until a consistency-check script lands as a CI step.
+
 ## GitHub Actions
 
 Every third-party action is pinned to a **full commit SHA**, with its release
@@ -835,62 +894,3 @@ back, and the third-party notices build refuses AGPL outright). The
 build/test tool and never distributes: check its own release for the
 licence that applies to it before shipping it anywhere. This is not legal
 advice.
-
-**CVE-on-Friday runbook.** When an advisory drops for a package newer than
-the 7-day gate window:
-1. Identify the patched version from the advisory.
-2. Confirm `bun audit` flags it.
-3. Open a hand PR:
-   - Edit `bunfig.toml`: temporarily add the package name to
-     `minimumReleaseAgeExcludes`.
-   - Run `bun update <pkg>` (or `bun add <pkg>@<version>`).
-   - Run `bun run audit:vue` + `bun run test:e2e`.
-   - Commit the lockfile + bunfig change.
-4. **Remove the exclude in the same PR, once `bun.lock` holds the patched
-   version.** The gate applies whenever `bun install` RESOLVES a version.
-   A frozen install never resolves, so CI and deploys need no exclude:
-   prove it before committing, with the exclude deleted,
-   `bun install --frozen-lockfile --force` must still succeed. An exclude
-   left in place "until the window passes" exempts every FUTURE version of
-   that name for days, which is the exposure the gate exists to prevent.
-
-   **What removing it costs, until the version is 7 days old:** editing the
-   `package.json` of a workspace re-resolves that workspace's dependency
-   tree, and a young version in it is gated again even though it is locked
-   — the install fails with `was published within minimum release age`
-   (verified on Bun 1.4.2 with a one-line edit to
-   `apps/extension/package.json` while a dependency was three days old). Workspaces that do not reach
-   the young version are unaffected, and so is an install that changes
-   nothing. So for that week, a dependency change in an affected workspace
-   either waits, or is resolved with the exclude added **locally and not
-   committed**: the lockfile it writes is the same, and the frozen install
-   proves it. Commit an exclude across PRs only when a later PR of the same
-   series must re-resolve the young version; date it, and remove it there.
-5. PR description must cite the CVE and link the advisory.
-
-**Bun bug oven-sh/bun#25305 — closed on Bun 1.4.** On 1.3.x, `bun update --latest`
-did not apply `minimumReleaseAge` to transitive deps (workaround was
-deleting `bun.lock` first). Verified fixed on 1.4.0 with a
-positive-control mock-registry probe: when a gated update actually
-re-resolves, direct AND transitive candidates are both held to the gate
-(matrix: `implementations-plan/archive/bun-1.4-bump/plan.md#age-gate-probe`). One
-nuance remains by design: update never re-gates versions already in
-`bun.lock` — evicting an already-locked too-young version takes a
-deliberate lockfile regeneration.
-
-**`bun pm scan`** is a plugin system for third-party scanners (Socket,
-Snyk, etc.), not a built-in tool. Not configured today; revisit if/when
-we pick a scanner.
-
-**`@aztec-labs/*` and `@aztec-foundation/*` outside this policy.** Exact-pinned, bumped manually with
-the class-id + address invariant fixtures (`CLAUDE.md`, Account-address
-freeze).
-
-**Bun-version sync trap.** Bumping `package.json#packageManager` (the
-Bun version) does NOT touch the versions the workflows pin themselves:
-`.github/actions/setup-bun/action.yml` and the `bun-version:` literals
-in a few jobs. CI still passes, because those jobs run their own pinned
-Bun, NOT the new `packageManager` version. The discrepancy is silent:
-there's no CI step that verifies the pinned values match. Move every pin
-site together on a Bun bump (the list is in `CLAUDE.md`, Dependency
-policy) until a consistency-check script lands as a CI step.
