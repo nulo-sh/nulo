@@ -2,6 +2,5 @@
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
-- [lock-ux-1](lock-ux-1/plan.md) — awaiting owner picks — five ux behaviours (#1158, #1192, #1207, #1208, #1228) planned as arcs that ship on the owner's pick
 - [lock-window-1](lock-window-1/plan.md) — awaiting approval — the lock screen and the export pages drop what a session left typed; an import a restart overtook lands on the lock screen; every #1218 site gets a recorded disposition (#1183, #1225, #1138)
 - [log-levels-1](log-levels-1/plan.md) — arc 1 in review — expected refusals (lock, purge, wrong credential) leave the error level
