@@ -1,8 +1,8 @@
 ---
 plan: release-prep-1.2.0
 tier: light
-status: A1 answered (b) on 2026-10-28; arc 1 resumed at Phase 4
-issues: "#1312 (filed in Phase 3; closed by Phase 4 under A1(b))"
+status: completed
+issues: "#1312 (filed in Phase 3; closed by #1314 under A1(b)); #1313 (filed in Phase 5)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,18 @@ post_implementation_hardening: not scheduled
 base: origin/dev at ce16a57a9
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed, delivered as #1314 against `dev`, awaiting the merge.
+- Shipped: #1314. `RELEASE_DIGESTS` and `RELEASE_TRAITS` pin v1.1.0 (both zips checked against `SHASUMS256.txt`, GitHub's digests and the build attestation), and `fixtures/update/v1.1.0.storage.json` is its Chrome recording. The traits gain `passkey: "retired" | "unlocks"` (D5). The replay's passkey case follows it, and under `unlocks` it presses the unlock on both browsers in the parked tab that made the credential (D6). The committed-recording unit check covers every sealing tag (D2). The README, the release skill and the `e2e-testing` skill name the trait and the parked tab (D7). The live scenario and all four replay cases pass from v1.1.0 on both browsers at the tested head, which the PR body names. Closes #1312.
+- Did not hold: "the scenarios run from v1.1.0 once pinned and recorded" (case 3, A1); D6's first form, a Firefox-only press, which review round 1 refused once a parked tab proved to keep Chrome's credential.
+- Lessons: none promoted. `lessons.md` holds 8191 of its 8192 bytes. The parked tab is an e2e technique, so it went to the `e2e-testing` skill. The zsh `${t}:path` pitfall stays in [lessons/phase-4.md](lessons/phase-4.md).
+- Known limits: none.
+- Open items: #1313. The profile chaos `pre-update` start retires the release's passkey row whatever the tag, so it refuses v1.1.0 (demonstrated).
+- Deadline: the v1.1.0 recording's dApp session expires about 2026-11-04 07:31 UTC. Re-record before the promote if that date has passed.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # release-prep-1.2.0: the update scenarios run from v1.1.0
 
@@ -77,7 +89,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 4. Commit: `test(e2e): the update replay's passkey case follows the release's passkey trait`.
 - **Gate:** lint; `typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e`; `check:plans`. Then rebuild both candidates and run Phase 2's four runs without `NULO_E2E_UPDATE_RECORD`. Pass: exit 0; both live runs pass; all four replay cases pass on both browsers; the recording unchanged (re-record only if the replay refuses it).
 
-### Phase 5: delivery
+### Phase 5: delivery ✓ (review loop converged at round 2; #1314; [lessons/phase-5.md](lessons/phase-5.md))
 1. Run the review loop (§ Post-implementation) over Phase 4's diff.
 2. Merge `origin/dev`, then read `index.md` and `lessons.md`. Open the PR as a draft (§ Delivery), for the number the Outcome cites.
 3. Write the close-out commits (§ Post-implementation).

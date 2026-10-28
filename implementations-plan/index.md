@@ -1,4 +1,4 @@
 # Implementations plan index
 
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
-- [release-prep-1.2.0](release-prep-1.2.0/plan.md) — arc 1 at its stop, A1 open (#1312) — v1.1.0 pinned and recorded so the 1.2.0 promote updates from it
+- [release-prep-1.2.0](release-prep-1.2.0/plan.md) — closed, awaiting archive — the update scenarios run from v1.1.0 (#1314; closes #1312; open item #1313)

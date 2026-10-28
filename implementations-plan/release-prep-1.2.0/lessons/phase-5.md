@@ -22,3 +22,9 @@
 ## Review loop, round 2 (over `1af2ac6f7..fe2048f1c`)
 
 - **Codex** (resumed session): `clean`. The parked tab keeps the credential under `updateInPlace` on both drivers, and the update's own checks (candidate version, live background, the `update` event) still hold. Under `unlocks` the unlock, Home and the row check now run on both browsers with no capability branch. The `retired` check is verbatim. The comments are exact. The loop converged at round 2.
+
+## Delivery
+
+- `origin/dev` had not moved past the base (`ce16a57a9`), so no merge was needed.
+- #1313 filed after dedupe (#1157 is the chaos model's new flows, not the `pre-update` start). The finding was demonstrated first: one seed, 3001, from v1.1.0 on Chrome, at the candidate built at `5c6e52888`. It failed its start check with `O2 P2 is listed not as retired after the update | O1 the lock screen on retired P2 does not show Set up again | O1 the lock screen offers retired P2 an unlock`.
+- Draft PR #1314 opened; the close-out commits follow it. The final-head runs are in the PR body.
