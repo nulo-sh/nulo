@@ -9,3 +9,4 @@
 - 2026-10-28: the orchestrator accepted Option A (D1's two files) on two conditions; merged `origin/dev` (#1326); arc 1 started.
 - 2026-10-28: 1.1 green: Settings.test.ts red at base (1 failed, 39 passed: the controls case), green after (40 passed); lint and typecheck:all exit 0.
 - 2026-10-28: 1.2 green: index.test.ts red at base (5 failed, 6 passed), green after (11 passed); the focus case fails without the handoff; lint, typecheck:all and the UI bans pass.
+- 2026-10-28: 1.3 green: settings-crud red on the base builds (both browsers, 1 failed | 8 passed), green on the head builds (9/9, four runs each); the probe fails without the pointer-through rule; Firefox first test median +2.6 s, Chrome within noise; light and dark captures.

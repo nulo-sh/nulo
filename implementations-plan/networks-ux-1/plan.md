@@ -72,7 +72,7 @@ Write each test first and run it at the base: it must fail there. Record red and
   - `"activated"` toasts success; `"blocked"`, `"unconfirmed"` and `"stale"` do not;
   - after the render completes, focus on a Switch whose row becomes active lands on that row's new link; focus on another row's Switch stays.
   The Developer Mode cases stay. *Gate:* `cd E && bun --bun vitest run src/popup/pages/settings/networks/index.test.ts`, red at base on the new cases and green after; root lint and typecheck exit 0.
-- [ ] **1.3 The e2e step and captures.** Extend "networks page lists the default networks":
+- [x] **1.3 The e2e step and captures.** Extend "networks page lists the default networks":
   - a Switch on each inactive row and none on the active one;
   - on Testnet's row (not the last), whole-pixel points from its left edge + 1 to its right edge - 1 on its midline and on its bottom hairline, skipping the Switch's box ± 1 px, each reach the row's link (`elementFromPoint`); the Switch's centre reaches the Switch;
   - `shotSend(page, "networks-list-switch", "network-row-switch")`, before any press, so no toast or hover shows;
