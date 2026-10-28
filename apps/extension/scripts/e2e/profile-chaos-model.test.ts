@@ -82,6 +82,8 @@ const FIREFOX: Caps = {
 const NETWORK: Caps = { ...CHROME, network: true, restoreGate: true }
 const SEEDS = Array.from({ length: 1_000 }, (_, i) => i * 7_919 + 1)
 const STARTS = ["empty", "pre-update-retired", "pre-update-unlocks"] as const satisfies readonly StartState[]
+/** Planning thousands of seeds is fixed work that a loaded shared host stretches past vitest's 5 s default. */
+const PLANNING = { timeout: 180_000 }
 
 const CHAIN = 1
 const on = (addresses: string[], chainId = CHAIN): ChainAddresses => ({ chainId, addresses })
@@ -195,7 +197,7 @@ describe("the planner", () => {
 		["Chrome", CHROME],
 		["Firefox", FIREFOX],
 		["the network file", NETWORK],
-	])("every planned step respects its preconditions over 1,000 seeds on %s, from every start", { timeout: 180_000 }, (_label, caps) => {
+	])("every planned step respects its preconditions over 1,000 seeds on %s, from every start", PLANNING, (_label, caps) => {
 		for (const start of STARTS) {
 			for (const seed of SEEDS) {
 				const p = plan(seed, start, caps)
@@ -316,17 +318,21 @@ describe("the planner", () => {
 		["Chrome", CHROME],
 		["Firefox", FIREFOX],
 		["the network file", NETWORK],
-	])("the counter moves by one exactly at a mint, a declined import's included, and stays within the slots on %s", (_label, caps) => {
-		for (const start of STARTS) {
-			for (const seed of SEEDS) {
-				for (const [s, before] of withBefore(plan(seed, start, caps))) {
-					const moved = s.expect.next.next.credential - before.next.credential
-					expect(moved, `seed ${seed} step ${s.index} ${s.action}`).toBe(mintsAt(s, before) ? 1 : 0)
-					expect(s.expect.next.next.credential - 1).toBeLessThanOrEqual(caps.credentialSlots)
+	])(
+		"the counter moves by one exactly at a mint, a declined import's included, and stays within the slots on %s",
+		PLANNING,
+		(_label, caps) => {
+			for (const start of STARTS) {
+				for (const seed of SEEDS) {
+					for (const [s, before] of withBefore(plan(seed, start, caps))) {
+						const moved = s.expect.next.next.credential - before.next.credential
+						expect(moved, `seed ${seed} step ${s.index} ${s.action}`).toBe(mintsAt(s, before) ? 1 : 0)
+						expect(s.expect.next.next.credential - 1).toBeLessThanOrEqual(caps.credentialSlots)
+					}
 				}
 			}
-		}
-	})
+		},
+	)
 
 	test("another credential is always one the authenticator holds and never the target's own", () => {
 		for (const seed of SEEDS) {
@@ -344,7 +350,7 @@ const SURFACE: readonly ActionName[] = ["createPassword", "createPasskey", "lock
 const VERIFIED: readonly ActionName[] = [...SURFACE, "verifyAll"]
 
 describe("the action surface a driver states", () => {
-	test("a surface naming every action plans exactly what no surface plans", () => {
+	test("a surface naming every action plans exactly what no surface plans", PLANNING, () => {
 		const every = CATALOG.map((a) => a.name)
 		for (const caps of [CHROME, FIREFOX, NETWORK])
 			for (const start of STARTS)
@@ -775,7 +781,7 @@ describe("the model's clauses", () => {
 		expect(citationMisses(CITED)).toEqual([])
 	})
 
-	test("every code source a plan or an allowlist names is a citation with its fragment", () => {
+	test("every code source a plan or an allowlist names is a citation with its fragment", PLANNING, () => {
 		const sources = new Set([
 			...STARTS.flatMap((start) =>
 				[CHROME, FIREFOX, NETWORK].flatMap((caps) =>
