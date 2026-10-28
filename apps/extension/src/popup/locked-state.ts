@@ -1,5 +1,5 @@
 import { watch } from "vue"
-import { lockScreenProfile } from "./lock-screen-profile"
+import { type LockScreenCandidate, lockScreenProfile } from "./lock-screen-profile"
 
 /** Pages that need no selected profile, as the route guard leaves them without one. */
 const PROFILE_FREE_ROUTES: ReadonlySet<string> = new Set(["popup-register", "popup-import", "popup-profile-new"])
@@ -28,12 +28,11 @@ export interface LockedStateShell<P> {
 	select: (profile: P | undefined) => void
 	readLastActiveId: () => Promise<string | undefined>
 	routeName: () => string | undefined
-	openChooser: () => void
 }
 
 /** The seal runs before anything awaits, so no snack stays up and no late result presents while
  *  a lock looks up where to land. */
-export function createLockedState<P extends { id: string }>(shell: LockedStateShell<P>) {
+export function createLockedState<P extends LockScreenCandidate>(shell: LockedStateShell<P>) {
 	const seal = () => {
 		shell.closePopups()
 		shell.onLocked()
@@ -45,20 +44,17 @@ export function createLockedState<P extends { id: string }>(shell: LockedStateSh
 		shell.resetInFlight()
 		shell.resetContactImports()
 	}
-	/** A selection `profiles` no longer holds gives way to the lock screen's profile; with none to
-	 *  presume, the window chooses. No selection stays none, for the route guard to fill. */
+	/** A selection `profiles` no longer holds gives way to the lock screen's profile. No selection
+	 *  stays none, for the route guard to fill. */
 	const reselect = (profiles: P[], lastActiveId: string | undefined) => {
 		const selected = shell.selectedId()
-		if (selected === undefined || profiles.some((p) => p.id === selected)) return false
-		const next = lockScreenProfile(profiles, lastActiveId)
-		shell.select(next)
-		return next === undefined && profiles.length > 0
+		if (selected === undefined || profiles.some((p) => p.id === selected)) return
+		shell.select(lockScreenProfile(profiles, lastActiveId))
 	}
 	const land = (profiles: P[], lastActiveId?: string) => {
 		shell.setProfiles(profiles)
-		const choose = reselect(profiles, lastActiveId)
+		reselect(profiles, lastActiveId)
 		shell.route(profiles.length ? "/popup/auth" : "/popup/register")
-		if (choose) shell.openChooser()
 	}
 	/** Lands a window whose selection is gone. A page that needs no profile only changes the
 	 *  selection, as its flow owns the window; any other drops its sheets and lands as a lock does. */

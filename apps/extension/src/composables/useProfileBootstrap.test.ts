@@ -566,7 +566,6 @@ describe("useProfileBootstrap", () => {
 			select: () => undefined,
 			readLastActiveId: async () => undefined,
 			routeName: () => undefined,
-			openChooser: () => undefined,
 		})
 		const lockEvent = lockedState.onLockEvent(
 			() =>
