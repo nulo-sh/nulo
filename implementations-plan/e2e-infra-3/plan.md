@@ -189,6 +189,8 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 2 Opus (general-purpose; Phases 4-5) | `conditional approve`: the same tree-read leak (medium, diagnostics); the ban's comment claimed Firefox refuses `viewport()`; a timed-out resize left the record stale | all three (`441d62d70`) | `.call`/`.bind` call shapes the ban misses: low, not worth a rule |
 | Arc 2 Codex r2 (resumed, `gpt-6.1-sol`, high) | `approve`: the fixes close the leak without hiding a real close; the 158 claims match its source and the run; no doc still moves the pin with the seam alone | — | — |
 | Cross-arc Codex (fresh, `gpt-6.1-sol`, high; `0d5b1967c~1..HEAD`) | `conditional approve`, three low, all records: the plan's cross-arc range, the `/goal` seed still asking for Phase 6, the index entry | all three | — |
+| Arc 2 Codex r3 (resumed, `gpt-6.1-sol`, high; with the standard's two rules and its adversarial ask, which r1 and r2 lacked) | `approve`, one low: name the resize's `includeInactive` flag | taken (`676e728d1`) | — |
+| Cross-arc Codex r2 (resumed, same rules) | `approve`: the record fixes verified; one low, a control's comment that restated its assertions | taken (`676e728d1`) | — |
 
 Light tier with both legs: the resumed final pass is the approval gate's verdict.
 
