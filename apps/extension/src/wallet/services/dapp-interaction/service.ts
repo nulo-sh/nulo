@@ -68,19 +68,12 @@ import {
 	type Methods,
 	type Events,
 	type DappInteraction,
+	INTERACTION_TIMEOUT_MS,
 } from "./spec"
 
 export * from "./spec"
 
-/**
- * Hard timeout for an approval popup. Bounds the worst case when neither the
- * user interacts nor `chrome.windows.onRemoved` fires (eg. extension reload,
- * popup crash, MV3 suspension races). Longer than the longest realistic
- * prove+approve flow so legitimate users aren't surprised.
- */
 const CANCELLED_BEFORE_APPROVAL = "Request was cancelled before approval"
-
-const INTERACTION_TIMEOUT_MS = 10 * 60 * 1000
 
 /** A capability payload also carries a session; only an execution payload has operations to run. */
 function isExecutionPayload(payload: DappInteraction["payload"]): payload is ExecutionPayload {
@@ -332,6 +325,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		payload: ExecutionPayload,
 		deltas: OperationApprovalDelta[],
 	): Promise<void> {
+		let releasePreviews = () => {}
 		const kinds = payload.params.operations.map((o) => o.kind).join(", ")
 		// The dApp name was sanitized when the session was persisted; the popup
 		// no longer supplies an origin of its own.
@@ -339,6 +333,9 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.logInfo(`executeAndResolve: starting [${kinds}] for ${origin.name}`)
 		this.approved.set(interaction.id, { payload, deltas })
 		try {
+			// Taken in the tick the record was deleted, before any await: a snapshot alive when the
+			// worker accepted the approval stays the approval's until its execution ends.
+			releasePreviews = this.executionService.claimPreviews(deltas.map((delta) => delta.previewId))
 			// Re-validate the active profile still matches the session this popup
 			// was approved under. A popup is a separate window that can outlive a
 			// profile switch or a wallet lock (up to INTERACTION_TIMEOUT_MS). Without
@@ -411,6 +408,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			this.windowManager.cancel(interaction.handleId, this.describeApprovalFailure(kinds, error))
 		} finally {
 			this.approved.delete(interaction.id)
+			releasePreviews()
 		}
 	}
 

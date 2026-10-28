@@ -59,7 +59,7 @@ type Internals = {
 		getActiveProfile: () => Promise<{ id: string } | undefined>
 		captureExecutionFence: () => Promise<{ profileId: string; epoch: number; session: number }>
 	}
-	executionService: { executeOperations: (...args: unknown[]) => Promise<unknown> }
+	executionService: { executeOperations: (...args: unknown[]) => Promise<unknown>; claimPreviews: () => () => void }
 	dappSessionService: { tryGetDappSession: (id: string) => Promise<{ profileId: string } | undefined> }
 	silentInteraction: (payload: unknown, hooks?: ExecutionHooks) => Promise<unknown>
 	operationJournal: { getOperation: (id: string) => Promise<unknown> }
@@ -87,7 +87,7 @@ function makeService(overrides: {
 			return { profileId: p.id, epoch: 0, session: 1 }
 		},
 	}
-	internals.executionService = { executeOperations: overrides.executeOperations ?? (async () => []) }
+	internals.executionService = { executeOperations: overrides.executeOperations ?? (async () => []), claimPreviews: () => () => {} }
 	// Live-by-default: executeAndResolve re-validates the session ROW at
 	// approval; the default keeps the happy-path tests unchanged.
 	internals.dappSessionService = {
@@ -618,7 +618,7 @@ async function windowHarness(session: typeof SESSION = SESSION) {
 	collection.add(stub(NetworkService.name, { getNetworks: async () => [{ id: "net-1", chainId: 1 }] }))
 	collection.add(stub(AccountService.name, { getAccount: async () => ({ address: ADDRESS }) }))
 	collection.add(stub(DappSessionService.name, { tryGetDappSession: async () => session }))
-	collection.add(stub(ExecutionService.name, { executeOperations }))
+	collection.add(stub(ExecutionService.name, { executeOperations, claimPreviews: () => () => {} }))
 	collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
 	collection.add(stub(FpcService.name, {}))
 	collection.add(stub(TokenService.name, {}))

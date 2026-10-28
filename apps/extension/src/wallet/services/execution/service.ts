@@ -736,6 +736,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.estimateCancel.cancel(estimateToken, profile.id)
 	}
 
+	/** In-process only (never in `rpcMethods`): the dApp-interaction service hands an accepted
+	 *  approval its authorization snapshots, released when that approval's execution ends. */
+	public claimPreviews(previewIds: readonly (string | undefined)[]): () => void {
+		return this.previewSnapshots.claim(previewIds)
+	}
+
 	public async getLastProveOutcome(): Promise<LastProveOutcome> {
 		await this.ensureInitialized()
 		return this.coordinator.getLastProveOutcome()

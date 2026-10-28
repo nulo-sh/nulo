@@ -221,6 +221,17 @@ describe("TTL sweeps", () => {
 		expect(evicted).toEqual(["stash-1"])
 	})
 
+	test("a settled token can still evict its stash for as long as an authorization snapshot lives", async () => {
+		const { registry, evicted, advance } = makeRegistry()
+		await registry.admit("t1", "p1", "send")
+		registry.settle("t1", "stash-1")
+		advance(9 * 60_000)
+		await registry.admit("t2", "p1", "send") // sweep fires
+		expect(evicted).toEqual([])
+		registry.cancel("t1", "p1")
+		expect(evicted).toEqual(["stash-1"])
+	})
+
 	test("parked admissions are bounded per profile: newcomers beyond the cap are rejected", async () => {
 		const { registry } = makeRegistry()
 		for (let i = 0; i < N; i++) await registry.admit(`t${i}`, "p1", `op:${i}`)

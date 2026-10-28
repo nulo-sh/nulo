@@ -34,6 +34,7 @@
  */
 
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { PREVIEW_SNAPSHOT_TTL_MS } from "./preview-snapshots"
 
 export const MAX_ACTIVE_ESTIMATES_PER_PROFILE = 4
 /** Parked admissions beyond this per profile are rejected outright — a
@@ -45,8 +46,10 @@ export const MAX_PENDING_ESTIMATES_PER_PROFILE = 8
  *  a ceiling on the work: a held entry whose simulation still waits offscreen
  *  behind queued proofs is reaped too, and its place admits the next estimate. */
 export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
-/** How long a settled token can still evict its stash — mirrors the reuse TTL. */
-export const SETTLED_STASH_TTL_MS = 120_000
+/** How long a settled token can still evict its stash: the longest-lived stash, the authorization
+ *  snapshot, so the sweep never drops a live snapshot. Signed requests still expire at their own
+ *  cache's TTL. */
+export const SETTLED_STASH_TTL_MS = PREVIEW_SNAPSHOT_TTL_MS
 
 interface ActiveEntry {
 	readonly profileId: string

@@ -12,7 +12,13 @@
  */
 
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
-import { ESTIMATE_REUSE_TTL_MS, SingleShotTtlCache } from "./estimate-reuse-shared"
+import { INTERACTION_TIMEOUT_MS } from "@/wallet/services/dapp-interaction/spec"
+import { SingleShotTtlCache } from "./estimate-reuse-shared"
+
+/** An unclaimed snapshot lives as long as its window can still approve: the window's clock starts
+ *  at its opening, before any estimate lands. It holds hashes and the rows a card showed, never a
+ *  signed request, so the reuse caches' shorter bound on signed requests does not apply. */
+export const PREVIEW_SNAPSHOT_TTL_MS = INTERACTION_TIMEOUT_MS
 
 export type PreviewIdentity = {
 	readonly interactionId: string
@@ -31,15 +37,37 @@ export type PreviewSnapshot = PreviewIdentity & {
 export type PreviewLookup = { kind: "found"; snapshot: PreviewSnapshot } | { kind: "missing" } | { kind: "foreign" }
 
 export class PreviewSnapshots {
-	private readonly cache = new SingleShotTtlCache<PreviewSnapshot>(ESTIMATE_REUSE_TTL_MS)
+	private readonly cache = new SingleShotTtlCache<PreviewSnapshot>(PREVIEW_SNAPSHOT_TTL_MS)
+	/** Snapshots an accepted approval owns until its execution ends: no TTL and no evict reach them. */
+	private readonly claimed = new Map<string, PreviewSnapshot>()
 
 	public stash(previewId: string, snapshot: Omit<PreviewSnapshot, "builtAt">): void {
 		this.cache.stash(previewId, { ...snapshot, builtAt: Date.now() })
 	}
 
-	/** Idempotent; unknown ids are a no-op. */
+	/** Idempotent; unknown ids are a no-op. Reaches only unclaimed snapshots. */
 	public evict(previewId: string): void {
 		this.cache.evict(previewId)
+	}
+
+	/**
+	 * Move the live snapshots `previewIds` name into the claimed set. The returned release drops
+	 * exactly the snapshots this claim moved, once; `take` still checks their identity at the turn.
+	 */
+	public claim(previewIds: readonly (string | undefined)[]): () => void {
+		const moved: Array<[string, PreviewSnapshot]> = []
+		for (const id of previewIds) {
+			if (!id || this.claimed.has(id)) continue
+			const snapshot = this.cache.consume(id)
+			if (!snapshot || Date.now() - snapshot.builtAt > PREVIEW_SNAPSHOT_TTL_MS) continue
+			this.claimed.set(id, snapshot)
+			moved.push([id, snapshot])
+		}
+		return () => {
+			for (const [id, snapshot] of moved.splice(0)) {
+				if (this.claimed.get(id) === snapshot) this.claimed.delete(id)
+			}
+		}
 	}
 
 	/**
@@ -50,8 +78,10 @@ export class PreviewSnapshots {
 	 */
 	public take(previewId: string | undefined, identity: PreviewIdentity): PreviewLookup {
 		if (!previewId) return { kind: "missing" }
-		const snapshot = this.cache.consume(previewId)
-		if (!snapshot || Date.now() - snapshot.builtAt > ESTIMATE_REUSE_TTL_MS) return { kind: "missing" }
+		const claimed = this.claimed.get(previewId)
+		this.claimed.delete(previewId)
+		const snapshot = claimed ?? this.cache.consume(previewId)
+		if (!snapshot || (!claimed && Date.now() - snapshot.builtAt > PREVIEW_SNAPSHOT_TTL_MS)) return { kind: "missing" }
 		const fingerprintMatches =
 			snapshot.fingerprint === null || identity.fingerprint === null || snapshot.fingerprint === identity.fingerprint
 		if (snapshot.interactionId !== identity.interactionId || snapshot.index !== identity.index || !fingerprintMatches) {
