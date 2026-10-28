@@ -172,7 +172,7 @@ const toggleSort = () => {
 	z-index: 2;
 
 	padding: 4px 0 6px;
-	background: var(--app-bg);
+	background: var(--token-list-bg, var(--app-bg));
 }
 
 .sort {

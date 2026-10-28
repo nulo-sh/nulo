@@ -556,14 +556,27 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
+/** The token the picker's paste-to-add imported, for the token watch to pick with the amount kept. */
+let keepAmountFor
+async function pickAddedToken(token) {
+	const epoch = appStore.scopeEpoch
+	const listed = () => tokens.value.some((t) => t.id === token.id)
+	if (!listed()) await reloadTokens().catch(onReadFailed)
+	// Only a token the list holds can be active: any other leaves the card with no token.
+	if (cancelled || appStore.scopeEpoch !== epoch || !listed() || cacheStore.activeTokenIdx === token.id) return
+	keepAmountFor = token.id
+	cacheStore.activeTokenIdx = token.id
+}
+
 watch(
 	() => cacheStore.activeTokenIdx,
-	() => {
+	(id) => {
 		closeReview()
 		initSendType()
 		initReceiverType()
 
-		amountTerm.value = null
+		if (id !== keepAmountFor) amountTerm.value = null
+		keepAmountFor = undefined
 	},
 )
 
@@ -812,7 +825,13 @@ onBeforeUnmount(() => {
 				<div :class="$style.section">
 					<span :class="$style.section_label">Select Asset</span>
 					<FlaggedTokenBanner v-if="prices.isFlagged(activeToken)" />
-					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
+					<SelectTokenCard
+						:token="activeToken"
+						:loading="tokensLoading"
+						:failed="tokensFailed"
+						:onTokenAdded="pickAddedToken"
+						@retry="retryTokens"
+					/>
 				</div>
 
 				<!-- Section: Transaction Amount -->

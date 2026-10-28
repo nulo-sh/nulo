@@ -6,3 +6,4 @@
 - 2026-10-28: final Codex pass conditional approve; condition 1 accepted (D4), condition 2 rebutted (needs an active token the failed fetch never sets); resumed check next.
 - 2026-10-28: final Codex pass resumed: approve. Plan committed; arc 1 next (auto-continue).
 - 2026-10-28: phase 1 green (1037 tests; lint, typecheck:all exit 0); 10 tests red on base.
+- 2026-10-28: phase 2 green (`bun run test src/popup` 3271 passed; lint, typecheck:all exit 0); 47 tests red on base, of which the New token file's legacy cases are harness-only (rerun on base with the old cache mock: 7 red, all payload or report).
