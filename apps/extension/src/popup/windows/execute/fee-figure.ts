@@ -43,3 +43,17 @@ export function waitsForFeeFigure(op: DraftUIOperation, payer?: FeePayerPick | n
 	const personPicks = !isEmbeddedFeePayment(op) && payer?.type !== "fpc"
 	return personPicks || personPaysAppPayment(op) || setsOwnFee(op)
 }
+
+/**
+ * Whether this operation holds Confirm. While its estimate or authorization preview is scheduled or
+ * running, always: confirm holds the approval to the authorizations that estimate lists, so a press
+ * before it lands carries nothing to hold it to. Once settled, only a figure the person pays must
+ * have landed (`waitsForFeeFigure`); a failed estimate otherwise leaves Confirm on.
+ */
+export function holdsConfirm(
+	op: DraftUIOperation,
+	payer: FeePayerPick | null | undefined,
+	estimate: { landed: boolean; inFlight: boolean },
+): boolean {
+	return estimate.inFlight || (waitsForFeeFigure(op, payer) && !estimate.landed)
+}

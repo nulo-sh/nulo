@@ -1066,14 +1066,39 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
-	test("an app that set nothing: Confirm never waits for the figure", async () => {
+	test("an app that set nothing: Confirm waits while its estimate runs, then never for the figure", async () => {
 		const { vm, fees, confirm } = await opened()
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
 		api.estimating.value = { 0: true }
 		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
 		await vm.approve()
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a default-entrypoint operation: Confirm waits while its authorization preview runs, then carries it", async () => {
+		const { vm, confirm } = await opened({ ...appPaid, executionMode: "default_entrypoint" })
+		const previews = feeMapInstances[1]!.api as (typeof feeMapInstances)[number]["api"] & { estimating: Ref<Record<number, boolean>> }
+		previews.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		previews.results.value = { 0: { previewId: "pv-0", discoveredAuthwits: [] } }
+		previews.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ previewId?: string }>
+		expect(deltas[0]?.previewId).toBe("pv-0")
 	})
 
 	// The app's own payment claiming Fee Juice to the account, as the wire carries the claim call.
@@ -1132,7 +1157,30 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
-	test("a sponsor picked in the window pays, not the person: Confirm does not wait, and a failed estimate leaves it on", async () => {
+	test("a sponsor picked in the window: Confirm waits while its estimate runs, then approval carries the estimate's ids", async () => {
+		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		const card = w!.findComponent(STUBS.OperationCard)
+		;(vm as unknown as { handleFeeUpdate: (index: number, value: unknown) => void }).handleFeeUpdate(0, {
+			paymentMethod: { kind: "fpc", fpcId: "s1" },
+		})
+		card.vm.$emit("updatePayer", 0, { type: "fpc" })
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "0", estimateId: "est-0", previewId: "est-0" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		const deltas = (approveInteractionMock.mock.calls[0] as unknown[] | undefined)?.[1] as Array<{ previewId?: string }>
+		expect(deltas[0]?.previewId).toBe("est-0")
+	})
+
+	test("a sponsor picked in the window pays, not the person: Confirm never waits for its figure, and a failed estimate leaves it on", async () => {
 		const { vm, fees, confirm } = await opened({ ...appPaid, exec: { calls: [] } })
 		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
 		const card = w!.findComponent(STUBS.OperationCard)
