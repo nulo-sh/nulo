@@ -182,6 +182,9 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Codex r2 (resumed) | `conditional approve`: r1's seven verified; new: the background sampler dies with test 9's restart (high); D5's Terms wording (low); the ask records (low) | all three: per-popup samplers re-armed per page, missing state incomplete; D5 restated; the intro and OWNER-ASKS synced | — |
 | Codex final (fresh, `gpt-6.1-sol`, high) | `conditional approve`, three: the first Terms expectation read from the candidate's record passes vacuously (medium, shown in memory); the observed cap may precede the submitted one (medium); recon's chain id was the rollup version (low) | all three: the first open answers from `released.entries` (D5); the review sheet's cap at the confirm press, unresolved on a late change; recon corrected | — |
 | Codex final, resumed | `approve`: the three fixes verified, no new finding | — | — |
+| Arc 1 Codex r1 (`gpt-6.1-sol`, high, fresh; `1dac12160..HEAD`) | `conditional approve`, one medium: the Terms flag was set once Continue was clicked, before the acceptance was stored | `answerUpdatedTerms` returns once the sheet has closed (`306d474e5`) | — |
+| Arc 1 Opus (general-purpose) | `conditional approve`: the release profiles shared one `imported` array, so an import into `P1` was expected in a live `P2` (high, shown by a probe over 1,000 seeds); the README read the parked tab as Chrome-only (low) | both (`e0224004b`), with a model test that reds on the unfixed model | a load-time console error on the held page is now a red at the start: kept, the collector watches before navigation by design |
+| Arc 1 Codex r2 (resumed) | `approve`: both fixes verified, no new finding | — | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 
