@@ -146,7 +146,7 @@ export async function waitForHash(page: Page, expectedHash: string, timeout = 15
 				),
 			new Promise<string>((done) => setTimeout(() => done("the page did not answer within 2 s"), 2_000)),
 		])
-		// Still a TimeoutError, the one type `withTimeoutMessage` relabels; callers wrap this in it.
+		// Stays a TimeoutError, the one type `withTimeoutMessage` relabels.
 		throw new TimeoutError(`waitForHash: ${expectedHash} not reached in ${timeout} ms; ${at}`, { cause: err })
 	}
 }

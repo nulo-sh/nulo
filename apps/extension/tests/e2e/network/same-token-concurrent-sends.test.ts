@@ -710,11 +710,22 @@ test.skipIf(!hasConfig)(
 		await waitForReviewReady(page)
 		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
 		await shotSend(page, "4-review-queued-cap", "send-review-fee")
-		const reviewed = await page.evaluate(() =>
-			document.querySelector('[data-testid="send-review-fee-cap"]')?.textContent?.replace(/\s+/g, " ").trim(),
-		)
-		const context = `; B's review read ${JSON.stringify(reviewed)} at the press, and the seeded basis caps at ${pinnedFeeText(queuedFeeCap(basis))}`
+		// Send replaces the queued cap on every answer until the submit, so the line is kept at the press.
+		await page.evaluate(() => {
+			const keep = () => {
+				const line = document.querySelector('[data-testid="send-review-fee-cap"]')?.textContent?.replace(/\s+/g, " ").trim()
+				;(window as Window & { e2eReviewedCap?: string }).e2eReviewedCap = line
+			}
+			document
+				.querySelector('[data-testid="send-review-submit"]')
+				?.addEventListener("pointerdown", keep, { capture: true, once: true })
+		})
 		await pointerClick(page, "send-review-submit")
+		const reviewed = await page
+			.evaluate(() => (window as Window & { e2eReviewedCap?: string }).e2eReviewedCap)
+			.catch(() => "<unreadable>")
+		const seededCap = queuedFeeCap(basis)
+		const context = `; B's review read ${JSON.stringify(reviewed)} at the press, and the seeded basis caps at ${seededCap === undefined ? "nothing" : pinnedFeeText(seededCap)}`
 		await waitForSendGone(page, 30_000)
 
 		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)

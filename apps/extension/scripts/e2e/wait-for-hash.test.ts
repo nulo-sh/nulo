@@ -6,7 +6,8 @@ function fakePage(evaluate: () => Promise<string>, wait: () => Promise<unknown>)
 	return { waitForFunction: vi.fn(wait), evaluate: vi.fn(evaluate) } as unknown as Page
 }
 
-const timedOut = () => Promise.reject(new TimeoutError("Waiting failed: 15000ms exceeded"))
+const timeout = new TimeoutError("Waiting failed: 15000ms exceeded")
+const timedOut = () => Promise.reject(timeout)
 
 describe("waitForHash", () => {
 	afterEach(() => vi.useRealTimers())
@@ -19,7 +20,7 @@ describe("waitForHash", () => {
 
 		expect(error).toBeInstanceOf(TimeoutError)
 		expect((error as Error).message).toBe('waitForHash: #/popup/general not reached in 15000 ms; the page is at "#/popup/auth"')
-		expect((error as Error).cause).toBeInstanceOf(TimeoutError)
+		expect((error as Error).cause).toBe(timeout)
 	})
 
 	test("a page that does not answer after the timeout still fails within 2 s", async () => {
