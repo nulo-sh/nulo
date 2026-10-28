@@ -23,6 +23,7 @@ import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor, releaseOwnWindow } from "@/utils/own-window"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
+import { openingFlowLive } from "@/popup/opening-flow"
 import { resolveFullBackupEnterAction } from "./import-helpers"
 import { retryResultText, withNetworkNames } from "@/components/composite/import/restore-warning"
 
@@ -62,6 +63,8 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 // mid-import lost the emit. Watching the SW connection instead regressed the healthy path: a
 // transient reconnect is indistinguishable from the wedge when it drops.
 const { hydrateKnownProfile } = useProfileBootstrap()
+const flowLive = openingFlowLive()
+let isUnmounted = false
 const completeImport = async (profile) => {
 	await setLastActiveProfileId(profile.id)
 	const outcome = await completeImportWithRecovery({
@@ -69,6 +72,8 @@ const completeImport = async (profile) => {
 		recover: async () => (await hydrateKnownProfile())?.id === profile.id && appStore.isLogined,
 		timeoutMs: 30_000,
 	})
+	// A page that went, or whose flow the shell ended, no longer owns the window: the shell's landing does.
+	if (isUnmounted || !flowLive()) return
 	// A finished restore in its own window shows the wallet there, as the panel would.
 	releaseOwnWindow()
 	if (outcome === "active") {
@@ -184,6 +189,7 @@ const onKeydown = (e) => {
 
 /** Lifecycle */
 onBeforeUnmount(() => {
+	isUnmounted = true
 	dispose()
 })
 </script>
