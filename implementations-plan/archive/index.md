@@ -458,4 +458,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [chaos-3](chaos-3/plan.md) — completed — the profile chaos model drives passkey imports and restores, Unlock method changes, shared passkeys and passkey account files; arc 2's fleet wave dropped (#1301, part of #1157; known limit #1306)
 - [e2e-infra-3](e2e-infra-3/plan.md) — completed — the Terms verdict and the fee check as product states; bringToFront and setViewport on the driver, the Firefox pin held at 153
 - [release-prep-1.2.0](release-prep-1.2.0/plan.md) — completed — v1.1.0 pinned and recorded, and the update replay's passkey case follows a reviewed `passkey` trait, so the 1.2.0 promote updates from v1.1.0 (#1314, closes #1312; open item #1313)
+- [log-levels-2](log-levels-2/plan.md) — completed — a stale-network refresh or a network-arrival read that a lock ends logs its refusal at debug (#1296)
 - [docs-3](docs-3/plan.md) — completed — SECURITY.md's dependency paragraphs moved into § Dependency policy, byte for byte, and its strict-mode residual list corrected (#1318, closes #1186 and #1274; known limits #1316, #1317)

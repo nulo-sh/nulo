@@ -1,4 +1,5 @@
 import { type InjectionKey, type Ref, ref } from "vue"
+import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import type { Network, NetworkServiceClient } from "@/wallet/services/network/client"
 
 type ArrivalClient = Pick<NetworkServiceClient, "getNetworkArrival" | "answerNetworkArrival">
@@ -47,8 +48,13 @@ export function useNetworkArrival(options: UseNetworkArrivalOptions): NetworkArr
 			// The worker's active profile can move before the shell's does.
 			if (mine === generation) arrived.value = network?.profileId === profileId ? network : null
 		} catch (error) {
-			if (mine === generation) arrived.value = null
-			console.warn("network arrival read failed", { error })
+			// Nothing reads a superseded read, and the re-read a lock fires supersedes the read it refuses.
+			if (mine !== generation) {
+				console.debug("network arrival read superseded", { error })
+				return
+			}
+			arrived.value = null
+			logCallFailure("network arrival read failed", error)
 		}
 	}
 

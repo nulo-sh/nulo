@@ -604,3 +604,35 @@ describe("a resume whose session a lock ends", () => {
 		await expect(resumed).rejects.toBe(refusal)
 	})
 })
+
+describe("a refresh whose session a lock ends", () => {
+	/** A refresh of the stale active network, parked at its read until `refuse`. */
+	const refreshing = () => {
+		let refuse!: (error: Error) => void
+		const read = new Promise<null>((_, reject) => (refuse = reject))
+		const { stale } = harness(fakeWorker(), {
+			scope: () => ({ profileId: "p1", networkId: "tn" }),
+			staleActive: () => view(),
+			syncActive: vi.fn(() => read),
+		})
+		return { stale, refreshed: stale.refresh(), refuse }
+	}
+
+	test("the read it refuses resolves the refresh, logged at debug", async () => {
+		const { stale, refreshed, refuse } = refreshing()
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		stale.clear()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(refreshed).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("stale-network refresh ended with its session", { error: refusal })
+		debug.mockRestore()
+	})
+
+	test("control: a refresh whose session lasts still rejects", async () => {
+		const { refreshed, refuse } = refreshing()
+		const refusal = new Error("Profile locked")
+		refuse(refusal)
+		await expect(refreshed).rejects.toBe(refusal)
+	})
+})

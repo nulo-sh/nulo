@@ -142,15 +142,20 @@ class Session {
 	}
 }
 
-/** `run`'s failure rejects while `live` holds. Once a lock or a switch ends the session, the failure
- *  belongs to the ended session and resolves at debug. */
-async function whileLive(live: () => boolean, run: Promise<void>): Promise<void> {
+/** `run`'s failure rejects while `live` holds. Once a lock or a profile switch ends the session,
+ *  the failure belongs to the ended session and resolves, logged at debug as `line`. */
+async function whileLive(live: () => boolean, run: Promise<void>, line: string): Promise<void> {
 	try {
 		await run
 	} catch (error) {
 		if (live()) throw error
-		console.debug("stale-network resume ended with its session", { error })
+		console.debug(line, { error })
 	}
+}
+
+async function syncActiveIfStale(deps: StaleNetworkDeps): Promise<void> {
+	const scope = deps.scope()
+	if (scope && deps.staleActive()?.networkId === scope.networkId) await deps.syncActive(scope.networkId)
 }
 
 export function useStaleNetwork(deps: StaleNetworkDeps) {
@@ -239,14 +244,14 @@ export function useStaleNetwork(deps: StaleNetworkDeps) {
 	 *  run in flight, and finishes and announces a completion no popup took. */
 	const resume = (profileId: string) => {
 		const s = session
-		return whileLive(() => live(s), resumeIn(s, profileId))
+		return whileLive(() => live(s), resumeIn(s, profileId), "stale-network resume ended with its session")
 	}
 
 	/** Re-reads the active network's view while it is stale: adding, renaming or deleting a network
 	 *  changes its name or which row holds its new chain (R2). */
-	const refresh = async () => {
-		const scope = deps.scope()
-		if (scope && deps.staleActive()?.networkId === scope.networkId) await deps.syncActive(scope.networkId)
+	const refresh = () => {
+		const s = session
+		return whileLive(() => live(s), syncActiveIfStale(deps), "stale-network refresh ended with its session")
 	}
 
 	/** Ends what the ended session or profile showed and owned. */

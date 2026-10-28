@@ -221,7 +221,7 @@ const takeover = computed(() =>
 )
 watch(
 	() => appStore.networks,
-	() => void stale.refresh(),
+	() => void stale.refresh().catch((error) => logCallFailure("stale-network refresh failed", error)),
 )
 
 const networkArrival = useNetworkArrival({
