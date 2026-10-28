@@ -1,7 +1,7 @@
 ---
 plan: log-levels-1
 tier: light (the orchestrator's call; Opus Plan leg added)
-status: approved; arc 1 delivered for review, arcs 2-3 pending
+status: completed; arc 1 merged (#1268), arcs 2-3 delivered (#1297, #1302) with this close-out
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +13,41 @@ base: origin/dev at 78f5f9171
 trunk: dev
 issues: [1131, 1132, 1133, 1136, 1178, 1216]
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed, delivered as a stack on `dev`:
+  - #1268 (arc 1), merged as 2e524ef73;
+  - #1297 (arc 2), #1302 (arc 3) and this close-out, awaiting the merge.
+- Shipped:
+  - #1268 (closes #1131 and #1136). Logs at debug, with a real failure on the same path kept at error:
+    - a gas balance retry that a lock, delete or switch overtakes is skipped, or fails at debug;
+    - a PXE op that a purge or a delete's generation fence ended (`StoreErasedError`);
+    - `getSyncedBlockHeader` asked of a PXE before its first sync.
+  - #1297 (closes #1133, #1132 and #1216):
+    - a lock that fails the profile activation leaves no unhandled rejection;
+    - both apps install `forwardVueError`, so Vue's client-disconnect errors log at debug;
+    - every lock path ends the network-switch run and the stale-network resume. A superseded run's failure resolves at debug, and the shell reports a live one with `logCallFailure`.
+    - #1216 was two calls; the diagnostic named both (D9).
+  - #1302 (closes #1178):
+    - these failures reach the popup typed (`PasskeyNotOpenedError`; `exportPlain` keeps the type): a wrong password, another profile's passkey, a passkey with no PRF, and an unconfirmed or cancelled prompt;
+    - each logs at debug where its page words it (`logCredentialFailure`);
+    - any other failure on those paths stays at error.
+- Did not hold: #1178's `Failed to create profile:` + `PasskeyPrfError` form at HEAD. It came from a chaos build that predates #1221 (phase 3.3, [lessons/phase-3.md](lessons/phase-3.md)).
+- Superseded:
+  - D5's `Promise.all`, which Codex reproduced publishing the failure before the supersede;
+  - D2's op-wide match, narrowed to `getSyncedBlockHeader`;
+  - `SameUnlockMethodError` as a refusal: it stays at error (D10).
+- Lessons:
+  - None promoted to `lessons.md`: it holds 8183 of its 8192 bytes, and none of its entries is superseded.
+  - The demotion rules went to the `logging-policy` skill, which owns log levels.
+  - The tooling candidates stay in [lessons/phase-2.md](lessons/phase-2.md) and [lessons/phase-3.md](lessons/phase-3.md): the chaos model's line citations, the auto-import types of a new `src/utils/` export, `gh stack sync` on a conflict, and Biome's line budget, which ignores comments.
+- Known limits:
+  - #1299 (D10);
+  - #1304: a lock refusal that the popup handles before the lock event, which arrives on another port, still logs at error.
+- Open items: #1296, two sibling popup reads that a lock can still leave at warn or error.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # log-levels-1: expected refusals leave the error level
 
@@ -138,6 +173,27 @@ Round 1, run in parallel on the draft. Every finding was checked against the tre
 - Round 2, Codex resumed on the revised plan: `VERDICT: approve` (no remaining material defect).
 - Arc 1 review loop (on `4c5c67f2f..HEAD`). Round 1: Codex (fresh session, gpt-6.1-sol, high) found one comment error (the not-synced callers fall back or defer; they do not both answer from elsewhere); Opus (diff review) found `StoreErasedError` splitting the coordinator's doc from its class (also caught in self-review), a gas comment that named too few session changes, a vacuous chaos-model assertion, a stale fixture id, and asked that the erased-store debug line carry the error. All accepted, fixed in `056881d8a`. Round 2 (Codex resumed): `VERDICT: clean`.
 - Both: D1, D3, D4 and D7's typed errors sound; no fix adds state, a lifecycle, a protocol, a recovery policy or a public contract.
+- Arc 2 review loop.
+  - Round 1, Codex (fresh session, gpt-6.1-sol, high): one demonstrated miss, the reconnect path's unhandled `stale.resume(...)`.
+  - Round 1, the Opus leg found:
+    - the same site;
+    - the shell's wiring, untested, now pinned by `popup/app-wiring.test.ts`;
+    - five comment fixes;
+    - two sibling reads outside the arc's issues, filed as #1296.
+  - All accepted. Round 2 (Codex resumed): `VERDICT: clean`.
+- Arc 3 review loop.
+  - Round 1, Codex and the Opus leg: the same residual, a slot corrupted under the right credential that now reads at debug. It became the closed known limit #1299, since separating the two changes `openProfileSlots`' exported contract.
+  - Round 1, the Opus leg also found:
+    - the regenerated auto-import types left uncommitted;
+    - `SameUnlockMethodError` unreachable from any page, so it stays at error (D10);
+    - two stale comments.
+  - All fixed. Round 2 (Codex resumed): `VERDICT: clean`.
+- Cross-arc pass: a fresh Codex session (gpt-6.1-sol, high) over the net diff from `78f5f9171`.
+  - The four demotion rules agree, and none combines with another to hide a live failure.
+  - A restore's disconnect and its rollback failure stay at error.
+  - No helper is duplicated in three places.
+  - All 65 chaos citations resolve.
+  - `VERDICT: clean`.
 
 ## Seeds (not run; orchestrator-owned)
 
