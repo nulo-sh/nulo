@@ -38,3 +38,5 @@ Codex (fresh session over `2914b9699..HEAD`): reject, two demonstrated false gre
 - The passkey drivers took `getPasskeyUnlockParams` for its input only and answered as the bound credential, so parameters naming another credential, which `auth.vue` hands its prompt, passed. Every parameter read now checks the credential is the profile's own (O2).
 - A first sighting trusted the words `exportMnemonic` returned apart from the master; the words must now derive the master `exportPlain` returned (O6).
 - A comment above the model test's surfaces restated them; deleted.
+
+The resumed round approved with no new finding; the loop converged.
