@@ -9,10 +9,20 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 0a659726c
 trunk: dev
-status: planned (final Codex pass: approve); arc 1 next
+status: completed; delivered as one PR carrying this close-out
 issues: "#1333"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-28. Planned and implemented in one session, as one arc.
+- **Status:** completed. The arc and this close-out ship as one PR into `dev`; its merge closes #1333 and archives this plan.
+- **Shipped:** Send's picker on the shared Holdings list, its rows native buttons (`TokenList.vue`, `TokenCard.vue`, `SelectTokenPopup.vue`); paste-to-add with the signed list's flag on the offer, and a whole pasted address matching by contract only, on Holdings too (`token-search.ts`); New token's `{ address, onAdded }` payload in place of the cache-store field, reported after its close while the scope holds (`NewTokenPopup.vue`); Send's pick of the reported token once its list holds it, keeping the recipient and a token-mode amount, a hand pick made meanwhile winning (`send.vue`); the corner's read zero and skeleton (`AmountCard.vue`, `balanceState`), drawing nothing for a stored side or decimals it cannot parse; S1 and N1; `token-list.test.ts`'s seed naming its balance functions (e2e-testing flake ledger row 66).
+- **Dropped or rejected:** S2, merged into S1, and N1's never-minted token (D11). A pending-pick watcher or a re-read waiting on its successor (D4, known limit #1340). A focus return past an add row that a new row replaced (#1339). No `lessons.md` line: it holds 8191 of 8192 bytes and none of its entries is superseded; the candidates stay in [lessons/phase-4.md](lessons/phase-4.md), and the seed lesson is the e2e-testing skill's ledger row 66.
+- **Known limits:** #1339, #1340.
+- **Open items:** #1341 (owner decision: From and To after a paste-to-add).
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 ## Goal
 
