@@ -11,3 +11,11 @@
   - two stale comments.
 - `src/utils/` is an auto-import dir: a new export there changes `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json`. A build regenerates both, and they ship in the same commit.
 - Round 2 (Codex resumed): clean. Reviewed head: `lint`, `typecheck`, `test` (944 files) green; the Chrome trio 11 of 11 again.
+- Sync onto `dev` at `bf105592b`, after lock-ux-1 and chaos-3 landed. `gh stack sync` aborted on this layer, so the layers took `dev` by hand, as merges.
+  - #1301 cut its citations into the account file page and the import flow against `0d5b1967c`. Lock-ux-1 moved those lines before #1301 landed, so `dev`'s own "every cited line" check fails on five citations; the popup layer repoints them.
+  - This layer's merge repoints 22 more, into the profile service, the lock screen, the Unlock method page and the account file page: the lines this arc and `dev` both moved.
+  - #1301 also held a known finding for #1178's Unlock method line (its D10: none once this fix lands). The entry and its model expectation are gone; the same line at error is now an unfiled red.
+  - Gate:
+    - `lint`, `typecheck:all`, `test` (947 files) and `check:plans` exit 0;
+    - the armed Chrome smoke build left the generated types unchanged;
+    - chaos-3's list (e), every `changeUnlockMethod` variant and the race, ran 3 of 3 green at retry 0 on Chrome, with no known finding (chaos-3 recorded it red on `known[#1178=1]`).
