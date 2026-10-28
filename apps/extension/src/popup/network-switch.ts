@@ -85,7 +85,7 @@ async function loadAccounts(deps: NetworkSwitchDeps, scope: NetworkSwitchScope, 
 }
 
 export type NetworkSwitchHandler = (() => Promise<void>) & {
-	/** Ends the run in flight, as a lock does: it stops at its next await, and its failure resolves. */
+	/** Ends the run in flight: it writes nothing past its next guard, and a failure it meets resolves at debug. */
 	supersede: () => void
 }
 

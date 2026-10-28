@@ -30,7 +30,7 @@ export function forwardVueError(error: unknown, _instance: unknown, info: string
 	else console.error("vue error", { error, info })
 }
 
-/** Logs `line` with a call's failure that no caller awaits, under the same disconnect rule. */
+/** Logs `line` with the failure of a call no caller reports, under the same disconnect rule. */
 export function logCallFailure(line: string, error: unknown): void {
 	if (isClientDisconnectRejection(error)) console.debug(line, { error })
 	else console.error(line, { error })

@@ -142,8 +142,8 @@ class Session {
 	}
 }
 
-/** `run`'s failure rejects while `live` holds. Once a lock or a switch has ended the session, the
- *  worker refuses its reads, and the failure resolves at debug. */
+/** `run`'s failure rejects while `live` holds. Once a lock or a switch ends the session, the failure
+ *  belongs to the ended session and resolves at debug. */
 async function whileLive(live: () => boolean, run: Promise<void>): Promise<void> {
 	try {
 		await run

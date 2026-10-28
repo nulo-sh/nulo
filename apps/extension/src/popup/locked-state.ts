@@ -12,7 +12,7 @@ export type SelectionCheck = "present" | "followed" | "superseded" | "unread"
 
 export interface LockedStateShell<P> {
 	closePopups: () => void
-	/** Bumps the scope epoch and closes any snack. */
+	/** Ends what a lock ends in the shell: the scope epoch, any snack, the network-switch run. */
 	onLocked: () => void
 	/** Clears the shell's logged-in mark, and supersedes every activation in flight so none sets it again. */
 	markLocked: () => void

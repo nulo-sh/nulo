@@ -510,7 +510,7 @@ describe("useProfileBootstrap", () => {
 			expect(unhandled).not.toHaveBeenCalled()
 		})
 
-		test("control: one no lock superseded still reports its failure, after the list lands", async () => {
+		test("control: one no lock supersedes still reports its failure, after the list lands", async () => {
 			let answerProfiles!: (profiles: unknown[]) => void
 			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockImplementationOnce(
 				() => new Promise((resolve) => (answerProfiles = resolve)),

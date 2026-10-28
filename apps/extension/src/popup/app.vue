@@ -247,11 +247,13 @@ watch(
 	[() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id, () => appStore.networks],
 	() => void networkArrival.refresh(),
 )
+/** No caller awaits a resume, so its failure is reported here. */
+const resumeStale = (profileId) => stale.resume(profileId).catch((error) => logCallFailure("stale-network resume failed", error))
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()
-		if (active && !isDappWindow(route.name)) stale.resume(active).catch((error) => logCallFailure("stale-network resume failed", error))
+		if (active && !isDappWindow(route.name)) void resumeStale(active)
 	},
 )
 
@@ -510,7 +512,7 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	if (!isCurrent()) return
 	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
 	// A worker restart drops a running reset without a word; its journal resumes here.
-	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void resumeStale(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */

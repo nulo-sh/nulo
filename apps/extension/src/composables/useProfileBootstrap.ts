@@ -127,7 +127,7 @@ async function settleActiveNetwork(
 }
 
 /** `run` plus `settled`, which rethrows its failure. It attaches to the run at once, so a failure
- *  that lands before the caller awaits it is never an unhandled rejection. */
+ *  that lands before the caller awaits it is never an unhandled rejection; one nobody awaits is dropped. */
 function awaitLater<Run extends { promise: Promise<void> }>(run: Run): Run & { settled: () => Promise<void> } {
 	const failure = run.promise.then(
 		() => undefined,
