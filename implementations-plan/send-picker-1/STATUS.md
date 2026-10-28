@@ -7,3 +7,4 @@
 - 2026-10-28: final Codex pass resumed: approve. Plan committed; arc 1 next (auto-continue).
 - 2026-10-28: phase 1 green (1037 tests; lint, typecheck:all exit 0); 10 tests red on base.
 - 2026-10-28: phase 2 green (`bun run test src/popup` 3271 passed; lint, typecheck:all exit 0); 47 tests red on base, of which the New token file's legacy cases are harness-only (rerun on base with the old cache mock: 7 red, all payload or report).
+- 2026-10-28: phase 3 green (`bun run test src/components/composite/send src/popup/pages` 1201 passed; build-storybook and `audit:vue` exit 0, 16258 tests); 6 tests red on base.

@@ -713,6 +713,56 @@ describe("send page — an amount over the balance says so", () => {
 	})
 })
 
+describe("send page — the balance beside Max", () => {
+	/** What the corner draws: the figure, a skeleton, or nothing. */
+	const corner = (w: W) => {
+		const figure = w.find('[data-testid="send-amount-balance"]')
+		if (figure.exists()) return figure.text()
+		return w.find('[data-testid="send-amount-balance-loading"]').exists() ? "skeleton" : "nothing"
+	}
+	const balanceConnected = () => lastClient<{ onConnected: EventHandler<void> }>(TokenBalanceServiceClient).onConnected
+	const FRESH = { ...BALANCE, privateBalance: "0", publicBalance: "0", updatedAt: 0 }
+
+	test("a row walks from unsynced to read: a skeleton, nothing on a failed first sync, then the zero it read, kept past a later failure", async () => {
+		mocks.getTokenBalances.mockResolvedValue([])
+		const { w } = await mountSend({ realAmountCard: true })
+		expect(corner(w)).toBe("skeleton")
+
+		balanceAdded().invoke(FRESH)
+		await flushPromises()
+		expect(corner(w)).toBe("skeleton")
+
+		const failure = { at: 1, message: "PXE down" }
+		balanceUpdated().invoke({ ...FRESH, syncFailure: failure })
+		await flushPromises()
+		expect(corner(w)).toBe("nothing")
+
+		balanceUpdated().invoke({ ...FRESH, updatedAt: 2 })
+		await flushPromises()
+		expect(corner(w)).toBe("0 TST")
+
+		balanceUpdated().invoke({ ...FRESH, updatedAt: 2, syncFailure: failure })
+		await flushPromises()
+		expect(corner(w)).toBe("0 TST")
+		w.unmount()
+	})
+
+	test("with no row, a refused balance read draws nothing until a read lands", async () => {
+		mocks.getTokenBalances.mockResolvedValue([])
+		const { w } = await mountSend({ realAmountCard: true })
+		balanceConnected().invoke()
+		mocks.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
+		balanceConnected().invoke()
+		await flushPromises()
+		expect(corner(w)).toBe("nothing")
+
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		expect(corner(w)).toBe("skeleton")
+		w.unmount()
+	})
+})
+
 describe("send page — the estimate follows the amount the balance covers", () => {
 	const fee = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("feeEstimate")
 	const estimating = (w: W) => w.findComponent({ name: "FeeSettingsCard" }).props("isEstimating")

@@ -25,7 +25,7 @@ const STUBS = {
 
 const mountCard = (props: Record<string, unknown> = {}) =>
 	mount(AmountCard, {
-		props: { tokenBalanceByType: 100, ...props },
+		props: { tokenBalanceByType: 100, balanceState: "read", ...props },
 		global: { stubs: STUBS },
 	})
 
@@ -120,18 +120,44 @@ describe("composite/AmountCard", () => {
 		["124457554400000000000000000", "124,457,554.4 TST"],
 		["1123456789012345678", "1.12345678 TST"],
 		["1000000000", "0 TST"],
+		["0", "0 TST"],
 	])("the balance beside Max reads the raw balance %s as %s: exact, cut at 8 places", (raw, text) => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: Number(raw) / 10 ** 18, balanceRawByType: raw })
 		expect(w.get("[data-testid='send-amount-balance']").text()).toBe(text)
 	})
 
 	test.each([
-		["a zero balance", { tokenBalanceByType: 0, balanceRawByType: "0" }],
 		["no raw balance", { tokenBalanceByType: 42, balanceRawByType: null }],
 		["no decimals", { token: { symbol: "TST" }, tokenBalanceByType: 42, balanceRawByType: "42" }],
 	])("no balance beside Max with %s", (_name, props) => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, ...props })
 		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+	})
+
+	test("a zero read beside Max, with Max and the field still off", () => {
+		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: 0, balanceRawByType: "0" })
+		expect(w.get("[data-testid='send-amount-balance']").text()).toBe("0 TST")
+		expect(w.get("[data-testid='send-amount-max']").attributes("disabled")).toBeDefined()
+		expect(w.get("[data-testid='send-amount-input']").attributes("disabled")).toBeDefined()
+	})
+
+	test.each([
+		["loading", { balanceState: "loading" }],
+		["no state passed", { balanceState: undefined }],
+	])("a balance not read yet (%s) draws a skeleton beside Max, never the zero placeholder", (_name, props) => {
+		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: 0, balanceRawByType: "0", ...props })
+		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+		expect(w.find("[data-testid='send-amount-balance-loading']").exists()).toBe(true)
+	})
+
+	test.each([
+		["unavailable", { token: { symbol: "TST", decimals: 18 }, balanceState: "unavailable" }],
+		["loading with no token", { token: undefined, balanceState: "loading" }],
+	])("%s: nothing beside Max", (_name, props) => {
+		const w = mountCard({ tokenBalanceByType: 0, balanceRawByType: "0", ...props })
+		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+		expect(w.find("[data-testid='send-amount-balance-loading']").exists()).toBe(false)
+		expect(w.find("[data-testid='send-amount-max']").exists()).toBe(true)
 	})
 
 	test("quoteless: no fiat line at all — no fake $0.00, no warning noise", () => {
@@ -572,7 +598,7 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 	// Attached and really focused: the fit asks which element has the focus.
 	const mountField = (props: Record<string, unknown> = {}) =>
 		mount(AmountCard, {
-			props: { tokenBalanceByType: 100, modelValue: "", token: { symbol: "TST", decimals: 18 }, ...props },
+			props: { tokenBalanceByType: 100, balanceState: "read", modelValue: "", token: { symbol: "TST", decimals: 18 }, ...props },
 			global: { stubs: STUBS },
 			attachTo: document.body,
 		})

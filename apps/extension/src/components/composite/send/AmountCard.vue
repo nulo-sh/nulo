@@ -20,6 +20,9 @@ const props = defineProps({
 	/** The selected side's balance in base units, as a digit string; null until it loads. Every
 	 *  balance digit Max fills or the corner shows comes from it: `tokenBalanceByType` is a float. */
 	balanceRawByType: { type: String, required: false, default: null },
+	/** `read` draws the balance, a zero included; `loading` draws a skeleton; `unavailable` nothing.
+	 *  Unread by default, so a parent that passes nothing never shows a zero it did not read. */
+	balanceState: { type: String, default: "loading" },
 	/** Live usable quote for the selected token ({ usd, fetchedAt }) or null.
 	 *  Null hides all fiat UI (and the fiat-input toggle). */
 	liveQuote: { type: Object, required: false, default: null },
@@ -245,7 +248,7 @@ const conversionTitle = computed(() => (props.proxyTicker ? `Priced via ${props.
  *  already names the private/public side, so no dot/word repeats it here.
  *  Truncated at 8 places, so it never reads more than the balance. */
 const balanceSegment = computed(() => {
-	if (!props.token || !props.tokenBalanceByType || props.balanceRawByType == null || tokenDecimals.value === undefined) return null
+	if (props.balanceState !== "read" || !props.token || props.balanceRawByType == null || tokenDecimals.value === undefined) return null
 	const amount = formatBaseUnits(props.balanceRawByType, tokenDecimals.value, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })
 	return `${amount} ${props.token.symbol}`
 })
@@ -508,6 +511,7 @@ const handleFiatBalanceAction = (divisor) => {
 
 				<Flex align="center" gap="8" style="flex: none">
 					<span v-if="balanceSegment" data-testid="send-amount-balance" :class="$style.balance_corner">{{ balanceSegment }}</span>
+					<Skeleton v-else-if="token && balanceState === 'loading'" :width="48" :height="10" data-testid="send-amount-balance-loading" />
 					<button
 						type="button"
 						:disabled="!tokenBalanceByType"

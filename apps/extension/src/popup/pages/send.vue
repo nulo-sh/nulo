@@ -250,6 +250,16 @@ const amountValidation = computed(() =>
 	}),
 )
 
+/** The amount card's balance corner, first match wins: a row read once shows its figure, even after a
+ *  later sync failed; a failed first sync, or a failed read with no row, shows nothing; anything
+ *  else is still loading, a never-synced row's zero placeholder included. */
+const balanceState = computed(() => {
+	const row = tokenBalance.value
+	if (row && row.updatedAt !== 0) return "read"
+	if (row ? row.syncFailure : balancesState.value === "unavailable") return "unavailable"
+	return "loading"
+})
+
 /** The line under the amount names only a balance the wallet read: a row never synced holds a zero
  *  placeholder, which the token card draws as loading. */
 const exceedsBalance = computed(() => amountValidation.value.reason === "exceedsBalance" && tokenBalance.value?.updatedAt !== 0)
@@ -846,6 +856,7 @@ onBeforeUnmount(() => {
 						:token="activeToken"
 						:tokenBalanceByType
 						:balanceRawByType="balanceRaw ?? null"
+						:balanceState
 						:liveQuote
 						:proxyTicker
 						:exceedsBalance
