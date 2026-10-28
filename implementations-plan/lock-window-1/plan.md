@@ -1,8 +1,8 @@
 ---
 plan: lock-window-1
 tier: mid
-status: awaiting approval (final pass: conditional approve, the orchestrator's call on OA-1's overlap)
-issues: "#1183 #1225 (arc 1), #1138 (arc 2); #1218 dispositions only; #1186 did not hold"
+status: approved; arc 1 merged (#1272); amended for the owner's answers (2026-10-27); arcs 2-3 and the close-out in progress
+issues: "#1183 #1225 (arc 1, merged), #1138 (arc 2), #1218 (arc 3, closed by the close-out); #1186 did not hold"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -10,14 +10,14 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: three sonnet explorers; Codex gpt-6.1-sol at high (dual audit, resumes, two fresh final passes); one Opus Plan leg
-base: origin/dev at 78f5f9171
+base: origin/dev at 78f5f9171 (arcs 2-3: origin/dev at d1165460c, arc 1 merged)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
 # lock-window-1: screens that outlive a lock, and writes that do
 
-Two arcs and a docs-only close-out, stacked on `dev`. Arc 1 makes the lock screen and the two export pages drop what was typed or revealed under a session once it ends or the profile changes. Arc 2 lands an import that a worker restart overtook on the lock screen. Every #1218 site gets a written disposition on the issue and none changes code here. Evidence: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Three arcs and a docs-only close-out, stacked on `dev`. Arc 1 (merged as #1272) makes the lock screen and the two export pages drop what was typed or revealed under a session once it ends or the profile changes. Arc 2 lands an import, a New profile or a first-profile create that a worker restart overtook on the lock screen. Arc 3 makes a fee payer's address edit save over the row as it stands at the write, and logs a discovery that a network reset ended at debug. Every other #1218 site is a recorded exception; the close-out closes #1218. The owner answered every ask on 2026-10-27: "ok go with your proposals, fix all." Evidence: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Findings and dispositions
 
@@ -30,23 +30,24 @@ Every path is a code trace at the base (recon.md § Claims checked). The rule th
 | B2 authwit reconcile | follows a tx commit; its only second chance is the Finalized commit | traced | kept (D3) |
 | B3 seeder markers | a pass starts under S; a marker write lands after a lock: the attempt record, a preview's verdict (`seeder.ts:549-557`), the marker after a landed persist | traced | kept (D4) |
 | B3' seeded row | the lock lands inside `persistToken` (local reads and two writes, no fetch) | traced | known limit KL-4 (D4) |
-| B4 stale row | `updateFpcAddress` writes the row it read before its PXE calls | traced | owner ask OA-3; a race shows "Invalid id" where today the row comes back |
+| B4 stale row | `updateFpcAddress` writes the row it read before its PXE calls | traced | **arc 3** (D5; owner, OA-3: fix) |
 | B5 registry status, revoke prune | mirror a proven tx; the popup reads only the stored status | traced | kept (D3) |
-| B4, B6-B9 person or dApp asked | the write lands after a lock; refusing it removes the row after unlock | traced | owner ask OA-1; unchanged now |
+| B4, B6-B9 person or dApp asked | the write lands after a lock; refusing it removes the row after unlock | traced | kept (owner, OA-1: A) |
 | B9 incoming cursor, journal create | the reset runs once per added account; the record is of work the person started | traced | kept (D3) |
-| #1218 "Also": discovery log level | a network reset deletes the network between discovery's liveness check and its fenced write; the catch logs warn and error while the session is live (`fpc/service.ts:194-202`) | traced | deferred to the `fpc/service.ts` arc OA-3 carries (D11) |
+| #1218 "Also": discovery log level | a network reset deletes the network between discovery's liveness check and its fenced write; the catch logs warn and error while the session is live (`fpc/service.ts:194-202`) | traced | **arc 3** (D11) |
 | #1183 | type for A, pick B, pick A: the text is back and Continue is on | demonstrated (agent session) | **arc 1** (D8) |
 | #1225 | a lock that leaves the export page mounted keeps the typed passwords, the approval and the words | traced | **arc 1** (D9) |
-| #1138 | restore finalizes, the worker restarts, the reconnect settles, `awaitProfileActivation` resolves on the stale flag: Home with no session | demonstrated (chaos seed 1003, 2 of 2) | **arc 2** (D7); its reading and New profile: OA-2 |
+| #1138 | restore finalizes, the worker restarts, the reconnect settles, `awaitProfileActivation` resolves on the stale flag: Home with no session | demonstrated (chaos seed 1003, 2 of 2) | **arc 2** (D7), widened to New profile and the first-profile create (D14; owner, OA-2: A) |
 | #1186 | SECURITY.md already says a lenient session persists a bearer under either unlock (#1142, 518170a18) | did not hold | a comment on the issue (D10) |
 
 ## Outcome & Quality Bar
 
 For a person who locks the wallet, lets it lock, or switches profile while a page is open, and for the maintainer who reads the chaos oracle O3 ("no write for a profile that is locked out"):
 - A secret typed or revealed under a session is gone from the page once the session ends or the profile changes, and the page shows its first step, as Unlock method does. A second reveal after the reset behaves like the first, its auto-close included.
-- An import whose session a restart dropped lands on the lock screen, never on a Home with no session.
+- An import, a New profile or a first-profile create whose session a restart dropped lands on the lock screen, never on a Home with no session.
+- A fee payer's address edit never brings back a fee payer removed meanwhile, nor drops a rename made meanwhile.
 - Every #1218 site carries a written disposition on the issue, so an O3 hit on a `txs`, `authRegistry` or `tokenSeeded` row reads as a recorded exception with its reason, not a new bug.
-- Good enough: the person-asked sites stay as they are until OA-1 is answered; the chaos harness is not extended, and whether O3 encodes the exceptions is the chaos plan's call.
+- Good enough: the person-asked sites stay as they are (the owner, OA-1: A); the chaos harness is not extended, and whether O3 encodes the exceptions is the chaos plan's call.
 
 ## Architecture & Implementation
 
@@ -57,21 +58,31 @@ For a person who locks the wallet, lets it lock, or switches profile while a pag
 - `composables/useSecretCountdown.ts`: `start()` also sets `isAutoCloseDisabled` back to false: a countdown it arms is never shown as disabled. Today `start()` runs once per mount (`seed.vue` `showWords`), so nothing a person sees changes; the reset makes a second reveal possible, and without this the second countdown would fire under a hidden timer after an earlier "keep open". `start()` already replaces `closeDeadline`.
 - `pages/auth.vue` (D8): the profile-id watcher (`:322-327`) also clears `password`, clears `isWrongPassword` and sets `isPasswordType` back to masked, but only when the previous id was defined. On a `known: false` mount, the first profile's arrival clears nothing.
 
-### Arc 2 — an import a restart overtook (#1138)
+### Arc 2 — an import or a new profile a restart overtook (#1138)
 
-- `popup/lock-landing.ts` (D7): `LockLandingState` gains two raw facts: `holdsSession` (the shell's `isLogined`) and `onImportRoute` (the `popup-import` route). `decideLockLanding` returns `lock` when `onAuthRequiredRoute || (holdsSession && onImportRoute)`, after the `!hasProfile` branch, so every branch stays unit-testable. `app.vue` fills both fields. `lock` runs `lockedState.enter`, which clears `isLogined` and lands on the lock screen. The header comment gains one sentence: an import past its finalize runs over the session it opened. The comment at `tests/e2e/helpers/profile-chaos/restart.ts:56-57` gains the same exception.
-- `pages/import.vue` (D7): `completeImport` sets an `isUnmounted` flag in `onUnmounted`, the idiom of `auth.vue:61,305`. After its wait, once the page has gone, it releases no own window, shows no toast and pushes no route. The shell's landing owns the route by then, and Home's restore banner (`utils/restore-outcome.ts`) carries a skipped account state after the unlock.
+- `popup/lock-landing.ts` (D7, D14): `LockLandingState` gains two raw facts: `holdsSession` (the shell's `isLogined`) and `onOpeningRoute` (a route whose flow opens a profile's session: `popup-import` and `popup-profile-new`; New profile and the first-profile create are both `popup-profile-new`, reached from the lock screen's chooser and from Register). After the `!hasProfile` branch, `decideLockLanding` returns a new action, `end-flow`, when `holdsSession && onOpeningRoute`, so every branch stays unit-testable. `app.vue` fills both fields from `appStore.isLogined` and `route.name`. Its `end-flow` ends the opening flows (below), releases the own window, then runs `lock`: `lockedState.enter`, which clears `isLogined` and lands on the lock screen with the shell's profile selected. Released, an own import window's unlock goes Home; kept, `followOwnRoute` holds the flow across the lock screen and `postAuthRoute` would mount a fresh import form (`own-window.ts:160,168`). The header comment gains one sentence: a flow past the moment it opened its profile runs over that session.
+- `popup/opening-flow.ts` (new, D16): one module-level run fence (`createRunFence`). `endOpeningFlows()` invalidates it; `openingFlowLive()` gives a page a snapshot at setup. The landing's navigation is not awaited (`app.vue` `route: (path) => router.push(path)`), so a completion that settles before it commits still sees its own route; the fence tells it synchronously that the shell owns the window.
+- `pages/import.vue` (D7, D16): takes `openingFlowLive()` at setup and sets an `isUnmounted` flag in `onBeforeUnmount`. After its wait, `completeImport` releases no own window, shows no toast and pushes no route once the flow was ended or the page has gone. The shell's landing owns the route by then, and Home's restore banner (`utils/restore-outcome.ts`) carries a skipped account state after the unlock.
+- `pages/profile/new.vue` and `new-profile-helpers.ts` (D14, D16): the page passes `flowLive: openingFlowLive()` in the helper's deps. `handOffCreatedProfile` returns before any routing once the flow is ended, as it does once the page has left (`left()`), and shows no toast after its awaited navigation once the flow is ended. The open path needs nothing new: its next `assertActive` reads the `isLogined` the lock cleared and hands off, which then returns. An ordinary lock in that tail keeps today's hand-off: the fence moves only on `end-flow`.
+- `tests/e2e/helpers/profile-chaos/restart.ts` and `network-drivers.ts` (D17): `restartBackground` takes whether the page's flow opened its session, and `restoreHeld`'s `compete` passes `p.stage === "account-state"`. An opened flow's page expects the lock screen, or its own page when the restart came before the shell marked it open (the landing then settles it, and the completion's own wait ends it on the lock screen). A flow that opened nothing keeps the strict `kept` expectation. No new action: the model's `restoreHeld` already expects committed-then-locked on the lock screen.
+- Out of reach, unchanged: a restart before the shell bootstrapped the created profile (`isLogined` never set). The helper's start wait (30 s) ends in its hand-off: the lock screen with the created profile selected and its "Open the wallet again to unlock your new profile" toast.
 
-### #1218 — dispositions, no code
+### Arc 3 — a fee payer's address edit, and a discovery a reset ended (#1218)
 
-One comment on #1218 carries the dispositions table above with each reason, names OA-1, OA-3 and D11 as what keeps it open, and KL-4. #1218 stays open.
+- `wallet/services/fpc/service.ts` `updateFpcAddress` (D5): inside the lock, right before the write, re-read the row with `requireOwnedRow(await this.storage.get(id), profile.id)` and write `{ ...current, address }`. A rename made during the PXE checks survives. A row removed during them (Delete, a chain purge, a profile purge) fails with the existing "Invalid id", which the Edit popup shows as its error line. `updateFpc`, `deleteFpc`, `clearChainState` and `purgeForProfile` take the same lock, so the re-read sees each of them whole or not at all. The checks before the lock keep reading the first row: its type, chain and protocol slot, which no rename changes.
+- The discovery's catch (`fpc/service.ts:195-202`, D11): after the session check, a network no longer live since the discovery's mark (`isNetworkLive(network.id, since)`) ends the discovery with one fixed `debug` line, "Protocol FPC discovery stopped: its network was reset", as the session's end does. A failure while both stand still logs at warn and error.
+
+### #1218 — dispositions, then closed
+
+The dispositions comment on #1218 stands (OA-1 A recorded). Arc 3 builds OA-3 and D11, the last open reasons; the close-out closes #1218 and adds one follow-up comment saying so.
 
 ### Alternatives not taken
 
 - (A) **Strict P5 everywhere**, the competing outline. Each write checks its own row's profile's session: the poller polls only the open profile's rows; B2, B5 and the person-asked sites refuse too, and a reconcile at unlock heals what they strand. Rejected: it adds a recovery lifecycle, and it changes what a person sees at OA-1's sites and when a switched-away profile's history settles.
 - (B) **A guard in `SealedEntityStorage`** that refuses any write for a profile with no live session. Rejected: the lane rules out a global guard, and it would refuse the deliberate post-lock writes: the journal's `session_ended` records and a send's recording (#1055).
 - (C) **#1138 option (b) alone**: the import completion asks the worker. Rejected: `route-guard.ts:39-40` bounces `/popup/auth` back to Home while `isLogined` holds, so (b) must clear the flag through the shell's locked state, which the landing already owns.
-- (D) **#1138 read literally** (the import route always auth-required): a restart before finalize would unmount the import's rollback screen whenever a profile is selected (`backup-restore-sw-restart.test.ts:276-323`; `SelectProfilePopup.vue:74-77`). **Keyed on `isLogined` on every route**: also moves New profile, the first create, Delete profile and the dApp windows. Both rejected; New profile is OA-2.
+- (D) **#1138 read literally** (the import route always auth-required): a restart before finalize would unmount the import's rollback screen whenever a profile is selected (`backup-restore-sw-restart.test.ts:276-323`; `SelectProfilePopup.vue:74-77`). **Keyed on `isLogined` on every route**: also moves Delete profile and the dApp windows. Both rejected; New profile and the first create joined by the owner's answer (D14).
+- (H) **OA-3 by a version check** (a revision field on the fee-payer row, compared at the write). Rejected: a stored-shape change, and the lock already orders every writer of the row, so a re-read inside it is the whole fix.
 - (E) **Seeder: bind the pass to its session** (in `guardsHold`, or at each marker write). Rejected: the pass counts an attempt before its preview, and at the cap (3) no later pass repeats it. A lock and re-unlock during the capping attempt then leaves a default "failed" that today is seeded.
 - (F) **Poller: re-check the batch's session before the commit** (the earlier arc 1). Rejected after the first final pass. A refused poll is not always polled again: a Dropped row's watch is evicted at its 30-minute window even while locked (`transaction/service.ts:521-526`) and is never re-armed (`:170-175`), so a mined transaction can stay Dropped; and a lock longer than `waitForTx`'s 120 s bound (`:373-377`) makes a registry toggle skip its status write. It would also close no property O3 checks: D2 lands the same write, for a profile with no open session, by design.
 - (G) **Countdown: the page resets the composable's refs itself.** Rejected: the inconsistency is `start()` arming a timer under a disabled flag, so the fix belongs in `start()`; a `reset()` method would add a method for one caller.
@@ -84,14 +95,18 @@ One comment on #1218 carries the dispositions table above with each reason, name
 | D2 | B1b kept | pinned by `sealed-transactions.composition.test.ts:270-293`; polled on the row's own endpoint, sealed under its own kept keys | both: agree |
 | D3 | B2, B5 and the revoke prune, the incoming cursor reset and the journal create are deliberate exceptions | each records the outcome of work already done; refusing strands a row no later run repairs (B2's one second chance can be refused too) | both: agree, B2 qualified (Codex) |
 | D4 | The seeder's markers are a deliberate exception; the `persistToken` window is KL-4 | what it writes after a lock records a step it took, and the attempt cap means a refused record is never repeated (alternative E); its pass already stops at its next step once its profile is not open (`guardsHold`) | Codex r1 2, r2 1-2; Opus 3, 4a |
-| D5 | The `updateFpcAddress` re-read is OA-3 | it changes what a race shows ("Invalid id" in the Edit popup) | Codex 5, Opus 9 |
+| D5 | The `updateFpcAddress` re-read ships in arc 3 | it changes what a race shows ("Invalid id" in the Edit popup), so it waited for the owner: OA-3, "fix" (2026-10-27) | Codex 5, Opus 9; the owner |
 | D6 | Withdrawn with D1's fence | it named the poller's composition tests | — |
-| D7 | #1138: the landing locks an import that holds a session; the departed page's completion stays silent | the owner's direction (2026-10-26: "the lock landing should treat the import route as auth-required, with an e2e proof"), read as the post-finalize case (D); the completion would otherwise toast and push over a later page | revised after Opus 2, 4b, 6; Codex 3 |
+| D7 | #1138: the landing locks an import that holds a session; the departed page's completion stays silent | the owner's direction (2026-10-26: "the lock landing should treat the import route as auth-required, with an e2e proof"), read as the post-finalize case (D) and confirmed (2026-10-27); the completion would otherwise toast and push over a later page | revised after Opus 2, 4b, 6; Codex 3; the owner |
 | D8 | #1183: the watcher clears; an in-flight unlock already discards itself (`moved()`, `auth.vue:121-129`) | the issue's fix | both: agree |
 | D9 | #1225 reuses `watchLockStart`; `start()` re-enables the countdown (alternative G) | the follower exists and is tested (`locked-state.test.ts:441-451`); a second reveal must not inherit "keep open" | Opus 7; first final pass 3 |
 | D10 | #1186: a comment, no change | the sentence is right at the base; the composition test pins the behaviour | both: agree |
-| D11 | The discovery log level waits for the `fpc/service.ts` arc | same file and same catch as OA-3's change; a warn line during a network reset is the whole consequence | lead; not yet audited |
+| D11 | The discovery log level ships in arc 3, beside OA-3's change | same file; a network reset is an expected end of a discovery, as a lock is, and a warn line reaches every user's log | lead; the owner ("fix all") |
 | D12 | Deviation: the chaos model cites `seed.vue` and `auth.vue` by line, which recon missed; arc 1 moves the three citations in `tests/e2e/helpers/profile-chaos/model.ts` | `profile-chaos-model.test.ts` requires each cited line to hold its fragment; a line number is upkeep, not a harness change | lead |
+| D14 | New profile and the first-profile create take the import's landing through the same raw fact; their completion stops at the landing's signal (D16) | the owner, OA-2 option A (2026-10-27); `activateCreatedProfile` re-checks `isLogined` after each await, but its hand-off reads a route the landing's pending navigation has not yet moved | the owner; amendment review, Codex 3 |
+| D16 | `end-flow` ends the opening flows synchronously and releases the own window before it locks | the landing's navigation is still pending when `isLogined` clears, so a completion can still see its route and toast or route over the lock screen; a kept own import window would return to a fresh import after the unlock | amendment review, Codex 1 and 3 |
+| D17 | The chaos driver's restart expects the lock screen for a flow that opened its session | it named the page `kept` from the URL alone, so the fixed landing would time the driver out; a flow that opened nothing stays strict | amendment review, Codex 2 |
+| D15 | #1218 closes at the close-out | OA-1 A is recorded in the dispositions comment, and arc 3 builds OA-3 and D11 | the owner's answers |
 | D13 | A reset rejects a passkey prompt the page left open, and each passkey path checks its run after the lookup and after the answer; the reveal guard is freed by the reset and released only by its own run | the reset must not leave a prompt for the ended session, nor let a late lookup raise one; `unlock-method.vue`'s and `export/full.vue`'s resets already reject theirs, and an ordinary lock closes it with the page | Codex arc r1 1-2 (closing is within the first-step return), Opus arc 1 (asked whether closing needs the owner); Codex r2: no owner decision |
 
 ## Assumptions
@@ -100,19 +115,22 @@ One comment on #1218 carries the dispositions table above with each reason, name
 
 **Inferences** (to attack):
 - I1 A reset that fires while a reveal is in flight cannot show its words: `revealFence.invalidate()` makes `isCurrent()` false, and `showWords` runs only under it.
-- I2 Scenario B usually has the shell's session open at the kill (`useProfileBootstrap.ts:257` runs on finalize's activation); the chaos seed 1003 replay is the red-on-base proof either way.
+- I2 Scenario B usually has the shell's session open at the kill (`useProfileBootstrap.ts:257` runs on finalize's activation); the action-list replay (Phase 2, step 6) is the red-on-base proof either way.
 - I3 Re-enabling in `start()` changes no current path: no caller starts after `disable()` today.
+- I4 After `end-flow`, neither completion routes nor toasts: the fence moves before `isLogined` clears, each completion checks it before routing (and New profile's hand-off again after its awaited navigation), and New profile's open path meets the cleared `isLogined` at its next `assertActive`.
+- I5 Every writer and remover of a fee-payer row runs under `FpcService.lock`, so a re-read inside it is current at the write.
 
-**Asks** (proceeding on the assumption shown): OA-1 person-asked writes across a lock (assumed: unchanged). OA-2 #1138's reading and New profile (assumed: the narrowed reading; New profile unchanged). OA-3 the FPC address re-read (assumed: not shipped).
+**Asks**, all answered by the owner on 2026-10-27 ("ok go with your proposals, fix all."): OA-1 A (keep), OA-2 confirmed and widened to New profile and the first create (A), OA-3 fix.
 
 ## Security & Adversarial Considerations
 
 - **Threat model.** A person at a machine that was unlocked, then locked, or switched to another profile, must not find a secret a page kept: a typed password, an approval, a file password, revealed words. An attacker who reads storage (T1) sees row changes; code execution in the extension (T4) is out of model (#1055).
 - **What arc 1 must not break.** The reveal and export run fences (`revealFence`, `runs`) stay; the reset invalidates them, so a late RPC answer can neither write a payload back nor land in another profile's flow. The clipboard scrub timer still outlives the page (`useSecretClipboardCopy`).
-- **What arc 2 must not break.** The landing still settles an import with no session; the route guard and the locked state are reused, not bypassed. A departed page's completion cannot push a route over a later page.
+- **What arc 2 must not break.** The landing still settles an import or a New profile with no session; the route guard and the locked state are reused, not bypassed. A departed page's completion cannot push a route over a later page, and New profile's hand-off still lands a created profile that never opened on the lock screen.
+- **What arc 3 must not break.** The address checks (deployed, a Sponsored FPC, not the protocol slot) still run before the write; the re-read only narrows what is written. A removed fee payer is never written back.
 - **Residual by design.** T1 still sees the D1-D4 writes for a locked-out profile, and node reads already in flight finish after a lock; the lane binds no background work to a session. A recovery phrase copied to the clipboard outlives a lock until its scrub; out of scope.
 - **Input validation, crypto, supply chain, least privilege.** No new input crosses a trust boundary. No new dependency, key or permission.
-- **Logging.** No new log line.
+- **Logging.** One fixed `debug` line replaces a warn and an error for a discovery a network reset ended (D11); it names no value.
 
 ## Phases
 
@@ -137,47 +155,78 @@ Final gates after the review loop (head before this record): lint, `typecheck:al
 
 ### Arc 2
 
-**Phase 2 — the import landing.** Steps:
-1. Change `lock-landing.ts`, `app.vue` and `import.vue` as § Arc 2 says.
-2. In `lock-landing.test.ts`, add two cases: an import that holds a session locks; an import that holds none settles. The existing cases stay.
-3. In `pages/import.test.ts`, add: a completion that resolves after the page unmounted releases no window, shows no toast and pushes no route; a mounted completion still does all three (the control).
-4. In `backup-restore-sw-restart.test.ts` scenario B, change only the post-kill terminal observation. Accept the lock screen, or the errors screen's Continue followed by the lock screen. Log which path ran. Assert the page never reaches `/popup/general`. Keep the no-rollback, never-torn and reopen assertions.
-5. Replay chaos seed 1003 once on the base build and once on the fix, with the issue's command (§ #1138 Record). Expect O1 on the base and none on the fix.
+**Phase 2 — the landing for an import and a new profile.** ✓ Steps:
+1. Change `lock-landing.ts`, `app.vue`, `opening-flow.ts`, `import.vue`, `profile/new.vue`, `new-profile-helpers.ts` and the chaos driver as § Arc 2 says.
+2. In `lock-landing.test.ts`, add: an import that holds a session ends its flow (`end-flow`); New profile (the first create's route too) that holds a session ends its flow; either holding none settles, so an own import window keeps its flow; a page that needs no session and opens none (Register) settles while holding one (the control); an auth-required page that holds a session still locks. The existing cases stay.
+3. In `pages/import.test.ts`, add: a completion that resolves after the flow was ended, the page still mounted (the landing's navigation pending), releases no window, shows no toast and pushes no route; the same after the page unmounted; a mounted completion with its flow live does all three (the control).
+4. In `new-profile-helpers.test.ts`, add: the flow ended during the created profile's tail, the route still on New profile: no route, no toast; a hand-off whose awaited navigation settles after the flow ended: no toast. The existing failure hand-off and successful-create cases are the controls.
+5. In `backup-restore-sw-restart.test.ts` scenario B, change only the post-kill terminal observation. Accept the lock screen, or the errors screen's Continue followed by the lock screen. Log which path ran. Assert the page never reaches `/popup/general`. Keep the no-rollback, never-torn and reopen assertions.
+6. Replay the #1138 action list once on the base build and once on the fix (seed label 1138; the list goes in a scratch file outside the repo):
+   ```json
+   [{"action":"createPassword","params":{"ref":"P1","name":"Chaos 1","password":"S1","double":false}},
+    {"action":"createPassword","params":{"ref":"P2","name":"Chaos 2","password":"S2","double":false}},
+    {"action":"exportBackup","params":{"file":"F1"}},
+    {"action":"deleteProfile","params":{"via":"settings"}},
+    {"action":"restoreHeld","params":{"file":"F1","stage":"account-state","competing":"restart","ref":"P3","password":"S4"}}]
+   ```
+   The issue's seed 1003 no longer reaches the case: the model has drifted since the issue, its plan holds no `restoreHeld` step, and on the base it meets filed finding #1132 first. Expect on the base the driver's diagnosis at step 4, Home while the worker holds no session; on the fix, green.
 
-Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, then `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-sw-restart.test.ts` (Chrome; the scenario is Chrome-only), and the step 5 replay: the issue's command with `NULO_E2E_RETRY=0` added, from the repo root. Pass: green; the replay red on the base and green on the fix. Record the scenario's runtime before and after. Layers: unit, component, network e2e.
+Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, then `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-sw-restart.test.ts` (Chrome; the scenario is Chrome-only), and the step 6 replay: `NULO_E2E_BROWSER=chrome NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=1138 NULO_E2E_CHAOS_ACTIONS=<the list's file> NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/profile-chaos.test.ts`, from the repo root. Pass: green; the replay red on the base and green on the fix. Record the scenario's runtime before and after. Layers: unit, component, network e2e. New profile is proven at the unit layer: its landing is the pure decision, and its completion's stop is the helper's, both unit-tested; a restart in its last second has no deterministic e2e hold point.
+
+Base run (d1165460c plus the amendment, Chrome, retry 0): scenario B passes (scenario 25 969 ms, file 70 299 ms); the action list is red at step 4, `restoreHeld`'s driver could not finish: "the popup holds Home while the worker holds no session" at `#/popup/general`.
+
+Final gates (at 68442891d, `origin/dev` merged; Chrome, retry 0): lint, `typecheck:all`, `test:all` (173 s) pass. Scenario B passes on both paths across two runs: the errors screen's Continue, then the lock screen (scenario 21 758 ms, file 61 529 ms), and the landing's `end-flow` straight to the lock screen (scenario 25 180 ms, file 78 050 ms, scenario A, which the arc does not touch, 52 s against 39 s on the base run, so the spread is the shared host's load). The action-list replay is green on the fix (no violation; the step's log gap across its planned restart is the harness's exemption), red on the base. No scenario added. ✓
+
+### Arc 3
+
+**Phase 3 — the fee payer's address edit and the discovery's log level.** Steps:
+1. Change `fpc/service.ts` as § Arc 3 says.
+2. In `fpc/service-create.test.ts` (its harness; the header widens from creation to write fences), add: a rename landing during the address check survives the edit; a delete landing during it rejects with "Invalid id" and leaves no row; an edit with nothing concurrent stores the new address under the same name (the control); a network reset during a registration ends the discovery at debug with no warn or error line. The existing "a registration that fails while its session is live is still logged at error" is that last case's control.
+
+Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`. Pass: green; each regression case red against the base `service.ts`. Layers: lint, typecheck, unit (no e2e drives the address edit, and the Edit popup's error line is unchanged).
 
 ## UI impact
 
 - Lock screen (`auth.vue`): after a profile switch, the password field is empty and masked, and Continue is off. Before: the earlier text, its mask state and a wrong-password shake.
 - Back up profile › Account and › Recovery phrase: when the wallet locks with the page still mounted, the page returns to its first step, and a passkey prompt it had open closes, as it does when a lock unmounts the page. Recovery phrase also does so on a profile switch. Before: the page kept its step.
 - Home's "save your recovery phrase" reminder: a reveal that settles after a profile switch no longer marks the earlier profile's phrase saved, since its words are no longer shown. Before: the words showed under the new profile and the earlier profile's reminder went away.
-- An import that a worker restart overtook after its restore: the lock screen, with no "Profile imported" toast after the unlock. Before: Home with no session behind it. The import's errors summary is not shown; Home's restore banner names a skipped account state after the unlock (OA-2).
-- #1218: none; no site changes.
+- An import that a worker restart overtook after its restore: the lock screen, with no "Profile imported" toast after the unlock. Before: Home with no session behind it. The import's errors summary is not shown; Home's restore banner names a skipped account state after the unlock (the owner, OA-2).
+- New profile and the first-profile create, when a worker restart overtakes them in their last second, after the new profile opened: the lock screen with the new profile selected, and no toast. Before: Home with no session behind it (the owner, OA-2: A). When the restart cuts a call that last step had in flight, Home and the "Something went wrong" toast can show for a moment before the lock screen, as they did before this change: the call fails before the shell learns of the restart.
+- An import or a New profile still in progress, in a popup that another window's unlock marked open: a restart sends it to the lock screen (KL-3).
+- Settings › Fee payers › Edit: a rename made in another window during the address check survives the address edit; an edit of a fee payer removed meanwhile fails with the popup's existing "Invalid id" line instead of bringing it back (the owner, OA-3).
+- #1218's other sites: none; they are recorded exceptions.
 
-No copy or layout changes. The lane brief pre-clears the first two as mirrors of Unlock method's reset; OA-2 carries the third to the owner. Each PR body carries its screenshots.
+No copy or layout changes. Every line above has the owner's sign-off (2026-10-27: "ok go with your proposals, fix all."). Each PR body carries its screenshots where a screen changes.
 
 ## Known limits (filed closed at the close-out)
 
-- KL-3: an import still before its finalize, in a popup whose shell another window's unlock marked open, is unmounted by a restart (OA-2 shows it to the owner). Reopen on a report.
+- KL-3: an import still before its finalize, or a New profile before its create, in a popup whose shell another window's unlock marked open, is unmounted by a restart (OA-2 showed it to the owner for the import; D14 extends it). Reopen on a report.
 - KL-4: a lock inside `persistToken`'s own window still lands the seeded token row. Reopen if the campaign meets O3 on a seeder-written `tokens` row.
 - (KL-2 was withdrawn with the poller fence, alternative F.)
 
 ## Delivery
 
 - Arc 1: branch `lock-window-1-a1` off `worktree-lock-window-1` (which holds this plan), then `gh stack init --base dev lock-window-1-a1` (an existing branch is adopted). PR title: `fix(popup): the lock screen and export pages drop what a session left typed` (≤ 92). Body: `Closes #1183`, `Closes #1225`, the screenshots, the gates, a pointer to the #1218 comment.
-- Arc 2: `gh stack add lock-window-1-a2`. Title: `fix(popup): an import a restart overtook lands on the lock screen` (≤ 92). Body: `Closes #1138`, the e2e runtime before and after, the replay result.
-- Close-out: `gh stack add lock-window-1-close-out`, docs only.
-- `code_review: off` on every arc. No lane split: the arcs are independent but short, and one session runs them in order.
+- Arc 1 merged as #1272 (d1165460c), so the remaining layers start a new stack from `origin/dev`:
+
+| Layer | Branch | Title (≤ 92) | Body |
+|---|---|---|---|
+| 1, arc 2 | `lock-window-1-a2` off `origin/dev`; `gh stack init --base dev lock-window-1-a2` | `fix(popup): an import or a new profile a restart overtook lands on the lock screen` | `Closes #1138`; the UI impact lines and under them the owner's OA-2 words; the e2e runtime before and after; the replay result |
+| 2, arc 3 | `gh stack add lock-window-1-a3` | `fix(fpc): an address edit re-reads its fee payer; a reset discovery logs at debug` | the UI impact line and the owner's OA-3 words; closes nothing (#1218 closes at the close-out) |
+| 3, close-out | `gh stack add lock-window-1-close-out` | `docs(plans): close lock-window-1 with its outcome and archive it` | `Closes #1218`; docs only |
+
+- Before each PR opens: `git fetch origin` and merge `origin/dev` into the stack, keeping both lanes' changes (lane `lock-ux-1` builds on `auth.vue` and the lock landing).
+- `code_review: off` on every arc. No lane split: one session runs the layers in order.
 
 ## Post-implementation
 
 The execution contract is this plan plus `implementations-plan/README.md` § Post-implementation standard at 78f5f9171. What is specific to this plan:
 - **Loop placement.** The Codex loop runs per arc at its boundary, while the arc is the stack tip. Start it with `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume it with `resume-codex.sh` and the fix diff. Hard stop at three rounds.
-- **Arc map for the prompt.** Arc 1 of 2 resets three pages and the countdown; arc 2 changes the lock landing and the import page's completion.
+- **Arc map for the prompt.** Arc 1 (merged) reset three pages and the countdown; arc 2 changes the lock landing for an import and a new profile, their completions and the chaos driver's restart expectation; arc 3 changes `fpc/service.ts`'s address edit and discovery catch.
 - **Opus leg.** One Opus `general-purpose` review runs beside each arc's first round.
-- **Cross-arc pass.** After both arcs, one fresh Codex session reads the net diff from 78f5f9171 with the cross-arc ask.
+- **Cross-arc pass.** After arcs 2 and 3, one fresh Codex session reads the net diff from d1165460c with the cross-arc ask.
 - **Delivery.** `gh stack submit --auto`, then `gh pr edit` for each body; no label at creation. Then `gh pr checks <n> --watch` for each PR.
-- **Close-out.** As the standard's step 4. `Known limits:` names KL-3 and KL-4. `Open items:` names #1218 (OA-1, OA-3, D11) and whatever OA-2 leaves.
+- **Close-out.** As the standard's step 4. `Known limits:` names KL-3 and KL-4 as closed `known-limit` issues. `Open items:` none from this lane, and one line: #1218 closes when this stack lands (OA-1 A recorded, OA-3 and D11 built). A follow-up comment on #1218 says the same.
 - **Teardown** (standing authorization). Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/lock-window-1/plan.md` succeeds, run `agent-worktree done lock-window-1 --merged`.
 
 ## Audit verdicts
@@ -186,7 +235,7 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - (1) Ownerless rows dispatch after an awaited re-read. Accepted: the fence's invariant was stated for profile rows only (moot after F).
 - (2) At the cap, a refused marker strands. Accepted: verdicts keep the epoch rule (D4, alternative E).
 - (3) The departed import page's completion still runs. Accepted: the `isUnmounted` guard (D7).
-- (4) Scenario B cannot reach the new assertion. Accepted: the terminal observation is rewritten, and the seed 1003 replay is the red-on-base proof.
+- (4) Scenario B cannot reach the new assertion. Accepted: the terminal observation is rewritten, and a chaos replay is the red-on-base proof (since the amendment, the #1138 action list).
 - (5) Arc 1 is visible through D5. Accepted: D5 is now OA-3.
 - (6) The preview-lock test passes on the base. Accepted: tests retargeted (moot after E).
 - Agreed: alternative A rejected, D3, D4's journal concern, D7's narrow field, D9.
@@ -222,12 +271,25 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 
 **Arc 1, Opus** (`general-purpose`, beside round 1): `approve with nits`. (1) The passkey reveal kept going after a reset: folded into D13. (2) No test pinned `countdown.clear()` in the reset: added, red when the line is removed. (3) The seed profile-id watcher's default flush: not taken, the path needs a reveal answer and a profile change in one checkpoint, which separate port messages do not produce.
 
+**Amendment for the owner's answers, Codex** (gpt-6.1-sol, high, fresh session): `changes requested`. The widened predicate and arc 3's re-read sound; each finding and what the plan did with it:
+- (1) A kept own import window returns to a fresh import form after the unlock (`own-window.ts:160,168`, `auth.vue:111`). Verified. Accepted: `end-flow` releases the own window before it locks (D16); a session-less import settles and keeps its flow.
+- (2) The chaos driver names the import page `kept` from its URL alone (`restart.ts:58,66`), so the fixed landing would time out `restoreHeld`'s competing restart. Verified (`network-drivers.ts:143`). Accepted: the driver learns whether the flow opened its session (D17); the session-less case stays strict.
+- (3) I4 assumed the landing's navigation had committed when `isLogined` clears; it has not (`app.vue:300,312`), so New profile's hand-off can still pass `left()` and toast. Plausible (an in-memory reproduction toasted; browser timing unverified). Accepted: a synchronous fence (D16), checked by both completions; the import's guard takes it too, as its completion has the same window.
+- Agreed: the first create is covered (`useProfileBootstrap.ts:234,257`), the named routes keep passkey and onboarding pages out, I5 holds, D11's liveness check, the gates are executable.
+- Also folded: the issue's seed 1003 no longer reaches the case on the base (no `restoreHeld` step; it meets #1132 first), so step 6 replays a hand-trimmed action list instead.
+
+**Arc 2, Codex** (fresh session): round 1 `changes requested`. (1) New profile's open path never read the fence, so after `end-flow` and an unlock of the same profile, a tail resuming from its pointer write pushed Home over a later page. Verified; fixed: `assertActive` reads `flowLive()` too, with a test red against the round's code. (2) Nit: scenario B observed the landing but would miss a passing Home. Taken: a page-side latch from before the kill, on every committed URL (round 2's nit: a 100 ms poll could miss one). Its settlement wait was not taken: once `end-flow` unmounts the import, nothing presses Continue, so the completion never runs; on the Continue path the lock screen is the completion's own last push.
+
+Round 2 `approve with nits`: every fix verified (its in-memory reproduction re-run against both helpers), no new production defect; one nit, the latch's sampling, taken.
+
+**Arc 2, Opus** (`general-purpose`, beside round 1): `approve with nits`. Should-fix: the New profile UI impact line overclaimed. A restart rejects the tail's in-flight call before the reconnect boot runs, so the hand-off still reads the stale session and shows Home and its toast, until the boot locks Home (an auth-required page) and the lock closes the toast. Same as before the change, and the end state is right. Taken as a wording fix to the UI impact line. Telling a dropped connection apart in the hand-off would be new design. Also taken: the hand-off test now drives the realistic branch (the tail's call rejected while the stale session reads open); a departed import page recovers nothing (`recover` checks the page and the fence), tested; the stale `app.vue` comment. Not taken: one base run of the new scenario B (the fix run took the errors screen path, the base's path too, so scenario B reads red on the base only in I2's timing; the action-list replay holds the red-on-base proof); merging `OPENING_ROUTES` into `PROFILE_FREE_ROUTES` (different facts: a page that needs no profile need not open a session); a test of `opening-flow.ts` alone (three lines over the tested `createRunFence`).
+
 ## Seeds
 
 Not run; the orchestrator spawns each arc.
 
 ```
-/goal Arcs 1 and 2 of implementations-plan/lock-window-1/plan.md each have every phase marked ✓ with its gate pasted, a converged Codex loop quoted, and an open PR in the lock-window-1 stack on dev; bun run test:all and bun run lint exit 0 on the stack tip.
+/goal Arcs 2 and 3 and the close-out of implementations-plan/lock-window-1/plan.md each have every phase marked ✓ with its gate pasted, a converged Codex loop quoted, and an open PR in the lock-window-1 stack on dev; bun run test:all and bun run lint exit 0 on the stack tip.
 ```
 
 ```
