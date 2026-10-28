@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import type { Browser, ElementHandle, Page, Target } from "puppeteer"
+import type { Browser, ElementHandle, Page, Target, Viewport } from "puppeteer"
 import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
@@ -395,12 +395,112 @@ async function openScratchPage(browser: Browser, extensionId: string): Promise<P
 	return page
 }
 
+/** Firefox 157 and later refuse BiDi `activate` on an extension page; Marionette's own switch focuses any tab. */
+const bringToFront = (page: Page): Promise<void> => classicSessionFor(page.browser()).selectWindow(contextIdOf(page))
+
+/** Puppeteer's `viewport()` never hears of a resize made around it, so the seam keeps its own record, `null` included. */
+export function viewportRecord(): { set(page: Page, viewport: Viewport | null): void; of(page: Page): Viewport | null } {
+	const sizes = new WeakMap<Page, Viewport | null>()
+	return {
+		set: (page, viewport) => sizes.set(page, viewport),
+		of: (page) => (sizes.has(page) ? (sizes.get(page) ?? null) : page.viewport()),
+	}
+}
+
+const viewports = viewportRecord()
+
+/** The size a tab's `<browser>` can take; a field it cannot honour throws rather than being dropped. */
+export function tabSize(viewport: Viewport | null): { width: number; height: number } | null {
+	if (!viewport) return null
+	const { width, height, ...rest } = viewport
+	const unsupported = Object.entries(rest).flatMap(([key, value]) => (value === undefined ? [] : [key]))
+	if (unsupported.length > 0) throw new Error(`setViewport: Firefox's resize sets no ${unsupported.join(", ")}`)
+	return { width, height }
+}
+
+/**
+ * Firefox's own `browsingContext.setViewport` body, run in its scope: the tab's `<browser>` takes the
+ * size, or with `null` loses it and takes its window's. Returns the size the page will read, or `gone`.
+ */
+const RESIZE_TAB = `function (id, width, height) {
+	const { NavigableManager } = ChromeUtils.importESModule("chrome://remote/content/shared/NavigableManager.sys.mjs");
+	const browser = NavigableManager.getBrowserById(id);
+	if (!browser) return "gone";
+	if (width === null) {
+		width = browser.parentElement.clientWidth;
+		height = browser.parentElement.clientHeight;
+		browser.style.removeProperty("width");
+		browser.style.removeProperty("height");
+	} else {
+		browser.style.setProperty("width", width + "px");
+		browser.style.setProperty("height", height + "px");
+	}
+	browser.ownerDocument.synchronouslyUpdateRemoteBrowserDimensions(true);
+	return width + "x" + height;
+}`
+
+const VIEWPORT_SETTLE_MS = 10_000
+
+type BiDiSend = (method: string, params: object) => Promise<unknown>
+
+/** Puppeteer keeps its BiDi session on internal fields; a rename there must fail by name. */
+function bidiSendOf(page: Page): BiDiSend {
+	const frame = page.mainFrame() as unknown as {
+		browsingContext?: {
+			userContext?: { browser?: { session?: { send?: (method: string, params: object) => Promise<{ result?: unknown }> } } }
+		}
+	}
+	const session = frame.browsingContext?.userContext?.browser?.session
+	const send = session?.send
+	if (typeof send !== "function") throw new Error("puppeteer no longer exposes its BiDi session on Frame.browsingContext")
+	return async (method, params) => (await send.call(session, method, params)).result
+}
+
+/**
+ * Firefox 157 and later refuse BiDi `setViewport` on an extension page, so the resize runs from
+ * Firefox's own scope, over BiDi on a window of Firefox's own: `chromeScript` would switch windows,
+ * which takes focus from the page holding it.
+ */
+async function setViewport(page: Page, viewport: Viewport | null): Promise<void> {
+	const size = tabSize(viewport)
+	const send = bidiSendOf(page)
+	const tree = (await send("browsingContext.getTree", { "moz:scope": "chrome", maxDepth: 0 })) as { contexts?: { context: string }[] }
+	const scope = tree.contexts?.[0]?.context
+	if (!scope) throw new Error("setViewport: Firefox lists no window of its own")
+	const number = (value: number | undefined) => (value === undefined ? { type: "null" } : { type: "number", value })
+	const outcome = (await send("script.callFunction", {
+		functionDeclaration: RESIZE_TAB,
+		target: { context: scope },
+		arguments: [{ type: "string", value: contextIdOf(page) }, number(size?.width), number(size?.height)],
+		awaitPromise: false,
+		resultOwnership: "none",
+	})) as { result?: { value?: unknown }; exceptionDetails?: { text?: string } }
+	const read = outcome.result?.value
+	if (read === "gone") throw new Error(`setViewport: no such window ${contextIdOf(page)}`)
+	const match = typeof read === "string" ? /^(\d+)x(\d+)$/.exec(read) : null
+	if (!match) throw new Error(`setViewport: ${outcome.exceptionDetails?.text ?? JSON.stringify(read)}`)
+	const [width, height] = [Number(match[1]), Number(match[2])]
+	await page
+		.waitForFunction((w, h) => innerWidth === w && innerHeight === h, { timeout: VIEWPORT_SETTLE_MS, polling: 50 }, width, height)
+		.catch((err: unknown) => {
+			throw new Error(`setViewport: the page did not read ${width}×${height} within ${VIEWPORT_SETTLE_MS} ms`, { cause: err })
+		})
+	viewports.set(page, viewport)
+}
+
+/** Firefox reports a closed window as a missing browsing context per BiDi command, and as `no such window` on the classic channel. */
+const TARGET_GONE =
+	/no such window|no such frame|Browsing Context with id \S+ not found|DiscardedBrowsingContext|Browsing context already closed/i
+
 /**
  * Headless Firefox hands focus to every window the wallet opens and refuses WebAuthn from any
  * window but the focused one. A person's click would have focused the page; a scripted one has to
- * be given that.
+ * be given that. A window that closed itself has nothing left to focus.
  */
-const prepareClick = (page: Page): Promise<void> => page.bringToFront().catch(() => {})
+const prepareClick = (page: Page): Promise<void> =>
+	bringToFront(page).catch((err: unknown) => {
+		if (!TARGET_GONE.test(err instanceof Error ? err.message : String(err))) throw err
+	})
 
 type BiDiPointerAction =
 	| { type: "pointerMove"; x: number; y: number }
@@ -439,7 +539,7 @@ const KEYS_FOCUS_ATTEMPT_MS = 500
  */
 async function prepareKeys(page: Page): Promise<void> {
 	const focus = async () => {
-		await page.bringToFront()
+		await bringToFront(page)
 		return page
 			.waitForFunction(() => document.hasFocus(), { timeout: KEYS_FOCUS_ATTEMPT_MS, polling: 50 })
 			.then(
@@ -858,6 +958,9 @@ export const firefoxDriver: BrowserDriver = {
 	waitForTarget,
 	waitForNewTab,
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
+	bringToFront,
+	setViewport,
+	viewportOf: viewports.of,
 	prepareClick,
 	prepareKeys,
 	doubleClick,
@@ -871,8 +974,7 @@ export const firefoxDriver: BrowserDriver = {
 	backgroundOrigin: (browser) => backgroundTimeOrigin(browser),
 	backgroundAlive: async (browser) => (await backgroundTimeOrigin(browser)) !== undefined,
 	evaluateInBackground: (browser, _extensionId, body) => evaluateInBackgroundPage(browser, inPageRealm(body)),
-	// Firefox reports a closed window as a missing browsing context, per command.
-	targetGone: /no such frame|Browsing Context with id \S+ not found|DiscardedBrowsingContext|Browsing context already closed/i,
+	targetGone: TARGET_GONE,
 }
 
 /** Resolves with the outcome in one word — `terminated`, `no-extension` — or `error: …`. */

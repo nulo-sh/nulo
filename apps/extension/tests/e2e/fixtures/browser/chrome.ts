@@ -303,6 +303,9 @@ export const chromeDriver: BrowserDriver = {
 	},
 	interceptRpc: (browser, extensionId, fromOrigin, mode, backgroundDown) =>
 		cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode, backgroundDown),
+	bringToFront: (page) => page.bringToFront(),
+	setViewport: (page, viewport) => page.setViewport(viewport),
+	viewportOf: (page) => page.viewport(),
 	// Chrome treats evaluated script as a user gesture and has no focused-window precondition.
 	prepareClick: async () => {},
 	// Chrome runs a key's default action on the page the key is sent to, focused or not.

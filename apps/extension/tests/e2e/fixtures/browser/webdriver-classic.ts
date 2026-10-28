@@ -106,6 +106,11 @@ export class WebDriverSession {
 		return run
 	}
 
+	/** Selects the tab and focuses its window, in turn with every other switch. */
+	selectWindow(handle: string): Promise<void> {
+		return this.exclusive(() => this.switchToWindow(handle))
+	}
+
 	/** The handle list, read in turn: inside `chromeScript`'s switch it would list Firefox's own windows. */
 	listWindows(): Promise<string[]> {
 		return this.exclusive(() => this.windowHandles())

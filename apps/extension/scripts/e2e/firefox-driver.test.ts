@@ -12,10 +12,13 @@ import {
 	capabilities,
 	egressGuardPrefs,
 	firefoxDirFor,
+	firefoxDriver,
 	permissionRequestPrefs,
 	silentlyClosed,
 	stopBackgroundWith,
+	tabSize,
 	uuidFromPrefs,
+	viewportRecord,
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
@@ -279,6 +282,40 @@ describe("an add-on page's URL in targets()", () => {
 		const destroyed = event("browsingContext.contextDestroyed", { context: "w", parent: null })
 		expect(trackContexts(destroyed, open, new Set(["w"]))).toEqual([])
 		expect(trackContexts(destroyed, new Set(["v"]), new Set())).toEqual([destroyed])
+	})
+})
+
+/** Firefox resizes a tab around Puppeteer, so the seam answers for the size it set, a reset included. */
+describe("the viewport seam", () => {
+	const pageAt = (viewport: puppeteer.Viewport | null) => ({ viewport: () => viewport }) as unknown as puppeteer.Page
+
+	test("reads Puppeteer's size until the seam sets one, and a reset as null", () => {
+		const record = viewportRecord()
+		const page = pageAt({ width: 800, height: 600 })
+		expect(record.of(page)).toEqual({ width: 800, height: 600 })
+		record.set(page, { width: 240, height: 600 })
+		expect(record.of(page)).toEqual({ width: 240, height: 600 })
+		record.set(page, null)
+		expect(record.of(page)).toBeNull()
+		expect(record.of(pageAt({ width: 800, height: 600 }))).toEqual({ width: 800, height: 600 })
+	})
+
+	test("refuses by name a field a tab's size cannot carry", () => {
+		expect(tabSize(null)).toBeNull()
+		expect(tabSize({ width: 240, height: 600, deviceScaleFactor: undefined })).toEqual({ width: 240, height: 600 })
+		expect(() => tabSize({ width: 390, height: 844, deviceScaleFactor: 2, hasTouch: true })).toThrow(
+			"setViewport: Firefox's resize sets no deviceScaleFactor, hasTouch",
+		)
+	})
+
+	test("a classic switch to a closed window reads as the window gone, a refusal does not", () => {
+		expect(firefoxDriver.targetGone?.test("POST /window → no such window: Unable to locate window")).toBe(true)
+		expect(firefoxDriver.targetGone?.test("Browsing Context with id 12 not found")).toBe(true)
+		expect(
+			firefoxDriver.targetGone?.test(
+				"POST /window → unknown error: The command does not support browsing contexts in privileged scope",
+			),
+		).toBe(false)
 	})
 })
 
