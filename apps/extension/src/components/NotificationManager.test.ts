@@ -99,3 +99,13 @@ describe("the notice is fixed to the viewport", () => {
 		expect(declarationsOf(parseSource(FILE), ".layer")).toMatchObject({ position: "fixed", inset: "0" })
 	})
 })
+
+/**
+ * Notice text can carry data wider than the card.
+ * Blind spot: a descendant that turns wrapping off (`noWrap`).
+ */
+describe("a notice's text stays inside its card", () => {
+	test("the card breaks a string wider than itself anywhere", () => {
+		expect(declarationsOf(parseSource(FILE), ".card")).toMatchObject({ "overflow-wrap": "anywhere" })
+	})
+})
