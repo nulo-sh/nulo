@@ -18,3 +18,7 @@
 - Case 3 alone, Firefox, same edit: **passed**, 16.5 s.
 - The retired branch, as a regression: the replay from `v1.0.0` on Chrome, all four cases, **passed**. Durations: 29.3 s, 13.9 s, case 3 10.6 s, 11.5 s; vitest 65.3 s.
 - D6 now presses on both browsers. The `credentialOutlivesPage` branch is gone.
+
+## Review loop, round 2 (over `1af2ac6f7..fe2048f1c`)
+
+- **Codex** (resumed session): `clean`. The parked tab keeps the credential under `updateInPlace` on both drivers, and the update's own checks (candidate version, live background, the `update` event) still hold. Under `unlocks` the unlock, Home and the row check now run on both browsers with no capability branch. The `retired` check is verbatim. The comments are exact. The loop converged at round 2.
