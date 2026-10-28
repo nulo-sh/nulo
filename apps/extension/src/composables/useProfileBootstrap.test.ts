@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from "pinia"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
 vi.mock("@/utils/core", () => {
@@ -481,6 +481,66 @@ describe("useProfileBootstrap", () => {
 		await expect(current).rejects.toThrow("timed out")
 	})
 
+	describe("a core that fails while the profile list is in flight", () => {
+		const unhandled = vi.fn()
+		const settleTimers = () => new Promise((resolve) => setTimeout(resolve, 0))
+		beforeEach(() => {
+			unhandled.mockClear()
+			process.on("unhandledRejection", unhandled)
+		})
+		afterEach(() => {
+			process.off("unhandledRejection", unhandled)
+		})
+
+		test("is never an unhandled rejection, and the lock that caused it still resolves the activation false", async () => {
+			let answerProfiles!: (profiles: unknown[]) => void
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((resolve) => (answerProfiles = resolve)),
+			)
+			netMock.getOrInitNetworks.mockRejectedValueOnce(new Error("Wallet locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			const activation = bootstrapActiveProfile(fakeProfile)
+			await vi.waitFor(() => expect(netMock.getOrInitNetworks).toHaveBeenCalledTimes(1))
+			await settleTimers()
+
+			supersedeProfileActivations()
+			answerProfiles([fakeProfile])
+			expect(await activation).toBe(false)
+			await settleTimers()
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+
+		test("control: one no lock supersedes still reports its failure, after the list lands", async () => {
+			let answerProfiles!: (profiles: unknown[]) => void
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockImplementationOnce(
+				() => new Promise((resolve) => (answerProfiles = resolve)),
+			)
+			netMock.getOrInitNetworks.mockRejectedValueOnce(new Error("Wallet locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			const appStore = useAppStore()
+			const activation = bootstrapActiveProfile(fakeProfile)
+			await vi.waitFor(() => expect(netMock.getOrInitNetworks).toHaveBeenCalledTimes(1))
+			await settleTimers()
+
+			answerProfiles([fakeProfile])
+			await expect(activation).rejects.toThrow("Wallet locked")
+			expect(appStore.profiles).toEqual([fakeProfile])
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+
+		test("a list read that fails first leaves the core's later failure observed", async () => {
+			let failCore!: (err: Error) => void
+			netMock.getOrInitNetworks.mockImplementationOnce(() => new Promise((_resolve, reject) => (failCore = reject)))
+			;(managers.profile.getProfiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Profile locked"))
+			const { bootstrapActiveProfile } = useProfileBootstrap()
+			await expect(bootstrapActiveProfile(fakeProfile)).rejects.toThrow("Profile locked")
+
+			failCore(new Error("Wallet locked"))
+			await settleTimers()
+			expect(unhandled).not.toHaveBeenCalled()
+		})
+	})
+
 	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
 		const answers = deferredReads()
 		const { hydrateKnownProfile } = useProfileBootstrap()
@@ -566,7 +626,6 @@ describe("useProfileBootstrap", () => {
 			select: () => undefined,
 			readLastActiveId: async () => undefined,
 			routeName: () => undefined,
-			openChooser: () => undefined,
 		})
 		const lockEvent = lockedState.onLockEvent(
 			() =>

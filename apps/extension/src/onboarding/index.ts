@@ -7,7 +7,7 @@
 
 import "@/utils/zod-jitless"
 import { recordCspViolationsInPage } from "@/e2e/csp-report"
-import { installConsoleForwarding } from "@/wallet/logger/console-forwarding"
+import { forwardVueError, installConsoleForwarding } from "@/wallet/logger/console-forwarding"
 
 if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
@@ -47,5 +47,9 @@ router.beforeEach(createLegalGuard(() => managers.legal.getStatus()))
 void startOnboarding({
 	isDone: isOnboardingDone,
 	handOver: openPopupWindowAndClose,
-	mount: () => createApp(App).use(router).use(createPinia()).mount("#app"),
+	mount: () => {
+		const app = createApp(App)
+		app.config.errorHandler = forwardVueError
+		app.use(router).use(createPinia()).mount("#app")
+	},
 })

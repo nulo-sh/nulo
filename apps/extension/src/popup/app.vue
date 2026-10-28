@@ -21,6 +21,7 @@ import { reconcileLockedBoot } from "./reconcile-locked-boot"
 import { applyBootOutcome } from "./apply-boot-outcome"
 import { applyRootFlags } from "./root-flags"
 import { defaultConfig } from "@/wallet/config"
+import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
 import { createNetworkSwitchHandler } from "@/popup/network-switch"
@@ -246,11 +247,13 @@ watch(
 	[() => appStore.isLogined && appStore.profile?.id, () => appStore.network?.id, () => appStore.networks],
 	() => void networkArrival.refresh(),
 )
+/** No caller awaits a resume, so its failure is reported here. */
+const resumeStale = (profileId) => stale.resume(profileId).catch((error) => logCallFailure("stale-network resume failed", error))
 watch(
 	() => appStore.isLogined && appStore.profile?.id,
 	(active) => {
 		stale.clear()
-		if (active && !isDappWindow(route.name)) void stale.resume(active)
+		if (active && !isDappWindow(route.name)) void resumeStale(active)
 	},
 )
 
@@ -294,12 +297,19 @@ watch(
 	() => appStore.network,
 	() => {
 		switchRun = switchNetwork()
+		// Only a completed reset awaits a run, so its failure is reported here.
+		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })
-watchLockStart(() => appStore.isLogined, onLocked)
+/** Both lock paths run this: a lock control's at once, a lock event's under its seal. */
+const endScopeOnLock = () => {
+	onLocked()
+	switchNetwork.supersede()
+}
+watchLockStart(() => appStore.isLogined, endScopeOnLock)
 
 /** The popup's locked state, entered from the lock event and from a boot-time session check
  *  that finds no session under an authenticated page (a worker restart). */
@@ -308,7 +318,7 @@ const lockedState = createLockedState({
 		popupStore.closeAll()
 		notificationStore.clear()
 	},
-	onLocked,
+	onLocked: endScopeOnLock,
 	markLocked: () => {
 		supersedeProfileActivations()
 		appStore.isLogined = false
@@ -328,7 +338,6 @@ const lockedState = createLockedState({
 	},
 	readLastActiveId: getLastActiveProfileId,
 	routeName: () => route.name,
-	openChooser: () => popupStore.open("select_profile"),
 })
 
 /** Sequence token for profile events. Handlers await service round-trips, and under load a
@@ -502,7 +511,7 @@ const loadProfile = async ({ reconnect = false } = {}) => {
 	if (!isCurrent()) return
 	applyBootOutcome(result, bootOutcomeShell(establishedNow()))
 	// A worker restart drops a running reset without a word; its journal resumes here.
-	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void stale.resume(appStore.profile.id)
+	if (reconnect && appStore.isLogined && appStore.profile && !isDappWindow(route.name)) void resumeStale(appStore.profile.id)
 }
 
 /** The shell as `applyBootOutcome` drives it. */

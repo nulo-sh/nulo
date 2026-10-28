@@ -22,7 +22,9 @@ import { managers } from "@/utils/core"
 import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 import { isNewPasswordValid } from "@/utils/password"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
+import { goBack } from "@/utils/page-back"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { watchLockStart } from "@/popup/locked-state"
@@ -73,6 +75,7 @@ const accounts = computed(() => {
 })
 
 const confirmPasskeyButton = useTemplateRef("confirmPasskeyButton")
+const closeButton = useTemplateRef("closeButton")
 const selectedAddress = ref("")
 const isAgreed = ref(false)
 const password = ref()
@@ -88,7 +91,7 @@ const approval = shallowRef(null)
 const isApproved = computed(() => approval.value !== null)
 const canSaveFile = computed(() => isNewPasswordValid(filePassword.value ?? "", repeatedFilePassword.value ?? ""))
 
-/** "" | "ready" | "protected" — the file stages, mirroring Full Backup's status machine. */
+/** "" | "ready" | "protected" | "downloaded" — the file stages, mirroring Full Backup's status machine. */
 const fileStatus = ref("")
 const payload = ref("")
 
@@ -251,7 +254,7 @@ const handleSaveFile = async () => {
 		dropApproval()
 	} catch (error) {
 		if (!isCurrent()) return
-		console.error("[export/account] passkey file failed:", { error })
+		logCredentialFailure("[export/account] passkey file failed:", error)
 		// An answer a Save failed with is never reused: the page asks the passkey again, and the
 		// keyboard lands on that ask, as the removed Save took focus with it.
 		dropApproval()
@@ -323,6 +326,7 @@ const handleDownload = async () => {
 	try {
 		await downloadFile({ data: payload.value, filename: fileName.value })
 		if (!isCurrent()) return
+		fileStatus.value = "downloaded"
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
 		if (!isCurrent()) return
@@ -331,6 +335,11 @@ const handleDownload = async () => {
 	} finally {
 		if (isCurrent()) isDownloading.value = false
 	}
+}
+
+const handleClose = () => {
+	if (isToolbarPopup()) window.close()
+	else void goBack(router, "/popup/settings/security/export")
 }
 
 /** Enter advances the active stage, matching the flow's CTA (the popup this page replaced
@@ -343,6 +352,11 @@ const onKeydown = (e) => {
 	else if (isApproved.value && isPopupSubmitKey(e)) handleSaveFile()
 }
 watch(selectedAddress, () => dropApproval())
+watch(fileStatus, async (status) => {
+	if (status !== "downloaded") return
+	await nextTick()
+	closeButton.value?.$el?.focus()
+})
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // account file moves to its own window first. A failed move keeps the page where it is.
@@ -423,7 +437,7 @@ onBeforeUnmount(() => {
 			@clearError="isWrongPassword = false"
 		/>
 
-		<!-- Steps 4/5: file ready / protected -->
+		<!-- Steps 4-6: file ready / protected / saved -->
 		<template v-else>
 			<div class="export_section_last">
 				<span class="export_section_label type--label-section">File</span>
@@ -439,7 +453,9 @@ onBeforeUnmount(() => {
 					</Banner>
 
 					<Banner v-else variant="done" direction="vertical" data-testid="account-file-protected-banner">
-						<template #title> Account file is protected </template>
+						<template #title>
+							{{ fileStatus === "downloaded" ? "Saved to your downloads" : "Account file is protected" }}
+						</template>
 						<template #description>
 							<Text color="secondary" height="140">
 								{{
@@ -517,8 +533,26 @@ onBeforeUnmount(() => {
 				</Button>
 			</Flex>
 
-			<Button v-else-if="fileStatus === 'protected'" @click="handleDownload" :disabled="isDownloading" variant="cta" data-testid="account-download-btn">
+			<Button
+				v-else-if="fileStatus === 'protected'"
+				@click="handleDownload"
+				@keydown.enter="refuseRepeatEnter"
+				:disabled="isDownloading"
+				variant="cta"
+				data-testid="account-download-btn"
+			>
 				Download File
+			</Button>
+
+			<Button
+				v-else-if="fileStatus === 'downloaded'"
+				ref="closeButton"
+				@click="handleClose"
+				@keydown.enter="refuseRepeatEnter"
+				variant="cta"
+				data-testid="account-close-btn"
+			>
+				Close
 			</Button>
 		</template>
 	</CollapsingHeroLayout>

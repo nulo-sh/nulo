@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
@@ -132,13 +132,20 @@ beforeEach(() => {
 	setLastActiveProfileIdMock.mockReset()
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
 	waitHolder.mock.mockReset().mockImplementation((...a: unknown[]) => waitHolder.real(...a))
+	vi.mocked(managers.profile.getProfiles).mockReset().mockResolvedValue([])
+	vi.mocked(getLastActiveProfileId).mockReset().mockResolvedValue(undefined)
 	vi.stubGlobal("chrome", {
 		storage: {},
 		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
 	})
 	installChromeStorage({}, { persist: false })
 })
-afterEach(() => vi.unstubAllGlobals())
+// A page left mounted still hears picks and deletions, and its reads would take a later test's answers.
+const mounted: VueWrapper[] = []
+afterEach(() => {
+	for (const wrapper of mounted.splice(0)) wrapper.unmount()
+	vi.unstubAllGlobals()
+})
 
 /** Minimal Input stub that keeps v-model wiring alive so the submit gate
  *  (`isAllowedToContinue`) opens once a password is typed. */
@@ -150,11 +157,13 @@ const InputStub = {
 	template: `<input :value="modelValue" data-stub-input @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)" />`,
 }
 
-function mountAuth(provide: Record<string, unknown> = {}) {
+/** `selectedAtMount` is the selection the page mounts with; without it, `p1` is selected just after. */
+function mountAuth(provide: Record<string, unknown> = {}, selectedAtMount?: ProfileInfo) {
+	const initialState = selectedAtMount ? { app: { profile: selectedAtMount } } : {}
 	const wrapper = mount(Auth, {
 		global: {
 			provide,
-			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false })],
+			plugins: [createTestingPinia({ createSpy: vi.fn, stubActions: false, initialState })],
 			stubs: {
 				Input: InputStub,
 				Button: { template: `<button type="submit" v-bind="$attrs"><slot /></button>` },
@@ -166,8 +175,9 @@ function mountAuth(provide: Record<string, unknown> = {}) {
 			},
 		},
 	})
+	mounted.push(wrapper)
 	const appStore = useAppStore()
-	appStore.profile = { id: "p1", name: "P", type: "password" } as never
+	if (!selectedAtMount) appStore.profile = { id: "p1", name: "P", type: "password" } as never
 	return { wrapper, appStore }
 }
 
@@ -441,15 +451,16 @@ describe("auth.vue — the mount's last-active lookup", () => {
 		expect(appStore.profile).toBeUndefined()
 	})
 
-	test("after the last active profile was deleted, several left: none is presumed and the chooser opens", async () => {
+	test("after the last active profile was deleted, several left: the first by name is selected and no chooser opens", async () => {
 		vi.mocked(getLastActiveProfileId).mockResolvedValueOnce("deleted")
 		vi.mocked(managers.profile.getProfiles).mockResolvedValueOnce([B, A])
 		const { appStore } = mountAuth()
+		const selected = () => appStore.profile?.id
 		appStore.profile = undefined
 		await flushPromises()
 
-		expect(appStore.profile).toBeUndefined()
-		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+		expect(selected()).toBe("pA")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
 	})
 })
 
@@ -536,11 +547,11 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 
 		vi.mocked(getLastActiveProfileId).mockResolvedValue(undefined)
 		const deleted = await unlockThatFails(A, () => {
-			vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+			vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 			elsewhere.delete("pA")
 		})
-		expect(deleted.appStore.profile).toBeUndefined()
-		expect(usePopupStore().isOpened("select_profile")).toBe(true)
+		expect(deleted.appStore.profile?.id).toBe("pB")
+		expect(usePopupStore().isOpened("select_profile")).toBe(false)
 	})
 
 	test("a pick elsewhere waits out an activation running here, and applies only if that activation leaves the page locked", async () => {
@@ -586,20 +597,18 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(appStore.profile?.id).toBe("pC")
 	})
 
-	test("its profile deleted elsewhere: several left opens the chooser with none selected; the only one left is selected", async () => {
+	test("its profile deleted elsewhere: several left select the first by name; the only one left is selected", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A
 		await flushPromises()
 		const popups = usePopupStore()
 
-		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 		elsewhere.delete("pA")
 		await flushPromises()
-		expect(appStore.profile).toBeUndefined()
-		expect(popups.isOpened("select_profile")).toBe(true)
+		expect(appStore.profile?.id).toBe("pB")
+		expect(popups.isOpened("select_profile")).toBe(false)
 
-		popups.closeAll()
-		appStore.profile = B
 		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C])
 		elsewhere.delete("pB")
 		await flushPromises()
@@ -607,7 +616,7 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		expect(popups.isOpened("select_profile")).toBe(false)
 	})
 
-	test("its selection cleared from outside while locked: the only profile left is selected, several open the chooser", async () => {
+	test("its selection cleared from outside while locked: the only profile left is selected, else the first by name", async () => {
 		const { appStore } = mountAuth()
 		appStore.profile = A
 		await flushPromises()
@@ -619,11 +628,85 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 		await flushPromises()
 		expect(selected()).toBe("pB")
 
-		vi.mocked(managers.profile.getProfiles).mockResolvedValue([B, C])
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
 		appStore.profile = undefined
 		await flushPromises()
-		expect(selected()).toBeUndefined()
+		expect(selected()).toBe("pB")
+		expect(popups.isOpened("select_profile")).toBe(false)
+	})
+
+	test("a selection cleared while the person has the chooser open still settles behind it, and the chooser stays", async () => {
+		const { appStore } = mountAuth()
+		appStore.profile = A
+		await flushPromises()
+		const popups = usePopupStore()
+		popups.open("select_profile")
+		const selected = () => appStore.profile?.id
+
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([C, B])
+		appStore.profile = undefined
+		await flushPromises()
+		expect(selected()).toBe("pB")
 		expect(popups.isOpened("select_profile")).toBe(true)
+	})
+
+	test("a pick another window makes while an automatic settle reads is the one that stands", async () => {
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		// On Firefox a read can still answer the pointer the pick replaced: the settle never sees "pC".
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pC")
+	})
+
+	test("a profile picked here after an automatic settle stands over another window's pick still loading", async () => {
+		const { appStore } = mountAuth()
+		await flushPromises()
+		const selected = () => appStore.profile?.id
+		let releaseSettle!: () => void
+		let releasePick!: () => void
+		vi.mocked(managers.profile.getProfiles)
+			.mockReturnValueOnce(new Promise((resolve) => (releaseSettle = () => resolve([C, B]))))
+			.mockReturnValueOnce(new Promise((resolve) => (releasePick = () => resolve([C, B]))))
+		appStore.profile = undefined
+		await flushPromises()
+
+		elsewhere.pick("pC")
+		await flushPromises()
+		releaseSettle()
+		await flushPromises()
+		expect(selected()).toBe("pB")
+		// The chooser's pick, before its pointer write is heard: no newer follow supersedes the old one.
+		appStore.profile = { ...A }
+		releasePick()
+		await flushPromises()
+		expect(selected()).toBe("pA")
+	})
+
+	test("with no last active profile in the list, a selection it still holds stays; a last active one is selected", async () => {
+		vi.mocked(managers.profile.getProfiles).mockResolvedValue([A, B, C])
+		const kept = mountAuth({}, C)
+		await flushPromises()
+		expect(kept.appStore.profile?.id).toBe("pC")
+		kept.wrapper.unmount()
+
+		vi.mocked(getLastActiveProfileId).mockResolvedValue("pB")
+		const lastActive = mountAuth({}, C)
+		await flushPromises()
+		expect(lastActive.appStore.profile?.id).toBe("pB")
 	})
 
 	test("a deletion of another profile changes nothing here", async () => {

@@ -6,6 +6,7 @@
 import { asBase64MasterSecret, type PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { isClientDisconnectRejection, RpcDisconnectedError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChain } from "@/utils/full-backup-helpers"
 import type { RestoreSecret, RunFence } from "@/wallet/services/profile/client"
 import { admitRestoreOutcome, finishRestoreOutcome } from "@/utils/restore-outcome"
@@ -996,5 +997,5 @@ export async function runRestoreFailurePath(
 	}
 	io.setStatus("")
 	io.fillError("full_backup", "Import failed", String((err as Error)?.message ?? err))
-	console.error("[full-backup] restore failed:", { error: err })
+	logCredentialFailure("[full-backup] restore failed:", err)
 }

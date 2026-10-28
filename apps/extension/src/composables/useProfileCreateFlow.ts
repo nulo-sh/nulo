@@ -6,6 +6,7 @@ import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { classifyPasskeyFailure, handleCancelOrUnconfirmed, PASSKEY_COPY } from "@/utils/passkey-copy"
 import {
 	type CreatePasskeyProfileDeps,
@@ -122,7 +123,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 			return
 		}
 		opts.notifyCreateFailed(authMethod.value === "passkey")
-		console.error("Failed to create profile:", e)
+		logCredentialFailure("Failed to create profile:", e)
 	}
 
 	/** `existing`: the profile takes a passkey the person already has. */

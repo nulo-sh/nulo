@@ -39,7 +39,6 @@ export interface RunState {
 	bindings: Bindings
 	secrets: Map<SecretRef, string>
 	phrases: Map<PhraseRef, string[]>
-	credentials: Map<CredentialRef, string>
 	files: Map<FileRef, HeldFile>
 	/** The run's own directory: downloads and corrupted copies land here. */
 	dir: string
@@ -103,7 +102,6 @@ type Derived =
 	| "bindings"
 	| "secrets"
 	| "phrases"
-	| "credentials"
 	| "files"
 	| "extras"
 	| "logs"
@@ -123,7 +121,6 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		bindings: emptyBindings(),
 		secrets: new Map(),
 		phrases: new Map(),
-		credentials: new Map(),
 		files: new Map(),
 		logs: { lastId: 0, carried: [], seen: [], searched: new Set(), gaps: [] },
 		errorMark: 0,
@@ -152,5 +149,12 @@ export const wrongSecret = (): string => `Wrong-${randomBytes(9).toString("base6
 export function profileId(s: RunState, ref: ProfileRef): string {
 	const id = s.bindings.profiles.get(ref)
 	if (!id) throw new Error(`${ref} is not bound to a profile yet`)
+	return id
+}
+
+/** The id the wallet stores for `ref`, bound from the answer that minted it. */
+export function credentialId(s: RunState, ref: CredentialRef | undefined): string {
+	const id = ref && s.bindings.credentials.get(ref)
+	if (!id) throw new Error(`${ref ?? "no credential"} is not bound to a credential yet`)
 	return id
 }

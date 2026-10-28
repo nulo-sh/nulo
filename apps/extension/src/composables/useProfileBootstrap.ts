@@ -126,6 +126,20 @@ async function settleActiveNetwork(
 	await appStore.syncStaleNetwork(networkId)
 }
 
+/** `run` plus `settled`, which rethrows its failure. It attaches to the run at once, so a failure
+ *  that lands before the caller awaits it is never an unhandled rejection; one nobody awaits is dropped. */
+function awaitLater<Run extends { promise: Promise<void> }>(run: Run): Run & { settled: () => Promise<void> } {
+	const failure = run.promise.then(
+		() => undefined,
+		(error: unknown) => ({ error }),
+	)
+	const settled = async () => {
+		const failed = await failure
+		if (failed) throw failed.error
+	}
+	return { ...run, settled }
+}
+
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
 
@@ -237,14 +251,15 @@ export function useProfileBootstrap() {
 		// — an older bootstrap is fenced immediately, not only once control reaches
 		// runBootstrapCore after the await. (No await between the profile assignment
 		// and this call, so no other activation can interleave in that window.)
-		const core = runBootstrapCore(profile.id)
+		const core = awaitLater(runBootstrapCore(profile.id))
 
 		// Refresh the in-memory list so the profile switcher + any other
 		// consumer sees adds (backup-import activates a restored profile)
 		// and updates (rename).
 		appStore.profiles = await managers.profile.getProfiles()
 
-		await core.promise
+		// Settled after the list lands, so a lock's supersede still turns the core's failure into `false`.
+		await core.settled()
 
 		// The lock must win. The re-read sees a lock that completed before it ran; the fence covers
 		// the one that ran right after it: the service mutex orders the calls, not when the popup

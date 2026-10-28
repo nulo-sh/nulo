@@ -23,6 +23,8 @@ import {
 	OwnAccountIntentRefusalError,
 	RetiredProfileError,
 	StaleUnlockCredentialError,
+	PasskeyNotOpenedError,
+	SameUnlockMethodError,
 	UnlockMethodChangedError,
 	PxeStaleAnchorError,
 	PxeStoreKeyMissingError,
@@ -114,16 +116,16 @@ describe("walletErrorFromPayload", () => {
 		expect((rebuilt.details as { capabilityType?: string })?.capabilityType).toBe("accounts")
 	})
 
-	test("DuplicateWalletError round-trips with code + existingProfileName preserved", () => {
+	test("DuplicateWalletError round-trips with code + every existingProfileNames entry preserved", () => {
 		// The dup-guard confirm-retry UX hinges on `instanceof` surviving the RPC boundary; a
 		// missing dispatch case flattens it to a generic Error and the dialog never shows.
-		const original = new DuplicateWalletError(undefined, { existingProfileName: "Main Profile" })
-		const rebuilt = walletErrorFromPayload(original.toPayload())
+		const original = new DuplicateWalletError(undefined, { existingProfileNames: ["Main Profile", "Savings"] })
+		const rebuilt = walletErrorFromPayload(JSON.parse(JSON.stringify(original.toPayload())))
 		expect(rebuilt).toBeInstanceOf(DuplicateWalletError)
 		expect(rebuilt).toBeInstanceOf(WalletError)
 		expect(rebuilt.code).toBe(DuplicateWalletError.CODE)
 		expect(rebuilt.message).toBe("A profile with this recovery phrase already exists")
-		expect((rebuilt.details as { existingProfileName?: string })?.existingProfileName).toBe("Main Profile")
+		expect((rebuilt.details as { existingProfileNames?: string[] })?.existingProfileNames).toEqual(["Main Profile", "Savings"])
 	})
 })
 
@@ -329,6 +331,20 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			code: "STALE_UNLOCK_CREDENTIAL",
 			rebuild: pass,
 		},
+		{
+			ctor: PasskeyNotOpenedError,
+			make: () => new PasskeyNotOpenedError(),
+			name: "PasskeyNotOpenedError",
+			code: "PASSKEY_NOT_OPENED",
+			rebuild: pass,
+		},
+		{
+			ctor: SameUnlockMethodError,
+			make: () => new SameUnlockMethodError(),
+			name: "SameUnlockMethodError",
+			code: "SAME_UNLOCK_METHOD",
+			rebuild: pass,
+		},
 		{ ctor: RecoveryModeError, make: () => new RecoveryModeError(), name: "RecoveryModeError", code: "RECOVERY_MODE", rebuild: pass },
 		{
 			ctor: ImportedAccountUnusableError,
@@ -414,6 +430,8 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		["RetiredProfileError", () => new RetiredProfileError(), "This profile was made with an earlier version and can't be opened"],
 		["UnlockMethodChangedError", () => new UnlockMethodChangedError(), "The unlock method changed. Unlock again to continue"],
 		["StaleUnlockCredentialError", () => new StaleUnlockCredentialError(), "The profile does not unlock with this credential"],
+		["PasskeyNotOpenedError", () => new PasskeyNotOpenedError(), "Passkey did not open this profile"],
+		["SameUnlockMethodError", () => new SameUnlockMethodError(), "A password profile changes its password, not its unlock method"],
 	])("%s keeps its default message", (_name, make, message) => {
 		expect(make().message).toBe(message)
 	})
@@ -435,7 +453,7 @@ describe("every WalletError subclass: identity and wire shape", () => {
 		expectRebuilt({ code: "VALIDATION", message }, { ctor: ValidationError, name: "ValidationError", message, details: undefined })
 	})
 
-	const foreignDetails = { jobId: "j", existingProfileName: "n", capabilityType: "accounts", k: 1 }
+	const foreignDetails = { jobId: "j", existingProfileNames: ["n"], capabilityType: "accounts", k: 1 }
 	const payloadShapes: Array<[label: string, extra: { details?: unknown }]> = [
 		["foreign details", { details: foreignDetails }],
 		["message only (the operation-result channel)", {}],
