@@ -30,3 +30,11 @@ Codex (resumed): conditional approve, three findings, all accepted, each fixture
 - The open session's secret was read after the write and log checks, so what that reading wrote or logged went unjudged; every reading now runs before the first check.
 - A write's strict mode was read when the write was issued, before its awaited pre-read; strict turned on in that window let a bearer land unjudged. It is read once the pre-read returns, just before the write lands.
 - The edited-row comment said "no slot opened"; the counter sees complete slot sets.
+
+## Review, the fresh pass over the net diff
+
+Codex (fresh session over `2914b9699..HEAD`): reject, two demonstrated false greens and a comment, all accepted, each fixture red before its fix and green after.
+
+- The passkey drivers took `getPasskeyUnlockParams` for its input only and answered as the bound credential, so parameters naming another credential, which `auth.vue` hands its prompt, passed. Every parameter read now checks the credential is the profile's own (O2).
+- A first sighting trusted the words `exportMnemonic` returned apart from the master; the words must now derive the master `exportPlain` returned (O6).
+- A comment above the model test's surfaces restated them; deleted.

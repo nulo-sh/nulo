@@ -304,7 +304,6 @@ describe("the planner", () => {
 	})
 })
 
-/** A driver that implements some of the catalog, `verifyAll` among them or not. */
 const SURFACE: readonly ActionName[] = ["createPassword", "createPasskey", "lock", "unlockPassword", "rename", "backgroundRestart"]
 const VERIFIED: readonly ActionName[] = [...SURFACE, "verifyAll"]
 

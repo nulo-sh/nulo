@@ -15,7 +15,7 @@ import { consoleMethods, type Log } from "@nulo/wallet-core/logger"
 import type { BrowserApi, StorageArea, StorageEntries } from "@nulo/wallet-core/ports"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { getEntropy } from "@nulo/wallet-core/utils"
-import { PasskeyCredential, type PasskeyCredentialData } from "@nulo/wallet-crypto"
+import { deriveMasterFromMnemonic, PasskeyCredential, type PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import { profileUiKeys } from "@/utils/profile-ui-keys"
 import { ServiceCollection } from "@/wallet/base"
@@ -411,6 +411,9 @@ async function readSightings(run: InProcessRun): Promise<void> {
 		if (sessionSecret !== fieldOf(master)) run.findings.push({ oracle: "O6", message: `${ref}'s session secret is not its master` })
 		if (phrase && !run.phrases.has(phrase))
 			await learnWords(run, phrase, await run.profiles.exportMnemonic(id, unlock.password, unlock.data))
+		const words = phrase && run.phrases.get(phrase)?.words
+		if (words && Buffer.from(await deriveMasterFromMnemonic(words)).toString("base64") !== master)
+			run.findings.push({ oracle: "O6", message: `${ref}'s words do not derive its master` })
 	}
 }
 
@@ -476,16 +479,26 @@ async function fromLockScreen(run: InProcessRun, before: World): Promise<void> {
 	if (before.session.kind === "open") await run.profiles.lockActiveProfile()
 }
 
-/** `auth.vue`: the passkey's parameters, the prompt, then the unlock. */
-async function passkeyUnlock(run: InProcessRun, id: string, k: CredentialRef | undefined): Promise<void> {
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
-	await run.profiles.unlockPasskeyProfile(id, await answer(run, k, prfSalt))
+/** A passkey profile's parameters as a page reads them; the page's prompt asks for the credential
+ *  they name, so it must be the profile's own. */
+async function unlockParams(run: InProcessRun, p: ModelProfile): Promise<{ prfSalt: string }> {
+	const params = await run.profiles.getPasskeyUnlockParams(boundId(run, p.ref))
+	if (params.credentialId !== credentialOf(run, p.credential))
+		run.findings.push({ oracle: "O2", message: `${p.ref}'s unlock parameters name another credential than ${p.credential}` })
+	return params
 }
 
+/** What `k` answers at `p`'s parameters. */
+async function answerAt(run: InProcessRun, p: ModelProfile, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
+	const { prfSalt } = await unlockParams(run, p)
+	return answer(run, k, prfSalt)
+}
+
+/** `auth.vue`: the password, or the passkey's parameters, its prompt, then the unlock. */
 async function unlockAs(run: InProcessRun, target: ModelProfile): Promise<void> {
 	const id = boundId(run, target.ref)
 	if (target.method === "password") await run.profiles.unlockProfile(id, secretOf(run, target.password as SecretRef))
-	else await passkeyUnlock(run, id, target.credential)
+	else await run.profiles.unlockPasskeyProfile(id, await answerAt(run, target, target.credential))
 }
 
 async function createWith(run: InProcessRun, step: PlannedStep, before: World, p: { ref: ProfileRef; name?: string }, unlock: Unlock) {
@@ -534,12 +547,12 @@ const unlockPassword: Drive<"unlockPassword"> = async (run, p, _step, before) =>
 
 /** A refused prompt and an answer with no PRF output end in the page, after the parameters. */
 const unlockPasskey: Drive<"unlockPasskey"> = async (run, p, _step, before) => {
+	const target = profileOf(before, p.target) as ModelProfile
 	const id = boundId(run, p.target)
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
+	const { prfSalt } = await unlockParams(run, target)
 	if (p.variant === "refuse") return "cancelled"
 	if (p.variant === "no-prf") return "refused"
-	const k = p.variant === "other" ? p.other : profileOf(before, p.target)?.credential
-	const data = await answer(run, k, prfSalt)
+	const data = await answer(run, p.variant === "other" ? p.other : target.credential, prfSalt)
 	return attempt(() => run.profiles.unlockPasskeyProfile(id, data), p.variant === "other" ? [says("Invalid profile id")] : [])
 }
 
@@ -562,7 +575,7 @@ const revealPhrase: Drive<"revealPhrase"> = async (run, p, _step, before) => {
 		const typed = p.variant === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret(run)
 		return attempt(() => reveal(typed), p.variant === "wrong" ? [says("Invalid profile old password")] : [])
 	}
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
+	const { prfSalt } = await unlockParams(run, open)
 	if (p.variant === "refuse") return "cancelled"
 	if (p.variant === "no-prf") return "refused"
 	const data = await answer(run, p.variant === "other" ? p.other : open.credential, prfSalt)
@@ -631,8 +644,7 @@ const backgroundRestart: Drive<"backgroundRestart"> = async (run) => {
 async function heldUnlock(run: InProcessRun, before: World, compete: () => Promise<void>): Promise<Outcome> {
 	const target = mustSelect(before)
 	const id = boundId(run, target.ref)
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
-	const data = await answer(run, target.credential, prfSalt)
+	const data = await answerAt(run, target, target.credential)
 	await compete()
 	const outcome = await attempt(() => run.profiles.unlockPasskeyProfile(id, data))
 	await run.profiles.lockActiveProfile()
@@ -702,8 +714,7 @@ async function withRow<T>(id: string, change: (raw: string) => string, step: () 
 const editRowDuringUnlock: Drive<"editRowDuringUnlock"> = async (run, p, _step, before) => {
 	const target = mustSelect(before)
 	const id = boundId(run, target.ref)
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
-	const data = await answer(run, target.credential, prfSalt)
+	const data = await answerAt(run, target, target.credential)
 	const opens = countOpens(run.profiles)
 	try {
 		return await withRow(
@@ -750,12 +761,6 @@ const tamperedUnlock: Drive<"tamperedUnlock"> = async (run, p, _step, before) =>
 
 type Change = ParamsMap["changeUnlockMethod"]
 
-/** What `k` answers at the stored input of `id`, read first as each page reads it. */
-async function answerAt(run: InProcessRun, id: string, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
-	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
-	return answer(run, k, prfSalt)
-}
-
 async function toPasskey(run: InProcessRun, open: ModelProfile, p: Change, before: World): Promise<Outcome> {
 	const id = boundId(run, open.ref)
 	const typed = p.current === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret(run)
@@ -768,10 +773,10 @@ async function toPasskey(run: InProcessRun, open: ModelProfile, p: Change, befor
 async function toNewPasskey(run: InProcessRun, open: ModelProfile, p: Change, before: World): Promise<Outcome> {
 	const id = boundId(run, open.ref)
 	if (p.current === "refuse") {
-		await run.profiles.getPasskeyUnlockParams(id)
+		await unlockParams(run, open)
 		return "cancelled"
 	}
-	const current = await answerAt(run, id, open.credential)
+	const current = await answerAt(run, open, open.credential)
 	await run.profiles.verifyUnlockCredential(id, { passkey: current })
 	const next = await newPasskey(run, before, p.credential)
 	return attempt(() => run.profiles.changeUnlockMethod(id, { passkey: current }, { passkey: next }))
@@ -780,10 +785,10 @@ async function toNewPasskey(run: InProcessRun, open: ModelProfile, p: Change, be
 async function toPassword(run: InProcessRun, open: ModelProfile, p: Change): Promise<Outcome> {
 	const id = boundId(run, open.ref)
 	if (p.current === "refuse") {
-		await run.profiles.getPasskeyUnlockParams(id)
+		await unlockParams(run, open)
 		return "cancelled"
 	}
-	const current = await answerAt(run, id, p.current === "other" ? p.other : open.credential)
+	const current = await answerAt(run, open, p.current === "other" ? p.other : open.credential)
 	const checked = await attempt(
 		() => run.profiles.verifyUnlockCredential(id, { passkey: current }),
 		p.current === "other" ? [is(PasskeyNotOpenedError)] : [],
@@ -815,9 +820,9 @@ async function wrongAttempts(run: InProcessRun, p: ModelProfile, w: World): Prom
 	if (p.method === "password")
 		return (await attempt(() => run.profiles.unlockProfile(id, wrongSecret(run)), [is(InvalidPasswordError)])) === "refused"
 	const others = otherCredentials(w, p.ref)
-	if (!others.length) await run.profiles.getPasskeyUnlockParams(id)
+	if (!others.length) await unlockParams(run, p)
 	for (const k of others) {
-		const data = await answerAt(run, id, k)
+		const data = await answerAt(run, p, k)
 		if ((await attempt(() => run.profiles.unlockPasskeyProfile(id, data), [says("Invalid profile id")])) !== "refused") return false
 	}
 	return true
@@ -832,7 +837,7 @@ async function verifyOne(run: InProcessRun, p: ModelProfile, w: World): Promise<
 	const opened = (await run.profiles.getActiveProfile())?.id === id
 	const reading: MasterReading = { ref: p.ref, wrongRefused, wrongWrote, opened }
 	if (opened) {
-		const unlock = await unlockOf(run, p, id)
+		const unlock = await unlockOf(run, p)
 		reading.master = await run.profiles.exportPlain(id, unlock.password, unlock.data)
 		reading.sessionSecret = (await run.profiles.getProfileSecret(id)).toString()
 	}
@@ -840,9 +845,9 @@ async function verifyOne(run: InProcessRun, p: ModelProfile, w: World): Promise<
 	return reading
 }
 
-async function unlockOf(run: InProcessRun, p: ModelProfile, id: string): Promise<Unlock> {
+async function unlockOf(run: InProcessRun, p: ModelProfile): Promise<Unlock> {
 	if (p.method === "password") return { password: secretOf(run, p.password as SecretRef) }
-	return { data: await answerAt(run, id, p.credential) }
+	return { data: await answerAt(run, p, p.credential) }
 }
 
 export const DRIVERS: Drivers = {

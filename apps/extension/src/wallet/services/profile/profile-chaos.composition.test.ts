@@ -286,6 +286,27 @@ describe("each reader can fail — break fixtures", () => {
 	)
 
 	test(
+		"O2: unlock parameters that name another credential than the profile's",
+		() =>
+			redAt(
+				[CREATE_PK, LOCK, { action: "unlockPasskey", params: { target: "P1", variant: "approve" } }],
+				"unlockPasskey",
+				"O2",
+				/^P1's unlock parameters name another credential than K1$/,
+				{
+					onWorker: (worker) => {
+						const read = worker.profiles.getPasskeyUnlockParams.bind(worker.profiles)
+						vi.spyOn(worker.profiles, "getPasskeyUnlockParams").mockImplementation(async (id) => ({
+							...(await read(id)),
+							credentialId: Buffer.alloc(16, 0x0c).toString("base64"),
+						}))
+					},
+				},
+			),
+		RUN_MS,
+	)
+
+	test(
 		"O2: a profile row missing a field",
 		() =>
 			redAt(
@@ -434,6 +455,16 @@ describe("each reader can fail — break fixtures", () => {
 					console.error("a planted failure")
 				}),
 			),
+		RUN_MS,
+	)
+
+	test(
+		"O6: words read at first sighting that derive another wallet's master",
+		() =>
+			redAt([CREATE_PK], "createPasskey", "O6", /^P1's words do not derive its master$/, {
+				onWorker: (worker) =>
+					void vi.spyOn(worker.profiles, "exportMnemonic").mockResolvedValue([...Array(23).fill("abandon"), "art"]),
+			}),
 		RUN_MS,
 	)
 

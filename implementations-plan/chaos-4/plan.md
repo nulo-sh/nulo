@@ -144,6 +144,7 @@ Each finding was checked against the tree; detail in lessons/phase-0.md.
 - **Codex, round 3 (resumed, the final pass):** approve; no new material defect.
 - **Arc 1, Codex round 1:** reject; 4 findings and a comment, all accepted (lessons/phase-1.md § Review, round 1): O7 reads every log level, O6 reads an open session's secret after each step, wrong passwords are needles, O1 judges every session-row write. **Opus, beside it:** 7 findings, all accepted: console lines reach the logger, the edited-row refusal counts only before the slots open, a phrase as a JSON array is a needle, strays survive to a check, a fixture per O6 clause, three comments.
 - **Arc 1, Codex round 2 (resumed):** conditional approve; 3 findings, all accepted: readings run before the first check, a write's strict mode is read as it lands, a comment.
+- **Arc 1, Codex round 3 (resumed):** approve. **Fresh session over the net diff:** reject; 2 findings and a comment, all accepted: unlock parameters must name the profile's own credential (O2), a first sighting's words must derive its master (O6).
 
 ## Seeds
 
