@@ -77,6 +77,7 @@ post_implementation_hardening: not scheduled
 | D15 | A reveal's words after a lock or a row edit are asserted as the service's contract: the answer authorizes the reveal; the wallet stays locked and nothing is written | asserting only "no write, no session" (Opus) | Codex 8c: an unpinned behaviour can change unseen; no screen shows the words, so it is no owner ask |
 | D16 | Accessibility: none | | no product file changes |
 | D17 | The fixed-set coverage check runs in the composition test, beside the hand lists it counts; the fixed set is {8001} | the model test (the file map's first place); more seeds | the model test imports no harness (D13); the four hand lists drive every action but `unlockPassword`, `secondWindow`, `changePassword` and `rename`, seed 8001 drives the first three and `rename` joined a hand list, so one seed is the fewest (D10), at about 6 s under load |
+| D18 | The model test's identity case plans 100 seeds per caps and start, not 1,000 | 1,000 (gate 1.1's text) | at 1,000 it cost 20 s of the unit suite's 30 s budget; the property is structural (a surface naming every action filters nothing), and gate 1.1's digest proved identity over the full seed set at the base and the head |
 
 ## Phases and gates
 
