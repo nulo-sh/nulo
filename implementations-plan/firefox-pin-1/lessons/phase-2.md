@@ -15,3 +15,27 @@
 ## Fix loop round 2
 
 - Codex `approve` over `4901ab3a4..6129a71d7`, one low: the FIREFOX.md sentence claimed a network-idle wait never settles, which overstates it (idle can be reported before any answered request, or under a concurrency allowance). Narrowed to "stays in Puppeteer's in-flight count". The loop converged at round 2.
+
+## Full smoke pass 1 at `6129a71d7` (84c1e1b5a only changed docs): one red, a fourth difference
+
+| Shard | Result | Wall-clock |
+|---|---|---|
+| 1/6 | 50 passed, 4 skipped | 375 s |
+| 2/6 | 50 passed, 1 skipped | 477 s |
+| 3/6 | 1 failed, 35 passed, 5 skipped | 413 s |
+| 4/6 | 41 passed, 8 skipped | 511 s |
+| 5/6 | 54 passed, 1 skipped | 385 s |
+| 6/6 | 45 passed, 5 skipped | 484 s |
+
+Total 2645 s; every launch `[firefox] 158.0`. The red: `import-errors-scroll.test.ts:230`, `expected 101.80000305175781 to be 102`. On its own the test fails 3 of 3 on 158 and passes 2 of 2 on 153.0.4. A probe of the scroller read: on 158, scrollTop 101.8, scrollHeight 399, clientHeight 297, `scrollTopMax` 101.8, children heights 56 + 342.8; on 153, scrollTop and `scrollTopMax` 102 with the same heights; on Chrome, scrollTop 102, children 56 + 342.77. So the content ends at 101.8 and 158 keeps that fractional end, where 153 and Chrome snap it to a whole pixel. `CollapsingHeroLayout.vue` sets `scrollTop = scrollHeight - clientHeight`, which the browser clamps to its end, so the product lands right; the test's end is the rounded bound. This test never got this far on 158 before: at the base it stopped on the refused `setFiles`.
+
+The plan stops the arc on a fourth difference. Codex r3 (plan.md § Audit verdicts) agreed the fix is a bounded test-only amendment (D7, proposed) and that approval comes first. The proposed patch, applied in place and reverted afterwards, passed the whole file 4/4 on 158, 153.0.4 and Chrome. It is not committed.
+
+## The gates D7 does not touch, run while the arc waits
+
+- **Chrome smoke**, full, retry 0, six shards in sequence: 273 passed, 0 failed (283 + 365 + 365 + 309 + 365 + 267 = 1954 s).
+- **Firefox network**, retry 0, on 158. Two deviations from the plan's gate command:
+  - `agent.sh` refuses a full run without `NULO_E2E_PROVERLESS=1`, because fifteen files are gated on it, so the gate ran proverless, as CI's shards do.
+  - The unsharded run outran its 7000 s bound after 102 of 133 files (203 tests, 0 failed). Its one orphaned geckodriver group was reaped by its run id, and the other 31 files ran on their own: 29 passed and 2 skipped, 35 tests passed and 2 skipped, 951 s.
+  - Together: 133 files, 0 failed, every launch (148 + 30) `[firefox] 158.0`.
+- D7 changes only `import-errors-scroll.test.ts`, a smoke file. The network result therefore stands for the final head. The Chrome smoke needs only that file rerun, which the patch trial did (4/4).

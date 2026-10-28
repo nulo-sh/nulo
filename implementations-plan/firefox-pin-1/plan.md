@@ -103,6 +103,7 @@ Single arc on `worktree-firefox-pin-1`, `gh pr create --base dev`, no labels at 
 - **D4** Ban the two calls outside the driver. Their refusal on Firefox would otherwise surface only on a 40-minute lane.
 - **D5** Keep a pin apart from Puppeteer's, at its value. Rejected: drop the pin and read Puppeteer's revision; 25.13's 157 refusal is why the pin exists.
 - **D6** Known limit, filed at close-out as one closed `known-limit` issue (deduplicated against #1306): no page screenshot of an extension page on Firefox 157+ (`shotSend`, the chaos `screenshot` verb), and the chaos session's preload capture is refused; `armDownloads` re-arms before each command, which cannot cover a new document's first moments. Reopen on a needed Firefox capture or a scheduled Firefox chaos session.
+- **D7** (proposed; the arc stops here until it is approved, § A fourth difference) `import-errors-scroll.test.ts`'s end becomes the browser's own: in the one test that asserts it, after the landing is read, set the scroller's `scrollTop` to its `scrollHeight` and compare the saved landing with the clamped value exactly; `popupLanding` drops its `maxScroll`. Firefox 158 keeps the fractional end (101.8) that `scrollHeight - clientHeight` rounds to 102. Rejected: MDN's `< 1` px check (passes a landing short of the end); restoring the probed offset (Firefox may quantize a fractional restore); changing `rows.test.ts:1220`'s same bound (no failing case).
 
 ## Post-implementation
 
@@ -123,6 +124,7 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Codex fix r1 (`gpt-6.1-sol`, high, fresh, over `5ef0c119d...4901ab3a4`) | `approve`, one low: `PxeHostState`'s doc comment left above the new types | moved back | — |
 | Opus (code, beside fix r1) | `conditional approve`, four low or info: the same doc comment; Firefox assigns the JSON text to a byte-string `responseBody` (BiDi UTF-8-encodes, `network.sys.mjs:3213-3228`); Chrome's driver lets a page arm twice; an answered request never reports `responseCompleted` to Puppeteer on Firefox (`NetworkRequest.sys.mjs:346-355`) | the comment; UTF-8 encoding, with the contract test's second body outside ASCII (red first: `JSON.parse: bad control character`); a FIREFOX.md sentence on the missing response event | the second-arm guard: no caller arms twice, and Chrome already fails one (Puppeteer refuses a request handled twice) |
 | Codex fix r2 (resumed, over `4901ab3a4..6129a71d7`) | `approve`, one low: the FIREFOX.md sentence overstated a network-idle hang | its narrower wording: an answered request stays in Puppeteer's in-flight count | — |
+| Codex r3 (resumed, a decision: the smoke's one red on 158) | the fix is a bounded test-only amendment; pick an exact probe of the browser's end without restoring; reject the `< 1` px check; leave `rows.test.ts`; the plan's stop rule binds, so approval comes first | D7 as proposed | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 
