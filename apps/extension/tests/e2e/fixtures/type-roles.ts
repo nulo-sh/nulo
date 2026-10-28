@@ -14,6 +14,7 @@ import { expect } from "vitest"
 import { OVERRIDES } from "../../../scripts/type-roles/exceptions"
 import { withTimeoutMessage } from "./dom"
 import { ensureUnlocked, navigateByHash, readSessionRow } from "./helpers"
+import { setViewport, viewportOf } from "./browser"
 
 type FontToken = (typeof fonts)[keyof typeof fonts]
 type RoleSpec = (typeof typeRoles)[TypeRole]
@@ -729,13 +730,13 @@ async function settleLayout(page: Page): Promise<void> {
 
 /** Runs `check` with the page's viewport `width` wide, then gives the page back its own. */
 export async function atWidth(page: Page, width: number, check: () => Promise<void>): Promise<void> {
-	const own = page.viewport()
-	await page.setViewport({ width, height: own?.height ?? 600 })
+	const own = viewportOf(page)
+	await setViewport(page, { width, height: own?.height ?? 600 })
 	try {
 		await settleLayout(page)
 		await check()
 	} finally {
-		await page.setViewport(own)
+		await setViewport(page, own)
 		await settleLayout(page)
 	}
 }

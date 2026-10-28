@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { isFirefox } from "../fixtures/browser"
+import { bringToFront, isFirefox, setViewport } from "../fixtures/browser"
 import { clickByTestId, test, type ExtensionContext } from "../fixtures/extension"
 import { assertPgOk, type PgBundle, type PgResult, requestPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import {
@@ -38,7 +38,7 @@ async function openWindow(ctx: Connected, bundle: PgBundle): Promise<{ popup: Pa
 	const popupP = waitForPopup(ctx, "capabilities", { timeout: 60_000 })
 	await requestPgBundle(ctx.playgroundPage, bundle, { tokenAddress: aztecConfig!.tokenAddress })
 	const popup = await popupP
-	await popup.setViewport({ width: 400, height: 800 })
+	await setViewport(popup, { width: 400, height: 800 })
 	await waitCapabilitiesReady(popup)
 	// The fonts swap in (`font-display: swap`), so the layout and the Tab order settle only once they load.
 	await popup.evaluate(() => document.fonts.ready.then(() => undefined))
@@ -131,7 +131,7 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const first = await openWindow(ctx, "transaction-listed")
 		const popup = first.popup
-		await popup.bringToFront()
+		await bringToFront(popup)
 
 		const stops: Stop[] = []
 		let switchOutline = ""
@@ -190,7 +190,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 180_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const fresh = await openWindow(ctx, "transaction-listed")
-		await fresh.popup.bringToFront()
+		await bringToFront(fresh.popup)
 		for (const stop of scrollStop) expect(await pressTab(fresh.popup)).toEqual(stop)
 		expect(await pressTab(fresh.popup)).toEqual({ testid: "cap-account-item", tag: "BUTTON" })
 		expect(await focusedAttr(fresh.popup, "aria-pressed")).toBe("true")

@@ -2,7 +2,7 @@ import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { BROWSER, prepareKeys } from "../fixtures/browser"
+import { BROWSER, bringToFront, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, type ExtensionContext, openPopup, test, waitForHash } from "../fixtures/extension"
 import { switchToLocalNetwork } from "../fixtures/helpers"
 import { navigateByHash } from "../fixtures/navigation"
@@ -280,7 +280,7 @@ test.skipIf(!aztecConfig)(
 		expect(await popupsOpen(control)).toBe(0)
 
 		const readFrom = Date.now()
-		await control.bringToFront()
+		await bringToFront(control)
 		await navigateByHash(control, "#/popup/settings/connected-apps", 15_000)
 		// A wallet of its own lists this one app, so the row's line is the only one.
 		await control.waitForSelector(row, { timeout: 5_000 })
@@ -293,7 +293,7 @@ test.skipIf(!aztecConfig)(
 		)
 		await shotSend(control, "connect-not-connected-app", "connected-app-not-connected")
 		const settingsMs = Date.now() - readFrom
-		await dapp.bringToFront()
+		await bringToFront(dapp)
 
 		const check = await checkP
 		const shown = await checkShown(check)

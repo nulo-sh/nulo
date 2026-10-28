@@ -35,6 +35,7 @@ import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { shotSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
+import { bringToFront, setViewport } from "../fixtures/browser"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -422,7 +423,7 @@ async function estimateOnSend(page: Page): Promise<void> {
 /** A drained send whose estimate landed before the grant: Confirm builds again, so it fails once its
  *  record is written. */
 async function confirmDrainedSend(page: Page): Promise<void> {
-	await page.bringToFront()
+	await bringToFront(page)
 	// A public origin needs no review, so the footer sends at once.
 	expect(await page.$eval(sel("send-submit"), (el) => el.getAttribute("data-action"))).toBe("send")
 	await clickByTestId(page, "send-submit")
@@ -520,7 +521,7 @@ test.skipIf(!hasConfig)(
 
 		// A 500px window over the 600px page: the footer starts below the fold.
 		await execute.evaluate(() => document.querySelector('[data-testid="e2e-footer-line"]')?.remove())
-		await execute.setViewport({ width: 400, height: 500 })
+		await setViewport(execute, { width: 400, height: 500 })
 		const short = await placementAtEnd(execute, FOOTER)
 		console.log(`[snack-placement] 400x500 before scrolling: ${JSON.stringify(short)}`)
 		expect(short.footerTop).toBeGreaterThanOrEqual(short.viewport)
@@ -569,7 +570,7 @@ test.skipIf(!hasConfig)(
 		// A dApp send waiting on its approval window keeps its Cancel; the failure snack stays until closed.
 		const execute = await openUnfundedDappSend(ctx)
 		await waitForExecuteContent(execute)
-		await page.bringToFront()
+		await bringToFront(page)
 		await page.waitForSelector(`${sel("tx-awaiting-card")}[data-stage="queued"] ${sel("tx-awaiting-cancel")}`, { timeout: 60_000 })
 		await waitForToast(page, "Send failed", 5_000, { kind: "error" })
 		// The snack measures again on the frame after the card arrives.

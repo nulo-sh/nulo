@@ -16,7 +16,7 @@
 import type { Page } from "puppeteer"
 import { afterAll, expect, inject, onTestFinished } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { extensionUrl, gotoExtensionPage, isFirefox, newPage, stopBackground } from "../fixtures/browser"
+import { bringToFront, extensionUrl, gotoExtensionPage, isFirefox, newPage, setViewport, stopBackground } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, openPopup, patchPagePolling, test, waitForHash } from "../fixtures/extension"
 import {
@@ -269,8 +269,8 @@ async function expectHomePlaysNothingFor(page: Page, id: string): Promise<void> 
 /** A popup page opened on `hash`, the way a tab opens it. */
 async function openPopupAt(page: Page, extensionId: string, hash: string): Promise<void> {
 	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
-	await page.bringToFront()
+	await setViewport(page, { width: 360, height: 600 })
+	await bringToFront(page)
 	await gotoExtensionPage(page, extensionUrl(extensionId, `/src/popup/index.html${hash}`))
 	await page.waitForFunction(() => window.location.hash !== "#/" && document.querySelector('[data-service-ready="true"]'), {
 		timeout: 30_000,

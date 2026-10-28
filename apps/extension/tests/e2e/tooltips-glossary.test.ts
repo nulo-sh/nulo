@@ -3,7 +3,7 @@ import type { Page } from "puppeteer"
 import { TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
-import { isFirefox, prepareKeys, reloadExtensionPage } from "./fixtures/browser"
+import { isFirefox, prepareKeys, reloadExtensionPage, setViewport } from "./fixtures/browser"
 import { openPopup, test, waitForHash } from "./fixtures/extension"
 import { lockWallet, navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
@@ -206,7 +206,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	await waitForBubbleGone(page)
 
 	// Taller than the window: it pins to the top inset and runs past the bottom edge.
-	await page.setViewport({ width: 360, height: Math.ceil(reopened.height) + 4 })
+	await setViewport(page, { width: 360, height: Math.ceil(reopened.height) + 4 })
 	const shortHeight = await page.evaluate(() => window.innerHeight)
 	console.log(`[tooltips-glossary] bubble ${reopened.height}px tall, window set to ${shortHeight}px`)
 	expect(shortHeight).toBeLessThan(reopened.height + 2 * INSET)
@@ -216,7 +216,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	expect(tall.bottom).toBeGreaterThan(shortHeight)
 	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
 	await waitForBubbleGone(page)
-	await page.setViewport({ width: 360, height: 600 })
+	await setViewport(page, { width: 360, height: 600 })
 
 	// An unbroken string wraps inside the cap instead of running past it.
 	await page.focus(TERM)

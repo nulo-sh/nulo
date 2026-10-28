@@ -8,7 +8,7 @@
  */
 import type { Browser, Page, Target } from "puppeteer"
 import { describe, expect } from "vitest"
-import { FIREFOX_ONLY, isFirefox, waitForTarget } from "./fixtures/browser"
+import { FIREFOX_ONLY, bringToFront, isFirefox, waitForTarget } from "./fixtures/browser"
 import { type SessionAuthenticator, sessionAuthenticator } from "./fixtures/browser/firefox"
 import {
 	armPanelDeath,
@@ -577,7 +577,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await untilRegistered(control, firstId)
 
 			// Focus elsewhere first, so that only the second start can bring the export window forward.
-			await control.bringToFront()
+			await bringToFront(control)
 			await untilFocused(control, (id) => id !== undefined && id !== firstId)
 			const before = new Set(browser.targets())
 			await openActionPopup(browser)
