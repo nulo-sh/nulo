@@ -13,3 +13,8 @@
 - Withholding the marker on the start location only: still red 1/5 on Firefox (the lock screen). Reverted.
 - A wait for Home inside the helper: green 10/10, but it would time out the chaos run, whose steps can end on Settings (`profile-chaos/ui.ts:298`). Replaced.
 - Shipped: the shell marks the verdict only where the route's meta has `isAuthRequired`. Trace: no marker on the start location or `#/popup/auth`, `shown` on general. S7 without Home waits: 10/10 green, Chrome 8.3-9.8 s, Firefox 16.6-19.2 s.
+
+## 2026-10-28 · Review rounds (arc 1)
+
+- Codex r1 (`gpt-6.1-sol`, high): `approve`. Opus (general-purpose), run beside it: `conditional approve` with six low findings, five taken (`5c7aef1d7`): read the verdict inside its wait; mark only where `legalSheetMayCover` holds (export and declined routes are auth-required but never covered); a hidden leaf instead of a wrapper testid, which had become every popup element's nearest testid in the type-role sweeps; rewrite two caller-naming comments. The fee-wait finding is in phase-2.md.
+- A resume against the worktree as its codex-dir ran round 2 on `gpt-6-astra` and wrote its session files into the worktree root (moved out, never staged). Resume with the CODEX_DIR `run-codex.sh` printed. Round 3 ran on `gpt-6.1-sol` and re-verified both rounds: `approve`.

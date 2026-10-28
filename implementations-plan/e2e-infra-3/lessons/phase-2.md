@@ -10,3 +10,7 @@
 
 - `FeeSettingsCard.test.ts`: 174/174. The saved-pick loading test pins the mark (`true` while the read runs, absent after); it goes red with the attribute deleted.
 - `type-roles.test.ts`, retry 0: Chrome 14 passed, 1 skipped, 116 s; Firefox 15/15, 175 s.
+
+## 2026-10-28 · Bound, after review
+
+- Opus: 15 s sat under the store's 20 s per-leg bound (`INIT_FETCH_TIMEOUT_MS`), so 30 s with a labelled timeout. Codex r2: Send's read is forced (`useFeeSelection.ts` `forceRefresh: () => true`), and a forced gas read first waits out an older flight (≤ 20 s), then fetches (≤ 20 s). Verified in `balances.store.ts`. The bound is 50 s.
