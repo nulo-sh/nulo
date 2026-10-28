@@ -38,3 +38,26 @@ Every seed below passed. A verdict of `incomplete` came only from `logs: the bac
 - Opus `conditional approve`: `startWorld` spread one `base` object into both release profiles, and a `structuredClone` keeps shared references, so `P1` and `P2` shared one `imported` array. The base had it too, harmless while `P2` was retired. Fixed with a fresh `base()` per profile, and a model test that reds on the unfixed model. Seed 110867 from v1.1.0, which imports into `P1` and verifies with `P2` live, passed on Chrome (55.7 s).
 - A re-run needs a rebuilt candidate: the candidate records the commit it was built from and refuses a run at another head.
 - Codex r2 `approve`.
+
+## 2026-10-28 · Final gates at `e0aaede3d` (the reviewed code; later commits are docs only)
+
+Fast gates: `bun run lint` exit 0; `bun run typecheck:all` exit 0 (50 s); `bun run test:all` exit 0 (155 s; the model file 256 passed). Every seed passed, at retry 0:
+
+| Browser | From | Seeds | Per-seed test time (s) | Wall (s) |
+|---|---|---|---|---|
+| Chrome | v1.1.0 | 3001 | 41.0 | 45 |
+| Chrome | v1.0.0 | 3001 | 48.8 | 53 |
+| Chrome | v1.1.0 | 8101-8105 | 57.6, 46.8, 51.3, 49.6, 57.8 | 268 |
+| Chrome | v1.0.0 | 8101-8105 | 51.0, 47.7, 55.2, 59.0, 51.0 | 269 |
+| Chrome | v0.31.0 | 8101 | 54.0 | 60 |
+| Chrome | v0.31.0 | first-open control | 23.6 | 31 |
+| Chrome | empty (armed smoke build) | 8101 | 41.4 | 45 |
+| Firefox | v1.1.0 | 3001 | 79.0 | 85 |
+| Firefox | v1.0.0 | 3001 | 77.5 | 85 |
+| Firefox | v1.1.0 | 8101-8105 | 91.9, 80.9, 89.3, 92.5, 88.9 | 449 |
+| Firefox | v1.0.0 | 8101-8105 | 77.4, 84.1, 73.9, 87.3, 75.8 | 403 |
+| Firefox | v0.31.0 | 8101 | 72.3 | 77 |
+| Firefox | v0.31.0 | first-open control | 25.6 | 30 |
+| Firefox | empty (armed smoke build) | 8101 | 54.7 | 59 |
+
+- `build-update-candidate.sh` leaves a production build in `dist/<browser>`, so the armed smoke build must be rebuilt before an empty-start run; the smoke setup refuses the unarmed one.
