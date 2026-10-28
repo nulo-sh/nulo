@@ -114,7 +114,7 @@ const CLAIM_DECODE: DecodedCall = {
 		{ name: "to", value: { kind: "address", value: MAIN } },
 		{ name: "amount", value: { kind: "integer", value: "5000000" } },
 		{ name: "secret", value: { kind: "field", value: CLAIM_SECRET } },
-		{ name: "leaf_index", value: { kind: "integer", value: "9" } },
+		{ name: "message_leaf_index", value: { kind: "field", value: field(9n) } },
 	],
 }
 
@@ -302,7 +302,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(authwit.find('[data-testid="execute-op-summary-authwit-unverified-warning"]').exists()).toBe(true)
 	})
 
-	test("every call read: no advice and no dotted interface, until an unreadable authorization takes the advice, the last one still open", async () => {
+	test("every call read: no line beside an app authorization, no advice and no dotted interface, until an unreadable authorization takes the advice, the last one still open", async () => {
 		const [, transfer] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
 		const { decodedCalls, decodedAuthwits } = await decodeFixture()
 		const op = { ...(fixtureOp() as object), exec: { calls: [transfer] } }
