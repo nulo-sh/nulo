@@ -28,3 +28,11 @@ Every run at retry 0, `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun ru
   Medians: Chrome file 17.4 to 17.8 s, first test 6.5 to 6.0 s (within the noise); Firefox file 27.3 to 31.4 s, first test 9.3 to 11.9 s (+2.6 s). The estimate was +3 to 5 s per browser.
 - Captures: `NULO_E2E_SHOT_DIR` into `screenshots/` on Chrome; `shotSend` writes the current theme unsuffixed, so the light one was renamed `networks-list-switch-light.png`.
 - Slip: `git checkout <base> -- <paths>` to time the base overwrote the uncommitted spec edit; it was re-applied from its script and re-run green on both browsers. Checkpoint before swapping sources.
+
+## Review, round 1
+
+- Codex (`run-codex.sh`, `gpt-6.1-sol`, high, read-only) over the net diff from `843d27f75`, and an Opus review (`Agent`, `opus`) beside it. Both found the reversed-switch focus loss: start on Alpha, press Testnet's Switch, the persist fails and the read-back restores Alpha; the watcher checked only Alpha's row, so Testnet's focused link was replaced and focus fell to `<body>`.
+- Red first: a case whose `activate` sets Testnet, flushes, then restores Alpha and returns `"unconfirmed"` failed with focus on `<body>`. Green after the watcher checks both rows (12/12).
+- Opus's repeated press: a case sends a click with `detail: 2` and a repeat Enter to the Switch, and a repeat Enter to both forms of the row's link. Each of the three guards, removed alone, fails it (`expected [ true ] to deeply equal [ false ]` for the link). One mutation run first matched two lines and never applied; check the diff before reading a mutation's green.
+- Codex's retry finding: the test now resets to Alpha V6 when the chip names another network. A normal run does not take that path; `switchToNetwork` is the suite's own helper for it.
+- After rebuilding both armed builds: `settings-crud.test.ts` 9/9 at retry 0, Chrome 15.1 s (first test 5.7 s), Firefox 24.6 s (first test 9.3 s). Root lint and the extension typecheck exit 0.
