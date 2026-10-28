@@ -21,7 +21,7 @@ import { callService } from "../../fixtures/session"
 import { openPopup } from "../../fixtures/wallet-pages"
 import { checkLeaks, checkSettle, findNeedles, type LeakHit, type SettleReading, type Violation } from "../profile-chaos/checkers"
 import { drainLogs, readProfiles, readSession, scanStorage } from "../profile-chaos/collect"
-import { DRIVERS } from "../profile-chaos/drivers"
+import { beforeDriver, DRIVERS } from "../profile-chaos/drivers"
 import {
 	ACTIONS,
 	type ActionName,
@@ -34,7 +34,7 @@ import {
 	type World,
 } from "../profile-chaos/model"
 import { RESTART_MS, replaceBackground } from "../profile-chaos/restart"
-import { checkStepLogs, homesOf, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
+import { checkStepLogs, drainPages, homesOf, learnPhrases, mask, needlesOf } from "../profile-chaos/run"
 import { startRun } from "../profile-chaos/start"
 import type { Drive, RunState } from "../profile-chaos/state"
 import { backgroundServing } from "../profile-chaos/ui"
@@ -657,6 +657,7 @@ class Session {
 		const refs = this.seedSecrets(params)
 		// Where a driver that threw left the wallet is unknown, so no later `do` starts from it.
 		this.doWorld = undefined
+		await beforeDriver(this.s)
 		const driven = await (DRIVERS[step.action] as Drive)(this.s, step.params, step, before)
 		const allowed = step.expect.outcomes.includes(driven.outcome)
 		this.doWorld = allowed ? step.expect.next : undefined
@@ -728,6 +729,9 @@ class Session {
 		const incomplete = (reason: string) => lines.push({ kind: "incomplete", n, verb, reason })
 		await this.saveDownloads(incomplete)
 		await this.learnShownPhrases()
+		// A command's passkey answers end at its checks: their PRF outputs become needles, and no
+		// later `do` reads them as its own.
+		await drainPages(s)
 		const needles = await needlesOf(s)
 		let restarted = ends.includes("background")
 		const origin = await backgroundOrigin(s.ctx)
