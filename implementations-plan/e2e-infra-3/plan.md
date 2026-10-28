@@ -84,6 +84,8 @@ Two arcs, stacked against `dev`: test infrastructure plus two invisible product 
 - **D4** (#1222) If Phase 3 shows a material difference, the session dismisses pickers. Rejected, by the panel rule: a longer bound; skipping the cancel half on a timeout. The cancel still proves activation, because no picker is asked for without it. An inconclusive Phase 3 ships nothing: #1222 gets a comment with the numbers and stays open.
 - **D5** #1222 stays in arc 1 (Opus), because Phase 4 can stop arc 2. Codex preferred all of it in arc 2, to avoid a mechanism that arc 2 replaces; it accepted arc 1 if Phase 3 shows a benefit while arc 2 is uncertain. That is D4's condition. The swap in arc 2 is two lines, with its own arming check.
 - **D6** (#1111) `bringToFront` is the classic switch, which Marionette itself uses to focus. `setViewport` mirrors Firefox's own resize, and Phase 4 picks the route. Rejected: a classic window rect (it includes the chrome, it moves focus, and its minimum widths are unverified).
+- **D7** (#1111, Phase 4) `setViewport` on Firefox runs Firefox's own resize body over BiDi `script.callFunction` on a chrome context. Rejected: `chromeScript`, which resizes as well but switches windows, so a page focused before the call loses focus (`lessons/phase-4.md`).
+- **D8** (delivery) Arc 2's branch is `e2e-infra-3-a2`, the orchestrator's name, not `e2e-infra-3-seam`.
 
 ## Security & Adversarial Considerations
 
@@ -130,7 +132,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 - The update replay from v1.0.0 (`tests/e2e/README.md` § In-place update; the candidate from `scripts/e2e/build-update-candidate.sh`), once per browser with `NULO_E2E_RETRY=0`: green.
 - `bun run check:plans` after staging.
 
-## Phase 4: the seam's Firefox route (spike, #1111)
+## Phase 4: the seam's Firefox route (spike, #1111) ✓ (route B, D7; lessons/phase-4.md)
 
 **Assumptions:** F8, F9; checks I3. A scratch file, never committed; results in `lessons/phase-4.md`.
 1. On 158 (`FIREFOX_PATH`): a classic switch to a popup page and to a dApp page refuses nothing, and `document.hasFocus()` is then true there.

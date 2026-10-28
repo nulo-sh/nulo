@@ -8,3 +8,4 @@
 - 2026-10-27 Phase 2 done: read mark on the fee card, waited out with the snack (bound 15 s, slowest read 2.74 s). Phase 3 next.
 - 2026-10-27 Phase 3 done, inconclusive: the arming holds (CID probe), but contended click-to-cancel is 11 ms median native vs 13 ms dismissed; no change, #1222 commented. Arc 1 gate next.
 - 2026-10-28 arc 1 review converged (Codex r3 approve) and its gate green on e8a22a626; PR next.
+- 2026-10-28 Phase 4 done: route B (BiDi `script.callFunction` on a chrome context) passes on 153 and 158 and keeps focus; `chromeScript` takes focus (D7). Phase 5 next.
