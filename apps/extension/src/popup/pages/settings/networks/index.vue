@@ -19,6 +19,7 @@ import { stringCompare } from "@/utils/string"
 /** Composables */
 import { useToast } from "@/composables/toast"
 import { useNetworkActivation } from "@/composables/useNetworkActivation"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -48,28 +49,31 @@ const networks = computed(() =>
 	}),
 )
 
-const isActive = (network) => appStore.network?.id === network.id
-
-/** Each row's `SettingItem` by network id. */
 const rows = new Map()
+
+const isActive = (network) => appStore.network?.id === network.id
 const setRow = (id, row) => (row ? rows.set(id, row) : rows.delete(id))
 
-// Refusals and the unconfirmed outcome toast inside the composable.
-async function handleSwitch(network) {
+// A double click's second press would queue the same switch again. Refusals and the unconfirmed
+// outcome toast inside the composable.
+async function handleSwitch(network, event) {
+	if (event.detail > 1) return
 	if ((await activate(network)) === "activated") openToast({ kind: "success", label: "Active network updated" })
 }
 
-// Pre-flush, while the row becoming active still holds its Switch: the render replaces that row,
-// so focus inside it moves to its new link instead of dropping to the body.
+/** A row's link: the row itself while it is active, else the target stretched under its Switch. */
+const linkOf = (row) => (row?.$el.tagName === "A" ? row.$el : row?.$el.querySelector(":scope > [data-row-target]"))
+
+// Pre-flush, while the rows the active network enters and leaves still stand: the render replaces
+// both, so focus inside either moves to that row's new link instead of dropping to the body. The
+// link then refuses a held Enter's repeat, which would open the row.
 watch(
 	() => appStore.network?.id,
-	async (id) => {
-		if (!rows.get(id)?.$el.contains(document.activeElement)) return
+	async (id, previous) => {
+		const held = [id, previous].find((key) => rows.get(key)?.$el.contains(document.activeElement))
+		if (held === undefined) return
 		await nextTick()
-		const link = rows.get(id)?.$el
-		const focused = document.activeElement
-		if (!link?.isConnected || (focused && focused !== document.body && focused.isConnected)) return
-		link.focus()
+		linkOf(rows.get(held))?.focus()
 	},
 )
 
@@ -97,6 +101,7 @@ onBeforeUnmount(() => {
 				data-testid="network-row"
 				:data-network-id="network.id"
 				:data-network-name="network.name"
+				@keydown.enter="refuseRepeatEnter"
 			>
 				<template #dot>
 					<div v-if="isActive(network)" :class="$style.active_dot" data-testid="network-active-dot" />
@@ -111,7 +116,8 @@ onBeforeUnmount(() => {
 							:aria-label="`Switch to ${network.name}`"
 							data-testid="network-row-switch"
 							:data-network-name="network.name"
-							@click="handleSwitch(network)"
+							@keydown.enter="refuseRepeatEnter"
+							@click="handleSwitch(network, $event)"
 						>
 							Switch
 						</Button>

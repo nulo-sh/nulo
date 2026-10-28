@@ -157,6 +157,18 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		expect(router.currentRoute.value.path).toBe("/start")
 	})
 
+	test("a repeated press neither queues a second switch nor opens the row: a double click's second click, a held Enter", async () => {
+		const { router } = await mountList("alpha")
+		const testnet = switchOf("Testnet") as HTMLElement
+		testnet.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }))
+		expect(pressOn(testnet, "Enter", { repeat: true })).toEqual([false])
+		for (const name of ["Testnet", "Alpha V6"])
+			expect(pressOn(rowLink(name) as HTMLElement, "Enter", { repeat: true })).toEqual([false])
+		await flushPromises()
+		expect(activate).not.toHaveBeenCalled()
+		expect(router.currentRoute.value.path).toBe("/start")
+	})
+
 	test("only an activated switch toasts 'Active network updated'; a refused, unconfirmed or stale one leaves the toast to the composable", async () => {
 		await mountList("alpha")
 		for (const result of ["blocked", "unconfirmed", "stale"]) {
@@ -193,6 +205,23 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		await flushPromises()
 		await nextTick()
 		expect(document.activeElement).toBe(local)
+	})
+
+	test("a switch the read-back reverses keeps focus on the pressed row's link as the row turns inactive again", async () => {
+		const { appStore } = await mountList("alpha")
+		const alpha = appStore.networks.find((n) => n.id === "alpha")
+		activate.mockImplementation(async (target) => {
+			appStore.network = target as never
+			await flushPromises()
+			appStore.network = alpha
+			return "unconfirmed"
+		})
+		pressOn(switchOf("Testnet") as HTMLElement, "Enter")
+		await flushPromises()
+		await nextTick()
+		expect(switchOf("Testnet")).not.toBeNull()
+		expect(document.activeElement).toBe(rowLink("Testnet"))
+		expect(rowLink("Testnet")?.hasAttribute("data-row-target")).toBe(true)
 	})
 
 	test("no left radio/circle icon remains (the source of the 'looks selectable' confusion)", async () => {

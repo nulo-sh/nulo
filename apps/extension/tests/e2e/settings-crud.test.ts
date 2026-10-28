@@ -7,6 +7,7 @@ import {
 	navigateToSettings,
 	selectedAccount,
 	setDeveloperMode,
+	switchToNetwork,
 	waitForSelectedAccount,
 } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
@@ -58,6 +59,12 @@ test("networks page lists the default networks; an inactive row's Switch activat
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
+	// A vitest retry reuses the profile a previous attempt may have left on another network.
+	const chip = await page.waitForFunction(() => document.querySelector('[data-testid="network-button"]')?.textContent?.trim() || false, {
+		timeout: 15_000,
+		polling: 200,
+	})
+	if ((await chip.jsonValue()) !== "Alpha V6") await switchToNetwork(page, "Alpha V6")
 	await navigateToSettings(page, "networks")
 	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
 

@@ -92,7 +92,6 @@ const rootClass = computed(() => [
 	mode.value === "stretched" && $style.stretched,
 ])
 
-/** The stretched link's attributes: the row's own, less what styles the row. */
 const linkAttrs = computed(() => {
 	const { class: _class, style: _style, ...rest } = attrs
 	return rest

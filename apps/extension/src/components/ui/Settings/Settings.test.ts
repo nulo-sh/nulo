@@ -198,21 +198,23 @@ describe("ui/Settings — SettingItem", () => {
 		w.unmount()
 	})
 
-	test("link mode with controls: a div root keeps the class; the stretched link alone carries the other attributes and the title's name; a control beside it presses once and never navigates", async () => {
+	test("link mode with controls: a div root keeps the class and style; the stretched link alone carries the other attributes and the title's name; a control beside it presses once and never navigates", async () => {
 		const onPress = vi.fn()
 		const { w, router, push } = await mountItem(
 			{ title: "Testnet", to: "/popup/settings/networks/tn", controls: true },
-			{ "data-testid": "row", "data-network-id": "tn", class: "extra" },
+			{ "data-testid": "row", "data-network-id": "tn", class: "extra", style: "color: red" },
 			// No stopPropagation, unlike RowAction: a press that bubbles must still not navigate.
 			{ right: () => h("button", { type: "button", "data-testid": "control", onClick: onPress }, "Switch") },
 		)
 		expect(w.element.tagName).toBe("DIV")
 		expect(w.classes()).toContain("extra")
+		expect(w.attributes("style")).toBe("color: red;")
 		expect(document.querySelectorAll('[data-testid="row"]')).toHaveLength(1)
 		const link = w.get("[data-row-target]")
 		expect(link.element.tagName).toBe("A")
 		expect(link.attributes()).toMatchObject({ "data-testid": "row", "data-network-id": "tn", href: "/popup/settings/networks/tn" })
 		expect(link.classes()).not.toContain("extra")
+		expect(link.attributes("style")).toBeUndefined()
 		expect(w.find(`#${link.attributes("aria-labelledby")}`).text()).toBe("Testnet")
 
 		const control = w.get('[data-testid="control"]')
