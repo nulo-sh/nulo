@@ -397,7 +397,7 @@ describe("FPC creation fences", () => {
 		await run
 		expect(logged.warn).toEqual([])
 		expect(logged.error).toEqual([])
-		expect(logged.debug).toContain("Protocol FPC discovery stopped: its network was reset")
+		expect(logged.debug).toContain("Protocol FPC discovery stopped: its network was reset or removed")
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
@@ -413,8 +413,31 @@ describe("FPC creation fences", () => {
 		await h.service.getFpcs(1)
 		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its session ended")
-		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset")
+		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 		expect(await fpcRowCount(h.api)).toBe(0)
+	})
+
+	test("getFpcs discovery: a liveness read that fails after a registration failure leaves that failure at error", async () => {
+		const h = await makeHarness()
+		setPxe(h, {
+			registerContract: async () => {
+				throw new Error("node unreachable")
+			},
+		})
+		// Each item reads liveness before its registration, then again in its failure path.
+		const network = (h.service as unknown as { networkService: { isNetworkLive: (id: string, since?: number) => Promise<boolean> } })
+			.networkService
+		const isNetworkLive = network.isNetworkLive
+		let reads = 0
+		network.isNetworkLive = async (id, since) => {
+			if (++reads % 2 === 0) throw new Error("storage unreadable")
+			return isNetworkLive(id, since)
+		}
+		const logged = spyLogs(h)
+
+		await h.service.getFpcs(1)
+		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
+		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 	})
 
 	test("getFpcs discovery: admitted while its network is reserved, it registers nothing and stores NO row", async () => {

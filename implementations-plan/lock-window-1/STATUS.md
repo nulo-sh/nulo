@@ -17,3 +17,5 @@
 2026-10-28T00:18:18Z [Phase 2] review round 1: Codex changes requested (2), Opus approve with nits; folded
 2026-10-28T00:20:00Z [Phase 2] review round 2: Codex approve with nits (latch nit taken); loop converged
 2026-10-28T00:29:20Z [Phase 2] final gates at 68442891d: lint, typecheck:all, test:all green; scenario B green (terminal=lock, 25 180 ms); replay green
+2026-10-28T00:34:11Z [Phase 3] gate at b5a77ef0d: lint, typecheck:all, test:all (151 s) green; 3 regression cases red on the base service, controls green
+2026-10-28T00:44:18Z [Phase 3] review round 1: Codex changes requested, Opus changes requested; popup revert fixed, wording taken
