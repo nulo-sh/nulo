@@ -160,8 +160,8 @@ or passkey.
   force-lock) but the `bearer` is removed from BOTH `chrome.storage.session`
   AND the in-memory `activeSession.session` object (so a subsequent `refresh()`
   cannot re-write it). The removal is best effort: a bearer can be left behind
-  by a failed storage write (logged, not retried) or by a toggle that lands
-  while a restarting worker is restoring the session. A bearer left behind
+  by a failed storage read or write (logged, not retried), or by a worker that
+  stops before the removal completes. A bearer left behind
   stays readable until the session record is rewritten without it or deleted,
   or the browser exits, and `restore()` refuses it while strict mode is on.
 - **Toggle OFF mid-session**: no immediate effect. The next session open
