@@ -40,3 +40,8 @@ Codex (fresh session over `2914b9699..HEAD`): reject, two demonstrated false gre
 - A comment above the model test's surfaces restated them; deleted.
 
 The resumed round approved with no new finding; the loop converged.
+
+## The merge of `origin/dev`
+
+- Dev split the `pre-update` start into `pre-update-retired` and `pre-update-unlocks`; the identity case loops dev's `STARTS`, 900 plan pairs. `plan()` costs the same at dev and here (300 seeds × 3 caps × 3 starts, 2.1-2.6 s on both); the model file's extra time is the new tests (about 3.7 s at a host load near 150).
+- At host loads of 150-250 dev's "the counter moves by one exactly at a mint" takes up to 4.8 s at dev alone, against vitest's 5 s default, and timed out once in a two-file run here; it passed in every full-suite run.
