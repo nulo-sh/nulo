@@ -98,6 +98,22 @@ function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 	})
 }
 
+/** A plan's committed imports, and each profile other than the open one whose files they changed. */
+function importsElsewhere(start: StartState, seed: number): { imports: number; leaks: string[] } {
+	let imports = 0
+	const leaks: string[] = []
+	for (const [s, before] of withBefore(plan(seed, start, CHROME))) {
+		if (s.action !== "importAccountFile" || !s.expect.outcomes.includes("committed")) continue
+		imports++
+		const open = before.session.kind === "open" ? before.session.ref : undefined
+		for (const p of s.expect.next.profiles) {
+			const was = before.profiles.find((x) => x.ref === p.ref)?.imported ?? []
+			if (p.ref !== open && p.imported.join() !== was.join()) leaks.push(`${start} seed ${seed} step ${s.index} ${p.ref}`)
+		}
+	}
+	return { imports, leaks }
+}
+
 /** Whether `k` names a credential the authenticator held before the step. */
 const mintedBefore = (w: World, k: string | undefined): boolean => k !== undefined && Number(k.slice(1)) < w.next.credential
 
@@ -676,6 +692,13 @@ describe("the model's clauses", () => {
 				for (const source of s.expect.sources) expect(source).toMatch(/^(code|flow|decision):\S/)
 			}
 		}
+	})
+
+	// Two profiles sharing one list would show an import in both, which the wallet never does.
+	test("a committed import changes only the open profile's files, from every start", () => {
+		const runs = STARTS.flatMap((start) => SEEDS.slice(0, 300).map((seed) => ({ start, ...importsElsewhere(start, seed) })))
+		expect(runs.flatMap((r) => r.leaks)).toEqual([])
+		expect(runs.filter((r) => r.start !== "empty").reduce((n, r) => n + r.imports, 0)).toBeGreaterThan(0)
 	})
 
 	// A citation that no longer resolves would let a clause outlive the branch it names.

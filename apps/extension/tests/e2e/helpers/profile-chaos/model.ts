@@ -414,9 +414,17 @@ export function startWorld(start: StartState): World {
 		next: { profile: 1, credential: 1, file: 1, secret: 1, phrase: 1, name: 1 },
 	}
 	if (start === "empty") return empty
-	const base = { derived: 1, imported: [], deleted: false }
-	const password: ModelProfile = { ref: "P1", method: "password", name: PRE_UPDATE_NAMES.password, password: "S1", phrase: "W1", ...base }
-	const passkey: ModelProfile = { ref: "P2", method: "passkey", name: PRE_UPDATE_NAMES.passkey, ...base }
+	// A fresh `imported` per profile: a clone keeps a shared array shared.
+	const base = () => ({ derived: 1, imported: [], deleted: false })
+	const password: ModelProfile = {
+		ref: "P1",
+		method: "password",
+		name: PRE_UPDATE_NAMES.password,
+		password: "S1",
+		phrase: "W1",
+		...base(),
+	}
+	const passkey: ModelProfile = { ref: "P2", method: "passkey", name: PRE_UPDATE_NAMES.passkey, ...base() }
 	if (start === "pre-update-retired")
 		return {
 			...empty,
