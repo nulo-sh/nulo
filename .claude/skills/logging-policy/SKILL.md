@@ -56,6 +56,14 @@ to log something sensitive.
   user with every toggle off**, and land in the buffer the log viewer renders and exports. `debug`
   is the only level that costs nothing when nobody asked for it. A line you would not want in a
   stranger's bug report belongs at `debug` or nowhere.
+- **An expected refusal logs at `debug`; a real failure on the same path stays at `error`.** Key
+  the demotion on a type or constant the wallet owns (a typed `WalletError`, `StoreErasedError`,
+  `isClientDisconnectRejection`), or on an upstream text pinned whole on the one op whose callers
+  recover, never on text a dApp or a node can shape, and pair each with an `error` control in its
+  test. The shared rules: a client disconnect (`logCallFailure`, and `forwardVueError` as both
+  apps' Vue `errorHandler`); a wrong credential the page words (`logCredentialFailure`); a run a
+  lock superseded resolves at debug (`createNetworkSwitchHandler`). An unhandled rejection is a
+  missing handler, not a level: hold the promise at the call that makes it.
 - **Two flags, not one — don't conflate them.** `debugMode` gates the LEVEL (and grows the ring
   buffer 1,000 → 10,000); `developerMode` gates PERSISTENCE to `chrome.storage.session`. Debug
   lines are dropped without `debugMode` even when `developerMode` is on.
