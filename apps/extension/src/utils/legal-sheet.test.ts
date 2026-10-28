@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { type LegalSheetContext, shouldShowLegalSheet } from "./legal-sheet"
+import { type LegalSheetContext, legalSheetMayCover, shouldShowLegalSheet } from "./legal-sheet"
 
 const ctx = (over: Partial<LegalSheetContext> = {}): LegalSheetContext => ({
 	status: "stale",
@@ -36,6 +36,16 @@ describe("shouldShowLegalSheet", () => {
 		"/popup/legal/declined",
 	])("never covers %s", (routePath) => {
 		expect(shouldShowLegalSheet(ctx({ routePath }))).toBe(false)
+	})
+
+	test.each([
+		["a normal wallet page", ctx()],
+		["the lock screen", ctx({ isAuthRequired: false, routeName: "popup-auth", routePath: "/popup/auth" })],
+		["a dApp window", ctx({ routeName: "windows-execute", routePath: "/windows/x" })],
+		["an export", ctx({ routePath: "/popup/settings/security/export/full" })],
+		["the declined page", ctx({ routePath: "/popup/legal/declined" })],
+	])("may cover %s exactly when a stale acceptance shows it there", (_name, route) => {
+		expect(legalSheetMayCover(route)).toBe(shouldShowLegalSheet(route))
 	})
 
 	test("Not now holds for that version only: a newer version asks again", () => {
