@@ -180,11 +180,13 @@ Final gates (at 68442891d, `origin/dev` merged; Chrome, retry 0): lint, `typeche
 
 ### Arc 3
 
-**Phase 3 — the fee payer's address edit and the discovery's log level.** Steps:
+**Phase 3 — the fee payer's address edit and the discovery's log level.** ✓ Steps:
 1. Change `fpc/service.ts` as § Arc 3 says.
 2. In `fpc/service-create.test.ts` (its harness; the header widens from creation to write fences), add: a rename landing during the address check survives the edit; a delete landing during it rejects with "Invalid id" and leaves no row; an edit with nothing concurrent stores the new address under the same name (the control); a network reset during a registration ends the discovery at debug with no warn or error line. The existing "a registration that fails while its session is live is still logged at error" is that last case's control. In `EditFpcPopup.test.ts`, add: a rename from another window during an address save stays (no rename call follows); a name and an address the person typed both save, the address first (the control).
 
-Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`. Pass: green; each regression case red against the base `service.ts`. Layers: lint, typecheck, unit (no e2e drives the address edit, and the Edit popup's error line is unchanged).
+Validation gate. From the repo root: `bun run lint`, `bun run typecheck:all`, `bun run test:all`. Pass: green; each regression case red against the base `service.ts`. Layers: lint, typecheck, unit and component (no e2e drives the address edit).
+
+Final gates (at 4bbc970d3, `dev` unchanged since arc 2's merge): lint, `typecheck:all`, `test:all` (179 s) and `check:plans` pass. The three service regression cases and the popup's are red against the base sources; the controls are green on both. No e2e scenario added. ✓
 
 ## UI impact
 
