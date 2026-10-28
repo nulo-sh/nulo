@@ -33,7 +33,6 @@ test.skipIf(!hasConfig)(
 		// The trigger is inert until the page's tokens load; openSend waits for the token itself.
 		await openSend(page)
 
-		// Two tokens: the search box for a paste, both rows listed, the current token marked selected.
 		await clickByTestId(page, "send-token-trigger")
 		await page.waitForSelector('[data-testid="select-token-row"][data-symbol="ALT"]', { visible: true, timeout: 15_000 })
 		expect(await page.$('[data-testid="select-token-search"]')).not.toBeNull()

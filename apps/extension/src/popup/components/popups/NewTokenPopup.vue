@@ -84,7 +84,6 @@ let activeBalanceWait = null
 /** The opener's `{ address, onAdded }`, kept on show: closing a popup deletes its payload. */
 let request
 
-/** Hands the added token to the opener after the close, only while the scope it was added in holds. */
 const closeAdded = (token, label, submittingEpoch) => {
 	const onAdded = request?.onAdded
 	openToast({ kind: "success", label })

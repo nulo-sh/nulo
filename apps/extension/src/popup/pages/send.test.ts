@@ -714,7 +714,6 @@ describe("send page — an amount over the balance says so", () => {
 })
 
 describe("send page — the balance beside Max", () => {
-	/** What the corner draws: the figure, a skeleton, or nothing. */
 	const corner = (w: W) => {
 		const figure = w.find('[data-testid="send-amount-balance"]')
 		if (figure.exists()) return figure.text()

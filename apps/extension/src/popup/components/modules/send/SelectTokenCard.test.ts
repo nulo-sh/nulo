@@ -1,8 +1,8 @@
 /**
  * Send's token card: while the page's tokens load it is an inert, busy row that a tap or a key
- * cannot open, with a skeleton only after a noticeable wait; loaded, it opens the token picker with
- * the page's report of a pasted token, or the import popup when there is no token, from a tap, Enter
- * or Space; after a failed load it offers a Retry instead.
+ * cannot open, with a skeleton only after a noticeable wait; loaded, it opens the token picker, or
+ * the import popup when there is no token, from a tap, Enter or Space; after a failed load it
+ * offers a Retry instead.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"

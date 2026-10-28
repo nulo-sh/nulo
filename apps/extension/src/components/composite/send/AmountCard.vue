@@ -5,7 +5,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
-import { parseSide } from "@/utils/token-amount"
+import { isValidDecimals, parseSide } from "@/utils/token-amount"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { isBlank } from "@/utils/string"
@@ -249,8 +249,8 @@ const conversionTitle = computed(() => (props.proxyTicker ? `Priced via ${props.
  *  already names the private/public side, so no dot/word repeats it here.
  *  Truncated at 8 places, so it never reads more than the balance. */
 const balanceSegment = computed(() => {
-	if (props.balanceState !== "read" || !props.token || props.balanceRawByType == null || tokenDecimals.value === undefined) return null
-	// A stored side that is no digit string draws nothing, as an unread one does.
+	if (props.balanceState !== "read" || !props.token || props.balanceRawByType == null || !isValidDecimals(tokenDecimals.value))
+		return null
 	const raw = parseSide(props.balanceRawByType)
 	if (raw === undefined) return null
 	const amount = formatBaseUnits(raw, tokenDecimals.value, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })

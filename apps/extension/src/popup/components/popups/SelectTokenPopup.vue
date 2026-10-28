@@ -1,10 +1,6 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
-/**
- * The Send token picker: the active account's tokens on the active chain as Holdings lists them,
- * the current one marked, and a pasted address no row holds offered for import and picked for the
- * send. The balance client connects on show and is torn down on hide — the popup stays mounted.
- */
+/** The Send token picker. It stays mounted, so its balance client connects on show and disconnects on hide. */
 
 /** Components */
 import TokenList from "@/popup/components/modules/holdings/TokenList.vue"
@@ -83,7 +79,6 @@ const handleSelectToken = (id) => {
 
 /** The opener's `{ onAdded }`, kept on show: closing a popup deletes its payload. */
 let request
-// New token reports the token it added; the opener picks it and the picker closes behind it.
 const openAddToken = (address) => {
 	const opener = request
 	popupStore.open("new_token", {

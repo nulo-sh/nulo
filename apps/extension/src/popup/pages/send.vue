@@ -250,9 +250,7 @@ const amountValidation = computed(() =>
 	}),
 )
 
-/** The amount card's balance corner, first match wins: a row read once shows its figure, even after a
- *  later sync failed; a failed first sync, or a failed read with no row, shows nothing; anything
- *  else is still loading, a never-synced row's zero placeholder included. */
+/** A never-synced row holds placeholder zeroes; a failed refresh keeps the last balance it read. */
 const balanceState = computed(() => {
 	const row = tokenBalance.value
 	if (row && row.updatedAt !== 0) return "read"
@@ -566,7 +564,7 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
-/** The token the picker's paste-to-add imported, for the token watch to pick with the amount kept. */
+/** An imported token's id: the token watch's next run keeps the amount for it. */
 let keepAmountFor
 async function pickAddedToken(token) {
 	const epoch = appStore.scopeEpoch

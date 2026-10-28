@@ -1,9 +1,4 @@
-/**
- * Send's token picker offers a pasted address no row holds for import, with the signed list's flag on
- * the offer, and New token stacked over it closes back onto the picker with its query and add row,
- * over a Send form that kept its token and recipient. Nothing is submitted, so no node is needed: the
- * import and its pick are the network suite's (`network/send-picker.test.ts`).
- */
+/** Nothing is submitted, so no node is needed: the import and its pick are `network/send-picker.test.ts`'s. */
 import { expect } from "vitest"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"

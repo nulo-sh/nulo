@@ -1,9 +1,4 @@
-/**
- * The Send picker over chain-scoped balance rows, drawn by the real `TokenList` and `TokenCard`: the
- * shared order and fold, the search box, selection writing the TOKEN id, paste-to-add and its
- * hand-off, the scope fence on a slow fetch, a fetch rejected by the hide, the retry and the
- * reconnect re-read, and the teardown on hide / unmount.
- */
+/** The Send picker drawn by the real `TokenList` and `TokenCard`, over service clients the test drives. */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"

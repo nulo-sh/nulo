@@ -1,9 +1,7 @@
 <script setup lang="ts">
 /**
- * The full token list: search, value/name sort, pinned rows above a rule, the rest in order, and
- * one fold that hides empty and under-dust rows. Presentational — the host owns the clients and
- * hands in rows, prices, the dust threshold and the pinned set, and handles `addToken`; a picker
- * host makes rows selectable and handles `pick`. Local state resets on every mount.
+ * The full token list, presentational: the host owns the clients and hands in rows, prices, the
+ * dust threshold and the pinned set; the list owns its search, sort and fold, reset on every mount.
  */
 import type { PropType } from "vue"
 import { computed, ref, useId } from "vue"
@@ -18,8 +16,7 @@ import { foldLabel, isHiddenHolding } from "@/utils/token-fold"
 import { type OrderCtx, type OrderableRow, classifyRow, orderTokenRows } from "@/utils/token-order"
 import { matchesQuery } from "@/utils/token-search"
 
-/** What the list needs from a row; the page passes full `TokenBalanceInfo` rows. `id` keys the
- *  balance row; a pick names the token, `token.id`. */
+/** `id` keys the balance row; a pick names the token, `token.id`. */
 type Row = OrderableRow & { id: number | string; token: { id: number | string } }
 // Callbacks receive the caller's own row type, so a `FiatOf<TokenBalanceInfo>` fits without a cast.
 // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch at the prop boundary; the template only reads OrderableRow fields.
@@ -194,7 +191,6 @@ const toggleSort = () => {
 	margin: 4px 0;
 }
 
-/* The add row's lines: the flag in the danger caption Home's flagged rows use, the note as body. */
 .add_flagged {
 	composes: type--caption from global;
 	margin-top: 8px;
