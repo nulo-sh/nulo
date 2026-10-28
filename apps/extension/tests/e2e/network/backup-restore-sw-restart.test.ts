@@ -385,13 +385,23 @@ describe.skipIf(isFirefox)(CHROME_ONLY.backgroundKillUnderPage, () => {
 				const probePre = await readDisconnectProbe(page2)
 				expect(probePre?.disconnectedAt ?? null).toBeNull()
 
-				// Latched from before the kill: Home at any moment after it fails the scenario, not only at the end.
+				// Latched on every committed URL from before the kill: Home at any moment after it fails the
+				// scenario, not only at the end. The router writes through `history`, which fires no event.
 				await page2.evaluate(() => {
 					const w = window as unknown as { __sawHome?: boolean }
 					w.__sawHome = false
-					setInterval(() => {
+					const seen = () => {
 						if (window.location.hash.split("?")[0] === "#/popup/general") w.__sawHome = true
-					}, 100)
+					}
+					for (const method of ["pushState", "replaceState"] as const) {
+						const write = history[method].bind(history)
+						history[method] = (...args: Parameters<History["pushState"]>) => {
+							write(...args)
+							seen()
+						}
+					}
+					window.addEventListener("hashchange", seen)
+					window.addEventListener("popstate", seen)
 				})
 				console.warn("[sw-crash] B: killing while held at account-state (post-finalize)")
 				await stopBackground(ctx2)
