@@ -15,6 +15,7 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { MOVE_APPROVED_LABEL } from "../complexity-baseline/scan"
+import { runStep } from "./gh-step-harness"
 
 const ROOT = join(import.meta.dir, "..", "..")
 // apps/ vs packages/ split (FLAT layout): deployable leaves live under apps/, libs under packages/.
@@ -303,6 +304,46 @@ describe("network suite job names", () => {
 		expect(produced.length, "the PR lane calls the suite").toBeGreaterThan(0)
 		expect([...expected].sort()).toEqual([...produced].sort())
 		expect(script, "the list is checked against the PR lane's runs").toContain(`if [ "$WF" = "${workflowOf(PR_LANE).name}" ]; then`)
+	})
+})
+
+describe("commitlint", () => {
+	const step = workflowOf("pr-quick.yml").jobs.commitlint.steps.find((s: { name?: string }) => s.name === "Lint PR commits")
+	// A failing lint, so a PR that reaches it goes red and one that skips it stays green.
+	const LOG_AND_FAIL = `#!/bin/sh\necho "$(basename "$0") $*" >> "$(dirname "$0")/calls"\nexit 1\n`
+	const run = (base: string, head: string, author: string) =>
+		runStep(step, {
+			shim: LOG_AND_FAIL,
+			bound: {
+				"${{ github.base_ref }}": base,
+				"${{ github.head_ref }}": head,
+				"${{ github.event.pull_request.base.sha }}": "base-sha",
+				"${{ github.event.pull_request.head.sha }}": "head-sha",
+				"${{ github.event.pull_request.user.login }}": author,
+			},
+			setup: (dir) => {
+				writeFileSync(join(dir, "bunx"), LOG_AND_FAIL)
+				chmodSync(join(dir, "bunx"), 0o755)
+			},
+		})
+
+	test.each([
+		["a human's PR into dev", "dev", "feat/x", "alice"],
+		["a human's PR from a branch named like Dependabot's", "dev", "dependabot/github_actions/actions-1", "alice"],
+	])("%s lints every commit in base..head", (_, base, head, author) => {
+		const { code, calls } = run(base, head, author)
+		expect(calls).toEqual(["bunx commitlint --from base-sha --to head-sha --verbose"])
+		expect(code).toBe(1)
+	})
+
+	test.each([
+		["Dependabot's PR", "dev", "dependabot/github_actions/actions-1", "dependabot[bot]"],
+		["a PR into main", "main", "dev", "alice"],
+		["the main → dev sync PR", "dev", "sync/main-to-dev-1.2.0", "nulo-release[bot]"],
+	])("%s is not linted", (_, base, head, author) => {
+		const { code, calls } = run(base, head, author)
+		expect(calls).toEqual([])
+		expect(code).toBe(0)
 	})
 })
 
