@@ -65,6 +65,7 @@ Good enough: no new log categories, no log-viewer work, no change to the redacto
 - D6 (#1216): no handler without the call named. The diagnostic records the method beside the rejection and never changes a rejected value, so every exact-message matcher behaves as shipped. If 80 Chrome runs do not reproduce it, comment on #1216 and leave it open.
 - D8 (arc 1, a deviation): `StoreErasedError` follows the brand-field idiom of `WrongStoreKeyError` (`isStoreErased = true as const`) with no literal `name`: `instanceof` runs in the module that throws it, and the logged name stays `Error`, as today.
 - D9 (arc 2, a deviation): #1216 had two calls, named one after the other by the diagnostic: the network-switch run's `getStaleNetwork` and the stale-network resume's `getPendingReset`. Both take the same fix: a lock ends the run (the switch fence's `supersede`, the resume's session), a superseded run's failure resolves at debug, and the shell reports a live one with `logCallFailure`, the forwarder's disconnect rule. Two sibling reads no run met are #1296.
+- D10 (arc 3, a deviation): `SameUnlockMethodError` is typed as planned but is not a refusal. Since #1219 the stale-credential guard runs first, so no page can reach it, and logging it at debug would only hide a future page bug. A slot corrupted under the right credential reads as a wrong one in `openProfileSlots` by design, so it now logs at debug. It is the closed known limit #1299.
 - D7 (#1178): typed errors over message matching, per `InvalidPasswordError` and `StaleUnlockCredentialError`; `exportPlain` keeps them through its catch. Reusing `StaleUnlockCredentialError` for the stale form was rejected: its page shows another toast. `PasskeyUnconfirmedError` is a stage, not a refusal: only its cause decides.
 
 ## Security & Adversarial Considerations
@@ -101,12 +102,12 @@ Gate: `bun run lint && bun run typecheck:all && bun run test && bun run test:all
 2.4 ✓ Remove the `KNOWN_FINDINGS` entries (`tests/e2e/helpers/profile-chaos/checkers.ts`) of each issue this arc closes; an entry whose issue stays open stays, re-pointed to it.
 Gate: arc 1's commands. Chaos replays from each issue's `## Record`, on a rebuild from the committed tree, all green at retry 0: #1132's list 12 times on Chrome (1 in 4 on base), #1133's list 3 times on Firefox (3 of 3 on base). Then `bun run test:e2e -- tests/e2e/security.test.ts --retry=0` on Chrome: 60 consecutive runs with no `pageErrors` when the call was named (0.95^60 ≈ 5% chance of a false pass); under D6, 20 runs where only the recorded `Profile locked` error may appear. Once on Firefox.
 
-### Arc 3 (#1178)
+### Arc 3 (#1178) ✓
 
-3.1 Typed refusals and `exportPlain`. Tests: each new type survives `walletErrorFromPayload` with its message (the existing error-table test); `exportPlain` with a wrong password rejects as `InvalidPasswordError` with no error line, another profile's passkey as `PasskeyNotOpenedError`, and a corrupt-row control still flattens and logs error; the account service's `exportAccount` rejects a wrong password as `InvalidPasswordError`.
-3.2 Classifier and sites. Tests in `credential-refusal.test.ts`: one case per refused class (debug); `PasskeyUnconfirmedError` with a `NotAllowedError` cause (debug) against one with a `TypeError` cause (error); the import wrap around each; an unknown error (error). `useProfileImportFlow` test: the no-PRF wrap keeps its message and carries the cause.
-3.3 Trace the `Failed to create profile:` line: find which error reached it, and fix it only with a written path.
-3.4 Remove no `KNOWN_FINDINGS` entry: #1178 has none.
+3.1 ✓ Typed refusals and `exportPlain`. Tests: each new type survives `walletErrorFromPayload` with its message (the existing error-table test); `exportPlain` with a wrong password rejects as `InvalidPasswordError` with no error line, another profile's passkey as `PasskeyNotOpenedError`, and a corrupt-row control still flattens and logs error; the account service's `exportAccount` rejects a wrong password as `InvalidPasswordError`.
+3.2 ✓ Classifier and sites. Tests in `credential-refusal.test.ts`: one case per refused class (debug); `PasskeyUnconfirmedError` with a `NotAllowedError` cause (debug) against one with a `TypeError` cause (error); the import wrap around each; an unknown error (error). `useProfileImportFlow` test: the no-PRF wrap keeps its message and carries the cause.
+3.3 ✓ Trace the `Failed to create profile:` line: find which error reached it, and fix it only with a written path.
+3.4 ✓ Remove no `KNOWN_FINDINGS` entry: #1178 has none.
 Gate: arc 1's commands, plus `bun run test:e2e -- tests/e2e/security.test.ts tests/e2e/passkey-backup.test.ts tests/e2e/security-backup.test.ts --retry=0` on Chrome, and `passkey-backup.test.ts` on Firefox.
 
 ## Delivery

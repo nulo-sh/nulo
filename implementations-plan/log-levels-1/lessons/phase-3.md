@@ -1,0 +1,21 @@
+# Arc 3: credential refusals (#1178)
+
+- The layer was rebased onto `dev` before its first push: #1297 conflicted on `implementations-plan/index.md` with #1272's plan line, and a conflicting PR runs no PR workflow. `gh stack sync` aborts on a conflict and asks for the interactive `gh stack rebase`, so both layers were rebased by hand (`git rebase origin/dev`, then `git rebase --onto`).
+- 3.1 and 3.2 moved cited lines (the chaos model pins 24 line citations into `profile/service.ts`, and more into `useFullBackupExport.ts` and `full-backup-restore.ts`) (`tests/e2e/helpers/profile-chaos/model.ts`, checked by `every cited line holds the fragment`): re-numbered from a line map of the diff, and the passkey refusal's fragment now names `PasskeyNotOpenedError`. A change to a cited file runs `scripts/e2e/profile-chaos-model.test.ts` before its commit; `bun run test` caught the second drift.
+- 3.3: the `Failed to create profile:` + `PasskeyPrfError` line came from the chaos build at `5d4dff0f6` (2026-10-26), whose `reportCreateFailure` had no `no-prf` return. #1221 (`6cf8353c1`, 2026-10-27) added it. The recon read `remember`'s `no-prf` line, which `fd474075e` added, as that return. At HEAD no `PasskeyPrfError` reaches the line, so no change beyond the site's classifier.
+- The seed import shows the wrapped no-PRF error without logging it; only the full-backup restore logs it (`[full-backup] restore failed:`), which is where the wrap's `cause` sets the level.
+- Gate, 2026-10-28, on the arc head: `lint`, `typecheck:all`, `test` (944 files), `test:all` and `check:plans` exit 0. On the armed Chrome smoke build, `security.test.ts`, `passkey-backup.test.ts` and `security-backup.test.ts` 11 of 11 at retry 0; `passkey-backup.test.ts` on Firefox 2 of 2.
+- Review round 1. Codex (gpt-6.1-sol, high) and the Opus leg found the same residual: `openProfileSlots` returns one `null` for a wrong key and for a slot corrupted after its guard opened, so that corruption now logs at debug. Separating them changes an exported `wallet-crypto` contract, so it is the closed known limit #1299, not a fix here. The Opus leg also found:
+  - the regenerated auto-import types left uncommitted, which CI's freshness diff fails (`isCredentialRefusal` is now module-local, so only `logCredentialFailure` is a global);
+  - `SameUnlockMethodError` unreachable from any page since #1219, so it stays at error;
+  - two stale comments.
+- `src/utils/` is an auto-import dir: a new export there changes `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json`. A build regenerates both, and they ship in the same commit.
+- Round 2 (Codex resumed): clean. Reviewed head: `lint`, `typecheck`, `test` (944 files) green; the Chrome trio 11 of 11 again.
+- Sync onto `dev` at `bf105592b`, after lock-ux-1 and chaos-3 landed. `gh stack sync` aborted on this layer, so the layers took `dev` by hand, as merges.
+  - #1301 cut its citations into the account file page and the import flow against `0d5b1967c`. Lock-ux-1 moved those lines before #1301 landed, so `dev`'s own "every cited line" check fails on five citations; the popup layer repoints them.
+  - This layer's merge repoints 22 more, into the profile service, the lock screen, the Unlock method page and the account file page: the lines this arc and `dev` both moved.
+  - #1301 also held a known finding for #1178's Unlock method line (its D10: none once this fix lands). The entry and its model expectation are gone; the same line at error is now an unfiled red.
+  - Gate:
+    - `lint`, `typecheck:all`, `test` (947 files) and `check:plans` exit 0;
+    - the armed Chrome smoke build left the generated types unchanged;
+    - chaos-3's list (e), every `changeUnlockMethod` variant and the race, ran 3 of 3 green at retry 0 on Chrome, with no known finding (chaos-3 recorded it red on `known[#1178=1]`).

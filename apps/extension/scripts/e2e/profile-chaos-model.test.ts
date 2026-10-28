@@ -1356,7 +1356,7 @@ describe("O4, errors", () => {
 			source: "ui",
 			text: `["[full-backup] restore failed:",{"error":{"name":"Error","message":"${message}"}}]`,
 		})
-		const source = "code:apps/extension/src/composables/full-backup-restore.ts:999"
+		const source = "code:apps/extension/src/composables/full-backup-restore.ts:1000"
 		expect(checkErrors([failed("Client disconnected")], ["session", "background"])).toEqual({
 			violations: [],
 			warns: {},
@@ -1489,9 +1489,12 @@ describe("O4, errors", () => {
 			source: "ui",
 			text: `["[unlock-method] change failed",{"error":{"name":"Error","message":"${message}"}}]`,
 		})
-		expect(checkErrors([methodFailed("Passkey did not open this profile")], []).violations[0]?.known).toBe(1178)
-		const otherFailure = checkErrors([methodFailed("The new password needs at least 8 characters")], []).violations
-		expect(shown("O4 a method change failing for another reason", otherFailure)[0]?.known).toBeUndefined()
+		// A refused passkey logs at debug, so its line at error is an unfiled red like any other failure.
+		for (const message of ["Passkey did not open this profile", "The new password needs at least 8 characters"]) {
+			const [failed] = shown("O4 a method change failing at error", checkErrors([methodFailed(message)], []).violations)
+			expect(failed?.oracle).toBe("O4")
+			expect(failed?.known).toBeUndefined()
+		}
 	})
 
 	test("log ids that run on are complete; a gap is not", () => {

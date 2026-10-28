@@ -28,6 +28,7 @@ const { openToast } = useToast()
 
 /** Utils */
 import { closesOnFocusLoss } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -170,7 +171,7 @@ async function attempt(run) {
 			return
 		}
 		if (handleCancelOrUnconfirmed(error, openToast)) return
-		console.error("[unlock-method] change failed", { error })
+		logCredentialFailure("[unlock-method] change failed", error)
 		openToast({ kind: "error", label: passkeyFailureCopy(error, "Couldn't change the unlock method. Try again.") })
 	} finally {
 		if (isCurrent()) isBusy.value = false

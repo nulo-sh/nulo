@@ -23,6 +23,7 @@ import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 import { isNewPasswordValid } from "@/utils/password"
 import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { goBack } from "@/utils/page-back"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
@@ -253,7 +254,7 @@ const handleSaveFile = async () => {
 		dropApproval()
 	} catch (error) {
 		if (!isCurrent()) return
-		console.error("[export/account] passkey file failed:", { error })
+		logCredentialFailure("[export/account] passkey file failed:", error)
 		// An answer a Save failed with is never reused: the page asks the passkey again, and the
 		// keyboard lands on that ask, as the removed Save took focus with it.
 		dropApproval()

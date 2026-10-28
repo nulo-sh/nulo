@@ -14,9 +14,16 @@ vi.mock("@/utils/core", () => {
 })
 
 vi.mock("@/utils", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/utils")>()), pickFile: vi.fn() }))
+// Spied, not replaced: the seed path's error surface keeps only the message, and this sees the error.
+vi.mock("@nulo/wallet-core/utils", async (importOriginal) => {
+	const original = await importOriginal<typeof import("@nulo/wallet-core/utils")>()
+	return { ...original, errorMessageFromUnknown: vi.fn(original.errorMessageFromUnknown) }
+})
 
 import { managers } from "@/utils/core"
 import { pickFile } from "@/utils"
+import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -369,6 +376,20 @@ describe("useProfileImportFlow", () => {
 				"",
 			])
 			expect(flow.isImporting.value).toBe(false)
+		})
+
+		test("a card with no PRF shows the page's copy, and the error it throws keeps the refusal as its cause", async () => {
+			const { flow } = await passkeyFlow()
+			const run = flow.handleImportSeed()
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value).not.toBeNull())
+			const refusal = new PasskeyPrfError("Passkey PRF not available")
+			flow.onCeremonyReject(refusal)
+			await run
+			expect(flow.error.value).toMatchObject({ type: "unknown", tooltip: "This passkey can't unlock Nulo." })
+			expect(vi.mocked(errorMessageFromUnknown).mock.calls.at(-1)?.[0]).toMatchObject({
+				message: "This passkey can't unlock Nulo.",
+				cause: refusal,
+			})
 		})
 
 		test("a failed card reports and imports nothing", async () => {

@@ -15,3 +15,7 @@
 - 2026-10-28: gate attempt 1: #1132 replay 12/12 green (after `logCallFailure`); `security.test.ts` red on run 35 with a second unhandled `Profile locked`, named as `stale.resume`'s `getPendingReset` and fixed; the 60-run count restarts.
 - 2026-10-28: arc 2 gate green on the head (unit layers; #1132 12/12; #1133 Firefox 3/3; security.test.ts 60/60 Chrome + 1 Firefox; network seed 1001 no red). Review loop next.
 - 2026-10-28: arc 2 review: Codex round 1 one finding plus the Opus leg's (fixed in 2db8f931c), round 2 clean. Reviewed head: lint, typecheck:all, test (943 files), check:plans green; security.test.ts 8/8 and #1132 replay 3/3 on a fresh armed build. PR next.
+- 2026-10-28: arc 3 starts on `log-levels-1-credentials`, stacked on PR #1297. Phase 3.1 green (errors 218, profile service 524, account import-export 22; the two exportPlain refusal cases red on the base service).
+- 2026-10-28: phases 3.2 and 3.3 green (credential-refusal 9; composables, settings/security, onboarding and import pages 1594; payload-ban 59; the import wrap's cause case red without the cause). 3.3 traced to a chaos build that predates #1221: no change.
+- 2026-10-28: arc 3 gate green (unit layers; Chrome security + passkey-backup + security-backup 11/11; Firefox passkey-backup 2/2). Review loop next.
+- 2026-10-28: arc 3 review: Codex round 1 two findings plus the Opus leg's (fixed in 6164a8e50; the slot-corruption residual is known limit #1299), round 2 clean. PR #1297 checks all green. Arc 3 PR next.

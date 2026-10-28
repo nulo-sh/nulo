@@ -13,9 +13,11 @@ import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
 	InvalidPasswordError,
+	PasskeyNotOpenedError,
 	RecoveryModeError,
 	RestoreTornError,
 	RetiredProfileError,
+	SameUnlockMethodError,
 	SessionEndedError,
 	StaleUnlockCredentialError,
 	UnlockMethodChangedError,
@@ -129,10 +131,6 @@ type OpenedSlots = {
 	openDek(dekSealed: string): Promise<ImportedKeysDek | null>
 	wipe(): void
 }
-
-/** A passkey answer that opens no slot of the row it was asked for: another passkey, or a slot
- *  changed in storage. */
-const PASSKEY_DID_NOT_OPEN = "Passkey did not open this profile"
 
 /** Whether `key` is for the unlock `row` stores: the same kind and, for a passkey, the row's own
  *  credential at its own input. A key that is still has to open the slots. */
@@ -499,7 +497,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** What a path throws when `key` did not open the row: its own wrong-password refusal, or the
 	 *  passkey's, which no screen may read as a wrong password. */
 	private notOpened(key: SlotKey, passwordRefusal: () => Error): Error {
-		return "passkey" in key ? new Error(PASSKEY_DID_NOT_OPEN) : passwordRefusal()
+		return "passkey" in key ? new PasskeyNotOpenedError() : passwordRefusal()
 	}
 
 	/** Caller MUST already hold the facade lock (`Lock` is non-reentrant). Checks row
@@ -967,7 +965,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				throw new Error("Invalid profile id")
 			}
 			const opened = await this.openSlots(snapshot, { passkey: answer.credential })
-			if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)
+			if (!opened) throw new PasskeyNotOpenedError()
 			let dek: ImportedKeysDek | null = null
 			try {
 				// The pairing check runs at every unlock: the stored words must still derive the stored
@@ -1398,7 +1396,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		if (kind !== "password" && kind !== "passkey") throw new Error("Profile storage corrupted")
 		const key = await this.unlockCredentialKey(current)
 		if (!unlocksWith(snapshot, key)) throw new StaleUnlockCredentialError()
-		if (kind === "password" && "password" in next) throw new Error("A password profile changes its password, not its unlock method")
+		if (kind === "password" && "password" in next) throw new SameUnlockMethodError()
 		const seal = "password" in next ? await this.newRowSeal(next.password, undefined) : await this.newRowSeal(undefined, next.passkey)
 		let opened: OpenedSlots | null = null
 		try {
@@ -2092,8 +2090,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public async exportPlain(id: string, password?: string, credentialData?: PasskeyCredentialData): Promise<string> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		// Any throw, a crypto-level failure included, is flattened to a plain `Error(message)`, so
-		// callers see one error shape.
+		// A wrong credential keeps its type for the caller to word. Any other throw, a crypto-level
+		// failure included, is flattened to a plain `Error(message)`.
 		try {
 			// An export asks for its credential again, so an empty one is a missing one here.
 			if (!password && !credentialData) throw new Error("Password is required")
@@ -2122,6 +2120,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				opened?.wipe()
 			}
 		} catch (error) {
+			if (error instanceof InvalidPasswordError || error instanceof PasskeyNotOpenedError) {
+				this.logDebug("Export refused its credential", { error })
+				throw error
+			}
 			this.logError("Failed to confirm operation", error)
 			throw new Error(getErrorMessage(error))
 		}

@@ -238,7 +238,7 @@ function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>,
 			return { credentialData: await newPasskey.ask(display, existing) }
 		} catch (err) {
 			if (handleCancelOrUnconfirmed(err, opts.openToast)) return null
-			throw new Error(passkeyFailureCopy(err, errorMessageFromUnknown(err)))
+			throw new Error(passkeyFailureCopy(err, errorMessageFromUnknown(err)), { cause: err })
 		}
 	}
 
