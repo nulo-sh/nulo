@@ -1,7 +1,7 @@
 ---
 plan: log-levels-2
 tier: light (the orchestrator's call; Opus Plan leg added)
-status: planned; Codex approve (round 2); phase 1 next
+status: phase 1 green; review loop next
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -80,9 +80,9 @@ None. No screen, copy, toast or route changes.
 
 ## Phases
 
-### Phase 1: both sites and their tests
+### Phase 1: both sites and their tests ✓
 
-1.1 `useStaleNetwork.ts`: add the `line` parameter to `whileLive`; wrap `refresh` as above.
+1.1 `useStaleNetwork.ts`: add the `line` parameter to `whileLive`; wrap `refresh` as above. Deviation: the read moved to a module-level `syncActiveIfStale(deps)`, since an inner `refreshIn` put `useStaleNetwork` at 83 lines, over the 80-line budget.
 1.2 `app.vue`: the `.catch(logCallFailure)` on the networks watcher.
 1.3 `useNetworkArrival.ts`: the split catch and the import.
 1.4 Tests:
