@@ -47,7 +47,7 @@ export async function capturePrf(page: Page): Promise<void> {
 
 /** What `page` captured, leaving its lists empty. A page that is gone, or a document that replaced
  *  the watched one, gives nothing. */
-async function takeAll(page: Page): Promise<{ prf: string[]; answers: Answer[]; picks: DiscoveryRequest[] }> {
+export async function takeAll(page: Page): Promise<{ prf: string[]; answers: Answer[]; picks: DiscoveryRequest[] }> {
 	return page
 		.evaluate(() => {
 			const probe = window as CaptureProbe

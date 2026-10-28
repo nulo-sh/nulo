@@ -61,9 +61,11 @@ import {
 	coverageLine,
 	endsOf,
 	type ListedStep,
+	mintedCredentials,
 	type PlannedStep,
 	plan,
 	planFromList,
+	type StartState,
 	startWorld,
 	type World,
 	recordCaps,
@@ -79,6 +81,7 @@ const FIREFOX: Caps = {
 }
 const NETWORK: Caps = { ...CHROME, network: true, restoreGate: true }
 const SEEDS = Array.from({ length: 1_000 }, (_, i) => i * 7_919 + 1)
+const STARTS = ["empty", "pre-update-retired", "pre-update-unlocks"] as const satisfies readonly StartState[]
 
 const CHAIN = 1
 const on = (addresses: string[], chainId = CHAIN): ChainAddresses => ({ chainId, addresses })
@@ -95,11 +98,27 @@ function citationMisses(cited: ReadonlyMap<string, string>): string[] {
 	})
 }
 
+/** A plan's committed imports, and each profile other than the open one whose files they changed. */
+function importsElsewhere(start: StartState, seed: number): { imports: number; leaks: string[] } {
+	let imports = 0
+	const leaks: string[] = []
+	for (const [s, before] of withBefore(plan(seed, start, CHROME))) {
+		if (s.action !== "importAccountFile" || !s.expect.outcomes.includes("committed")) continue
+		imports++
+		const open = before.session.kind === "open" ? before.session.ref : undefined
+		for (const p of s.expect.next.profiles) {
+			const was = before.profiles.find((x) => x.ref === p.ref)?.imported ?? []
+			if (p.ref !== open && p.imported.join() !== was.join()) leaks.push(`${start} seed ${seed} step ${s.index} ${p.ref}`)
+		}
+	}
+	return { imports, leaks }
+}
+
 /** Whether `k` names a credential the authenticator held before the step. */
 const mintedBefore = (w: World, k: string | undefined): boolean => k !== undefined && Number(k.slice(1)) < w.next.credential
 
 /** The steps of a plan, each with the world it ran on. */
-const withBefore = (p: { start: "empty" | "pre-update"; steps: PlannedStep[] }): [PlannedStep, World][] => {
+const withBefore = (p: { start: StartState; steps: PlannedStep[] }): [PlannedStep, World][] => {
 	let w = startWorld(p.start)
 	return p.steps.map((s) => {
 		const before = w
@@ -176,8 +195,8 @@ describe("the planner", () => {
 		["Chrome", CHROME],
 		["Firefox", FIREFOX],
 		["the network file", NETWORK],
-	])("every planned step respects its preconditions over 1,000 seeds on %s, from either start", { timeout: 120_000 }, (_label, caps) => {
-		for (const start of ["empty", "pre-update"] as const) {
+	])("every planned step respects its preconditions over 1,000 seeds on %s, from every start", { timeout: 180_000 }, (_label, caps) => {
+		for (const start of STARTS) {
 			for (const seed of SEEDS) {
 				const p = plan(seed, start, caps)
 				const replayed = planFromList(listOf(p.steps), start, caps, seed)
@@ -186,8 +205,8 @@ describe("the planner", () => {
 		}
 	})
 
-	test("from the pre-update start, the retired profile is never opened, and is deleted and verified as retired", () => {
-		const steps = SEEDS.flatMap((seed) => plan(seed, "pre-update", FIREFOX).steps)
+	test("from the retired start, the retired profile is never opened, and is deleted and verified as retired", () => {
+		const steps = SEEDS.flatMap((seed) => plan(seed, "pre-update-retired", FIREFOX).steps)
 		const opensP2 = steps.filter(({ expect: { next } }) => next.session.kind === "open" && next.session.ref === "P2")
 		expect(opensP2).toEqual([])
 		expect(steps.every((s) => s.expect.next.profiles.find((x) => x.ref === "P2")?.retired)).toBe(true)
@@ -195,10 +214,27 @@ describe("the planner", () => {
 		expect(new Set(retiredClause)).toEqual(new Set(["deleteProfile", "verifyAll"]))
 	})
 
-	test("the same seed plans the same run from the pre-update start, and another start plans another", () => {
-		for (const seed of SEEDS.slice(0, 50)) {
-			expect(plan(seed, "pre-update", FIREFOX)).toEqual(plan(seed, "pre-update", FIREFOX))
-			expect(plan(seed, "pre-update", FIREFOX).steps).not.toEqual(plan(seed, "empty", FIREFOX).steps)
+	test("the same seed plans the same run from a pre-update start, and another start plans another", () => {
+		for (const seed of SEEDS.slice(0, 50))
+			for (const start of ["pre-update-retired", "pre-update-unlocks"] as const) {
+				expect(plan(seed, start, FIREFOX)).toEqual(plan(seed, start, FIREFOX))
+				expect(plan(seed, start, FIREFOX).steps).not.toEqual(plan(seed, "empty", FIREFOX).steps)
+			}
+	})
+
+	test("from the unlocks start, P2 holds K1 in a slot, and seeds open it with K1 on both browsers", () => {
+		const w = startWorld("pre-update-unlocks")
+		expect(w.profiles.find((x) => x.ref === "P2")).toMatchObject({ method: "passkey", credential: "K1", phrase: "W2" })
+		expect(w.profiles.find((x) => x.ref === "P2")?.retired).toBeUndefined()
+		expect(mintedCredentials(w)).toBe(1)
+		for (const caps of [CHROME, FIREFOX]) {
+			const opens = SEEDS.slice(0, 300).flatMap((seed) =>
+				plan(seed, "pre-update-unlocks", caps).steps.filter(
+					(s) => s.action === "unlockPasskey" && s.expect.next.session.kind === "open" && s.expect.next.session.ref === "P2",
+				),
+			)
+			// A method change may give P2 another credential first, so only some opens use K1.
+			expect(opens.filter((s) => s.expect.next.profiles.find((x) => x.ref === "P2")?.credential === "K1").length).toBeGreaterThan(0)
 		}
 	})
 
@@ -281,7 +317,7 @@ describe("the planner", () => {
 		["Firefox", FIREFOX],
 		["the network file", NETWORK],
 	])("the counter moves by one exactly at a mint, a declined import's included, and stays within the slots on %s", (_label, caps) => {
-		for (const start of ["empty", "pre-update"] as const) {
+		for (const start of STARTS) {
 			for (const seed of SEEDS) {
 				for (const [s, before] of withBefore(plan(seed, start, caps))) {
 					const moved = s.expect.next.next.credential - before.next.credential
@@ -311,7 +347,7 @@ describe("the action surface a driver states", () => {
 	test("a surface naming every action plans exactly what no surface plans", () => {
 		const every = CATALOG.map((a) => a.name)
 		for (const caps of [CHROME, FIREFOX, NETWORK])
-			for (const start of ["empty", "pre-update"] as const)
+			for (const start of STARTS)
 				for (const seed of SEEDS.slice(0, 100))
 					expect(plan(seed, start, { ...caps, actions: every }).steps).toEqual(plan(seed, start, caps).steps)
 	})
@@ -726,6 +762,13 @@ describe("the model's clauses", () => {
 		}
 	})
 
+	// Two profiles sharing one list would show an import in both, which the wallet never does.
+	test("a committed import changes only the open profile's files, from every start", () => {
+		const runs = STARTS.flatMap((start) => SEEDS.slice(0, 300).map((seed) => ({ start, ...importsElsewhere(start, seed) })))
+		expect(runs.flatMap((r) => r.leaks)).toEqual([])
+		expect(runs.filter((r) => r.start !== "empty").reduce((n, r) => n + r.imports, 0)).toBeGreaterThan(0)
+	})
+
 	// A citation that no longer resolves would let a clause outlive the branch it names.
 	test("every cited line holds the fragment its citation names", () => {
 		expect(CITED.size).toBeGreaterThan(40)
@@ -733,9 +776,8 @@ describe("the model's clauses", () => {
 	})
 
 	test("every code source a plan or an allowlist names is a citation with its fragment", () => {
-		const starts = ["empty", "pre-update"] as const
 		const sources = new Set([
-			...starts.flatMap((start) =>
+			...STARTS.flatMap((start) =>
 				[CHROME, FIREFOX, NETWORK].flatMap((caps) =>
 					SEEDS.slice(0, 300).flatMap((seed) => plan(seed, start, caps).steps.flatMap((s) => s.expect.sources)),
 				),
@@ -1071,7 +1113,7 @@ describe("O2, profile rows", () => {
 	})
 
 	test("passes a retired profile listed as retired with its row's fields, and fails one listed openable", () => {
-		const wr = startWorld("pre-update")
+		const wr = startWorld("pre-update-retired")
 		const both = bind([
 			["P1", P1],
 			["P2", P2],
@@ -1955,7 +1997,7 @@ describe("O6, a retired profile", () => {
 		["P1", P1],
 		["P2", P2],
 	])
-	const w = startWorld("pre-update")
+	const w = startWorld("pre-update-retired")
 	const calls = Object.fromEntries(RETIRED_REFUSALS.map((c) => [c, "retired"]))
 	const openable = {
 		ref: "P1" as const,
@@ -2013,7 +2055,7 @@ describe("O1, the lock screen on a retired profile", () => {
 		["P1", P1],
 		["P2", P2],
 	])
-	const w = startWorld("pre-update")
+	const w = startWorld("pre-update-retired")
 	const on = (lockScreen: { setupAgain: boolean; unlockOffered: boolean }) =>
 		({ pages: [{ label: "anchor", route: "/popup/auth", anchor: true, lockScreen }], protectedCallRefused: true }) as SessionReading
 
@@ -2041,12 +2083,12 @@ describe("O1, the lock screen on a retired profile", () => {
 	})
 })
 
-describe("the pre-update start", () => {
+describe("the pre-update start from a release whose passkey the candidate retires", () => {
 	const b = bind([
 		["P1", P1],
 		["P2", P2],
 	])
-	const w = startWorld("pre-update")
+	const w = startWorld("pre-update-retired")
 	const rowP1 = `{"id":"${P1}","name":"Main","type":"password"}`
 	const rowP2 = `{"id":"${P2}","name":"Chaos 1","type":"passkey"}`
 	const released = { [`nulo:core:profiles@${P1}`]: rowP1, [`nulo:core:profiles@${P2}`]: rowP2 }
@@ -2081,6 +2123,56 @@ describe("the pre-update start", () => {
 		["a start off the lock screen", { released, updated: { ...released }, listed, onAuth: false }, b],
 	] as const)("fails %s", (label, r, bindings) => {
 		expect(shown(`start ${label}`, checkPreUpdate(w, r as never, bindings)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("the pre-update start from a release whose passkey still unlocks", () => {
+	const K1 = "Y3JlZGVudGlhbC1vbmU="
+	const b = bind([
+		["P1", P1],
+		["P2", P2],
+	])
+	b.credentials.set("K1", K1)
+	const w = startWorld("pre-update-unlocks")
+	const released = {
+		[`nulo:core:profiles@${P1}`]: `{"id":"${P1}","name":"Main","type":"password"}`,
+		[`nulo:core:profiles@${P2}`]: `{"id":"${P2}","name":"Chaos 1","type":"passkey"}`,
+	}
+	const listed = [
+		{ id: P1, name: "Main", type: "password", retired: false },
+		{ id: P2, name: "Chaos 1", type: "passkey", retired: false },
+	]
+	const reading = (credentialId = K1): ProfileReading => ({
+		listed,
+		rows: [
+			{ keyId: P1, id: P1, name: "Main", type: "password", fields: [...PROFILE_ROW_FIELDS.password] },
+			{ keyId: P2, id: P2, name: "Chaos 1", type: "passkey", fields: [...PROFILE_ROW_FIELDS.passkey], credentialId },
+		],
+	})
+	const on = (lockScreen: { setupAgain: boolean; unlockOffered: boolean }) =>
+		({ pages: [{ label: "anchor", route: "/popup/auth", anchor: true, lockScreen }], protectedCallRefused: true }) as SessionReading
+
+	test("passes both rows kept and listed openable, the passkey row naming the credential bound to K1", () => {
+		expect(checkPreUpdate(w, { released, updated: { ...released }, listed, onAuth: true }, b)).toEqual([])
+		expect(checkProfiles(w, reading(), b)).toEqual([])
+	})
+
+	test("fails the passkey row listed as retired", () => {
+		const r = { released, updated: { ...released }, listed: [listed[0], { ...listed[1], retired: true }], onAuth: true }
+		const v = shown("start a live passkey row listed as retired", checkPreUpdate(w, r, b))
+		expect(v.map((x) => x.message)).toEqual(["P2 is listed as retired after the update"])
+	})
+
+	test("fails the passkey row naming another credential than the one bound to K1", () => {
+		const v = shown("O2 the release's row naming another credential", checkProfiles(w, reading("b3RoZXI="), b))
+		expect(v.map((x) => x.message)).toEqual(["P2's row names another credential than K1"])
+	})
+
+	test("passes its lock screen offering an unlock with no Set up again, and fails Set up again on it", () => {
+		expect(checkSession(w, on({ setupAgain: false, unlockOffered: true }), b)).toEqual([])
+		expect(
+			shown("O1 Set up again on a passkey that unlocks", checkSession(w, on({ setupAgain: true, unlockOffered: true }), b)).length,
+		).toBeGreaterThan(0)
 	})
 })
 
