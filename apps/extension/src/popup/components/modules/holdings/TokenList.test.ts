@@ -235,3 +235,91 @@ describe("TokenList — add a pasted address", () => {
 		expect(w.find('[data-testid="holdings-fold"]').text()).toContain("1 empty")
 	})
 })
+
+describe("TokenList — a picker host", () => {
+	const UNLISTED = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+	const picker = (props: Record<string, unknown>, slots: Record<string, string> = {}) =>
+		mount(TokenList, {
+			props: { fiatOf: fiatBy({}), testidPrefix: "select-token", label: "Your tokens", sortable: false, ...props } as never,
+			slots,
+			global: { stubs: STUBS },
+		})
+	// The balance row's id and the token's id differ, as they do in storage.
+	const rows = () => [
+		{ ...row(1, "ONE", { privateBalance: ONE }), id: 71, token: { ...row(1, "ONE").token, id: 7 } },
+		{ ...row(2, "TWO", { privateBalance: ONE }), id: 91, token: { ...row(2, "TWO").token, id: 9 } },
+	]
+	const marks = (w: ReturnType<typeof picker>) =>
+		Object.fromEntries(
+			w.findAll('[data-testid="select-token-row"]').map((el) => [el.attributes("data-symbol"), el.attributes("data-selected")]),
+		)
+
+	test("the prefix names every control, and the label and the sort switch follow the host", async () => {
+		const w = picker({ rows: [...rows(), row(3, "E")], selectable: true })
+		await flushPromises()
+		expect(w.find('[data-testid="select-token-search"]').exists()).toBe(true)
+		expect(w.find('[data-testid="select-token-count"]').text()).toBe("3")
+		expect(w.find('[data-testid="select-token-fold"]').exists()).toBe(true)
+		expect(w.text()).toContain("Your tokens")
+		expect(w.find('[data-testid="select-token-sort"]').exists()).toBe(false)
+		expect(w.find('[data-testid^="holdings-"]').exists()).toBe(false)
+		await w.find('[data-testid="select-token-search"]').setValue("zzz")
+		expect(w.find('[data-testid="select-token-no-results"]').exists()).toBe(true)
+	})
+
+	test("rows are buttons marked and picked by token id, never by balance row id", async () => {
+		const w = picker({ rows: rows(), selectable: true, selectedId: 9 })
+		await flushPromises()
+		expect(marks(w)).toEqual({ ONE: "false", TWO: "true" })
+		expect(w.find('[data-testid="select-token-row"][data-symbol="TWO"]').attributes("aria-current")).toBe("true")
+		expect(w.find('[data-testid="select-token-row"][data-symbol="ONE"]').attributes("aria-current")).toBeUndefined()
+		expect(w.findAll("a")).toHaveLength(0)
+		await w.find('[data-testid="select-token-row"][data-symbol="ONE"]').trigger("click")
+		expect(w.emitted("pick")).toEqual([[7]])
+	})
+
+	test("with no current token the rows are still options, none marked", async () => {
+		const w = picker({ rows: rows(), selectable: true })
+		await flushPromises()
+		expect(marks(w)).toEqual({ ONE: "false", TWO: "false" })
+		expect(w.findAll("button[data-testid='select-token-row']")).toHaveLength(2)
+		expect(w.findAll('[data-testid="tokens-card"]')).toHaveLength(0)
+	})
+
+	test("Holdings' rows stay links to the token page", async () => {
+		const w = mountList({ rows: rows() })
+		await flushPromises()
+		expect(w.findAll('a[data-testid="tokens-card"]')).toHaveLength(2)
+		expect(w.find('[data-testid="select-token-row"]').exists()).toBe(false)
+	})
+
+	test.each([
+		["select-token", picker],
+		["holdings", (props: Record<string, unknown>) => mountList(props)],
+	])("%s: a flagged pasted address shows the flag under an enabled add button that names it", async (prefix, mountIt) => {
+		const flagged = vi.fn((address: string) => address === UNLISTED)
+		const w = mountIt({ rows: rows(), isFlagged: flagged })
+		await w.find(`[data-testid="${prefix}-search"]`).setValue(UNLISTED)
+		const add = w.get(`[data-testid="${prefix}-add-token"]`)
+		const line = w.get(`[data-testid="${prefix}-add-token-flagged"]`)
+		expect(line.text()).toBe("Flagged as a scam")
+		expect(add.attributes("disabled")).toBeUndefined()
+		expect(add.attributes("aria-describedby")?.split(" ")).toContain(line.attributes("id"))
+		expect(add.text()).toBe("Add token 0x04…7a")
+	})
+
+	test("an unflagged pasted address shows no flag line", async () => {
+		const w = picker({ rows: rows(), isFlagged: () => false })
+		await w.find('[data-testid="select-token-search"]').setValue(UNLISTED)
+		expect(w.find('[data-testid="select-token-add-token"]').exists()).toBe(true)
+		expect(w.find('[data-testid="select-token-add-token-flagged"]').exists()).toBe(false)
+	})
+
+	test("the host's note shows with the add row only, and the button names it", async () => {
+		const w = picker({ rows: rows() }, { "add-note": "It joins your list." })
+		expect(w.text()).not.toContain("It joins your list.")
+		await w.find('[data-testid="select-token-search"]').setValue(UNLISTED)
+		const note = w.get(`[id="${w.get('[data-testid="select-token-add-token"]').attributes("aria-describedby")}"]`)
+		expect(note.text()).toBe("It joins your list.")
+	})
+})

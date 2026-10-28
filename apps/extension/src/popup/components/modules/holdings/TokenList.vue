@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
  * The full token list: search, value/name sort, pinned rows above a rule, the rest in order, and
- * one fold that hides empty and under-dust rows. Presentational — the page owns the clients and
- * hands in rows, prices, the dust threshold and the pinned set, and handles `addToken`. Local state
- * resets on every mount.
+ * one fold that hides empty and under-dust rows. Presentational — the host owns the clients and
+ * hands in rows, prices, the dust threshold and the pinned set, and handles `addToken`; a picker
+ * host makes rows selectable and handles `pick`. Local state resets on every mount.
  */
 import type { PropType } from "vue"
-import { computed, ref } from "vue"
+import { computed, ref, useId } from "vue"
 import { SectionLabel } from "@nulo/design"
 import ListStatusMessage from "@/components/composite/ListStatusMessage.vue"
 import SearchField from "@/components/composite/SearchField.vue"
@@ -18,15 +18,25 @@ import { foldLabel, isHiddenHolding } from "@/utils/token-fold"
 import { type OrderCtx, type OrderableRow, classifyRow, orderTokenRows } from "@/utils/token-order"
 import { matchesQuery } from "@/utils/token-search"
 
-/** What the list needs from a row; the page passes full `TokenBalanceInfo` rows. */
-type Row = OrderableRow & { id: number | string }
+/** What the list needs from a row; the page passes full `TokenBalanceInfo` rows. `id` keys the
+ *  balance row; a pick names the token, `token.id`. */
+type Row = OrderableRow & { id: number | string; token: { id: number | string } }
 // Callbacks receive the caller's own row type, so a `FiatOf<TokenBalanceInfo>` fits without a cast.
 // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch at the prop boundary; the template only reads OrderableRow fields.
 type RowFn<R> = (tb: any) => R
 
-const emit = defineEmits<{ addToken: [address: string] }>()
+const emit = defineEmits<{ addToken: [address: string]; pick: [tokenId: number | string] }>()
 const props = defineProps({
 	rows: { type: Array as PropType<Row[]>, required: true },
+	testidPrefix: { type: String, default: "holdings" },
+	label: { type: String, default: "All holdings" },
+	placeholder: { type: String, default: "Search tokens" },
+	sortable: { type: Boolean, default: true },
+	/** Rows become options that emit `pick`; `selectedId` marks the current token. */
+	selectable: { type: Boolean, default: false },
+	selectedId: { type: [Number, String], default: undefined },
+	/** Whether the signed list flags a pasted address no row holds. */
+	isFlagged: { type: Function as PropType<(address: string) => boolean>, default: () => false },
 	pinnedContracts: { type: Object as PropType<ReadonlySet<string>>, default: () => new Set<string>() },
 	fiatOf: { type: Function as PropType<RowFn<bigint | undefined>>, required: true },
 	/** Fresh USD rate per row for the dust fold; absent → the fold hides empties only. */
@@ -72,7 +82,7 @@ const partition = computed(() => {
 	return { pinned, rest, hidden, empty }
 })
 
-const label = computed(() =>
+const foldText = computed(() =>
 	foldLabel({
 		hidden: partition.value.hidden.length,
 		empty: partition.value.empty,
@@ -87,8 +97,17 @@ const addCandidate = computed(() => {
 	const q = query.value.trim()
 	return matching.value.length === 0 && isValidAztecAddress(q) ? q : undefined
 })
+const addFlagged = computed(() => addCandidate.value !== undefined && props.isFlagged(addCandidate.value))
 const noResults = computed(() => query.value.trim() !== "" && matching.value.length === 0)
 const visibleCount = computed(() => matching.value.length)
+
+const tid = (suffix: string) => `${props.testidPrefix}-${suffix}`
+const addFlagId = useId()
+const addNoteId = useId()
+const rowProps = (tb: Row) =>
+	props.selectable
+		? { pickPrefix: props.testidPrefix, selected: tb.token.id === props.selectedId, onPick: () => emit("pick", tb.token.id) }
+		: {}
 
 const toggleSort = () => {
 	sort.value = sort.value === "value" ? "name" : "value"
@@ -98,38 +117,48 @@ const toggleSort = () => {
 <template>
 	<Flex direction="column" gap="12">
 		<div :class="$style.sticky">
-			<SearchField v-model="query" placeholder="Search tokens" testid="holdings-search" />
+			<SearchField v-model="query" :placeholder :testid="tid('search')" />
 		</div>
 
 		<Flex align="end" justify="between">
-			<SectionLabel label="All holdings" :count="visibleCount" countTestid="holdings-count" />
-			<button type="button" @click="toggleSort" data-testid="holdings-sort" :data-sort="sort" :class="$style.sort">
+			<SectionLabel :label :count="visibleCount" :countTestid="tid('count')" />
+			<button v-if="sortable" type="button" @click="toggleSort" :data-testid="tid('sort')" :data-sort="sort" :class="$style.sort">
 				{{ sort === "value" ? "BY VALUE" : "A–Z" }}
 			</button>
 		</Flex>
 
 		<Flex direction="column" :class="$style.list">
-			<Button v-if="addCandidate" wide variant="secondary" data-testid="holdings-add-token" @click="emit('addToken', addCandidate)">
-				<span>Add token <span class="type--meta" data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
-			</Button>
-			<ListStatusMessage v-else-if="noResults" variant="no-results" testid="holdings-no-results" />
+			<template v-if="addCandidate">
+				<Button
+					wide
+					variant="secondary"
+					:data-testid="tid('add-token')"
+					:aria-describedby="[addFlagged && addFlagId, $slots['add-note'] && addNoteId].filter(Boolean).join(' ') || undefined"
+					@click="emit('addToken', addCandidate)"
+				>
+					<span>Add token <span class="type--meta" :data-testid="tid('add-token-address')">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
+				</Button>
+				<span v-if="addFlagged" :id="addFlagId" :data-testid="tid('add-token-flagged')" :class="$style.add_flagged">Flagged as a scam</span>
+				<span v-if="$slots['add-note']" :id="addNoteId" :class="$style.add_note"><slot name="add-note" /></span>
+			</template>
+			<ListStatusMessage v-else-if="noResults" variant="no-results" :testid="tid('no-results')" />
 			<template v-else>
-				<TokenCard v-for="tb in partition.pinned" :key="tb.id" :tokenBalance="tb" />
+				<TokenCard v-for="tb in partition.pinned" :key="tb.id" :tokenBalance="tb" v-bind="rowProps(tb)" />
 				<div v-if="showDivider" :class="$style.divider" data-testid="token-list-divider" />
-				<TokenCard v-for="tb in partition.rest" :key="tb.id" :tokenBalance="tb" />
+				<TokenCard v-for="tb in partition.rest" :key="tb.id" :tokenBalance="tb" v-bind="rowProps(tb)" />
 				<button
-					v-if="label"
+					v-if="foldText"
 					type="button"
 					@click="showHidden = !showHidden"
-					data-testid="holdings-fold"
+					:data-testid="tid('fold')"
 					:data-open="showHidden || undefined"
 					:class="$style.fold"
 				>
-					<span>{{ label }}</span>
+					<span>{{ foldText }}</span>
 					<span :class="$style.fold_action">{{ showHidden ? "hide" : "show" }}</span>
 				</button>
 				<template v-if="showHidden">
-					<TokenCard v-for="tb in partition.hidden" :key="tb.id" :tokenBalance="tb" />
+					<TokenCard v-for="tb in partition.hidden" :key="tb.id" :tokenBalance="tb" v-bind="rowProps(tb)" />
 				</template>
 			</template>
 		</Flex>
@@ -163,6 +192,19 @@ const toggleSort = () => {
 .divider {
 	border-top: 1px dashed var(--nulo-border);
 	margin: 4px 0;
+}
+
+/* The add row's lines: the flag in the danger caption Home's flagged rows use, the note as body. */
+.add_flagged {
+	composes: type--caption from global;
+	margin-top: 8px;
+	color: var(--txt-danger);
+}
+
+.add_note {
+	composes: type--body from global;
+	margin-top: 8px;
+	color: var(--txt-tertiary);
 }
 
 .fold {

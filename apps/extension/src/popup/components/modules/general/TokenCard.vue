@@ -24,9 +24,21 @@ const props = defineProps({
 		type: Object,
 		required: false,
 	},
+	/** Set, the row is a picker's option: a button that emits `pick` with the token id, its testids
+	 *  under this prefix. Unset, it links to the token's page. */
+	pickPrefix: String,
+	selected: Boolean,
 })
+const emit = defineEmits(["pick"])
 
 const token = computed(() => props.tokenBalance.token)
+const pickAttrs = computed(() => ({
+	type: "button",
+	"data-testid": `${props.pickPrefix}-row`,
+	"data-symbol": token.value.symbol,
+	"data-selected": props.selected ? "true" : "false",
+	"aria-current": props.selected ? "true" : undefined,
+}))
 // Row numbers come from storage rows that contracts fed: a side that is not a non-negative
 // integer literal, or decimals the wallet does not know, makes the row "unknown" — rendered as a
 // dash, never parsed into BigInt or an exponent.
@@ -71,14 +83,21 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 
 <template>
 	<!-- Space calls `navigate` with no `.prevent`: vue-router's guardEvent refuses an event whose
-	     default is already prevented, and `navigate` prevents it itself when it navigates. -->
+	     default is already prevented, and `navigate` prevents it itself when it navigates. A pick
+	     row is a native button, which Space and Enter activate on their own. -->
 	<RouterLink v-if="tokenBalance" :to="`/popup/tokens/${token?.id}`" custom v-slot="{ href, navigate }">
-		<a :href data-testid="tokens-card" :class="[$style.row, $style.link]" @click="navigate" @keydown.space="navigate">
+		<component
+			:is="pickPrefix ? 'button' : 'a'"
+			v-bind="pickPrefix ? pickAttrs : { href, 'data-testid': 'tokens-card' }"
+			:class="[$style.row, $style.link, pickPrefix && $style.pick, selected && $style.selected]"
+			@click="pickPrefix ? emit('pick', token.id) : navigate($event)"
+			@keydown.space="pickPrefix || navigate($event)"
+		>
 			<Flex direction="column" gap="2">
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 					{{ dashIfBlank(token.symbol) }}
 				</span>
-				<span v-if="isFlagged" data-testid="token-flagged" :class="$style.flagged">Flagged as a scam</span>
+				<span v-if="isFlagged" :data-testid="pickPrefix ? `${pickPrefix}-flagged` : 'token-flagged'" :class="$style.flagged">Flagged as a scam</span>
 				<span v-else-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
 				<span v-else data-testid="token-name" :class="$style.fiat">{{ dashIfBlank(token?.name) }}</span>
 			</Flex>
@@ -110,7 +129,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 					Couldn't refresh
 				</span>
 			</Flex>
-		</a>
+		</component>
 	</RouterLink>
 
 	<Flex v-if="newToken" align="center" justify="between" :class="[$style.row, $style.minting]">
@@ -146,6 +165,21 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 		outline: 2px solid var(--nulo-accent);
 		outline-offset: -2px;
 	}
+}
+
+/* A picker's option spans the sheet: the fill and bar reach past the text on both sides. */
+.pick {
+	width: calc(100% + 16px);
+	margin: 0 -8px;
+	padding: 8px;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+}
+
+.selected {
+	background: var(--nulo-surface-low);
+	box-shadow: inset 2px 0 0 var(--nulo-accent);
 }
 
 .minting {

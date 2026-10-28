@@ -62,6 +62,7 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const fiatOf = prices.fiatOfRow
 const usdRateOf = (tb: TokenBalanceInfo) => prices.quoteFor(tb.token.chainId, tb.token.contract)?.usd
+const isFlaggedAddress = (address: string) => prices.isFlagged({ chainId: activeChainId(), contract: address })
 
 const showFiatValues = ref(true)
 const dustThresholdUsd = ref(0)
@@ -220,6 +221,7 @@ onBeforeUnmount(() => {
 				:fiatOf="fiatOf"
 				:usdRateOf="usdRateOf"
 				:dustThresholdUsd="dustThresholdUsd"
+				:isFlagged="isFlaggedAddress"
 				@addToken="openAddToken"
 			/>
 		</Flex>
