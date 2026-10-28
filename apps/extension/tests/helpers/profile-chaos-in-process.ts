@@ -129,7 +129,7 @@ export interface WriteRecord {
 	key: string
 	before: unknown
 	after: unknown
-	/** The device's strict mode as the worker held it when the write was made. */
+	/** The device's strict mode as the worker held it when the write landed. */
 	strict: boolean
 }
 
@@ -245,8 +245,8 @@ const sameValue = (a: unknown, b: unknown): boolean => (a === undefined ? b === 
 
 function loggedArea(run: InProcessRun, worker: Worker, area: Area, inner: StorageArea): StorageArea {
 	const write = async (keys: string[], after: (key: string) => unknown, apply: () => Promise<void>) => {
-		const strict = worker.config?.get("strictSecurityMode") === true
 		const before = await inner.get(keys)
+		const strict = worker.config?.get("strictSecurityMode") === true
 		const records = keys.map((key) => ({ worker: worker.n, area, key, before: before[key], after: after(key), strict }))
 		// Checked after the read, so a write a worker began before its restart is refused too.
 		if (worker.dropped) {
@@ -666,7 +666,7 @@ function flipLast(b64: string): string {
 }
 
 /** What refuses each field's change once the prompt answered (the model's `EDIT_REFUSES`); a refusal
- *  counts only while no slot of the row opened, since an unlock that opened them read a stale row. */
+ *  counts only while no complete slot set opened, since an unlock that opened one read a stale row. */
 const EDIT_REFUSALS: Record<ParamsMap["editRowDuringUnlock"]["field"], Refusal> = {
 	prfSalt: is(PasskeyNotOpenedError),
 	credentialId: says("Invalid profile id"),
@@ -1181,8 +1181,10 @@ function checkSessionWrite(r: WriteRecord): Violation[] {
 	return out
 }
 
+/** Every reading runs before the first check, so what a reading writes or logs is judged too. */
 async function checkStep(run: InProcessRun, step: PlannedStep | undefined, before: World, censuses: [StoredEntry[], StoredEntry[]]) {
 	const next = step?.expect.next ?? before
+	const openSecret = await checkOpenSecret(run, next)
 	await learnSalts(run)
 	const needles = needlesOf(run)
 	const session = await readSession(run, next.session.kind === "locked")
@@ -1203,7 +1205,7 @@ async function checkStep(run: InProcessRun, step: PlannedStep | undefined, befor
 		...checkLeaks(leaks, { ...structure, exports: [] }, passkeyIds, homes),
 		...checkLogs(run, step, IN_PROCESS_ALLOWED),
 		...(step?.action === "verifyAll" ? checkMasters(before, run.verified, run.seen) : []),
-		...(await checkOpenSecret(run, next)),
+		...openSecret,
 	]
 }
 

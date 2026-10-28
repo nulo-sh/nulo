@@ -22,3 +22,11 @@ Codex (reject, four false greens shown by planting each fault) and Opus (seven f
 - O1 read the session row once a step ended: a bearer written under strict mode and overwritten in the step passed. Every logged session-row write is judged with the strict mode the worker held when it wrote.
 - A changed credential or type refuses with the words a stale-row refusal after the slots opened uses; a refusal now counts only while no slot of the row opened, and the stale-snapshot fixture runs over all four fields with the refusal pinned.
 - A dropped worker's write between two steps was cleared unreported; strays now stay until a step's check reports them. The fixture plants the stray at the next step's start: a real late write cannot be timed into that window.
+
+## Review, round 2
+
+Codex (resumed): conditional approve, three findings, all accepted, each fixture red on the round-1 harness and green after.
+
+- The open session's secret was read after the write and log checks, so what that reading wrote or logged went unjudged; every reading now runs before the first check.
+- A write's strict mode was read when the write was issued, before its awaited pre-read; strict turned on in that window let a bearer land unjudged. It is read once the pre-read returns, just before the write lands.
+- The edited-row comment said "no slot opened"; the counter sees complete slot sets.

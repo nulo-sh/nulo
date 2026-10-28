@@ -239,6 +239,36 @@ describe("each reader can fail — break fixtures", () => {
 	)
 
 	test(
+		"O1: a bearer issued while lenient that lands once strict mode is on",
+		() =>
+			redAt(
+				[
+					CREATE_PK,
+					{ action: "toggleStrict", params: {} },
+					LOCK,
+					{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
+				],
+				"unlockPasskey",
+				"O1",
+				/wrote a session row holding a bearer under strict mode/,
+				faultAfter("lock", async (run) => {
+					const { config } = run.worker
+					const area = run.worker.raw.storage.session
+					const read = area.get.bind(area)
+					const strict = config.get.bind(config)
+					// Strict mode turns on while the next session-row write is in flight.
+					vi.spyOn(area, "get").mockImplementation(async (keys) => {
+						const got = await read(keys)
+						if (Array.isArray(keys) && keys.includes(SESSION_ROW))
+							vi.spyOn(config, "get").mockImplementation((key) => (key === "strictSecurityMode" ? true : strict(key)))
+						return got
+					})
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
 		"O2: a profile row the model never made",
 		() =>
 			redAt(
@@ -469,6 +499,25 @@ describe("the harness reads what it drives — break fixtures", () => {
 					onWorker: (worker) =>
 						void vi.spyOn(worker.profiles, "unlockPasskeyProfile").mockRejectedValue(new PasskeyNotOpenedError()),
 				},
+			),
+		RUN_MS,
+	)
+
+	test(
+		"a write made while the harness reads an open session's secret is judged",
+		() =>
+			redAt(
+				[CREATE_PK, RENAME],
+				"rename",
+				"O3",
+				/^a reading wrote session:nulo:chaos-session$/,
+				faultAfter("rename", async (run) => {
+					const read = run.profiles.getProfileSecret.bind(run.profiles)
+					vi.spyOn(run.profiles, "getProfileSecret").mockImplementationOnce(async (id) => {
+						await run.worker.api.storage.session.set({ "nulo:chaos-session": "1" })
+						return read(id)
+					})
+				}),
 			),
 		RUN_MS,
 	)
