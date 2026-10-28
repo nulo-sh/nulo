@@ -72,7 +72,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 
 ### Phase 4: the passkey trait, under A1(b) ✓ (ca1a8b24c; gates green; four runs green, all four replay cases on both browsers: [lessons/phase-4.md](lessons/phase-4.md))
 1. Add `passkey: "retired" | "unlocks"` to `ReleaseTraits`: whether a passkey profile the release made is one the candidate retires or one its passkey still unlocks. Pin `v0.31.0` and `v1.0.0` `retired`, `v1.1.0` `unlocks` (D5).
-2. In case 3, keep the update checks. Under `retired`, keep today's check verbatim. Under `unlocks`, require `auth-submit` enabled, no `auth-setup-again` and no overlay. Where the driver's `credentialOutlivesPage` holds, press it, reach `#/popup/general`, and check the profile rows still equal the release's (D6). The title names both.
+2. In case 3, keep the update checks. Under `retired`, keep today's check verbatim. Under `unlocks`, require `auth-submit` enabled, no `auth-setup-again` and no overlay, press it, reach `#/popup/general`, and check the profile rows still equal the release's. The tab that made the credential waits on `about:blank` across the update and comes back to the popup for the press, on both browsers (D6, revised in Phase 5's review round 1). The title names both.
 3. Run the committed-recording test in `update-recording.test.ts` over every sealing tag in `RELEASE_TRAITS`; each must have its recording (D2).
 4. Commit: `test(e2e): the update replay's passkey case follows the release's passkey trait`.
 - **Gate:** lint; `typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e`; `check:plans`. Then rebuild both candidates and run Phase 2's four runs without `NULO_E2E_UPDATE_RECORD`. Pass: exit 0; both live runs pass; all four replay cases pass on both browsers; the recording unchanged (re-record only if the replay refuses it).
@@ -87,7 +87,7 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 ## What did not hold
 
 - **"The scenarios run from v1.1.0 once pinned and recorded."** Case 3 encodes pre-1.1 passkey rows (F7; demonstrated in [lessons/phase-2.md](lessons/phase-2.md)). Fixed by Phase 4.
-- **"Unlock with the same virtual authenticator" on Chrome.** The answer to A1 asks the `unlocks` branch to unlock the updated profile. On Chrome that cannot run. Chrome's authenticator belongs to the page that made the credential, and the update closes every extension page (`in-place.ts:148`). PRF state does not survive CDP `getCredentials`/`addCredential` (`tests/e2e/PRF-NON-PORTABLE.md`). Firefox's authenticator belongs to the session. So the press runs where `credentialOutlivesPage` holds, as the passkey canary does, and Chrome checks the offer (D6).
+- **D6's first form: "no Chrome credential survives the update".** Phase 4 pressed the unlock on Firefox only and checked the offer on Chrome, because Chrome's authenticator belongs to the page that made the credential and the update closes every extension page (`in-place.ts:148`). Review round 1 (Codex P2) found that unproven: populate had closed that page itself. Parking that tab on `about:blank` across the update keeps the credential, and Chrome then presses the unlock (case 3 passed alone in 8.4 s). The control, the tab closed and a fresh one parked, timed out at the unlock, so the parked tab is what keeps it ([lessons/phase-5.md](lessons/phase-5.md)). D6 now presses on both browsers, and the `credentialOutlivesPage` branch is gone.
 - **The answer file and the resume message disagree on D2.** The file says "D2 stands"; the later message says D2 is reversed and the unit check is in scope. This plan follows the later message.
 
 ### Alternatives not taken
@@ -95,7 +95,8 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 - **A ready or draft PR now:** rejected; the brief says stop, and a standing merge policy could land a ready PR whose lane is blocked.
 - **Demonstrate case 3 alone first, recording after A1:** rejected; recording now tests I1 on both browsers before the decision, and both answers need the recording. A re-record costs one Chrome live run while `dev` stays on 6.0.0.
 - **Leave case 3 red, or skip it for v1.1.0:** worse. Red holds the promote's step 1 for good. A tag-named skip is the banned `skipIf` dodge, and it drops the one update test of a release-made passkey row.
-- **Make Chrome's credential outlive the update** (export it, add it to a new authenticator): impossible; PRF state does not move (`PRF-NON-PORTABLE.md`).
+- **Move Chrome's credential across the update** (export it, add it to a new authenticator): impossible; PRF state does not move (`PRF-NON-PORTABLE.md`). Keeping its tab alive off the extension (D6) needs no move.
+- **Press the unlock on Firefox only** (D6's first form): refused in review round 1; it left Chrome's ceremony untested on the strength of an unproven limit.
 
 ## Security & Adversarial Considerations
 
@@ -117,7 +118,8 @@ None. The lane changes test files only and touches no screen.
 | D3 | Run everything, file the refusal, push the branch, stop before any PR, ask A1 | ready PR (round 1 draft); draft PR (Opus) | brief: "stop and report"; Codex and Opus both refused the ready PR |
 | D4 | Pins committed before the builds; no commit during Phase 2; the final runs after the close-out | build first | F6: any commit moves HEAD off the candidate |
 | D5 | `passkey: "retired" \| "unlocks"`, from each tag's `profile-row.ts` `newPasskeyRow`: v0.31.0 and v1.0.0 (one blob, `8243671fa`) write only `credentialId` beside the base fields, which HEAD's `RetiredPasskeyRow` matches; v1.1.0 (`:113-133`) writes the sealed slots, `envelopeMac` and `prfSalt`, which HEAD's `PasskeyUnlock` matches | infer from the rows a run shows; branch on the tag | the fixture's own rule: a reviewed trait beside the digests. Obligation: every later pin carries it, and `releaseTraits` already refuses a tag without traits. Risk: a wrong pin flips the case's expectation, which the run then shows red |
-| D6 | `unlocks` presses the unlock only where `credentialOutlivesPage`; Chrome checks the offer | unlock on both (A1's wording) | What did not hold: no Chrome credential survives the update; the driver seam already carries this fact |
+| D6 | `unlocks` presses the unlock on both browsers, in the tab that made the credential, parked on `about:blank` across the update; `retired` closes that tab and runs today's check | press only where `credentialOutlivesPage` (Phase 4; refused in review round 1, Codex P2); a fresh popup for the press | Chrome's authenticator belongs to that tab, and the update closes extension pages only; a fresh tab times out at the unlock (the control in [lessons/phase-5.md](lessons/phase-5.md)) |
+| D7 | The release skill's post-release step names the third trait | leave the skill alone (outside test files) | the brief allows a skill edit where a step's wording proved wrong; a pin made from its two-trait list is refused by `releaseTraits`' type |
 
 ## Review verdicts
 
