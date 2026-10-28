@@ -191,18 +191,22 @@ export async function legalSheetVerdict(page: Page): Promise<"shown" | "hidden">
 	return (await verdict.jsonValue()) as "shown" | "hidden"
 }
 
-/** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
- *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
-export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
-	if (updatedTermsAnswer(entries) === "none") {
-		if ((await legalSheetVerdict(page)) === "shown" || (await isSheetPresent(page))) {
-			throw new Error("the update raised the Terms sheet over a current acceptance")
-		}
-		return
+/** Holds that the Terms sheet neither showed nor is in the page, once the shell read the acceptance. */
+export async function expectNoTermsSheet(page: Page): Promise<void> {
+	if ((await legalSheetVerdict(page)) === "shown" || (await isSheetPresent(page))) {
+		throw new Error("the update raised the Terms sheet over a current acceptance")
 	}
+}
+
+/** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
+ *  `entries`, predates this build's newest material Terms, and returns once the sheet has closed,
+ *  which it does only when the acceptance is stored; otherwise holds that none shows. */
+export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
+	if (updatedTermsAnswer(entries) === "none") return expectNoTermsSheet(page)
 	await waitForSheet(page, "changed")
 	await pointerClick(page, "legal-consent-checkbox")
 	await pointerClick(page, "legal-continue")
+	await page.waitForSelector(sel("legal-sheet"), { hidden: true, timeout: 15_000 })
 }
 
 /**

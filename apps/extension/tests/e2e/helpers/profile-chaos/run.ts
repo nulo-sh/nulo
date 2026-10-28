@@ -487,10 +487,11 @@ async function drive(s: RunState, step: PlannedStep, before: World): Promise<Dri
 
 /** Answers what the update left for its profile's first open once a step ends with it open. */
 async function answerAfterUpdate(s: RunState, before: World): Promise<void> {
-	const pending = s.afterUpdate
-	if (!pending || before.session.kind !== "open" || before.session.ref !== pending.ref) return
-	s.afterUpdate = undefined
-	await pending.answer(s)
+	if (before.session.kind !== "open") return
+	const answer = s.afterUpdate.get(before.session.ref)
+	if (!answer) return
+	s.afterUpdate.delete(before.session.ref)
+	await answer(s)
 }
 
 async function runOne(s: RunState, step: PlannedStep, before: World): Promise<StepRecord> {

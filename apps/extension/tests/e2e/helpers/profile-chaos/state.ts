@@ -74,14 +74,17 @@ export interface RunState {
 	/** The rows a release wrote plain in roots sealed since, by key: they stay plain until their
 	 *  profile next opens, and only these bytes are exempt. */
 	legacyPlain: Record<string, string>
-	/** What an update leaves for the first open of the release's profile, answered between steps
-	 *  once a step ends with it open, then cleared. */
-	afterUpdate?: { ref: ProfileRef; answer: (s: RunState) => Promise<void> }
+	/** What an update leaves for the first open of each release profile, answered between steps
+	 *  once a step ends with that profile open, then dropped. */
+	afterUpdate: Map<ProfileRef, FirstOpen>
 	/** Present on a run with a node. */
 	network?: NetworkRun
 }
 
 export type Drive = (s: RunState, params: unknown, step: PlannedStep, before: World) => Promise<Driven>
+
+/** Answers what an update left for one profile's first open, on the anchor. */
+export type FirstOpen = (s: RunState) => Promise<void>
 
 /** What a run with a node adds: the network file's own drivers, and the move that puts a profile a
  *  step opened for the first time on the node's network, before the step's checks read it. */
@@ -113,6 +116,7 @@ type Derived =
 	| "prf"
 	| "salts"
 	| "legacyPlain"
+	| "afterUpdate"
 
 export function newRunState(init: Omit<RunState, Derived>): RunState {
 	return {
@@ -131,6 +135,7 @@ export function newRunState(init: Omit<RunState, Derived>): RunState {
 		prf: new Set(),
 		salts: new Map(),
 		legacyPlain: {},
+		afterUpdate: new Map(),
 	}
 }
 

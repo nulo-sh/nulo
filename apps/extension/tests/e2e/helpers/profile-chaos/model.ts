@@ -10,6 +10,7 @@
  * Imports nothing from Puppeteer or Vitest, so an in-process driver can run the same catalog.
  */
 import { prng } from "../../fixtures/chaos-seed"
+import type { ReleaseTraits } from "../../fixtures/update/release"
 import { cite } from "./citations"
 
 export type Method = "password" | "passkey"
@@ -105,7 +106,8 @@ export interface World {
 	next: { profile: number; credential: number; file: number; secret: number; phrase: number; name: number }
 }
 
-export type StartState = "empty" | "pre-update"
+/** `pre-update-<passkey>` names the release's passkey trait, so a record says which world it began in. */
+export type StartState = "empty" | `pre-update-${ReleaseTraits["passkey"]}`
 
 export type Outcome = "committed" | "refused" | "cancelled" | "committed-then-locked"
 
@@ -392,14 +394,15 @@ const EXPORT_CHECK_REFUSES = cite(SERVICE, 1367, "if (!opened) throw this.notOpe
 export const EARLIER_TITLE = "Backup from an earlier version"
 const EARLIER_TITLE_SOURCE = cite(IMPORT, 122, `title: "${EARLIER_TITLE}"`)
 
-/** The names a release gives the two profiles the `pre-update` start makes on it. */
+/** The names a release gives the two profiles a `pre-update` start makes on it. */
 export const PRE_UPDATE_NAMES = { password: "Main", passkey: "Chaos 1" } as const
 
 /**
- * `empty`: a fresh install. `pre-update`: the release build made a password profile, then a passkey
- * profile, and locked; the wallet then updated in place. The password profile carries over; the
- * passkey one is retired. Its credential counts toward no slot: on a browser that keeps
- * a credential on its page, it went with the release's page, and a retired profile never asks it.
+ * `empty`: a fresh install. `pre-update-*`: the release build made a password profile, then a
+ * passkey profile, and locked; the wallet then updated in place, and the password profile carries
+ * over. On `pre-update-retired` the passkey profile is retired, and its credential counts toward no
+ * slot: a retired profile never asks it. On `pre-update-unlocks` it keeps `K1`, which the release's
+ * own page minted and the run keeps alive, so `K1` takes a slot.
  */
 export function startWorld(start: StartState): World {
 	const empty: World = {
@@ -411,17 +414,32 @@ export function startWorld(start: StartState): World {
 		next: { profile: 1, credential: 1, file: 1, secret: 1, phrase: 1, name: 1 },
 	}
 	if (start === "empty") return empty
-	if (start !== "pre-update") throw new Error(`unknown start state ${start}`)
-	const base = { derived: 1, imported: [], deleted: false }
-	return {
-		...empty,
-		profiles: [
-			{ ref: "P1", method: "password", name: PRE_UPDATE_NAMES.password, password: "S1", phrase: "W1", ...base },
-			{ ref: "P2", method: "passkey", name: PRE_UPDATE_NAMES.passkey, retired: true, ...base },
-		],
-		selected: "P2",
-		next: { profile: 3, credential: 1, file: 1, secret: 2, phrase: 2, name: 2 },
+	// A fresh `imported` per profile: a clone keeps a shared array shared.
+	const base = () => ({ derived: 1, imported: [], deleted: false })
+	const password: ModelProfile = {
+		ref: "P1",
+		method: "password",
+		name: PRE_UPDATE_NAMES.password,
+		password: "S1",
+		phrase: "W1",
+		...base(),
 	}
+	const passkey: ModelProfile = { ref: "P2", method: "passkey", name: PRE_UPDATE_NAMES.passkey, ...base() }
+	if (start === "pre-update-retired")
+		return {
+			...empty,
+			profiles: [password, { ...passkey, retired: true }],
+			selected: "P2",
+			next: { profile: 3, credential: 1, file: 1, secret: 2, phrase: 2, name: 2 },
+		}
+	if (start === "pre-update-unlocks")
+		return {
+			...empty,
+			profiles: [password, { ...passkey, credential: "K1", phrase: "W2" }],
+			selected: "P2",
+			next: { profile: 3, credential: 2, file: 1, secret: 2, phrase: 3, name: 2 },
+		}
+	throw new Error(`unknown start state ${start}`)
 }
 
 export const live = (w: World): ModelProfile[] => w.profiles.filter((p) => !p.deleted)
