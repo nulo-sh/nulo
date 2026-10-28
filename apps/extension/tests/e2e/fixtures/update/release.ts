@@ -19,6 +19,10 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
 		chrome: "b226ac904484577a30a0dee7c5ef80b6a48e107148d81c959c488bc2659d00a9",
 		firefox: "66d380bfe2ba002558343324f5dce4c3521b2e75fa2ce58f84c0f38d972dd8d1",
 	},
+	"v1.1.0": {
+		chrome: "bcc66cb0960359a8a70fe7693086faff82af4718cf2429d7fb0ac79ffc261117",
+		firefox: "388fadfb24c86fae309605a64077924a5a384574429fa2a2fa7aa35e37e1a762",
+	},
 }
 
 /**
@@ -34,6 +38,7 @@ export type ReleaseTraits = { storage: "plaintext" | "sealed"; connect: "replace
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
 	"v0.31.0": { storage: "plaintext", connect: "replaces-page" },
 	"v1.0.0": { storage: "sealed", connect: "own-window" },
+	"v1.1.0": { storage: "sealed", connect: "own-window" },
 }
 
 /** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */
