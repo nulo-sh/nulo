@@ -573,7 +573,7 @@ describe("FpcService.updateFpcAddress — the write lands on the row as it stand
 	const OLD = `0x${"11".repeat(32)}`
 	const NEW = `0x${"22".repeat(32)}`
 
-	/** A user fee payer at OLD, and a PXE whose lookup of NEW waits on `gate` when one is given. */
+	/** Only NEW waits on the gate, so the row's creation at OLD completes. */
 	async function withUserRow(gate?: Promise<void>) {
 		const h = await makeHarness()
 		const reached = deferred<void>()
