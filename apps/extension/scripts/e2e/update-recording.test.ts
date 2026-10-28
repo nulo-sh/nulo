@@ -60,11 +60,15 @@ describe("recordingProblems", () => {
 		])
 	})
 
-	test("the committed v1.0.0 recording replays as a sealing release's, and names no URL off this machine", () => {
-		const v100 = readRecording("v1.0.0") as Recording
-		expect(recordingProblems(v100, "v1.0.0", "sealed")).toEqual([])
-		// Counted, never listed: an outside endpoint may carry a provider's key.
-		const urls = JSON.stringify(v100).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
+	const sealing = Object.keys(RELEASE_TRAITS).filter((tag) => releaseTraits(tag).storage === "sealed")
+
+	test.each(sealing)("the committed %s recording replays as a sealing release's, and names no URL off this machine", (tag) => {
+		const committed = readRecording(tag)
+		expect(committed, `no recording of ${tag}`).toBeDefined()
+		expect(recordingProblems(committed as Recording, tag, "sealed")).toEqual([])
+		// Counted, never listed: an outside endpoint may carry a provider's key. Sealed rows are opaque, so
+		// only plaintext URLs are counted.
+		const urls = JSON.stringify(committed).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
 		expect(urls.length).toBeGreaterThan(0)
 		expect(urls.filter((url) => !isLoopbackUrl(url)).length).toBe(0)
 	})

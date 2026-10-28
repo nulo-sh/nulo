@@ -1,0 +1,8 @@
+# Phase 0: planning consults
+
+- 2026-10-28, recon: two Explore agents (sonnet). One mapped the update harness for reuse; one diffed `v1.0.0..v1.1.0` over the release path. Both found the same refusal independently: replay case 3 expects pre-1.1 passkey rows (recon.md).
+- 2026-10-28, v1.1.0's zips: downloaded into an empty scratch folder, `sha256sum -c` OK, equal to the GitHub asset digests, `gh attestation verify` exit 0 at the tag commit for both.
+- 2026-10-28, Codex plan audit (gpt-6.1-sol, high, read-only), first call: failed after its first file read with "Selected model is at capacity". Retried once after a minute, as the program's rule says.
+- 2026-10-28, Codex plan audit retry (gpt-6.1-sol, high): `reject`. Blocking: D3 delivered a PR where the brief says "stop and report"; the close-out merge and commits came after the final-head runs. Also: D2 sits outside "fixtures only" and its URL check sees plaintext only; F4, F7 and I1 were worded as proof. All accepted.
+- 2026-10-28, Opus Plan leg: `conditional approve`. Same D3 and D2 points, plus F6's two consequences (an uncommitted fixture is unseen; any commit moves HEAD off the candidate), a gate that named a screenshot no fixture takes, and a skipped case 2 counted as a pass. Accepted. Rejected: a draft PR (the brief says stop), and recording only after the decision (both answers need the recording; recording now tests I1).
+- 2026-10-28, Codex final pass (resumed session): `conditional approve`, two conditions: a pin or trait fix during Phase 2 must return to Phase 1, and the PR must turn ready only at the pushed, tested head. Both folded in; the confirmation resume answered `approve`.
