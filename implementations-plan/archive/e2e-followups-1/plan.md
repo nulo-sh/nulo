@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-1
 tier: light
-status: approved
+status: completed; delivered as two PRs, the second carrying this close-out
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,17 @@ issues: "#1313 (arc 1); #1222 (arc 2); #1300 (arc 3)"
 budget: three Explore recon agents (sonnet); one Codex audit (gpt-6.1-sol, high) with its resumes; one Opus Plan leg; a fresh final Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-28.
+- **Status:** delivered as two PRs against `dev`: #1322 (arc 1, landed as `5ef0c119d`) and the PR that carries arc 3's change, arc 2's record and this close-out. Its merge closes the plan.
+- **Shipped:** #1322: the profile chaos `pre-update` start runs from every reviewed release (closes #1313). Then: a `waitForHash` timeout names the hash the page is at and stays a `TimeoutError`; the Urgent re-ask case's "left the queue without an accept" names the review cap kept at the press beside the seed's; flake-ledger row 65, open.
+- **Dispositions:** arc 2 traced branch (a) and shipped no code (D10): the dismissal and Firefox's `pickFile` are one `BrowserDriver` change, on #1111's ground, and #1222 stays open with the trace. Arc 3 reproduced neither failure in 10 runs (D7, no red), so #1300 closed as not planned with the numbers. A2's "through `withTimeoutMessage`" became a `TimeoutError` with the original as `cause` ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Known limits:** none.
+- **Open items:** #1222, tied to #1111.
+- **Lessons:** none promoted: `lessons.md` is at 8191 of 8192 B and nothing in it is superseded. The picker finding (headless Firefox's picker never answers a focused window, and the Firefox `pickFile` relies on it) stays in [lessons/phase-2.md](lessons/phase-2.md) and on #1222, where #1111 meets it.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # e2e-followups-1: three e2e follow-ups, test files only
 
@@ -126,7 +137,7 @@ UI impact: none on every arc (test files, fixtures and e2e docs only).
 - **Empty-start control:** rebuild the armed smoke build (the e2e-testing skill, § Build-armed tests: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<b>` in `apps/extension`), then `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=8101 NULO_E2E_CHAOS_RUNS=1 env -u EXTENSION_PATH bun run test:e2e -- tests/e2e/profile-chaos.test.ts --retry=0`.
 - **Pass:** each test exits green. The two red copies now pass their start and first open. At least one `unlocks` seed per browser unlocks `P2`, read from its record. A red seed is triaged from its record (README § Chaos runs). A fault in this arc's files is fixed, and the batch reruns. A product finding is filed after a dedupe, named in the PR and not fixed; that seed counts as red-filed, and the gate still passes. Log each seed's outcome and wall-clock in lessons/phase-1.md.
 
-## Phase 2: the picker triage (#1222)
+## Phase 2: the picker triage (#1222) ✓ (branch (a) traced; no code, D10)
 
 1. Write stage 1. Run it 20 times on the host's natural load, then 10 times with its process tree under `taskset -c` on four CPUs: `cd apps/extension && NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/_probe-picker.test.ts --retry=0` on the armed smoke build. Grep the job logs of the last 100 Firefox smoke PR runs for `the picker's input clicked and cancelled` (`gh api repos/nulo-sh/nulo/actions/jobs/<id>/logs`).
 2. Run stage 2 only on stage 1's trigger: its 10-and-10 control first, then the same batches until a miss or 30 more runs.
@@ -134,7 +145,7 @@ UI impact: none on every arc (test files, fixtures and e2e docs only).
 
 **Validation gate:** every run's outcome, wall-clock and click-to-`cancel` time is in lessons/phase-2.md. Branch (a) keeps e2e-infra-3's bar: the base missed past the bound under the reproducing condition, and the fix then needs 20 runs under it with no miss and every click-to-`cancel` under 1 s, then `bun run test:ci-gating`, `cd apps/extension && bun --bun vitest run scripts/e2e/firefox-driver.test.ts`, the toolbar-panel file and the full Firefox smoke suite once at `--retry=0`, all green. The other branches need the comment posted and `git status --porcelain` empty.
 
-## Phase 3: the heavy-shard triage (#1300)
+## Phase 3: the heavy-shard triage (#1300) ✓ (no reproduction in 10 runs; A2 ships)
 
 1. Write the probe. Check it on one run: a planted 2 s busy loop in the popup shows as a gap, and a quiet run shows none over 1 s.
 2. Run 10 fresh times from the repo root: `NULO_E2E_BROWSER=firefox NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 VITE_NULO_FEE_MULTIPLIER=10 NULO_E2E_OPENPOPUP_LOG=1 NODE_OPTIONS=--dns-result-order=ipv4first taskset -c <four free CPUs> bun run e2e:agent <the probe copy> tests/e2e/network/concurrent-sendtx-confirm.test.ts`. Four CPUs match the CI runner. Split the runs across tool calls under two hours each. Run the profile only on a red, or on a gap over 5 s that has no stack.
@@ -163,6 +174,7 @@ Each PR body states: the path, what held, the gates with counts and outcomes, ea
 - **D7** #1300's arc never edits product code. H1 maps to (a) only: (b) cannot come from a stall (F10, Opus). An H1 result is reported, not worked around in the test. Rejected: a sampler in the hidden background page, whose timers Firefox clamps (Opus), and which dies with the case's own restart (Codex r2).
 - **D8** Arcs 2 and 3 open a PR only when a change ships; A2's messages count (orchestrator's call).
 - **D9** On no reproduction, #1300 closes as not planned with its evidence and a ledger row, as the lane brief directs. It gets no `known-limit` label, since nothing shows its conditions are unsupported (Codex r1). #1222 stays open (A1).
+- **D10** Arc 2 traced branch (a), but its change cannot ship alone: Firefox's `pickFile` fills the pending input only because a focused window's native picker never answers, so dismissal removes the input first and the toolbar-panel restore case fails (lessons/phase-2.md). The dismissal and the pick are one `BrowserDriver` change, on #1111's ground; arc 2 ships no code, its record goes into arc 3's PR, and #1222 stays open with the trace. Rejected: shipping the dismissal with a pick that sets files before the `cancel` (a race, not a fix).
 
 ## Post-implementation
 
@@ -185,6 +197,10 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 1 Codex r1 (`gpt-6.1-sol`, high, fresh; `1dac12160..HEAD`) | `conditional approve`, one medium: the Terms flag was set once Continue was clicked, before the acceptance was stored | `answerUpdatedTerms` returns once the sheet has closed (`306d474e5`) | — |
 | Arc 1 Opus (general-purpose) | `conditional approve`: the release profiles shared one `imported` array, so an import into `P1` was expected in a live `P2` (high, shown by a probe over 1,000 seeds); the README read the parked tab as Chrome-only (low) | both (`e0224004b`), with a model test that reds on the unfixed model | a load-time console error on the held page is now a red at the start: kept, the collector watches before navigation by design |
 | Arc 1 Codex r2 (resumed) | `approve`: both fixes verified, no new finding | — | — |
+| Arc 3 Codex r1 (`gpt-6.1-sol`, high, fresh; `5ef0c119d..HEAD`) | `conditional approve`, two: the review cap was read before `pointerClick` settled, not at the press (plausible); a comment named callers | both (`eb73eead5`): a capture-phase `pointerdown` keeps the line at the press, forced again once; the comment states the invariant | — |
+| Arc 3 Opus (general-purpose) | `conditional approve`: `typecheck:all` red on `queuedFeeCap`'s `undefined` (high, shown); the cap read before the press (as Codex r1); `cause` checked by type only; the comment; STATUS's 1.6 s read as the open time | all five (`eb73eead5`) | — |
+| Arc 3 Codex r2 (resumed) | `conditional approve`: r1's two and Opus's verified; new: the post-click read had no deadline (plausible) | bounded at 2 s (`585e4bead`) | — |
+| Arc 3 Codex r3 (resumed) | `approve`: the bound verified, no new finding | — | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 

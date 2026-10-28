@@ -638,8 +638,8 @@ type Asking = TransferRow & { reask: { fee: string; cap: string } }
 const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
 
 /** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
- *  progress; fails on a terminal failure, or on proof progress before any accept. */
-async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
+ *  progress; fails on a terminal failure, or on proof progress before any accept, ending with `context`. */
+async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string, context = ""): Promise<Asking | "sent"> {
 	const asking = (row: TransferRow | undefined) =>
 		row?.stage === "queued" && row.reask !== undefined && (cap === undefined || row.reask.cap === cap)
 	const sent = (row: TransferRow | undefined) => row?.stage !== undefined && !BEFORE_PROOF.has(row.stage)
@@ -647,7 +647,7 @@ async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Pr
 		async () => {
 			const read = (await readTransferRows(page)).find((r) => r.amount === amountRaw)
 			if (!asking(read) && sent(read) && (cap === undefined || !["proving", "submitting", "succeeded"].includes(read?.stage ?? ""))) {
-				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}`)
+				throw new Error(`transfer ${amountRaw} left the queue without an accept: ${JSON.stringify(read)}${context}`)
 			}
 			return read
 		},
@@ -710,7 +710,24 @@ test.skipIf(!hasConfig)(
 		await waitForReviewReady(page)
 		expect(await page.$eval('[data-testid="send-review-submit"]', (el) => el.textContent?.trim())).toBe("Queue send")
 		await shotSend(page, "4-review-queued-cap", "send-review-fee")
+		// Send replaces the queued cap on every answer until the submit, so the line is kept at the press.
+		await page.evaluate(() => {
+			const keep = () => {
+				const line = document.querySelector('[data-testid="send-review-fee-cap"]')?.textContent?.replace(/\s+/g, " ").trim()
+				;(window as Window & { e2eReviewedCap?: string }).e2eReviewedCap = line
+			}
+			document
+				.querySelector('[data-testid="send-review-submit"]')
+				?.addEventListener("pointerdown", keep, { capture: true, once: true })
+		})
 		await pointerClick(page, "send-review-submit")
+		// Bounded, so a stalled page still meets the 30 s gate below.
+		const reviewed = await Promise.race([
+			page.evaluate(() => (window as Window & { e2eReviewedCap?: string }).e2eReviewedCap).catch(() => "<unreadable>"),
+			new Promise<string>((done) => setTimeout(() => done("<unanswered in 2 s>"), 2_000)),
+		])
+		const seededCap = queuedFeeCap(basis)
+		const context = `; B's review read ${JSON.stringify(reviewed)} at the press, and the seeded basis caps at ${seededCap === undefined ? "nothing" : pinnedFeeText(seededCap)}`
 		await waitForSendGone(page, 30_000)
 
 		await expectStageHeld(page, raw(b.amount), "queued", HELD_MS)
@@ -722,7 +739,7 @@ test.skipIf(!hasConfig)(
 		let accepted: string | undefined
 		const caps: string[] = []
 		for (let asks = 1; ; asks++) {
-			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
+			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted, context)
 			if (asking === "sent") break
 			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
 			caps.push(asking.reask.cap)
