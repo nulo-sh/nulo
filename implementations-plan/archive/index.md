@@ -146,6 +146,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [firefox-files-1](firefox-files-1/plan.md) — completed — file pickers leave Firefox's toolbar panel for the wallet's own window (contacts, account file, Restore again), the full backup's "Saved to your downloads" done state with Close, the contacts export probed at once in 5 s with a working card (#160); known limits #960 #961
 - [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
 - [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
+- [firefox-pin-1](firefox-pin-1/plan.md) — completed — the e2e suite's Firefox pin on Puppeteer's 158, its four extension-page differences absorbed on the driver (#1111)
 - [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
 - [fit-240-2](fit-240-2/plan.md) — completed — the full backup's working card, ready, encrypted and done states checked at 240 px inside existing smoke visits; tests only
 - [fix-account-generation-fence](fix-account-generation-fence/plan.md) — completed — stale account activation fenced by generation
@@ -462,3 +463,6 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [docs-3](docs-3/plan.md) — completed — SECURITY.md's dependency paragraphs moved into § Dependency policy, byte for byte, and its strict-mode residual list corrected (#1318, closes #1186 and #1274; known limits #1316, #1317)
 - [lock-followups-1](lock-followups-1/plan.md) — completed — a settle keeps a selection that a newer pick in another window names (#1320, closes #1281; known limit #1315), and Disable auto-close on the Settings phrase screen hands focus to Close (closes #1282)
 - [e2e-followups-1](e2e-followups-1/plan.md) — completed — the profile chaos pre-update start runs from every reviewed release (#1322, closes #1313); the picker triage traced its miss and shipped no code (#1222 open, with #1111); the heavy-shard triage reproduced nothing in ten runs and its two failures now name what they saw (#1300 closed)
+- [naming-copy-1](naming-copy-1/plan.md) — completed — one line under the approval window's calls names the ones Nulo cannot check, replacing the per-call "Named by the app." mark (#1332, closes #1328)
+- [chaos-4](chaos-4/plan.md) — completed — the profile chaos catalog driven in process (#1324) and the scenario list's in-process items as planned sequences, each with a break fixture; part of #1157, closes #1327
+- [networks-ux-1](networks-ux-1/plan.md) — completed — a Switch button on each inactive row of Manage Networks (closes #1325; known limit #1330)

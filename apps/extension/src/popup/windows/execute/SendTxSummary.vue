@@ -12,6 +12,7 @@ import {
 	RAW_LINE,
 	RAW_TITLE,
 	rowTitle,
+	uncheckedCallsLine,
 } from "./call-surface"
 import ArgsNotice from "./ArgsNotice.vue"
 
@@ -35,6 +36,8 @@ const callRows = computed(() =>
 		amount: surface.kind === "transfer" || surface.kind === "mint" ? amountOf(call.to, surface.amount) : undefined,
 	})),
 )
+
+const uncheckedLine = computed(() => uncheckedCallsLine(callRows.value.map(({ surface }) => surface)))
 
 const authwitRows = computed(() =>
 	(props.authwits ?? []).map(({ authwit, surface }) => {
@@ -70,7 +73,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				<Text variant="meta" color="secondary" :class="$style.marker">{{ j + 1 }}</Text>
 				<Flex direction="column" gap="4" :class="$style.item_body">
 					<Text data-testid="execute-op-summary-call-head" variant="body" color="primary" height="130">
-						<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template><template v-else-if="row.surface.kind === 'decoded'">. <Text variant="caption" color="secondary" data-testid="execute-op-call-named">Named by the app.</Text></template>
+						<Text variant="meta" data-testid="execute-op-summary-call-title">{{ row.title }}</Text> on <AddressDisplay :address="row.call.to" data-testid="execute-op-summary-call-to" /><template v-if="row.amount">:</template>
 					</Text>
 					<Text
 						v-if="row.amount && (row.surface.kind === 'transfer' || row.surface.kind === 'mint')"
@@ -97,6 +100,7 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 				</Flex>
 			</li>
 		</ol>
+		<Text v-if="uncheckedLine" data-testid="execute-op-summary-unchecked" variant="caption" color="secondary" height="130">{{ uncheckedLine }}</Text>
 		<Text v-if="advice" data-testid="execute-op-summary-unverified-advice" variant="body" color="tertiary">{{ RAW_ADVICE }}</Text>
 	</Flex>
 

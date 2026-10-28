@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { runInNewContext } from "node:vm"
-import * as puppeteer from "puppeteer"
+import type * as puppeteer from "puppeteer"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
@@ -128,11 +128,10 @@ describe("firefox cache directory selection", () => {
 })
 
 describe("the pinned Firefox", () => {
-	test("is the one launched, with Puppeteer's own revision installed beside it", () => {
-		const own = (puppeteer as unknown as { PUPPETEER_REVISIONS: { firefox: string } }).PUPPETEER_REVISIONS.firefox
+	test("is the one launched, with a newer revision installed beside it", () => {
 		const cache = mkdtempSync(path.join(tmpdir(), "nulo-firefox-pin-test-"))
 		try {
-			for (const revision of [E2E_FIREFOX_REVISION, own]) {
+			for (const revision of [E2E_FIREFOX_REVISION, "stable_999.0"]) {
 				mkdirSync(path.join(cache, "firefox", `linux-${revision}`, "firefox"), { recursive: true })
 				writeFileSync(path.join(cache, "firefox", `linux-${revision}`, "firefox", "firefox"), "")
 			}
