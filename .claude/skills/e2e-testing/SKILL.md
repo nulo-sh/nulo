@@ -613,7 +613,9 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
 - **Passkeys: the virtual authenticator is per FrameTreeNode**, not per browser context, and PRF
   state is not serialisable over CDP. Register, lock/unlock, the phrase reveal and the full backup are
   drivable in the SAME popup (`fixtures/passkey.ts` `setupPasskeyVirtualAuth`); cross-popup and cross-authenticator flows
-  are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open. Firefox's
+  are not (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`). Keep the anchor popup open; across an
+  in-place update, which closes every extension page, park that tab on `about:blank` and bring it back
+  (`update-replay.test.ts`, the release-made passkey case). Firefox's
   authenticator is session-scoped (`credentialOutlivesPage`), and only there does the toolbar panel
   hand a passkey step to the passkey window (`toolbar-panel.test.ts`). A step that must stay
   in the page says so: `watchPasskeySurface` / `readPasskeySurface` record whether the card mounted and
