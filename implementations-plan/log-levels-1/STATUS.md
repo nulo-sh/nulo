@@ -8,3 +8,10 @@
 - 2026-10-27: arc 1 gate green (unit layers; #1131 replay 15/15 with a base red; network seed 1001 clean of #1131/#1136 with a base red; its only red is #1132, arc 2).
 - 2026-10-27: arc 1 review loop converged (Codex round 2 clean); final gates next.
 - 2026-10-27: final gates on the head: lint, typecheck:all, test:all exit 0; #1131 replay 5/5 on a fresh armed build.
+- 2026-10-27: PR #1268 (arc 1) checks green; merged by the orchestrator as 2e524ef73. Arc 2 starts on `log-levels-1-popup`, synced onto dev.
+- 2026-10-27: phase 2.1 green (useProfileBootstrap.test.ts 29/29; the three new cases red on the base source).
+- 2026-10-27: phase 2.2 green (console-forwarding.test.ts 6/6; the disconnect cases red with the rule removed)
+- 2026-10-27: phase 2.3: #1216 named on diagnostic run 18 (`getStaleNetwork` from the network-switch run); fixed, network-switch.test.ts 18/18. Phase 2.4: known findings for #1132 and #1133 removed, model test 209/209.
+- 2026-10-28: gate attempt 1: #1132 replay 12/12 green (after `logCallFailure`); `security.test.ts` red on run 35 with a second unhandled `Profile locked`, named as `stale.resume`'s `getPendingReset` and fixed; the 60-run count restarts.
+- 2026-10-28: arc 2 gate green on the head (unit layers; #1132 12/12; #1133 Firefox 3/3; security.test.ts 60/60 Chrome + 1 Firefox; network seed 1001 no red). Review loop next.
+- 2026-10-28: arc 2 review: Codex round 1 one finding plus the Opus leg's (fixed in 2db8f931c), round 2 clean. Reviewed head: lint, typecheck:all, test (943 files), check:plans green; security.test.ts 8/8 and #1132 replay 3/3 on a fresh armed build. PR next.

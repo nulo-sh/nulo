@@ -311,3 +311,28 @@ describe("createNetworkSwitchHandler", () => {
 		expect(h.setAccounts).not.toHaveBeenCalled()
 	})
 })
+
+describe("a lock that supersedes the run", () => {
+	test("the read it refuses resolves the run at debug, and nothing after it runs", async () => {
+		const h = makeDeps()
+		const read = deferred<StaleNetworkView | null>()
+		h.syncStaleNetwork.mockReturnValueOnce(read.promise)
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined)
+		const handler = createNetworkSwitchHandler(h.deps)
+		const run = handler()
+		handler.supersede()
+		const refusal = new Error("Profile locked")
+		read.reject(refusal)
+		await expect(run).resolves.toBeUndefined()
+		expect(debug).toHaveBeenCalledExactlyOnceWith("network switch superseded", { error: refusal })
+		expect(h.deps.replaceAccountClient).not.toHaveBeenCalled()
+		debug.mockRestore()
+	})
+
+	test("control: a live run's failure still rejects", async () => {
+		const h = makeDeps()
+		const refusal = new Error("Profile locked")
+		h.syncStaleNetwork.mockRejectedValueOnce(refusal)
+		await expect(createNetworkSwitchHandler(h.deps)()).rejects.toBe(refusal)
+	})
+})

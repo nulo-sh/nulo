@@ -360,7 +360,7 @@ const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
-const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 196, 'await deps.chooseUnlock({ step: "import", profileName: name }, existing)')
+const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 193, 'await deps.chooseUnlock({ step: "import", profileName: name }, existing)')
 const RESTORE_CARD = cite(IMPORT, 445, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
 const PASSKEY_IMPORT_SEALS = cite(SERVICE, 2031, "seal = await this.newRowSeal(password, credentialData)")
 const RESTORE_SEALS = cite(SERVICE, 2456, "seal = await this.newRowSeal(password, credentialData)")
@@ -382,10 +382,10 @@ const METHOD_LEAVES = cite(UNLOCK_METHOD, 158, 'leaveFor(router, "/popup/setting
 const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 249, "if (!logged) onSessionEnded()")
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 105, 'onCeremonyReject(new Error("The unlock method page started over"))')
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 217, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
-const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 220, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
-const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 224, "handleCancelOrUnconfirmed(error, openToast)) return")
-const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 89, "const canSaveFile = computed(() => isNewPasswordValid(")
+const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 219, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
+const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 222, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
+const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 226, "handleCancelOrUnconfirmed(error, openToast)) return")
+const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 91, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 110, "The file password needs at least 8 characters")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1369, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
