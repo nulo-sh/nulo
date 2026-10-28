@@ -319,10 +319,16 @@ watch(selectionHeld, (held) => {
 	missedWhileHeld = false
 	if (!appStore.isLogined && appStore.profile?.id === selectedWhenMissed) void settleProfile()
 })
+// What was typed belongs to the profile it was typed for. A screen opened before the service
+// answered keeps its field when the first profile arrives: nothing was typed for another.
 watch(
 	() => appStore.profile?.id,
-	() => {
+	(_id, previousId) => {
 		isTornImport.value = false
+		if (previousId === undefined) return
+		password.value = ""
+		isWrongPassword.value = false
+		isPasswordType.value = true
 	},
 )
 // The mount's focus for a profile that became known later; never taken from a control the person

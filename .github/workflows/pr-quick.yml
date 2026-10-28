@@ -198,6 +198,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           if [ "$BASE_REF" = "main" ]; then
             # Skip on promote / Release PRs to main. The two kinds of main PR:
@@ -221,6 +222,12 @@ jobs:
             # Quality. The one NEW commit the sync adds (the manifest re-baseline)
             # is bot-generated and reliably conventional. Same rationale, dev side.
             echo "commitlint: skipped on the main->dev sync PR ($HEAD_REF) — carries main's immutable history; the one new commit (manifest re-baseline) is bot-conventional."
+          elif [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            # Skip on Dependabot's PR, by author: only the app opens PRs as dependabot[bot]. It
+            # guesses the case of "bump" from dev's history, so its commits can read "Bump"; the
+            # squash drops them, and the merger lower-cases the title that lands (CLAUDE.md,
+            # Dependency policy).
+            echo "commitlint: skipped on Dependabot's PR — its commits are squashed away; the merger writes the title that lands."
           else
             bunx commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
           fi
