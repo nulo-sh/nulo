@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
 import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
@@ -301,6 +301,75 @@ describe("the planner", () => {
 				expect(other, `seed ${seed} step ${s.index}`).not.toBe(ownCredential(s, before))
 			}
 		}
+	})
+})
+
+/** A driver that implements some of the catalog, `verifyAll` among them or not. */
+const SURFACE: readonly ActionName[] = ["createPassword", "createPasskey", "lock", "unlockPassword", "rename", "backgroundRestart"]
+const VERIFIED: readonly ActionName[] = [...SURFACE, "verifyAll"]
+
+describe("the action surface a driver states", () => {
+	test("a surface naming every action plans exactly what no surface plans", { timeout: 120_000 }, () => {
+		const every = CATALOG.map((a) => a.name)
+		for (const caps of [CHROME, FIREFOX, NETWORK])
+			for (const start of ["empty", "pre-update"] as const)
+				for (const seed of SEEDS)
+					expect(plan(seed, start, { ...caps, actions: every }).steps).toEqual(plan(seed, start, caps).steps)
+	})
+
+	test("a plan draws only its surface, replays from its own record, and closes with verifyAll only when the surface has it", () => {
+		for (const actions of [SURFACE, VERIFIED]) {
+			const caps = capsOfRecord(JSON.parse(JSON.stringify(recordCaps({ ...FIREFOX, actions }))))
+			expect(caps.actions).toEqual(actions)
+			for (const seed of SEEDS.slice(0, 200)) {
+				const p = plan(seed, "empty", caps)
+				expect(p.steps.filter((s) => !actions.includes(s.action))).toEqual([])
+				const replayed = planFromList(listOf(p.steps), "empty", caps, seed)
+				expect(replayed.steps.map((s) => s.expect)).toEqual(p.steps.map((s) => s.expect))
+			}
+		}
+		expect(
+			SEEDS.slice(0, 200).some((seed) => plan(seed, "empty", { ...FIREFOX, actions: VERIFIED }).steps.at(-1)?.action === "verifyAll"),
+		).toBe(true)
+	})
+
+	test("a hand list naming an action outside the surface is refused at that step", () => {
+		const listed = listOf([
+			{ action: "createPassword", params: { ref: "P1", name: "Chaos 1", password: "S1", double: false } },
+			{ action: "addAccount", params: {} },
+		])
+		expect(() => planFromList(listed, "empty", { ...FIREFOX, actions: SURFACE })).toThrow(
+			"step 1 (addAccount) is outside the run's actions",
+		)
+		expect(planFromList(listed, "empty", FIREFOX).steps).toHaveLength(2)
+	})
+})
+
+/** The modules the unit suite and the e2e runner share: each may import only the others at run time,
+ *  so neither Puppeteer nor a page fixture reaches the unit suite through them. */
+const PURE_MODULES = [
+	"tests/e2e/helpers/profile-chaos/model.ts",
+	"tests/e2e/helpers/profile-chaos/checkers.ts",
+	"tests/e2e/helpers/profile-chaos/citations.ts",
+	"tests/e2e/fixtures/chaos-seed.ts",
+]
+
+/** Every specifier `text` imports or re-exports at run time, side-effect imports included. */
+const runtimeImports = (text: string): string[] =>
+	[...text.matchAll(/^(import|export)\s+(type\s+)?(?:[^;"]*?from\s+)?"([^"]+)"/gms)].filter((m) => !m[2]).map((m) => m[3])
+
+describe("the shared modules", () => {
+	test.each(PURE_MODULES)("%s imports nothing at run time beyond the other shared modules", (file) => {
+		const path = join(import.meta.dirname, "../..", file)
+		const shared = PURE_MODULES.map((m) => join(import.meta.dirname, "../..", m).replace(/\.ts$/, ""))
+		const outside = runtimeImports(readFileSync(path, "utf8")).filter((s) => !shared.includes(join(dirname(path), s)))
+		expect(outside).toEqual([])
+	})
+
+	test("the check sees a multi-line, a side-effect and a re-exported import, and lets a type-only one pass", () => {
+		const planted =
+			'import type { Y } from "@/a"\nimport {\n\tz,\n\ttype W,\n} from "puppeteer"\nimport "./setup"\nexport { q } from "../b"\n'
+		expect(runtimeImports(planted)).toEqual(["puppeteer", "./setup", "../b"])
 	})
 })
 

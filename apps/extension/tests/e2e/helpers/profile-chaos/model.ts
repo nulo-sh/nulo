@@ -32,6 +32,9 @@ export interface Caps {
 	/** Passkey credentials the run's authenticator can hold: every one a mint made counts, a deleted
 	 *  profile's, a declined import's and a replaced one's included, since nothing removes them. */
 	credentialSlots: number
+	/** The actions the run's driver implements, every one when absent: the planner draws from the
+	 *  catalog in its own order, so a run without it draws exactly as before. */
+	actions?: readonly ActionName[]
 }
 
 /** The caps as a record holds them, and back: JSON has no `Infinity`, which an unlimited
@@ -1628,9 +1631,13 @@ function stepOf<N extends ActionName>(index: number, spec: ActionSpec<N>, params
 	return { index, action: spec.name, params: p, expect: spec.expect(w, p, caps) } as PlannedStep
 }
 
-/** `verifyAll` is drawn like any action and also closes every run. */
+const drives = (caps: Caps, action: ActionName): boolean => caps.actions === undefined || caps.actions.includes(action)
+
+/** `verifyAll` is drawn like any action and also closes every run its driver can verify. */
 function drawStep(rng: Rng, w: World, caps: Caps, index: number): PlannedStep | undefined {
-	const candidates = CATALOG.map((spec) => ({ spec, params: spec.params(rng, w, caps) })).filter((c) => c.params !== undefined)
+	const candidates = CATALOG.filter((spec) => drives(caps, spec.name))
+		.map((spec) => ({ spec, params: spec.params(rng, w, caps) }))
+		.filter((c) => c.params !== undefined)
 	const total = candidates.reduce((sum, c) => sum + c.spec.weight, 0)
 	let roll = rng() * total
 	for (const c of candidates) {
@@ -1651,7 +1658,7 @@ export function plan(seed: number, start: StartState, caps: Caps, length = ACTIO
 		steps.push(step)
 		w = step.expect.next
 	}
-	if (!ACTIONS.verifyAll.invalid(w, {}, caps)) steps.push(stepOf(length, ACTIONS.verifyAll, {}, w, caps))
+	if (drives(caps, "verifyAll") && !ACTIONS.verifyAll.invalid(w, {}, caps)) steps.push(stepOf(length, ACTIONS.verifyAll, {}, w, caps))
 	return { seed, start, caps, steps }
 }
 
@@ -1664,6 +1671,7 @@ export function planFromList(list: readonly ListedStep[], start: StartState, cap
 	const steps: PlannedStep[] = list.map((listed, index) => {
 		const spec = ACTIONS[listed.action] as ActionSpec<ActionName> | undefined
 		if (!spec) throw new Error(`step ${index}: unknown action ${String(listed.action)}`)
+		if (!drives(caps, listed.action)) throw new Error(`step ${index} (${listed.action}) is outside the run's actions`)
 		const why = spec.invalid(w, listed.params as never, caps)
 		if (why) throw new Error(`step ${index} (${listed.action}) cannot run here: ${why}`)
 		const step = stepOf(index, spec, listed.params, w, caps)

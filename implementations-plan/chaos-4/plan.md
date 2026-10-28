@@ -83,7 +83,7 @@ Every gate also runs `bun run lint` and `bun run typecheck:all` (exit 0). `T` = 
 
 **Arc 1: the harness, the fixed seeds, the surface.**
 
-**1.1 The model.** Add `Caps.actions` (D1); split `checkChanges` out of `checkWrites`; move `SLOT_FRAMES` into `checkers.ts`. Model test: equal plans for caps without `actions` before and after, three caps, 1,000 seeds; a surface plan draws only its actions and passes `invalid` at each step; every surface plan replays through `planFromList` under the same caps, and one without `verifyAll` ends without it; `planFromList` refuses an action outside the surface; the purity check (D13).
+**1.1 ✓ The model.** Add `Caps.actions` (D1); split `checkChanges` out of `checkWrites`; move `SLOT_FRAMES` into `checkers.ts`. Model test: equal plans for caps without `actions` before and after, three caps, 1,000 seeds; a surface plan draws only its actions and passes `invalid` at each step; every surface plan replays through `planFromList` under the same caps, and one without `verifyAll` ends without it; `planFromList` refuses an action outside the surface; the purity check (D13).
 Gate: `T scripts/e2e/profile-chaos-model.test.ts` green. A scratch script prints a digest of `plan()` for seeds 1, 1001, 3001, 7001-7030, 7101-7105 and 7201-7205 under the model test's three caps at `2914b9699` and at the head: identical.
 
 **1.2 The harness.** Write the boot, bindings, drivers (a record keyed by action, type-checked complete over the surface), the write log, the readers, the barrier and the step loop.
