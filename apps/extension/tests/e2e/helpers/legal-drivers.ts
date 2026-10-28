@@ -199,12 +199,14 @@ export async function expectNoTermsSheet(page: Page): Promise<void> {
 }
 
 /** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
- *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
+ *  `entries`, predates this build's newest material Terms, and returns once the sheet has closed,
+ *  which it does only when the acceptance is stored; otherwise holds that none shows. */
 export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
 	if (updatedTermsAnswer(entries) === "none") return expectNoTermsSheet(page)
 	await waitForSheet(page, "changed")
 	await pointerClick(page, "legal-consent-checkbox")
 	await pointerClick(page, "legal-continue")
+	await page.waitForSelector(sel("legal-sheet"), { hidden: true, timeout: 15_000 })
 }
 
 /**
