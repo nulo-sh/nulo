@@ -435,7 +435,7 @@ const RESIZE_TAB = `function (id, width, height) {
 		browser.style.setProperty("width", width + "px");
 		browser.style.setProperty("height", height + "px");
 	}
-	browser.ownerDocument.synchronouslyUpdateRemoteBrowserDimensions(true);
+	browser.ownerDocument.synchronouslyUpdateRemoteBrowserDimensions(/* includeInactive */ true);
 	return width + "x" + height;
 }`
 
