@@ -132,7 +132,23 @@ export function isFrameDetachError(err: unknown): boolean {
  *  flake. A genuinely broken route fails at any timeout; call sites that
  *  need a tighter bound pass one explicitly. */
 export async function waitForHash(page: Page, expectedHash: string, timeout = 15_000): Promise<void> {
-	await page.waitForFunction((hash: string) => window.location.hash === hash, { timeout, polling: 200 }, expectedHash)
+	try {
+		await page.waitForFunction((hash: string) => window.location.hash === hash, { timeout, polling: 200 }, expectedHash)
+	} catch (err) {
+		if (!(err instanceof TimeoutError)) throw err
+		// The page that missed the hash may be the stalled one, so its answer is bounded too.
+		const at = await Promise.race([
+			page
+				.evaluate(() => window.location.hash)
+				.then(
+					(hash) => `the page is at ${JSON.stringify(hash)}`,
+					() => "the page's hash is unreadable",
+				),
+			new Promise<string>((done) => setTimeout(() => done("the page did not answer within 2 s"), 2_000)),
+		])
+		// Stays a TimeoutError, the one type `withTimeoutMessage` relabels.
+		throw new TimeoutError(`waitForHash: ${expectedHash} not reached in ${timeout} ms; ${at}`, { cause: err })
+	}
 }
 
 /** Waits for a profile-creating page, found by its root testid, to settle whether it shows the
