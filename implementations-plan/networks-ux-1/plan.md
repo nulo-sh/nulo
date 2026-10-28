@@ -9,10 +9,21 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 843d27f75
 trunk: dev
-status: approved (Codex round 3, its one condition met by the orchestrator's scope call of 2026-10-28); arc 1 in progress
+status: completed; delivered as one PR, carrying this close-out
 issues: "#1325"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-28.
+- **Status:** delivered as one PR against `dev`, the PR that carries this close-out and closes #1325. Its merge closes the plan.
+- **Shipped:** every inactive row of Manage Networks carries an outlined Switch that activates its network in place through `useNetworkActivation` and toasts "Active network updated". The active row keeps its dot and Active badge, and the row still opens the network's settings. `SettingItem` gained the opt-in `controls` form, a link stretched under the row's own controls, which only this list passes. Focus follows the row the active network enters or leaves. A double click's second press and a held Enter's repeat are refused.
+- **Dispositions:** for Codex's retry finding, a reset to Alpha V6 at the test's start replaced the per-test fixture (Review verdicts). The post-render bail-out was removed as unreachable (D7). `switchToNetwork` keeps its path, with no follow-up issue (D6).
+- **Known limits:** #1330.
+- **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` is at 8191 of 8192 B and nothing in it is superseded. Two slips stay in [lessons/phase-1.md](lessons/phase-1.md): a `git checkout <base> -- <paths>` that overwrote an uncommitted edit, and a mutation that never applied.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 ## Goal
 

@@ -55,3 +55,5 @@ At `fce5509cc` with `origin/dev` (`0a659726c`) already merged, host load near 90
   | 1/3 | 98 passed, 7 skipped, 612 s | 80 passed, 5 skipped, 922 s |
   | 2/3 | 101 passed, 10 skipped, 678 s | 95 passed, 1 skipped, 1113 s |
   | 3/3 | 74 passed, 10 skipped, 593 s | 101 passed, 18 skipped, 776 s |
+
+After merging `origin/dev` again (#1331, #1332: no file in common with this arc), on the merged head: `audit:vue` exit 0 (16276 extension tests), `test:all` exit 0, and `settings-crud.test.ts` 9/9 at retry 0 on both rebuilt armed builds (Chrome 19.3 s, Firefox 34.1 s).
