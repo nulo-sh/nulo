@@ -7,3 +7,4 @@
 - 2026-10-28 phase 2 gate met: both live runs passed; replay cases 1, 2, 4 passed and case 3 failed at update-replay.test.ts:689 on both browsers (lessons/phase-2.md).
 - 2026-10-28 phase 3 gate green: lint, typecheck:all, the two unit files (20 passed), test:all exit 0, check:plans 0 findings; recording committed cede2cbfe; issue #1312 filed.
 - 2026-10-28 phase 3: review loop converged at round 1 (Codex clean; 4 Opus wording fixes); branch to be pushed, no PR; stop on A1.
+- 2026-10-28 A1 answered (b). Plan change recorded (Phase 4, What did not hold, D2 reversed, D5, D6). Adds one reviewed trait, `passkey: "retired" | "unlocks"`. Obligation: every later pin carries it, and `releaseTraits` refuses a tag without traits, as today. Risk: a wrong pin flips case 3's expectation, and the run shows it red. Rejected: leaving case 3 red, which holds the promote, or a tag-named skip, which is the banned dodge. Deviation: Chrome cannot press the unlock (D6).

@@ -1,8 +1,8 @@
 ---
 plan: release-prep-1.2.0
 tier: light
-status: arc 1 at its stop after Phase 3 (A1 open); no PR
-issues: "#1312 (filed in Phase 3: replay case 3 refuses v1.1.0; not closed here)"
+status: A1 answered (b) on 2026-10-28; arc 1 resumed at Phase 4
+issues: "#1312 (filed in Phase 3; closed by Phase 4 under A1(b))"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,13 +17,13 @@ trunk: dev
 
 # release-prep-1.2.0: the update scenarios run from v1.1.0
 
-v1.1.0 shipped on 2026-10-27, and nobody did the release runbook's post-release step (`.claude/skills/release/SKILL.md` § Stable release, step 1): pin its zips' digests and its traits, and record its storage from Chrome. The 1.2.0 promote updates from v1.1.0, so it needs that step. One arc, one PR against `dev`, test fixtures only. One replay case refuses v1.1.0 for a reason no fixture can answer (F7), so arc 1 stops before delivery and asks (A1). Evidence: [recon.md](recon.md).
+v1.1.0 shipped on 2026-10-27, and nobody did the release runbook's post-release step (`.claude/skills/release/SKILL.md` § Stable release, step 1): pin its zips' digests and its traits, and record its storage from Chrome. The 1.2.0 promote updates from v1.1.0, so it needs that step. One arc, one PR against `dev`, test files only. One replay case refused v1.1.0 for a reason no fixture could answer (F7). Arc 1 stopped and asked (A1); the orchestrator chose (b), so Phase 4 teaches that case a reviewed passkey trait. Evidence: [recon.md](recon.md).
 
 ## Outcome & Quality Bar
 
 - **For whom:** the person who runs the 1.2.0 promote's step 1, and the reviewer of the PR. Both must trust the pins without redoing the work.
 - **Excellent:** (1) every pin traces to a check the PR body shows: the two digests from our own download, equal to `SHASUMS256.txt`, to the GitHub asset digests and to an attestation at the tag commit; each trait with the tag files that decide it. (2) Every run is at retry 0, at a named commit with a clean tree, with its outcome and duration. Nothing red is hidden, and the refusal is reported with its cause, not patched.
-- **Good enough:** no scenario or unit-test edit; the arrival scenario and the v0.31.0 and v1.0.0 replays are not run (no scenario code changes).
+- **Good enough:** the one scenario edit is case 3's branch on the new trait (Phase 4); the arrival scenario and the v0.31.0 and v1.0.0 replays are not run (their paths do not change).
 
 ## Assumptions
 
@@ -42,11 +42,11 @@ v1.1.0 shipped on 2026-10-27, and nobody did the release runbook's post-release 
 - I2. A sealed row other than an endpoint that names an outside URL with a provider's key would reach the public repo unseen (F8). No such row is traced; plausible but unverified, the same exposure as the committed v1.0.0 recording.
 
 **Asks** (to the orchestrator, through the report; not a product question):
-- A1. Case 3 refuses v1.1.0 (F7). Choose (a) ship the fixtures as they are and give case 3 to a test lane (#1312), or (b) extend this lane to teach case 3 a reviewed per-release passkey trait and the unlock path for a 1.1 row. Working assumption: neither until answered. Arc 1 stops after Phase 3, with its branch pushed and no PR.
+- A1. Case 3 refuses v1.1.0 (F7): (a) ship the fixtures and give case 3 to a test lane, or (b) extend this lane. **Answered (b), 2026-10-28**, with "fixtures only" read as "test files only" and the unit check over every sealing tag in scope (D2 reversed).
 
 ## Architecture & Implementation (arc 1, branch `worktree-release-prep-1.2.0`)
 
-Files: `apps/extension/tests/e2e/fixtures/update/release.ts` (two entries) and `apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json` (new, written by the scenario). Nothing else outside this plan folder. Scratch files stay outside the repository.
+Files: `apps/extension/tests/e2e/fixtures/update/release.ts` (the v1.1.0 entries; Phase 4: the `passkey` trait), `apps/extension/tests/e2e/fixtures/update/v1.1.0.storage.json` (new, written by the scenario), and in Phase 4 `apps/extension/tests/e2e/update-replay.test.ts` (case 3 only) and `apps/extension/scripts/e2e/update-recording.test.ts`. No product file. Scratch files stay outside the repository.
 
 ### Phase 1: the pins ✓ (956fc686e; lint, typecheck:all, the two unit files green)
 1. Add `"v1.1.0"` to `RELEASE_DIGESTS` with the F2 digests, and to `RELEASE_TRAITS` as `{ storage: "sealed", connect: "own-window" }`.
@@ -70,18 +70,32 @@ Warning: never set `NULO_E2E_BACKUP_RECORD`. Never touch another tag's recording
 - **Gate**, before step 4: Phase 1's commands, plus `bun run test:all` and `bun run check:plans` after staging. Pass: exit 0.
 4. Run the review loop (§ Post-implementation) over the arc diff. Then `git push -u origin worktree-release-prep-1.2.0`, with no PR. Stop and report `LEAD_BLOCKED` with A1.
 
-### Phase 4: delivery, on the orchestrator's answer to A1
-1. Under (b), write the scenario change into this plan first, and audit it as a plan change.
-2. Merge `origin/dev`, then read `index.md` and `lessons.md`. Run the review loop again on any new diff. Open the PR as a draft (§ Delivery), for the number the Outcome cites.
+### Phase 4: the passkey trait, under A1(b)
+1. Add `passkey: "retired" | "unlocks"` to `ReleaseTraits`: whether a passkey profile the release made is one the candidate retires or one its passkey still unlocks. Pin `v0.31.0` and `v1.0.0` `retired`, `v1.1.0` `unlocks` (D5).
+2. In case 3, keep the update checks. Under `retired`, keep today's check verbatim. Under `unlocks`, require `auth-submit` enabled, no `auth-setup-again` and no overlay. Where the driver's `credentialOutlivesPage` holds, press it, reach `#/popup/general`, and check the profile rows still equal the release's (D6). The title names both.
+3. Run the committed-recording test in `update-recording.test.ts` over every sealing tag in `RELEASE_TRAITS`; each must have its recording (D2).
+4. Commit: `test(e2e): the update replay's passkey case follows the release's passkey trait`.
+- **Gate:** lint; `typecheck:all`; `cd apps/extension && bun --bun vitest run scripts/e2e`; `check:plans`. Then rebuild both candidates and run Phase 2's four runs without `NULO_E2E_UPDATE_RECORD`. Pass: exit 0; both live runs pass; all four replay cases pass on both browsers; the recording unchanged (re-record only if the replay refuses it).
+
+### Phase 5: delivery
+1. Run the review loop (§ Post-implementation) over Phase 4's diff.
+2. Merge `origin/dev`, then read `index.md` and `lessons.md`. Open the PR as a draft (§ Delivery), for the number the Outcome cites.
 3. Write the close-out commits (§ Post-implementation).
-4. At that head, rebuild both candidates and rerun Phase 2's four runs without `NULO_E2E_UPDATE_RECORD`. Run lint, `typecheck:all`, `test:all` and `check:plans`. Pass: as Phase 2 (under (b), case 3 passes), and the recording unchanged.
+4. At that head, rebuild both candidates and rerun the four runs. Run lint, `typecheck:all`, `test:all` and `check:plans`. Pass: as Phase 4's gate.
 5. Push that head. `gh pr view <n> --json headRefOid` must equal the tested SHA, which the body names. Run `gh pr checks <n> --watch` on it, then `gh pr ready <n>`.
+
+## What did not hold
+
+- **"The scenarios run from v1.1.0 once pinned and recorded."** Case 3 encodes pre-1.1 passkey rows (F7; demonstrated in [lessons/phase-2.md](lessons/phase-2.md)). Fixed by Phase 4.
+- **"Unlock with the same virtual authenticator" on Chrome.** The answer to A1 asks the `unlocks` branch to unlock the updated profile. On Chrome that cannot run. Chrome's authenticator belongs to the page that made the credential, and the update closes every extension page (`in-place.ts:148`). PRF state does not survive CDP `getCredentials`/`addCredential` (`tests/e2e/PRF-NON-PORTABLE.md`). Firefox's authenticator belongs to the session. So the press runs where `credentialOutlivesPage` holds, as the passkey canary does, and Chrome checks the offer (D6).
+- **The answer file and the resume message disagree on D2.** The file says "D2 stands"; the later message says D2 is reversed and the unit check is in scope. This plan follows the later message.
 
 ### Alternatives not taken
 - **Patch case 3 here** (a trait branch or a skip): refused; the brief says stop and report, and a `skipIf` dodge is banned.
 - **A ready or draft PR now:** rejected; the brief says stop, and a standing merge policy could land a ready PR whose lane is blocked.
 - **Demonstrate case 3 alone first, recording after A1:** rejected; recording now tests I1 on both browsers before the decision, and both answers need the recording. A re-record costs one Chrome live run while `dev` stays on 6.0.0.
-- **Generalise the committed-recording unit test (former D2):** dropped; it is outside "fixtures only", and its URL check sees plaintext only (F8). Phase 3 step 1 does the check by hand; the issue carries it.
+- **Leave case 3 red, or skip it for v1.1.0:** worse. Red holds the promote's step 1 for good. A tag-named skip is the banned `skipIf` dodge, and it drops the one update test of a release-made passkey row.
+- **Make Chrome's credential outlive the update** (export it, add it to a new authenticator): impossible; PRF state does not move (`PRF-NON-PORTABLE.md`).
 
 ## Security & Adversarial Considerations
 
@@ -99,9 +113,11 @@ None. The lane changes test files only and touches no screen.
 | # | Decision | Alternatives | Why |
 |---|---|---|---|
 | D1 | Traits `sealed` / `own-window` from the tag's files (F3) | infer from v1.0.0 | the brief forbids inference |
-| D2 | No unit-test edit; check the recording by hand | generalise the v1.0.0 test (both legs: outside scope; plaintext only) | brief scope; F8 |
+| D2 | Reversed under A1(b): the committed-recording test runs over every sealing tag, each with its recording | no unit-test edit (round 1, both legs: outside "fixtures only") | the orchestrator widened scope to test files; it is a plaintext check only (F8) |
 | D3 | Run everything, file the refusal, push the branch, stop before any PR, ask A1 | ready PR (round 1 draft); draft PR (Opus) | brief: "stop and report"; Codex and Opus both refused the ready PR |
 | D4 | Pins committed before the builds; no commit during Phase 2; the final runs after the close-out | build first | F6: any commit moves HEAD off the candidate |
+| D5 | `passkey: "retired" \| "unlocks"`, from each tag's `profile-row.ts` `newPasskeyRow`: v0.31.0 and v1.0.0 (one blob, `8243671fa`) write only `credentialId` beside the base fields, which HEAD's `RetiredPasskeyRow` matches; v1.1.0 (`:113-133`) writes the sealed slots, `envelopeMac` and `prfSalt`, which HEAD's `PasskeyUnlock` matches | infer from the rows a run shows; branch on the tag | the fixture's own rule: a reviewed trait beside the digests. Obligation: every later pin carries it, and `releaseTraits` already refuses a tag without traits. Risk: a wrong pin flips the case's expectation, which the run then shows red |
+| D6 | `unlocks` presses the unlock only where `credentialOutlivesPage`; Chrome checks the offer | unlock on both (A1's wording) | What did not hold: no Chrome credential survives the update; the driver seam already carries this fact |
 
 ## Review verdicts
 
@@ -112,24 +128,24 @@ None. The lane changes test files only and touches no screen.
 
 ## Delivery
 
-- **Arc 1** = Phases 1-4, one PR against `dev`, opened as a draft only in Phase 4 and marked ready only at the tested head. Title: `test(e2e): the update scenarios run from v1.1.0` (47 characters). `Closes #1312` under A1(b), else `Refs #1312`. No label: `apps/extension/**` trips both e2e filters.
-- **Body:** the two digests and the three checks (F2's full command); `isImmutable: false`; the traits with their deciding files; every run with its commit, clean status, browser version, outcome and per-file duration; the recording's UTC date and its 7-day expiry; case 3's failure lines and the issue; the arrival sentence (F5); F8's limit. No e2e envelope: no scenario is added or changed.
+- **Arc 1** = Phases 1-5, one PR against `dev`, opened as a draft only in Phase 5 and marked ready only at the tested head. Title: `test(e2e): the update scenarios run from v1.1.0` (47 characters). `Closes #1312`. No label: `apps/extension/**` trips both e2e filters.
+- **Body:** the two digests and the three checks (F2's full command); `isImmutable: false`; the traits with their deciding files; every run with its commit, clean status, browser version, outcome and per-file duration; the recording's UTC date and its 7-day expiry; case 3's Phase 2 failure and its Phase 4 fix, with the trait's deciding files and D6; the arrival sentence (F5); F8's limit. Case 3 changes; its wall-clock per browser before and after (Phase 2 against Phase 4) stands for the envelope, since the opt-in specs run in no CI lane.
 
 ## Post-implementation
 
 Execution contract: this plan plus `implementations-plan/README.md` § Post-implementation standard at `ce16a57a9`. Plan-specific values:
 - **Diff review:** `code_review: off`; absent.
-- **Review loop**, in Phase 3 over the arc diff from `origin/dev`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus `general-purpose` review beside round 1; hard stop at three rounds; each round in `lessons/phase-3.md` and under Review verdicts.
-- **Delivery:** `gh pr create --base dev --draft`; Phase 4 steps 4-5 then make it ready at the tested head. One rerun for a known flake. Never merge.
-- **Close-out** as the PR's final commits, after the `origin/dev` merge in Phase 4: the `## Outcome` block (`Known limits:`, `Open items:` with #1312 under A1(a)); lessons within 8 KiB; `STATUS.md` deleted; `git mv implementations-plan/release-prep-1.2.0 implementations-plan/archive/release-prep-1.2.0` in its own commit, the index line to `archive/index.md`; `bun run check:plans` green after staging.
+- **Review loop**, in Phase 3 over the arc diff from `origin/dev`, and in Phase 5 over Phase 4's diff: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus `general-purpose` review beside round 1; hard stop at three rounds; each round in `lessons/phase-3.md` or `lessons/phase-5.md` and under Review verdicts.
+- **Delivery:** `gh pr create --base dev --draft`; Phase 5 steps 4-5 then make it ready at the tested head. One rerun for a known flake. Never merge.
+- **Close-out** as the PR's final commits, after the `origin/dev` merge in Phase 5: the `## Outcome` block (`Known limits:`, `Open items:`); lessons within 8 KiB; `STATUS.md` deleted; `git mv implementations-plan/release-prep-1.2.0 implementations-plan/archive/release-prep-1.2.0` in its own commit, the index line to `archive/index.md`; `bun run check:plans` green after staging.
 - **Teardown after the merge** (standing authorization): once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/release-prep-1.2.0/plan.md` succeeds, run `agent-worktree done release-prep-1.2.0 --merged`; relay a refusal, never force. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its wrap-up report.
 
 ## Seeds (draft)
 
 ```
-/goal Arc 1 of implementations-plan/release-prep-1.2.0/plan.md at its stop: Phases 1-3 marked ✓ with their gates reported in the transcript; the Codex loop (gpt-6.1-sol high) converged, quoted; the branch pushed, no PR; the Phase 3 issue filed; A1 reported.
+/goal Arc 1 of implementations-plan/release-prep-1.2.0/plan.md delivered: Phases 4 and 5 marked ✓ with their gates reported in the transcript; the Codex loop (gpt-6.1-sol high) converged, quoted; the PR open against dev with its head equal to the tested SHA (gh pr view output), Closes #1312.
 ```
 
 ```
-/loop 15m Drive arc 1 of implementations-plan/release-prep-1.2.0 per its plan.md (plan.md is the state). Next unchecked step, fast gates after each edit, signed commits, no commit during Phase 2, one e2e run at a time polled in a bounded loop. Never patch a scenario. Stop after Phase 3 and report A1; Phase 4 only on the orchestrator's answer. Never merge.
+/loop 15m Drive arc 1 of implementations-plan/release-prep-1.2.0 per its plan.md (plan.md is the state). Next unchecked step, fast gates after each edit, signed commits, one e2e run at a time polled in a bounded loop. Open the PR as a draft, close out, rerun at that head, watch checks, mark ready, report and stop. Never merge.
 ```
