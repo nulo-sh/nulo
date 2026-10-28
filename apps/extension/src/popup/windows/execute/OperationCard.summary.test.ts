@@ -1,11 +1,12 @@
 /**
  * A multi-call transaction reads as its summary at rest: each call in order with the wallet's own
- * reading or "Named by the app.", an unreadable call's warning, and every authorization's line. The
- * value rows open under one "Show all details". Fed the wire-shaped fixture: 32-byte hex fields,
- * real Token decodes.
+ * reading or an unreadable call's warning, one line under them naming the calls it decoded but did
+ * not read, and every authorization's line. The value rows open under one "Show all details". Fed
+ * the wire-shaped fixture: 32-byte hex fields, real Token decodes.
  */
 
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { CLAIM_AND_END_SETUP, CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
 import AddressDisplay from "@/components/AddressDisplay.vue"
@@ -58,14 +59,21 @@ const mountFixture = async () => mountCard({ feeEstimate: feeEstimateWith(AUTHWI
 const read = (w: VueWrapper, testid: string): string[] => w.findAll(`[data-testid="${testid}"]`).map((el) => el.text().replace(/\s+/g, " "))
 const toggle = (w: VueWrapper) => w.get('[data-testid="execute-op-details-toggle"]')
 const advice = (w: VueWrapper) => w.findAll('[data-testid$="-unverified-advice"]')
+const testidOf = (el: Element | null | undefined) => el?.getAttribute("data-testid")
+/** The advice closes the calls: list, line, advice when the line shows; list, advice otherwise. */
 const afterTheCalls = (w: VueWrapper) => {
 	const all = advice(w)
+	const before = all[0]?.element.previousElementSibling
+	const line = w.find('[data-testid="execute-op-summary-unchecked"]')
 	return {
 		count: all.length,
 		inRow: all.some((a) => a.element.closest('[data-testid="execute-op-summary-call"]') !== null),
-		after: all[0]?.element.previousElementSibling?.getAttribute("data-testid") === "execute-op-summary-calls",
+		after: line.exists()
+			? before === line.element && testidOf(line.element.previousElementSibling) === "execute-op-summary-calls"
+			: testidOf(before) === "execute-op-summary-calls",
 	}
 }
+const unchecked = (w: VueWrapper) => read(w, "execute-op-summary-unchecked")
 const AFTER_THE_CALLS = { count: 1, inRow: false, after: true }
 const ADVICE = "Check what the app says this does before approving."
 const UNREAD = (reason: "unknown-contract" | "unknown-function"): DecodedCall => ({ kind: "undecoded", reason })
@@ -87,19 +95,46 @@ const tokenCall = (name: string, args: string[], roles: string[], extra: Record<
 	return { op: { ...op, exec: { calls: [call] }, ...extra }, decodedCalls: [decoded] }
 }
 
+/** A Fee Juice claim as a dApp sends it, and the decode the bundled Fee Juice artifact gives it. */
+const CLAIM_SECRET = `0x1c${"7a".repeat(31)}`
+const CLAIM = {
+	name: CLAIM_AND_END_SETUP,
+	to: FEE_JUICE_CONTRACT,
+	selector: CLAIM_AND_END_SETUP_SELECTOR,
+	type: "private",
+	isStatic: false,
+	hideMsgSender: false,
+	args: [MAIN, field(5_000_000n), CLAIM_SECRET, field(9n)],
+}
+const CLAIM_DECODE: DecodedCall = {
+	kind: "decoded",
+	contract: "FeeJuice",
+	fn: CLAIM_AND_END_SETUP,
+	params: [
+		{ name: "to", value: { kind: "address", value: MAIN } },
+		{ name: "amount", value: { kind: "integer", value: "5000000" } },
+		{ name: "secret", value: { kind: "field", value: CLAIM_SECRET } },
+		{ name: "leaf_index", value: { kind: "integer", value: "9" } },
+	],
+}
+
 beforeEach(() => {
 	lookups.accounts.splice(0)
 	lookups.accounts.push({ name: "Main", address: MAIN })
 })
 
 describe("OperationCard — a multi-call transaction's summary", () => {
-	test("at rest: each call in order with the wallet's reading or the app's naming, and both authorizations' lines", async () => {
+	test("at rest: each call in order with the wallet's reading, one line naming the call it did not read, and both authorizations' lines", async () => {
 		const w = await mountFixture()
 		expect(read(w, "execute-op-summary-call-head")).toEqual([
-			`Exit To L1 on ${trimAddress(HUB)}. Named by the app.`,
+			`Exit To L1 on ${trimAddress(HUB)}`,
 			`Transfer (private) on ${trimAddress(USDC)}:`,
 			`Checkpoint on ${trimAddress(UNKNOWN)}`,
 		])
+		expect(unchecked(w)).toEqual(["Nulo can only check transfers and mints of tokens in your list, so it can't say what call 1 does."])
+		const line = w.get('[data-testid="execute-op-summary-unchecked"]').element
+		expect(line.closest('[data-testid="execute-op-summary-call"]')).toBeNull()
+		expect(line.closest('[data-testid="execute-op-summary-authwits-section"]')).toBeNull()
 		expect(read(w, "execute-op-call-line")).toEqual([`0.1 USDC from Main to ${trimAddress(RECIPIENT)}`])
 		expect(w.findAll('[data-testid="execute-op-call-line"]')[0]!.element.closest('[data-call-index="1"]')).not.toBeNull()
 		const unreadable = w.get('[data-call-index="2"] [data-testid="execute-op-summary-unverified-args"]')
@@ -134,6 +169,21 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(w.findAll('[data-testid="execute-discovered-authwit-details"]')).toHaveLength(2)
 		expect(w.findAll('[data-testid="execute-op-summary-call"]')).toHaveLength(3)
 	})
+
+	test.each([
+		[1, "Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1 and 3 do."],
+		[2, "Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1, 3 and 4 do."],
+	])(
+		"a Fee Juice claim is named with the app's calls, never the transfer Nulo read beside them (%i app calls)",
+		async (hubCalls, line) => {
+			const [exit, transfer] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
+			const { decodedCalls } = await decodeFixture()
+			const op = { ...(fixtureOp() as object), exec: { calls: [CLAIM, transfer, ...Array(hubCalls).fill(exit)] } }
+			const w = await mountCard({ decodedCalls: [CLAIM_DECODE, decodedCalls[1], ...Array(hubCalls).fill(decodedCalls[0])] }, op)
+			expect(read(w, "execute-op-summary-call-title").slice(0, 2)).toEqual(["Claim Fee Juice", "Transfer (private)"])
+			expect(unchecked(w)).toEqual([line])
+		},
+	)
 
 	test("three unreadable calls then a readable one: each says why with interface dotted, and the advice reads once, after the calls", async () => {
 		const [exit, transfer, checkpoint] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
@@ -256,10 +306,11 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		const [, transfer] = (fixtureOp() as unknown as { exec: { calls: unknown[] } }).exec.calls
 		const { decodedCalls, decodedAuthwits } = await decodeFixture()
 		const op = { ...(fixtureOp() as object), exec: { calls: [transfer] } }
-		const readable = await mountCard(
-			{ feeEstimate: feeEstimateWith(AUTHWITS.slice(0, 1)), decodedCalls: [decodedCalls[1]], decodedAuthwits },
-			op,
+		const readable = await mountCard({ feeEstimate: feeEstimateWith(AUTHWITS), decodedCalls: [decodedCalls[1]], decodedAuthwits }, op)
+		expect(read(readable, "execute-discovered-authwit-line")).toContain(
+			`Lets ${trimAddress(HUB)} call Withdraw For on ${trimAddress(VAULT)}`,
 		)
+		expect(unchecked(readable)).toEqual([])
 		await toggle(readable).trigger("click")
 		expect(readable.find('[data-testid$="-unverified-args"]').exists()).toBe(false)
 		expect(readable.findAllComponents(DottedTerm)).toHaveLength(0)
@@ -294,9 +345,11 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(read(w, "execute-op-summary-call-title")).toEqual(["Exit To L1", "Transfer Private To Private", "Checkpoint"])
 		expect(read(w, "execute-op-summary-args-pending")).toEqual(["Reading arguments…", "Reading arguments…", "Reading arguments…"])
 		expect(w.find('[data-testid="execute-op-call-line"]').exists()).toBe(false)
+		expect(unchecked(w)).toEqual([])
 
 		await w.setProps(await decodeFixture())
 		expect(read(w, "execute-op-summary-call-title")).toEqual(["Exit To L1", "Transfer (private)", "Checkpoint"])
+		expect(unchecked(w)).toEqual(["Nulo can only check transfers and mints of tokens in your list, so it can't say what call 1 does."])
 		expect(w.find('[data-testid="execute-op-summary-args-pending"]').exists()).toBe(false)
 		expect(read(w, "execute-op-summary-unverified-warning")).toEqual(["Can't read the arguments"])
 	})
@@ -308,9 +361,28 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 			["from", "to", "amount", "_nonce"],
 		)
 		const w = await mountCard({ tokens: [], decodedCalls }, op)
-		expect(read(w, "execute-op-summary-call-head")).toEqual([`Transfer Public To Public on ${trimAddress(USDC)}. Named by the app.`])
+		expect(read(w, "execute-op-summary-call-head")).toEqual([`Transfer Public To Public on ${trimAddress(USDC)}`])
 		await toggle(w).trigger("click")
 		expect(read(w, "execute-op-payload-row")[0]).toMatch(/^Transfer Public To Public/)
+	})
+
+	test("the line follows the token list: one unread call, two, then none once the token is listed", async () => {
+		const one = tokenCall("transfer", [RECIPIENT, field(5_000_000n)], ["to", "amount"])
+		const w = await mountCard({ tokens: [], decodedCalls: one.decodedCalls }, one.op)
+		expect(unchecked(w)).toEqual([
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what this call does.",
+		])
+
+		const twoCalls = { ...one.op, exec: { calls: [...one.op.exec.calls, ...one.op.exec.calls] } }
+		const two = await mountCard({ tokens: [], decodedCalls: [...one.decodedCalls, ...one.decodedCalls] }, twoCalls)
+		expect(unchecked(two)).toEqual([
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.",
+		])
+
+		await w.setProps({ tokens: [USDC_TOKEN] })
+		await flushPromises()
+		expect(read(w, "execute-op-call-line")).toEqual([`5 USDC from this account to ${trimAddress(RECIPIENT)}`])
+		expect(unchecked(w)).toEqual([])
 	})
 
 	test("the sender reads as 'this account' when the account is the caller, and the entrypoint's call names none", async () => {

@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 0a659726c
 trunk: dev
-status: planned (Codex approve, round 3); arc 1 next
+status: arc 1 phase 1 green; phase 2 next
 issues: "#1328"
 post_implementation_hardening: not scheduled
 ---
@@ -64,7 +64,7 @@ post_implementation_hardening: not scheduled
 
 ## Phases and gates
 
-### Phase 1 — the sentence ⬜
+### Phase 1 — the sentence ✓
 
 1. Add `uncheckedCallsLine` and its unit test to `X/call-surface.test.ts`, as one table: no surfaces, every call read, `pending` and `raw` only, one `decoded` alone, two `decoded`, `decoded` third of three, places 1, 3 and 4 of four, places 1 and 3, a `labels: "unchecked"` decode counted.
 2. Change `X/SendTxSummary.vue` as Architecture says.
