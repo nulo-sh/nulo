@@ -3,10 +3,34 @@ import type { Browser, CDPSession, Page, Target } from "puppeteer"
 import puppeteer from "puppeteer"
 import { cdpInterceptRpc } from "./chrome-rpc-intercept"
 import { cdpVirtualAuthenticator } from "./chrome-webauthn"
-import type { BrowserDriver, LaunchOptions, LaunchedBrowser, PxeHostState } from "./index"
+import type { AnsweredRequests, BrowserDriver, LaunchOptions, LaunchedBrowser, PxeHostState, RequestAnswer } from "./index"
 import { EGRESS_CANARY_HOST } from "../egress-guard"
 
 const SCHEME = "chrome-extension://"
+
+/** The page's own interception over CDP, which sees the requests of the page and its frames. */
+async function answerRequests(page: Page, answers: ReadonlyMap<string, RequestAnswer>): Promise<AnsweredRequests> {
+	const hits = new Map<string, number>()
+	const faults: string[] = []
+	await page.setRequestInterception(true)
+	page.on("request", (req) => {
+		const url = req.url()
+		const how = answers.get(url)
+		if (how === undefined) return req.continue()
+		hits.set(url, (hits.get(url) ?? 0) + 1)
+		const answered =
+			how === "refused"
+				? req.abort("connectionrefused")
+				: req.respond({ status: how.status, contentType: "application/json", body: JSON.stringify(how.body) })
+		answered.catch((err: unknown) => faults.push(`${url}: ${err instanceof Error ? err.message : String(err)}`))
+	})
+	return {
+		hits: async (url) => {
+			if (faults.length > 0) throw new Error(`answerRequests: ${faults.join("; ")}`)
+			return hits.get(url) ?? 0
+		},
+	}
+}
 
 /** The offscreen document is a target of its own, so its visibility is read in it over CDP. */
 async function pxeHostState(page: Page): Promise<PxeHostState> {
@@ -303,6 +327,7 @@ export const chromeDriver: BrowserDriver = {
 	},
 	interceptRpc: (browser, extensionId, fromOrigin, mode, backgroundDown) =>
 		cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode, backgroundDown),
+	answerRequests,
 	bringToFront: (page) => page.bringToFront(),
 	setViewport: (page, viewport) => page.setViewport(viewport),
 	viewportOf: (page) => page.viewport(),

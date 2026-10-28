@@ -103,7 +103,6 @@ async function popupLanding(page: Page) {
 			}
 			const scroller = document.querySelector('[data-testid="collapsing-hero-scroller"]') as HTMLElement
 			return {
-				maxScroll: scroller.scrollHeight - scroller.clientHeight,
 				barBottom: edges("collapsing-hero-header").bottom,
 				viewBottom: scroller.getBoundingClientRect().top + scroller.clientHeight,
 				title: edges("collapsing-hero-title"),
@@ -227,7 +226,14 @@ test("one network to retry: the open lands at the scroller's end, the title abov
 		expect(l.retryShown).toBe(true)
 		expect(l.warningText).toContain(restoreWarningText(["Local Network"], false))
 		expectWarningWhole(l)
-		expect(l.scrollTop).toBe(l.maxScroll)
+		// `scrollHeight` is a whole pixel and the end need not be: the end is where the browser stops a
+		// scroll past it.
+		const end = await page.evaluate(() => {
+			const scroller = document.querySelector('[data-testid="collapsing-hero-scroller"]') as HTMLElement
+			scroller.scrollTop = scroller.scrollHeight
+			return scroller.scrollTop
+		})
+		expect(l.scrollTop).toBe(end)
 		expect(l.title.bottom).toBeLessThanOrEqual(l.barBottom)
 
 		expect(await failedRetryLine(page)).toBe(retryResultText(["Local Network"]))
