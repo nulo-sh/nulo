@@ -142,8 +142,8 @@ class Session {
 	}
 }
 
-/** `run`'s failure rejects while `live` holds. Once a lock or a switch ends the session, the failure
- *  belongs to the ended session and resolves, logged at debug as `line`. */
+/** `run`'s failure rejects while `live` holds. Once a lock or a profile switch ends the session,
+ *  the failure belongs to the ended session and resolves, logged at debug as `line`. */
 async function whileLive(live: () => boolean, run: Promise<void>, line: string): Promise<void> {
 	try {
 		await run
