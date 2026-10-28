@@ -1,12 +1,11 @@
 import type { Page } from "puppeteer"
-import { acceptanceStatus } from "@nulo/legal"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, replaceInputValue, waitForHash } from "../fixtures/dom"
 import type { ExtensionContext } from "../fixtures/extension"
 import { openOnboarding, seedLegalAcceptance } from "../fixtures/wallet-pages"
 import { PollTimeoutError, pollUntil } from "../fixtures/poll"
-import { LEGAL_ACCEPTANCE_KEY, type LegalSeed } from "../fixtures/legal"
+import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, updatedTermsAnswer } from "../fixtures/legal"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 
@@ -177,11 +176,28 @@ export async function isSheetPresent(page: Page): Promise<boolean> {
 	return page.evaluate((s) => document.querySelector(s) !== null, sel("legal-sheet"))
 }
 
+/**
+ * The shell's verdict on the Terms sheet, once the sheet has read the acceptance status on a page it
+ * may cover. A reload into such a page's hash passes through the start location and the lock screen
+ * first, and the shell marks no verdict on either. Read in the wait, so a mark that leaves after it
+ * cannot be read as none.
+ */
+export async function legalSheetVerdict(page: Page): Promise<"shown" | "hidden"> {
+	const verdict = await page.waitForFunction(
+		(s) => document.querySelector(s)?.getAttribute("data-verdict") ?? false,
+		{ timeout: 15_000, polling: 100 },
+		sel("legal-sheet-verdict"),
+	)
+	return (await verdict.jsonValue()) as "shown" | "hidden"
+}
+
 /** Answers the Terms sheet an update meets when the release's stored acceptance, in its storage
  *  `entries`, predates this build's newest material Terms; otherwise holds that none shows. */
 export async function answerUpdatedTerms(page: Page, entries: Record<string, unknown>): Promise<void> {
-	if (acceptanceStatus(entries[LEGAL_ACCEPTANCE_KEY]) === "current") {
-		if (await isSheetPresent(page)) throw new Error("the update raised the Terms sheet over a current acceptance")
+	if (updatedTermsAnswer(entries) === "none") {
+		if ((await legalSheetVerdict(page)) === "shown" || (await isSheetPresent(page))) {
+			throw new Error("the update raised the Terms sheet over a current acceptance")
+		}
 		return
 	}
 	await waitForSheet(page, "changed")
