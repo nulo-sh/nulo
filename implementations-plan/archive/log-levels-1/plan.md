@@ -34,6 +34,7 @@ issues: [1131, 1132, 1133, 1136, 1178, 1216]
     - these failures reach the popup typed (`PasskeyNotOpenedError`; `exportPlain` keeps the type): a wrong password, another profile's passkey, a passkey with no PRF, and an unconfirmed or cancelled prompt;
     - each logs at debug where its page words it (`logCredentialFailure`);
     - any other failure on those paths stays at error.
+    - The profile chaos model's #1178 known finding goes, as chaos-3's D10 planned, and so the same line at error is an unfiled red ([lessons/phase-3.md](lessons/phase-3.md)).
 - Did not hold: #1178's `Failed to create profile:` + `PasskeyPrfError` form at HEAD. It came from a chaos build that predates #1221 (phase 3.3, [lessons/phase-3.md](lessons/phase-3.md)).
 - Superseded:
   - D5's `Promise.all`, which Codex reproduced publishing the failure before the supersede;
