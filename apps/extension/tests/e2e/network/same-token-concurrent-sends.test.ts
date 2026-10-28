@@ -721,9 +721,11 @@ test.skipIf(!hasConfig)(
 				?.addEventListener("pointerdown", keep, { capture: true, once: true })
 		})
 		await pointerClick(page, "send-review-submit")
-		const reviewed = await page
-			.evaluate(() => (window as Window & { e2eReviewedCap?: string }).e2eReviewedCap)
-			.catch(() => "<unreadable>")
+		// Bounded, so a stalled page still meets the 30 s gate below.
+		const reviewed = await Promise.race([
+			page.evaluate(() => (window as Window & { e2eReviewedCap?: string }).e2eReviewedCap).catch(() => "<unreadable>"),
+			new Promise<string>((done) => setTimeout(() => done("<unanswered in 2 s>"), 2_000)),
+		])
 		const seededCap = queuedFeeCap(basis)
 		const context = `; B's review read ${JSON.stringify(reviewed)} at the press, and the seeded basis caps at ${seededCap === undefined ? "nothing" : pinnedFeeText(seededCap)}`
 		await waitForSendGone(page, 30_000)
