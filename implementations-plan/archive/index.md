@@ -452,3 +452,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [docs-2](docs-2/plan.md) — completed — the manual npm bumps restated as policy with their source and the two untested points; the plans standard's PR-title cap at 92 (#1273; open item #1274)
 - [unit-flakes-5](unit-flakes-5/plan.md) — completed — four whole-tree guards skip the files that cannot hold a finding (#1270; known limit #1279)
 - [lock-window-1](lock-window-1/plan.md) — completed — the lock screen and backup pages drop what a session left; a restart over an opening import or create lands on the lock screen; a fee payer's address edit keeps a concurrent rename (#1272, #1289, #1291; known limits #1293, #1294)
+- [chaos-3](chaos-3/plan.md) — completed — the profile chaos model drives passkey imports and restores, Unlock method changes, shared passkeys and passkey account files; arc 2's fleet wave dropped (#1301, part of #1157; known limit #1306)
