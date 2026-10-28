@@ -339,8 +339,8 @@ const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithRemi
 const RESTORE_GATE = cite("src/e2e/chrome-storage-restore-gate.ts", 45, "held: true")
 const DAPP_QUEUE = cite("src/wallet/services/wallet-sdk/background.ts", 766, "discoveryQueue.drain(")
 const SEED_PAGE = "src/popup/pages/settings/security/export/seed.vue"
-const REVEAL_PASSKEY = cite(SEED_PAGE, 108, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
-const REVEAL_CANCEL = cite(SEED_PAGE, 112, "handleCancelOrUnconfirmed(error, openToast)")
+const REVEAL_PASSKEY = cite(SEED_PAGE, 125, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal"')
+const REVEAL_CANCEL = cite(SEED_PAGE, 130, "handleCancelOrUnconfirmed(error, openToast)")
 const CEREMONY_ENDS_WITH_PAGE = cite("src/components/passkey/PasskeyCeremonyDialog.vue", 85, 'cancel("dialog dismounted")')
 const SLOTS_BIND_PASSKEY = cite(SERVICE, 471, "credential.id === row.credentialId ? credential.unlockKeyFor(row.prfSalt) : null")
 const PASSKEY_SLOTS_REFUSE = cite(SERVICE, 970, "if (!opened) throw new Error(PASSKEY_DID_NOT_OPEN)")
@@ -351,7 +351,7 @@ const RETIRED_EXPORTS = cite(SERVICE, 529, 'if (classifyProfileRow(profile).kind
 const RETIRED_LISTED = cite(SERVICE, 2402, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1294, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_FINALIZE = cite(SERVICE, 2584, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 377, 'data-testid="auth-delete-retired"')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 383, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 142, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 155, "if (isMounted()) router.push(doneRoute(path.value))")
@@ -382,10 +382,10 @@ const METHOD_LEAVES = cite(UNLOCK_METHOD, 158, 'leaveFor(router, "/popup/setting
 const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 249, "if (!logged) onSessionEnded()")
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 105, 'onCeremonyReject(new Error("The unlock method page started over"))')
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 205, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
-const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 208, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
-const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 212, "handleCancelOrUnconfirmed(error, openToast)) return")
-const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 88, "const canSaveFile = computed(() => isNewPasswordValid(")
+const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 217, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
+const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 220, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
+const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 224, "handleCancelOrUnconfirmed(error, openToast)) return")
+const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 89, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 110, "The file password needs at least 8 characters")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1369, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
