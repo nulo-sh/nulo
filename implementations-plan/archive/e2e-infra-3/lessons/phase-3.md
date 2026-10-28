@@ -17,3 +17,7 @@
 - Full smoke in six shards: Chrome 72 files, 273 passed, 27 skipped, 0 failed, 29 min; Firefox 72 files, 276 passed, 24 skipped, 0 failed, 44 min.
 - Network, proverless as CI's shards run them (`cancel-mid-prove`, `in-flight-send-guard`, `type-roles-windows`): Chrome 7/7, 343 s; Firefox 7/7, 395 s.
 - Update replay from v1.0.0: Chrome 4/4, 73 s; Firefox 4/4, 95 s. The smoke setup refuses a `dist/<browser>` the candidate build replaced, so rebuild the armed smoke build after `build-update-candidate.sh`.
+
+## 2026-10-28 · PR
+
+- #1298 opened with only CodeQL running: `dev` had moved, `implementations-plan/index.md` conflicted, and GitHub runs no `pull_request` workflow on a PR it cannot merge. Merged `dev` into the branch (no force-push), re-ran lint, typecheck, `test:all`, `test:ci-gating` and both touched specs once per browser on the merged head (all green), pushed; every PR workflow then started.

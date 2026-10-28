@@ -1,6 +1,7 @@
 ---
 plan: e2e-infra-3
 tier: light
+status: completed; arc 1 merged (#1298), arc 2 delivered (#1309) with this close-out; the Firefox pin held (D10)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -13,6 +14,21 @@ issues: "#1123, #1210, #1222 (arc 1); #1111 (arc 2)"
 budget: one Explore recon agent (sonnet); one Codex audit (gpt-6.1-sol, high) with its resumes; one Opus Plan leg; a fresh final Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed, delivered as a stack on `dev`: #1298 (arc 1, merged as 0d5b1967c), then #1309 (arc 2) and this close-out, awaiting the merge.
+- Shipped:
+  - #1298: the popup shell marks the Terms sheet's verdict where the sheet may cover the route, and `answerUpdatedTerms` reads it before it holds that no sheet shows over a current acceptance; the fee card marks its balance read, which `expectFitsNarrow` waits out before the 240 px record. Closes #1123 and #1210.
+  - #1309: `bringToFront`, `setViewport` and `viewportOf` are `BrowserDriver` methods, every call under `tests/e2e` goes through them, and `browser-seam.test.ts` fails a direct one. Firefox focuses through the classic window switch and resizes the tab from its own scope over BiDi (D7); the BiDi shim no longer counts that tree read's windows as tabs.
+- Dropped: Phase 3's picker dismissal, inconclusive by D4's bar (median 11 ms native against 13 ms dismissed); #1222 has the numbers and stays open.
+- Did not hold: the Firefox pin move (Phase 6, D10). On 158.0, `input.setFiles`, a page-scoped `network.addIntercept` and a new `getManifest()` key failed 35 smoke tests; the pin stays at 153.0.4, and #1111 has the inventory and stays open.
+- Rejected: arc 1's Opus residual (a same-identity retry or an app-window card that sets no mark; unverified, outside #1210's path); `.call` and `.bind` shapes the ban misses (low).
+- Lessons: none promoted. `lessons.md` holds 8191 of its 8192 bytes; #1298's no-run-on-a-conflict lesson is its Git & GitHub first line already and stays in [lessons/phase-3.md](lessons/phase-3.md). The privileged-scope inventory is in `apps/extension/tests/e2e/FIREFOX.md`, and running smoke beside a network run on a copied build is in the e2e-testing skill.
+- Known limits: none.
+- Open items: #1222 (the picker cancel's latency, measured and unfixed); #1111 (the pin, blocked on the file pick, the page's request interception and the manifest check). #1216, seen once in arc 2's Chrome smoke, was another lane's and is closed by #1297, which the smoke run's commit predates.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # e2e-infra-3: e2e gaps and Firefox-side flakes
 
