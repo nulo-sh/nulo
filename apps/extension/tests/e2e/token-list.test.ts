@@ -52,12 +52,17 @@ async function openHomeHoldingFlagged(ctx: ExtensionContext): Promise<Page> {
 	const [pair] = E2E_LIST_FLAGGED
 	if (identity.chainId !== pair.chainId)
 		throw new Error(`the profile is on chain ${identity.chainId}, the flagged pair on ${pair.chainId}`)
-	// Transfer functions, so the token page and Send read as for any sendable token.
+	// Transfer functions, so the token page and Send read as for any sendable token; balance
+	// functions, so a refresh asks the refused node: a token without one reads that side as 0.
 	const transfers = Object.fromEntries(
-		["transferPublicFn", "transferPrivateFn", "transferPublicToPrivateFn", "transferPrivateToPublicFn"].map((key) => [
-			key,
-			{ name: key, impl: 0 },
-		]),
+		[
+			"transferPublicFn",
+			"transferPrivateFn",
+			"transferPublicToPrivateFn",
+			"transferPrivateToPublicFn",
+			"balanceOfPublicFn",
+			"balanceOfPrivateFn",
+		].map((key) => [key, { name: key, impl: 0 }]),
 	)
 	const scope = { ...identity, token: { contract: pair.address, name: "Scam Token", symbol: "SCAM", decimals: 6, ...transfers } }
 	await seedTokenRow(seeder, scope, 1)
