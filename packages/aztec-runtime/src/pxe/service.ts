@@ -42,14 +42,14 @@ import { PXE_DATA_DIR_ROOT, chainRegistryKey, chainRegistryKeyPrefix } from "./c
 import { listChainStoreDirs, removeChainStoreDir, removeProfileStoreDirs } from "./opfs-store"
 import { SqliteCorruptionError } from "@aztec-labs/kv-store/sqlite-opfs"
 import { ArtifactRegistry } from "./artifact-registry"
-import { PxeLifecycleCoordinator } from "./lifecycle-coordinator"
+import { PxeLifecycleCoordinator, StoreErasedError } from "./lifecycle-coordinator"
 import { loadProductionKnownArtifacts } from "./known-artifacts"
 import { loadProductionNoteSchemas, type NoteSchema } from "./note-schemas"
 import { type Methods, PXE_SERVICE_NAME, type PxeEvents } from "./spec"
 import type { ProvePhaseSink } from "./prove-phase-sink"
 import { type PrivateEventFilter, PrivateEventFilterSchema } from "@aztec-labs/aztec.js/wallet"
 import { NotesFilterSchema } from "./schemas"
-import { withStaleAnchorRetry } from "./stale-anchor"
+import { PXE_NOT_SYNCED_DIAGNOSTIC, withStaleAnchorRetry } from "./stale-anchor"
 import { assertScopesRegistered } from "./scope-guard"
 import { PxeScopeUnregisteredError } from "@nulo/extension-messaging/errors"
 import {
@@ -885,12 +885,12 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		const record = this.profileLifecycles.get(network.profileId)
 		if (!record) return
 		if (record.dead.has(captured)) {
-			throw new Error(`pxe op rejected: profile ${network.profileId} generation was erased — the capture is stale`)
+			throw new StoreErasedError(`pxe op rejected: profile ${network.profileId} generation was erased — the capture is stale`)
 		}
 		const current = record.current
 		if (!current) return
 		if (current.kind !== "live" || current.gen !== captured) {
-			throw new Error(
+			throw new StoreErasedError(
 				`pxe op rejected: profile ${network.profileId} is ${current.kind} (generation ${current.gen === captured ? "matches" : "superseded"}) — the capture is stale`,
 			)
 		}
@@ -965,12 +965,14 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	}
 
 	/**
-	 * A `PXE_STORE_KEY_MISSING` rejection is a designed protocol step, not an
-	 * incident: keys live in offscreen memory only, so the FIRST profile-scoped
-	 * op after an offscreen boot misses and the SW client derives +
-	 * re-provisions + retries once. Logging it at error painted three red lines
-	 * on every cold start for a condition that self-heals in ~1s; a retry that
-	 * ALSO fails still surfaces at the caller. Everything else stays error.
+	 * Designed refusals log at debug; everything else stays error. They are: a
+	 * `PXE_STORE_KEY_MISSING` miss (keys live in offscreen memory only, so the
+	 * first profile-scoped op after an offscreen boot misses and the SW client
+	 * re-provisions and retries once; a retry that also fails surfaces at the
+	 * caller), an unregistered scope the client registers and retries, a store
+	 * a purge or an erase ended under the op, and a fresh PXE's synced header
+	 * asked before its first sync, whose callers fall back to the node or defer
+	 * reconciliation to the next scan.
 	 */
 	private logOpFailure(kind: "READ" | "WRITE", label: string, start: number, err: unknown): void {
 		const message = errorMessageFromUnknown(err)
@@ -978,6 +980,10 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			this.logDebug(`[${kind}] ${label} pre-provision miss after ${Date.now() - start}ms (client re-provisions + retries)`)
 		} else if (err instanceof PxeScopeUnregisteredError) {
 			this.logDebug(`[${kind}] ${label} refused an unregistered scope (client registers + retries)`)
+		} else if (err instanceof StoreErasedError) {
+			this.logDebug(`[${kind}] ${label} refused: a purge or an erase ended the store it captured`, { error: err })
+		} else if (label === "getSyncedBlockHeader" && message === PXE_NOT_SYNCED_DIAGNOSTIC) {
+			this.logDebug(`[${kind}] ${label} refused before the PXE's first sync`)
 		} else {
 			this.logError(`[${kind}] ${label} failed after ${Date.now() - start}ms`, { error: err })
 		}

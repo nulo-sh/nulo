@@ -5,6 +5,7 @@ import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, typeNow } from "../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -1065,6 +1066,52 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		await flushPromises()
 		expect(unlockProfile).toHaveBeenCalledTimes(1)
 		expect(shaker().className).toMatch(/shake/)
+	})
+
+	const P1 = { id: "p1", name: "P", type: "password" } as never
+	const P2 = { id: "p2", name: "Q", type: "password" } as never
+	const submit = () => (wrapper as NonNullable<typeof wrapper>).get('[data-testid="auth-submit"]').element as HTMLButtonElement
+
+	test("a switch to another profile and back leaves the field empty and masked, and Continue off", async () => {
+		wrapper = mountReal()
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "pass1234")
+		sendEvent(wrapper.get('[data-testid="auth-password-input-visibility-toggle"]').element, "click")
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).type).toBe("text")
+		expect(submit().disabled).toBe(false)
+
+		useAppStore().profile = P2
+		await flushPromises()
+		useAppStore().profile = P1
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).value).toBe("")
+		expect(nativeInput(wrapper, FIELD).type).toBe("password")
+		expect(submit().disabled).toBe(true)
+	})
+
+	test("a switch clears a wrong password's error", async () => {
+		unlockProfile.mockRejectedValue(new InvalidPasswordError())
+		wrapper = mountReal()
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "wrong-pass")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(true)
+
+		useAppStore().profile = P2
+		await flushPromises()
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(nativeInput(wrapper, FIELD).value).toBe("")
+	})
+
+	test("(control) the first profile a screen learns keeps what the field holds", async () => {
+		wrapper = mountReal({ known: false })
+		await flushPromises()
+		typeNow(nativeInput(wrapper, FIELD), "pass1234")
+		useAppStore().profile = P1
+		await flushPromises()
+		expect(nativeInput(wrapper, FIELD).value).toBe("pass1234")
 	})
 
 	test("before the profile is known, the heading, its line and the form keep their place hidden and the field takes no focus", async () => {

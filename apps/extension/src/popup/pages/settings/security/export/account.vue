@@ -26,6 +26,7 @@ import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { goBack } from "@/utils/page-back"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
+import { watchLockStart } from "@/popup/locked-state"
 
 /** Composables */
 import { createRunFence } from "@/composables/runFence"
@@ -109,6 +110,7 @@ const resetFlow = () => {
 	fileStatus.value = ""
 	payload.value = ""
 	dropApproval()
+	onCeremonyReject(new Error("The account file flow started over"))
 }
 
 function dropApproval() {
@@ -162,6 +164,15 @@ watch(
 		applyQueryPreselect()
 	},
 )
+// A lock can leave this page mounted (an unlock from another window supersedes it before the
+// landing): what was typed or approved belongs to the session that ended.
+watchLockStart(
+	() => appStore.isLogined,
+	() => {
+		resetFlow()
+		applyQueryPreselect()
+	},
+)
 // A passkey profile's file not made yet ends with a network switched from another window: its
 // approval and any pending export were given for the previous network. A made file is kept.
 watch(
@@ -204,6 +215,7 @@ const handleConfirmPasskey = async () => {
 	const { id: profileId, name } = appStore.profile
 	try {
 		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
+		if (!isCurrent() || scope !== approvalScope()) return
 		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
 		if (!isCurrent() || scope !== approvalScope()) return
 		// An answer that cannot open the profile is refused here, never held until Save.
