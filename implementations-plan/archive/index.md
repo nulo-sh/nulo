@@ -466,3 +466,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [naming-copy-1](naming-copy-1/plan.md) — completed — one line under the approval window's calls names the ones Nulo cannot check, replacing the per-call "Named by the app." mark (#1332, closes #1328)
 - [chaos-4](chaos-4/plan.md) — completed — the profile chaos catalog driven in process (#1324) and the scenario list's in-process items as planned sequences, each with a break fixture; part of #1157, closes #1327
 - [networks-ux-1](networks-ux-1/plan.md) — completed — a Switch button on each inactive row of Manage Networks (closes #1325; known limit #1330)
+- [send-picker-1](send-picker-1/plan.md) — completed — Send's token picker is the Holdings-style list with paste-to-add, and the amount card reads a zero it read (closes #1333; known limits #1339, #1340; owner decision #1341)
