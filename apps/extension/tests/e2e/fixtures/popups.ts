@@ -388,12 +388,8 @@ const EXECUTE_APPROVABLE_TIMEOUT_MS = 120_000
  * live attribute is drift-proof; the pointer-events clause additionally covers
  * the CSS-only `loading` state the design Button never reflects into `disabled`.
  *
- * `waitForExecuteContent` (op rows rendered) is a strictly weaker signal: the
- * fee-selection settle happens after rows render, and on a cold shard that gap
- * alone historically blew the generic 10s click wait (see implementations-plan/archive/e2e-deflake/plan.md, Flake ledger).
- * Budget rationale: every popup now waits for an estimate, so the default is
- * the 120s budget the cold-path callers and the sibling Send flow already use
- * for an estimate-gated button.
+ * `waitForExecuteContent` (op rows rendered) is a strictly weaker signal. The
+ * default is the budget for an estimate-gated button, as on Send.
  *
  * Every wait appends `content_ready→approvable` timing to
  * `.e2e-state/exec-approvable-timings.log` (worktree-local; uploaded with the CI

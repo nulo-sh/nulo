@@ -250,7 +250,6 @@ const {
 	},
 })
 
-/** Confirm waits for every estimate and preview to settle, and for a figure the person pays. */
 const awaitsEstimates = computed(() =>
 	operations.value.some((op, i) =>
 		holdsConfirm(op as unknown as UIOperation, feePayers.value[i], {

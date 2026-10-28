@@ -190,6 +190,15 @@ describe("approveInteraction — the popup cannot substitute what executes", () 
 		expect(release).toHaveBeenCalledTimes(1)
 	})
 
+	test("a null delta claims nothing and executes as an empty one", async () => {
+		const { svc, internals } = makeService()
+		store(internals, "i-6", execPayload([{ kind: "register_token", account: `aztec:1:${OWNER}`, address: "0xt" }]))
+		await svc.approveInteraction("i-6", [null as never])
+		await flush()
+		expect(internals.executionService.claimPreviews).toHaveBeenCalledExactlyOnceWith([undefined])
+		expect(internals.executionService.executeOperations).toHaveBeenCalledTimes(1)
+	})
+
 	test("an approval refused after its claim releases what it claimed", async () => {
 		const { svc, internals } = makeService()
 		const release = vi.fn()

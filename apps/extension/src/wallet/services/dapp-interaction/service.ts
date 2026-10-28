@@ -335,7 +335,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		try {
 			// Taken in the tick the record was deleted, before any await: a snapshot alive when the
 			// worker accepted the approval stays the approval's until its execution ends.
-			releasePreviews = this.executionService.claimPreviews(deltas.map((delta) => delta.previewId))
+			releasePreviews = this.executionService.claimPreviews(deltas.map((delta) => delta?.previewId))
 			// Re-validate the active profile still matches the session this popup
 			// was approved under. A popup is a separate window that can outlive a
 			// profile switch or a wallet lock (up to INTERACTION_TIMEOUT_MS). Without

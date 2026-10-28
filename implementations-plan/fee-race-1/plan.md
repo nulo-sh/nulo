@@ -22,7 +22,7 @@ Three arcs, one stacked PR each, against `dev`. Recon: [recon.md](recon.md) (reu
 **Invariants this plan establishes.**
 
 - **I1.** The dApp window offers Confirm only when every operation's estimate and authorization preview has settled: none is scheduled or running. After that, today's rule decides (a figure the person pays must have landed; D38: a failed sponsored estimate leaves Confirm on).
-- **I2.** An authorization snapshot the worker holds a Confirm to is alive whenever its interaction can still be approved, can still be evicted by its estimate's cancel for that whole time, and passes to the approval in the same tick the worker accepts it; the approval owns it until its execution ends.
+- **I2.** An authorization snapshot the worker holds a Confirm to is alive whenever its interaction can still be approved, can still be evicted by its estimate's cancel for that whole time while its profile stays active, and passes to the approval in the same tick the worker accepts it; the approval owns it until its execution ends.
 - **I3.** Once the worker has admitted an estimate, the popup's deadline never ends the call while the worker still bounds its run: it is a liveness backstop above that bound, never the bound itself. A call that waits for admission is not covered (KL4).
 
 ## Outcome & Quality Bar
@@ -101,7 +101,7 @@ Paths without a prefix are under `apps/extension/src/`; `tests/` is `apps/extens
 
 Every gate includes `bun run lint` and `bun run typecheck:all` (exit 0). Unit runs are `cd apps/extension && bun --bun vitest run <files> --retry=0`. Every e2e run is at retry 0 through `NULO_E2E_RETRY=0` (both e2e configs default to 2). Smoke: `NULO_E2E_RETRY=0 bun run test:e2e`. Network e2e, from the repository root (the root script enters `apps/extension`): `NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`; prover-ON only where a step says so. A red-before test runs on the base with the arc's source unchanged and its own test file added. Log every run in `lessons/phase-N.md`.
 
-### Phase 1.1: the window holds Confirm while an estimate or preview runs (#1335)
+### Phase 1.1: the window holds Confirm while an estimate or preview runs (#1335) ✓
 
 1. On the base, add and record red: `fee-figure.test.ts` rows for `holdsConfirm` (in flight holds a sponsor, an app-paid op and a default-entrypoint op: red, the function is absent) and `index.test.ts` (a sponsor's estimate in flight disables Confirm and `approve()` sends nothing, then it lands and Confirm is live: red; a default-entrypoint preview in flight does the same: red). Green on the base and kept as pins: a failed sponsored estimate leaves Confirm on (D38), the figure rule's rows.
 2. Add `holdsConfirm`; `index.vue` reads it in the binding and in `approve()`. Rewrite the in-flight half of `index.test.ts:1135`.
@@ -110,7 +110,7 @@ Every gate includes `bun run lint` and `bun run typecheck:all` (exit 0). Unit ru
 
 **Gate.** Step-1 reds red on the base and green on the head, pins green on both; `fee-figure.test.ts`, `index.test.ts`, `OperationCard*.test.ts` green; the delegated spec green on both browsers at retry 0; `tx-sendTx-sponsoredFpc`, `concurrent-sendtx-approve`, `concurrent-sendtx-confirm`, `authwit-lifecycle`, `scope-refusal` green on Chrome. The approvable timings of that run (`.e2e-state/exec-approvable-timings.log`) logged per browser: maximum and the slowest five, against D7's bound.
 
-### Phase 1.2: the snapshot outlives the queue (the sibling, D5)
+### Phase 1.2: the snapshot outlives the queue (#1343, D5) ✓
 
 1. File the issue (dedupe first) with the path from Root causes; arc 1's PR closes it.
 2. On the base, add and record red: `preview-snapshots.test.ts` (an unclaimed snapshot found at 9 min; a claimed one found after its unclaimed TTL, untouched by `evict`, gone after release; a release drops only the entries its claim moved and a second release is a no-op); `estimate-cancel-registry.test.ts` (a settled token still evicts at 9 min); a service-level fake-clock test on the real wiring (`estimate-hold.integration.test.ts`'s shape): stash a snapshot and settle its token, advance 150 s, admit another estimate, then the approval finds the snapshot; a `dapp-interaction` test: the snapshots an approval names are claimed before its first await, and released when its fence check refuses.
@@ -172,7 +172,7 @@ Apply the runtime budget rule to each pair #1337 names. Expected, to verify: the
 ## Security & Adversarial Considerations
 
 - **Trust boundary.** The dApp supplies the request; the popup supplies ids. Ids are worker-minted UUIDs, so a forged or replayed `previewId` claims nothing; the identity check (interaction, index, fingerprint) stays at the turn. `claimPreviews` is not an RPC method (the dispatcher is an allow-list, `packages/extension-messaging/src/core/rpc-methods.ts`), and the claimed set never crosses a port.
-- **Disclosure.** I1 strengthens "the card shows what Confirm signs": no approval leaves before the discovery that lists its authorizations. The snapshot keeps the shown rows (addresses, amounts) in worker memory up to 10 min instead of 2, as long as the window that showed them; a cancel evicts it for that whole time (F12's fix), and nothing persists it.
+- **Disclosure.** I1 strengthens "the card shows what Confirm signs": no approval leaves before the discovery that lists its authorizations. The snapshot keeps the shown rows (addresses, amounts) in worker memory up to 10 min instead of 2, as long as the window that showed them; a cancel evicts it for that whole time while its profile is active (F12's fix), and nothing persists it. After a lock or a profile switch the cancel no-ops, so the snapshot stays, unreachable by any call, until its TTL (KL5).
 - **Denial of service.** A hostile dApp can open requests whose estimates run; admission caps them at 4 active and 8 parked per profile. With D6 a window estimate also holds the slot for its run, so an approved send arriving during it waits one run (seconds locally, unmeasured on Testnet, N1); a waiting send already blocks new estimates. A longer popup deadline holds a port, not a simulation.
 - **Logging.** Any new line logs a fixed category with named keys; no envelope, balance or hash.
 - **Supply chain, crypto, privileges.** No dependency, no cryptography, no permission change.
@@ -207,18 +207,20 @@ Scope this plan asks approval for: S1, D5 ships in arc 1 under its own issue (it
 | D11 | Closing #1336 | after Phase 2.0's reproduction names the cause | the 60 s cut is shown by trace; the owner's failure is not |
 | D12 | Arc 3's boundary | existing seams only (reuse fast path, lane, registry, journal); no new carve-out | a seeded landed estimate is what the worker writes; a canned build would be a second wallet |
 | D13 | O1 and D38 | a failed estimate's refusal is a permitted outcome | D38 keeps Confirm on after a failure on purpose |
+| D14 | Where the claim sits in `executeAndResolve` (deviation, arc 1) | first statement inside the `try`, after the synchronous `approved.set` | still before any await; a throwing claim then cancels the window and the `finally` runs |
 
 ## Audit verdicts
 
 - **Round 1.** Opus Plan leg: conditional approve (the settled sweep path, the missing owner ask, #1336 unreproduced, O1 against D38, the driver testing a copy). Codex: reject (D8's bound, the settled sweep path, the claim's ingress and ownership, N1 and the DoS argument, OA1 assuming its behaviour, arc 3 past the composition contract, oracles against retained behaviour, unrunnable proofs). Every finding's disposition: [lessons/phase-0.md](lessons/phase-0.md) § Audit round 1. Rejected: narrowing I1 (D10). Disputed and argued: D8.
 - **Round 2 (Codex, same session): conditional approve.** D8 accepted over B's async half; condition: the admission wait (I3 narrowed, KL4). D5's ownership accepted, with its implementation requirements (try right after the claim, release only own entries, idempotent, evict never reaches claimed entries). Arc 3: map each action to a reachable seam; rebuild paths out of the layer; O2's transport proof stays in `client.test.ts`. Arc 1 depends on neither owner ask. The network command runs from the repository root. All folded.
+- **Arc 1 review, round 1.** Codex (fresh session): 2 low comment findings (`holdsConfirm`'s doc misread the settled rule for an app's own cap; the approvable helper's doc kept an archived plan path), both fixed. Opus (`general-purpose`): 5 low, all accepted: a null delta threw at the claim (`delta?.previewId`, pinned by a test red without it); the plan's claim that a cancel evicts a snapshot for its whole life is false after a lock or switch (sentence corrected, KL5); two comment nits; gate evidence to log. Its forward note for arc 2 is in KL3.
 - **Final pass (fresh Codex session): approve,** after one round. Its conditional approve asked: no order among estimates in O2 (queued answers reserve no position), a test path the unit runner collects for the model, `NULO_E2E_RETRY=0` on every e2e command, N2 qualified as unmeasured. All folded; its note on N2's wording applied. It confirmed arc 1 depends on neither owner ask.
 
 ## Delivery
 
 | Arc | Branch | Phases | Stacks on | PR title (≤ 92) | Closes |
 |---|---|---|---|---|---|
-| 1 | `worktree-fee-race-1` | 1.1-1.2 | `dev` | `fix(execute): confirm waits for the fee estimate, and its authorizations outlive the queue` | #1335 and the Phase 1.2 issue |
+| 1 | `worktree-fee-race-1` | 1.1-1.2 | `dev` | `fix(execute): confirm waits for the fee estimate, and its authorizations outlive the queue` | #1335, #1343 |
 | 2 | `fee-race-1-a2` | 2.0-2.3 | arc 1 | `fix(fees): the popup no longer ends an estimate the worker is still running` | #1336 per D11 |
 | 3 | `fee-race-1-a3` | 3.1-3.4 | arc 2 | `test(execution): a seeded sequence test over fee estimates, queue and confirm timing` | #1337 |
 | close-out | `fee-race-1-close-out` | Outcome, lessons, archive | arc 3 | `docs(plans): close fee-race-1` | none |
@@ -236,7 +238,8 @@ The steps are `implementations-plan/README.md` § Post-implementation standard, 
 - **Known limits to file at close-out** (closed `known-limit` issues, deduped first):
   - KL1: a simulation queued behind a proof past 90 s fails at the worker and still runs offscreen. Reopen on a user log showing a simulate timeout after a proof.
   - KL2: the authorization popups' wallet-built estimates (`estimateRevokeFee`, `estimateRegistryToggleFee`) neither queue nor hold the slot. Reopen when one fails behind a proof.
-  - KL3: a worker that stays connected but never answers holds an estimate's popup call until its 15-minute deadline. Reopen on a report of a card estimating past a few minutes with the wallet idle.
+  - KL3: a worker that stays connected but never answers holds an estimate's popup call until its 15-minute deadline; with arc 1 the window's Confirm stays off until the window's own 10-minute close. Reopen on a report of a card estimating past a few minutes with the wallet idle.
+  - KL5: after a lock or a profile switch, an unclaimed authorization snapshot (the rows its card showed) stays in worker memory until its 10-minute TTL; no call can read it, since its interaction is gone. Reopen if a lock is required to purge in-memory estimate state.
   - KL4: an estimate parked for admission behind four places held by simulations that timed out offscreen counts that wait against its 15-minute deadline and can fail soon after it starts. Reopen on a log showing an admitted estimate's call timing out within seconds of its admission.
 
 ## Seeds (draft; not run, the orchestrator owns execution)
