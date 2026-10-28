@@ -8,12 +8,22 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: dev 78f5f9171
-status: awaiting owner picks
+status: completed
 ---
 
 # lock-ux-1: five small behaviours the owner picks from pictures
 
 Five `ux` issues, each a product decision: #1158 (auto-lock 0 saves with no confirm), #1192 (the onboarding phrase step has no 5-minute close), #1207 (a saved account file is offered again as if unsaved), #1208 (the duplicate-phrase confirm names one profile of several), #1228 (after a delete, the lock screen opens the chooser). Nothing ships before the owner's pick. [`OWNER-ASKS.md`](OWNER-ASKS.md) holds the options, the copy, the pictures and a recommendation for each; this plan holds how each pick is built.
+
+## Outcome
+
+- **Date:** 2026-10-28. Planned, picked by the owner (decision page 88, option A on all five) and implemented as one stack.
+- **Status:** completed, delivered as a stack into `dev`: #1283 (closes #1158), #1284 (#1192), #1285 (#1208), #1286 (#1207), #1287 (#1228), and this close-out on top; the merge of the stack archives the plan.
+- **Shipped:** a confirm before auto-lock is set to never, through `askConfirm`, which the duplicate-phrase confirm now shares; the onboarding phrase step's 5-minute close with Disable auto-close, one `DisableAutoCloseLink` and one bound for both phrase screens; the duplicate-phrase confirm naming every profile on the phrase, A to Z; the account file's saved state with Close, as Full Backup has; the lock screen selecting the first remaining profile by name when no last-active one is known, with another window's pick outranking that automatic pick.
+- **Dropped or rejected:** every option B (not picked); clearing the account file's sealed payload once saved (page-scoped, cleared at unmount and every reset); deleting the account template's stage marker (every stage carries one); shortening the duplicate-names comment (it says why `stringCompare`). Arc 1228's review loop reached its three-round stop with one finding, fixed after the stop and reviewed by the cross-arc pass. `lessons.md`: the object-identity line now also names a counter.
+- **Known limits:** none.
+- **Open items:** #1281 (two orderings, shared with `dev` before this plan, where the lock screen loses the newest pick), #1282 (Settings' Disable auto-close drops keyboard focus).
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 ## Outcome & Quality Bar
 
@@ -111,7 +121,7 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 - **Arc 1228, round 3, the hard stop** (Codex resume over `57ac3ee8f..0fea2dcc8`): one finding, accepted. Demonstrated: a counter of settles also gave way a profile the person picked after the settle, before its pointer write was heard. Fixed in `2bc10631d`: only the settle's own pick, held by reference, gives way; a second regression covers that order, and each regression goes red against the other's mechanism. No fourth round ran; the cross-arc pass reviews the fix.
 - **Cross-arc pass** (fresh Codex session over `78f5f9171..6520d1ece`, plan files excluded): five findings. Accepted: auth page tests left their pages mounted, so a later test's deferred reads could be taken by an earlier page; every mounted page is now unmounted after its test, and the manual listener clears are gone. The recovery phrase constant's comment restated its name; deleted. Not taken, as `dev` behaves the same and filed: a re-pick of the selected profile here, or a pointer that already names the selection, can still lose to another window's pick or to a settle (#1281); Settings' Disable auto-close drops keyboard focus, which the onboarding step's use of the same link hands on (#1282). Not taken: shortening the duplicate-names comment, whose "as the chooser lists them" says why `stringCompare`. The pass found the arc 1228 fix's regression holding.
 
-## Seeds (draft; run none until the orchestrator spawns an arc)
+## Seeds (retired)
 
 `/goal` Arc <issue> of implementations-plan/lock-ux-1/plan.md built to the owner's quoted pick, its gate passing in the transcript, its Codex loop converged (a resumed pass with no new material finding quoted), its PR open on the lane's stack with the pick quoted and `Closes #<issue>`.
 `/loop 15m` Drive the next picked arc of implementations-plan/lock-ux-1/plan.md per its Arcs section and Post-implementation; never build an unpicked option; stop at the open PR.
