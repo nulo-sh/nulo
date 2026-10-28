@@ -722,9 +722,9 @@ const stopBackground = (browser: Browser): Promise<void> =>
 	})
 
 /**
- * Firefox refuses a file picker without a user gesture, and an evaluated click is not one, so no
- * chooser event ever comes. The wallet appends its `<input type="file">` to the body before asking
- * for the picker and removes it on `change`, so the file goes straight into that pending input.
+ * The opening click, an evaluated one included, opens Firefox's native picker, which headless leaves
+ * unanswered while its window has focus. So the `<input type="file">` the wallet appends before asking
+ * for the picker, and removes on `change` or `cancel`, stays pending to take the file.
  * Over the classic channel: Firefox 157 and later refuse BiDi `input.setFiles` on an extension page.
  * The window it selects is the one the opening click's `prepareClick` selected.
  */

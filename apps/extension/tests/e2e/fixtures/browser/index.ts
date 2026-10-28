@@ -68,7 +68,7 @@ export type RequestAnswer = { status: number; body: unknown } | "refused"
 export interface AnsweredRequests {
 	/**
 	 * How many requests for `url` the page has sent since the answer was armed, answered or not.
-	 * Rejects once any answer has failed, or once the answer is no longer armed.
+	 * Rejects once any answer has failed, or once the count can no longer be read.
 	 */
 	hits(url: string): Promise<number>
 }
