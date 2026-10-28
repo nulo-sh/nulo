@@ -146,14 +146,10 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.accountService.registerAccountPurgeSubscriber(async (profileId, scopes) => this.purgeForAccounts(scopes, profileId))
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.purgeChain(profileId, chainId))
 
-		// Reconcile pending public-authwit rows by their tx's on-chain outcome: a row is
-		// written `pending` at the post-send tail, then confirmed here once its tx is proven
-		// successful, or removed if the tx dropped/reverted — so the local revocation index
-		// never claims a grant that never landed. Best-effort + idempotent: a failed pass is
-		// retried on the next tx update (or by sync). See implementations-plan/archive/network-e2e-required/plan.md#pending-authwits.
-		this.transactionService.onTransactionUpdated.add((tx) => {
-			void this.reconcileFromTx(tx).catch(() => {})
-		})
+		// Confirm a `pending` authwit row once its tx is proven successful and remove it once the tx
+		// reverts, so the revocation index never claims a grant that never landed. Best-effort and
+		// idempotent: a failed pass is retried on the next tx update, or by sync.
+		this.transactionService.onTransactionUpdated.add((tx) => this.reconcileFromTx(tx).catch(() => {}))
 		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
 	}
 
