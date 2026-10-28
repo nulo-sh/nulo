@@ -66,7 +66,8 @@ describe("recordingProblems", () => {
 		const committed = readRecording(tag)
 		expect(committed, `no recording of ${tag}`).toBeDefined()
 		expect(recordingProblems(committed as Recording, tag, "sealed")).toEqual([])
-		// Counted, never listed: an outside endpoint may carry a provider's key. Only plaintext is read.
+		// Counted, never listed: an outside endpoint may carry a provider's key. Sealed rows are opaque, so
+		// only plaintext URLs are counted.
 		const urls = JSON.stringify(committed).match(/\bhttps?:\/\/[^"\s\\]+/g) ?? []
 		expect(urls.length).toBeGreaterThan(0)
 		expect(urls.filter((url) => !isLoopbackUrl(url)).length).toBe(0)

@@ -152,8 +152,10 @@ candidate names the commit it was built from: a candidate from another commit, o
 uncommitted changes a build reads, is refused, so commit before you build it.
 
 - Each release a scenario updates from has reviewed traits beside its digests (`RELEASE_TRAITS` in
-  `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, and whether
-  its connect prompt replaces the popup's page or opens its own window. A tag with none is refused.
+  `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, whether its
+  connect prompt replaces the popup's page or opens its own window, and whether a passkey profile it
+  made is one the candidate retires (only Set up again) or one its passkey still unlocks, as the
+  candidate's `profile/profile-row.ts` classifies the row the release wrote. A tag with none is refused.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
   Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,
