@@ -80,7 +80,12 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 	if (wrongPassword) throw new Error("export unlock rejected the password")
 
 	await clickByTestId(page, "account-protect-btn")
-	const body = await downloadProtectedAccountFile(page)
+	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
+
+	await armDownloadCapture(page, { gzip: false })
+	await clickByTestId(page, "account-download-btn")
+	const body = await readCapturedDownload(page)
+	expect(body.length).toBeGreaterThan(0)
 	if (encrypt) return body
 	const { decryptAccountExport } = await import("@nulo/aztec-runtime/account")
 	return decryptAccountExport(body, password)
@@ -88,16 +93,6 @@ async function runExportStages(page: Page, encrypt: boolean, password: string): 
 
 /** Every network's first derived account is named this (`DEFAULT_ACCOUNT_NAME`). */
 export const FIRST_ACCOUNT_NAME = "Account 1"
-
-/** The protected file the export page offers once it shows it protected, as downloaded. */
-export async function downloadProtectedAccountFile(page: Page): Promise<string> {
-	await page.waitForSelector('[data-testid="account-file-protected-banner"]', { visible: true, timeout: 30_000 })
-	await armDownloadCapture(page, { gzip: false })
-	await clickByTestId(page, "account-download-btn")
-	const body = await readCapturedDownload(page)
-	expect(body.length).toBeGreaterThan(0)
-	return body
-}
 
 /** Export the account named `accountName` via the full page flow (picker included). */
 export async function exportAccountBody(

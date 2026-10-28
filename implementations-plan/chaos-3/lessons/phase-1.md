@@ -23,3 +23,7 @@
 - **`changeUnlockMethod`'s param is `change`, not `to`:** the launcher's `do` validates a `to` as a profile symbol and would refuse `new-passkey`.
 - **The answer-sequence check is pure** (`bindCeremonies` in `checkers.ts`) so the model test breaks it: another credential, a discovery the wallet narrowed itself or without PRF input, a missing create, a create on a bound id, an extra create, a get on an unminted credential.
 - **Gate.** Model test 249 green; `scripts/e2e/chaos-session.test.ts` and `chaos-seed.test.ts` green; seeds 7001-7003: Chrome red (7001, 7003) only on #1131 and incomplete (7002) only at its planned restart, Firefox green (7001) and red (7002, 7003) only on #1131; `account-import-export.test.ts` and `backup-imported-account.test.ts` green on Chrome.
+
+## 1.3 — campaign triage
+
+- 2026-10-28, Firefox seed 7008 step 17 (`exportAccountFile`, a passkey profile, approve): the driver timed out pressing Download. A passkey profile's Save downloads the file on its own (`account.vue` `handleSaveFile` ends in `handleDownload`), so the driver's later press met a button disabled by the page's own, unstubbed download. Chrome finished that download fast enough that the press went through and the second download was captured; Firefox did not. Classified as a harness defect; the passkey Save now arms the capture before the press, settles on the protected banner or the save's failure toast, and reads the page's own download. The shared `account-io` helper is back to its original shape. Rerun of 7008 on both browsers: no unfiled violation.

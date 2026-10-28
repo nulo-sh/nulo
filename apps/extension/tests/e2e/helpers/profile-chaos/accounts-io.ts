@@ -9,7 +9,8 @@ import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { readActiveNetwork } from "../../fixtures/networks"
 import { answerWithCredential } from "../../fixtures/passkey"
 import { callService } from "../../fixtures/session"
-import { downloadProtectedAccountFile, exportAccountBody, openAccountExport, previewImport } from "../account-io"
+import { exportAccountBody, openAccountExport, previewImport } from "../account-io"
+import { armDownloadCapture, readCapturedDownload } from "../download-capture"
 import { refusesShortPassword, shortFilePassword } from "./backups"
 import type { ChainAddresses } from "./checkers"
 import type { FileRef, ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
@@ -91,6 +92,20 @@ async function confirmPasskey(s: RunState, p: Pick<ParamsMap["exportAccountFile"
 	return press()
 }
 
+const SAVED: Signal[] = [
+	{ label: "saved", testid: "account-file-protected-banner" },
+	{ label: "refused", text: "Failed to create the file" },
+]
+
+/** Save seals the file and downloads it unasked, so the capture is armed before the press. */
+async function saveFile(page: Page, button: string, password: string): Promise<{ body: string; password: string } | Driven> {
+	await armDownloadCapture(page, { gzip: false })
+	await clickByTestId(page, button)
+	const saved = await settle(page, SAVED, { saved: "committed", refused: "refused" }, ACCOUNT_MS)
+	if (saved.outcome !== "committed" || !saved.settle.reached) return saved
+	return { body: await readCapturedDownload(page), password }
+}
+
 /** A passkey profile's file: its passkey, then the file password; the body, or how the page refused. */
 async function passkeyFile(
 	s: RunState,
@@ -106,14 +121,12 @@ async function passkeyFile(
 		const short = shortFilePassword(s, p.password)
 		// An enabled Save is pressed, as a person would, so a file the rule let through is seen.
 		if (await refusesShortPassword(s.anchor, short, form)) return timed(t0, ACCOUNT_MS, "refused")
-		await clickByTestId(s.anchor, form.button)
-		return { body: await downloadProtectedAccountFile(s.anchor), password: short }
+		return saveFile(s.anchor, form.button, short)
 	}
 	const password = secretFor(s, p.password)
 	await replaceInputValue(s.anchor, `[data-testid="${form.field}-input"]`, password)
 	await replaceInputValue(s.anchor, `[data-testid="${form.field}-confirm-input"]`, password)
-	await clickByTestId(s.anchor, form.button)
-	return { body: await downloadProtectedAccountFile(s.anchor), password }
+	return saveFile(s.anchor, form.button, password)
 }
 
 /** A password profile's file opens with its password; a passkey profile's with the file password
