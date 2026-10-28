@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-1
 tier: light
-status: approved
+status: completed; delivered as two PRs, the second carrying this close-out
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,17 @@ issues: "#1313 (arc 1); #1222 (arc 2); #1300 (arc 3)"
 budget: three Explore recon agents (sonnet); one Codex audit (gpt-6.1-sol, high) with its resumes; one Opus Plan leg; a fresh final Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-28.
+- **Status:** delivered as two PRs against `dev`: #1322 (arc 1, landed as `5ef0c119d`) and the PR that carries arc 3's change, arc 2's record and this close-out. Its merge closes the plan.
+- **Shipped:** #1322: the profile chaos `pre-update` start runs from every reviewed release (closes #1313). Then: a `waitForHash` timeout names the hash the page is at and stays a `TimeoutError`; the Urgent re-ask case's "left the queue without an accept" names the review cap kept at the press beside the seed's; flake-ledger row 65, open.
+- **Dispositions:** arc 2 traced branch (a) and shipped no code (D10): the dismissal and Firefox's `pickFile` are one `BrowserDriver` change, on #1111's ground, and #1222 stays open with the trace. Arc 3 reproduced neither failure in 10 runs (D7, no red), so #1300 closed as not planned with the numbers. A2's "through `withTimeoutMessage`" became a `TimeoutError` with the original as `cause` ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Known limits:** none.
+- **Open items:** #1222, tied to #1111.
+- **Lessons:** none promoted: `lessons.md` is at 8191 of 8192 B and nothing in it is superseded. The picker finding (headless Firefox's picker never answers a focused window, and the Firefox `pickFile` relies on it) stays in [lessons/phase-2.md](lessons/phase-2.md) and on #1222, where #1111 meets it.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # e2e-followups-1: three e2e follow-ups, test files only
 
@@ -186,6 +197,10 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 1 Codex r1 (`gpt-6.1-sol`, high, fresh; `1dac12160..HEAD`) | `conditional approve`, one medium: the Terms flag was set once Continue was clicked, before the acceptance was stored | `answerUpdatedTerms` returns once the sheet has closed (`306d474e5`) | — |
 | Arc 1 Opus (general-purpose) | `conditional approve`: the release profiles shared one `imported` array, so an import into `P1` was expected in a live `P2` (high, shown by a probe over 1,000 seeds); the README read the parked tab as Chrome-only (low) | both (`e0224004b`), with a model test that reds on the unfixed model | a load-time console error on the held page is now a red at the start: kept, the collector watches before navigation by design |
 | Arc 1 Codex r2 (resumed) | `approve`: both fixes verified, no new finding | — | — |
+| Arc 3 Codex r1 (`gpt-6.1-sol`, high, fresh; `5ef0c119d..HEAD`) | `conditional approve`, two: the review cap was read before `pointerClick` settled, not at the press (plausible); a comment named callers | both (`eb73eead5`): a capture-phase `pointerdown` keeps the line at the press, forced again once; the comment states the invariant | — |
+| Arc 3 Opus (general-purpose) | `conditional approve`: `typecheck:all` red on `queuedFeeCap`'s `undefined` (high, shown); the cap read before the press (as Codex r1); `cause` checked by type only; the comment; STATUS's 1.6 s read as the open time | all five (`eb73eead5`) | — |
+| Arc 3 Codex r2 (resumed) | `conditional approve`: r1's two and Opus's verified; new: the post-click read had no deadline (plausible) | bounded at 2 s (`585e4bead`) | — |
+| Arc 3 Codex r3 (resumed) | `approve`: the bound verified, no new finding | — | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 

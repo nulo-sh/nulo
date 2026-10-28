@@ -70,5 +70,11 @@ B's trajectory (the Urgent case):
 - Forced once each, Firefox, retry 0 (one run, 289 s, the Urgent case alone with its seed's fee raised 100-fold and a `waitForHash` on a missing route):
   - `TimeoutError: waitForHash: #/popup/forced not reached in 2000 ms; the page is at "#/popup/general"`
   - `transfer 10000000000000000000 left the queue without an accept: {…"stage":"proving"…}; B's review read "Fee up to ~4.617896 FJ ($32.325), based on your last send. If it comes out higher, we ask again." at the press, and the seeded basis caps at ~4.617896 FJ ($32.325)`
+- After the review moved the read into a capture-phase `pointerdown` on the confirm button, the Urgent message was forced again (258 s) and read the same line at the press.
 - `scripts/e2e/wait-for-hash.test.ts` (3 tests) pins the message, the type, the 2 s bound and the pass-through of any other failure.
 - #1300 closes as not planned with these numbers and a ledger row `(open)`; it reopens on a second first-attempt failure of either fingerprint.
+
+## 2026-10-28 · Final gates
+
+- The shard's real files at `585e4bead`, retry 0, `taskset -c 180-183`, proverless, `VITE_NULO_FEE_MULTIPLIER=10`: Firefox 17/17 green in 814 s (`same-token-concurrent-sends` 684 s, `concurrent-sendtx-confirm` 43 s); Chrome 17/17 green in 687 s (562 s, 31 s).
+- CI's heavy concurrent-confirm job before this change, on the last three green PR runs: Firefox 735-799 s, Chrome 609-706 s; the whole network lane 1112-1262 s and 957-1030 s.
