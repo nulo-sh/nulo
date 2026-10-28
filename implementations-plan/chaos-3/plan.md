@@ -180,7 +180,7 @@ Each finding was checked against the tree before its disposition; detail in less
 Phase 1.3, at retry 0: 80 seeds, 2,000 steps, every step run. Smoke Chrome 7001-7030 and Firefox 7001-7015 ran at `780b3e6d3`; the rest at `ef0b0fb4d`, which changes only how the passkey account file is read (lessons/phase-1.md § 1.3). The smoke seeds ran as six `seeded` batches of five per browser, three at a time, rather than three of ten; the seed set is the same.
 
 - **Verdicts:** no seed is red on an unfiled finding. One harness red, Firefox smoke 7008 step 17, was fixed and the seed rerun on both browsers clean (its row is the rerun). Every incomplete step is a planned restart's log window (`RESTART_LOG_GAP`); no unplanned restart.
-- **Findings met:** #1131, #1132, #1133, #1136, and #1178 on the changes it covers. None new; no suspected weakness.
+- **Findings met:** #1131, #1132, #1133, #1136, and #1178 on the changes it covers. None new; no suspected weakness. After `origin/dev` fixed #1131 and #1136, seeds 7001-7005 rerun on the merged head were green on both browsers, or incomplete only at a planned restart.
 - **Outcomes:** smoke Chrome 2 green, 13 red-filed, 15 incomplete (restart only); smoke Firefox 4, 16, 10; `pre-update` Chrome 1, 3, 1; `pre-update` Firefox 0, 5, 0; network 5 red-filed on each browser (#1136 meets every network seed).
 
 Wall-clock per seed, launch included, on a host shared with other lanes:
