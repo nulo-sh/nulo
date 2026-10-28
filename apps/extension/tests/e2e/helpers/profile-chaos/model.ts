@@ -284,9 +284,9 @@ const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext
 const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
 const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 299, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
-const FULL_EXPORT = cite(EXPORT, 392, "sealFullBackupText(plaintext as string, state.password.value as string)")
-const FILE_PASSWORD_RULE = cite(EXPORT, 559, "!isPasskeyProfile.value || isNewPasswordValid(")
-const FILE_PASSWORD_BLOCKED = cite(EXPORT, 382, "if (filePasswordBlocked(ctx)) return")
+const FULL_EXPORT = cite(EXPORT, 393, "sealFullBackupText(plaintext as string, state.password.value as string)")
+const FILE_PASSWORD_RULE = cite(EXPORT, 560, "!isPasskeyProfile.value || isNewPasswordValid(")
+const FILE_PASSWORD_BLOCKED = cite(EXPORT, 383, "if (filePasswordBlocked(ctx)) return")
 const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 677, "public async exportAccount(")
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 761, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 832, "This account is already in your wallet")
@@ -301,7 +301,7 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	966,
+	967,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
 const RESTORE_FINALIZES = cite(IMPORT, 508, "restoreRun = await finalizeWithReminder(")

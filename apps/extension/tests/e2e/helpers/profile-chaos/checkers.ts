@@ -541,7 +541,7 @@ export const ALLOWED_ERRORS: readonly AllowedError[] = [
 		pattern: /^\["\[full-backup\] restore failed:",\{"error":\{"name":"Error","message":"Client disconnected"\}\}\]$/,
 		kinds: ["log"],
 		during: ["background"],
-		source: cite("apps/extension/src/composables/full-backup-restore.ts", 999, 'console.error("[full-backup] restore failed:"'),
+		source: cite("apps/extension/src/composables/full-backup-restore.ts", 1000, 'logCredentialFailure("[full-backup] restore failed:"'),
 		reason: "a planned restart under a running restore drops the run's client, and the run reports its own failure and rolls the profile back, which the model expects",
 	},
 ]

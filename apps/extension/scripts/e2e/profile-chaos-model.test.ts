@@ -894,7 +894,7 @@ describe("O4, errors", () => {
 			source: "ui",
 			text: `["[full-backup] restore failed:",{"error":{"name":"Error","message":"${message}"}}]`,
 		})
-		const source = "code:apps/extension/src/composables/full-backup-restore.ts:999"
+		const source = "code:apps/extension/src/composables/full-backup-restore.ts:1000"
 		expect(checkErrors([failed("Client disconnected")], ["session", "background"])).toEqual({
 			violations: [],
 			warns: {},

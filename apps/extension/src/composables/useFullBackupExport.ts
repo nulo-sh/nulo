@@ -18,6 +18,7 @@ import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH } from "@/wallet/services/backup/backup-migration-registry"
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
 import { downloadFile, profileFileNameSegment } from "@/utils"
+import { logCredentialFailure } from "@/utils/credential-refusal"
 import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { markGetStarted } from "@/utils/get-started"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
@@ -183,7 +184,7 @@ async function acquirePasskeyCredential(ctx: ExportCtx, isCurrent: () => boolean
 		// User-facing copy stays generic; the underlying error goes to the console so a failed
 		// export is diagnosable (this catch and the key-export one below are otherwise
 		// indistinguishable — same toast, same navigation).
-		console.error("[export/full] passkey credential acquisition failed:", err)
+		logCredentialFailure("[export/full] passkey credential acquisition failed:", err)
 		ctx.openToast({ kind: "error", label: "Failed to authenticate by passkey" })
 		ctx.opts.leaveAfterPasskeyFailure()
 		return "handled"
@@ -225,7 +226,7 @@ async function exportKeyMaterial(
 		} else {
 			// See the acquisition catch above — stage-tagged so the two failure points are
 			// distinguishable in the console while the user-facing copy stays generic.
-			console.error("[export/full] passkey export failed:", error)
+			logCredentialFailure("[export/full] passkey export failed:", error)
 			ctx.openToast({ kind: "error", label: "Failed to authenticate by passkey" })
 			ctx.opts.leaveAfterPasskeyFailure()
 		}
