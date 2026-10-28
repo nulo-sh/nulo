@@ -7,3 +7,4 @@
 - 2026-10-28: Opus round 1 conditional approve (9 findings; 8 accepted, 1 rejected); plan revised; Codex round 2 next.
 - 2026-10-28: Codex round 2 conditional approve (focus timing, scope amendment; both accepted); round 3 conditional approve on the scope call alone. Plan committed; arc 1 waits on the orchestrator's acceptance of `SettingItem.vue` and `Settings.test.ts`.
 - 2026-10-28: the orchestrator accepted Option A (D1's two files) on two conditions; merged `origin/dev` (#1326); arc 1 started.
+- 2026-10-28: 1.1 green: Settings.test.ts red at base (1 failed, 39 passed: the controls case), green after (40 passed); lint and typecheck:all exit 0.

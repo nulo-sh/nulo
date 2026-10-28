@@ -184,6 +184,58 @@ describe("ui/Settings — SettingItem", () => {
 		w.unmount()
 	})
 
+	/** A CSS module class's local name, without the test build's `_name_hash` decoration. */
+	const localNames = (classes: string[]) => classes.map((name) => name.replace(/^_(.+)_[0-9a-z]+$/i, "$1")).sort()
+
+	test("link mode without controls keeps its shape: the root is the link with the row's classes and attributes, its first child the row body", async () => {
+		const { w } = await mountItem({ title: "X", to: "/popup/general" }, { "data-testid": "row", class: "extra" })
+		expect(w.element.tagName).toBe("A")
+		expect(w.attributes("href")).toBe("/popup/general")
+		expect(w.attributes("data-testid")).toBe("row")
+		expect(localNames(w.classes())).toEqual(["extra", "interactive", "medium", "wrapper"])
+		expect(w.element.firstElementChild?.matches("[data-row-target]")).toBe(false)
+		expect(localNames([...(w.element.firstElementChild?.classList ?? [])])).toEqual(["main"])
+		w.unmount()
+	})
+
+	test("link mode with controls: a div root keeps the class; the stretched link alone carries the other attributes and the title's name; a control beside it presses once and never navigates", async () => {
+		const onPress = vi.fn()
+		const { w, router, push } = await mountItem(
+			{ title: "Testnet", to: "/popup/settings/networks/tn", controls: true },
+			{ "data-testid": "row", "data-network-id": "tn", class: "extra" },
+			// No stopPropagation, unlike RowAction: a press that bubbles must still not navigate.
+			{ right: () => h("button", { type: "button", "data-testid": "control", onClick: onPress }, "Switch") },
+		)
+		expect(w.element.tagName).toBe("DIV")
+		expect(w.classes()).toContain("extra")
+		expect(document.querySelectorAll('[data-testid="row"]')).toHaveLength(1)
+		const link = w.get("[data-row-target]")
+		expect(link.element.tagName).toBe("A")
+		expect(link.attributes()).toMatchObject({ "data-testid": "row", "data-network-id": "tn", href: "/popup/settings/networks/tn" })
+		expect(link.classes()).not.toContain("extra")
+		expect(w.find(`#${link.attributes("aria-labelledby")}`).text()).toBe("Testnet")
+
+		const control = w.get('[data-testid="control"]')
+		expect(link.element.contains(control.element)).toBe(false)
+		expect(link.element.compareDocumentPosition(control.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		await control.trigger("click")
+		await flushPromises()
+		expect(onPress).toHaveBeenCalledTimes(1)
+		expect(push).not.toHaveBeenCalled()
+
+		await link.trigger("click")
+		await flushPromises()
+		expect(push).toHaveBeenCalledTimes(1)
+		expect(router.currentRoute.value.path).toBe("/popup/settings/networks/tn")
+
+		await router.push("/start")
+		push.mockClear()
+		link.element.dispatchEvent(space())
+		await flushPromises()
+		expect(push).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
 	test("inert mode: no target, no tabindex, no pointer class", async () => {
 		const { w } = await mountItem({ title: "Version", raw: true })
 		expect(w.element.tagName).toBe("DIV")
