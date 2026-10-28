@@ -190,7 +190,7 @@ describe("AccountService import/export", () => {
 	test("export requires the profile password (service-side auth)", async () => {
 		const { account } = await build()
 		await account.importAccount("p1", CHAIN, exportFile(), addrFor(SK), "")
-		// The page words a wrong password from its type, so the export must not flatten it.
+		// A credential refusal keeps its type through the account export.
 		await expect(account.exportAccount("p1", CHAIN, addrFor(SK), "wrong-pass", false)).rejects.toBeInstanceOf(InvalidPasswordError)
 		const body = await account.exportAccount("p1", CHAIN, addrFor(SK), "correct-pass", false)
 		expect(body).toContain("nulo-account-export")

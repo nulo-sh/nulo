@@ -309,6 +309,7 @@ declare global {
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const legalSheetMayCover: typeof import('../utils/legal-sheet').legalSheetMayCover
   const listOwnAccountRow: typeof import('../utils/account-rows').listOwnAccountRow
+  const logCredentialFailure: typeof import('../utils/credential-refusal').logCredentialFailure
   const managers: typeof import('../utils/core').managers
   const markGetStarted: typeof import('../utils/get-started').markGetStarted
   const markRaw: typeof import('vue').markRaw
@@ -1179,6 +1180,7 @@ declare module 'vue' {
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly legalSheetMayCover: UnwrapRef<typeof import('../utils/legal-sheet')['legalSheetMayCover']>
     readonly listOwnAccountRow: UnwrapRef<typeof import('../utils/account-rows')['listOwnAccountRow']>
+    readonly logCredentialFailure: UnwrapRef<typeof import('../utils/credential-refusal')['logCredentialFailure']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markGetStarted: UnwrapRef<typeof import('../utils/get-started')['markGetStarted']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>

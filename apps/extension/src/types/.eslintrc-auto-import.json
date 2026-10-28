@@ -552,6 +552,7 @@
     "legalAboutRow": true,
     "legalSheetMayCover": true,
     "listOwnAccountRow": true,
+    "logCredentialFailure": true,
     "managers": true,
     "markGetStarted": true,
     "markRaw": true,

@@ -5,3 +5,8 @@
 - 3.3: the `Failed to create profile:` + `PasskeyPrfError` line came from the chaos build at `5d4dff0f6` (2026-10-26), whose `reportCreateFailure` had no `no-prf` return. #1221 (`6cf8353c1`, 2026-10-27) added it. The recon read `remember`'s `no-prf` line, which `fd474075e` added, as that return. At HEAD no `PasskeyPrfError` reaches the line, so no change beyond the site's classifier.
 - The seed import shows the wrapped no-PRF error without logging it; only the full-backup restore logs it (`[full-backup] restore failed:`), which is where the wrap's `cause` sets the level.
 - Gate, 2026-10-28, on the arc head: `lint`, `typecheck:all`, `test` (944 files), `test:all` and `check:plans` exit 0. On the armed Chrome smoke build, `security.test.ts`, `passkey-backup.test.ts` and `security-backup.test.ts` 11 of 11 at retry 0; `passkey-backup.test.ts` on Firefox 2 of 2.
+- Review round 1. Codex (gpt-6.1-sol, high) and the Opus leg found the same residual: `openProfileSlots` returns one `null` for a wrong key and for a slot corrupted after its guard opened, so that corruption now logs at debug. Separating them changes an exported `wallet-crypto` contract, so it is the closed known limit #1299, not a fix here. The Opus leg also found:
+  - the regenerated auto-import types left uncommitted, which CI's freshness diff fails (`isCredentialRefusal` is now module-local, so only `logCredentialFailure` is a global);
+  - `SameUnlockMethodError` unreachable from any page since #1219, so it stays at error;
+  - two stale comments.
+- `src/utils/` is an auto-import dir: a new export there changes `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json`. A build regenerates both, and they ship in the same commit.

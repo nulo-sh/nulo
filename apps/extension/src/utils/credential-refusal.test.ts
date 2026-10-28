@@ -10,7 +10,6 @@ const wrapped = (cause: unknown) => new Error("This passkey can't unlock Nulo.",
 const refusals: Array<[string, () => unknown]> = [
 	["a wrong password", () => new InvalidPasswordError()],
 	["another passkey", () => new PasskeyNotOpenedError()],
-	["the unlock method the profile has", () => new SameUnlockMethodError()],
 	["a passkey with no PRF", () => new PasskeyPrfError("Passkey PRF not available")],
 	["an unconfirmed prompt", () => new DOMException("not allowed", "NotAllowedError")],
 	["a cancelled prompt", () => new DOMException("cancelled", "AbortError")],
@@ -18,6 +17,8 @@ const refusals: Array<[string, () => unknown]> = [
 ]
 const failures: Array<[string, () => unknown]> = [
 	["an unknown error", () => new Error("boom")],
+	// No page can send a password profile a new password as its new unlock: a page bug, not a refusal.
+	["the unlock method the profile has", () => new SameUnlockMethodError()],
 	["a minted passkey whose confirmation broke", () => unconfirmed(new TypeError("bad response"))],
 ]
 
