@@ -10,3 +10,4 @@
 - 2026-10-28 Phase 2 gate RED: full Firefox smoke pass 1 failed 1 of 290 (`import-errors-scroll.test.ts:230`, a 158 fractional scroll end). Arc stopped per § A fourth difference; D7 proposed, awaiting approval (OWNER-ASKS.md).
 - 2026-10-28 while blocked: Chrome smoke green (273/273, 1954 s); Firefox network green on 158 (133 files, 0 failed; proverless, in two runs, lessons/phase-2.md). Waiting on D7.
 - 2026-10-28 D7 approved by the orchestrator; applied; the arc resumes.
+- 2026-10-28 Phase 2 gate green at the final head: Firefox smoke 3x 276/276 on 158; static gates green; review loop converged (final r1 conditional on this gate, r2 approve).

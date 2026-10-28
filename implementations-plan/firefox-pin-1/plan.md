@@ -127,6 +127,7 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Codex r3 (resumed, a decision: the smoke's one red on 158) | the fix is a bounded test-only amendment; pick an exact probe of the browser's end without restoring; reject the `< 1` px check; leave `rows.test.ts`; the plan's stop rule binds, so approval comes first | D7 as proposed | — |
 | Codex final r1 (fresh, over `origin/dev...HEAD` after D7 and the `dev` merge) | `conditional approve`: the three smoke passes must finish green; no code finding; D7 keeps the exact compare and needs no restore; `Refs #1222`, not `Closes` | the gate, and `Refs #1222` | — |
 | Opus (final, beside Codex final r1) | `conditional approve`, four: the plan's and FIREFOX.md's "an evaluated click opens no picker" is false (Puppeteer's BiDi evaluate passes `userActivation: true`, `shared/Realm.sys.mjs:220-227`); FIREFOX.md's screenshot advice ignores 157's refusal; the D7 FIREFOX.md row uncommitted; `hits`' doc promised a rejection Chrome never gives | all four: the claim corrected in the plan, FIREFOX.md and `pickFile`'s comment; the advice narrowed to web pages with #1329; the row committed; the doc says "once the count can no longer be read" | — |
+| Codex final r2 (resumed, over `c775544a2`) | `approve`: the corrected picker claim, the new rows and the `hits` contract hold against the sources | — | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 

@@ -39,3 +39,19 @@ The plan stops the arc on a fourth difference. Codex r3 (plan.md § Audit verdic
   - The unsharded run outran its 7000 s bound after 102 of 133 files (203 tests, 0 failed). Its one orphaned geckodriver group was reaped by its run id, and the other 31 files ran on their own: 29 passed and 2 skipped, 35 tests passed and 2 skipped, 951 s.
   - Together: 133 files, 0 failed, every launch (148 + 30) `[firefox] 158.0`.
 - D7 changes only `import-errors-scroll.test.ts`, a smoke file. The network result therefore stands for the final head. The Chrome smoke needs only that file rerun, which the patch trial did (4/4).
+
+## D7 approved; the gate at the final head
+
+- The orchestrator approved D7 on 2026-10-28. It landed as `24c5d7dde`, and `origin/dev` was merged as `8acc54ff9`; the merge left the drivers alone, and its one fixture change was `fixtures/dom.ts`'s `waitForHash`.
+- Static gates at `8acc54ff9` were green: lint, typecheck:all, test:all (extension 16219 passed), test:ci-gating (691 pass), check:plans (0 findings). D7's file on Chrome passed 4/4 (60 s).
+- The full Firefox smoke ran three times at retry 0 on 158, six shards in sequence. Pass 1 started at `8acc54ff9`; `c775544a2`, a comments-and-docs-only commit, landed during its shard 2. Every launch printed `[firefox] 158.0`:
+
+| Pass | Shards (passed) | Failed | Wall-clock |
+|---|---|---|---|
+| 1 | 50, 50, 36, 41, 54, 45 = 276 | 0 | 2929 s |
+| 2 | 50, 50, 36, 41, 54, 45 = 276 | 0 | 2852 s |
+| 3 | 50, 50, 36, 41, 54, 45 = 276 | 0 | 3038 s |
+
+- D7's test passed on 158 in every pass (shard 3).
+- The answerer's contract test measured 6.5 s on Firefox 158, and 3.6 to 4.5 s on Chrome.
+- The Chrome smoke (273/273) and the Firefox network suite (133 files, 0 failed) ran before the merge. The merge changed no driver file, so per the orchestrator the PR's CI lanes are the authority on the merged head.
