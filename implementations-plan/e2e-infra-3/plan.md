@@ -143,7 +143,7 @@ Test infrastructure plus two product data attributes. The attributes put on the 
 
 **Validation gate:** one route passes all of it on both revisions, or arc 2 stops and #1111 stays open with the measurements.
 
-## Phase 5: the seam, its callers and the ban
+## Phase 5: the seam, its callers and the ban ✓ (lessons/phase-5.md)
 
 1. Arc-2 items 1 to 3, on 153. Commit per item.
 
@@ -168,7 +168,7 @@ Each body gives the path, what held, the gates with their counts, each browser's
 
 The plan plus `implementations-plan/README.md` § Post-implementation standard at `78f5f9171`. Plan-specific values:
 - **Step 1:** absent (`code_review: off`).
-- **Step 2:** per arc, at its boundary, over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus `general-purpose` review runs beside round 1. Hard stop at three rounds. Then one fresh Codex pass over `origin/dev...` the top arc, for cross-arc issues.
+- **Step 2:** per arc, at its boundary, over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus `general-purpose` review runs beside round 1. Hard stop at three rounds. Then one fresh Codex pass over `origin/dev...` the top arc, for cross-arc issues. Run over `git diff 0d5b1967c~1..HEAD`: arc 1 had landed on `dev` as `0d5b1967c`, so `origin/dev...` would have left it out.
 - **Step 3:** `gh stack submit --auto`, `gh pr edit` each body, `gh pr checks <n> --watch`. Never merge.
 - **Step 4:** the close-out layer. Merge `origin/dev` and read `index.md` and `lessons.md`. Write the Outcome. Promote lessons after a dedupe (the file is near its budget). Delete `STATUS.md`. `git mv` the plan into `archive/` in its own commit.
 - **Step 5:** once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/e2e-infra-3/plan.md` succeeds, run `agent-worktree done e2e-infra-3 --merged`.
@@ -187,11 +187,13 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Arc 1 Codex r3 (resumed, `gpt-6.1-sol`, high) | `approve`: both rounds' fixes re-verified, no regression | — | — |
 | Arc 2 Codex r1 (`gpt-6.1-sol`, high; Phases 4-5, D9) | `approve`, one low: the chrome-scope tree read enters the shim's open contexts, and the close watch then reports Firefox's windows closed on every tick | the shim opens only content contexts never seen closed, with a test (`441d62d70`) | — |
 | Arc 2 Opus (general-purpose; Phases 4-5) | `conditional approve`: the same tree-read leak (medium, diagnostics); the ban's comment claimed Firefox refuses `viewport()`; a timed-out resize left the record stale | all three (`441d62d70`) | `.call`/`.bind` call shapes the ban misses: low, not worth a rule |
+| Arc 2 Codex r2 (resumed, `gpt-6.1-sol`, high) | `approve`: the fixes close the leak without hiding a real close; the 158 claims match its source and the run; no doc still moves the pin with the seam alone | — | — |
+| Cross-arc Codex (fresh, `gpt-6.1-sol`, high; `0d5b1967c~1..HEAD`) | `conditional approve`, three low, all records: the plan's cross-arc range, the `/goal` seed still asking for Phase 6, the index entry | all three | — |
 
 Light tier with both legs: the resumed final pass is the approval gate's verdict.
 
 ## Seeds (not run; the orchestrator drives this lane)
 
-`/goal Phases 1-6 of implementations-plan/e2e-infra-3/plan.md are ✓, each gate reported in the transcript; each arc's Codex loop converged (a resumed pass with no new material finding, quoted), then the cross-arc pass; the stack's PRs exist with their Closes lines, and the close-out archived the plan.`
+`/goal Phases 1-5 of implementations-plan/e2e-infra-3/plan.md are ✓ and Phase 6's hold is recorded (D10), each gate reported in the transcript; each arc's Codex loop converged (a resumed pass with no new material finding, quoted), then the cross-arc pass; the stack's PRs exist with their Closes lines, and the close-out archived the plan.`
 
 `/loop 15m Drive implementations-plan/e2e-infra-3 forward per its plan.md; never merge; stop after the PRs' checks report.`

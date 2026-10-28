@@ -10,3 +10,4 @@
 - 2026-10-28 arc 1 review converged (Codex r3 approve) and its gate green on e8a22a626; PR next.
 - 2026-10-28 Phase 4 done: route B (BiDi `script.callFunction` on a chrome context) passes on 153 and 158 and keeps focus; `chromeScript` takes focus (D7). Phase 5 next.
 - 2026-10-28 Phase 5 smoke green at retry 0 (Chrome 273, Firefox 153 276); review r1 converged on 441d62d70. Phase 6 held: Firefox 158 refuses `input.setFiles` and page-scoped `network.addIntercept` on wallet pages, and `getManifest()` adds `sandbox: null` (35 failed); the pin stays at 153.0.4 (D10).
+- 2026-10-28 Arc 2 review converged: Codex r2 approve (resumed), cross-arc pass conditional approve on three record fixes, taken. Chrome network 233/0, Chrome smoke 3 runs (one #1216 flake, rerun green).
