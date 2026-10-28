@@ -17,6 +17,16 @@ post_implementation_hardening: not scheduled
 
 Arc 1 makes a lock screen keep its selection when a settle's stale pointer read crosses a newer write naming that selection (#1281, second ordering). The first ordering is a closed known limit, #1315 (D1). Arc 2 makes Settings' Disable auto-close hand keyboard focus to Close, as the onboarding phrase step already does (#1282). Both fixes stay inside the behaviour `lock-ux-1` and `lock-window-1` approved; neither changes what a screen shows. Evidence: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
+## Outcome
+
+- **Date:** 2026-10-28. Planned and both arcs implemented in one session; arc 2 started from `dev` after arc 1 merged, so it is a plain PR, not a stack.
+- **Status:** completed. Arc 1 merged as #1320 (closes #1281). Arc 2 and this close-out ship as one PR into `dev`; its merge closes #1282 and archives this plan.
+- **Shipped:** #1320, a settle gives way when the last pointer event heard during its reads names a selection its list still holds (`auth.vue`); arc 2 (`0381a3c77`), Disable auto-close on the Settings phrase screen hands focus to Close, which refuses the repeat of that Enter (`SecretCountdownClose.vue`).
+- **Dropped or rejected:** #1281's first ordering, as known limit #1315 (D1): the issue's object comparison mistakes an activation's same-id write for a pick, and the exact signal is a cross-module mechanism for one page. The write-count signal of audit round 2 (D1). No `lessons.md` line: it holds 8191 of 8192 bytes and none of its entries is superseded; the candidate stays in [lessons/phase-0.md](lessons/phase-0.md).
+- **Known limits:** #1315.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
+
 ## Findings (paths at 210d02f1f)
 
 - **F1, #1281 ordering 1, demonstrated (code trace); known limit #1315.** A selected; another window picks B and `followPick("pB")` awaits its list (`apps/extension/src/popup/pages/auth.vue:281-285`); the person re-picks A here (`SelectProfilePopup.vue:60`, the chooser's own object), whose pointer event is not heard yet; B's list returns, `selectedHere` compares ids (`auth.vue:286`), and B is selected. The person's own event then restores A. The screens disagree only if that restoring lookup rejects or the person's write fails.
@@ -117,9 +127,10 @@ The execution contract is this plan plus `implementations-plan/README.md` § Pos
 - **Final pass, fresh Codex session**: `approve`. No blocking finding; the regression is red and both controls green on the base, all three green after, by trace; existing cases `:523`, `:653`, `:675`, `:699` hold. Accepted, wording only: Fact 2 records a hold only when it reaches `heldBack()`; F3's "next Tab starts at the top" is unmeasured; F2's invariant scoped to the settle; `lint:actions` before each push.
 
 - **Arc 1, round 1** (Codex over `2ed82cef2..0964d0488`): one finding, accepted: the `settleProfile` TSDoc said the heard pick is newer than the read; it may be. Opus diff review, same round: two findings, accepted. The same comment also hung off "as in the route guard"; rewritten. No test failed if `follows !== followsAtStart` was dropped; a held-replay case now does (mutation-checked). `heard` renamed `lastHeard`.
-- **Arc 1, round 2** (Codex resume over `0964d0488..9de3bbcf6`): `clean`.
+- **Arc 1, round 2** (Codex resume over `0964d0488..9de3bbcf6`): `clean`. Merged as #1320.
+- **Arc 2, round 1** (Codex over `2914b9699..0381a3c77`): `clean`. Opus diff review, same round: `clean` (pointer, Space, Close's own activation and `seed.vue`'s handler traced).
 
-## Seeds
+## Seeds (retired)
 
 `/goal` Arc <n> of implementations-plan/lock-followups-1/plan.md built, its red-first tests reported failing (or, for controls, passing) on the base and passing after, its gate passing in the transcript, its Codex loop converged (a resumed pass with no new material finding quoted), its PR open on the lane's stack with `Closes #<issue>`.
 `/loop 15m` Drive the next arc of implementations-plan/lock-followups-1/plan.md per its phases and Post-implementation; stop at the open PR; never merge.
