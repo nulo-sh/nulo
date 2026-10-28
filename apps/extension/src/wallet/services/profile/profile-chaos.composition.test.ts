@@ -4,29 +4,42 @@
  * lists replay through `planFromList`; each reader has a break fixture that turns a run red on the
  * oracle it reads for. See `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { PasskeyNotOpenedError } from "@nulo/extension-messaging/errors"
 import { LogLevel } from "@nulo/wallet-core/logger"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import type { OracleId } from "../../../../tests/e2e/helpers/profile-chaos/checkers"
-import { type ListedStep, planFromList } from "../../../../tests/e2e/helpers/profile-chaos/model"
+import {
+	type ListedStep,
+	type PhraseRef,
+	plan,
+	planFromList,
+	type ProfileRef,
+	startWorld,
+	type World,
+} from "../../../../tests/e2e/helpers/profile-chaos/model"
 import { fakePasskeyAnswer } from "../../../../tests/helpers/fake-passkey"
 import {
+	checkMasters,
 	describeRed,
+	type FirstSighting,
+	IN_PROCESS_ACTIONS,
 	IN_PROCESS_CAPS,
 	type InProcessRun,
-	type RunReport,
+	type MasterReading,
 	runPlan,
 	type StepHooks,
+	type Worker,
 } from "../../../../tests/helpers/profile-chaos-in-process"
 
 const RUN_MS = 120_000
 
 const planOf = (list: ListedStep[]) => planFromList(list, "empty", IN_PROCESS_CAPS)
 
-async function green(list: ListedStep[]): Promise<RunReport> {
+async function green(list: ListedStep[]): Promise<void> {
 	const report = await runPlan(planOf(list))
 	expect(report.red, describeRed(report)).toBeUndefined()
 	expect(report.steps.map((s) => s.action)).toEqual(list.map((s) => s.action))
-	return report
 }
 
 /** The run is red at `action`, on `oracle` alone, with a violation whose message matches `message`. */
@@ -67,90 +80,95 @@ const CREATE: ListedStep = { action: "createPassword", params: { ref: "P1", name
 const CREATE_PK: ListedStep = { action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } }
 const RENAME: ListedStep = { action: "rename", params: { name: "Chaos 9" } }
 
-describe("the profile chaos catalog in process — hand lists", () => {
-	test(
-		"a passkey profile is created, unlocked, edited under its prompt, changed to a new passkey, restarted and changed to a password",
-		() =>
-			green([
-				{ action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } },
-				{ action: "lock", params: {} },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "refuse" } },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "no-prf" } },
-				{ action: "editRowDuringUnlock", params: { field: "prfSalt" } },
-				{ action: "editRowDuringUnlock", params: { field: "type" } },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
-				{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "refuse", credential: "K2" } },
-				{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } },
-				{ action: "backgroundRestart", params: {} },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "other", other: "K1" } },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
-				{ action: "revealPhrase", params: { variant: "other", other: "K1" } },
-				{ action: "revealPhrase", params: { variant: "approve" } },
-				{ action: "changeUnlockMethod", params: { change: "password", current: "other", password: "S1", other: "K1" } },
-				{ action: "changeUnlockMethod", params: { change: "password", current: "approve", password: "S1" } },
-				{ action: "revealPhrase", params: { variant: "right" } },
-				{ action: "verifyAll", params: {} },
-			]),
+/** Short lists for what a seed rarely draws: each race, each row edit, a duplicate import, the
+ *  strict toggle around restarts. */
+const HAND_LISTS: Record<string, ListedStep[]> = {
+	"a passkey profile is created, unlocked, edited under its prompt, changed to a new passkey, restarted and changed to a password": [
+		{ action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } },
+		{ action: "lock", params: {} },
+		{ action: "unlockPasskey", params: { target: "P1", variant: "refuse" } },
+		{ action: "unlockPasskey", params: { target: "P1", variant: "no-prf" } },
+		{ action: "editRowDuringUnlock", params: { field: "prfSalt" } },
+		{ action: "editRowDuringUnlock", params: { field: "type" } },
+		{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
+		{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "refuse", credential: "K2" } },
+		{ action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } },
+		{ action: "backgroundRestart", params: {} },
+		{ action: "unlockPasskey", params: { target: "P1", variant: "other", other: "K1" } },
+		{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
+		{ action: "revealPhrase", params: { variant: "other", other: "K1" } },
+		{ action: "revealPhrase", params: { variant: "approve" } },
+		{ action: "changeUnlockMethod", params: { change: "password", current: "other", password: "S1", other: "K1" } },
+		{ action: "changeUnlockMethod", params: { change: "password", current: "approve", password: "S1" } },
+		{ action: "revealPhrase", params: { variant: "right" } },
+		{ action: "verifyAll", params: {} },
+	],
+	"a lock and a restart each meet a held passkey unlock, two windows unlock one password profile, and stored rows change under unlocks": [
+		{ action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: true } },
+		{ action: "lock", params: {} },
+		{ action: "raceLockDuringUnlock", params: {} },
+		{ action: "raceRestartDuringUnlock", params: {} },
+		{ action: "editRowDuringUnlock", params: { field: "credentialId" } },
+		{ action: "editRowDuringUnlock", params: { field: "secret" } },
+		{ action: "tamperedUnlock", params: { target: "P1", slot: "entropy" } },
+		{ action: "createPassword", params: { ref: "P2", name: "Chaos 2", password: "S1", double: false } },
+		{ action: "lock", params: {} },
+		{ action: "raceDoubleUnlock", params: {} },
+		{ action: "verifyAll", params: {} },
+	],
+	"a phrase imported over its own profile warns, declined then confirmed, and deletes from Settings and from the lock screen": [
+		CREATE,
+		{ action: "revealPhrase", params: { variant: "wrong" } },
+		{ action: "revealPhrase", params: { variant: "right" } },
+		{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "Chaos 2", password: "S2", duplicate: "decline" } },
+		{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "Chaos 2", password: "S2", duplicate: "confirm" } },
+		{
+			action: "importPhrase",
+			params: { ref: "P3", phrase: "W1", name: "Chaos 3", method: "passkey", credential: "K1", duplicate: "confirm" },
+		},
+		{ action: "deleteProfile", params: { via: "settings" } },
+		{ action: "switchProfile", params: { to: "P1" } },
+		{ action: "deleteProfile", params: { via: "forgot" } },
+		{ action: "verifyAll", params: {} },
+	],
+	"strict mode turned off and on around restarts keeps a bearer only while lenient, and a stopped worker's row stays for the lock screen":
+		[
+			{ action: "onboardingCreate", params: { ref: "P1", method: "passkey", credential: "K1", answer: "later" } },
+			{ action: "toggleStrict", params: {} },
+			{ action: "lock", params: {} },
+			{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
+			{ action: "backgroundRestart", params: {} },
+			{ action: "toggleStrict", params: {} },
+			{ action: "backgroundRestart", params: {} },
+			{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
+			RENAME,
+			{ action: "verifyAll", params: {} },
+		],
+}
+
+/** The fixed set (D10): the fewest seeds from 8001 upward that, with the hand lists, drive every
+ *  action of the surface. */
+const FIXED_SEEDS = [8001]
+
+describe("the profile chaos catalog in process", () => {
+	test.each(Object.entries(HAND_LISTS))("%s", (_, list) => green(list), RUN_MS)
+
+	test.each(FIXED_SEEDS)(
+		"seed %i",
+		async (seed) => {
+			const report = await runPlan(plan(seed, "empty", IN_PROCESS_CAPS))
+			expect(report.red, describeRed(report)).toBeUndefined()
+		},
 		RUN_MS,
 	)
 
-	test(
-		"a lock and a restart each meet a held passkey unlock, two windows unlock one password profile, and stored rows change under unlocks",
-		() =>
-			green([
-				{ action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: true } },
-				{ action: "lock", params: {} },
-				{ action: "raceLockDuringUnlock", params: {} },
-				{ action: "raceRestartDuringUnlock", params: {} },
-				{ action: "editRowDuringUnlock", params: { field: "credentialId" } },
-				{ action: "editRowDuringUnlock", params: { field: "secret" } },
-				{ action: "tamperedUnlock", params: { target: "P1", slot: "entropy" } },
-				{ action: "createPassword", params: { ref: "P2", name: "Chaos 2", password: "S1", double: false } },
-				{ action: "lock", params: {} },
-				{ action: "raceDoubleUnlock", params: {} },
-				{ action: "verifyAll", params: {} },
-			]),
-		RUN_MS,
-	)
-
-	test(
-		"a phrase imported over its own profile warns, declined then confirmed, and deletes from Settings and from the lock screen",
-		() =>
-			green([
-				CREATE,
-				{ action: "revealPhrase", params: { variant: "wrong" } },
-				{ action: "revealPhrase", params: { variant: "right" } },
-				{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "Chaos 2", password: "S2", duplicate: "decline" } },
-				{ action: "importPhrase", params: { ref: "P2", phrase: "W1", name: "Chaos 2", password: "S2", duplicate: "confirm" } },
-				{
-					action: "importPhrase",
-					params: { ref: "P3", phrase: "W1", name: "Chaos 3", method: "passkey", credential: "K1", duplicate: "confirm" },
-				},
-				{ action: "deleteProfile", params: { via: "settings" } },
-				{ action: "switchProfile", params: { to: "P1" } },
-				{ action: "deleteProfile", params: { via: "forgot" } },
-				{ action: "verifyAll", params: {} },
-			]),
-		RUN_MS,
-	)
-
-	test(
-		"strict mode turned off and on around restarts keeps a bearer only while lenient, and a stopped worker's row stays for the lock screen",
-		() =>
-			green([
-				{ action: "onboardingCreate", params: { ref: "P1", method: "passkey", credential: "K1", answer: "later" } },
-				{ action: "toggleStrict", params: {} },
-				{ action: "lock", params: {} },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
-				{ action: "backgroundRestart", params: {} },
-				{ action: "toggleStrict", params: {} },
-				{ action: "backgroundRestart", params: {} },
-				{ action: "unlockPasskey", params: { target: "P1", variant: "approve" } },
-				RENAME,
-				{ action: "verifyAll", params: {} },
-			]),
-		RUN_MS,
-	)
+	test("the fixed seeds and the hand lists drive every action of the surface", () => {
+		const driven = new Set([
+			...Object.values(HAND_LISTS).flatMap((list) => planOf(list).steps.map((s) => s.action)),
+			...FIXED_SEEDS.flatMap((seed) => plan(seed, "empty", IN_PROCESS_CAPS).steps.map((s) => s.action)),
+		])
+		expect(IN_PROCESS_ACTIONS.filter((a) => !driven.has(a))).toEqual([])
+	})
 })
 
 describe("each reader can fail — break fixtures", () => {
@@ -301,5 +319,172 @@ describe("each reader can fail — break fixtures", () => {
 				}),
 			),
 		RUN_MS,
+	)
+})
+
+const LOCK: ListedStep = { action: "lock", params: {} }
+const NEW_PASSKEY: ListedStep = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }
+type Snapshot = (id: string, kind: string) => Promise<unknown>
+
+describe("the harness reads what it drives — break fixtures", () => {
+	test(
+		"an unlock that reads the row its parameters read, not the edited one, refuses for another reason than its edit",
+		() =>
+			redAt(
+				[CREATE_PK, LOCK, { action: "editRowDuringUnlock", params: { field: "prfSalt" } }],
+				"editRowDuringUnlock",
+				"O5",
+				/lists for no variant/,
+				{
+					onWorker: (worker) => {
+						const profiles = worker.profiles as unknown as { snapshotForUnlock: Snapshot }
+						const read = profiles.snapshotForUnlock.bind(worker.profiles)
+						let held: Promise<unknown> | undefined
+						vi.spyOn(profiles, "snapshotForUnlock").mockImplementation((id, kind) => {
+							const snapshot = held ?? read(id, kind)
+							held = held ? undefined : snapshot
+							return snapshot
+						})
+					},
+				},
+			),
+		RUN_MS,
+	)
+
+	test(
+		"a rejection its driver lists for no variant fails the step instead of reading as a refusal",
+		() =>
+			redAt(
+				[CREATE_PK, NEW_PASSKEY, LOCK, { action: "unlockPasskey", params: { target: "P1", variant: "other", other: "K1" } }],
+				"unlockPasskey",
+				"O5",
+				/lists for no variant: PasskeyNotOpenedError/,
+				{
+					onWorker: (worker) =>
+						void vi.spyOn(worker.profiles, "unlockPasskeyProfile").mockRejectedValue(new PasskeyNotOpenedError()),
+				},
+			),
+		RUN_MS,
+	)
+
+	test(
+		"a worker that writes after its restart is refused and reported",
+		() => {
+			const workers: Worker[] = []
+			return redAt(
+				[CREATE_PK, { action: "backgroundRestart", params: {} }],
+				"backgroundRestart",
+				"O3",
+				/worker 1 wrote local:\S+ after its restart/,
+				{
+					onWorker: (worker) => void workers.push(worker),
+					afterDriver: async (_run, step) => {
+						if (step.action === "backgroundRestart")
+							await expect(workers[0].api.storage.local.set({ "nulo:ui:loggerWindowId": "1" })).rejects.toThrow()
+					},
+				},
+			)
+		},
+		RUN_MS,
+	)
+})
+
+describe("O6 reads each clause of a master — break fixtures", () => {
+	const A = Buffer.alloc(32, 0x0a).toString("base64")
+	const B = Buffer.alloc(32, 0x0b).toString("base64")
+	const fieldOf = (master: string) => Fr.fromBuffer(Buffer.from(master, "base64")).toString()
+	const world = (...profiles: [ProfileRef, PhraseRef][]): World => ({
+		...startWorld("empty"),
+		profiles: profiles.map(([ref, phrase]) => ({
+			ref,
+			method: "password",
+			password: "S1",
+			phrase,
+			derived: 1,
+			imported: [],
+			deleted: false,
+		})),
+	})
+	const opened = (ref: ProfileRef, master: string, sessionSecret = fieldOf(master)): MasterReading => ({
+		ref,
+		wrongRefused: true,
+		wrongWrote: [],
+		opened: true,
+		master,
+		sessionSecret,
+	})
+	const firstSeen = (...entries: [ProfileRef, string][]): FirstSighting => ({
+		masters: new Map(entries),
+		sessionSecrets: new Map(entries.map(([ref, master]) => [ref, fieldOf(master)])),
+	})
+
+	test("control: siblings share a master, strangers differ, each as first seen", () => {
+		const w = world(["P1", "W1"], ["P2", "W1"], ["P3", "W2"])
+		expect(checkMasters(w, [opened("P1", A), opened("P2", A), opened("P3", B)], firstSeen(["P1", A], ["P2", A], ["P3", B]))).toEqual([])
+	})
+
+	test.each<[string, World, MasterReading[], FirstSighting, RegExp]>([
+		["a lone profile's master replaced", world(["P1", "W1"]), [opened("P1", B)], firstSeen(["P1", A]), /^P1's master is not the one/],
+		[
+			"a sibling with another master",
+			world(["P1", "W1"], ["P2", "W1"]),
+			[opened("P1", A), opened("P2", B)],
+			firstSeen(["P1", A], ["P2", B]),
+			/^P1 and P2 share W1 but hold different masters$/,
+		],
+		[
+			"a stranger with the same master",
+			world(["P1", "W1"], ["P2", "W2"]),
+			[opened("P1", A), opened("P2", A)],
+			firstSeen(["P1", A], ["P2", A]),
+			/^P1 and P2 hold different phrases but one master$/,
+		],
+		[
+			"a session secret off its master",
+			world(["P1", "W1"]),
+			[opened("P1", A, fieldOf(B))],
+			{ masters: new Map([["P1", A]]), sessionSecrets: new Map([["P1", fieldOf(B)]]) },
+			/^P1's session secret is not its master$/,
+		],
+	])("%s", (_, w, readings, seen, message) => {
+		const out = checkMasters(w, readings, seen)
+		expect(out.length).toBeGreaterThan(0)
+		expect(out.every((v) => v.oracle === "O6")).toBe(true)
+		expect(
+			out.some((v) => message.test(v.message)),
+			JSON.stringify(out),
+		).toBe(true)
+	})
+})
+
+/** How many seeds `NULO_PROFILE_CHAOS_RUNS` asks for: none when unset or empty. */
+function runsOf(raw: string | undefined): number {
+	if (!raw) return 0
+	if (!/^[1-9]\d*$/.test(raw)) throw new Error(`NULO_PROFILE_CHAOS_RUNS=${JSON.stringify(raw)} is not a positive integer`)
+	return Number(raw)
+}
+
+/** The long mode's first seed from `NULO_PROFILE_CHAOS_SEED`: a random draw when unset or empty, else
+ *  a nonnegative decimal safe integer, so the seed the test's name logs replays that very run. */
+function firstSeed(raw: string | undefined): number {
+	if (!raw) return Math.floor(Math.random() * 2 ** 31)
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)))
+		throw new Error(`NULO_PROFILE_CHAOS_SEED=${JSON.stringify(raw)} is not a decimal integer seed`)
+	return Number(raw)
+}
+
+const RUNS = runsOf(process.env.NULO_PROFILE_CHAOS_RUNS)
+
+describe.skipIf(RUNS === 0)("the profile chaos catalog in process — long mode", () => {
+	const first = firstSeed(process.env.NULO_PROFILE_CHAOS_SEED)
+	test(
+		`${RUNS} seed(s) from ${first}`,
+		async () => {
+			for (let seed = first; seed < first + RUNS; seed++) {
+				const report = await runPlan(plan(seed, "empty", IN_PROCESS_CAPS))
+				expect(report.red, describeRed(report)).toBeUndefined()
+			}
+		},
+		Math.max(1, RUNS) * RUN_MS,
 	)
 })
