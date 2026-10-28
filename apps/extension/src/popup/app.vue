@@ -338,7 +338,6 @@ const lockedState = createLockedState({
 	},
 	readLastActiveId: getLastActiveProfileId,
 	routeName: () => route.name,
-	openChooser: () => popupStore.open("select_profile"),
 })
 
 /** Sequence token for profile events. Handlers await service round-trips, and under load a

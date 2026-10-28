@@ -40,9 +40,9 @@ import {
 	carriedBy,
 } from "./checkers"
 import { drainLogs, logErrors, readCensus, readProfiles, readSession, scanStorage } from "./collect"
-import { DRIVERS } from "./drivers"
+import { beforeDriver, DRIVERS } from "./drivers"
 import { expireRelease } from "./pre-update"
-import { capturePrf, drainPrf } from "./prf-capture"
+import { drainPrf } from "./prf-capture"
 import {
 	type ActionName,
 	coverage,
@@ -60,7 +60,7 @@ import {
 	type World,
 } from "./model"
 import { type Drive, type Driven, profileId, type RunState, type ScannedFile, secretFor, wrongSecret } from "./state"
-import { dismissNotices, isLocked, whereStuck } from "./ui"
+import { isLocked, whereStuck } from "./ui"
 
 export type VerdictKind = RunVerdict
 
@@ -123,7 +123,7 @@ const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'\\<>]+/gi
 const LOOPBACK_ORIGIN = /^[a-z][a-z0-9+.-]*:\/\/(localhost|127\.0\.0\.1|\[::1\])(?![\w.-])(:\d+)?/i
 
 /** The PRF outputs every page of the run captured since the last drain. */
-async function drainPages(s: RunState): Promise<void> {
+export async function drainPages(s: RunState): Promise<void> {
 	for (const page of [s.anchor, ...s.extras.map((e) => e.page)]) await drainPrf(s, page)
 }
 
@@ -450,6 +450,7 @@ function writeRecord(
 		verdict: kind,
 		coverage: line,
 		bindings: Object.fromEntries(s.bindings.profiles),
+		credentials: Object.fromEntries(s.bindings.credentials),
 		plan: plan.steps.map((p) => ({ action: p.action, params: p.params })),
 		steps,
 	}
@@ -501,13 +502,12 @@ async function runOne(s: RunState, step: PlannedStep, before: World): Promise<St
 			violations: [{ oracle: "O5", message: "the update's first open could not be answered", detail }],
 		})
 	}
-	await dismissNotices(s.anchor)
+	await beforeDriver(s)
 	const census = await readCensus(s.anchor)
 	const origin = await backgroundOrigin(s.ctx)
 	const t0 = Date.now()
 	// A restart during the last step's checks or since loses lines the drain can never read.
 	if (s.origin !== undefined && origin !== s.origin) return recordOf(step, t0, { incomplete: [UNPLANNED_RESTART] })
-	await capturePrf(s.anchor)
 	let driven: Driven
 	try {
 		driven = await drive(s, step, before)

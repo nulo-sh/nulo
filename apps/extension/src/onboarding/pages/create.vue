@@ -60,7 +60,10 @@ let stopSessionWatch: (() => void) | undefined
 function loseSession() {
 	if (sessionLost || !isMounted()) return
 	sessionLost = true
-	if (stage.value !== "phrase") return
+	if (stage.value === "phrase") leavePhrase()
+}
+
+function leavePhrase() {
 	words.value = []
 	stage.value = "closed"
 	router.push(doneRoute(path.value))
@@ -152,11 +155,7 @@ const submitLabel = computed(() => {
 
 async function onPhraseSaved() {
 	await markGetStarted(createdId, "phraseSaved")
-	if (isMounted()) router.push(doneRoute(path.value))
-}
-
-function onPhraseLater() {
-	router.push(doneRoute(path.value))
+	if (isMounted()) leavePhrase()
 }
 
 onBeforeUnmount(() => {
@@ -173,7 +172,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="onPhraseLater" />
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="leavePhrase" />
 	<OnboardingPage v-else-if="stage === 'form'" data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"

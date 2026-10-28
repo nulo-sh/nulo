@@ -3,6 +3,7 @@
  * state reached within a bound, and a miss reports the route and the loading testids on screen.
  */
 import type { Page } from "puppeteer"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { openProfileChooser, pressHeaderLock, waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, clickSelector, replaceInputValue } from "../../fixtures/dom"
 import { navigateByHash } from "../../fixtures/navigation"
@@ -26,6 +27,13 @@ export interface Signal {
 	/** `storage.local` holds no such key. */
 	noLocalKey?: string
 }
+
+/** A passkey prompt's failures, by the toast each one shows (`passkeyFailureCopy`). */
+export const PASSKEY_REFUSAL: Signal[] = [
+	{ label: "cancelled", text: PASSKEY_COPY.notConfirmed },
+	{ label: "refused", text: PASSKEY_COPY.noPrf },
+	{ label: "refused", text: PASSKEY_COPY.unlockFailed },
+]
 
 export async function firstSignal(page: Page, signals: readonly Signal[], boundMs: number): Promise<{ label?: string; elapsedMs: number }> {
 	const t0 = Date.now()
@@ -358,4 +366,29 @@ export async function dismissNotices(page: Page): Promise<void> {
 		for (const close of document.querySelectorAll<HTMLElement>('[data-testid="snackbar-close"]')) close.click()
 	})
 	await page.waitForFunction(() => !document.querySelector('[data-testid="snackbar"]'), { timeout: 5_000, polling: 100 }).catch(() => {})
+}
+
+type AbortProbe = Window & { __chaosPromptAborted?: boolean }
+
+/** Marks the page once the next passkey request's own signal aborts. Installed over a hold, so the
+ *  page's call meets it first. */
+export async function watchPromptAbort(page: Page): Promise<() => Promise<boolean>> {
+	await page.evaluate(() => {
+		const probe = window as AbortProbe
+		probe.__chaosPromptAborted = false
+		const credentials = navigator.credentials
+		const get = credentials.get.bind(credentials)
+		credentials.get = (options) => {
+			credentials.get = get
+			options?.signal?.addEventListener("abort", () => {
+				probe.__chaosPromptAborted = true
+			})
+			return get(options)
+		}
+	})
+	return () =>
+		page
+			.waitForFunction(() => (window as AbortProbe).__chaosPromptAborted === true, { timeout: 15_000, polling: 100 })
+			.then(() => true)
+			.catch(() => false)
 }

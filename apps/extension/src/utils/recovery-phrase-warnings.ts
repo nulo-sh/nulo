@@ -4,3 +4,5 @@ export const RECOVERY_PHRASE_WARNINGS: readonly string[] = [
 	"Storing a text file with sensitive information like a recovery phrase can be dangerous",
 	"Paper keeps the phrase off every computer; keep it somewhere safe from loss, water and fire.",
 ]
+
+export const RECOVERY_PHRASE_AUTO_CLOSE_MS = 5 * 60_000
