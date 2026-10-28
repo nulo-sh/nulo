@@ -551,6 +551,7 @@
     "leaveFor": true,
     "leavePanelFor": true,
     "legalAboutRow": true,
+    "legalSheetMayCover": true,
     "listOwnAccountRow": true,
     "managers": true,
     "markGetStarted": true,
