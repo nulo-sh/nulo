@@ -19,6 +19,7 @@ import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { capitalize } from "@/utils/string"
 import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
+import { openingFlowLive } from "@/popup/opening-flow"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -46,6 +47,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 
 const backTo = computed(() => String(route.query.from || "/popup/register"))
 const selectedOnEntry = appStore.profile?.id
+const flowLive = openingFlowLive()
 
 const maxPasswordLength = 128
 
@@ -72,7 +74,7 @@ const {
 	// Popup activation is listener-based (app.vue's onActiveProfileChanged runs
 	// the bootstrap); this manual tail waits for it, loads accounts, persists
 	// the active account, and routes. Extracted to a testable page helper.
-	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry }),
+	onCreated: (profile) => activateCreatedProfile(profile, { appStore, router, openToast, selectedOnEntry, flowLive }),
 	openToast,
 	notifyCreateFailed: (isPasskey) => notificationStore.create(createFailedNotice(isPasskey)),
 })
