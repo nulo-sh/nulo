@@ -621,8 +621,11 @@ describe("SelectTokenPopup — paste to add", () => {
 			expect(wrapper.get('[data-testid="select-token-row"]').attributes("aria-current")).toBe("true")
 			expect(addRow(wrapper).exists()).toBe(false)
 		}
+		H.cache.activeTokenIdx = 6
+		await search(wrapper, held)
 		await wrapper.get('[data-testid="select-token-row"]').trigger("click")
 		expect(H.cache.activeTokenIdx).toBe(5)
+		expect(wrapper.emitted("onClose")).toHaveLength(1)
 		expect(H.popupOpen).not.toHaveBeenCalled()
 	})
 

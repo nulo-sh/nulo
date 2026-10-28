@@ -5,6 +5,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
+import { parseSide } from "@/utils/token-amount"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { isBlank } from "@/utils/string"
@@ -249,7 +250,10 @@ const conversionTitle = computed(() => (props.proxyTicker ? `Priced via ${props.
  *  Truncated at 8 places, so it never reads more than the balance. */
 const balanceSegment = computed(() => {
 	if (props.balanceState !== "read" || !props.token || props.balanceRawByType == null || tokenDecimals.value === undefined) return null
-	const amount = formatBaseUnits(props.balanceRawByType, tokenDecimals.value, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })
+	// A stored side that is no digit string draws nothing, as an unread one does.
+	const raw = parseSide(props.balanceRawByType)
+	if (raw === undefined) return null
+	const amount = formatBaseUnits(raw, tokenDecimals.value, { maxDecimals: 8, thousandsSep: ",", decimalSep: "." })
 	return `${amount} ${props.token.symbol}`
 })
 

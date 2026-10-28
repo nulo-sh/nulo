@@ -1154,12 +1154,12 @@ describe("send page — a token the picker imported", () => {
 			async ({ reads }: Awaited<ReturnType<typeof heldAfterMount>>) => reads[0]?.reject(new Error("port closed")),
 		],
 		[
-			"its re-read superseded by one refused",
+			"its re-read superseded by a later one, which lists it",
 			async ({ reads }: Awaited<ReturnType<typeof heldAfterMount>>) => {
 				tokenAdded().invoke(NEW)
 				reads[0]?.resolve([TOKEN, NEW])
 				await flushPromises()
-				reads[1]?.reject(new Error("port closed"))
+				reads[1]?.resolve([TOKEN, NEW])
 			},
 		],
 	])("a report whose token is not listed, with %s, picks nothing and keeps the listed token", async (_, settle) => {

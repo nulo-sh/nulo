@@ -134,6 +134,15 @@ describe("composite/AmountCard", () => {
 		expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
 	})
 
+	test.each([["abc"], ["1.5"], ["-1"]])(
+		"a read side %j that is no digit string draws nothing beside Max, and the card still renders",
+		(raw) => {
+			const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: Number(raw), balanceRawByType: raw })
+			expect(w.find("[data-testid='send-amount-balance']").exists()).toBe(false)
+			expect(w.find("[data-testid='send-amount-input']").exists()).toBe(true)
+		},
+	)
+
 	test("a zero read beside Max, with Max and the field still off", () => {
 		const w = mountCard({ token: { symbol: "TST", decimals: 18 }, tokenBalanceByType: 0, balanceRawByType: "0" })
 		expect(w.get("[data-testid='send-amount-balance']").text()).toBe("0 TST")
