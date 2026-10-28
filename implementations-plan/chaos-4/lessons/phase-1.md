@@ -11,3 +11,14 @@
 - Budget (D10): the break fixtures run on a passkey profile (no password derivation, about 0.1 s each) and the strict hand list on a passkey profile; the four hand lists then cover every action of the surface but `unlockPassword`, `secondWindow`, `changePassword` and `rename`. Seed 8001 covers the first three; `rename` joined the strict list. The fixed set is therefore {8001}: the fewest from 8001 upward that, with the hand lists, drive all 22.
 - The stray-row fixture first copied a passkey row, which also carries its `prfSalt`, so O7 answered too; shaped as a retired row it isolates O2.
 - Biome reads a helper named `after(...)` as a test hook (`noDuplicateTestHooks`); it is `faultAfter`.
+
+## Review, round 1
+
+Codex (reject, four false greens shown by planting each fault) and Opus (seven findings) overlapped; every finding was checked against the tree and accepted. Each fix has a fixture red on the harness before it and green after (nine; the O6 clause fixtures are coverage).
+
+- O7 read only warn and error lines: the logger keeps info for every user, so every line is now kept and O4 alone filters to warn and above. `console.*` reaches the logger in every context, so the run routes it there as the worker's hook does.
+- O6 read the session secret only at `verifyAll`, which locks first: a session secret changed under an open session went unseen. Each step that ends open now reads it against its first sighting, and the first sighting checks it is the master.
+- A typed wrong password was no needle; each is now one, as is a phrase as a JSON array of words.
+- O1 read the session row once a step ended: a bearer written under strict mode and overwritten in the step passed. Every logged session-row write is judged with the strict mode the worker held when it wrote.
+- A changed credential or type refuses with the words a stale-row refusal after the slots opened uses; a refusal now counts only while no slot of the row opened, and the stale-snapshot fixture runs over all four fields with the refusal pinned.
+- A dropped worker's write between two steps was cleared unreported; strays now stay until a step's check reports them. The fixture plants the stray at the next step's start: a real late write cannot be timed into that window.

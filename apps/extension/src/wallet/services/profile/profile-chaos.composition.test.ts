@@ -42,13 +42,14 @@ async function green(list: ListedStep[]): Promise<void> {
 	expect(report.steps.map((s) => s.action)).toEqual(list.map((s) => s.action))
 }
 
-/** The run is red at `action`, on `oracle` alone, with a violation whose message matches `message`. */
+/** The run is red at `action`, on `oracle` alone, with a violation whose message, then its detail in
+ *  brackets, matches `message`. */
 async function redAt(list: ListedStep[], action: ListedStep["action"], oracle: OracleId, message: RegExp, hooks: StepHooks) {
 	const report = await runPlan(planOf(list), hooks)
 	expect(report.red?.action, describeRed(report)).toBe(action)
 	expect(new Set(report.red?.violations.map((v) => v.oracle)), describeRed(report)).toEqual(new Set([oracle]))
 	expect(
-		report.red?.violations.some((v) => message.test(v.message)),
+		report.red?.violations.some((v) => message.test(v.detail === undefined ? v.message : `${v.message} [${v.detail}]`)),
 		describeRed(report),
 	).toBe(true)
 }
@@ -79,6 +80,16 @@ const CREATE: ListedStep = { action: "createPassword", params: { ref: "P1", name
 /** A passkey profile: no password derivation, so a fixture costs little. */
 const CREATE_PK: ListedStep = { action: "createPasskey", params: { ref: "P1", name: "Chaos 1", credential: "K1", double: false } }
 const RENAME: ListedStep = { action: "rename", params: { name: "Chaos 9" } }
+const LOCK: ListedStep = { action: "lock", params: {} }
+const RESTART: ListedStep = { action: "backgroundRestart", params: {} }
+const LEAK_KEY = "nulo:ui:loggerWindowId"
+
+/** Writes `value` through the worker and removes it, so only the write log still holds it; a
+ *  session-area key, so no write contract answers. */
+async function writeAndRemove(run: InProcessRun, value: string): Promise<void> {
+	await run.worker.api.storage.session.set({ "nulo:chaos-session": value })
+	await run.worker.api.storage.session.remove("nulo:chaos-session")
+}
 
 /** Short lists for what a seed rarely draws: each race, each row edit, a duplicate import, the
  *  strict toggle around restarts. */
@@ -146,7 +157,7 @@ const HAND_LISTS: Record<string, ListedStep[]> = {
 		],
 }
 
-/** The fixed set (D10): the fewest seeds from 8001 upward that, with the hand lists, drive every
+/** The fixed set: the fewest seeds from 8001 upward that, with the hand lists, drive every
  *  action of the surface. */
 const FIXED_SEEDS = [8001]
 
@@ -203,6 +214,25 @@ describe("each reader can fail — break fixtures", () => {
 						id,
 						await fakePasskeyAnswer(run.bindings.credentials.get("K1") as string, prfSalt),
 					)
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O1: a bearer written under strict mode and replaced in the same step",
+		() =>
+			redAt(
+				[CREATE_PK],
+				"createPasskey",
+				"O1",
+				/wrote a session row holding a bearer under strict mode/,
+				faultAfter("createPasskey", async (run) => {
+					const original = (await run.worker.raw.storage.session.get(SESSION_ROW))[SESSION_ROW] as string
+					await run.worker.api.storage.session.set({
+						[SESSION_ROW]: JSON.stringify({ ...JSON.parse(original), bearer: "planted" }),
+					})
+					await run.worker.api.storage.session.set({ [SESSION_ROW]: original })
 				}),
 			),
 		RUN_MS,
@@ -299,8 +329,49 @@ describe("each reader can fail — break fixtures", () => {
 				"O7",
 				/prf-0\/b64 found in local:nulo:ui:loggerWindowId/,
 				faultAfter("createPasskey", async (run) => {
-					await run.worker.api.storage.local.set({ "nulo:ui:loggerWindowId": [...run.prf][0] })
-					await run.worker.api.storage.local.remove("nulo:ui:loggerWindowId")
+					await run.worker.api.storage.local.set({ [LEAK_KEY]: [...run.prf][0] })
+					await run.worker.api.storage.local.remove(LEAK_KEY)
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O7: a phrase's words written as a JSON array",
+		() =>
+			redAt(
+				[CREATE_PK, RENAME],
+				"rename",
+				"O7",
+				/\/words-json found in session:nulo:chaos-session/,
+				faultAfter("rename", (run) => writeAndRemove(run, JSON.stringify([...run.phrases.values()][0].words))),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O7: a wrong password the person typed",
+		() =>
+			redAt(
+				[CREATE, LOCK, { action: "unlockPassword", params: { target: "P1", variant: "wrong" } }],
+				"unlockPassword",
+				"O7",
+				/wrong-0\/password found in session:nulo:chaos-session/,
+				faultAfter("unlockPassword", (run) => writeAndRemove(run, run.wrong[0])),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O7: a PRF output in an info log",
+		() =>
+			redAt(
+				[CREATE_PK],
+				"createPasskey",
+				"O7",
+				/prf-0\/b64 found in log:/,
+				faultAfter("createPasskey", async (run) => {
+					run.worker.logger.log("chaos-fixture", LogLevel.Info, { note: [...run.prf][0] })
 				}),
 			),
 		RUN_MS,
@@ -320,21 +391,56 @@ describe("each reader can fail — break fixtures", () => {
 			),
 		RUN_MS,
 	)
+
+	test(
+		"O4: a console error the worker's hook routes to its logger",
+		() =>
+			redAt(
+				[CREATE_PK],
+				"createPasskey",
+				"O4",
+				/Error log from wallet/,
+				faultAfter("createPasskey", async () => {
+					console.error("a planted failure")
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O6: an open session whose secret changed under it",
+		() =>
+			redAt(
+				[CREATE_PK, RENAME],
+				"rename",
+				"O6",
+				/^P1's session secret is not the one it showed at first sighting$/,
+				faultAfter("rename", async (run) => {
+					const { sessionManager } = run.profiles as unknown as { sessionManager: { activeSession: { secret: Fr } } }
+					sessionManager.activeSession.secret = Fr.ZERO
+				}),
+			),
+		RUN_MS,
+	)
 })
 
-const LOCK: ListedStep = { action: "lock", params: {} }
 const NEW_PASSKEY: ListedStep = { action: "changeUnlockMethod", params: { change: "new-passkey", current: "approve", credential: "K2" } }
 type Snapshot = (id: string, kind: string) => Promise<unknown>
 
 describe("the harness reads what it drives — break fixtures", () => {
-	test(
-		"an unlock that reads the row its parameters read, not the edited one, refuses for another reason than its edit",
-		() =>
+	test.each([
+		["prfSalt", "Invalid profile id"],
+		["secret", "Invalid profile id"],
+		["credentialId", "Invalid profile id"],
+		["type", "Profile requires password"],
+	] as const)(
+		"an unlock that reads the row its parameters read, not the row with its %s edited, fails the step",
+		(field, detail) =>
 			redAt(
-				[CREATE_PK, LOCK, { action: "editRowDuringUnlock", params: { field: "prfSalt" } }],
+				[CREATE_PK, LOCK, { action: "editRowDuringUnlock", params: { field } }],
 				"editRowDuringUnlock",
 				"O5",
-				/lists for no variant/,
+				new RegExp(`lists for no variant: Error \\[${detail}\\]$`),
 				{
 					onWorker: (worker) => {
 						const profiles = worker.profiles as unknown as { snapshotForUnlock: Snapshot }
@@ -368,22 +474,36 @@ describe("the harness reads what it drives — break fixtures", () => {
 	)
 
 	test(
+		"a stopped worker's write that lands between two steps is reported at the next",
+		() =>
+			redAt(
+				[CREATE_PK, RESTART, { action: "unlockPasskey", params: { target: "P1", variant: "approve" } }],
+				"unlockPasskey",
+				"O3",
+				/^worker 1 wrote local:nulo:ui:loggerWindowId after its restart$/,
+				faultAfter("backgroundRestart", async (run) => {
+					const begin = run.beginStep.bind(run)
+					vi.spyOn(run, "beginStep").mockImplementationOnce(() => {
+						// As the logged area records it once the stopped worker's read returns.
+						run.strays.push({ worker: 1, area: "local", key: LEAK_KEY, before: undefined, after: "1", strict: true })
+						begin()
+					})
+				}),
+			),
+		RUN_MS,
+	)
+
+	test(
 		"a worker that writes after its restart is refused and reported",
 		() => {
 			const workers: Worker[] = []
-			return redAt(
-				[CREATE_PK, { action: "backgroundRestart", params: {} }],
-				"backgroundRestart",
-				"O3",
-				/worker 1 wrote local:\S+ after its restart/,
-				{
-					onWorker: (worker) => void workers.push(worker),
-					afterDriver: async (_run, step) => {
-						if (step.action === "backgroundRestart")
-							await expect(workers[0].api.storage.local.set({ "nulo:ui:loggerWindowId": "1" })).rejects.toThrow()
-					},
+			return redAt([CREATE_PK, RESTART], "backgroundRestart", "O3", /worker 1 wrote local:\S+ after its restart/, {
+				onWorker: (worker) => void workers.push(worker),
+				afterDriver: async (_run, step) => {
+					if (step.action === "backgroundRestart")
+						await expect(workers[0].api.storage.local.set({ [LEAK_KEY]: "1" })).rejects.toThrow()
 				},
-			)
+			})
 		},
 		RUN_MS,
 	)
@@ -438,6 +558,35 @@ describe("O6 reads each clause of a master — break fixtures", () => {
 			[opened("P1", A), opened("P2", A)],
 			firstSeen(["P1", A], ["P2", A]),
 			/^P1 and P2 hold different phrases but one master$/,
+		],
+		["a profile not verified", world(["P1", "W1"]), [], firstSeen(["P1", A]), /^P1 was not verified$/],
+		[
+			"a profile opened with a wrong secret",
+			world(["P1", "W1"]),
+			[{ ...opened("P1", A), wrongRefused: false }],
+			firstSeen(["P1", A]),
+			/^P1 opened with a wrong secret$/,
+		],
+		[
+			"a refused unlock that wrote",
+			world(["P1", "W1"]),
+			[{ ...opened("P1", A), wrongWrote: [`local:${SESSION_ROW}`] }],
+			firstSeen(["P1", A]),
+			/^P1's refused unlock wrote local:nulo:core:session$/,
+		],
+		[
+			"a profile that did not open with its own secret",
+			world(["P1", "W1"]),
+			[{ ref: "P1", wrongRefused: true, wrongWrote: [], opened: false }],
+			firstSeen(["P1", A]),
+			/^P1 did not open with its own secret$/,
+		],
+		[
+			"a session secret other than at first sighting",
+			world(["P1", "W1"]),
+			[opened("P1", A)],
+			{ masters: new Map([["P1", A]]), sessionSecrets: new Map([["P1", fieldOf(B)]]) },
+			/^P1's session secret is not the one it showed at first sighting$/,
 		],
 		[
 			"a session secret off its master",

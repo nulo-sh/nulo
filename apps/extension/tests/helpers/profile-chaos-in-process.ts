@@ -11,7 +11,7 @@
 import { createHash, randomBytes } from "node:crypto"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { DuplicateWalletError, InvalidPasswordError, PasskeyNotOpenedError } from "@nulo/extension-messaging/errors"
-import type { Log } from "@nulo/wallet-core/logger"
+import { consoleMethods, type Log } from "@nulo/wallet-core/logger"
 import type { BrowserApi, StorageArea, StorageEntries } from "@nulo/wallet-core/ports"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { getEntropy } from "@nulo/wallet-core/utils"
@@ -129,6 +129,8 @@ export interface WriteRecord {
 	key: string
 	before: unknown
 	after: unknown
+	/** The device's strict mode as the worker held it when the write was made. */
+	strict: boolean
 }
 
 export interface Worker {
@@ -188,9 +190,12 @@ export class InProcessRun {
 	writes: WriteRecord[] = []
 	/** Writes a worker made while the harness read: a reading writes nothing. */
 	readingWrites: WriteRecord[] = []
-	/** Writes a dropped worker tried. */
+	/** Writes a dropped worker tried, kept until a step's check reports them. */
 	strays: WriteRecord[] = []
+	/** Every log line the workers' loggers kept, at any level. */
 	logs: { worker: number; log: Log }[] = []
+	/** Every wrong secret a driver typed. */
+	readonly wrong: string[] = []
 	/** Needles each write held at once, with the needles known then. */
 	writeHits: LeakHit[] = []
 	findings: Violation[] = []
@@ -198,11 +203,24 @@ export class InProcessRun {
 	verified: MasterReading[] = []
 	phase: "step" | "reading" = "step"
 	workerCount = 0
+	private sink?: LoggerStore
+	private readonly pending: [LogLevel, unknown[]][] = []
 
 	constructor(readonly hooks: StepHooks) {}
 
 	get profiles(): ProfileService {
 		return this.worker.profiles
+	}
+
+	/** The worker's console hook: a line goes to the newest logger, and waits for the first. */
+	console(level: LogLevel, args: unknown[]): void {
+		if (this.sink) this.sink.log("wallet", level, ...args)
+		else this.pending.push([level, args])
+	}
+
+	sinkTo(logger: LoggerStore): void {
+		this.sink = logger
+		for (const [level, args] of this.pending.splice(0)) logger.log("wallet", level, ...args)
 	}
 
 	record(r: WriteRecord): void {
@@ -214,7 +232,6 @@ export class InProcessRun {
 	beginStep(): void {
 		this.writes = []
 		this.readingWrites = []
-		this.strays = []
 		this.logs = []
 		this.writeHits = []
 		this.findings = []
@@ -228,13 +245,16 @@ const sameValue = (a: unknown, b: unknown): boolean => (a === undefined ? b === 
 
 function loggedArea(run: InProcessRun, worker: Worker, area: Area, inner: StorageArea): StorageArea {
 	const write = async (keys: string[], after: (key: string) => unknown, apply: () => Promise<void>) => {
+		const strict = worker.config?.get("strictSecurityMode") === true
 		const before = await inner.get(keys)
+		const records = keys.map((key) => ({ worker: worker.n, area, key, before: before[key], after: after(key), strict }))
+		// Checked after the read, so a write a worker began before its restart is refused too.
 		if (worker.dropped) {
-			for (const key of keys) run.strays.push({ worker: worker.n, area, key, before: before[key], after: after(key) })
+			run.strays.push(...records)
 			throw new Error(`worker ${worker.n} wrote after its restart`)
 		}
 		await apply()
-		for (const key of keys) run.record({ worker: worker.n, area, key, before: before[key], after: after(key) })
+		for (const r of records) run.record(r)
 	}
 	const listed = (keys: string | string[]) => (typeof keys === "string" ? [keys] : keys)
 	return {
@@ -281,8 +301,9 @@ async function boot(run: InProcessRun): Promise<Worker> {
 	await worker.config.load()
 	worker.logger = new LoggerStore(worker.config)
 	worker.logger.onLog.add((log) => {
-		if (log.level >= LogLevel.Warn) run.logs.push({ worker: worker.n, log })
+		run.logs.push({ worker: worker.n, log })
 	})
+	run.sinkTo(worker.logger)
 	const services = new ServiceCollection()
 	services.add(
 		svc(PASSKEY_SERVICE_NAME, { materializeCredential: async (data: PasskeyCredentialData) => PasskeyCredential.create(data) }),
@@ -332,7 +353,12 @@ const secretOf = (run: InProcessRun, ref: SecretRef): string => {
 	return value
 }
 
-const wrongSecret = (): string => `Wrong-${randomBytes(9).toString("base64url")}`
+/** A secret no profile holds, kept as a needle: a typed password leaks like a right one. */
+function wrongSecret(run: InProcessRun): string {
+	const value = `Wrong-${randomBytes(9).toString("base64url")}`
+	run.wrong.push(value)
+	return value
+}
 
 const credentialOf = (run: InProcessRun, ref: CredentialRef | undefined): string => {
 	const id = ref && run.bindings.credentials.get(ref)
@@ -378,8 +404,11 @@ function made(run: InProcessRun, step: PlannedStep, before: World, ref: ProfileR
 
 async function readSightings(run: InProcessRun): Promise<void> {
 	for (const { ref, id, unlock, phrase } of run.sightings) {
-		run.seen.masters.set(ref, await run.profiles.exportPlain(id, unlock.password, unlock.data))
-		run.seen.sessionSecrets.set(ref, (await run.profiles.getProfileSecret(id)).toString())
+		const master = await run.profiles.exportPlain(id, unlock.password, unlock.data)
+		const sessionSecret = (await run.profiles.getProfileSecret(id)).toString()
+		run.seen.masters.set(ref, master)
+		run.seen.sessionSecrets.set(ref, sessionSecret)
+		if (sessionSecret !== fieldOf(master)) run.findings.push({ oracle: "O6", message: `${ref}'s session secret is not its master` })
 		if (phrase && !run.phrases.has(phrase))
 			await learnWords(run, phrase, await run.profiles.exportMnemonic(id, unlock.password, unlock.data))
 	}
@@ -499,7 +528,7 @@ const lock: Drive<"lock"> = async (run) => {
 
 const unlockPassword: Drive<"unlockPassword"> = async (run, p, _step, before) => {
 	const target = profileOf(before, p.target) as ModelProfile
-	const typed = p.variant === "right" ? secretOf(run, target.password as SecretRef) : wrongSecret()
+	const typed = p.variant === "right" ? secretOf(run, target.password as SecretRef) : wrongSecret(run)
 	return attempt(() => run.profiles.unlockProfile(boundId(run, p.target), typed), p.variant === "wrong" ? [is(InvalidPasswordError)] : [])
 }
 
@@ -530,7 +559,7 @@ const revealPhrase: Drive<"revealPhrase"> = async (run, p, _step, before) => {
 	const reveal = async (password?: string, data?: PasskeyCredentialData) =>
 		learnWords(run, open.phrase, await run.profiles.exportMnemonic(id, password, data))
 	if (open.method === "password") {
-		const typed = p.variant === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret()
+		const typed = p.variant === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret(run)
 		return attempt(() => reveal(typed), p.variant === "wrong" ? [says("Invalid profile old password")] : [])
 	}
 	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
@@ -567,7 +596,7 @@ const importPhrase: Drive<"importPhrase"> = async (run, p, step, before) => {
 
 const changePassword: Drive<"changePassword"> = async (run, p, _step, before) => {
 	const open = mustOpen(before)
-	const current = p.variant === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret()
+	const current = p.variant === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret(run)
 	return attempt(
 		() => run.profiles.changeProfilePassword(boundId(run, open.ref), current, secretOf(run, p.password)),
 		p.variant === "wrong" ? [says("Invalid profile old password")] : [],
@@ -636,7 +665,8 @@ function flipLast(b64: string): string {
 	return bytes.toString("base64")
 }
 
-/** What refuses each field's change once the prompt answered (the model's `EDIT_REFUSES`). */
+/** What refuses each field's change once the prompt answered (the model's `EDIT_REFUSES`); a refusal
+ *  counts only while no slot of the row opened, since an unlock that opened them read a stale row. */
 const EDIT_REFUSALS: Record<ParamsMap["editRowDuringUnlock"]["field"], Refusal> = {
 	prfSalt: is(PasskeyNotOpenedError),
 	credentialId: says("Invalid profile id"),
@@ -674,11 +704,37 @@ const editRowDuringUnlock: Drive<"editRowDuringUnlock"> = async (run, p, _step, 
 	const id = boundId(run, target.ref)
 	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
 	const data = await answer(run, target.credential, prfSalt)
-	return withRow(
-		id,
-		(raw) => edited(run, raw, p.field),
-		() => attempt(() => run.profiles.unlockPasskeyProfile(id, data), [EDIT_REFUSALS[p.field]]),
-	)
+	const opens = countOpens(run.profiles)
+	try {
+		return await withRow(
+			id,
+			(raw) => edited(run, raw, p.field),
+			() => attempt(() => run.profiles.unlockPasskeyProfile(id, data), [(e) => EDIT_REFUSALS[p.field](e) && opens.count === 0]),
+		)
+	} finally {
+		opens.restore()
+	}
+}
+
+/** Counts the slot sets `profiles` opens until `restore` runs. */
+function countOpens(profiles: ProfileService): { readonly count: number; restore: () => void } {
+	type Opener = { openSlots: (...args: unknown[]) => Promise<unknown> }
+	const target = profiles as unknown as Opener
+	const open = target.openSlots
+	let count = 0
+	target.openSlots = async function (this: unknown, ...args) {
+		const opened = await open.apply(this, args)
+		if (opened) count++
+		return opened
+	}
+	return {
+		get count() {
+			return count
+		},
+		restore: () => {
+			Reflect.deleteProperty(target, "openSlots")
+		},
+	}
 }
 
 const tamperedUnlock: Drive<"tamperedUnlock"> = async (run, p, _step, before) => {
@@ -694,15 +750,15 @@ const tamperedUnlock: Drive<"tamperedUnlock"> = async (run, p, _step, before) =>
 
 type Change = ParamsMap["changeUnlockMethod"]
 
-/** `security/unlock-method.vue`: the current unlock checked before anything new is asked. */
-async function currentPasskey(run: InProcessRun, id: string, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
+/** What `k` answers at the stored input of `id`, read first as each page reads it. */
+async function answerAt(run: InProcessRun, id: string, k: CredentialRef | undefined): Promise<PasskeyCredentialData> {
 	const { prfSalt } = await run.profiles.getPasskeyUnlockParams(id)
 	return answer(run, k, prfSalt)
 }
 
 async function toPasskey(run: InProcessRun, open: ModelProfile, p: Change, before: World): Promise<Outcome> {
 	const id = boundId(run, open.ref)
-	const typed = p.current === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret()
+	const typed = p.current === "right" ? secretOf(run, open.password as SecretRef) : wrongSecret(run)
 	const checked = await attempt(() => run.profiles.verifyUnlockCredential(id, { password: typed }), [is(InvalidPasswordError)])
 	if (checked !== "committed") return checked
 	const next = await newPasskey(run, before, p.credential)
@@ -715,7 +771,7 @@ async function toNewPasskey(run: InProcessRun, open: ModelProfile, p: Change, be
 		await run.profiles.getPasskeyUnlockParams(id)
 		return "cancelled"
 	}
-	const current = await currentPasskey(run, id, open.credential)
+	const current = await answerAt(run, id, open.credential)
 	await run.profiles.verifyUnlockCredential(id, { passkey: current })
 	const next = await newPasskey(run, before, p.credential)
 	return attempt(() => run.profiles.changeUnlockMethod(id, { passkey: current }, { passkey: next }))
@@ -727,7 +783,7 @@ async function toPassword(run: InProcessRun, open: ModelProfile, p: Change): Pro
 		await run.profiles.getPasskeyUnlockParams(id)
 		return "cancelled"
 	}
-	const current = await currentPasskey(run, id, p.current === "other" ? p.other : open.credential)
+	const current = await answerAt(run, id, p.current === "other" ? p.other : open.credential)
 	const checked = await attempt(
 		() => run.profiles.verifyUnlockCredential(id, { passkey: current }),
 		p.current === "other" ? [is(PasskeyNotOpenedError)] : [],
@@ -757,11 +813,11 @@ const verifyAll: Drive<"verifyAll"> = async (run, _p, _step, before) => {
 async function wrongAttempts(run: InProcessRun, p: ModelProfile, w: World): Promise<boolean> {
 	const id = boundId(run, p.ref)
 	if (p.method === "password")
-		return (await attempt(() => run.profiles.unlockProfile(id, wrongSecret()), [is(InvalidPasswordError)])) === "refused"
+		return (await attempt(() => run.profiles.unlockProfile(id, wrongSecret(run)), [is(InvalidPasswordError)])) === "refused"
 	const others = otherCredentials(w, p.ref)
 	if (!others.length) await run.profiles.getPasskeyUnlockParams(id)
 	for (const k of others) {
-		const data = await currentPasskey(run, id, k)
+		const data = await answerAt(run, id, k)
 		if ((await attempt(() => run.profiles.unlockPasskeyProfile(id, data), [says("Invalid profile id")])) !== "refused") return false
 	}
 	return true
@@ -786,7 +842,7 @@ async function verifyOne(run: InProcessRun, p: ModelProfile, w: World): Promise<
 
 async function unlockOf(run: InProcessRun, p: ModelProfile, id: string): Promise<Unlock> {
 	if (p.method === "password") return { password: secretOf(run, p.password as SecretRef) }
-	return { data: await currentPasskey(run, id, p.credential) }
+	return { data: await answerAt(run, id, p.credential) }
 }
 
 export const DRIVERS: Drivers = {
@@ -857,8 +913,8 @@ async function readSession(run: InProcessRun, locked: boolean): Promise<SessionR
 	return reading
 }
 
-/** Whether a read only an open session is served is refused as locked; any other failure is the
- *  probe's, not an answer. */
+/** Whether a read that needs an open session is refused as locked; any other failure is the probe's,
+ *  not an answer. */
 async function protectedCallRefused(run: InProcessRun): Promise<boolean> {
 	try {
 		await run.worker.contacts.getContactByAddress(PROBE_ADDRESS)
@@ -897,9 +953,12 @@ export function needlesOf(run: InProcessRun): Needle[] {
 	for (const [ref, { words, entropy }] of run.phrases)
 		out.push(
 			{ name: `${ref}/words`, value: words.join(" ") },
+			{ name: `${ref}/words-json`, value: words.join('","') },
 			{ name: `${ref}/entropy-hex`, value: Buffer.from(entropy).toString("hex") },
 			{ name: `${ref}/entropy-b64`, value: b64(entropy) },
 		)
+	for (const [i, value] of run.wrong.entries())
+		out.push({ name: `wrong-${i}/password`, value }, { name: `wrong-${i}/password-b64`, value: b64(Buffer.from(value)) })
 	for (const [name, salt] of run.salts) out.push({ name, ...salt })
 	for (const [i, value] of [...run.prf].entries()) {
 		const bytes = Buffer.from(value, "base64")
@@ -992,12 +1051,13 @@ const variantOf = (step: PlannedStep): string | undefined => {
 }
 
 /** Every warn or error log of the step's workers, unless an entry names it for the step; the boot
- *  is no step, so it accepts none. */
+ *  is no step, so it accepts none. Lower levels are read for leaks only. */
 function checkLogs(run: InProcessRun, step: PlannedStep | undefined, allowed: readonly InProcessAllowed[]): Violation[] {
 	const variant = step && variantOf(step)
 	const names = (a: InProcessAllowed) =>
 		step !== undefined && a.during.some((d) => d.action === step.action && (d.variant === undefined || d.variant === variant))
 	return run.logs.flatMap(({ log }) => {
+		if (log.level < LogLevel.Warn) return []
 		const text = logText(log)
 		if (allowed.some((a) => names(a) && a.pattern.test(text))) return []
 		return [{ oracle: "O4" as const, message: `${LogLevel[log.level]} log from ${log.source}`, detail: text }]
@@ -1043,7 +1103,21 @@ function checkOneMaster(r: MasterReading, seen: FirstSighting, v: (message: stri
 	}
 	if (r.master !== seen.masters.get(r.ref)) v(`${r.ref}'s master is not the one it showed at first sighting`)
 	if (r.sessionSecret !== seen.sessionSecrets.get(r.ref)) v(`${r.ref}'s session secret is not the one it showed at first sighting`)
-	if (r.sessionSecret !== Fr.fromBuffer(Buffer.from(r.master, "base64")).toString()) v(`${r.ref}'s session secret is not its master`)
+	if (r.sessionSecret !== fieldOf(r.master)) v(`${r.ref}'s session secret is not its master`)
+}
+
+const fieldOf = (master: string): string => Fr.fromBuffer(Buffer.from(master, "base64")).toString()
+
+/** The open profile's session secret is the one it showed at first sighting, after every step. */
+async function checkOpenSecret(run: InProcessRun, w: World): Promise<Violation[]> {
+	if (w.session.kind !== "open") return []
+	const { ref } = w.session
+	const id = run.bindings.profiles.get(ref)
+	if (!id || (await run.profiles.getActiveProfile())?.id !== id) return []
+	const secret = (await run.profiles.getProfileSecret(id)).toString()
+	return secret === run.seen.sessionSecrets.get(ref)
+		? []
+		: [{ oracle: "O6", message: `${ref}'s session secret is not the one it showed at first sighting` }]
 }
 
 // ── the step loop ───────────────────────────────────────────────────────
@@ -1068,7 +1142,8 @@ const idsOf = (run: InProcessRun, refs: Iterable<ProfileRef>): Set<string> =>
 const openRefs = (w: World): ProfileRef[] => (w.session.kind === "open" ? [w.session.ref] : [])
 
 /** O3 over every logged `storage.local` transition, reverted ones included, once the step has bound
- *  its new ids; then each create's row and each delete's purge; then writes no step may make. */
+ *  its new ids; then each create's row and each delete's purge; then writes no step may make, and
+ *  O1 over every session row written, whatever came after it. */
 function checkWriteLog(
 	run: InProcessRun,
 	step: PlannedStep | undefined,
@@ -1089,7 +1164,20 @@ function checkWriteLog(
 		.flatMap((r) => checkChanges({ ...ctx, before: side(r.key, r.before), after: side(r.key, r.after) }))
 	out.push(...checkLifecycle({ ...ctx, before: censuses[0], after: censuses[1] }))
 	for (const r of run.readingWrites) out.push({ oracle: "O3", message: `a reading wrote ${r.area}:${r.key}` })
-	for (const r of run.strays) out.push({ oracle: "O3", message: `worker ${r.worker} wrote ${r.area}:${r.key} after its restart` })
+	for (const r of run.strays.splice(0))
+		out.push({ oracle: "O3", message: `worker ${r.worker} wrote ${r.area}:${r.key} after its restart` })
+	for (const r of [...run.writes, ...run.readingWrites]) out.push(...checkSessionWrite(r))
+	return out
+}
+
+/** A session row is never written with a legacy passhash, nor with a bearer while strict. */
+function checkSessionWrite(r: WriteRecord): Violation[] {
+	if (r.area !== "session" || r.key !== SESSION_ROW || typeof r.after !== "string") return []
+	const row = JSON.parse(r.after) as { bearer?: unknown; passhash?: unknown }
+	const out: Violation[] = []
+	if (row.passhash != null) out.push({ oracle: "O1", message: `worker ${r.worker} wrote a session row holding a legacy passhash` })
+	if (r.strict && row.bearer != null)
+		out.push({ oracle: "O1", message: `worker ${r.worker} wrote a session row holding a bearer under strict mode` })
 	return out
 }
 
@@ -1115,6 +1203,7 @@ async function checkStep(run: InProcessRun, step: PlannedStep | undefined, befor
 		...checkLeaks(leaks, { ...structure, exports: [] }, passkeyIds, homes),
 		...checkLogs(run, step, IN_PROCESS_ALLOWED),
 		...(step?.action === "verifyAll" ? checkMasters(before, run.verified, run.seen) : []),
+		...(await checkOpenSecret(run, next)),
 	]
 }
 
@@ -1167,6 +1256,14 @@ export async function runPlan(plan: Plan, hooks: StepHooks = {}): Promise<RunRep
 		if (!(IN_PROCESS_ACTIONS as readonly string[]).includes(action)) throw new Error(`${action} has no in-process driver`)
 	const local = (chrome.storage as { local?: unknown }).local
 	const run = new InProcessRun(hooks)
+	const consoles = consoleMethods.map(([method, level]) => {
+		const name = method as "log"
+		const original = console[name]
+		console[name] = (...args: unknown[]) => run.console(level, args)
+		return () => {
+			console[name] = original
+		}
+	})
 	try {
 		new FakeBrowserApi().reset()
 		run.beginStep()
@@ -1182,6 +1279,7 @@ export async function runPlan(plan: Plan, hooks: StepHooks = {}): Promise<RunRep
 		return await runSteps(run, plan, empty)
 	} finally {
 		;(chrome.storage as { local?: unknown }).local = local
+		for (const restore of consoles) restore()
 	}
 }
 
