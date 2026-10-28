@@ -102,12 +102,12 @@ Gate: `bun run lint && bun run typecheck:all && bun run test && bun run test:all
 2.4 ✓ Remove the `KNOWN_FINDINGS` entries (`tests/e2e/helpers/profile-chaos/checkers.ts`) of each issue this arc closes; an entry whose issue stays open stays, re-pointed to it.
 Gate: arc 1's commands. Chaos replays from each issue's `## Record`, on a rebuild from the committed tree, all green at retry 0: #1132's list 12 times on Chrome (1 in 4 on base), #1133's list 3 times on Firefox (3 of 3 on base). Then `bun run test:e2e -- tests/e2e/security.test.ts --retry=0` on Chrome: 60 consecutive runs with no `pageErrors` when the call was named (0.95^60 ≈ 5% chance of a false pass); under D6, 20 runs where only the recorded `Profile locked` error may appear. Once on Firefox.
 
-### Arc 3 (#1178)
+### Arc 3 (#1178) ✓
 
-3.1 Typed refusals and `exportPlain`. Tests: each new type survives `walletErrorFromPayload` with its message (the existing error-table test); `exportPlain` with a wrong password rejects as `InvalidPasswordError` with no error line, another profile's passkey as `PasskeyNotOpenedError`, and a corrupt-row control still flattens and logs error; the account service's `exportAccount` rejects a wrong password as `InvalidPasswordError`.
-3.2 Classifier and sites. Tests in `credential-refusal.test.ts`: one case per refused class (debug); `PasskeyUnconfirmedError` with a `NotAllowedError` cause (debug) against one with a `TypeError` cause (error); the import wrap around each; an unknown error (error). `useProfileImportFlow` test: the no-PRF wrap keeps its message and carries the cause.
-3.3 Trace the `Failed to create profile:` line: find which error reached it, and fix it only with a written path.
-3.4 Remove no `KNOWN_FINDINGS` entry: #1178 has none.
+3.1 ✓ Typed refusals and `exportPlain`. Tests: each new type survives `walletErrorFromPayload` with its message (the existing error-table test); `exportPlain` with a wrong password rejects as `InvalidPasswordError` with no error line, another profile's passkey as `PasskeyNotOpenedError`, and a corrupt-row control still flattens and logs error; the account service's `exportAccount` rejects a wrong password as `InvalidPasswordError`.
+3.2 ✓ Classifier and sites. Tests in `credential-refusal.test.ts`: one case per refused class (debug); `PasskeyUnconfirmedError` with a `NotAllowedError` cause (debug) against one with a `TypeError` cause (error); the import wrap around each; an unknown error (error). `useProfileImportFlow` test: the no-PRF wrap keeps its message and carries the cause.
+3.3 ✓ Trace the `Failed to create profile:` line: find which error reached it, and fix it only with a written path.
+3.4 ✓ Remove no `KNOWN_FINDINGS` entry: #1178 has none.
 Gate: arc 1's commands, plus `bun run test:e2e -- tests/e2e/security.test.ts tests/e2e/passkey-backup.test.ts tests/e2e/security-backup.test.ts --retry=0` on Chrome, and `passkey-backup.test.ts` on Firefox.
 
 ## Delivery

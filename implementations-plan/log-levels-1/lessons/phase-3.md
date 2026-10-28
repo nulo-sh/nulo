@@ -10,3 +10,4 @@
   - `SameUnlockMethodError` unreachable from any page since #1219, so it stays at error;
   - two stale comments.
 - `src/utils/` is an auto-import dir: a new export there changes `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json`. A build regenerates both, and they ship in the same commit.
+- Round 2 (Codex resumed): clean. Reviewed head: `lint`, `typecheck`, `test` (944 files) green; the Chrome trio 11 of 11 again.
