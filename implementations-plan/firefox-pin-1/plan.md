@@ -122,6 +122,7 @@ The plan plus `implementations-plan/README.md` § Post-implementation standard a
 | Codex final (resumed) | `approve`: every fix verified, no new material finding; I1 and I3 stay gated by the contract test | — | — |
 | Codex fix r1 (`gpt-6.1-sol`, high, fresh, over `5ef0c119d...4901ab3a4`) | `approve`, one low: `PxeHostState`'s doc comment left above the new types | moved back | — |
 | Opus (code, beside fix r1) | `conditional approve`, four low or info: the same doc comment; Firefox assigns the JSON text to a byte-string `responseBody` (BiDi UTF-8-encodes, `network.sys.mjs:3213-3228`); Chrome's driver lets a page arm twice; an answered request never reports `responseCompleted` to Puppeteer on Firefox (`NetworkRequest.sys.mjs:346-355`) | the comment; UTF-8 encoding, with the contract test's second body outside ASCII (red first: `JSON.parse: bad control character`); a FIREFOX.md sentence on the missing response event | the second-arm guard: no caller arms twice, and Chrome already fails one (Puppeteer refuses a request handled twice) |
+| Codex fix r2 (resumed, over `4901ab3a4..6129a71d7`) | `approve`, one low: the FIREFOX.md sentence overstated a network-idle hang | its narrower wording: an answered request stays in Puppeteer's in-flight count | — |
 
 ## Seeds (not run; the orchestrator drives this lane)
 

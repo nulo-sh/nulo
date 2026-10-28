@@ -11,3 +11,7 @@
 - Firefox's `nsIReplacedHttpResponse.responseBody` is a byte string; assigning JSON text truncated each UTF-16 unit, so `✓` became a control byte. Red first: the contract test with `note: "präsent ✓"` in the second page's body failed `JSON.parse: bad control character` on 158; encoded as UTF-8 it passed on 158 and Chrome.
 - An override set outside BiDi skips `prepareResponseStart` (`NetworkRequest.sys.mjs:346-355`), so Puppeteer never sees `responseCompleted` for an answered request; no spec waits on network idle. Recorded in FIREFOX.md.
 - The Firefox stderr line `InternalError: unsafe filename: data:application/javascript…` (the page-error relay's frame script) prints on every green launch too; it is not a failure.
+
+## Fix loop round 2
+
+- Codex `approve` over `4901ab3a4..6129a71d7`, one low: the FIREFOX.md sentence claimed a network-idle wait never settles, which overstates it (idle can be reported before any answered request, or under a concurrency allowance). Narrowed to "stays in Puppeteer's in-flight count". The loop converged at round 2.
