@@ -5,6 +5,7 @@ import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import {
+	type CallSurface,
 	amountLabel,
 	authwitLine,
 	authwitTitle,
@@ -14,6 +15,7 @@ import {
 	readableGrants,
 	rowTitle,
 	tokenAt,
+	uncheckedCallsLine,
 	valueText,
 	valueTitle,
 } from "./call-surface"
@@ -438,5 +440,47 @@ describe("readableGrants", () => {
 	test("a grant the batch left out is unavailable, so a short batch cannot read as complete", () => {
 		const shown = memo("ok")
 		expect(readableGrants([shown], 2)).toEqual([shown, { kind: "undecoded", reason: "unavailable" }])
+	})
+})
+
+describe("uncheckedCallsLine", () => {
+	const read: CallSurface = { kind: "transfer", fn: "transfer", to: TO, amount: "5", sender: { kind: "account", address: OWNER } }
+	const minted: CallSurface = { kind: "mint", fn: "mint_to_public", to: TO, amount: "5" }
+	const named: CallSurface = { kind: "decoded", fn: "exit_to_l1", params: [] }
+	const claimed: CallSurface = { kind: "decoded", fn: "transfer", params: [], labels: "unchecked" }
+	const pending: CallSurface = { kind: "pending" }
+	const raw: CallSurface = { kind: "raw", reason: "unknown-contract", rows: [], hidden: 0 }
+
+	test.each([
+		["no call", [], undefined],
+		["every call read", [read, minted], undefined],
+		["calls still being read or unreadable", [pending, raw], undefined],
+		[
+			"a one-call transaction",
+			[named],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what this call does.",
+		],
+		[
+			"every call in the list",
+			[named, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what these calls do.",
+		],
+		[
+			"one call among several",
+			[read, raw, named],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what call 3 does.",
+		],
+		[
+			"two of three",
+			[named, minted, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1 and 3 do.",
+		],
+		[
+			"three of four",
+			[named, read, named, claimed],
+			"Nulo can only check transfers and mints of tokens in your list, so it can't say what calls 1, 3 and 4 do.",
+		],
+	] as const)("%s", (_, surfaces, line) => {
+		expect(uncheckedCallsLine(surfaces)).toBe(line)
 	})
 })

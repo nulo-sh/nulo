@@ -49,6 +49,12 @@ const props = defineProps({
 	},
 	/** A glyph in the chevron's place, for a row that acts in place instead of opening a page. */
 	trailingIcon: String,
+	/** With an internal `to`, the row holds its own controls in `#right`: its link is stretched
+	 *  under them, never around them, and carries every attribute but `class` and `style`. */
+	controls: {
+		type: Boolean,
+		default: false,
+	},
 	disabled: {
 		type: Boolean,
 		default: false,
@@ -69,7 +75,10 @@ const titleId = useId()
 /** `disabled` decides first: a disabled row is inert whatever `to` or `@click` it carries. */
 const mode = computed(() => {
 	if (props.disabled) return "inert"
-	if (props.to) return props.external ? "external" : "link"
+	if (props.to) {
+		if (props.external) return "external"
+		return props.controls ? "stretched" : "link"
+	}
 	if (attrs.onClick) return "click"
 	return "inert"
 })
@@ -80,7 +89,13 @@ const rootClass = computed(() => [
 	mode.value !== "inert" && $style.interactive,
 	props.raw && $style.raw,
 	props.disabled && $style.disabled,
+	mode.value === "stretched" && $style.stretched,
 ])
+
+const linkAttrs = computed(() => {
+	const { class: _class, style: _style, ...rest } = attrs
+	return rest
+})
 
 /** An anchor has no native Space action; a bare Space presses it, and a modified one scrolls. */
 const pressOnSpace = withKeys(
@@ -102,6 +117,7 @@ const Root = (_, { slots }) => {
 			},
 		)
 	}
+	if (mode.value === "stretched") return h("div", { class: [attrs.class, rootClass.value], style: attrs.style }, body)
 	if (mode.value === "external") {
 		return h("a", mergeProps(shared, { href: props.to, target: "_blank", rel: "noopener noreferrer", onKeydown: pressOnSpace }), body)
 	}
@@ -112,6 +128,7 @@ const Root = (_, { slots }) => {
 <template>
 	<Root>
 		<RowTarget v-if="mode === 'click'" :labelledby="titleId" />
+		<RowTarget v-else-if="mode === 'stretched'" v-bind="linkAttrs" :to :labelledby="titleId" />
 
 		<Flex wide align="center" justify="between" gap="16" :class="$style.main">
 			<Flex align="center" gap="14" wide :class="$style.left">
@@ -226,6 +243,12 @@ const Root = (_, { slots }) => {
 	&:active {
 		background: var(--nulo-surface-highest);
 	}
+}
+
+/* Positioned, so they paint above the stretched link: they let the pointer through to it. */
+.stretched .icon_wrapper,
+.stretched::after {
+	pointer-events: none;
 }
 
 .icon_wrapper {
