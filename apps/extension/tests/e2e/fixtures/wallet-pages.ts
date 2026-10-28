@@ -135,7 +135,7 @@ export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
 }
 
 /** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
-async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
+export async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
 	await setViewport(page, { width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
