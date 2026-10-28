@@ -9,10 +9,26 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 2914b9699
 trunk: dev
-status: planned (Codex approve, round 3); arc 1 next
+status: closed (arc 1 #1324; arc 2 and the close-out one PR, awaiting the merge)
 issues: "#1157 (its Possible fix phase 2 and the scenario list's in-process items)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-28.
+- Status: completed. Arc 1 merged as #1324; arc 2 and this close-out ship as one PR (D21), awaiting the merge.
+- Shipped: part of #1157, its phase 2 and the scenario list's in-process items.
+  - #1324: `src/wallet/services/profile/profile-chaos.composition.test.ts` drives 22 of the catalog's actions in process, over the real `ProfileService`, `ContactService` and `ConfigStore`, and judges every step with O1-O7. Every unit run drives seed 8001 and four hand lists; `NULO_PROFILE_CHAOS_RUNS` and `NULO_PROFILE_CHAOS_SEED` arm a long mode.
+  - Arc 2: `profile-chaos-scenarios.composition.test.ts` runs every item of the lane's scenario list as a planned sequence on the same harness (2.1, D19, D20). Each item has a break fixture, and each item held at a passkey answer or a MAC check has a control. The harness gains `StepHooks.onAnswer`, `onBoot`, `drive` and `allowed`, plus `plant`; the model gains `planFrom`, and every e2e seed plans byte-identically. The model test's four fixed-work planning cases share one 180 s budget, which closes #1327 (D22).
+  - No product file changed, and no product fault came up.
+- Budget: the two composition files took 18.5, 18.0 and 14.6 s together in three extension-suite runs at retry 0, under the 30 s the plan states.
+- Lessons: none promoted.
+  - `lessons.md` holds 8191 of its 8192 bytes, and the pruning pass found no superseded entry. The Bun 1.4.2, Vue 3.5.42, Vue Test Utils 2.4.11 and zod 4.6.7 entries still hold. The four Aztec entries name 6.0.0-rc.1 while the line is 6.0.0; they were not re-checked here.
+  - The candidates stay in [lessons/phase-2.md](lessons/phase-2.md): a one-shot HMAC spy catches whichever verify comes first; a logged write that changes nothing is never recorded; and fixed planning work sits near vitest's 5 s default under load (#1327).
+- Known limits: none. Every item of the scenario list landed in process.
+- Open items: #1157 stays open for its browser scenarios. Each needs an extension window, a file pick or the network; they are listed in its close-out comment.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 ## Goal
 
@@ -52,7 +68,7 @@ post_implementation_hardening: not scheduled
 
 **Restart** (D7): snapshot both areas and the alarm list, `reset()`, restore them, boot the new worker on a new `FakeBrowserApi` instance. The dropped worker keeps no listener (F3), and no call of its is waiting in arc 1. Arc 2's stop between a write and its reopen parks one call forever; that is the stop. **Holds** (D9): arc 2 uses `onAnswer`, a one-shot storage wrapper on one worker's instance, and a one-shot spy on HMAC `crypto.subtle.verify`; each proves it was reached; no `src/` change.
 
-**File map.** Arc 1: `PC/model.ts` (`Caps.actions`), `PC/checkers.ts` (`checkChanges`, `SLOT_FRAMES`), `PC/collect.ts` (imports `SLOT_FRAMES`), `E/scripts/e2e/profile-chaos-model.test.ts` (identity, surface, purity), `E/tests/helpers/profile-chaos-in-process.ts` (new), `PS/profile-chaos.composition.test.ts` (new), `E/tests/COMPOSITION-TESTS.md` (a worked-example row), `E/tests/e2e/README.md` § Chaos runs. Arc 2: `PS/profile-chaos-scenarios.composition.test.ts` (new), the harness (holds), both docs.
+**File map.** Arc 1: `PC/model.ts` (`Caps.actions`), `PC/checkers.ts` (`checkChanges`, `SLOT_FRAMES`), `PC/collect.ts` (imports `SLOT_FRAMES`), `E/scripts/e2e/profile-chaos-model.test.ts` (identity, surface, purity), `E/tests/helpers/profile-chaos-in-process.ts` (new), `PS/profile-chaos.composition.test.ts` (new), `E/tests/COMPOSITION-TESTS.md` (a worked-example row), `E/tests/e2e/README.md` § Chaos runs. Arc 2: `PS/profile-chaos-scenarios.composition.test.ts` (new), the harness (`StepHooks.onAnswer`, `onBoot`, `drive`, `allowed`; `plant`), `PC/model.ts` (`planFrom`), `E/scripts/e2e/profile-chaos-model.test.ts` (one planning budget, D22), both docs.
 
 **Not taken:** a `plan()` parameter (works, but leaves the restriction out of the recorded caps and the README rule); a capability per missing feature (a dozen `params` edits); new catalog actions for in-process faults (each needs an e2e driver, D11); refactoring the three existing boots (outside the lane).
 
@@ -78,6 +94,10 @@ post_implementation_hardening: not scheduled
 | D16 | Accessibility: none | | no product file changes |
 | D17 | The fixed-set coverage check runs in the composition test, beside the hand lists it counts; the fixed set is {8001} | the model test (the file map's first place); more seeds | the model test imports no harness (D13); the four hand lists drive every action but `unlockPassword`, `secondWindow`, `changePassword` and `rename`, seed 8001 drives the first three and `rename` joined a hand list, so one seed is the fewest (D10), at about 6 s under load |
 | D18 | The model test's identity case plans 100 seeds per caps and start, not 1,000 | 1,000 (gate 1.1's text) | at 1,000 it cost 20 s of the unit suite's 30 s budget; the property is structural (a surface naming every action filters nothing), and gate 1.1's digest proved identity over the full seed set at the base and the head |
+| D19 | A scenario is a planned list: its scenario step is a span of catalog steps (the first names the action and params, the span may write what any of them may and leaves the last one's world, with patches `before` and `after` where a harness write or the schedule differs); `StepHooks.drive` replaces that step's driver; `planFrom` plans from any world; `plant` stores a row around the log and keeps O7 from reading it as the wallet's write | new catalog actions (D11); hand assertions outside the oracles | every step stays judged by O1-O7 against the model; `planFrom` only moves `planFromList`'s loop, and every e2e seed plans byte-identically (2.1's gate) |
+| D20 | Arc 2 drives every item of the lane's scenario list, the three 2.1 left out included (salts swapped, a delete and a second change during a held change) | 2.1's Not taken (covered by integration tests) | the arc-2 brief lists them; each costs one sequence at about 20 ms, and the integration tests do not run O1-O7 |
+| D21 | Arc 2 on `chaos-4-a2` from `dev` after arc 1's merge, the close-out as the same PR's last commits | a stack of arc 2 and a close-out PR (Delivery) | the orchestrator's arc-2 brief: one PR to land |
+| D22 | The model test's four fixed-work planning cases share one 180 s budget (#1327) | fold the counter into the precondition loop; memoise `plan()`; fewer seeds | the counter case timed out once at retry 0 (5.5 s at load 104); the work is set by the seed count, not the tree, so cutting it cuts seeds; Codex chose the budget and named the citation and surface cases as the same cause |
 
 ## Phases and gates
 
@@ -96,11 +116,11 @@ Gate: `T` with no filter three times, each green; the file's duration in each (�
 
 **Arc 2: the scenario list** (`PS/profile-chaos-scenarios.composition.test.ts`). Each item: its never-happens assertion, its success control, its break fixture (the guard spied away, red), O1-O3 after.
 
-**2.1 Sequences.** (a) `prfSalt` edited inside `unlockPasskeyProfile` after the snapshot (`onAnswer`; the slots open from the snapshot, so it is the storage window up to the re-read): refused, nothing written; a reveal under the same edit returns the snapshot's words (D15). (b) A flipped `dekSealed` byte under a bearer session, then a restart: the restore closes the session. (c) A reveal held after its answer: a lock leaves the wallet locked, nothing written, the words returned (D15); a delete refuses it. (d) A retired row naming a live row's `credentialId`: the live row opens and is unchanged. A retired row given the live row's slots: the live row unchanged, and the transplant opens with no trusted imported-key DEK and no bearer (its MAC binds the id); anything else is filed (D14). (f) Strict turned on at a passkey answer: no bearer persisted. Strict turned on at a bearer restore's HMAC check: the session closes. (g) A stop after a change's row write lands and before its reopen: under strict, locked and only the new unlock opens; with strict off, restored on the new row. (h) A passkey change held at its new answer (the second `onAnswer` call): a second passkey change wins and the first is stale; a lock lets the change commit and the session stays locked.
-Not taken: the method change's stale refusal (PU:449), the degraded unlock and rekey refusals (INT:3167, :3219, :3245; PU:295-311), salts swapped (INT:737-765; occupied salts PU:125, :292), a delete during a held change (COMP:157-174).
+**2.1 ✓ Sequences.** (a) `prfSalt` edited inside `unlockPasskeyProfile` after the snapshot (`onAnswer`; the slots open from the snapshot, so it is the storage window up to the re-read): refused, nothing written; a reveal under the same edit returns the snapshot's words (D15). (b) A flipped `dekSealed` byte under a bearer session, then a restart: the restore closes the session. (c) A reveal held after its answer: a lock leaves the wallet locked, nothing written, the words returned (D15); a delete refuses it. (d) A retired row naming a live row's `credentialId`: the live row opens and is unchanged. A retired row given the live row's slots: the live row unchanged, and the transplant opens with no trusted imported-key DEK and no bearer (its MAC binds the id); anything else is filed (D14). (f) Strict turned on at a passkey answer: no bearer persisted. Strict turned on at a bearer restore's HMAC check: the session closes. (g) A stop after a change's row write lands and before its reopen: under strict, locked and only the new unlock opens; with strict off, restored on the new row. (h) A passkey change held at its new answer (the second `onAnswer` call): a second passkey change wins and the first is stale; a lock lets the change commit and the session stays locked.
+Not taken: the degraded unlock and rekey refusals outside a restart (INT:3167, :3219, :3245; PU:295-311). Landed beyond the list above (D20): (i) two profiles on one credential with their salts swapped: neither opens; (h) a delete during the held change refuses it, and the second change's case is the stale refusal. Each item held at a passkey answer or a MAC check has a control (the same hold, the fault absent); each break fixture spies the guard away or forces the opposite outcome.
 Gate: `T src/wallet/services/profile/profile-chaos-scenarios.composition.test.ts` green; each break fixture red; recorded in lessons/phase-2.md.
 
-**2.2 Record.** Docs; each product finding filed (D14); the #1157 comment drafted for the close-out.
+**2.2 ✓ Record.** Docs; each product finding filed (D14); the #1157 comment drafted for the close-out.
 Gate: as 1.3's, with both files' durations (≤ 30 s together).
 
 ## Security & Adversarial Considerations
@@ -121,15 +141,14 @@ None: no product file changes.
 | Arc | Phases | Branch | Base | PR title (≤ 92) | Issue | code_review |
 |---|---|---|---|---|---|---|
 | 1 | 1.1-1.3 | `worktree-chaos-4` | `dev` | `test(profile): a seeded in-process sequence drives the profile chaos catalog` | Part of #1157 | off |
-| 2 | 2.1-2.2 | `chaos-4-arc-2` | arc 1 | `test(profile): in-process sequences for the profile chaos scenario list` | Part of #1157 | off |
-| close-out | Outcome, archive | `chaos-4-close-out` | arc 2 | `docs(plans): close chaos-4 with its outcome and archive it` | none | off |
+| 2 + close-out | 2.1-2.2, Outcome, archive | `chaos-4-a2` | `dev` (D21) | `test(profile): in-process sequences for the profile chaos scenario list` | #1157, #1327 | off |
 
-`gh stack` (`gh stack add` per arc, `gh stack submit --auto`, bodies by `gh pr edit`); PRs opened without labels after each arc's gates and Codex loop. #1157 stays open for its browser scenarios; the close-out comments with what shipped. Serial; no lanes.
+Arc 1 shipped as #1324 (`worktree-chaos-4`). Arc 2 and the close-out are one PR (D21), opened without labels after the gates and the Codex loop. #1157 stays open for its browser scenarios; the close-out comments with what shipped. Serial; no lanes.
 
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard at `2914b9699`, with:
-- Loop per arc, while it is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the arc's diff, this plan, the arc map ("arc N of 2; arc 2 adds targeted sequences on arc 1's harness"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `opus`, `general-purpose`) beside round 1. Three rounds at most. Then one fresh session over the net diff from `2914b9699`.
+- Loop per arc, while it is the stack tip: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; the prompt carries the arc's diff, this plan, the arc map ("arc N of 2; arc 2 adds targeted sequences on arc 1's harness"), the adversarial ask and the standard's two rules verbatim. One Opus review (`Agent`, `opus`, `general-purpose`) beside round 1. Three rounds at most. Then one fresh session over the net diff from `2914b9699`. Arc 2: three rounds at most in all, over its diff from `843d27f75`.
 - `/code-review`: off.
 - Close-out: merge `origin/dev`, read `index.md` and `lessons.md`; the Outcome; lessons; the #1157 comment; known limits filed closed; `STATUS.md` deleted; `git mv` into `archive/` in its own commit; `bun run check:plans`.
 - Teardown once the close-out merges: `agent-worktree done chaos-4 --merged --trunk dev`; a `/loop` checks each firing, a `/goal` arms one wait after its report.
@@ -145,6 +164,8 @@ Each finding was checked against the tree; detail in lessons/phase-0.md.
 - **Arc 1, Codex round 1:** reject; 4 findings and a comment, all accepted (lessons/phase-1.md § Review, round 1): O7 reads every log level, O6 reads an open session's secret after each step, wrong passwords are needles, O1 judges every session-row write. **Opus, beside it:** 7 findings, all accepted: console lines reach the logger, the edited-row refusal counts only before the slots open, a phrase as a JSON array is a needle, strays survive to a check, a fixture per O6 clause, three comments.
 - **Arc 1, Codex round 2 (resumed):** conditional approve; 3 findings, all accepted: readings run before the first check, a write's strict mode is read as it lands, a comment.
 - **Arc 1, Codex round 3 (resumed):** approve. **Fresh session over the net diff:** reject; 2 findings and a comment, all accepted: unlock parameters must name the profile's own credential (O2), a first sighting's words must derive its master (O6). Round 2 (resumed): approve.
+- **Arc 2, Codex round 1:** reject; 5 findings, all accepted (lessons/phase-2.md § Review, round 1). O7's plant exemption hid wallet writes; a reveal's no-write was unenforced (`silent`); the retired-row break threw before the unlock; the swapped-salt break was a control; comments. **Opus, beside it:** conditional approve; 6 findings, all accepted: loose break patterns, the same retired-row break, docs that overclaimed controls, a break that patched both workers, the plant exemption, comments. Its latent note (a span's `before` reaches planning only) is recorded and left alone.
+- **Arc 2, Codex round 2 (resumed):** approve; no new finding. The loop converged.
 
 ## Seeds
 

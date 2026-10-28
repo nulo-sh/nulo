@@ -248,6 +248,20 @@ export const RAW_LINE: Readonly<Record<UndecodedReason, readonly NoticeSegment[]
 /** Said once per window, never on a request the wallet refuses; `OperationCard` picks its place. */
 export const RAW_ADVICE = "Check what the app says this does before approving."
 
+const callsNamed = (places: readonly number[], total: number): string => {
+	if (places.length === total) return total === 1 ? "this call does" : "these calls do"
+	if (places.length === 1) return `call ${places[0]} does`
+	return `calls ${places.slice(0, -1).join(", ")} and ${places.at(-1)} do`
+}
+
+/** The summary's one line on the calls it decoded but did not read, by their place in the list; a
+ *  call still being read or unreadable is not named, as its own row says so. */
+export const uncheckedCallsLine = (surfaces: readonly CallSurface[]): string | undefined => {
+	const places = surfaces.flatMap((surface, j) => (surface.kind === "decoded" ? [j + 1] : []))
+	if (places.length === 0) return undefined
+	return `Nulo can only check transfers and mints of tokens in your list, so it can't say what ${callsNamed(places, surfaces.length)}.`
+}
+
 export const LABELS_TITLE = "Labels from the contract"
 export const LABELS_LINE: readonly NoticeSegment[] = [
 	{ text: "These names come from the contract, not from Nulo. Check the addresses and amount before approving." },
