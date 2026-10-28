@@ -100,6 +100,8 @@ Execute `implementations-plan/README.md` § Post-implementation standard as it r
 - **Round 3, Codex resume** (verification): `approve`. No new material finding.
 - **Arc 1158, round 1** (Codex gpt-6.1-sol, high, over `f1183fc43..9dfb28417`): two findings, both accepted. (1) Demonstrated: `0` → question A → `15` → `0` → question B replaces A, A's no restores the stored minutes, and B's Never lock then writes nothing; fixed with one question at a time and a regression test. (2) Two comments narrated; trimmed. Opus diff review, same round: three findings, all accepted. Two page tests could not fail (the debounce never fired after unmount; a late Confirm after unmount was never tried); both now go red without their guard. One stale test header. Rejected: none.
 - **Arc 1158, round 2** (Codex resume over `9dfb28417..7adc3eb5a`): `clean`.
+- **Arc 1192, round 1** (Codex over `1054f2b08..6ca25aa57`): one finding, accepted: two comments restated their declarations; trimmed. Opus diff review, same round: four findings, all accepted. The countdown's tabular figures sat on the button beside `type--label-section`, which sets `font-variant-numeric: normal` at equal specificity; moved to the countdown span. The repeat-Enter test pressed "Do it later" directly, so it did not depend on the focus hand-off; it now presses the focused element. A link test renamed; a stale option doc in `useSecretCountdown`. Rejected: none.
+- **Arc 1192, round 2** (Codex resume over `6ca25aa57..212584dc1`): `clean`.
 
 ## Seeds (draft; run none until the orchestrator spawns an arc)
 
