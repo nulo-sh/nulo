@@ -52,7 +52,7 @@ One issue, one arc, one PR against `dev`. Recon and the trace: [recon.md](recon.
 - **Flow after the fix**: switch → flag cleared → engine aborts the old attempt (its `onQueued` is now inert) → row shows the estimating state → the replacement's own `queued` answer sets the flag again, or its `onEstimateStarted` and settle leave it clear.
 - **Not taken**: D1 and D2 below.
 
-### Phase 1: The fix and its component case
+### Phase 1: The fix and its component case ✓
 
 - Add to `index.test.ts` § "execute window — approval envelope", beside the two queued cases: "a fee method switched while queued reads estimating until the wallet answers again, and Confirm holds as before". Drive the real `estimateWhenClear` through the map's `opts.estimate`, on fake timers. The mocked map's `estimate` does what the engine's `schedule` does, synchronously: abort the live attempt's controller, set the result to `null`, set estimating `true`. Catch the aborted attempt's rejection, as the engine's staleness check drops it. Steps and assertions:
   1. Pick `fj`; attempt `tok-a`'s first ask answers queued: `isQueued` true, Confirm off. After the 2 s poll, its second ask stays unanswered.

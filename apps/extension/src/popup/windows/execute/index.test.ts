@@ -875,6 +875,77 @@ describe("execute window — approval envelope", () => {
 			vi.useRealTimers()
 		}
 	})
+
+	test("a fee method switched while queued reads estimating until the wallet answers again, and Confirm holds as before", async () => {
+		resolvable()
+		previewTokenMetadataMock.mockResolvedValueOnce(preview)
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		const [fees] = feeMapInstances
+		const card = () => w!.findAllComponents(STUBS.OperationCard)[0]!
+		const queued = () => card().props("isQueued")
+		const confirmOff = () => w!.find('[data-testid="execute-confirm-btn"]').attributes("disabled") !== undefined
+		const FJ = { paymentMethod: { kind: "fj" } }
+		const SPONSOR = { paymentMethod: { kind: "fpc", fpcId: "s1" } }
+		// What the engine's `schedule` does at once: abort the attempt it supersedes, clear the result,
+		// keep the operation estimating.
+		let live = new AbortController()
+		fees!.api.estimate.mockImplementation(() => {
+			live.abort()
+			live = new AbortController()
+			fees!.api.results.value = { 0: null }
+			fees!.api.estimating.value = { 0: true }
+		})
+		const QUEUED = { queued: true, tokenSpent: false }
+		let answerOld: (answer: unknown) => void = () => {}
+		let answerNew: (answer: unknown) => void = () => {}
+		estimateOperationFeeMock
+			.mockResolvedValueOnce(QUEUED as never)
+			.mockReturnValueOnce(new Promise((resolve) => (answerOld = resolve)) as never)
+			.mockReturnValueOnce(new Promise((resolve) => (answerNew = resolve)) as never)
+			.mockReturnValueOnce(new Promise(() => {}) as never)
+		vi.useFakeTimers()
+		try {
+			vm.handleFeeUpdate(0, FJ)
+			// The engine drops a superseded attempt's rejection.
+			void fees!.opts.estimate({ index: 0, feeSettings: FJ }, "tok-a", "flow-a", live.signal).catch(() => {})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(true)
+			expect(confirmOff()).toBe(true)
+			await vi.advanceTimersByTimeAsync(2_000)
+
+			// The send is gone and another estimate holds the slot: the replacement gets no answer yet.
+			vm.handleFeeUpdate(0, SPONSOR)
+			card().vm.$emit("updatePayer", 0, { type: "fpc" })
+			expect(fees!.api.estimate).toHaveBeenLastCalledWith(0, { index: 0, feeSettings: SPONSOR })
+			void fees!.opts.estimate({ index: 0, feeSettings: SPONSOR }, "tok-b", "flow-b", live.signal)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(false)
+			expect(confirmOff()).toBe(true)
+
+			answerOld(QUEUED)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(false)
+
+			answerNew(QUEUED)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-a" })
+			await nextTick()
+			expect(queued()).toBe(true)
+			expect(confirmOff()).toBe(true)
+
+			fees!.api.results.value = { 0: { maxFee: "800" } }
+			fees!.api.estimating.value = { 0: false }
+			await nextTick()
+			expect(queued()).toBe(false)
+			expect(confirmOff()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
 })
 
 // ── A token add the signed list flags: Confirm and approve() wait for the list's first answer, and

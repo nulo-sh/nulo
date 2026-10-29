@@ -178,7 +178,7 @@ const {
 })
 
 /** Per operation, whether its estimate or preview waits behind another send; cleared once its run
- *  starts or neither is in flight. */
+ *  starts, a new fee setting asks again, or neither is in flight. */
 const queuedOps = ref<Record<number, boolean>>({})
 const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) => ({
 	onQueued: () => {
@@ -461,7 +461,9 @@ const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()
-	if (value) scheduleFeeEstimate(index, { index, feeSettings: value })
+	if (!value) return
+	queuedOps.value[index] = false
+	scheduleFeeEstimate(index, { index, feeSettings: value })
 }
 
 const approve = async () => {
