@@ -1551,7 +1551,7 @@ describe("ExecutionService composition — a send queued against a fee cap asks 
 		const id = await asking(h)
 		// While the slot is held, an accepted send cannot reach `proving` before the cancel lands; a
 		// cancel after its `proving` mark is the mid-prove cancel, which proves and drops.
-		const slot = await h.lane.tryTakeSlot("p1", NETWORK.chainId)
+		const slot = await h.lane.takeEstimateSlot("p1", NETWORK.chainId)
 		expect(slot).toBeDefined()
 		const cancel = () => h.service.cancelJob(id)
 		const accept = () => h.service.acceptQueuedFee(id, FEE)

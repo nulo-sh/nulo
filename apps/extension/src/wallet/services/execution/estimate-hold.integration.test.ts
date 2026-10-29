@@ -51,7 +51,7 @@ function harness() {
 		ensureInitialized: async () => {},
 		services: { get: () => ({ materializeStoredOperation: async () => ({}), refusalOf: () => undefined, recordRefusal: () => {} }) },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
-		lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
+		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		pxeService: pxe,
 		estimateCancel: registry,

@@ -58,7 +58,7 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 	})
 	const admit = vi.fn(async () => new AbortController().signal)
 	const estimateFee = vi.fn(async () => ({ maxFee: "1", gasDetails: {} }))
-	const lane = { isSlotBusy: vi.fn(() => false) }
+	const lane = { isSendInSlot: vi.fn(() => false) }
 	const emit = vi.fn()
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
@@ -88,9 +88,9 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 
 	test("a send holding the slot (proving, so the PXE is busy) answers queued too", async () => {
 		const { lane, admit, estimate } = makeFacade()
-		lane.isSlotBusy.mockReturnValue(true)
+		lane.isSendInSlot.mockReturnValue(true)
 		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
-		expect(lane.isSlotBusy).toHaveBeenCalledWith("p1", 7)
+		expect(lane.isSendInSlot).toHaveBeenCalledWith("p1", 7)
 		expect(admit).not.toHaveBeenCalled()
 	})
 
@@ -354,8 +354,8 @@ describe("ExecutionService window estimates and previews: the slot of the reques
 			emit: vi.fn(),
 		}) as ExecutionService
 		const calls = {
-			estimateOperationFee: () => facade.estimateOperationFee("ix-1", 0, URGENT_FJ, "tok-1"),
-			previewOperationAuthwits: () => facade.previewOperationAuthwits("ix-1", 0, "tok-1"),
+			estimateOperationFee: (token = "tok-1") => facade.estimateOperationFee("ix-1", 0, URGENT_FJ, token),
+			previewOperationAuthwits: (token = "tok-1") => facade.previewOperationAuthwits("ix-1", 0, token),
 		}
 		/** A send joining the slot's line, as a dApp send or a Send-page transfer does. */
 		const send = () => lane.acquireTransferSlot("net-1", `j-${Math.random()}`, FENCE, new AbortController().signal)
@@ -383,6 +383,22 @@ describe("ExecutionService window estimates and previews: the slot of the reques
 			expect(running).toHaveBeenCalledTimes(1)
 		},
 	)
+
+	test.each(METHODS)("%s behind another estimate waits its turn instead of answering queued", async (method) => {
+		const { running, runs, calls, emit } = makeWindow()
+		const first = calls[method]()
+		await tick()
+		const second = calls[method]("tok-2")
+		await tick()
+		expect(running).toHaveBeenCalledTimes(1)
+		expect(emit).toHaveBeenCalledExactlyOnceWith("onEstimateStarted", { estimateToken: "tok-1" })
+		runs[0]!.finish()
+		await first
+		await tick()
+		expect(emit).toHaveBeenLastCalledWith("onEstimateStarted", { estimateToken: "tok-2" })
+		runs[1]!.finish()
+		expect(await second).toMatchObject({ maxFee: "1" })
+	})
 
 	test.each(METHODS)("%s answers queued while a send waits for the slot, so it never runs ahead of one", async (method) => {
 		const { running, calls, send } = makeWindow()

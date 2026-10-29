@@ -263,22 +263,42 @@ describe("ExecutionLane.acquireTransferSlot", () => {
 		;(await dapp).release()
 	})
 
-	test("tryTakeSlot takes a free slot ahead of any later acquirer, and refuses a held or awaited one", async () => {
+	test("takeEstimateSlot waits behind an estimate, and refuses while a send holds or waits for the slot", async () => {
 		const { lane } = makeLane()
-		const slot = lane.tryTakeSlot("p1", 7)
-		expect(slot).toBeDefined()
-		expect(lane.tryTakeSlot("p1", 7)).toBeUndefined()
+		const first = lane.takeEstimateSlot("p1", 7) as Promise<() => void>
+		expect(lane.isSlotBusy("p1", 7)).toBe(true)
+		expect(lane.isSendInSlot("p1", 7)).toBe(false)
+		let secondGranted = false
+		const second = (lane.takeEstimateSlot("p1", 7) as Promise<() => void>).then((release) => {
+			secondGranted = true
+			return release
+		})
 		let dappGranted = false
 		const dapp = lane.acquireSlot("net-1", undefined, FENCE, undefined, "https://dapp.example").then((s) => {
 			dappGranted = true
 			return s
 		})
-		const release = await (slot as Promise<() => void>)
+		await vi.waitFor(() => expect(lane.isSendInSlot("p1", 7)).toBe(true))
+		expect(lane.takeEstimateSlot("p1", 7)).toBeUndefined()
+		expect(secondGranted).toBe(false)
+		;(await first)()
+		const releaseSecond = await second
 		await Promise.resolve()
 		expect(dappGranted).toBe(false)
-		release()
+		releaseSecond()
 		;(await dapp).release()
-		expect(lane.tryTakeSlot("p1", 8)).toBeDefined()
+		expect(lane.isSlotBusy("p1", 7)).toBe(false)
+	})
+
+	test("an estimate's abort while it waits ends the wait as the cancel sentinel", async () => {
+		const { lane } = makeLane()
+		const first = lane.takeEstimateSlot("p1", 7) as Promise<() => void>
+		const controller = new AbortController()
+		const waiting = lane.takeEstimateSlot("p1", 7, controller.signal)
+		controller.abort()
+		await expect(waiting).rejects.toBeInstanceOf(JobCancelledSentinel)
+		;(await first)()
+		await vi.waitFor(() => expect(lane.isSlotBusy("p1", 7)).toBe(false))
 	})
 
 	test("an ended session refuses before keying or waiting", async () => {

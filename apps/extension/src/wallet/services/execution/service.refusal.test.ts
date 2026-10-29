@@ -33,7 +33,7 @@ function makeSelf() {
 		ensureInitialized: async () => {},
 		services: { get: () => interactions },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
-		lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
+		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		dappSendExecutor,
 	}) as ExecutionService

@@ -1893,7 +1893,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const self = Object.assign(Object.create(ExecutionService.prototype), {
 				profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 				networkService: { getNetwork: async () => ({ chainId: 7 }) },
-				lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
+				lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
 				emit: () => {},
 				accountService: {},
 				transactionService: {},

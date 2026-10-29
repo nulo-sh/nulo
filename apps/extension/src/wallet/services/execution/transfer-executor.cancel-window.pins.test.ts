@@ -59,7 +59,7 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 			beginQueuedWait: vi.fn(),
 			endQueuedWait: vi.fn(),
 			isSlotBusy: vi.fn(() => false),
-			tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+			takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 			acquireTransferSlot: vi.fn(async () => () => {}),
 		},
 		getActiveProfile: vi.fn(async () => ({ id: "p1" }) as never),
@@ -141,7 +141,7 @@ describe("transfer cancel publication window", () => {
 				beginQueuedWait: vi.fn(),
 				endQueuedWait: vi.fn(),
 				isSlotBusy: vi.fn(() => false),
-				tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+				takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 				acquireTransferSlot: vi.fn(async () => () => {}),
 			},
 			transitionJournal: vi.fn(async (_id: string, progress: { stage: string }) => {

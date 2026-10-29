@@ -451,7 +451,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
 				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
-				tryTakeSlot: (profileId, chainId) => this.lane.tryTakeSlot(profileId, chainId),
+				takeEstimateSlot: (profileId, chainId, signal) => this.lane.takeEstimateSlot(profileId, chainId, signal),
 				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
 					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
 			},
@@ -665,7 +665,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		const sequence = await this.transferExecutor.sequence(req, profile.id)
 		// A send holding the slot is proving: the PXE runs one operation at a time, so this estimate
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
-		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
+		const slotBusy = this.lane.isSendInSlot(profile.id, sequence.scope.chainId)
 		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
 		// The popup asks again every 2 s; the read it starts is what lets that answer change.
 		if (lagging) void this.chainTipGate.refresh(networkId)
@@ -830,8 +830,9 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	 * Runs a stored request's estimate or preview holding the slot of its chain, as a transfer's
 	 * estimate does: the PXE runs one operation at a time, so a simulation behind a proof outlasts its
 	 * request deadline. Admitted before the request is read, so a cancel either finds it or follows
-	 * the approval that deleted the request, which the read then refuses. While a send holds or awaits
-	 * the slot it answers queued, settled with nothing stashed, so the same token can ask again.
+	 * the approval that deleted the request, which the read then refuses. Behind an estimate it waits
+	 * its turn; while a send holds or awaits the slot it answers queued, settled with nothing stashed,
+	 * so the same token can ask again.
 	 */
 	private withStoredRequestSlot<T extends { estimateId?: string; previewId?: string }>(
 		interactionId: string,
@@ -845,7 +846,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
 			const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 			const { chainId } = await this.networkService.getNetwork(operation.networkId)
-			const slot = this.lane.tryTakeSlot(profile.id, chainId)
+			const slot = this.lane.takeEstimateSlot(profile.id, chainId, signal)
 			if (!slot) return { queued: true, tokenSpent: false }
 			const release = await slot
 			try {

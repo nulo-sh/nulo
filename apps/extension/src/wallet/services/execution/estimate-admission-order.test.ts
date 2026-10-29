@@ -35,7 +35,7 @@ function harness(entry: (typeof ENTRIES)[number]) {
 			}),
 		},
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
-		lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
+		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		pxeService: { offscreenSettled: () => undefined },
 		emit: () => {},

@@ -22,9 +22,10 @@ export const EXECUTION_SERVICE_NAME = "execution"
  *  reaped too, and its place admits the next estimate. */
 export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
 
-/** An estimate that did not run: a send sharing its chain state, or holding the slot it needs, is in flight. A spent token was
- *  admitted and cannot be sent again. `cap` holds the last fee of this token's like sends and the cap a
- *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
+/** An estimate that did not run: a send sharing its chain state, or holding or awaiting the slot it
+ *  needs, is in flight. A spent token was admitted and cannot be sent again. `cap` holds the last fee
+ *  of this token's like sends and the cap a send may be queued against above it
+ *  (`queued-fee-cap.ts`); absent when there is none. */
 export type TransferFeeQueued = {
 	readonly queued: true
 	readonly tokenSpent: boolean

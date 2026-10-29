@@ -97,7 +97,8 @@ export class EstimateCancelRegistry {
 		return n
 	}
 
-	/** A token may be admitted once, ever — active, settled, and parked all collide. */
+	/** Refuses a token still active, parked, or holding a settled stash; a settle with nothing stashed
+	 *  leaves it free to ask again. */
 	private assertFreshToken(token: string): void {
 		if (this.active.has(token) || this.settled.has(token)) {
 			throw new Error("duplicate estimate token")
