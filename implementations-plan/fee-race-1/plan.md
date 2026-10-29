@@ -1,7 +1,7 @@
 ---
 plan: fee-race-1
 tier: mid
-status: planned
+status: completed; delivered with arc 3's PR, which carries this close-out
 issues: "#1335 (arc 1), #1336 (arc 2), #1337 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,26 @@ base: origin/dev at b036edbff
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-29. Planned on 2026-10-28; three arcs, each merged into `dev` before the next opened.
+- **Status:** completed. Arc 3 and this close-out ship as one PR into `dev`. Its merge closes #1337 and archives this plan. #1336 stays open (below).
+- **Shipped:**
+  - **Arc 1, #1344** (closes #1335 and #1343). The window holds Confirm while any estimate or authorization preview runs (I1, `holdsConfirm`). An authorization snapshot lives as long as its interaction and is claimed in the tick the worker accepts the approval (I2, D5).
+  - **Arc 2, #1351.** A granted estimate's call is bounded by the worker's estimate lifetime, not the popup's 60 s (I3, D8). The window's estimates queue behind a send and say so (D6, OA1 = B). Both surfaces leave the queued reading once the run starts (D15, OA2 = B). An estimate behind another estimate waits in the slot's line without the queued sentence (D18).
+  - **Arc 3.** The pure catalog, the in-process driver and `fee-race.composition.test.ts`: four oracles with eight break fixtures, eight hand lists and three seeds in about 12 s, and a long mode (D20). It also ships a double-press component test on each surface. The PrivateFPC question is answered: such a Send sequences behind a send holding the contract's notes. No product fault was found.
+- **Dropped, rejected or superseded:**
+  - D12's mechanism, the driver seeding the stashes, is superseded by D20.
+  - The Delivery section's stack (`gh stack`, a close-out layer) was not used. Each arc merged before the next opened, so arcs 2 and 3 continued on the arc's branch against `dev`.
+  - Outline B, the asynchronous estimate, was not taken (Trade-offs).
+  - Phase 3.4 adds no e2e scenario: the two browser pairs already ran from arcs 1 and 2.
+  - No `lessons.md` line. Its one general rule, how a composition test cans a build without reaching a rebuild, is the fee-race row in `apps/extension/tests/COMPOSITION-TESTS.md`. The run notes stay in `lessons/`.
+- **Known limits:** #1354 (KL1), #1355 (KL2), #1356 (KL3), #1357 (KL4), #1358 (KL5), #1359 (KL6).
+- **Open items:**
+  - #1336 stays open under outcome (iii) (D11). Three prover-on local runs did not fail, and the popup's 60 s deadline is gone as a cause. The other possible cause is KL1 (#1354). The issue's comment names the evidence that would settle it.
+  - #1360, found by the cross-arc pass: a fee-method switch keeps the window's queued sentence behind another estimate, against D18. Its fix changes what the window shows, so it waits for the owner.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # fee-race-1: Confirm waits for what the worker holds it to, and the popup stops cutting estimates short
 
@@ -252,6 +272,8 @@ Scope this plan asks approval for: S1, D5 ships in arc 1 under its own issue (it
 - **Arc 2 design consult (Codex, OA2's signal): agree with changes.** The start event over Outline B; the listener fenced by its attempt's live signal; a lost event documented, not replayed; stale comments corrected; the wire contract recorded (D15). Detail: [lessons/phase-2.md](lessons/phase-2.md).
 - **Arc 2 review, round 1.** Codex (`gpt-6.1-sol`, high): 2 low, both fixed (the Send-page e2e's exact reading sequence could miss the transient estimating state, so it asserts the landing; the registry's "admitted once, ever" comment contradicted the reusable queued token). Opus (`general-purpose`): 1 medium, fixed as D18 (the queued sentence behind an estimate); 1 low, fixed (the window's requeue branches were unreachable). The Chrome gate on the round's base found the D19 pair. Detail: [lessons/phase-2.md](lessons/phase-2.md).
 - **Arc 2 review, rounds 2-3 (Codex, same session).** Round 2: 3 findings: the held-window helper required the held send alone though the SDK records each request `queued` on arrival (fixed); the slot wait counts against the 15-minute lifetime (KL6, I3 narrowed, not resized); a test walkthrough (cut). Round 3: `clean`.
+- **Arc 3 review, round 1.** Codex (`gpt-6.1-sol`, high): 4 medium, 3 low, all fixed (settle waits for WebCrypto, an unended press is red, a dropped cancel is red with its own break fixture, a standard confirm must meet its snapshot, every run winds down, the bundle marker, the long mode's bounds). Opus (`general-purpose`): 1 medium (Send's driver kept a queued reading the page clears; O1's exemption narrowed), 6 low, all fixed. Round 2 (Codex, same session): `clean`. Detail: [lessons/phase-3.md](lessons/phase-3.md).
+- **Cross-arc pass (fresh Codex session over `b036edbff...HEAD`).** 1 medium, fixed (the claim's case now waits past the window's lifetime, with a skipped-claim break fixture); 1 low, filed as #1360 (a fee-method switch keeps the window's queued flag behind another estimate, against D18; its fix changes what the window shows). Round 2: `clean`.
 
 ## Delivery
 
