@@ -10,3 +10,4 @@
 - 2026-10-28 arc 1 gates: delegated spec green on Chrome and Firefox; 5 Chrome gate specs green; test:all run 1 green; review round 1 (Codex 2 low, Opus 5 low) applied.
 - 2026-10-29 arc 1 final gates on the merged head: lint, typecheck:all, test:all x3, smoke on both browsers, the delegated spec on both browsers, all green; Codex round 2 clean.
 - 2026-10-29 arc 2: owner answers recorded (OA1 B, OA2 B, S1 accepted); Phase 2.0 prover-ON reproduction running on Chrome.
+- 2026-10-29 arc 2: D8, D6, D15 and D18 built; review converged (Codex round 3 clean, Opus beside round 1); lint, typecheck:all, test:all x3, the network set (19 files) and smoke on both browsers green at retry 0; PR opened.

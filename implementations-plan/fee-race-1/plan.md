@@ -150,7 +150,7 @@ As built, a queued answer is never spent (D16), so the spent pins and the window
 
 **Gate.** As Phase 2.2's, plus `src/utils` and `src/popup/pages`.
 
-### Phase 2.3: a Send queued behind a dApp transaction, end to end
+### Phase 2.3: a Send queued behind a dApp transaction, end to end ✓
 
 1. Add to `same-token-concurrent-sends.test.ts` the interleaving #1336 asks for, as an integration backstop (green on the base too; the reds are 2.1's): a PrivateFPC dApp send held at `proving` by the proof gate; Send opened with PrivateFPC and filled; its row reads queued with Send off; after release, the fee lands, Send confirms, and both succeed in order with the ledger reconciled.
 2. Run it on Chrome and Firefox; record the measured runtime against an estimate of 90 s.
