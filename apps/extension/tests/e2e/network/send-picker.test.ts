@@ -3,14 +3,14 @@
  * and re-opening the picker marks that row as selected. One extra token is deployed and imported
  * beside the fixture's TST; the import is waited for with the fixture's freshness-gated row check.
  * A token deployed and never imported is added from the picker by its pasted address, and Send
- * picks it with the form kept.
+ * picks it with the form kept, From and To included.
  */
 
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
 import { selectSendToken, setActiveSendType, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
-import { openSend, readSendInputs, shotSend } from "../fixtures/send-page"
+import { openSend, readSendInputs, readSendView, shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { waitForFocus } from "../helpers/pointer-probes"
 
@@ -68,7 +68,7 @@ const textOf = (testid: string, want: string) =>
 	`document.querySelector('[data-testid="${testid}"]')?.textContent?.trim() === ${JSON.stringify(want)}`
 
 test.skipIf(!hasConfig)(
-	"send picker: a pasted address imports its token, picked with the recipient and amount kept, its unread side reading 0",
+	"send picker: a pasted address imports its token, picked with the recipient, amount and sides kept, its unread side reading 0",
 	{ timeout: 420_000, retry: 0 },
 	async ({ tokenReadyExtension }) => {
 		const config = aztecConfig as AztecTestConfig
@@ -82,6 +82,7 @@ test.skipIf(!hasConfig)(
 
 		// The fixture mints public tokens only: the amount field takes text on the funded side.
 		await setActiveSendType(page, "send-from-type", "public")
+		await setActiveSendType(page, "send-to-type", "public")
 		await page.waitForSelector(sel("send-amount-balance"), { visible: true, timeout: 30_000 })
 		await replaceInputValue(page, `${sel("send-destination-field")} input`, config.minterAddress)
 		await page.type(sel("send-amount-input"), "1")
@@ -100,13 +101,15 @@ test.skipIf(!hasConfig)(
 		// The picker closed with New token: its leave transition removes it.
 		await page.waitForFunction((s: string) => document.querySelector(s) === null, { timeout: 5_000 }, sel("select-token-search"))
 		expect(await readSendInputs(page)).toEqual({ amount: "1", destination: config.minterAddress })
-		// The pick re-selects the private side, which the mint never funded.
-		await page.waitForFunction(textOf("send-amount-balance", "0 PICK"), { timeout: 30_000 })
-		await shotSend(page, "send-amount-zero", "send-amount-row")
-
-		await setActiveSendType(page, "send-from-type", "public")
+		const view = await readSendView(page)
+		expect([view.origin, view.strip?.to]).toEqual(["public", "public"])
 		await page.waitForFunction(textOf("send-amount-balance", "7 PICK"), { timeout: 30_000 })
 		await page.waitForSelector(sel("fee-estimate"), { visible: true, timeout: 120_000 })
+
+		// The private side, which the mint never funded.
+		await setActiveSendType(page, "send-from-type", "private")
+		await page.waitForFunction(textOf("send-amount-balance", "0 PICK"), { timeout: 30_000 })
+		await shotSend(page, "send-amount-zero", "send-amount-row")
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])

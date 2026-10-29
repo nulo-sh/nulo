@@ -1080,6 +1080,9 @@ describe("send page — a token the picker imported", () => {
 	const amountInput = (w: W) => w.get('[data-testid="send-amount-input"]')
 	const amountText = (w: W) => (amountInput(w).element as HTMLInputElement).value
 	const cardSymbol = (w: W) => w.get('[data-testid="stub-token-card"]').attributes("data-symbol")
+	/** From and To as the real `SendTypesCard` marks them. */
+	const sides = (w: W) =>
+		["send-from-type", "send-to-type"].map((id) => w.get(`[data-testid="${id}"] [data-selected]`).text().toLowerCase())
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	/** What New token hands the picker's opener once the add is done. */
 	const report = (w: W, token: unknown) =>
@@ -1115,6 +1118,45 @@ describe("send page — a token the picker imported", () => {
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
 		const asked = mocks.estimateTransferFee.mock.calls[1]
 		expect([asked?.[2], asked?.[3], asked?.[6]]).toEqual([NEW.id, NEW.contract, 112n])
+		w.unmount()
+	})
+
+	test.each([
+		["public", "private", TransferType.PublicToPrivate],
+		["private", "public", TransferType.PrivateToPublic],
+	] as const)("the swap keeps From on %s and To on %s, and the fee is asked for that transfer", async (from, to, transfer) => {
+		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await feeCard(w, SPONSOR)
+		if (from === "public") await w.get('[data-testid="send-from-type"]').trigger("click")
+		if (to === "public") await w.get('[data-testid="send-to-type"]').trigger("click")
+		await amountInput(w).setValue("1.5")
+
+		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
+		balanceAdded().invoke({ ...NEW_BALANCE, publicBalance: "500" })
+		await report(w, NEW)
+		await flushPromises()
+		expect(cacheStore.activeTokenIdx).toBe(NEW.id)
+		expect(amountText(w)).toBe("1.5")
+		expect(sides(w)).toEqual([from, to])
+
+		await estimateLands()
+		const asked = mocks.estimateTransferFee.mock.calls.filter((call) => call[2] === NEW.id).at(-1)
+		expect([asked?.[3], asked?.[4]]).toEqual([NEW.contract, transfer])
+		w.unmount()
+	})
+
+	test("a row pick still puts From and To back on private and clears the amount", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, NEW])
+		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		await amountInput(w).setValue("1.5")
+		await w.get('[data-testid="send-from-type"]').trigger("click")
+		await w.get('[data-testid="send-to-type"]').trigger("click")
+		expect([amountText(w), ...sides(w)]).toEqual(["1.5", "public", "public"])
+
+		cacheStore.activeTokenIdx = NEW.id
+		await flushPromises()
+		expect([amountText(w), ...sides(w)]).toEqual(["", "private", "private"])
 		w.unmount()
 	})
 
