@@ -249,6 +249,8 @@ Design record: [`implementations-plan/archive/paths-filter-negation-fix/`](./imp
 3. Add it to the `status` aggregator's `needs:` and check its result there against the state its `if:` asks for (`success` when it runs, `skipped` when it does not); in an e2e lane, `needs:` is the whole change, since `scripts/ci-cd/e2e-aggregate.sh` holds every need but `changes` to that rule. [`scripts/ci-cd/aggregators.test.ts`](./scripts/ci-cd/aggregators.test.ts) and `behavior-gating.test.ts` fail on a need the aggregator never checks.
 4. Update this file's "What runs when" matrix.
 
+A job that needs one that can be skipped is skipped with it unless its `if:` calls a status function, and `always()` also runs after a cancel: a job with side effects gates on `always() && !cancelled()` and the success results it needs ([record](./implementations-plan/archive/release-pipeline-hardening/plan.md#always)).
+
 The reusables today are:
 - `_lint-and-typecheck.yml` — biome + typecheck
 - `_unit-tests.yml` — vitest workspace-wide
