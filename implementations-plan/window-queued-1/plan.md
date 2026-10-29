@@ -67,7 +67,7 @@ One issue, one arc, one PR against `dev`. Recon and the trace: [recon.md](recon.
   - Pass: every command exits 0; the red-before run fails at step 2 only, logged in `lessons/phase-1.md` with its output line.
   - Layers: lint, typecheck, unit, component, composition.
 
-### Phase 2: Full gate and the e2e that hold a window
+### Phase 2: Full gate and the e2e that hold a window ✓
 
 - Run the full local gate on the head.
 - Run the network files that hold a window behind a send or pick a window method beside a queued Send, Chrome then Firefox, from the repository root: `concurrent-sendtx-confirm`, `tx-sendTx-noFrom`, `same-token-concurrent-sends`. Command per browser: `NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first [NULO_E2E_BROWSER=firefox] bun run e2e:agent tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/tx-sendTx-noFrom.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts`. Run one `e2e:agent` at a time.
@@ -115,7 +115,7 @@ The window's fee row after a fee-method switch while queued, and after any other
 - **Round 2** (Codex, resumed, verification): `approve`. Two low notes, folded: the picture arms its observation before the pick and adds no sleep or retry; D8 says "no existing deterministic browser fixture", not "no browser path". It argued D7 both ways and found it sound. It traced step 2 red on the base `index.vue` (to be confirmed by the run).
 - Both, round 1: D1-D3 and D5 hold; no new state, lifecycle, protocol, recovery policy or contract; the clear cannot land after the replacement's own queued answer (the clear and `schedule` share one synchronous stack, the replacement asks after the 500 ms timer).
 
-**Post-implementation** (diff `15a9bd9d3...HEAD -- apps/`). Round 1: Codex (gpt-6.1-sol, high, session `01a189b7`) `clean`; Opus 5.5 diff review beside it `findings: 1`, low, demonstrated, taken: the case queued a fourth answer it never consumed (`vi.clearAllMocks` keeps once-values, so a later case driving the estimator could hang) and left `tok-b` live → the once-value removed, `tok-b`'s rejection caught and `live.abort()` in `finally`. A test-only change inside the approved behaviour; Codex's clean round stands as convergence.
+**Post-implementation** (diff `15a9bd9d3...HEAD -- apps/`). Round 1: Codex (gpt-6.1-sol, high, session `01a189b7`) `clean`; Opus 5.5 diff review beside it `findings: 1`, low, demonstrated, taken: the case queued a fourth answer it never consumed (`vi.clearAllMocks` keeps once-values, so a later case driving the estimator could hang) and left `tok-b` live → the once-value removed, `tok-b`'s rejection caught and `live.abort()` in `finally`. Round 2 (Codex, resumed, over that fix): `clean`. Converged.
 
 ## Delivery
 
