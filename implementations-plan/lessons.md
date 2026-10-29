@@ -45,6 +45,6 @@
 
 ## Agent tooling
 
-- Agent Bash (zsh 5.9, 2026-10): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell), [more](lessons-budget-1/recon.md)
+- Agent Bash (zsh 5.9, 2026-10): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell), [more](archive/lessons-budget-1/recon.md)
 - `pgrep -f` matches its own `zsh -c` wrapper and any agent prompt naming the pattern: anchor it (`^(bun|node) .*vitest`) and signal your launcher's pgid, never `$$`/`$PPID`; a signal-killed Node child's `exitCode` is null: wait on `signalCode`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md)
 - Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/code-followups-1/plan.md#outcome)
