@@ -797,15 +797,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		feeSettings: FeeSettings,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<TransferFeeEstimate> {
+	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
-		// after the approval that deleted the request, which the read then refuses.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
-			}),
+			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+			),
 		)
 	}
 
@@ -814,15 +811,43 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		index: number,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<OperationAuthwitPreview> {
+	): Promise<OperationAuthwitPreview | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the read, as `estimateOperationFee` is.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
-			}),
+			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+			),
 		)
+	}
+
+	/**
+	 * Runs a stored request's estimate or preview holding the slot of its chain, as a transfer's
+	 * estimate does: the PXE runs one operation at a time, so a simulation behind a proof outlasts its
+	 * request deadline. Admitted before the request is read, so a cancel either finds it or follows
+	 * the approval that deleted the request, which the read then refuses. While a send holds or awaits
+	 * the slot it answers queued, settled with nothing stashed, so the same token can ask again.
+	 */
+	private withStoredRequestSlot<T extends { estimateId?: string; previewId?: string }>(
+		interactionId: string,
+		index: number,
+		feeSettings: FeeSettings | undefined,
+		estimateToken: string | undefined,
+		flowKey: string,
+		run: (operation: Operation, signal?: AbortSignal) => Promise<T>,
+	): Promise<T | TransferFeeQueued> {
+		return this.withEstimateAdmission<T | TransferFeeQueued>(estimateToken, flowKey, async (signal) => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+			const profile = await requireActiveProfile(this.profileService, "Wallet locked")
+			const { chainId } = await this.networkService.getNetwork(operation.networkId)
+			const slot = this.lane.tryTakeSlot(profile.id, chainId)
+			if (!slot) return { queued: true, tokenSpent: false }
+			const release = await slot
+			try {
+				return await run(operation, signal)
+			} finally {
+				release()
+			}
+		})
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window

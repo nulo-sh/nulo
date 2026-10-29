@@ -1892,7 +1892,8 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const h = makeHarness()
 			const self = Object.assign(Object.create(ExecutionService.prototype), {
 				profileService: { getActiveProfile: async () => ({ id: "p1" }) },
-				networkService: {},
+				networkService: { getNetwork: async () => ({ chainId: 7 }) },
+				lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
 				accountService: {},
 				transactionService: {},
 				fpcService: {},

@@ -104,6 +104,15 @@ describe("FeeCostReadout", () => {
 		expect(drawn(handAdded)).toBe(`You pay ${QUEUED_FEE_COPY}`)
 	})
 
+	test("a surface that holds a queued send shows only the queued line, whoever pays and whatever cap", () => {
+		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
+		for (const props of [{ payer: "sponsor" }, { queuedCap }, { payer: "self" }]) {
+			const w = factory({ isEstimating: true, isQueued: true, offersQueue: false, ...props })
+			expect(w.find('[data-testid="fee-estimate-queued"]').exists()).toBe(true)
+			expect(drawn(w)).toBe(`You pay ${QUEUED_FEE_COPY}`)
+		}
+	})
+
 	test("a queued estimate shows the queued line in place of the skeleton; the estimate replaces it", () => {
 		const queued = factory({ isEstimating: true, isQueued: true })
 		expect(queued.find('[data-testid="fee-estimate-queued"]').exists()).toBe(true)

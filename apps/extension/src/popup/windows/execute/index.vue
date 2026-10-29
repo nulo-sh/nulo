@@ -56,6 +56,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
@@ -176,6 +177,15 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
+/** Per operation, whether its estimate or preview waits behind another send; cleared once neither is
+ *  in flight. */
+const queuedOps = ref<Record<number, boolean>>({})
+const readQueued = (index: number, signal: AbortSignal) => () => {
+	if (!signal.aborted) queuedOps.value[index] = true
+}
+/** What each operation's running estimate was asked: a requeue repeats it with a fresh token. */
+const lastFeeParams: Record<number, { index: number; feeSettings: FeeSettings }> = {}
+
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
@@ -187,11 +197,19 @@ const {
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
-	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
-		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
+	estimate: (params, estimateToken, flowKey, signal) => {
+		lastFeeParams[params.index] = params
+		return estimateWhenClear(
+			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
+			signal,
+			{ onQueued: readQueued(params.index, signal) },
+		)
+	},
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
+		// Rescheduled before the engine's settle clears its in-flight flag, so Confirm never comes on between.
+		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(key, lastFeeParams[key]!)
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
 		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
@@ -239,11 +257,14 @@ const {
 	cancelAll: cancelAllAuthwitPreviews,
 	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
-	estimate: ({ index }, estimateToken, flowKey) =>
-		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+	estimate: ({ index }, estimateToken, flowKey, signal) =>
+		estimateWhenClear(() => executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey), signal, {
+			onQueued: readQueued(index, signal),
+		}),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
+		if (err instanceof EstimateRequeue) return scheduleAuthwitPreview(key, { index: key })
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
@@ -592,6 +613,13 @@ watch(
 )
 
 watch([feeEstimates, authwitPreviews], decodeDiscoveredAuthwits, { deep: true })
+watch(
+	[estimatingOps, previewingOps],
+	([estimating, previewing]) => {
+		for (const i of Object.keys(queuedOps.value).map(Number)) if (!estimating[i] && !previewing[i]) queuedOps.value[i] = false
+	},
+	{ deep: true },
+)
 // Synchronous, so a result cleared in the tick it landed still leaves its verdict behind.
 watch(
 	feeEstimates,
@@ -659,6 +687,7 @@ onUnmounted(() => {
 						:isEstimating="!!estimatingOps[i]"
 						:authwitPreview="authwitPreviews[i] ?? undefined"
 						:isPreviewing="!!previewingOps[i]"
+						:isQueued="!!queuedOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
 						:decodedGrants="decodedGrants.get(i)"

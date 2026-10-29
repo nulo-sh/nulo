@@ -22,7 +22,7 @@ export const EXECUTION_SERVICE_NAME = "execution"
  *  reaped too, and its place admits the next estimate. */
 export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
 
-/** An estimate that did not run: a send sharing its chain state is in flight. A spent token was
+/** An estimate that did not run: a send sharing its chain state, or holding the slot it needs, is in flight. A spent token was
  *  admitted and cannot be sent again. `cap` holds the last fee of this token's like sends and the cap a
  *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
 export type TransferFeeQueued = {
@@ -109,7 +109,8 @@ export type Methods = {
 	 * by reference: the SW re-materializes the request at `(interactionId,
 	 * index)` and applies `feeSettings` after validating its fee path. The
 	 * result's `previewId` names the snapshot of discovered authorizations the
-	 * confirm of that operation is held to.
+	 * confirm of that operation is held to. Answers queued, its token free to ask
+	 * again, while a send holds or awaits the slot of the request's chain.
 	 */
 	estimateOperationFee(
 		interactionId: string,
@@ -117,7 +118,7 @@ export type Methods = {
 		feeSettings: FeeSettings,
 		estimateToken?: string,
 		flowKey?: string,
-	): TransferFeeEstimate
+	): TransferFeeEstimate | TransferFeeQueued
 
 	/**
 	 * Discovers, without signing, the private authorizations a stored
@@ -125,7 +126,12 @@ export type Methods = {
 	 * token and flow-key contract as {@link estimateOperationFee}; its
 	 * `previewId` participates in {@link cancelEstimate} the same way.
 	 */
-	previewOperationAuthwits(interactionId: string, index: number, estimateToken?: string, flowKey?: string): OperationAuthwitPreview
+	previewOperationAuthwits(
+		interactionId: string,
+		index: number,
+		estimateToken?: string,
+		flowKey?: string,
+	): OperationAuthwitPreview | TransferFeeQueued
 
 	/**
 	 * Decodes calls for the approval card against the artifacts the PXE holds on

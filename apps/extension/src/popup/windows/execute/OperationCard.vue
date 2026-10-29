@@ -73,6 +73,8 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
+	/** Its estimate or preview waits behind another send. */
+	isQueued?: boolean
 	/** The authorizations an earlier window listed for this operation, for a window that only reads it. */
 	approvedAuthwits?: readonly DiscoveredAuthwit[]
 	/** Display-only ABI decodings of this operation's calls, index-aligned with
@@ -437,6 +439,8 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			:account="op.account"
 			:feeEstimate="feeEstimate"
 			:isEstimating="isEstimating"
+			:isQueued="isQueued"
+			:offersQueue="false"
 			:modelValue="op.feeSettings"
 			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
 			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
