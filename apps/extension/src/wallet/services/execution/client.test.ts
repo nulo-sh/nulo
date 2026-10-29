@@ -1,7 +1,7 @@
 /**
- * The popup's deadline for a transfer: `executeTransfer` waits as long as a proof in the browser
- * can take, a dropped port or a disposed page still ends it at once, and every other method keeps
- * the default deadline.
+ * The popup's deadlines: `executeTransfer` waits as long as a proof in the browser can take, an
+ * estimate as long as the worker keeps its run, a dropped port or a disposed page still ends either
+ * at once, and every other method keeps the default deadline.
  */
 import { isClientDisconnectRejection, RpcTimeoutError } from "@nulo/extension-messaging/errors"
 import { MessageType } from "@nulo/extension-messaging/messages"
@@ -9,7 +9,7 @@ import { connectStub, PortRegistry } from "@nulo/extension-messaging/testing"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import { ExecutionServiceClient } from "./client"
-import { EXECUTION_SERVICE_NAME } from "./spec"
+import { ESTIMATE_JOB_TTL_MS, EXECUTION_SERVICE_NAME } from "./spec"
 
 let registry: PortRegistry
 
@@ -113,12 +113,51 @@ describe("ExecutionServiceClient: the executeTransfer deadline", () => {
 		expect(port?.disconnectListeners.size).toBe(0)
 	})
 
-	test("(pin) every other method keeps the default: estimateTransferFee ends at 60 s", async () => {
+	test("(pin) every other method keeps the default: getGasBalances ends at 60 s", async () => {
 		const client = await connected()
-		const estimate = track(client.estimateTransferFee(...ARGS))
+		const balances = track(client.getGasBalances("net1", "0xacct"))
 		await vi.advanceTimersByTimeAsync(59_999)
+		expect(balances.state).toBe("pending")
+		await vi.advanceTimersByTimeAsync(1)
+		expect(balances.value).toBeInstanceOf(RpcTimeoutError)
+	})
+})
+
+const ESTIMATES: [string, (client: ExecutionServiceClient) => Promise<unknown>][] = [
+	["estimateTransferFee", (client) => client.estimateTransferFee(...ARGS, "token")],
+	["estimateOperationFee", (client) => client.estimateOperationFee("interaction", 0, ARGS[7], "token")],
+	["previewOperationAuthwits", (client) => client.previewOperationAuthwits("interaction", 0, "token")],
+]
+
+describe("ExecutionServiceClient: an estimate's deadline is the worker's estimate lifetime", () => {
+	test.each(ESTIMATES)("%s answered at 61 s resolves", async (_, call) => {
+		const client = await connected()
+		const estimate = track(call(client))
+		await vi.advanceTimersByTimeAsync(61_000)
+		expect(estimate.state).toBe("pending")
+		answer({ maxFee: "1" })
+		await vi.advanceTimersByTimeAsync(0)
+		expect(estimate).toEqual({ state: "resolved", value: { maxFee: "1" } })
+	})
+
+	test.each(ESTIMATES)("%s unanswered ends with RpcTimeoutError at the estimate lifetime", async (_, call) => {
+		const client = await connected()
+		const estimate = track(call(client))
+		await vi.advanceTimersByTimeAsync(ESTIMATE_JOB_TTL_MS - 1)
 		expect(estimate.state).toBe("pending")
 		await vi.advanceTimersByTimeAsync(1)
+		expect(estimate.state).toBe("rejected")
 		expect(estimate.value).toBeInstanceOf(RpcTimeoutError)
 	})
+})
+
+test("the worker's report that an estimate started reaches the client's onEstimateStarted", async () => {
+	const client = await connected()
+	const seen: unknown[] = []
+	client.onEstimateStarted.add((event) => seen.push(event))
+	registry.deliver(EXECUTION_SERVICE_NAME, {
+		type: MessageType.Event,
+		content: { event: "onEstimateStarted", payload: { estimateToken: "t1" } },
+	})
+	expect(seen).toEqual([{ estimateToken: "t1" }])
 })

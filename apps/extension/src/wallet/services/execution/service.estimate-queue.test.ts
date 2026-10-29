@@ -9,7 +9,10 @@ import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { FeeSettings } from "@nulo/wallet-bridge"
 import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { OriginType, TransferType, type Tx } from "@/wallet/services/transaction/spec"
+import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { ChainTipGate } from "./chain-tip-gate"
+import { EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { ExecutionLane } from "./execution-lane"
 import { SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
@@ -55,7 +58,8 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 	})
 	const admit = vi.fn(async () => new AbortController().signal)
 	const estimateFee = vi.fn(async () => ({ maxFee: "1", gasDetails: {} }))
-	const lane = { isSlotBusy: vi.fn(() => false) }
+	const lane = { isSendInSlot: vi.fn(() => false) }
+	const emit = vi.fn()
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
 		sendSequencer,
@@ -65,11 +69,12 @@ function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
 		transactionService: { transactionsOf: vi.fn(async () => rows) },
+		emit,
 	}) as ExecutionService
 	const estimateWith = (feeSettings: FeeSettings) =>
 		facade.estimateTransferFee("net-1", "0xme", 1, TOKEN_CONTRACT, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
 	const estimate = () => estimateWith(URGENT_FJ)
-	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate, estimateWith }
+	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate, estimateWith, emit }
 }
 
 describe("ExecutionService.estimateTransferFee while a send holds the transfer's chain state", () => {
@@ -83,9 +88,9 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 
 	test("a send holding the slot (proving, so the PXE is busy) answers queued too", async () => {
 		const { lane, admit, estimate } = makeFacade()
-		lane.isSlotBusy.mockReturnValue(true)
+		lane.isSendInSlot.mockReturnValue(true)
 		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
-		expect(lane.isSlotBusy).toHaveBeenCalledWith("p1", 7)
+		expect(lane.isSendInSlot).toHaveBeenCalledWith("p1", 7)
 		expect(admit).not.toHaveBeenCalled()
 	})
 
@@ -154,11 +159,14 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		expect(estimateFee).toHaveBeenCalledTimes(1)
 	})
 
-	test("once clear, admits the token and estimates with the transfer's sequence", async () => {
-		const { admit, estimateFee, estimate } = makeFacade()
+	test("once clear, admits the token and estimates with the transfer's sequence, reporting its start by token", async () => {
+		const { admit, estimateFee, estimate, emit } = makeFacade()
 		expect(await estimate()).toMatchObject({ maxFee: "1" })
 		expect(admit).toHaveBeenCalledWith("tok-1", "p1", "send")
-		expect(estimateFee).toHaveBeenCalledWith(expect.anything(), expect.anything(), { scope: SCOPE, keys: KEYS })
+		expect(estimateFee).toHaveBeenCalledWith(expect.anything(), expect.anything(), { scope: SCOPE, keys: KEYS }, expect.any(Function))
+		expect(emit).not.toHaveBeenCalled()
+		;((estimateFee.mock.calls[0] as unknown[])[3] as () => void)()
+		expect(emit).toHaveBeenCalledExactlyOnceWith("onEstimateStarted", { estimateToken: "tok-1" })
 	})
 })
 
@@ -301,5 +309,133 @@ describe("ExecutionService.acceptQueuedFee", () => {
 	test("refuses a fee that is not a fee amount", async () => {
 		const { facade } = makeAccepting(ASKING)
 		await expect(facade.acceptQueuedFee("j1", "5e2")).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+})
+
+describe("ExecutionService window estimates and previews: the slot of the request's chain", () => {
+	const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+
+	function makeWindow() {
+		const lane = new ExecutionLane({
+			operationJournal: { touchOperation: vi.fn(async () => {}) } as never,
+			getActiveProfile: async () => ({ id: "p1" }) as never,
+			assertFence: async () => {},
+			peekLiveSerial: () => FENCE.session,
+			getNetwork: async () => ({ chainId: 7 }) as never,
+			logDebug: () => {},
+			logInfo: () => {},
+			logError: () => {},
+		})
+		const registry = new EstimateCancelRegistry({ evictStash: () => {}, logDebug: () => {} })
+		const runs: { finish: () => void }[] = []
+		const running = vi.fn(
+			(_op: unknown, ...rest: unknown[]) =>
+				new Promise((resolve, reject) => {
+					const signal = rest.find((r) => r instanceof AbortSignal) as AbortSignal
+					signal.addEventListener("abort", () => reject(new JobCancelledSentinel("tok-1")))
+					runs.push({ finish: () => resolve({ maxFee: "1", gasDetails: {}, previewId: "pv-1", discoveredAuthwits: [] }) })
+				}),
+		)
+		const source = {
+			materializeStoredOperation: vi.fn(async () => ({ networkId: "net-1" })),
+			refusalOf: () => undefined,
+			recordRefusal: () => {},
+		}
+		const facade = Object.assign(Object.create(ExecutionService.prototype), {
+			ensureInitialized: async () => {},
+			profileService: { getActiveProfile: async () => ({ id: "p1" }) },
+			networkService: { getNetwork: async () => ({ chainId: 7 }) },
+			services: { get: () => source },
+			lane,
+			estimateCancel: registry,
+			pxeService: { offscreenSettled: () => undefined },
+			dappSendExecutor: { estimateOperationFee: running, previewOperationAuthwits: running },
+			logDebug: () => {},
+			emit: vi.fn(),
+		}) as ExecutionService
+		const calls = {
+			estimateOperationFee: (token = "tok-1") => facade.estimateOperationFee("ix-1", 0, URGENT_FJ, token),
+			previewOperationAuthwits: (token = "tok-1") => facade.previewOperationAuthwits("ix-1", 0, token),
+		}
+		/** A send joining the slot's line, as a dApp send or a Send-page transfer does. */
+		const send = () => lane.acquireTransferSlot("net-1", `j-${Math.random()}`, FENCE, new AbortController().signal)
+		return { facade, lane, registry, running, runs, calls, send, emit: (facade as unknown as { emit: ReturnType<typeof vi.fn> }).emit }
+	}
+
+	const METHODS = ["estimateOperationFee", "previewOperationAuthwits"] as const
+	const tick = () => new Promise((r) => setTimeout(r, 0))
+
+	test.each(METHODS)(
+		"%s answers queued while a send holds the slot, and the same token runs once it is free, reporting its start",
+		async (method) => {
+			const { registry, running, runs, calls, send, emit } = makeWindow()
+			const release = await send()
+			expect(await calls[method]()).toEqual({ queued: true, tokenSpent: false })
+			expect(running).not.toHaveBeenCalled()
+			expect(registry.unsettledCount("p1")).toBe(0)
+			expect(emit).not.toHaveBeenCalled()
+			release()
+			const answer = calls[method]()
+			await tick()
+			expect(emit).toHaveBeenCalledExactlyOnceWith("onEstimateStarted", { estimateToken: "tok-1" })
+			runs[0]!.finish()
+			expect(await answer).toMatchObject({ maxFee: "1" })
+			expect(running).toHaveBeenCalledTimes(1)
+		},
+	)
+
+	test.each(METHODS)("%s behind another estimate waits its turn instead of answering queued", async (method) => {
+		const { running, runs, calls, emit } = makeWindow()
+		const first = calls[method]()
+		await tick()
+		const second = calls[method]("tok-2")
+		await tick()
+		expect(running).toHaveBeenCalledTimes(1)
+		expect(emit).toHaveBeenCalledExactlyOnceWith("onEstimateStarted", { estimateToken: "tok-1" })
+		runs[0]!.finish()
+		await first
+		await tick()
+		expect(emit).toHaveBeenLastCalledWith("onEstimateStarted", { estimateToken: "tok-2" })
+		runs[1]!.finish()
+		expect(await second).toMatchObject({ maxFee: "1" })
+	})
+
+	test.each(METHODS)("%s answers queued while a send waits for the slot, so it never runs ahead of one", async (method) => {
+		const { running, calls, send } = makeWindow()
+		const release = await send()
+		const waiting = send()
+		release()
+		expect(await calls[method]()).toEqual({ queued: true, tokenSpent: false })
+		expect(running).not.toHaveBeenCalled()
+		;(await waiting)()
+	})
+
+	test.each(METHODS)("%s holds the slot while it runs: a send arriving meanwhile is granted after it", async (method) => {
+		const { lane, runs, calls, send } = makeWindow()
+		const answer = calls[method]()
+		await tick()
+		expect(lane.isSlotBusy("p1", 7)).toBe(true)
+		let granted = false
+		const sending = send().then((release) => {
+			granted = true
+			return release
+		})
+		await tick()
+		expect(granted).toBe(false)
+		runs[0]!.finish()
+		await answer
+		;(await sending)()
+		expect(granted).toBe(true)
+	})
+
+	test.each(METHODS)("%s cancelled while it runs frees the slot for the next send", async (method) => {
+		const { facade, lane, calls, send } = makeWindow()
+		const answer = calls[method]()
+		await tick()
+		const sending = send()
+		await facade.cancelEstimate("tok-1")
+		await expect(answer).rejects.toMatchObject({ name: "JobCancelledError" })
+		;(await sending)()
+		expect(lane.isSlotBusy("p1", 7)).toBe(false)
 	})
 })

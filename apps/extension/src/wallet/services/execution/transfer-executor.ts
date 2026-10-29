@@ -81,8 +81,8 @@ export interface TransferExecutorLane {
 	beginQueuedWait(journalId: string): void
 	endQueuedWait(journalId: string): void
 	isSlotBusy(profileId: string, chainId: number): boolean
-	/** The slot, only if nobody holds or waits for it; `undefined` otherwise. */
-	tryTakeSlot(profileId: string, chainId: number): Promise<ExecutionMutexRelease> | undefined
+	/** The slot behind the estimates ahead in line; `undefined` while a send holds or waits for it. */
+	takeEstimateSlot(profileId: string, chainId: number, signal?: AbortSignal): Promise<ExecutionMutexRelease> | undefined
 	acquireTransferSlot(
 		networkId: string,
 		journalId: string,
@@ -738,28 +738,32 @@ export class TransferExecutor {
 
 	/**
 	 * With `sequence`, answers {@link TransferFeeQueued} instead of running while a send sharing its
-	 * keys is in flight or the slot is taken. Otherwise it holds both while it runs: the PXE runs one
-	 * operation at a time, so a proof started between two of its simulations would outlast its deadline.
+	 * keys is in flight or a send holds or waits for the slot; behind an estimate it waits its turn.
+	 * It holds both while it runs: the PXE runs one operation at a time, so a proof started between two
+	 * of its simulations would outlast its deadline. `onStarted` runs once both are held, before the run.
 	 */
 	public async estimateFee(
 		req: TransferRequest,
 		signal?: AbortSignal,
 		sequence?: TransferSequence,
+		onStarted?: () => void,
 	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		if (!sequence) return this.runEstimate(req, signal, undefined)
 		const { profileId } = await this.deps.captureExecutionFence()
 		const hold = this.deps.sequencer.beginEstimate(sequence.scope, sequence.keys)
 		if (!hold) return QUEUED_SPENT
-		const slot = this.deps.lane.tryTakeSlot(profileId, sequence.scope.chainId)
+		const slot = this.deps.lane.takeEstimateSlot(profileId, sequence.scope.chainId, signal)
 		if (!slot) {
 			hold.end()
 			return QUEUED_SPENT
 		}
-		const release = await slot
+		let release: ExecutionMutexRelease | undefined
 		try {
+			release = await slot
+			onStarted?.()
 			return await this.runEstimate(req, signal, sequence)
 		} finally {
-			release()
+			release?.()
 			hold.end()
 		}
 	}

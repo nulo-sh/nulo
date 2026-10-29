@@ -56,6 +56,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
+import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
@@ -176,6 +177,16 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
+/** Per operation, whether its estimate or preview waits behind another send; cleared once its run
+ *  starts or neither is in flight. */
+const queuedOps = ref<Record<number, boolean>>({})
+const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) => ({
+	onQueued: () => {
+		if (!signal.aborted) queuedOps.value[index] = true
+	},
+	start: { events: executionService.onEstimateStarted, estimateToken, onStarted: () => (queuedOps.value[index] = false) },
+})
+
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
@@ -187,8 +198,12 @@ const {
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
-	estimate: ({ index, feeSettings }, estimateToken, flowKey) =>
-		executionService.estimateOperationFee(requestId.value!, index, feeSettings, estimateToken, flowKey),
+	estimate: (params, estimateToken, flowKey, signal) =>
+		estimateWhenClear(
+			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
+			signal,
+			queueWatch(params.index, estimateToken, signal),
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
@@ -239,8 +254,12 @@ const {
 	cancelAll: cancelAllAuthwitPreviews,
 	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
-	estimate: ({ index }, estimateToken, flowKey) =>
-		executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+	estimate: ({ index }, estimateToken, flowKey, signal) =>
+		estimateWhenClear(
+			() => executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+			signal,
+			queueWatch(index, estimateToken, signal),
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
@@ -592,6 +611,13 @@ watch(
 )
 
 watch([feeEstimates, authwitPreviews], decodeDiscoveredAuthwits, { deep: true })
+watch(
+	[estimatingOps, previewingOps],
+	([estimating, previewing]) => {
+		for (const i of Object.keys(queuedOps.value).map(Number)) if (!estimating[i] && !previewing[i]) queuedOps.value[i] = false
+	},
+	{ deep: true },
+)
 // Synchronous, so a result cleared in the tick it landed still leaves its verdict behind.
 watch(
 	feeEstimates,
@@ -659,6 +685,7 @@ onUnmounted(() => {
 						:isEstimating="!!estimatingOps[i]"
 						:authwitPreview="authwitPreviews[i] ?? undefined"
 						:isPreviewing="!!previewingOps[i]"
+						:isQueued="!!queuedOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
 						:decodedGrants="decodedGrants.get(i)"

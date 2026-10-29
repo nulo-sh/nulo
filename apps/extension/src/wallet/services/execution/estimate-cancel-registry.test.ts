@@ -1,11 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import {
-	ESTIMATE_JOB_TTL_MS,
-	EstimateCancelRegistry,
-	MAX_ACTIVE_ESTIMATES_PER_PROFILE,
-	SETTLED_STASH_TTL_MS,
-} from "./estimate-cancel-registry"
+import { EstimateCancelRegistry, MAX_ACTIVE_ESTIMATES_PER_PROFILE, SETTLED_STASH_TTL_MS } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS } from "./spec"
 
 const makeRegistry = () => {
 	let clock = 1_000_000

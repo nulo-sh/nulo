@@ -104,6 +104,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			previewOperationAuthwits: vi.fn(async () => undefined),
 			decodeCallsForDisplay: vi.fn(async () => []),
 			cancelEstimate: vi.fn(async () => undefined),
+			onEstimateStarted: { add: vi.fn(), remove: vi.fn() },
 		}
 	}),
 }))

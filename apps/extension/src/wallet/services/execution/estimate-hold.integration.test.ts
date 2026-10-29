@@ -8,7 +8,8 @@ import { PxeServiceClientBase } from "@nulo/aztec-runtime/pxe"
 import type { NetworkInfo } from "@nulo/aztec-runtime/pxe"
 import { JobCancelledError, RpcTimeoutError } from "@nulo/extension-messaging/errors"
 import { MessageType } from "@nulo/extension-messaging/messages"
-import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS } from "./spec"
 import { ExecutionService } from "./service"
 
 const net: NetworkInfo = { profileId: "p1", chainId: 31337, rpcUrl: "http://n/1" }
@@ -50,8 +51,11 @@ function harness() {
 		ensureInitialized: async () => {},
 		services: { get: () => ({ materializeStoredOperation: async () => ({}), refusalOf: () => undefined, recordRefusal: () => {} }) },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
+		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
+		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		pxeService: pxe,
 		estimateCancel: registry,
+		emit: () => {},
 		dappSendExecutor: {
 			estimateOperationFee: async () => {
 				await pxe.simulateTx(net, {} as never, {} as never)

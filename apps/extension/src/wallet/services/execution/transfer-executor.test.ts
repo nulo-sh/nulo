@@ -153,7 +153,7 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 			beginQueuedWait: vi.fn(),
 			endQueuedWait: vi.fn(),
 			isSlotBusy: vi.fn(() => false),
-			tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+			takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 			acquireTransferSlot: vi.fn(async () => () => {}),
 		},
 		getActiveProfile: vi.fn(async () => ({ id: "p1" }) as never),
@@ -456,7 +456,7 @@ describe("TransferExecutor.execute", () => {
 				beginQueuedWait: vi.fn(),
 				endQueuedWait: vi.fn(),
 				isSlotBusy: vi.fn(() => false),
-				tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+				takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 				acquireTransferSlot: vi.fn(async () => () => {}),
 			},
 		})
@@ -509,7 +509,7 @@ describe("TransferExecutor: the authorizing session", () => {
 				beginQueuedWait: vi.fn(),
 				endQueuedWait: vi.fn(),
 				isSlotBusy: vi.fn(() => false),
-				tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+				takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 				acquireTransferSlot: vi.fn(async () => () => {}),
 			},
 			estimateReuse: { tryConsume: vi.fn(async () => snapshot()), stash: vi.fn() } as never,
@@ -1351,7 +1351,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 				beginQueuedWait: vi.fn(() => registered?.abort()),
 				endQueuedWait: vi.fn(),
 				isSlotBusy: vi.fn(() => false),
-				tryTakeSlot: vi.fn(() => Promise.resolve(() => {})),
+				takeEstimateSlot: vi.fn(() => Promise.resolve(() => {})),
 				acquireTransferSlot: vi.fn(async () => () => {}),
 			},
 		})
@@ -1374,7 +1374,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("an estimate answers queued when the slot is taken, and leaves no hold behind", async () => {
 		const sequencer = sequencerOnPendingMap()
 		const { executor, deps } = makeHarness({ sequencer })
-		;(deps.lane.tryTakeSlot as ReturnType<typeof vi.fn>).mockReturnValue(undefined)
+		;(deps.lane.takeEstimateSlot as ReturnType<typeof vi.fn>).mockReturnValue(undefined)
 		const sequence = { scope: SCOPE, keys: REQ_KEYS, sponsored: false }
 		expect(await executor.estimateFee(makeReq(), undefined, sequence)).toEqual({ queued: true, tokenSpent: true })
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
@@ -1384,11 +1384,24 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("an estimate holds the slot for its simulations and frees it when it settles", async () => {
 		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
 		const release = vi.fn()
-		;(deps.lane.tryTakeSlot as ReturnType<typeof vi.fn>).mockReturnValue(Promise.resolve(release))
+		;(deps.lane.takeEstimateSlot as ReturnType<typeof vi.fn>).mockReturnValue(Promise.resolve(release))
 		await executor.estimateFee(makeReq(), undefined, { scope: SCOPE, keys: REQ_KEYS, sponsored: false })
-		expect(deps.lane.tryTakeSlot).toHaveBeenCalledWith(FENCE.profileId, SCOPE.chainId)
+		expect(deps.lane.takeEstimateSlot).toHaveBeenCalledWith(FENCE.profileId, SCOPE.chainId, undefined)
 		const built = (deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
 		expect(built).toBeLessThan(release.mock.invocationCallOrder[0])
+	})
+
+	test("an estimate reports its start once it holds the slot, before it builds; a queued one reports nothing", async () => {
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		const sequence = { scope: SCOPE, keys: REQ_KEYS, sponsored: false }
+		const started = vi.fn()
+		;(deps.lane.takeEstimateSlot as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined)
+		expect(await executor.estimateFee(makeReq(), undefined, sequence, started)).toEqual({ queued: true, tokenSpent: true })
+		expect(started).not.toHaveBeenCalled()
+		await executor.estimateFee(makeReq(), undefined, sequence, started)
+		expect(started).toHaveBeenCalledTimes(1)
+		const built = (deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect(started.mock.invocationCallOrder[0]).toBeLessThan(built)
 	})
 
 	test("an estimate holds back a send that enters while it runs, and records the epoch it was built at", async () => {

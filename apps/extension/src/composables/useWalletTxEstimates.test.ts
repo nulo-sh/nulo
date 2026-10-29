@@ -42,7 +42,7 @@ describe("useWalletTxEstimates", () => {
 		estimates.refresh(0)
 		expect(estimate).not.toHaveBeenCalled()
 		await lands()
-		expect(estimate).toHaveBeenCalledWith({ network: "A", fee: 1 }, expect.any(String), expect.any(String))
+		expect(estimate).toHaveBeenCalledWith({ network: "A", fee: 1 }, expect.any(String), expect.any(String), expect.any(AbortSignal))
 		expect(estimates.results.value[0]?.maxFee).toBe("A:1")
 		expect(estimates.landed()).toBe(true)
 	})

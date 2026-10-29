@@ -71,6 +71,8 @@ const PRE_SUBMIT_STAGES = ["queued", "pending", "simulating", "proving"] as cons
 const POPUP_ORIGIN_KEY = "__popup__"
 /** Keeps an unexpected absent dApp origin capped under one bucket rather than bypassing the cap. */
 const NO_ORIGIN_KEY = "__no_origin__"
+/** Popup estimates' bucket: an estimate waits behind another, and queues only behind a send. */
+const ESTIMATE_ORIGIN_KEY = "__estimate__"
 
 /**
  * A dApp send's place among its origin's sends in one lane, from its first grant until it starts
@@ -471,19 +473,27 @@ export class ExecutionLane {
 		return { originKey, maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP, maxLaneDepth: ExecutionLane.EXECUTION_LANE_CAP }
 	}
 
-	/** Whether a send holds (or waits for) the `(profileId, chainId)` slot right now. */
+	/** Whether a send or an estimate holds (or waits for) the `(profileId, chainId)` slot right now. */
 	public isSlotBusy(profileId: string, chainId: number): boolean {
 		return this.executionMutex.isLocked(`${profileId}:${chainId}`)
 	}
 
+	/** Whether a send holds (or waits for) the `(profileId, chainId)` slot right now. */
+	public isSendInSlot(profileId: string, chainId: number): boolean {
+		return this.executionMutex.isLockedOutside(`${profileId}:${chainId}`, ESTIMATE_ORIGIN_KEY)
+	}
+
 	/**
-	 * The slot for a popup estimate, only if nobody holds or waits for it. Nothing can take it in
-	 * between: the mutex installs its tail synchronously, so the grant follows on the next microtask.
+	 * The slot for a popup estimate, in line behind the estimates ahead of it; `undefined` while a send
+	 * holds or waits for it. No send can join in between: the mutex installs its tail synchronously.
+	 * An abort of `signal` while waiting ends the wait as the cancel sentinel.
 	 */
-	public tryTakeSlot(profileId: string, chainId: number): Promise<ExecutionMutexRelease> | undefined {
-		const key = `${profileId}:${chainId}`
-		if (this.executionMutex.isLocked(key)) return undefined
-		return this.executionMutex.acquire(key, undefined, this.capsFor(POPUP_ORIGIN_KEY))
+	public takeEstimateSlot(profileId: string, chainId: number, signal?: AbortSignal): Promise<ExecutionMutexRelease> | undefined {
+		if (this.isSendInSlot(profileId, chainId)) return undefined
+		return this.executionMutex.acquire(`${profileId}:${chainId}`, signal, this.capsFor(ESTIMATE_ORIGIN_KEY)).catch((error: unknown) => {
+			if (error instanceof ExecutionMutexAbortError) throw new JobCancelledSentinel("")
+			throw error
+		})
 	}
 
 	/**

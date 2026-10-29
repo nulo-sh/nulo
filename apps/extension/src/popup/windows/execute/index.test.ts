@@ -58,12 +58,13 @@ const { accountServiceCtorMock, networkServiceCtorMock } = vi.hoisted(() => ({
  *  [0] fee estimates, [1] authorization previews. */
 const feeMapInstances: Array<{
 	opts: {
-		estimate: (params: unknown, token: string, flowKey: string) => Promise<unknown>
+		estimate: (params: unknown, token: string, flowKey: string, signal: AbortSignal) => Promise<unknown>
 		onError?: (key: number, err: unknown) => void
 		cancelRemote?: (token: string) => unknown
 	}
 	api: {
 		results: Ref<Record<number, unknown>>
+		estimating: Ref<Record<number, boolean>>
 		estimate: ReturnType<typeof vi.fn>
 		handoffAll: ReturnType<typeof vi.fn>
 		dispose: ReturnType<typeof vi.fn>
@@ -91,6 +92,10 @@ const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
 const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
+const estimateEvents = await vi.hoisted(async () => {
+	const { EventHandler } = await import("@nulo/wallet-core/utils")
+	return { onEstimateStarted: new EventHandler<{ estimateToken: string }>() }
+})
 vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: toastMocks.openToast }),
 }))
@@ -105,6 +110,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			decodeCallsForDisplay: vi.fn(async () => []),
 			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
 			cancelEstimate: cancelEstimateMock,
+			onEstimateStarted: estimateEvents.onEstimateStarted,
 		}
 	}),
 }))
@@ -191,7 +197,7 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged"], template: '<div><slot name="fee" /></div>' },
+	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued"], template: '<div><slot name="fee" /></div>' },
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -800,10 +806,73 @@ describe("execute window — approval envelope", () => {
 		expect(previews!.api.estimate).toHaveBeenCalledExactlyOnceWith(1, { index: 1 })
 		expect(fees!.api.estimate).not.toHaveBeenCalled()
 
-		await fees!.opts.estimate({ index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }, "tok-a", "flow-a")
+		const signal = new AbortController().signal
+		await fees!.opts.estimate({ index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }, "tok-a", "flow-a", signal)
 		expect(estimateOperationFeeMock).toHaveBeenCalledExactlyOnceWith("req-123", 0, { paymentMethod: { kind: "fj" } }, "tok-a", "flow-a")
-		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b")
+		await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b", signal)
 		expect(previewOperationAuthwitsMock).toHaveBeenCalledExactlyOnceWith("req-123", 1, "tok-b", "flow-b")
+	})
+
+	test("an estimate behind another send asks again with its token, its operation reading queued until it settles", async () => {
+		resolvable()
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const [fees] = feeMapInstances
+		const queued = () => w!.findAllComponents(STUBS.OperationCard)[0]!.props("isQueued")
+		const params = { index: 0, feeSettings: { paymentMethod: { kind: "fj" } } }
+		estimateOperationFeeMock
+			.mockResolvedValueOnce({ queued: true, tokenSpent: false } as never)
+			.mockResolvedValueOnce({ maxFee: "800" } as never)
+		vi.useFakeTimers()
+		try {
+			fees!.api.estimating.value = { 0: true }
+			let settled = false
+			const answer = fees!.opts.estimate(params, "tok-a", "flow-a", new AbortController().signal).finally(() => {
+				settled = true
+			})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(settled).toBe(false)
+			expect(queued()).toBe(true)
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(await answer).toEqual({ maxFee: "800" })
+			expect(estimateOperationFeeMock.mock.calls).toEqual([
+				["req-123", 0, params.feeSettings, "tok-a", "flow-a"],
+				["req-123", 0, params.feeSettings, "tok-a", "flow-a"],
+			])
+			fees!.api.estimating.value = { 0: false }
+			await nextTick()
+			expect(queued()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a preview behind another send reads queued until the wallet reports its run, whose token alone clears it", async () => {
+		resolvable()
+		approval.payloadToLoad = payload()
+		w = factory()
+		await completeInit()
+		const [, previews] = feeMapInstances
+		const queued = () => w!.findAllComponents(STUBS.OperationCard)[1]!.props("isQueued")
+		previewOperationAuthwitsMock
+			.mockResolvedValueOnce({ queued: true, tokenSpent: false } as never)
+			.mockReturnValueOnce(new Promise(() => {}) as never)
+		vi.useFakeTimers()
+		try {
+			previews!.api.estimating.value = { 1: true }
+			void previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b", new AbortController().signal)
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-other" })
+			await nextTick()
+			expect(queued()).toBe(true)
+			estimateEvents.onEstimateStarted.invoke({ estimateToken: "tok-b" })
+			await nextTick()
+			expect(queued()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
