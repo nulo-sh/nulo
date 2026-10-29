@@ -20,7 +20,7 @@ post_implementation_hardening: not scheduled
 - **Date:** 2026-10-29. Planned and implemented as one arc the same day.
 - **Status:** completed. The arc and this close-out ship as #1352 into `dev`; its merge closes #1349 and archives this plan.
 - **Shipped:** #1352. The flag-on-paste check moved into `token-list.test.ts`'s source-run describe on a second, never-held flagged pair (`0x…f3`) with a listed-unheld control. `send-picker-add.test.ts` runs its stacked-popup flow in both modes, with a flag-absence check on its unlisted add row. The held-list rule is in `tests/e2e/README.md`. The red (both browsers, release-shaped build, base) and the green (both modes, both browsers) are recorded under Phases.
-- **Dropped or rejected:** options A, B and C (D1); the two-core amplifier (D7); an OWNER-ASKS entry on publishing a flagged Testnet pair (D8). There is no flake-ledger row (D10): the lane brief directs none, and the conflict with the ledger's charter went to the orchestrator. There is no `lessons.md` line: the rule's home is the e2e README, where the held list is defined.
+- **Dropped or rejected:** options A, B and C (D1); the two-core amplifier (D7); an OWNER-ASKS entry on publishing a flagged Testnet pair (D8). The flake ledger gains row 67 (D10, amended by the orchestrator). There is no `lessons.md` line: the rule's home is the e2e README, where the held list is defined.
 - **Known limits:** #1353.
 - **Open items:** none.
 - **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
@@ -103,7 +103,7 @@ None. Test, fixture and README only; no screen, copy or row changes. No OWNER-AS
 - **D6.** S1 keeps a flag-absence check on its `UNLISTED` add row (Codex 1): `token-list.test.ts`'s listed control alone would miss a flag drawn on every unlisted address.
 - **D8.** No OWNER-ASKS entry for publishing a flagged Testnet pair (Opus 6, partly rejected): nothing in the lane depends on it, and the known-limit issue (D9) names it as the reopening condition.
 - **D9.** Close-out files a closed `known-limit` issue (Opus 6): the release build's flag rendering is proven only by the armed build, since the artifact runs hold a list that flags nothing. Reopen when the published list flags a Testnet pair or a release-only flag regression is reported.
-- **D10.** No flake-ledger row, as the lane brief directs; Opus 3 notes the ledger's charter ("every named fingerprint with a root cause") and row 44, the same class. The conflict goes to the orchestrator in the report.
+- **D10.** No flake-ledger row, as the lane brief directs; Opus 3 notes the ledger's charter ("every named fingerprint with a root cause") and row 44, the same class. The conflict goes to the orchestrator in the report. **Amended by the orchestrator, 2026-10-29:** the ledger gets a row, per its own charter; row 67 states the fingerprint, the root cause, the class (deterministic, not a flake) and the fix (#1352).
 - **D7.** No two-core amplifier (`taskset -c 0,1`) for the red/green proof (Codex 4, rejected): the failure is deterministic, not a race, and the amplifier exists to validate deflakes. Explicit per-mode environments (`SRC`, `ART`) accepted.
 
 ## Audit verdicts
