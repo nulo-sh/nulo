@@ -23,3 +23,12 @@
 - `bun run test:all` run 1: green, every workspace (extension 950 files, 16290 tests).
 - Codex round 1 (fresh session, gpt-6.1-sol, high): `findings: 2`, both low comment fixes; no runtime bug in ownership, eviction, the fee re-ask or the Confirm gate. Applied.
 - Opus review (`general-purpose`): `findings: 5`, all low or nits, all applied (null-delta tolerance with a test, red without the fix; KL5 and the corrected Security sentence; the `claimPreviews` doc no longer names its caller; the helper doc no longer says every popup waits).
+
+## Arc 1 final gates, after merging `origin/dev` (2026-10-29)
+
+- `origin/dev` merged (the Send picker and the Firefox 158 pin); Firefox 158 installed.
+- A first smoke run read a `dist` the network runner had built before the merge, network-flavoured, and went red in unrelated files (`import-dead-rpc`, `backup-migration`'s arming contract, the merged `send-picker-add`). Not a regression: smoke needs its own armed build. Rerun with `_extension-smoke-e2e.yml`'s build env (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:<browser>`, then `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 NULO_E2E_RETRY=0 bun run test:e2e`).
+- Smoke, retry 0: Chrome 62 files, 274 tests green (34 min); Firefox 66 files, 277 tests green (52 min).
+- Delegated spec, retry 0: Chrome green (first offer 47.7 s), Firefox green (59.7 s).
+- `bun run test:all` three times at retry 0: green each time (183 s, 206 s, 199 s; extension 16340 tests, the same inventory each run).
+- `bun run lint` and `bun run typecheck:all` exit 0.

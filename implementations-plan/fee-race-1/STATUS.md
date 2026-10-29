@@ -8,3 +8,4 @@
 - 2026-10-28 phase 1.1: reds red on the base (3 behavioural, 5 structural), green on the head; delegated first-offer e2e red on base, green on head (Chrome). Firefox and the D38 specs running.
 - 2026-10-28 phase 1.2: #1343 filed; 6 behavioural reds red on the base (9-min snapshot, settled handle at 9 min, sweep at 150 s through the real wiring, claim before the first await, release on a refused fence) plus 2 structural; head: execution + dapp-interaction 81 files green.
 - 2026-10-28 arc 1 gates: delegated spec green on Chrome and Firefox; 5 Chrome gate specs green; test:all run 1 green; review round 1 (Codex 2 low, Opus 5 low) applied.
+- 2026-10-29 arc 1 final gates on the merged head: lint, typecheck:all, test:all x3, smoke on both browsers, the delegated spec on both browsers, all green; Codex round 2 clean.
