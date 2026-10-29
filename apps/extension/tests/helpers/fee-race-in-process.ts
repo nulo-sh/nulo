@@ -8,8 +8,9 @@
  * faked. A simulation cannot run here, so the seams one sits behind answer canned values and
  * nothing asserts what one holds: the service's fee-strategy dispatch, the transfer's operation
  * builder (its selector derivation needs bb), and a default-entrypoint request's build, discovery
- * and sizing. The PXE fake is the cancel spike's, `proveTx` alone. Every estimate run parks at its start until a step lands or fails it; it holds the
- * slot of its chain meanwhile, as a simulation does.
+ * and sizing. The PXE fake is the cancel spike's, `proveTx` alone. Every estimate run parks at its
+ * start until a step lands or fails it; it holds the slot of its chain meanwhile, as a simulation
+ * does.
  *
  * - O1: a press the popup allowed names the snapshot of its operation's latest landed estimate (or
  *   none, after a failed one), meets that snapshot at its turn, and ends sent unless the person
@@ -51,6 +52,7 @@ import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/pro
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { TransferType } from "@/wallet/services/transaction/service"
+import { trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
 import { OriginType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import type { ProofGate } from "@/e2e/proof-gate"
 import { startExecutionGraph } from "./execution-graph"
@@ -88,6 +90,8 @@ export interface Faults {
 	journalSkipsStage?: boolean
 	/** The strip loses the first transaction recorded. */
 	stripDropsRow?: boolean
+	/** The worker drops the person's cancel of their own send. */
+	cancelIgnored?: boolean
 }
 
 /** A press as the oracles and the coverage read it. */
@@ -176,6 +180,9 @@ export class RebuildOutOfLayer extends Error {
 	}
 }
 
+/** Carried by the PXE fake as live data; the build's test-only marker check fails a bundle holding it. */
+export const FEE_RACE_PXE_FAKE_BUNDLE_MARKER = "FEE_RACE_PXE_FAKE_BUNDLE_MARKER"
+
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 const fastSleep = (_ms: number, signal?: AbortSignal) =>
 	new Promise<void>((resolve) => {
@@ -216,7 +223,6 @@ interface PressRecord {
 	named: { estimateId?: string; previewId?: string; feeCap?: string; queued?: boolean }
 	/** A lock or a cancel of this send came after the press. */
 	endedByPerson: boolean
-	/** Set once the send ends. */
 	end?: { ok: true } | { ok: false; error: unknown }
 	journalId?: string
 	judged: boolean
@@ -238,7 +244,7 @@ interface SurfaceBase {
 
 type Race = Awaited<ReturnType<typeof startRace>>
 
-async function startRace(faults: Faults) {
+async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCrypto>) {
 	let activity = 0
 	const bump = () => {
 		activity++
@@ -284,6 +290,7 @@ async function startRace(faults: Faults) {
 		},
 	}
 	const pxeClient = {
+		marker: FEE_RACE_PXE_FAKE_BUNDLE_MARKER,
 		getPXE: () => pxe,
 		onProvePhase: { add: () => {} },
 		offscreenSettled: async () => {},
@@ -374,12 +381,14 @@ async function startRace(faults: Faults) {
 	// The sequencer's and the chain tip's own waits poll; here they poll at once.
 	;(raw.sendSequencer.deps as { sleep: unknown }).sleep = fastSleep
 	;(raw.chainTipGate.deps as { sleep: unknown }).sleep = fastSleep
+	if (faults.cancelIgnored) (service as unknown as { cancelJob: () => Promise<void> }).cancelJob = async () => {}
 
 	// An estimate's run is the worker's own code from its admission to its stash; the one call in it
 	// that simulates answers canned data: the fee strategy's build, the transfer's operation (its
 	// selector derivation needs bb), a default-entrypoint request's build and discovery. Builds run
 	// only under the slot, so one outside an estimate's run is a confirm rebuilding: that needs a real
-	// simulation, so it stops there, past its snapshot lookup.
+	// simulation, so it stops there, past its snapshot lookup (a default-entrypoint confirm builds
+	// before it looks its snapshot up, so it stops short of it).
 	let inEstimateRun = 0
 	const underRun =
 		<A extends unknown[], R>(canned: (...args: A) => Promise<R> | R) =>
@@ -548,6 +557,7 @@ async function startRace(faults: Faults) {
 			return activity
 		},
 		faults,
+		crypto,
 		proof,
 		parked,
 		refByAmount,
@@ -592,12 +602,16 @@ async function startRace(faults: Faults) {
 	}
 }
 
+/** Quiet means no event and no WebCrypto call pending: a sealed journal write raises no event
+ *  until its encryption resolves, which a loaded runner can delay past `QUIET_MS`. */
 async function settle(race: Race): Promise<void> {
 	const deadline = performance.now() + SETTLE_MAX_MS
-	let seen = -1
-	while (seen !== race.activity) {
-		seen = race.activity
+	for (;;) {
+		const seen = race.activity
+		await race.crypto.settled()
 		await realSleep(QUIET_MS)
+		await race.crypto.settled()
+		if (seen === race.activity) return
 		if (performance.now() > deadline) throw new DriverError(`the run did not settle within ${SETTLE_MAX_MS} ms`)
 	}
 }
@@ -1012,9 +1026,14 @@ const DRIVERS: Drivers = {
 		if (!press) return "gone"
 		press.endedByPerson = true
 		if (!press.journalId) return "gone"
+		const before = race.records.get(press.journalId)?.progress.stage
 		await race.service.cancelJob(press.journalId).catch(() => {})
 		await settle(race)
-		return race.records.get(press.journalId)?.progress.stage === "cancelled" ? "cancelled" : "too-late"
+		const after = race.records.get(press.journalId)?.progress.stage
+		if (after === "cancelled") return "cancelled"
+		if (before && canTransition(before as never, "cancelled" as never))
+			race.red("O4", `${s.ref}'s cancel at ${before} left its row ${after ?? "gone"}`)
+		return "too-late"
 	},
 	lock: async (race) => {
 		for (const press of race.presses) if (press.end === undefined) press.endedByPerson = true
@@ -1082,15 +1101,24 @@ function endOf(press: PressRecord): NonNullable<PressFact["end"]> {
 	return press.endedByPerson ? "ended" : "failed"
 }
 
+/** What a window's confirm met of the snapshot its press named: "found" when nothing was due. A
+ *  default-entrypoint confirm stops at its build, before its lookup, and a lock or cancel may end a
+ *  confirm before its turn. */
+function snapshotAtTurn(race: Race, press: PressRecord): string {
+	const { previewId } = press.named
+	if (!previewId || press.endedByPerson) return "found"
+	if (press.fact.surface !== "window" || press.fact.method === "no_from") return "found"
+	return race.takes.get(previewId) ?? "never looked up"
+}
+
 /** O1: each ended press ended sent, at a rebuild, or by the person's lock or cancel; every snapshot
  *  it named was there at its turn. */
 function judgeEnds(race: Race): void {
 	for (const press of race.presses) {
 		if (!press.end || press.judged) continue
 		press.judged = true
-		const { previewId } = press.named
-		const met = previewId ? race.takes.get(previewId) : undefined
-		if (met && met !== "found" && !press.endedByPerson) race.red("O1", `${press.fact.ref}'s snapshot was ${met} at its turn`)
+		const met = snapshotAtTurn(race, press)
+		if (met !== "found") race.red("O1", `${press.fact.ref}'s snapshot was ${met} at its turn`)
 		if (endOf(press) === "failed")
 			race.red(
 				"O1",
@@ -1122,6 +1150,7 @@ function judgeFinale(race: Race): void {
 	}
 	judgeSentHashes(race)
 	for (const press of race.presses) {
+		if (!press.end) race.red("O1", `${press.fact.ref}'s send never ended`)
 		const record = press.journalId ? race.records.get(press.journalId) : undefined
 		if (record?.progress.stage === "cancelled" && press.end?.ok) race.red("O4", `${press.fact.ref} was cancelled and still sent`)
 	}
@@ -1148,10 +1177,11 @@ const BASE_TIME = Date.UTC(2026, 9, 1, 12)
 /** Runs `plan`, judging every step; the report's `red` is the first step any oracle failed on. */
 export async function runPlan(plan: Plan, faults: Faults = {}): Promise<RaceReport> {
 	vi.useFakeTimers({ toFake: ["Date"], now: BASE_TIME })
+	const crypto = trackSubtleCrypto()
 	const steps: StepReport[] = []
 	let race: Race | undefined
 	try {
-		race = await startRace(faults)
+		race = await startRace(faults, crypto)
 		for (const step of plan.steps) {
 			const report = await runStep(race, step)
 			steps.push(report)
@@ -1169,9 +1199,18 @@ export async function runPlan(plan: Plan, faults: Faults = {}): Promise<RaceRepo
 		end.violations = race.violations.splice(0)
 		return finish(race, steps, plan, end.violations.length > 0 ? end : undefined)
 	} finally {
-		for (const s of race?.surfaces ?? []) s.close()
+		if (race) await windDown(race)
+		crypto.restore()
 		vi.useRealTimers()
 	}
+}
+
+/** Ends what a run left in flight, a red's early return included, so none of it writes into the
+ *  next run's storage. */
+async function windDown(race: Race): Promise<void> {
+	race.session.lock()
+	for (const s of race.surfaces) s.close()
+	await drain(race).catch(() => {})
 }
 
 async function runStep(race: Race, step: PlannedStep): Promise<StepReport> {

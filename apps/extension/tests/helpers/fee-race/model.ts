@@ -43,7 +43,6 @@ export const startWorld = (): World => ({ ops: [] })
 
 /** Surfaces open at once: a dApp's windows and the Send page, below the worker's estimate cap. */
 export const MAX_OPEN = 3
-/** Operations in one run. */
 export const MAX_OPS = 8
 export const ACTIONS_PER_RUN = 28
 

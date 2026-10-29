@@ -323,6 +323,18 @@ describe("each oracle can fail — break fixtures", () => {
 	)
 
 	test(
+		"O4: a cancel during the proof is dropped, and the send goes out",
+		() =>
+			redOn(
+				[...SEND_PROVING, { action: "cancel", params: { target: "op1" } }, PROOF],
+				{ cancelIgnored: true },
+				"O4",
+				/op1's cancel at proving left its row proving/,
+			),
+		RUN_MS,
+	)
+
+	test(
 		"O4: the strip loses a transaction the node took",
 		() => redOn([...SEND_PROVING, PROOF], { stripDropsRow: true }, "O4", /the strip shows/),
 		RUN_MS,
@@ -366,7 +378,8 @@ describe("coverage", () => {
 /** How many seeds `NULO_FEE_RACE_RUNS` asks for: none when unset or empty. */
 function runsOf(raw: string | undefined): number {
 	if (!raw) return 0
-	if (!/^[1-9]\d*$/.test(raw)) throw new Error(`NULO_FEE_RACE_RUNS=${JSON.stringify(raw)} is not a positive integer`)
+	if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw)))
+		throw new Error(`NULO_FEE_RACE_RUNS=${JSON.stringify(raw)} is not a positive integer`)
 	return Number(raw)
 }
 
@@ -383,6 +396,7 @@ const RUNS = runsOf(process.env.NULO_FEE_RACE_RUNS)
 
 describe.skipIf(RUNS === 0)("the fee-race catalog in process — long mode", () => {
 	const first = firstSeed(process.env.NULO_FEE_RACE_SEED)
+	if (!Number.isSafeInteger(first + RUNS)) throw new Error(`seeds ${first} to ${first + RUNS} are not all safe integers`)
 	test(
 		`${RUNS} seed(s) from ${first}`,
 		async () => {
