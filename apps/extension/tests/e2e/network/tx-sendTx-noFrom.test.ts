@@ -4,10 +4,9 @@ import { UNCLASSIFIED_ERROR_MESSAGE } from "@/wallet/services/wallet-sdk/error-e
 import { waitForTxMined, type AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, type ExtensionContext, grantCapBundle, openPopup, test } from "../fixtures/extension"
 import { readSendRecords, type SendRecordView, waitForSendRecord } from "../fixtures/journal"
-import { pollUntil } from "../fixtures/poll"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult, waitForPgResults } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
-import { PROOF_GATE_HOLD_MS, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { expectWindowHeldBehindProof, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -18,7 +17,8 @@ const hasConfig = aztecConfig !== undefined
  * badge, no fee picker). The default entrypoint runs only a private function: a public call is
  * refused after approval, and the dApp learns nothing more than the wallet's constant for an
  * unclassified throw. `SponsoredFPC.sponsor_unconditionally` is the private call that stands alone:
- * it reads no sender and pays its own fee, so it lands, and two at once both land, one at a time.
+ * it reads no sender and pays its own fee, so it lands, and two at once both land, one at a time:
+ * the second window waits for its preview, Confirm off, while the first proves.
  *
  * @requires-proverless — the concurrent case parks the first send on the proof gate, which exists
  * only in a proverless build; the agent runner refuses this file without `NULO_E2E_PROVERLESS=1`.
@@ -47,45 +47,6 @@ async function openNoFromWindow(ctx: ExtensionContext, page: Page, button: strin
 
 const dappSends = async (wallet: Page): Promise<SendRecordView[]> =>
 	(await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute")
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** How long the second send must keep waiting behind the held first once its approval is in. */
-const QUEUED_HELD_MS = 3_000
-
-/** The send held at `proving` while the other waits `queued`, if the journal shows exactly that. */
-const heldPair = (sends: SendRecordView[]): SendRecordView | undefined =>
-	sends.length === 2 && sends.some((r) => r.stage === "queued") ? sends.find((r) => r.stage === "proving") : undefined
-
-/**
- * Serialization evidence: after the second approval is in, the second send stays `queued` behind the
- * first, held at `proving`, for `QUEUED_HELD_MS`. A record reads `queued` from the request's arrival
- * too, so one snapshot could catch the second before its approval reached the mutex. Every read falls
- * before `PROOF_GATE_HOLD_MS` past the first's `enteredProveAt`: later, the gate may have released
- * itself, and a `queued` record would prove nothing about the mutex.
- */
-async function expectQueuedBehindHeld(wallet: Page): Promise<void> {
-	const paired = await pollUntil(
-		() => dappSends(wallet),
-		(sends) => heldPair(sends) !== undefined,
-		{
-			label: "a send held at proving with the other queued",
-			timeoutMs: 60_000,
-			intervalMs: 250,
-		},
-	)
-	const held = heldPair(paired) as SendRecordView
-	const gateHoldsUntil = (held.enteredProveAt ?? Number.NaN) + PROOF_GATE_HOLD_MS
-	const observeUntil = Date.now() + QUEUED_HELD_MS
-	for (;;) {
-		await sleep(250)
-		const sends = await dappSends(wallet)
-		const readAt = Date.now()
-		expect(heldPair(sends)?.id, `the second send must stay queued behind the held first: ${JSON.stringify(sends)}`).toBe(held.id)
-		expect(readAt, "every read must fall while the first send's gate certainly still holds").toBeLessThanOrEqual(gateHoldsUntil)
-		if (readAt >= observeUntil) return
-	}
-}
 
 test.skipIf(!hasConfig)(
 	"tx-sendTx-noFrom — a public call is refused after approval, and the dApp gets only the wallet's constant",
@@ -145,6 +106,7 @@ test.skipIf(!hasConfig)(
 
 		const seqTx = await snapshotResultSeq(page)
 		await holdProofGate(wallet)
+		let second: Page
 		try {
 			const firstP = waitForPopup(ctx, "execute", { timeout: 60_000 })
 			await page.evaluate((testid: string) => {
@@ -157,14 +119,14 @@ test.skipIf(!hasConfig)(
 			await waitForExecuteContent(first)
 			const secondP = waitForPopup(ctx, "execute", { timeout: 60_000 })
 			await approveExecute(first)
-			const second = await secondP
+			second = await secondP
 			await waitForExecuteContent(second)
-			await approveExecute(second)
-			await waitForPopupClosed(second, 10_000)
-			await expectQueuedBehindHeld(wallet)
+			await expectWindowHeldBehindProof(wallet, second, { windowMs: 3_000, feeRow: false })
 		} finally {
 			await releaseProofGate(wallet)
 		}
+		await approveExecute(second)
+		await waitForPopupClosed(second, 10_000)
 
 		const results = await waitForPgResults(page, "sendTx", seqTx, 2, 300_000)
 		for (const [i, result] of results.entries()) await assertPgOk(page, result, `tx-sendTx-noFrom:concurrent-${i}`)

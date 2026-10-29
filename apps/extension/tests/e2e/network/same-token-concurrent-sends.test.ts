@@ -65,9 +65,7 @@ import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import {
 	type BurstSend,
 	confirmSend,
-	type EstimateState,
 	expectEstimateQueued,
-	readEstimateState,
 	expectStageHeld,
 	readTransferRows,
 	readTxStatuses,
@@ -495,21 +493,8 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-/** Every reading the fee row passes through until its estimate lands or fails, in order. */
-async function recordEstimateStates(page: Page, timeoutMs: number): Promise<EstimateState[]> {
-	const seen: EstimateState[] = []
-	const deadline = Date.now() + timeoutMs
-	while (Date.now() < deadline) {
-		const state = await readEstimateState(page)
-		if (seen.at(-1) !== state) seen.push(state)
-		if (state === "ready" || state === "failed") return seen
-		await new Promise((r) => setTimeout(r, 100))
-	}
-	throw new Error(`the estimate never landed; it read ${JSON.stringify(seen)}`)
-}
-
 test.skipIf(!hasConfig)(
-	"a Send-page estimate asked while a PrivateFPC dApp send proves reads queued, then estimating once granted, then both succeed",
+	"a Send-page estimate asked while a PrivateFPC dApp send proves reads queued, then lands, and both succeed",
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const config = aztecConfig as AztecTestConfig
@@ -533,24 +518,17 @@ test.skipIf(!hasConfig)(
 			const approval = await approvalP
 			await waitForExecuteContent(approval, 60_000)
 			await holdProofGate(burst.page)
-			let states: Promise<EstimateState[]> | undefined
 			try {
 				await approveExecute(approval, { feeMethod: "private", approvableTimeoutMs: 120_000 })
 				await waitForDappExecuteStagesPresent(burst.page, ["proving"], { timeout: 60_000 })
 				await bringToFront(burst.page)
 				await replaceInputValue(burst.page, '[data-testid="send-amount-input"]', b.amount)
-				states = recordEstimateStates(burst.page, 240_000)
 				// The proof gate releases itself after 20 s.
 				await expectEstimateQueued(burst.page, 3_000)
 			} finally {
 				await releaseProofGate(burst.page)
 			}
-			const seen = (await states) ?? []
-			expect(seen.slice(seen.indexOf("queued")), "B leaves queued for estimating once the queue grants its run").toEqual([
-				"queued",
-				"estimating",
-				"ready",
-			])
+			expect(await waitForEstimate(burst.page, 240_000), "B's estimate lands once the dApp send is mined").toBe("ready")
 			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send ahead of a queued estimate")
 			await confirmSend(burst.page)
 			const row = await waitForTransferStage(burst.page, raw(b.amount), ["succeeded", "failed"], 300_000)

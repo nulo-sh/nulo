@@ -1,23 +1,21 @@
-import { expect, inject } from "vitest"
+import { inject } from "vitest"
 import { openPopup, test } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResults, assertPgOk } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
-import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
-import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
+import { expectWindowHeldBehindProof, holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Concurrent sendTx — two APPROVED sends serialize on the execution mutex, and
- * both confirm (v3 parallel popups, heavy).
+ * Concurrent sendTx — the second of two dApp sends waits behind the first, and both confirm (v3
+ * parallel popups, heavy).
  *
- * Fire two sendTx, approve popup #1 (baton releases → popup #2 opens), approve
- * popup #2. The per-(profileId, chainId) execution mutex runs them one-at-a-time:
- * with T1 held at `proving`, the journal shows T1 `proving` while T2 is `queued`
- * behind it — the deterministic serialization signal. Releasing T1 lets it
- * complete its full prove + submit.
+ * Fire two sendTx and approve popup #1 (the baton releases, popup #2 opens). With T1 held at
+ * `proving`, popup #2's estimate queues behind it: its fee row reads queued and its Confirm stays
+ * off, so T2 cannot be approved, and never reaches the execution mutex, while T1 proves. Releasing
+ * T1 lets it prove and submit; T2's estimate then runs and T2 is approved.
  *
  * The mutex releases at submit, not at inclusion, and the PXE simulates against
  * mined state only, so T2 built at once would spend T1's notes again ("duplicate
@@ -29,7 +27,7 @@ const hasConfig = aztecConfig !== undefined
  * dedicated network-e2e job, not the standard shard matrix.
  */
 test.skipIf(!hasConfig)(
-	"concurrent-sendtx-confirm — two approved sends serialize on the mutex; both confirm",
+	"concurrent-sendtx-confirm — the second send's window waits behind the first's proof; both confirm",
 	{ timeout: 600_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
@@ -72,29 +70,19 @@ test.skipIf(!hasConfig)(
 		const firstPopup = await firstPopupP
 		await waitForExecuteContent(firstPopup)
 		const secondPopupP = waitForPopup(ctx, "execute", { timeout: 60_000 })
-		// Hold the proof gate first so T1 parks at `proving`, making the ordering
-		// snapshot below deterministic (no-op under real proving).
+		// Hold the proof gate first so T1 parks at `proving` (no-op under real proving).
 		await holdProofGate(firstPopup)
 		await approveExecute(firstPopup, { feeMethod: "sponsored" })
 
-		// Approve popup #2 → T2 queues behind T1 on the execution mutex.
 		const secondPopup = await secondPopupP
 		await waitForExecuteContent(secondPopup)
+		const wallet = await openPopup(ctx)
+		await expectWindowHeldBehindProof(wallet, secondPopup, { windowMs: 3_000, feeRow: true })
+
+		// Release T1: it proves and submits; T2's estimate runs, T2 is approved, builds once T1 is mined.
+		await releaseProofGate(wallet)
+		await wallet.close()
 		await approveExecute(secondPopup, { feeMethod: "sponsored" })
-
-		// Deterministic ordering assert, read from the JOURNAL (source of truth):
-		// with T1 held by the proof gate, the journal must hold a `dapp_execute`
-		// record at `proving` (T1) AND one at `queued` (T2 behind it on the mutex)
-		// — the non-timing signal that serialization holds.
-		const orderingPopup = await openPopup(ctx)
-		await waitForDappExecuteStagesPresent(orderingPopup, ["proving", "queued"], { timeout: 30_000 })
-		const orderingStages = (await readDappExecuteRecords(orderingPopup)).map((r) => r.stage)
-		expect(orderingStages).toContain("proving")
-		expect(orderingStages).toContain("queued")
-
-		// Release T1: it proves and submits; T2 builds once T1 is mined, then both confirm.
-		await releaseProofGate(orderingPopup)
-		await orderingPopup.close()
 
 		// The playground's sendTx is NO_WAIT: each answer is a submission, so inclusion is read on the node.
 		const [r1, r2] = await waitForPgResults(page, "sendTx", seqBefore, 2, 480_000)
