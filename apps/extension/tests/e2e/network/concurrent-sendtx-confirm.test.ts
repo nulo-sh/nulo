@@ -12,10 +12,8 @@ const hasConfig = aztecConfig !== undefined
  * Concurrent sendTx — the second of two dApp sends waits behind the first, and both confirm (v3
  * parallel popups, heavy).
  *
- * Fire two sendTx and approve popup #1 (the baton releases, popup #2 opens). With T1 held at
- * `proving`, popup #2's estimate queues behind it: its fee row reads queued and its Confirm stays
- * off, so T2 cannot be approved, and never reaches the execution mutex, while T1 proves. Releasing
- * T1 lets it prove and submit; T2's estimate then runs and T2 is approved.
+ * With T1 held at `proving`, popup #2 must stay unapprovable for as long as the proof gate certainly
+ * holds: its estimate waits for the slot T1 holds.
  *
  * The mutex releases at submit, not at inclusion, and the PXE simulates against
  * mined state only, so T2 built at once would spend T1's notes again ("duplicate

@@ -35,14 +35,20 @@ export async function releaseProofGate(extensionPage: Page): Promise<void> {
 
 /**
  * An execute window opened while a dApp send is held at `proving` cannot be approved: for `windowMs`
- * its Confirm stays off, its fee row reads queued (`feeRow`), and the journal holds that send alone.
- * Every read falls before `PROOF_GATE_HOLD_MS` past the held send's `enteredProveAt`: later, the gate
- * may have released itself, and the reads would prove nothing.
+ * its Confirm stays off and its fee row reads queued (`feeRow`), while the journal holds the first
+ * send at `proving` and the second request at the `queued` it was recorded at on arrival. Every read
+ * falls before `PROOF_GATE_HOLD_MS` past the held send's `enteredProveAt`: later, the gate may have
+ * released itself, and the reads would prove nothing.
  */
 export async function expectWindowHeldBehindProof(wallet: Page, execute: Page, opts: { windowMs: number; feeRow: boolean }): Promise<void> {
-	const dappSends = async () => (await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute")
-	const [held] = await pollUntil(dappSends, (sends) => sends.length === 1 && sends[0]?.stage === "proving", {
-		label: "one dApp send held at proving",
+	const pair = async () => {
+		const sends = (await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute")
+		const held = sends.find((r) => r.stage === "proving")
+		const waiting = sends.find((r) => r.stage === "queued")
+		return { sends, held: sends.length === 2 && held && waiting ? held : undefined }
+	}
+	const { held } = await pollUntil(pair, (read) => read.held !== undefined, {
+		label: "one dApp send held at proving, the other queued",
 		timeoutMs: 60_000,
 		intervalMs: 250,
 	})
@@ -65,11 +71,11 @@ export async function expectWindowHeldBehindProof(wallet: Page, execute: Page, o
 	const observeUntil = Date.now() + opts.windowMs
 	for (;;) {
 		const view = await readWindow()
-		const sends = await dappSends()
+		const read = await pair()
 		const readAt = Date.now()
 		if (readAt > gateHoldsUntil) throw new Error("a read fell after the held send's gate may have released itself")
-		if (!view.confirmOff || (opts.feeRow && !view.queued) || sends.length !== 1 || sends[0]?.id !== held?.id) {
-			throw new Error(`the window must wait behind the held send: ${JSON.stringify({ view, sends })}`)
+		if (!view.confirmOff || (opts.feeRow && !view.queued) || read.held?.id !== held?.id) {
+			throw new Error(`the window must wait behind the held send: ${JSON.stringify({ view, sends: read.sends })}`)
 		}
 		if (readAt >= observeUntil) return
 		await new Promise((resolve) => setTimeout(resolve, 250))
