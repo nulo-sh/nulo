@@ -36,6 +36,7 @@ import {
 	grantCapBundle,
 	openPopup,
 	registerProfile,
+	replaceInputValue,
 	waitForHash,
 } from "../fixtures/extension"
 import { pinnedFeeText, refusePrices, seedFeeJuiceQuote } from "../fixtures/fee-quote"
@@ -64,7 +65,9 @@ import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
 import {
 	type BurstSend,
 	confirmSend,
+	type EstimateState,
 	expectEstimateQueued,
+	readEstimateState,
 	expectStageHeld,
 	readTransferRows,
 	readTxStatuses,
@@ -480,6 +483,76 @@ test.skipIf(!hasConfig)(
 				await releaseProofGate(burst.page)
 			}
 			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send beside a queued transfer")
+			const row = await waitForTransferStage(burst.page, raw(b.amount), ["succeeded", "failed"], 300_000)
+			expect([row.stage, row.error]).toEqual(["succeeded", undefined])
+			await waitForTxsMined(burst.page, [row.txHash as string])
+			await settle(burst, [b])
+			burst.ledger.TST.publicRaw -= 1n
+			await expectLedger(burst, ["TST"])
+		} finally {
+			await playground.close()
+		}
+	},
+)
+
+/** Every reading the fee row passes through until its estimate lands or fails, in order. */
+async function recordEstimateStates(page: Page, timeoutMs: number): Promise<EstimateState[]> {
+	const seen: EstimateState[] = []
+	const deadline = Date.now() + timeoutMs
+	while (Date.now() < deadline) {
+		const state = await readEstimateState(page)
+		if (seen.at(-1) !== state) seen.push(state)
+		if (state === "ready" || state === "failed") return seen
+		await new Promise((r) => setTimeout(r, 100))
+	}
+	throw new Error(`the estimate never landed; it read ${JSON.stringify(seen)}`)
+}
+
+test.skipIf(!hasConfig)(
+	"a Send-page estimate asked while a PrivateFPC dApp send proves reads queued, then estimating once granted, then both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const config = aztecConfig as AztecTestConfig
+		await reopen(burst)
+		const playground = await matrixPlayground(burst)
+		try {
+			// Both pay through the PrivateFPC, as #1336's swap and transfer did: B waits for the slot while
+			// the dApp send proves, then for its block, since the two spend the same fee notes.
+			const b: BurstSend = { token: "TST", from: "public", to: "public", amount: "34", destination: to(), fee: "private" }
+			await waitForEmptyMempool(config.nodeUrl)
+			await startSend(burst.page, { ...b, amount: "35" })
+			expect(await waitForEstimate(burst.page)).toBe("ready")
+
+			await bringToFront(playground)
+			await setPgInput(playground, "tokenAddress", config.tokenAddress)
+			await setPgInput(playground, "recipient", config.minterAddress)
+			await setPgInput(playground, "amount", "1")
+			const seq = await snapshotResultSeq(playground)
+			const approvalP = waitForPopup(burst.ctx, "execute", { timeout: 60_000 })
+			await clickByTestId(playground, "pg-btn-sendTx-default")
+			const approval = await approvalP
+			await waitForExecuteContent(approval, 60_000)
+			await holdProofGate(burst.page)
+			let states: Promise<EstimateState[]> | undefined
+			try {
+				await approveExecute(approval, { feeMethod: "private", approvableTimeoutMs: 120_000 })
+				await waitForDappExecuteStagesPresent(burst.page, ["proving"], { timeout: 60_000 })
+				await bringToFront(burst.page)
+				await replaceInputValue(burst.page, '[data-testid="send-amount-input"]', b.amount)
+				states = recordEstimateStates(burst.page, 240_000)
+				// The proof gate releases itself after 20 s.
+				await expectEstimateQueued(burst.page, 3_000)
+			} finally {
+				await releaseProofGate(burst.page)
+			}
+			const seen = (await states) ?? []
+			expect(seen.slice(seen.indexOf("queued")), "B leaves queued for estimating once the queue grants its run").toEqual([
+				"queued",
+				"estimating",
+				"ready",
+			])
+			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send ahead of a queued estimate")
+			await confirmSend(burst.page)
 			const row = await waitForTransferStage(burst.page, raw(b.amount), ["succeeded", "failed"], 300_000)
 			expect([row.stage, row.error]).toEqual(["succeeded", undefined])
 			await waitForTxsMined(burst.page, [row.txHash as string])
