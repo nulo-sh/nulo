@@ -2,7 +2,8 @@
 import type { MethodsSpec, ServiceSpec } from "@/wallet/base"
 import { ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
-import { ESTIMATE_JOB_TTL_MS, EXECUTION_SERVICE_NAME, type Methods } from "./spec"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { ESTIMATE_JOB_TTL_MS, type EstimateStarted, type Events, EXECUTION_SERVICE_NAME, type Methods } from "./spec"
 
 export * from "./spec"
 
@@ -17,7 +18,9 @@ const ESTIMATE_METHODS: ReadonlySet<keyof Methods> = new Set(["estimateTransferF
 // `implements ServiceSpec` and gives consumers full inference.
 export interface ExecutionServiceClient extends MethodsSpec<Methods> {}
 // biome-ignore lint/suspicious/noUnsafeDeclarationMerging: the merged interface's methods ARE installed — at runtime by definePassthroughsExhaustive below, whose signature proves the name list covers every Methods key, so no advertised method is missing.
-export class ExecutionServiceClient extends ServiceClient<Methods> implements ServiceSpec<Methods> {
+export class ExecutionServiceClient extends ServiceClient<Methods, Events> implements ServiceSpec<Methods, Events> {
+	public readonly onEstimateStarted = new EventHandler<EstimateStarted>()
+
 	public constructor(name?: string) {
 		super(EXECUTION_SERVICE_NAME, documentLogger(), name)
 	}

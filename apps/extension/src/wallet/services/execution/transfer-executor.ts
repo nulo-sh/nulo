@@ -740,11 +740,13 @@ export class TransferExecutor {
 	 * With `sequence`, answers {@link TransferFeeQueued} instead of running while a send sharing its
 	 * keys is in flight or the slot is taken. Otherwise it holds both while it runs: the PXE runs one
 	 * operation at a time, so a proof started between two of its simulations would outlast its deadline.
+	 * `onStarted` runs once both are held, before the run.
 	 */
 	public async estimateFee(
 		req: TransferRequest,
 		signal?: AbortSignal,
 		sequence?: TransferSequence,
+		onStarted?: () => void,
 	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		if (!sequence) return this.runEstimate(req, signal, undefined)
 		const { profileId } = await this.deps.captureExecutionFence()
@@ -757,6 +759,7 @@ export class TransferExecutor {
 		}
 		const release = await slot
 		try {
+			onStarted?.()
 			return await this.runEstimate(req, signal, sequence)
 		} finally {
 			release()

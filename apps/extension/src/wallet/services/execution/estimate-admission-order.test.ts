@@ -38,6 +38,7 @@ function harness(entry: (typeof ENTRIES)[number]) {
 		lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		pxeService: { offscreenSettled: () => undefined },
+		emit: () => {},
 		estimateCancel: registry,
 		dappSendExecutor: { estimateOperationFee: executor, previewOperationAuthwits: executor },
 		logDebug: () => {},

@@ -57,7 +57,7 @@ import {
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { getErrorMessage } from "@nulo/wallet-core/utils"
+import { EventHandler, getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import {
@@ -92,6 +92,8 @@ import {
 	type RegisterTokenOperation,
 	type TransferFeeEstimate,
 	type TransferFeeQueued,
+	type EstimateStarted,
+	type Events,
 } from "./spec"
 import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
@@ -201,7 +203,7 @@ const FEE_SETTINGS_OF = {
 		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
-export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
+export class ExecutionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"executeTransfer",
 		"executeOperations",
@@ -219,6 +221,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"getLastProveOutcome",
 	)
 	public static name = EXECUTION_SERVICE_NAME
+
+	public readonly onEstimateStarted = new EventHandler<EstimateStarted>()
 
 	private pxeService: PxeServiceClient = null!
 	private profileService: ProfileService = null!
@@ -669,7 +673,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			const cap = await this.queuedFeeCapFor(req, profile.id, sequence)
 			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
 		}
-		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
+		return this.withEstimateAdmission(estimateToken, "send", (signal, started) =>
+			this.transferExecutor.estimateFee(req, signal, sequence, started),
+		)
 	}
 
 	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
@@ -692,7 +698,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private async withEstimateAdmission<T extends { estimateId?: string; previewId?: string } | TransferFeeQueued>(
 		estimateToken: string | undefined,
 		flowKey: string,
-		run: (signal?: AbortSignal) => Promise<T>,
+		run: (signal?: AbortSignal, started?: () => void) => Promise<T>,
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
@@ -704,7 +710,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
 			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			const result = await run(admission)
+			const result = await run(admission, () => this.emit("onEstimateStarted", { estimateToken }))
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
@@ -835,7 +841,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		flowKey: string,
 		run: (operation: Operation, signal?: AbortSignal) => Promise<T>,
 	): Promise<T | TransferFeeQueued> {
-		return this.withEstimateAdmission<T | TransferFeeQueued>(estimateToken, flowKey, async (signal) => {
+		return this.withEstimateAdmission<T | TransferFeeQueued>(estimateToken, flowKey, async (signal, started) => {
 			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
 			const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 			const { chainId } = await this.networkService.getNetwork(operation.networkId)
@@ -843,6 +849,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			if (!slot) return { queued: true, tokenSpent: false }
 			const release = await slot
 			try {
+				started?.()
 				return await run(operation, signal)
 			} finally {
 				release()

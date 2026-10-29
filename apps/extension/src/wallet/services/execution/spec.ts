@@ -202,3 +202,11 @@ export type Methods = {
 	 *  both reset on SW restart; the journal is the record. */
 	getLastProveOutcome(): LastProveOutcome
 }
+
+/** The estimate asked with `estimateToken` holds the slot and runs. An admission or a queued answer
+ *  emits nothing, and nothing replays an event a dropped port lost: display only. */
+export type EstimateStarted = { readonly estimateToken: string }
+
+export type Events = {
+	onEstimateStarted: EstimateStarted
+}

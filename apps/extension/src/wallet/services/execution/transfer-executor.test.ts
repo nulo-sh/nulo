@@ -1391,6 +1391,19 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		expect(built).toBeLessThan(release.mock.invocationCallOrder[0])
 	})
 
+	test("an estimate reports its start once it holds the slot, before it builds; a queued one reports nothing", async () => {
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		const sequence = { scope: SCOPE, keys: REQ_KEYS, sponsored: false }
+		const started = vi.fn()
+		;(deps.lane.tryTakeSlot as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined)
+		expect(await executor.estimateFee(makeReq(), undefined, sequence, started)).toEqual({ queued: true, tokenSpent: true })
+		expect(started).not.toHaveBeenCalled()
+		await executor.estimateFee(makeReq(), undefined, sequence, started)
+		expect(started).toHaveBeenCalledTimes(1)
+		const built = (deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect(started.mock.invocationCallOrder[0]).toBeLessThan(built)
+	})
+
 	test("an estimate holds back a send that enters while it runs, and records the epoch it was built at", async () => {
 		const sequencer = sequencerOnPendingMap()
 		let release: () => void = () => {}

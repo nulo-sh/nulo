@@ -1894,6 +1894,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 				networkService: { getNetwork: async () => ({ chainId: 7 }) },
 				lane: { tryTakeSlot: () => Promise.resolve(() => {}) },
+				emit: () => {},
 				accountService: {},
 				transactionService: {},
 				fpcService: {},

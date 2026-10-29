@@ -54,6 +54,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			executeTransfer: mocks.executeTransfer,
 			estimateTransferFee: mocks.estimateTransferFee,
 			cancelEstimate: mocks.cancelEstimate,
+			onEstimateStarted: { add: vi.fn(), remove: vi.fn() },
 		}
 	}),
 }))

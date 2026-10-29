@@ -310,8 +310,9 @@ const handleRequote = (e) => {
 	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
-/** The wallet answered that an earlier send holds this transfer's chain state; set until a real
- *  estimate lands, fails or stops, so nothing the person pays goes out on a fee they have not seen. */
+/** The wallet answered that an earlier send holds this transfer's chain state; set until the
+ *  estimate's run starts, lands, fails or stops, so nothing the person pays goes out on a fee they
+ *  have not seen. */
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
@@ -441,6 +442,7 @@ const {
 					// A spent token's answer carries no cap; the requeue's own answer will.
 					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
 				},
+				start: { events: executionService.onEstimateStarted, estimateToken, onStarted: clearQueued },
 			},
 		)
 	},

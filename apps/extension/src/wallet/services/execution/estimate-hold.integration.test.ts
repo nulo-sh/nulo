@@ -55,6 +55,7 @@ function harness() {
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		pxeService: pxe,
 		estimateCancel: registry,
+		emit: () => {},
 		dappSendExecutor: {
 			estimateOperationFee: async () => {
 				await pxe.simulateTx(net, {} as never, {} as never)

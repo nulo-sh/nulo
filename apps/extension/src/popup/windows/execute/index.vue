@@ -177,12 +177,15 @@ const {
 	dappOf: (p) => p.session.dappMetadata as UIDappMetadata,
 })
 
-/** Per operation, whether its estimate or preview waits behind another send; cleared once neither is
- *  in flight. */
+/** Per operation, whether its estimate or preview waits behind another send; cleared once its run
+ *  starts or neither is in flight. */
 const queuedOps = ref<Record<number, boolean>>({})
-const readQueued = (index: number, signal: AbortSignal) => () => {
-	if (!signal.aborted) queuedOps.value[index] = true
-}
+const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) => ({
+	onQueued: () => {
+		if (!signal.aborted) queuedOps.value[index] = true
+	},
+	start: { events: executionService.onEstimateStarted, estimateToken, onStarted: () => (queuedOps.value[index] = false) },
+})
 /** What each operation's running estimate was asked: a requeue repeats it with a fresh token. */
 const lastFeeParams: Record<number, { index: number; feeSettings: FeeSettings }> = {}
 
@@ -202,7 +205,7 @@ const {
 		return estimateWhenClear(
 			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
 			signal,
-			{ onQueued: readQueued(params.index, signal) },
+			queueWatch(params.index, estimateToken, signal),
 		)
 	},
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
@@ -258,9 +261,11 @@ const {
 	dispose: disposeAuthwitPreviews,
 } = useFeeEstimationMap<number, { index: number }, OperationAuthwitPreview>({
 	estimate: ({ index }, estimateToken, flowKey, signal) =>
-		estimateWhenClear(() => executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey), signal, {
-			onQueued: readQueued(index, signal),
-		}),
+		estimateWhenClear(
+			() => executionService.previewOperationAuthwits(requestId.value!, index, estimateToken, flowKey),
+			signal,
+			queueWatch(index, estimateToken, signal),
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {

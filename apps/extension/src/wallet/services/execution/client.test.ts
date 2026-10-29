@@ -150,3 +150,14 @@ describe("ExecutionServiceClient: an estimate's deadline is the worker's estimat
 		expect(estimate.value).toBeInstanceOf(RpcTimeoutError)
 	})
 })
+
+test("the worker's report that an estimate started reaches the client's onEstimateStarted", async () => {
+	const client = await connected()
+	const seen: unknown[] = []
+	client.onEstimateStarted.add((event) => seen.push(event))
+	registry.deliver(EXECUTION_SERVICE_NAME, {
+		type: MessageType.Event,
+		content: { event: "onEstimateStarted", payload: { estimateToken: "t1" } },
+	})
+	expect(seen).toEqual([{ estimateToken: "t1" }])
+})
