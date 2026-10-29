@@ -15,7 +15,7 @@ Base: `origin/dev` at `af025cfb5`. One Explore pass (sonnet), every claim below 
 
 ## Facts
 
-- Token flags are computed at read time from the stored interface (`E/src/wallet/services/token/utils.ts:12-18`), never stored. New token proceeds only when the parsed interface is complete (`NewTokenPopup.vue:210`, `isTokenComplete`, `utils.ts:21-30`), so a paste-added token always lists with all four flags true.
+- Token flags are computed at read time from the stored interface (`E/src/wallet/services/token/utils.ts:12-18`), never stored. New token proceeds only when the parsed interface is complete (`NewTokenPopup.vue:210`, `isTokenComplete`, `utils.ts:21-30`), so a token New token creates lists with all four flags true; a contract already stored comes back as stored (`token/service.ts:440-446`), and a dApp's `registerToken` stores partial interfaces (plan F4).
 - `cacheStore.preselectedBalanceType` defaults to `"private"` (`E/src/stores/cache.store.ts:43`); its one writer is Send's unmount, back to `"private"` (`send.vue:803`). The reset after a token change is therefore always to Private.
 - `initReceiverType` gates its default on the Balances flags but clamps on the Transfers flags (`send.vue:203-213`); `SendTypesCard.vue:16-24` toggles From on Transfers and To on Balances. Pre-existing, out of scope.
 - No unit or component test pins the sides after a token change. `send.test.ts:370` and `:385` pin the capability watcher on a same-token update; `send.test.ts:1040` pins that a row pick clears the amount.
@@ -27,4 +27,4 @@ Base: `origin/dev` at `af025cfb5`. One Explore pass (sonnet), every claim below 
 ## Collisions
 
 - Lane fee-race-1 also edits `send.vue` (fee card, estimate, review sheet). The watcher calls `closeReview()`; the diff here stays off that line and off everything below the watcher.
-- Closed known limits searched (`send side`, `send picker`): none in this area.
+- Closed known limits searched (`send side`, `send picker`): #1339 and #1340, from the picker lane; neither touches the sides.

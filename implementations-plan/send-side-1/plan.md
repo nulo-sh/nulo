@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at af025cfb5
 trunk: dev
-status: audited; waiting on owner ask 1
+status: approved; implementing arc 1
 issues: "#1341"
 post_implementation_hardening: not scheduled
 ---
@@ -37,10 +37,10 @@ post_implementation_hardening: not scheduled
 
 **Inferences:**
 - I1. Nothing else writes the sides between the pick and the next render. The writers are the two inits, the capability watcher (`send.vue:594-598`, which forces nothing on a token with both kinds) and the toggle. A row pick or `onTokenDeleted` is a separate event, and the guard at `:576` drops an import a row pick beat. One order leaves the mark stale: the import's write and a write back to the old id in one tick, so the watcher never runs and a later pick of the imported id keeps the form. No writer produces that order (both reviewers checked); it is filed as a closed known limit at close-out.
-- I2. A side the old token forced is kept too: on a dApp-registered token without private transfers, From and To sit on Public, and a paste-add of a complete token keeps Public where the base resets to Private. F1's words cover it ("where the person had them"), but both reviewers doubted that the decision settles it, so it is the owner's: [OWNER-ASKS.md](OWNER-ASKS.md) ask 1. The arc builds that reading without waiting (the code below, no extra check), and its PR does not merge before the owner answers. If the owner picks reset, the watcher passes `keep` only for a side the old token let the person choose (From: both transfer kinds; To: both balance kinds, as `SendTypesCard` toggles), and U1 gains that row.
+- I2. A side the old token forced is kept too: on a dApp-registered token without private transfers, From and To sit on Public, and a paste-add of a complete token keeps Public where the base resets to Private. Both reviewers doubted that F1 settled it, so it went to the owner as [OWNER-ASKS.md](OWNER-ASKS.md) ask 1, answered A (D6): the code below needs no extra check.
 - I3. Firefox needs no product difference; the twin run proves it.
 
-**Asks:** one, I2, in [OWNER-ASKS.md](OWNER-ASKS.md); everything else is F1, with no copy and no control changes.
+**Asks:** none open. Ask 1 (I2) is answered (D6); no copy and no control changes.
 
 ## Architecture & Implementation
 
@@ -56,6 +56,7 @@ post_implementation_hardening: not scheduled
 - D3. No test imports a token that lacks the person's side: New token does not create one (F4), the clamp is unchanged code, and the capability watcher would force the same side, so such a test would pass with the clamp deleted.
 - D4. E2E: the existing import step changes, no new scenario. Before the import it puts both sides on Public; after it, it reads both with no flip, then flips From to Private for the "0 PICK" read and its capture.
 - D5. Tests before code: phase 1 writes them and records their red runs on the base, so no base copy of `send.vue` is swapped in later.
+- D6. The owner, on #1341's second Decision comment (2026-10-29): "A, keep Public. When Send's token was forced to Public (a dApp-registered token with public functions only) and the person paste-adds a full token, From keeps Public: the same rule as every import, From and To stay where they were when the new token supports that side." So the forced-side case keeps its side like any other import, and Codex's one open condition is met.
 
 ## Phases and gates
 
@@ -83,11 +84,11 @@ Gate, in order (`e2e:agent` overwrites `dist`, so the smoke build comes after it
 
 ## UI impact
 
-Send's From and To after an import keep the side the person had, when the token supports it; no new copy, no new control. A row pick is unchanged. Sign-off: F1, quoted in the PR body. The forced-side edge (I2) waits on owner ask 1.
+Send's From and To after an import keep the side the person had, when the token supports it; no new copy, no new control. A row pick is unchanged. A side the old token forced is kept too. Sign-off: F1 ("B, keep the side. After a paste-to-add, From and To stay where the person had them when the new token supports that side; a row pick keeps today's reset, since it still clears the amount.") and D6 ("A, keep Public. ... From and To stay where they were when the new token supports that side."), both quoted in full in the PR body.
 
 ## Delivery
 
-One arc, one PR, the close-out as its final commits. Branch `worktree-send-side-1`, base `dev`; merge `origin/dev` before the PR (lane fee-race-1 edits `send.vue`). Title (74 chars): `fix(send): a token imported from the picker keeps the sides the person had`. Body: what and why, F1 quoted, owner ask 1 and its answer, U1's red run and every gate's outcome, N1's time per browser before and after, each suite's CI wall-clock before and after, `Closes #1341`. Opened without labels after the Codex loop; a label only if a path filter skips a suite the change needs. Serial; no lanes.
+One arc, one PR, the close-out as its final commits. Branch `worktree-send-side-1`, base `dev`; merge `origin/dev` before the PR (lane fee-race-1 edits `send.vue`). Title (74 chars): `fix(send): a token imported from the picker keeps the sides the person had`. Body: what and why, F1 and D6 quoted, U1's red run and every gate's outcome, N1's time per browser before and after, each suite's CI wall-clock before and after, `Closes #1341`. Opened without labels after the Codex loop; a label only if a path filter skips a suite the change needs. Serial; no lanes.
 
 ## Post-implementation
 
@@ -104,7 +105,8 @@ Each finding was checked against the tree; the consults are in [lessons/phase-0.
 - **Codex, round 1** (fresh, `gpt-6.1-sol`, high): conditional approve; 5 findings. Accepted: F4 overstated (a stored row comes back as stored); F3's Balances/Transfers split worded exactly; I1 bounded by the stale-mark order, filed as a known limit rather than fixed (no writer produces it); U2's amount check was vacuous without a typed amount; the Security line wrongly said the review sheet names a kept Public From. Confirmed sound: D2's parameter, U1's two mixed rows, D4's reads, the base red run if the import itself succeeds.
 - **Opus, round 1** (`Plan`): conditional approve; findings accepted: the e2e `strip.to` read could not fail on the base, so the step puts To on Public first (D4); tests come first and run red on the base, so no base copy is swapped in (D5); the forced-side case is written down (I2); (a)'s stated reason was wrong and is corrected; U1 runs the import's own re-read, uses the real amount card and checks the estimate's transfer type; `token-list.test.ts` joins the smoke set (it enters Send by `?tokenId=`). Rejected: a U2 that runs after an import to pin the mark's clear, since that clear is unchanged and its one failing order is I1's. Disputed: (a) over the parameter (D2).
 - **Codex, resumed** (the folded plan and D2): conditional approve. D2: keep the parameter (D2's reason). I2: not the panel's to settle, so owner ask 1. New, accepted: U1's estimate check could not pass, since `NEW` had no balance row; U1 now funds both sides and matches the estimate by `NEW`'s id and contract.
-- **Codex, verify:** conditional approve, with conditions: the owner answers ask 1 before the PR merges (open, the owner's); the ask's options balanced and A marked as proposed (applied). U1 confirmed sound; D2 settled; no other material finding.
+- **Codex, verify:** conditional approve, with conditions: the owner answers ask 1 before the PR merges; the ask's options balanced and A marked as proposed (applied). U1 confirmed sound; D2 settled; no other material finding.
+- **Owner, 2026-10-29:** ask 1 answered A (D6), which meets Codex's open condition; the plan counts as approved.
 
 ## Seeds
 

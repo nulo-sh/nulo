@@ -1,8 +1,8 @@
 # send-side-1 owner asks
 
-The owner decided #1341 on 2026-10-28 ("B, keep the side"). One edge of that decision is left to the owner, since both reviewers doubted that the decision's words settle it (plan I2).
+The owner decided #1341 on 2026-10-28 ("B, keep the side"). One edge of that decision went to the owner, since both reviewers doubted that the decision's words settle it (plan I2). Answered on 2026-10-29: A (plan D6).
 
-## 1. After a paste-to-add, does Send keep a side the old token forced?
+## 1. After a paste-to-add, does Send keep a side the old token forced? Answered: A
 
 - **Surface:** Send's From origin and To destination pair, right after a token imported from the picker comes back picked.
 - **The case:** the token on Send has no private transfer. This happens with a token a dApp registered with only public functions. From and To then sit on Public, and the person cannot switch them. The person types an amount, pastes an address in the picker and imports a full token, which has both sides.
