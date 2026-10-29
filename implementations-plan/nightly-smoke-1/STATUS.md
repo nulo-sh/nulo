@@ -7,3 +7,4 @@
 - 2026-10-29 final Codex pass: approve. Auto-continue: no owner ask; arc 1 starts.
 - 2026-10-29 phase 2 gate green at 2bfcc8e5a (lint, typecheck:all, test:all, SRC five files both browsers, ART S1 both browsers, ART token-list skipped).
 - 2026-10-29 codex loop converged (round 2 clean); final-head gates green at 699567c4b.
+- 2026-10-29 merged origin/dev (fa82918a6); full local gates green on the merged head. PR next.
