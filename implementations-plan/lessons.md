@@ -19,13 +19,13 @@
 
 ## Extension runtime
 
-- A popup RPC fails 60 s after it began, the worker's Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it, so a send that lands reads as failed); a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
+- A popup RPC fails 60 s after it began, the worker's Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it, so a send that lands reads as failed); a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s), [more](archive/account-session-life/lessons/phase-4.md), [more](archive/wallet-followups/lessons/phase-4.md)
 - `PopupManager` keeps a popup mounted while it is hidden: gate its setup on `show` or a `v-if`. A profile switch or unlock change elsewhere updates open pages in place: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/passkey-unlock-1/lessons/phase-A4.md)
-- A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included: never name a local after a prop. [Evidence](archive/send-picker-1/lessons/phase-1.md)
+- A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included: never name a local after a prop (Vue 3.5.42, 2026-10). [Evidence](archive/send-picker-1/lessons/phase-1.md)
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` flattens the rest to `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
-- `getAll()` skips undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. Gate a row on its reader's fields, not its writer schema; zod strips unknown keys, so a legacy variant forbids newer ones (zod 4.6.7, 2026-10). [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows), [more](archive/passkey-unlock-1/lessons/phase-A1.md)
+- `getAll()` skips undecodable rows and a sealed root's unopened ones, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. Gate a row on its reader's fields, not its writer schema; zod strips unknown keys, so a legacy variant forbids newer ones (zod 4.6.7, 2026-10). [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows), [more](archive/passkey-unlock-1/lessons/phase-A1.md), [more](archive/passkey-unlock-1/plan.md#decision-ledger)
 - Lifting a display gate (a hidden zero, a skipped row) shows the malformed stored values it hid: parse what newly renders (`utils/token-amount.ts`). [Evidence](archive/send-picker-1/lessons/phase-4.md)
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
@@ -45,6 +45,6 @@
 
 ## Agent tooling
 
-- Agent Bash (zsh 5.9, 2026-10): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
-- `pgrep -f` matches its own `zsh -c` wrapper and any agent prompt naming the pattern: anchor it (`^(bun|node) .*vitest`) and signal your launcher's pgid; a signal-killed Node child's `exitCode` is null: wait on `signalCode`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep)
-- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy)
+- Agent Bash (zsh 5.9, 2026-10): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell), [more](lessons-budget-1/recon.md)
+- `pgrep -f` matches its own `zsh -c` wrapper and any agent prompt naming the pattern: anchor it (`^(bun|node) .*vitest`) and signal your launcher's pgid, never `$$`/`$PPID`; a signal-killed Node child's `exitCode` is null: wait on `signalCode`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md)
+- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/code-followups-1/plan.md#outcome)

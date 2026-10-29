@@ -6,3 +6,4 @@
 - 2026-10-29 · panel: Codex r1 conditional, Opus conditional, Codex r2 conditional (all folded), Codex r3 approve.
 - 2026-10-29 · phase 1 green (four routes, gates pass).
 - 2026-10-29 · phase 2 green (7592 B, 31 entries; gates pass).
+- 2026-10-29 · review round 1: Codex conditional (evidence), Opus conditional; fixes applied; 7940 B.

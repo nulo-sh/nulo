@@ -9,7 +9,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 87d04118e
 trunk: dev
-status: planned
+status: implementing
 issues: "#1347"
 post_implementation_hardening: not scheduled
 ---
@@ -51,8 +51,10 @@ post_implementation_hardening: not scheduled
 
 | Line | Disposition |
 |---|---|
-| L10, L14, L15, L18, L20, L23, L25, L26, L33 | keep verbatim |
-| L1, L4, L31 | keep; add the month to the stamp |
+| L10, L14, L15, L18, L20, L23, L25, L26 | keep verbatim |
+| L33 base copy | keep; restore the green-run clause's source #68 had, `archive/code-followups-1/plan.md#outcome` |
+| L1, L4 | keep; add the month to the stamp |
+| L31 agent Bash | keep; month added; link this plan's recon, which records the pipe-status and word-splitting reproductions (the line's evidence covers `set -e` only) |
 | L3 `vue-tsc` | keep; stamp `(3.3.10, 2026-10)`, reproduced: a bad prop from a JS `<script setup>` passes, the same from `lang="ts"` fails |
 | L2 root `test` | fix: "Root `test` (so `audit:vue`) runs only `apps/extension`'s vitest config, in jsdom, without the packages' node-only tests" (typecheck and lint are repo-wide; some packages' tests ride along, `vitest.config.ts:37-70`) |
 | L5 success control | keep "match a captured identity exactly", sourced from `archive/harden-dedupe/plan.md#success-control`, and merge in L22's `innerText` clause: "(whole `textContent`: `innerText` follows `text-transform`)" |
@@ -61,22 +63,22 @@ post_implementation_hardening: not scheduled
 | L8 merge ref | keep, shortened: "A PR lane builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent until you merge `dev`; a PR that conflicts with `dev` gets no run at all." (`pr-quick.yml` builds `head.sha` too, and the skills that state it are read by e2e and Aztec work only) |
 | L9 `always()` | route to `CI.md` § Adding a new gate: T9 |
 | L11 `gh stack` | route to `implementations-plan/README.md` § Post-implementation standard step 3, its dropped evidence restored: T11 |
-| L12 popup RPC | trim: "A popup RPC fails 60 s after it began, the worker's Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it, so a send that lands reads as failed)" |
+| L12 popup RPC | restore the two sources #607 dropped (`archive/account-session-life/lessons/phase-4.md`, `archive/wallet-followups/lessons/phase-4.md`); trim: "A popup RPC fails 60 s after it began, the worker's Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it, so a send that lands reads as failed)" |
 | L13 `PopupManager` | fix: "`PopupManager` keeps a popup mounted while it is hidden: gate its setup on `show` or a `v-if`" (`SelectTokenPopup` is `v-if`-gated, `PopupManager.vue:97`); second link to `archive/passkey-unlock-1/lessons/phase-A4.md`, the substance |
 | L16 typed errors | fix: "`viaPxe` flattens the rest to `Error`" (it also synthesizes `SessionEndedError`) |
-| L17 hidden rows | "skips"; "zod strips unknown keys, so a legacy variant forbids newer ones (zod 4.6.7, 2026-10)" |
+| L17 hidden rows | link the legacy-variant rule's source, `archive/passkey-unlock-1/plan.md#decision-ledger` (D4); "skips"; "zod strips unknown keys, so a legacy variant forbids newer ones (zod 4.6.7, 2026-10)" |
 | L19 error text | route to `logging-policy`, after the "Pass the value…" bullet: T19 |
 | L21 MAC and class | split: the MAC rule stays; the class rule moves to § Aztec with its restored evidence (`archive/security-fixes-1/lessons/phase-6.md`, `archive/tokens-and-balances/lessons/phase-3.md`) |
 | L22 four facts | drop the `composes` clause (`packages/design/README.md:51-55`, `type-role-ban.test.ts`) and the `innerText` clause (into L5); stamp the storage clause `(153.0.4, 2026-10)`, the pin it was seen on |
 | L24 `Lock` | trim to its general rule; the deleter count is one service's remedy, stated at `incoming-transfer/service.ts:292-295` |
 | L27, L29, L30 | restamp `(6.0.0, 2026-10)` (F7); L29 also links its `safeParse` source, `archive/dapp-ingress-grants/lessons/phase-3.md` |
-| L28 HandshakeRegistry | retire, stated at its code (`execution/transfer-sequence-keys.ts:1-9`, `execution/README.md:16`) and enforced for every send (F7) |
-| L32 `pgrep` | trim "not `$$`/`$PPID`" (restates its evidence's "exclude the launcher's own pid and parent") |
-| P1 new, § Extension runtime | "A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included: never name a local after a prop." ← `archive/send-picker-1/lessons/phase-1.md` |
+| L28 HandshakeRegistry | retire, stated at its code (`execution/transfer-sequence-keys.ts:1-9`, `execution/README.md:16`) and enforced for every popup transfer and dApp send (F7); wallet-UI sends skip the sequencer but never use the pair handshake |
+| L32 `pgrep` | keep; "not `$$`/`$PPID`" becomes "never `$$`/`$PPID`" (the agent's own shell is the wrong target the line exists to name); restore the `signalCode` source, `archive/code-followups-2/lessons/phase-2.md` |
+| P1 new, § Extension runtime | "A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included: never name a local after a prop (Vue 3.5.42, 2026-10)." ← `archive/send-picker-1/lessons/phase-1.md` |
 | P2 new, § Extension runtime | "Lifting a display gate (a hidden zero, a skipped row) shows the malformed stored values it hid: parse what newly renders (`utils/token-amount.ts`)." ← `archive/send-picker-1/lessons/phase-4.md` |
 | C1-C4, C7-C15 | not promoted: already in their home or below the bar (recon § Candidates gives each reason) |
 
-Measured on the draft: 7592 B, 31 entries (from 8191 B, 33). The brief's 7 KiB aim is missed by about 400 B: the panel's accuracy conditions (L8 kept, L5's and L12's clauses, the months) cost about 470 B, and no further line meets D1.
+Measured: 7940 B, 31 entries (from 8191 B, 33), 252 B of head-room. The brief's 7 KiB aim is missed by 772 B: the panel's accuracy conditions (L8 kept, L5's and L12's clauses, the months) cost about 470 B, and the implementation review's evidence conditions (a source for every clause, five lines) about 330 B; no further line meets D1, and the next pass starts from a file whose every clause can be re-checked.
 
 **Routed texts:**
 - T6, the end of the `passkey refuse|no-prf|other|hold|release` row: "The test authenticator approves every prompt silently: set a fault right before the press that prompts. A fault armed after a press cannot test that press: before reporting a step that ran unprompted, check their order in `actions.jsonl` (`implementations-plan/archive/passkey-chaos-1/lessons/phase-C5.md`)."
@@ -100,7 +102,7 @@ Commands run from the worktree root. Every gate: `bun run lint` exit 0; `git add
 
 **1. Routes** ✓ (L6, L9, L11, L19). Write T6, T9, T11 and T19 where the table says; delete each line from `lessons.md` in the same commit. Gate, also: `git grep -n` finds each routed text once in its home and its old line nowhere in `lessons.md`.
 
-**2. The pass and the promotions** ✓. Apply every other row of the table in one commit, then P1 and P2 in a second. Gate, also: `wc -c implementations-plan/lessons.md` ≤ 7600; `grep -c '^- '` is 31; reading the whole diff finds no account name, launch day or advisory finding.
+**2. The pass and the promotions** ✓. Apply every other row of the table in one commit, then P1 and P2 in a second. Gate, also: `wc -c implementations-plan/lessons.md` ≤ 7950; `grep -c '^- '` is 31; reading the whole diff finds no account name, launch day or advisory finding.
 
 **3. Close-out** (the PR's final commits, after `gh pr create`). Merge `origin/dev`; read what changed in `index.md` and `lessons.md` and re-run the phase 2 gate on the merged file. Then the Outcome block, `STATUS.md` deleted, `git mv` into `archive/` in its own commit with the index line moved to `archive/index.md`. Gate: as above, plus `bun run test:ci-gating` exit 0.
 
@@ -135,10 +137,15 @@ Each finding was checked against the tree; the consults are in [lessons/phase-0.
 - **Codex, round 2** (resumed, the folded plan): conditional approve; three local conditions, applied: T6 said a late fault "meets nothing", but a later press can spend it (`helpers/chaos-session/faults.ts:1-7`), so it now says to check the order in `actions.jsonl`; L3 stamped after a probe on vue-tsc 3.3.10; recon's stale T6 home and `viaPxe` wording corrected. It judged the README row the better T6 home and 7592 B defensible (no further line meets D1).
 - **Codex, round 3** (resumed, verify): approve, no new material finding.
 
+## Implementation review verdicts
+
+- **Codex, round 1** (fresh, `gpt-6.1-sol`, high, the diff from `87d04118e`): conditional approve; one finding, accepted: five kept lines held clauses no linked file states (L12's Ready and replay clauses, L17's legacy variant, L31's pipe status and word splitting, L32's `signalCode`, L33's green-run grep). Four of the sources were dropped by earlier tightenings (#607, #240, #68) and are restored; L17 gains its decision-ledger source; L31 links this plan's recon, which records the reproductions. It confirmed every disposition, the nine verbatim lines, all stamps and the four routes.
+- **Opus** (`general-purpose`, the same diff): conditional approve. Accepted: the index hook claimed "7 KiB or less" and the status read "planned"; L32's trim lost the concrete wrong target, restored as "never `$$`/`$PPID`"; P1 is Vue behaviour and takes a stamp; the plan's L28 reason now says "every popup transfer and dApp send" (wallet-UI sends skip the sequencer and never use the pair handshake); recon's source for the 153.0.4 stamp corrected (`archive/e2e-followups-3/plan.md:91`). Rejected: moving the disjoint-decision-ids clause out of README step 3, since CLAUDE.md § Implementation plans has every planner read that README before writing a plan, so the rule reaches it before arcs take ids. Noted for the orchestrator, outside this lane: whether a wallet-UI send paid by a fee contract can run unsequenced beside a popup transfer that holds that contract's notes (plausible, unverified).
+
 ## Seeds
 
 ```
-/goal Phases 1-3 of implementations-plan/lessons-budget-1/plan.md are marked ✓, each backed by its gate reported passing in the transcript; LESSONS_FILE=implementations-plan/lessons-budget-1/lessons/phase-N.md printed per phase; `wc -c implementations-plan/lessons.md` ≤ 7600; the Codex loop over the whole diff converged (a resumed pass with no new material finding quoted); one PR into dev exists, opened after the loop, carrying the close-out that archived the plan (`git show --stat` of the move); `bun run check:plans` and `bun run lint` exit 0.
+/goal Phases 1-3 of implementations-plan/lessons-budget-1/plan.md are marked ✓, each backed by its gate reported passing in the transcript; LESSONS_FILE=implementations-plan/lessons-budget-1/lessons/phase-N.md printed per phase; `wc -c implementations-plan/lessons.md` ≤ 7950; the Codex loop over the whole diff converged (a resumed pass with no new material finding quoted); one PR into dev exists, opened after the loop, carrying the close-out that archived the plan (`git show --stat` of the move); `bun run check:plans` and `bun run lint` exit 0.
 ```
 
 ```

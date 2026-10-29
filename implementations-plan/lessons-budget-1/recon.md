@@ -43,7 +43,7 @@ Installed now: Bun 1.4.2, Vue 3.5.42, VTU 2.4.11, vue-tsc 3.3.10, zod 4.6.7, zsh
 - L19 error text: holds; `logging-policy` says a caught error logs as a capped `{ name, message }`, but not that a message can quote its input.
 - L20 classify by selector: holds (`wallet-bridge/src/fee-payer.ts:41-49`, `field-address.ts:21-26`).
 - L21 MAC and class: two unrelated rules in one line. The class clause's evidence (`archive/security-fixes-1/lessons/phase-6.md`, `archive/tokens-and-balances/lessons/phase-3.md`) was dropped by an earlier tightening (#368). It still holds: `aztec-runtime/src/pxe/effective-class.ts:1-15` and the installed 6.0.0 PXE's `contract_class_service.js:32` read the node's current class for a call.
-- L22: four facts. The `composes` clause is covered by `packages/design/README.md:51-55` (a role composes in the element's own single-class module rule) and enforced by `type-role-ban.test.ts`. The storage clause was seen on the 153.0.4 pin (`archive/onboarding-3/lessons/phase-4.md:7`).
+- L22: four facts. The `composes` clause is covered by `packages/design/README.md:51-55` (a role composes in the element's own single-class module rule) and enforced by `type-role-ban.test.ts`. The storage clause was seen in `archive/onboarding-3/lessons/phase-4.md:7`, when the e2e Firefox pin was 153.0.4 (`archive/e2e-followups-3/plan.md:91`).
 - L23 `ActiveSession`: holds; ARCHITECTURE.md:185 states the first clause only.
 - L24 `Lock`: holds (`wallet-core/src/utils/lock.ts:86-90`); its deleter-count clause is the one service's remedy, stated at `incoming-transfer/service.ts:292-295`.
 - L25 C1 `dispose()`: holds; CLAUDE.md § Composables does not say terminal.
