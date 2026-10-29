@@ -98,9 +98,9 @@ Measured on the draft: 7592 B, 31 entries (from 8191 B, 33). The brief's 7 KiB a
 
 Commands run from the worktree root. Every gate: `bun run lint` exit 0; `git add` the touched files, then `bun run check:plans` exit 0 with 0 findings; `bun test scripts/ci-cd/plans/` all pass; `bash scripts/check-no-local-paths.sh` prints `ok`.
 
-**1. Routes** (L6, L9, L11, L19). Write T6, T9, T11 and T19 where the table says; delete each line from `lessons.md` in the same commit. Gate, also: `git grep -n` finds each routed text once in its home and its old line nowhere in `lessons.md`.
+**1. Routes** ✓ (L6, L9, L11, L19). Write T6, T9, T11 and T19 where the table says; delete each line from `lessons.md` in the same commit. Gate, also: `git grep -n` finds each routed text once in its home and its old line nowhere in `lessons.md`.
 
-**2. The pass and the promotions.** Apply every other row of the table in one commit, then P1 and P2 in a second. Gate, also: `wc -c implementations-plan/lessons.md` ≤ 7600; `grep -c '^- '` is 31; reading the whole diff finds no account name, launch day or advisory finding.
+**2. The pass and the promotions** ✓. Apply every other row of the table in one commit, then P1 and P2 in a second. Gate, also: `wc -c implementations-plan/lessons.md` ≤ 7600; `grep -c '^- '` is 31; reading the whole diff finds no account name, launch day or advisory finding.
 
 **3. Close-out** (the PR's final commits, after `gh pr create`). Merge `origin/dev`; read what changed in `index.md` and `lessons.md` and re-run the phase 2 gate on the merged file. Then the Outcome block, `STATUS.md` deleted, `git mv` into `archive/` in its own commit with the index line moved to `archive/index.md`. Gate: as above, plus `bun run test:ci-gating` exit 0.
 
