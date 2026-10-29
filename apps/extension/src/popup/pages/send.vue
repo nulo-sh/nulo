@@ -564,8 +564,8 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
-/** An imported token's id: the token watch's next run keeps the form for it, the amount and each
- *  side the token supports. */
+/** An imported token's id: the token watch's next run keeps the amount and each side the token
+ *  supports. */
 let keepFormFor
 async function pickAddedToken(token) {
 	const epoch = appStore.scopeEpoch
@@ -573,7 +573,7 @@ async function pickAddedToken(token) {
 	const listed = () => tokens.value.some((t) => t.id === token.id)
 	if (!listed()) await reloadTokens().catch(onReadFailed)
 	// Only a token the list holds can be active: any other leaves the card with no token. A token
-	// picked while the list was read is the later choice, and keeps its own amount.
+	// picked while the list was read is the later choice, and keeps its own form.
 	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
 	keepFormFor = token.id
 	cacheStore.activeTokenIdx = token.id
