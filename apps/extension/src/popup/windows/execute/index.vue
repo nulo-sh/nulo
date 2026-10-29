@@ -21,7 +21,7 @@ import { createScopeFollow, selectionWriter } from "./scope-follow"
 import { managers, requireNetwork } from "@/utils/core"
 import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
-import { type FeePayerPick, personPaysAppPayment, waitsForFeeFigure } from "./fee-figure"
+import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
 import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
 import { grantRefusalRow, readableGrants } from "./call-surface"
@@ -213,11 +213,6 @@ const holdRefusal = (error: unknown): boolean => {
 /** A send whose fee the app pays through its own payload. */
 const isAppPaid = (op: UIOperation | undefined): boolean => carriesFeeSettings(op) && isEmbeddedFeePayment(op)
 
-/** The figure an approval carries is on screen before Confirm; a failed estimate keeps Confirm off. */
-const awaitsFeeFigure = computed(() =>
-	operations.value.some((op, i) => waitsForFeeFigure(op as unknown as UIOperation, feePayers.value[i]) && !feeEstimates.value[i]),
-)
-
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
  *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
 const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
@@ -254,6 +249,15 @@ const {
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
 })
+
+const awaitsEstimates = computed(() =>
+	operations.value.some((op, i) =>
+		holdsConfirm(op as unknown as UIOperation, feePayers.value[i], {
+			landed: !!feeEstimates.value[i],
+			inFlight: estimatingOps.value[i] === true || previewingOps.value[i] === true,
+		}),
+	),
+)
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -456,7 +460,7 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsFeeFigure.value || tokenFlagHold.value) return
+	if (payerShort.value || awaitsEstimates.value || tokenFlagHold.value) return
 	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
@@ -707,7 +711,7 @@ onUnmounted(() => {
 				operations.length === 0 ||
 				needsFeeSelection ||
 				payerShort ||
-				awaitsFeeFigure ||
+				awaitsEstimates ||
 				tokenFlagHold ||
 				grantsPending ||
 				grantRefusal !== undefined ||

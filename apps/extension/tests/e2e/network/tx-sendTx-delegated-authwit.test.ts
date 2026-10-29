@@ -1,7 +1,8 @@
 import { expect, inject } from "vitest"
 import { trimAddress } from "@/utils/string"
 import { deployDelegatedPullRig, type AztecTestConfig } from "../fixtures/aztec"
-import { clickByTestId, grantCapBundle, openPopup, test, waitForHash } from "../fixtures/extension"
+import type { Page } from "puppeteer"
+import { clickByTestId, type ExtensionContext, grantCapBundle, openPopup, test, waitForHash } from "../fixtures/extension"
 import { importToken } from "../fixtures/helpers"
 import { waitForDappExecuteWorked } from "../fixtures/journal"
 import { assertPgOk, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -26,46 +27,55 @@ const DONOR_MINT = 10n ** 19n
 /** 5 PULL in base units, half of `DONOR_MINT`. */
 const AMOUNT = "5000000000000000000"
 
+type Ctx = ExtensionContext & { playgroundPage: Page }
+
+/** Deploys the rig, imports its token and asks the playground to donate; returns once the execute
+ *  window shows its operation. */
+async function openDonation(ctx: Ctx) {
+	const page = ctx.playgroundPage
+
+	const [accountAddress] = await grantCapBundle(ctx, page, "transaction-contracts", async (ids) => [ids[0]!])
+	const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, accountAddress!, DONOR_MINT)
+
+	// The window reads a call as a transfer only on a token the wallet holds, from the list it
+	// loads when it opens, so the import lands before the send.
+	const home = await openPopup(ctx)
+	await waitForHash(home, "#/popup/general")
+	await importToken(home, pullTokenAddress)
+	await home.close()
+
+	const { createAztecNodeClient } = await import("@aztec-labs/aztec.js/node")
+	const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
+	const node = createAztecNodeClient(aztecConfig!.nodeUrl)
+	const tokenInstance = await node.getContract(AztecAddress.fromStringUnsafe(pullTokenAddress))
+	const consumerInstance = await node.getContract(AztecAddress.fromStringUnsafe(consumerAddress))
+	if (!tokenInstance || !consumerInstance) throw new Error("Rig instances not found at node")
+	await setPgInput(page, "consumerAddress", consumerAddress)
+	await setPgInput(page, "amount", AMOUNT)
+	await setPgTextarea(page, "delegatedTokenInstance", serializeInstance(tokenInstance))
+	await setPgTextarea(page, "delegatedConsumerInstance", serializeInstance(consumerInstance))
+
+	const seqTx = await snapshotResultSeq(page)
+	const execPopupP = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(page, "pg-btn-sendTx-delegated")
+	let execPopup: Awaited<typeof execPopupP>
+	try {
+		execPopup = await execPopupP
+	} catch (e) {
+		// The dApp-side `safe()` wrapper swallows pre-sendTx failures into the
+		// playground's error banner — surface it instead of a blind timeout.
+		const dappError = await page.evaluate(() => document.querySelector('[data-testid="pg-error-text"]')?.textContent ?? "")
+		throw new Error(`execute popup never opened; playground lastError: "${dappError}" (${(e as Error).message})`)
+	}
+	await waitForExecuteContent(execPopup)
+	return { page, execPopup, seqTx, consumerAddress }
+}
+
 test.skipIf(!hasConfig)(
 	"tx-sendTx-delegated — folded discovery finds the pull authwit, reads it as the donor's transfer, and the send is submitted",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
-		const page = ctx.playgroundPage
-
-		const [accountAddress] = await grantCapBundle(ctx, page, "transaction-contracts", async (ids) => [ids[0]!])
-		const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, accountAddress!, DONOR_MINT)
-
-		// The window reads a call as a transfer only on a token the wallet holds, from the list it
-		// loads when it opens, so the import lands before the send.
-		const home = await openPopup(ctx)
-		await waitForHash(home, "#/popup/general")
-		await importToken(home, pullTokenAddress)
-		await home.close()
-
-		const { createAztecNodeClient } = await import("@aztec-labs/aztec.js/node")
-		const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
-		const node = createAztecNodeClient(aztecConfig!.nodeUrl)
-		const tokenInstance = await node.getContract(AztecAddress.fromStringUnsafe(pullTokenAddress))
-		const consumerInstance = await node.getContract(AztecAddress.fromStringUnsafe(consumerAddress))
-		if (!tokenInstance || !consumerInstance) throw new Error("Rig instances not found at node")
-		await setPgInput(page, "consumerAddress", consumerAddress)
-		await setPgInput(page, "amount", AMOUNT)
-		await setPgTextarea(page, "delegatedTokenInstance", serializeInstance(tokenInstance))
-		await setPgTextarea(page, "delegatedConsumerInstance", serializeInstance(consumerInstance))
-
-		const seqTx = await snapshotResultSeq(page)
-		const execPopupP = waitForPopup(ctx, "execute", { timeout: 60_000 })
-		await clickByTestId(page, "pg-btn-sendTx-delegated")
-		let execPopup: Awaited<typeof execPopupP>
-		try {
-			execPopup = await execPopupP
-		} catch (e) {
-			// The dApp-side `safe()` wrapper swallows pre-sendTx failures into the
-			// playground's error banner — surface it instead of a blind timeout.
-			const dappError = await page.evaluate(() => document.querySelector('[data-testid="pg-error-text"]')?.textContent ?? "")
-			throw new Error(`execute popup never opened; playground lastError: "${dappError}" (${(e as Error).message})`)
-		}
-		await waitForExecuteContent(execPopup)
+		const { page, execPopup, seqTx, consumerAddress } = await openDonation(ctx)
 
 		const ops = await execPopup.evaluate(() =>
 			[...document.querySelectorAll<HTMLElement>('[data-testid="execute-op-item"]')].map((el) => el.getAttribute("data-op-kind")),
@@ -115,6 +125,23 @@ test.skipIf(!hasConfig)(
 		// it the token's authwit check fails in private execution, before anything is submitted.
 		const result = await waitForPgResult(page, "sendTx", seqTx, 300_000)
 		await assertPgOk(page, result, "tx-sendTx-delegated-authwit:result")
+		expect(typeof (result.resultJson as { txHash?: string } | undefined)?.txHash).toBe("string")
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"tx-sendTx-delegated — a sponsored Confirm pressed at its first offer is submitted with the discovered authwit",
+	{ timeout: 420_000 },
+	async ({ dappConnectedExtensionPerTest: ctx }) => {
+		const { page, execPopup, seqTx } = await openDonation(ctx)
+		// Pressed as soon as the button allows, without waiting for the discovered rows: the press
+		// must still carry the estimate whose authorization confirm holds the send to.
+		await approveExecute(execPopup, { feeMethod: "sponsored" })
+
+		const walletPopup = await openPopup(ctx)
+		await waitForDappExecuteWorked(walletPopup)
+		const result = await waitForPgResult(page, "sendTx", seqTx, 300_000)
+		await assertPgOk(page, result, "tx-sendTx-delegated-authwit:first-offer")
 		expect(typeof (result.resultJson as { txHash?: string } | undefined)?.txHash).toBe("string")
 	},
 )

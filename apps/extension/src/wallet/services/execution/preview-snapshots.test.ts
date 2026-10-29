@@ -6,7 +6,7 @@ import {
 	PreviewSnapshots,
 	assertWithinPreview,
 } from "./preview-snapshots"
-import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
+import { INTERACTION_TIMEOUT_MS } from "@/wallet/services/dapp-interaction/spec"
 
 const A = { interactionId: "i-a", index: 0, fingerprint: "fp" }
 
@@ -45,9 +45,43 @@ describe("PreviewSnapshots", () => {
 		s.evict("p1")
 		expect(s.take("p1", A)).toEqual({ kind: "missing" })
 		s.stash("p2", { ...A, discoveredHashes: [] })
-		vi.advanceTimersByTime(ESTIMATE_REUSE_TTL_MS + 5)
+		vi.advanceTimersByTime(INTERACTION_TIMEOUT_MS + 5)
 		expect(s.take("p2", A)).toEqual({ kind: "missing" })
 		expect(s.take(undefined, A)).toEqual({ kind: "missing" })
+	})
+
+	test("an unclaimed snapshot lives as long as its window can approve", () => {
+		const s = new PreviewSnapshots()
+		s.stash("p1", { ...A, discoveredHashes: ["h1"] })
+		vi.advanceTimersByTime(9 * 60_000)
+		expect(s.take("p1", A).kind).toBe("found")
+	})
+
+	test("a claimed snapshot outlives the unclaimed TTL, no evict reaches it, and its release drops it", () => {
+		const s = new PreviewSnapshots()
+		s.stash("p1", { ...A, discoveredHashes: ["h1"] })
+		const release = s.claim(["p1"])
+		s.evict("p1")
+		vi.advanceTimersByTime(INTERACTION_TIMEOUT_MS + 5)
+		expect(s.take("p1", A)).toEqual({ kind: "found", snapshot: expect.objectContaining({ discoveredHashes: ["h1"] }) })
+
+		s.stash("p2", { ...A, discoveredHashes: [] })
+		s.claim(["p2"])()
+		expect(s.take("p2", A)).toEqual({ kind: "missing" })
+		release()
+	})
+
+	test("a release drops only what its own claim moved, and a second release is a no-op", () => {
+		const s = new PreviewSnapshots()
+		s.stash("p1", { ...A, discoveredHashes: [] })
+		s.stash("p2", { ...A, index: 1, discoveredHashes: [] })
+		const first = s.claim(["p1"])
+		const second = s.claim(["p1", "p2", undefined])
+		second()
+		second()
+		expect(s.take("p1", A).kind).toBe("found")
+		expect(s.take("p2", { ...A, index: 1 })).toEqual({ kind: "missing" })
+		first()
 	})
 })
 
