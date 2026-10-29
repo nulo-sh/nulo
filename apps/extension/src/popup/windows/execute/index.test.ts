@@ -30,6 +30,7 @@ import {
 	windowsRemoveMock,
 } from "../../../../tests/helpers/approval-window-harness"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 
 const approveInteractionMock = vi.fn(async () => undefined)
 const executionServiceConnectMock = vi.fn(() => callLog.push("execution.connect"))
@@ -1061,6 +1062,17 @@ describe("execute window — an operation the app pays for", () => {
 		api.estimating.value = { 0: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test("two presses of Confirm in one task approve once", async () => {
+		const { fees, confirm } = await opened()
+		fees.api.results.value = verdict(false)
+		await flushPromises()
+		approveInteractionMock.mockImplementationOnce(() => new Promise<undefined>(() => {}))
+		expect(sendEvent(confirm().element, "click")).toBeDefined()
+		expect(sendEvent(confirm().element, "click")).toBeDefined()
+		await flushPromises()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 
 	test("a short read the transaction could still fund leaves Confirm as today", async () => {
