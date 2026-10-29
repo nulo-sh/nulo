@@ -184,9 +184,9 @@ const tokenBalanceByType = computed(() => {
 
 const selectedSendType = ref("private")
 const selectedReceiverType = ref("private")
-const initSendType = () => {
+const initSendType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
 		selectedSendType.value = cacheStore.preselectedBalanceType
 	}
 
@@ -198,9 +198,9 @@ const initSendType = () => {
 		selectedSendType.value = "private"
 	}
 }
-const initReceiverType = () => {
+const initReceiverType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
+	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
 		selectedReceiverType.value = cacheStore.preselectedBalanceType
 	}
 
@@ -564,8 +564,9 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
-/** An imported token's id: the token watch's next run keeps the amount for it. */
-let keepAmountFor
+/** An imported token's id: the token watch's next run keeps the form for it, the amount and each
+ *  side the token supports. */
+let keepFormFor
 async function pickAddedToken(token) {
 	const epoch = appStore.scopeEpoch
 	const current = cacheStore.activeTokenIdx
@@ -574,7 +575,7 @@ async function pickAddedToken(token) {
 	// Only a token the list holds can be active: any other leaves the card with no token. A token
 	// picked while the list was read is the later choice, and keeps its own amount.
 	if (cancelled || appStore.scopeEpoch !== epoch || cacheStore.activeTokenIdx !== current || !listed() || current === token.id) return
-	keepAmountFor = token.id
+	keepFormFor = token.id
 	cacheStore.activeTokenIdx = token.id
 }
 
@@ -582,11 +583,11 @@ watch(
 	() => cacheStore.activeTokenIdx,
 	(id) => {
 		closeReview()
-		initSendType()
-		initReceiverType()
-
-		if (id !== keepAmountFor) amountTerm.value = null
-		keepAmountFor = undefined
+		const keep = id === keepFormFor
+		keepFormFor = undefined
+		initSendType(keep)
+		initReceiverType(keep)
+		if (!keep) amountTerm.value = null
 	},
 )
 
