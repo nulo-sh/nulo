@@ -118,3 +118,15 @@ A fresh Codex session over `git diff b036edbff...HEAD` found 1 medium and 1 low.
 - **Low, filed as #1360, not fixed here.** On a fee-method switch, the window keeps the superseded attempt's queued flag. Behind another estimate it then reads "Queued behind your previous send" until the replacement's run starts, which D18 rules out. The fix changes what the window shows, and this arc changes nothing a person sees.
 
 Round 2, same session: `clean`.
+
+## Final gates, 2026-10-29, on `2a23624ea`
+
+- The composition file, three runs at retry 0: 24 green plus the skipped long mode. Its own duration in vitest's JSON report was 13.70 s, 13.62 s and 14.13 s. `fee-race-model.test.ts` was 15 green each time.
+- `bun run test:all` three times: green at 186 s, 202 s and 201 s, with the same inventory each run (extension 16412 passed, 1 expected fail, 7 skipped, 7 todo).
+- `bun run lint`, `bun run typecheck:all`, `bun run check:plans`, `bun run lint:actions` and `bun run test:ci-gating` all green.
+- Network e2e at retry 0, proverless, on four files: `tx-sendTx-delegated-authwit`, `same-token-concurrent-sends`, `fee-methods` and `tx-sendTx-sponsoredFpc`.
+  - Chrome: 28 green, 1070 s.
+  - Firefox: 28 green, 1331 s.
+- Smoke at retry 0 on the armed build, the seven files that drive Send's press or the window: `send-keyboard`, `send-fee-privacy`, `rows`, `home-links`, `legal-acceptance`, `token-list` and `type-roles`.
+  - Chrome: 48 green and 1 skipped, 387 s.
+  - Firefox: 49 green, 629 s.
