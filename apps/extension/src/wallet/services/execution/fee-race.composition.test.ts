@@ -111,14 +111,14 @@ const HAND_LISTS: Record<string, ListedStep[]> = {
 		FAIL,
 		press("op3"),
 	],
-	"a window pressed behind a send waits past the reuse bound; its claimed snapshot is still there": [
+	"a window pressed behind a send waits past its own lifetime; its claimed snapshot is still there": [
 		openWindow("fee_juice"),
 		LAND,
 		openSend("fee_juice"),
 		LAND,
 		press("op2"),
 		press("op1"),
-		PAST_REUSE,
+		PAST_WINDOW,
 		PROOF,
 		PROOF,
 		MINE,
@@ -286,6 +286,18 @@ describe("each oracle can fail — break fixtures", () => {
 			redOn(
 				[openWindow("fee_juice"), LAND, openSend("fee_juice"), LAND, press("op2"), press("op1"), PAST_REUSE, PROOF, PROOF],
 				{ snapshotSweepAt120s: true },
+				"O1",
+				/op1's snapshot was missing at its turn/,
+			),
+		RUN_MS,
+	)
+
+	test(
+		"O1: an approval that claims nothing leaves a window waiting past its lifetime without its snapshot",
+		() =>
+			redOn(
+				[openWindow("fee_juice"), LAND, openSend("fee_juice"), LAND, press("op2"), press("op1"), PAST_WINDOW, PROOF, PROOF],
+				{ claimSkipped: true },
 				"O1",
 				/op1's snapshot was missing at its turn/,
 			),

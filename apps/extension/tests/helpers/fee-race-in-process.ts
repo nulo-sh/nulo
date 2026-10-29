@@ -80,6 +80,8 @@ export interface Faults {
 	stripDropsRow?: boolean
 	/** The worker drops the person's cancel of their own send. */
 	cancelIgnored?: boolean
+	/** An accepted approval claims none of its snapshots. */
+	claimSkipped?: boolean
 }
 
 /** A press as the oracles and the coverage read it. */
@@ -368,6 +370,7 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 	;(raw.sendSequencer.deps as { sleep: unknown }).sleep = fastSleep
 	;(raw.chainTipGate.deps as { sleep: unknown }).sleep = fastSleep
 	if (faults.cancelIgnored) (service as unknown as { cancelJob: () => Promise<void> }).cancelJob = async () => {}
+	if (faults.claimSkipped) (service as unknown as { claimPreviews: () => () => void }).claimPreviews = () => () => {}
 
 	// An estimate's run is the worker's own code from its admission to its stash; the one call in it
 	// that simulates answers canned data: the fee strategy's build, the transfer's operation (its
