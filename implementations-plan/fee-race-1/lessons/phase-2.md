@@ -58,3 +58,9 @@ Codex (`gpt-6.1-sol`, high, read-only) on S, a start event keyed by the estimate
 ## Review round 3, 2026-10-29
 
 - Codex (same session): `clean`. The fixes verified; KL6 accepted as the lifetime's trade-off. The loop converged at round 3.
+
+## Final gates, 2026-10-29, at `f652b2515` (dev merged after #1346)
+
+- `bun run lint`, `bun run check:plans`, `bun run typecheck:all` green; `bun run test:all` three times, 209 s, 197 s, 183 s, identical inventory.
+- Network e2e, retry 0, proverless, 19 files: the arc's files plus every file that opens a dApp window beside a send, and `send-picker` (#1346's): `same-token-concurrent-sends`, `concurrent-sendtx` ×3, `tx-sendTx-noFrom`, `cancel-mid-prove`, `lock-cancels-dapp-send`, `inflight-call-background-death`, `authwit-consume-smoke`, `authwit-lifecycle`, `authwit-variants`, `execute-scope-account`, `multi-account-from`, `register-token`, `tx-sendTx-delegated-authwit`, `tx-sendTx-sponsoredFpc`, `fee-methods`, `send-chaos` (skipped without `NULO_E2E_CHAOS=1`), `send-picker`. Chrome: 18 files, 52 tests green, 1738 s. Firefox: 18 files, 52 tests green, 2012 s.
+- Scenario times (Chrome / Firefox): the Send-page case 27.0 s / 33.8 s (estimate 90 s; the earlier 135.7 s / 152.5 s counted the file's burst fixture); `concurrent-sendtx-confirm` 34.0 s / 40.5 s; `tx-sendTx-noFrom`'s concurrent case 23.8 s / 31.5 s.
