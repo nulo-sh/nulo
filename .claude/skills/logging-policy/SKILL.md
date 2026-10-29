@@ -28,6 +28,10 @@ to log something sensitive.
   (aliasing and indirection defeat it), stated in its own header. Its denied names are imported
   FROM `REDACTED_KEYS`/`URL_KEYS`, so the two lists cannot drift; an arity read
   (`authWitnesses.length`) is deliberately allowed, being the idiom this policy asks for.
+- **An error's message is a finished string.** `trim` keeps up to 200 characters of it
+  (`MAX_ERROR_MESSAGE_CHARS`), and a message can quote its input (`JSON.parse`'s does): where that
+  input can hold anything this policy never logs, log a fixed category, never the error
+  (`implementations-plan/archive/backup-log-hygiene/plan.md#error-text`).
 - **Log the identifier, not the payload — chosen per site.** There is no single right identifier:
   a `txHash` links private activity, an unsalted origin hash is dictionary-reversible, a bare row
   id is useless without the database. Prefer note type + content arity, function name + return
