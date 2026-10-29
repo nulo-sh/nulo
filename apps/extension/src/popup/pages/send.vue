@@ -39,6 +39,7 @@ import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
+import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
@@ -320,25 +321,23 @@ const clearQueued = () => {
 	feeQueued.value = false
 	queuedCap.value = null
 }
-/** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
-const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
-/** Queued with Nulo's sponsor paying: the person pays nothing, so there is no cap to hold it to. A
- *  sponsor added by hand can charge the account, so it never queues. */
-const queuedSponsored = computed(() => feeQueued.value && feePayerOf(payer.value) === "sponsor")
-const queueMode = computed(() => Boolean(queueCap.value) || queuedSponsored.value)
+const feeState = computed(() => ({
+	queued: feeQueued.value,
+	queuedCap: queuedCap.value,
+	payer: feePayerOf(payer.value),
+	estimate: feeEstimate.value,
+}))
+const queueCap = computed(() => queueCapOf(feeState.value))
+const queuedSponsored = computed(() => queuedSponsoredOf(feeState.value))
+const queueMode = computed(() => queueModeOf(feeState.value))
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value && !queueMode.value) return false
+	if (!feeAllowsSend(feeState.value)) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
 	if (!feeSettings.value) return false
-	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too. A
-	// queued send's figure is the cap the card shows, and nothing goes out above it; Nulo's sponsor
-	// charges the person nothing.
-	if (!queueMode.value && !feeEstimate.value) return false
-	if (feeEstimate.value?.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
 })
@@ -512,10 +511,7 @@ function snapshotTransfer() {
 	// Only when a consumable id exists: handing off a still-in-flight
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
-	const feeCap = queueCap.value?.cap
-	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
-	// A send the person pays is held to the figure the page showed: the queued cap, or the estimate.
-	const shownFee = feeCap || feePayerOf(payer.value) !== "self" ? undefined : feeEstimate.value?.maxFee
+	const { feeCap, precomputedEstimateId, shownFee } = sendFeeHandoff(feeState.value)
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
