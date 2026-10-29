@@ -9,3 +9,7 @@
 - Codex (fresh, `gpt-6.1-sol`, high): conditional approve, one finding (clause-level evidence missing on five kept lines). Tracing each clause's commit (`git log -S`) showed four sources dropped by earlier tightenings (#607, #240, #68) and one clause that never had a source (L31's pipe status, from the starting commit); all five now link a source. Cost: about 330 B.
 - Opus (`general-purpose`): conditional approve, six findings; five accepted (index hook and status, L32's wrong-target clause, P1's stamp, L28's reason in the plan, recon's Firefox-version source), one rejected (the decision-ids clause stays in README step 3: planners read that README before writing a plan).
 - Result: 7940 B, 31 entries, 252 B of head-room.
+
+## Review loop, round 2 (2026-10-29)
+
+- Codex (resumed): approve, no new material finding. The loop converged in two rounds.
