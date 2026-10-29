@@ -156,6 +156,7 @@ import { usePopupStore } from "@/stores/popup.store"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import Send from "./send.vue"
 
 const STUBS = {
@@ -934,6 +935,18 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		await estimateLands()
 		expect(sendDisabled(w)).toBe(false)
 		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("two presses of Send in one task send once", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"])
+		await fillForm(w)
+		await estimateLands()
+		expect(sendDisabled(w)).toBe(false)
+		expect(sendEvent(submit(w).element, "click")).toBeDefined()
+		expect(sendEvent(submit(w).element, "click")).toBeDefined()
+		await flushPromises()
 		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
 		w.unmount()
 	})

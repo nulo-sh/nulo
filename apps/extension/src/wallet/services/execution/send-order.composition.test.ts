@@ -8,35 +8,17 @@ import { describe, expect, test, vi } from "vitest"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { JobCancelledError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { ConfigStore } from "@/wallet/config"
-import { LoggerStore } from "@/wallet/logger"
-import { ServiceCollection } from "@/wallet/base"
-import { svc } from "@/wallet/services/composition-harness"
-import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { NetworkService } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { ContactService } from "@/wallet/services/contact/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { PriceService } from "@/wallet/services/price/service"
-import { FpcService } from "@/wallet/services/fpc/service"
 import { FpcType } from "@/wallet/services/fpc/spec"
-import { TransactionService, TransferType, TxStatus } from "@/wallet/services/transaction/service"
+import { TransferType, TxStatus } from "@/wallet/services/transaction/service"
 import { OriginType, TxExecutionResult } from "@/wallet/services/transaction/spec"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
-import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
-import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
-import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { NOOP_PROOF_GATE } from "@/e2e/proof-gate"
+import { startExecutionGraph, waitFor } from "../../../../tests/helpers/execution-graph"
 import type { ExecutionLane } from "./execution-lane"
 import type { ExecutionMutex } from "./execution-mutex"
 import type { FeeSettings } from "./models"
 import type { SendSequencer } from "./send-sequencer"
-import { ExecutionService } from "./service"
 import type { TransferExecutor } from "./transfer-executor"
 
 const NETWORK = { id: "net1", chainId: 1, l1ChainId: 5, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
@@ -53,20 +35,6 @@ const ACCOUNT_2 = AztecAddress.fromNumberUnsafe(0x2222).toString()
 const TOKEN_CONTRACT = AztecAddress.fromNumberUnsafe(0x7070).toString()
 
 async function makeHarness() {
-	const api = new FakeBrowserApi()
-	api.reset()
-	const logger = new LoggerStore(new ConfigStore())
-	const journal = new OperationJournalService(logger, api)
-	const stages: string[] = []
-	journal.onOperationUpdated.add((rec) => stages.push(rec.progress.stage))
-	// Stage changes only: a waiting record's heartbeat touch re-emits its stage.
-	const byId: [string, string][] = []
-	const lastStage = new Map<string, string>()
-	journal.onOperationUpdated.add((rec) => {
-		if (lastStage.get(rec.id) === rec.progress.stage) return
-		lastStage.set(rec.id, rec.progress.stage)
-		byId.push([rec.id, rec.progress.stage])
-	})
 	const deletionState = new ProfileDeletionState()
 	const session = { live: true, serial: FENCE_SESSION }
 	const fenceLive = (fence: ExecutionFence) => session.live && fence.profileId === "p1" && fence.session === FENCE_SESSION
@@ -96,64 +64,62 @@ async function makeHarness() {
 	}
 	const pending = [pendingRow]
 
-	const collection = new ServiceCollection()
-	collection.add(
-		svc(ProfileService.name, {
-			getActiveProfile: async () => ({ id: "p1" }),
-			getProfiles: async () => [{ id: "p1" }],
-			...(await rowKeysForEveryProfile()),
-			getDeletionState: () => deletionState,
-			captureExecutionFence,
-			assertFence: async () => {
-				if (!session.live) throw new SessionEndedError()
-			},
-			isFenceLive: fenceLive,
-			peekLiveSerial: () => session.serial,
-			setExpiryDeferral: () => {},
-			onActiveProfileChanged: new EventHandler<unknown>(),
-		}),
-	)
-	collection.add(svc(NetworkService.name, { getNetwork: async () => NETWORK, getNode: async () => ({}) }))
-	collection.add(svc(AccountService.name, {}))
-	collection.add(
-		svc(TransactionService.name, {
-			getPendingForAccount: (account: string) => pending.filter((row) => row.account.toLowerCase() === account.toLowerCase()),
-			// One mined tx: the account is initialized, so a public send here holds only its fee contract.
-			transactionsOf: async () => [
-				{ chainId: NETWORK.chainId, status: TxStatus.Proposed, executionResult: TxExecutionResult.Success, calls: [] },
-				pendingRow,
-			],
-			addTransaction: vi.fn(),
-			onTransactionUpdated: { add: () => {} },
-		}),
-	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
-	collection.add(
-		svc(FpcService.name, {
-			onFpcUpdated: { add: () => {} },
-			onFpcDeleted: { add: () => {} },
-			getFpcImpl: async (id: string) => ({
-				infoData: {
-					id,
-					profileId: "p1",
-					chainId: NETWORK.chainId,
-					type: FpcType.DefaultSponsoredFpc,
-					address: SPONSORS[id],
-					isProtocol: false,
+	const { service, journal } = await startExecutionGraph(
+		{
+			profile: {
+				getActiveProfile: async () => ({ id: "p1" }),
+				getProfiles: async () => [{ id: "p1" }],
+				getDeletionState: () => deletionState,
+				captureExecutionFence,
+				assertFence: async () => {
+					if (!session.live) throw new SessionEndedError()
 				},
-			}),
-		}),
+				isFenceLive: fenceLive,
+				peekLiveSerial: () => session.serial,
+				setExpiryDeferral: () => {},
+				onActiveProfileChanged: new EventHandler<unknown>(),
+			},
+			network: { getNetwork: async () => NETWORK, getNode: async () => ({}) },
+			transactions: {
+				getPendingForAccount: (account: string) => pending.filter((row) => row.account.toLowerCase() === account.toLowerCase()),
+				// One mined tx: the account is initialized, so a public send here holds only its fee contract.
+				transactionsOf: async () => [
+					{ chainId: NETWORK.chainId, status: TxStatus.Proposed, executionResult: TxExecutionResult.Success, calls: [] },
+					pendingRow,
+				],
+				addTransaction: vi.fn(),
+				onTransactionUpdated: { add: () => {} },
+			},
+			token: { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) },
+			fpc: {
+				onFpcUpdated: { add: () => {} },
+				onFpcDeleted: { add: () => {} },
+				getFpcImpl: async (id: string) => ({
+					infoData: {
+						id,
+						profileId: "p1",
+						chainId: NETWORK.chainId,
+						type: FpcType.DefaultSponsoredFpc,
+						address: SPONSORS[id],
+						isProtocol: false,
+					},
+				}),
+			},
+			task: { startNewTask: () => ({ complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }) },
+		},
+		NOOP_PROOF_GATE,
+		pxeClient,
 	)
-	collection.add(svc(ContactService.name, {}))
-	collection.add(svc(AuthRegistryService.name, {}))
-	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
-	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: async () => {} }))
-	collection.add(journal)
-	collection.add(svc(TaskService.name, { startNewTask: () => ({ complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }) }))
-	collection.add(svc(PriceService.name, {}))
-	const service = new ExecutionService(logger, NOOP_PROOF_GATE, () => pxeClient)
-	collection.add(service)
-	await collection.start()
+	const stages: string[] = []
+	journal.onOperationUpdated.add((rec) => stages.push(rec.progress.stage))
+	// Stage changes only: a waiting record's heartbeat touch re-emits its stage.
+	const byId: [string, string][] = []
+	const lastStage = new Map<string, string>()
+	journal.onOperationUpdated.add((rec) => {
+		if (lastStage.get(rec.id) === rec.progress.stage) return
+		lastStage.set(rec.id, rec.progress.stage)
+		byId.push([rec.id, rec.progress.stage])
+	})
 
 	const internals = service as unknown as { transferExecutor: TransferExecutor; sendSequencer: SendSequencer; lane: ExecutionLane }
 	const lane = internals.lane
@@ -197,14 +163,6 @@ const request = (fpcId: string) => {
 		recipientAddress: AztecAddress.fromNumberUnsafe(0x5678).toString(),
 		amount: 10n,
 		feeSettings,
-	}
-}
-
-const waitFor = async (pred: () => boolean | Promise<boolean>, timeoutMs = 2000) => {
-	const deadline = Date.now() + timeoutMs
-	while (!(await pred())) {
-		if (Date.now() > deadline) throw new Error("waitFor timeout")
-		await new Promise((r) => setTimeout(r, 5))
 	}
 }
 

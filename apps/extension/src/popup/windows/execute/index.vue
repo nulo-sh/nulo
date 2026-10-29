@@ -22,6 +22,7 @@ import { managers, requireNetwork } from "@/utils/core"
 import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
+import { approvalDeltas } from "./approval-deltas"
 import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
 import { grantRefusalRow, readableGrants } from "./call-surface"
@@ -46,7 +47,6 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import {
 	DappInteractionServiceClient,
 	type ExecutionPayload,
-	type OperationApprovalDelta,
 	type ShownTokenMetadata,
 	type WindowEnd,
 } from "@/wallet/services/dapp-interaction/client"
@@ -488,20 +488,12 @@ const approve = async () => {
 		// eviction would race the execution out of its reuse hits and preview snapshots.
 		handoffFeeEstimates()
 		handoffAuthwitPreviews()
-		// The SW executes the dApp's stored request; per operation the popup
-		// contributes only its fee choice, the ids the SW minted for it, and the
-		// token details its card showed.
-		const deltas: OperationApprovalDelta[] = operations.value.map((op, index) => {
-			const estimate = feeEstimates.value[index] ?? undefined
-			const feeSettings = carriesFeeSettings(op) ? op.feeSettings : undefined
-			return {
-				feeSettings,
-				estimateId: estimate?.estimateId,
-				previewId: estimate?.previewId ?? authwitPreviews.value[index]?.previewId,
-				feeCeiling: estimate?.maxFee,
-				tokenMetadata: op.kind === "register_token" ? tokenMetadata.value.get(op.address) : undefined,
-			}
-		})
+		const deltas = approvalDeltas(
+			operations.value as unknown as UIOperation[],
+			feeEstimates.value,
+			authwitPreviews.value,
+			tokenMetadata.value,
+		)
 		const stillOurs = scopeFollow.capture()
 		await interactionService.approveInteraction(requestId.value!, deltas)
 		// A removed window runs no unmount, so the approval itself ends every estimate it did not
