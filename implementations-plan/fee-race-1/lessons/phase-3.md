@@ -53,6 +53,8 @@ The three cases are the `describe` "a PrivateFPC send beside another that holds 
 - A superseded or cancelled estimate that is parked keeps the slot until its run ends, because a simulation cannot be preempted.
 - An estimate taken while a predecessor is pending rebuilds once that predecessor settles (the pending-hash check).
 
+**Replay.** A seed names its plan, not its run. Two estimates released by one event each re-ask on their own real 3 ms poll, so which one takes the slot first can differ between runs. Every outcome either way is in the catalog, but a long-mode red may need several runs of its seed to reproduce.
+
 **Oracle limit.** O1 accepts a rebuild end as permitted, so it cannot tell a rebuild the reuse rules require from a reuse refusal that is wrong. The hand lists assert `sent` where the reuse entry must hold.
 
 ## Phase 3.4, 2026-10-29: the e2e pairs

@@ -56,19 +56,7 @@ import { trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testin
 import { OriginType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import type { ProofGate } from "@/e2e/proof-gate"
 import { startExecutionGraph } from "./execution-graph"
-import {
-	type ActionName,
-	type ActionParams,
-	type Method,
-	type OpRef,
-	type Outcome,
-	type PickedMethod,
-	type Plan,
-	type PlannedStep,
-	type Surface,
-	type Timing,
-	describePlan,
-} from "./fee-race/model"
+import type { ActionName, ActionParams, Method, OpRef, Outcome, PickedMethod, Plan, PlannedStep, Surface, Timing } from "./fee-race/model"
 
 export type OracleId = "O1" | "O2" | "O3" | "O4" | "catalog" | "driver"
 export interface Violation {
@@ -122,7 +110,6 @@ export interface RaceReport {
 	/** The first step with a violation, or the run's end when only the finale found one. */
 	red?: StepReport
 	presses: PressFact[]
-	plan: string[]
 }
 
 export const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
@@ -203,13 +190,11 @@ function proofQueue() {
 type Row = Record<string, unknown> & { hash: string; status: TxStatus; account: string; createdAt: number }
 
 interface ParkedRun {
-	ref: OpRef | undefined
 	decide: (verdict: "land" | "fail") => void
 }
 
 /** One estimate attempt as the popup made it. */
 interface RunRecord {
-	token: string
 	answers: Array<"queued" | "result" | "error">
 	started: boolean
 	state: "asking" | "landed" | "failed"
@@ -282,7 +267,8 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 		},
 		getTxReceipt: async () => ({ status: "pending" }),
 	}
-	// As the cancel spike's: `proveTx` alone, and nothing reads what it proves.
+	// As the cancel spike's: `proveTx` alone. Nothing asserts what a proof holds; O4 follows the hash
+	// each one mints as an id.
 	const pxe = {
 		proveTx: async () => {
 			const hash = `0x${(++proofs).toString(16).padStart(64, "0")}`
@@ -448,15 +434,14 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 
 	// Every estimate run parks at its start, holding the slot it took, until a step decides it.
 	const parked: ParkedRun[] = []
-	const refByAmount = new Map<string, OpRef>()
-	const park = <A extends unknown[], R>(target: Record<string, unknown>, name: string, refOf: (...args: A) => OpRef | undefined) => {
+	const park = <A extends unknown[], R>(target: Record<string, unknown>, name: string) => {
 		const original = (target[name] as (...args: A) => Promise<R>).bind(target)
 		target[name] = async (...args: A): Promise<R> => {
 			let decide: (verdict: "land" | "fail") => void = () => {}
 			const verdict = new Promise<"land" | "fail">((resolve) => {
 				decide = resolve
 			})
-			const run: ParkedRun = { ref: refOf(...args), decide }
+			const run: ParkedRun = { decide }
 			parked.push(run)
 			bump()
 			const v = await verdict
@@ -471,11 +456,9 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			}
 		}
 	}
-	const byPreview = (...args: unknown[]) =>
-		(args.find((a) => a && typeof a === "object" && "interactionId" in a) as { interactionId: OpRef } | undefined)?.interactionId
-	park(raw.dappSendExecutor, "estimateOperationFee", byPreview)
-	park(raw.dappSendExecutor, "previewOperationAuthwits", byPreview)
-	park(raw.transferExecutor, "runEstimate", (req: unknown) => refByAmount.get(String((req as { amount: bigint }).amount)))
+	park(raw.dappSendExecutor, "estimateOperationFee")
+	park(raw.dappSendExecutor, "previewOperationAuthwits")
+	park(raw.transferExecutor, "runEstimate")
 
 	// O3: the slot grants in arrival order.
 	type SlotEntry = { seq: number; granted: boolean; aborted: boolean }
@@ -560,7 +543,6 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 		crypto,
 		proof,
 		parked,
-		refByAmount,
 		rows,
 		submitted,
 		records,
@@ -636,7 +618,7 @@ function attempt<T extends object>(
 	onQueued?: (answer: TransferFeeQueued) => void,
 	onStarted?: () => void,
 ): Promise<T> {
-	const run: RunRecord = { token, answers: [], started: false, state: "asking" }
+	const run: RunRecord = { answers: [], started: false, state: "asking" }
 	s.runs.push(run)
 	race.bump()
 	const ask = async () => {
@@ -649,6 +631,7 @@ function attempt<T extends object>(
 			throw error
 		}
 		const kind = isQueued(answer) ? "queued" : "result"
+		// A repeat of the same answer is no activity: a queued poll every few ms would never settle.
 		if (run.answers.at(-1) !== kind) race.bump()
 		run.answers.push(kind)
 		if (kind === "queued" && race.faults.popupFailsQueued) throw new Error("the popup dropped a queued answer")
@@ -697,15 +680,24 @@ function recordPress(race: Race, s: SurfaceBase, timing: Timing, named: PressRec
 	const press: PressRecord = { fact, named, endedByPerson: false, judged: false }
 	race.presses.push(press)
 	s.press$ = press
-	// O1: the press names its operation's latest landed estimate, or none after a failed one.
-	const latest = s.runs.at(-1)
-	if (!named.queued && latest?.state !== "failed") {
-		if (latest?.state !== "landed") race.red("O1", `${s.ref} was pressed while its estimate was ${fact.estimate}`)
-		else if (named.estimateId !== latest.ids?.estimateId || named.previewId !== latest.ids?.previewId)
-			race.red("O1", `${s.ref}'s press named ${JSON.stringify(named)}, not its landed estimate ${JSON.stringify(latest.ids)}`)
-	}
+	judgeNamed(race, s, press)
 	race.bump()
 	return press
+}
+
+/** O1: a press names its operation's latest landed estimate, or none after a failed one; a Send the
+ *  worker answered queued names its cap, or nothing when Nulo's sponsor pays. */
+function judgeNamed(race: Race, s: SurfaceBase, press: PressRecord): void {
+	const { named, fact } = press
+	const latest = s.runs.at(-1)
+	if (latest?.state === "failed") {
+		if (named.estimateId || named.previewId) race.red("O1", `${s.ref}'s press named ${JSON.stringify(named)} after its estimate failed`)
+		return
+	}
+	if (named.queued && fact.estimate === "queued") return
+	if (latest?.state !== "landed") race.red("O1", `${s.ref} was pressed while its estimate was ${fact.estimate}`)
+	else if (named.estimateId !== latest.ids?.estimateId || named.previewId !== latest.ids?.previewId)
+		race.red("O1", `${s.ref}'s press named ${JSON.stringify(named)}, not its landed estimate ${JSON.stringify(latest.ids)}`)
 }
 
 function openWindow(race: Race, opRef: OpRef, method: Method): SurfaceBase {
@@ -827,7 +819,6 @@ function openWindow(race: Race, opRef: OpRef, method: Method): SurfaceBase {
 
 function openSend(race: Race, opRef: OpRef, method: PickedMethod, transfer: "public" | "private"): SurfaceBase {
 	const amount = BigInt(Number(opRef.slice(2)))
-	race.refByAmount.set(String(amount), opRef)
 	const scope = effectScope()
 	const surface = { ref: opRef, surface: "send", method, open: true, runs: [] } as unknown as SurfaceBase
 	const transferType = transfer === "private" ? TransferType.Private : TransferType.Public
@@ -885,10 +876,10 @@ function openSend(race: Race, opRef: OpRef, method: PickedMethod, transfer: "pub
 			payer: feePayerOf(payer.value),
 			estimate: est.result.value,
 		}))
-		return { est, state, payer }
+		return { est, state, payer, clearQueued }
 	})
 	if (!engines) throw new DriverError("the Send page's scope did not run")
-	const { est, state, payer } = engines
+	const { est, state, payer, clearQueued } = engines
 
 	Object.assign(surface, {
 		allows: () => feeAllowsSend(state.value),
@@ -898,6 +889,8 @@ function openSend(race: Race, opRef: OpRef, method: PickedMethod, transfer: "pub
 				payer.value = SEND_PAYER[next]
 				feeSettings = FEE_SETTINGS[next]
 			}
+			// As the page: new input is queued only once the wallet says so again.
+			clearQueued()
 			est.estimate({ feeSettings })
 		},
 		press: (timing: Timing): Outcome => {
@@ -1185,7 +1178,7 @@ export async function runPlan(plan: Plan, faults: Faults = {}): Promise<RaceRepo
 		for (const step of plan.steps) {
 			const report = await runStep(race, step)
 			steps.push(report)
-			if (report.violations.length > 0) return finish(race, steps, plan, report)
+			if (report.violations.length > 0) return finish(race, steps, report)
 		}
 		const end: StepReport = { index: plan.steps.length, action: "mineBlock", params: { finale: true }, violations: [] }
 		try {
@@ -1197,7 +1190,7 @@ export async function runPlan(plan: Plan, faults: Faults = {}): Promise<RaceRepo
 			race.red("driver", error instanceof Error ? error.message : String(error))
 		}
 		end.violations = race.violations.splice(0)
-		return finish(race, steps, plan, end.violations.length > 0 ? end : undefined)
+		return finish(race, steps, end.violations.length > 0 ? end : undefined)
 	} finally {
 		if (race) await windDown(race)
 		crypto.restore()
@@ -1211,6 +1204,7 @@ async function windDown(race: Race): Promise<void> {
 	race.session.lock()
 	for (const s of race.surfaces) s.close()
 	await drain(race).catch(() => {})
+	await settle(race).catch(() => {})
 }
 
 async function runStep(race: Race, step: PlannedStep): Promise<StepReport> {
@@ -1228,8 +1222,8 @@ async function runStep(race: Race, step: PlannedStep): Promise<StepReport> {
 	return report
 }
 
-function finish(race: Race, steps: StepReport[], plan: Plan, red: StepReport | undefined): RaceReport {
-	return { steps, red, presses: race.presses.map((p) => ({ ...p.fact, end: endOf(p) })), plan: describePlan(plan) }
+function finish(race: Race, steps: StepReport[], red: StepReport | undefined): RaceReport {
+	return { steps, red, presses: race.presses.map((p) => ({ ...p.fact, end: endOf(p) })) }
 }
 
 export function describeRed(report: RaceReport): string {

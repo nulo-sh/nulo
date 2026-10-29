@@ -1,7 +1,7 @@
 /**
  * The fee-race catalog: what a person can do to a fee estimate, the execution queue and Confirm, as
- * weighted actions over a world computed from a seed alone, before anything runs. A seed names a
- * whole run, and a run replays from it on the same commit.
+ * weighted actions over a world computed from a seed alone, before anything runs. A seed names its
+ * plan; a run of it can differ where two estimates released by one event race to re-ask.
  *
  * The world is what the person did, not what the wallet holds: whether an estimate runs, queues or
  * waits behind another is the wallet's answer, so an action lists every outcome it may end in and
@@ -176,13 +176,10 @@ export const ACTIONS: { [N in ActionName]: ActionSpec<N> } = {
 			return w.lastPress === p.target ? undefined : `the step before did not press ${p.target}`
 		},
 		params: (rng, w) => {
-			const roll = rng()
-			if (w.lastPress && roll < 0.3) return { target: w.lastPress, timing: "repeat" }
+			if (w.lastPress && rng() < 0.3) return { target: w.lastPress, timing: "repeat" }
 			const pressable = w.ops.filter((o) => o.phase !== "closed")
-			return {
-				target: choose(rng, open(w).length > 0 && roll < 0.8 ? open(w) : pressable).ref,
-				timing: roll < 0.65 ? "now" : "first-offer",
-			}
+			const target = choose(rng, open(w).length > 0 && rng() < 0.8 ? open(w) : pressable).ref
+			return { target, timing: rng() < 0.65 ? "now" : "first-offer" }
 		},
 		outcomes: ["submitted", "refused", "armed", "gone"],
 		next: (w, p) => withOp(w, p.target, { phase: "pressed" }),
