@@ -16,7 +16,6 @@ import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-b
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
 import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
-import { EstimateRequeue } from "@/utils/estimate-when-clear"
 import {
 	approval,
 	beforeunloadAdds,
@@ -874,29 +873,6 @@ describe("execute window — approval envelope", () => {
 		} finally {
 			vi.useRealTimers()
 		}
-	})
-
-	test("a spent answer reschedules that operation with its attempt's own params, an app-paid one's included, and toasts nothing", async () => {
-		resolvable()
-		approval.payloadToLoad = payload()
-		w = factory()
-		await completeInit()
-		const [fees, previews] = feeMapInstances
-		const signal = new AbortController().signal
-		const embedded = { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }
-		estimateOperationFeeMock.mockResolvedValueOnce({ queued: true, tokenSpent: true } as never)
-		const spent = await fees!.opts.estimate(embedded, "tok-a", "flow-a", signal).catch((error: unknown) => error)
-		expect(spent).toBeInstanceOf(EstimateRequeue)
-		fees!.api.estimate.mockClear()
-		fees!.opts.onError?.(0, spent)
-		expect(fees!.api.estimate).toHaveBeenCalledExactlyOnceWith(0, embedded)
-
-		previewOperationAuthwitsMock.mockResolvedValueOnce({ queued: true, tokenSpent: true } as never)
-		const spentPreview = await previews!.opts.estimate({ index: 1 }, "tok-b", "flow-b", signal).catch((error: unknown) => error)
-		previews!.api.estimate.mockClear()
-		previews!.opts.onError?.(1, spentPreview)
-		expect(previews!.api.estimate).toHaveBeenCalledExactlyOnceWith(1, { index: 1 })
-		expect(toastMocks.openToast).not.toHaveBeenCalled()
 	})
 })
 

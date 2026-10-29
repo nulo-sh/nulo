@@ -56,7 +56,7 @@ import type { DappMetadata } from "@/wallet/services/dapp-session/client"
 import { useDappInteractionPayload } from "@/composables/useDappInteractionPayload"
 import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 import { useFeeEstimationMap } from "@/composables/useFeeEstimationMap"
-import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
+import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
@@ -186,8 +186,6 @@ const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) =
 	},
 	start: { events: executionService.onEstimateStarted, estimateToken, onStarted: () => (queuedOps.value[index] = false) },
 })
-/** What each operation's running estimate was asked: a requeue repeats it with a fresh token. */
-const lastFeeParams: Record<number, { index: number; feeSettings: FeeSettings }> = {}
 
 const {
 	results: feeEstimates,
@@ -200,19 +198,15 @@ const {
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
-	estimate: (params, estimateToken, flowKey, signal) => {
-		lastFeeParams[params.index] = params
-		return estimateWhenClear(
+	estimate: (params, estimateToken, flowKey, signal) =>
+		estimateWhenClear(
 			() => executionService.estimateOperationFee(requestId.value!, params.index, params.feeSettings, estimateToken, flowKey),
 			signal,
 			queueWatch(params.index, estimateToken, signal),
-		)
-	},
+		),
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 500,
 	onError: (key, err) => {
-		// Rescheduled before the engine's settle clears its in-flight flag, so Confirm never comes on between.
-		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(key, lastFeeParams[key]!)
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
 		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
@@ -269,7 +263,6 @@ const {
 	cancelRemote: (estimateToken) => executionService.cancelEstimate(estimateToken).catch(() => {}),
 	debounceMs: 0,
 	onError: (key, err) => {
-		if (err instanceof EstimateRequeue) return scheduleAuthwitPreview(key, { index: key })
 		if (holdRefusal(err)) return
 		console.error(`[Execute] Authorization preview failed for op ${key}:`, err)
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
