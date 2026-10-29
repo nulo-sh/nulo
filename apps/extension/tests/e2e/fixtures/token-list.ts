@@ -4,7 +4,7 @@
  * write saw no acceptance. A launch that needs the list's entries (a priced token, the defaults)
  * holds one from its first boot instead: `launchExtension({ tokenList: "held" })`.
  *
- * A source run holds and serves a fixed two-token list that also flags one pair, signed with a
+ * A source run holds and serves a fixed two-token list that also flags two pairs, signed with a
  * per-process key that the armed build reads from `nulo:e2e:token-list`, so no spec depends on what
  * the owner lists. An artifact run holds the published envelope, the only list a release build's
  * pinned keys accept.
@@ -53,8 +53,12 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
-/** The pair the source run's list flags as a scam: a row shows the warning only where a spec seeds it. */
-export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` }]
+/** The pairs the source run's list flags as a scam: a spec seeds the first as a held token and pastes the
+ *  second, which nothing holds. Only a source run holds them; the published list flags none. */
+export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [
+	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` },
+	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f3` },
+]
 
 type Signer = { seedHex: string; pinned: PinnedKey }
 let signer: Promise<Signer> | undefined

@@ -8,11 +8,12 @@ import type { Page } from "puppeteer"
 import { describe, expect, inject } from "vitest"
 import { TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { extensionUrl, isFirefox, newPage, openScratchPage, stopBackground } from "./fixtures/browser"
-import { type ExtensionContext, clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
+import { type ExtensionContext, clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { navigateByHash, openHoldings, switchToNetwork, unlockAfterBackgroundDeath } from "./fixtures/helpers"
 import { shotSend } from "./fixtures/send-page"
 import {
 	E2E_LIST_FLAGGED,
+	E2E_LIST_TOKENS,
 	type ListHost,
 	e2eSigner,
 	heldListEntries,
@@ -149,7 +150,7 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 		}
 	})
 
-	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner", {
+	test("a token the held list flags reads the warning on its Home, Holdings and Send picker rows; its page and the Send form carry the banner; a pasted flagged address carries it on the picker's add row", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ listedExtensionPerTest: ctx }) => {
@@ -182,6 +183,20 @@ describe.skipIf(inject("liveLeg") === true)("the signed token list", () => {
 			await clickByTestId(page, "send-token-trigger")
 			await page.waitForSelector(`${sel("select-token-row")}[data-symbol="SCAM"] ${sel("select-token-flagged")}`, VISIBLE)
 			await shotSend(page, "flagged-send-picker", "select-token-flagged")
+
+			const [, unheld] = E2E_LIST_FLAGGED
+			await replaceInputValue(page, sel("select-token-search"), unheld.address.toUpperCase().replace("0X", "0x"))
+			await page.waitForSelector(sel("select-token-add-token-flagged"), VISIBLE)
+			expect(await page.$eval(sel("select-token-add-token"), (el) => (el as HTMLButtonElement).disabled)).toBe(false)
+			await shotSend(page, "send-picker-flagged", "select-token-add-token")
+			// A listed token nothing holds: its add row carries no flag.
+			await replaceInputValue(page, sel("select-token-search"), E2E_LIST_TOKENS[1].address)
+			await page.waitForFunction(
+				(s: string) => document.querySelector(s) === null,
+				{ timeout: 5_000 },
+				sel("select-token-add-token-flagged"),
+			)
+			expect(await page.$(sel("select-token-add-token"))).not.toBeNull()
 		} finally {
 			await refusal.stop()
 		}
