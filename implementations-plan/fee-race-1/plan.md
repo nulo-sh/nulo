@@ -70,7 +70,7 @@ Three arcs, one stacked PR each, against `dev`. Recon: [recon.md](recon.md) (reu
 
 ### Arc 3 (#1337)
 
-- **Boundary (D12).** Inside COMPOSITION-TESTS.md as written, with no new carve-out: a real estimate needs `simulateTx`, so no sequence lands one. "Lands" seeds what a landed estimate writes through the stash APIs the worker itself calls (the reuse entry, the snapshot, the registry's settle), the reuse fast path the cancel spike already uses (D3 there). Build-result reconciliation stays in the executor's unit tests.
+- **Boundary (D12).** Inside COMPOSITION-TESTS.md as written, with no new carve-out: a real estimate needs `simulateTx`, so no sequence lands one. "Lands" seeds what a landed estimate writes through the stash APIs the worker itself calls (the reuse entry, the snapshot, the registry's settle), the reuse fast path the cancel spike already uses (D3 there). Build-result reconciliation stays in the executor's unit tests. As built, a land is the worker's own run (D20).
 - **Shared graph.** `tests/helpers/execution-graph.ts` takes over the two local `makeHarness` copies (`service.composition.test.ts`, `send-order.composition.test.ts`); both migrate, inventory unchanged.
 - **Pure catalog.** `tests/helpers/fee-race/model.ts`, tested by `src/wallet/services/execution/fee-race-model.test.ts` (the unit suite collects only `src/**` and `scripts/**`): a `World` (operations by origin and fee method, private authorization or not, estimate state, slot holder and waiters, journal), weighted actions with `invalid`, `params` and the outcomes each may end in, `plan(seed)`, `planFromList`, `prng` from `tests/e2e/fixtures/chaos-seed.ts`. Actions: open a dApp request (sponsor, public Fee Juice, PrivateFPC, app-paid; default entrypoint), open Send, land / fail / hold an estimate, a queued ask, press Confirm or Send (first offer, repeat, double), switch method mid-estimate, cancel, lock, finish a proof, mine a block, advance the clock (past 120 s, past 10 min).
 - **Driver.** `tests/helpers/fee-race-in-process.ts`. Popup side, the real code: `createFeeEstimationEngine`, `estimateWhenClear`, `holdsConfirm`, and the window's approval-delta builder, extracted from `approve()` (`index.vue:471-481`) into `popup/windows/execute/approval-deltas.ts` when this second caller appears. Worker side, the real graph: `estimateTransferFee`'s queued branch, lane, registry, reuse caches, snapshots and claim, journal; `executeTransfer` and `executeOperations` over reused builds; `proveTx` on `ControllableGate`; `node.sendTx` canned. Faults are injected at these seams, never by editing source.
@@ -159,15 +159,15 @@ As built, a queued answer is never spent (D16), so the spent pins and the window
 
 **Gate.** The case green on both browsers at retry 0; the file, `concurrent-sendtx-*`, `fee-methods` and `tx-sendTx-sponsoredFpc` green on Chrome, and every network file that opens a window beside a send green on both browsers ([lessons/phase-2.md](lessons/phase-2.md)). Arc gate as in Phase 1.2.
 
-### Phase 3.1: one in-process execution graph
+### Phase 3.1: one in-process execution graph ✓
 
 Extract the builder; migrate both files. **Gate:** both green with an unchanged inventory (`--reporter=json` names before and after compared).
 
-### Phase 3.2: the pure catalog
+### Phase 3.2: the pure catalog ✓
 
 Write the model and `fee-race-model.test.ts` (each action's `invalid` and outcomes, `plan` deterministic per seed, `planFromList` refuses an invalid list). **Gate:** `cd apps/extension && bun --bun vitest run src/wallet/services/execution/fee-race-model.test.ts --retry=0` green.
 
-### Phase 3.3: the seeded sequence test
+### Phase 3.3: the seeded sequence test ✓
 
 1. Write the driver, the oracles and the test file: fixed seeds, hand lists, the coverage test, one break fixture per oracle.
 2. Each break fixture injects at a seam: the window rule answering "settled" while an estimate is in flight (O1), the snapshot sweep at 120 s (O1), the popup failing a queued answer (O2), a lane granting out of order (O3), a journal row skipping a stage (O3), a dropped sent row (O4). Each turns exactly its oracle red.
@@ -175,9 +175,20 @@ Write the model and `fee-race-model.test.ts` (each action's `invalid` and outcom
 
 **Gate.** The file green three times at retry 0; each break fixture red on exactly its oracle; the coverage test green; the file's own duration under 30 s in vitest's JSON report on each of three runs; `NULO_FEE_RACE_RUNS=50` green once, logged.
 
-### Phase 3.4: the e2e pairs
+**What the sequences answer** ([lessons/phase-3.md](lessons/phase-3.md)). A PrivateFPC Send beside a send that holds the contract's notes sequences behind it: the two share the sequencer's `fpc:<address>` key, so its estimate reads queued through the first's proof and until its block, and a window pressed beside a pressed PrivateFPC Send waits for that block, then rebuilds. No product fault found.
 
-Apply the runtime budget rule to each pair #1337 names. Expected, to verify: the sponsored first-offer Confirm (1.1) and the queued Send (2.3) need a browser; a first-offer Confirm on the other window methods, a first-offer Send per method and a double press are shown at the component layer (1.1's table, `send.integration.test.ts`, two presses in one task through `sendEvent`), so they add no e2e. Add a component test for each double press none covers. **Gate:** the PR body carries each pair's disposition and the per-browser wall-clocks of the lane's e2e jobs before and after.
+**Not reachable in process, with why.** Each #1337 dimension not listed here is a catalog action or a hand list.
+
+- **A double click.** One press reaches the worker once because the page latches `isLoading` / `isSending`, a component's state. Phase 3.4 places it at the component layer. A second press of a surface already pressed is the catalog's `repeat`, which ends `gone`, and O4 holds it to one send.
+- **Estimate state idle at the press.** Both surfaces start their estimate in the tick they open, so a press finds it estimating at the earliest. The no-estimate gate is `feeAllowsSend`, which the driver reads.
+- **A rebuild, its signing, and a default-entrypoint send past its build.** Each needs a simulation (D2, D3). The driver ends the press at `RebuildOutOfLayer` and judges only that it was permitted. The rebuild stays in `dapp-send-executor.test.ts` and the network e2e.
+- **Sponsor and app-payer fee probes.** Their result is a simulation's (D2). The canned build carries an external payment.
+- **The queue-mode cap for a Send paying its own fee.** Its basis is a stored row of the same send shape that carries a fee. The driver's strip holds only what the worker writes, so no fixed seed or hand list pins the cap. Its sum stays in `queued-fee-cap.test.ts`.
+- **A granted call outliving 60 s.** That is the transport's job, in `client.test.ts`, as O2 states.
+
+### Phase 3.4: the e2e pairs ✓
+
+Apply the runtime budget rule to each pair #1337 names. Expected, to verify: the sponsored first-offer Confirm (1.1) and the queued Send (2.3) need a browser; a first-offer Confirm on the other window methods, a first-offer Send per method and a double press are shown at the component layer (1.1's table, `send.integration.test.ts`, two presses in one task through `sendEvent`), so they add no e2e. Add a component test for each double press none covers. **Gate:** the PR body carries each pair's disposition and the per-browser wall-clocks of the lane's e2e jobs before and after. As found: the two browser pairs were already in the suite from arcs 1 and 2, the double press had no test on either surface and gained one each, and the arc adds no e2e scenario ([lessons/phase-3.md](lessons/phase-3.md) § Phase 3.4).
 
 ## UI impact
 
@@ -230,6 +241,7 @@ Scope this plan asks approval for: S1, D5 ships in arc 1 under its own issue (it
 | D17 | The window's queued reading per payer | `QUEUED_FEE_COPY` whoever pays; an app-paid line and a default-entrypoint operation keep their loading state | the owner approved that one sentence for the window; the cap and sponsor variants say a send goes out, and Confirm is off there. The app-paid line and a preview-only operation have no You pay row to carry it, and a new placement is the owner's call |
 | D18 | An estimate behind another estimate (review, arc 2) | it waits its turn in the slot's line and answers queued only while a send holds or waits for the slot; the mutex counts the requests in each lane by origin bucket, and a place a parked dApp send keeps outside the slot counts for neither check; the wait counts against the call's lifetime (KL6) | answering queued behind any holder put "Queued behind your previous send" on a window's second operation, a superseded attempt and Send behind a window estimate, with no send in flight. Not taken: the mutex's admission depths, which count a parked send's kept place, so every estimate would queue for a whole park; no change, which keeps a false sentence on screen |
 | D19 | Two network e2e that approved a second window mid-proof | rewritten to the window's new contract: held behind the proving send, approved after the release | under OA1 = B the second window cannot be approved while the first proves, so the state they snapshot (two approved sends, one `queued` on the mutex) is unreachable from one session's windows; the mutex's FIFO stays pinned by `execution-mutex.test.ts` and `execution-lane.test.ts`. Not taken: a test-only path around the window's Confirm |
+| D20 | How a sequence lands an estimate (deviation from D12's mechanism, arc 3) | the worker's own estimate run, parked at its start holding the slot; while it proceeds, its simulating calls (the fee-strategy build, the planner's selector derivation, the default-entrypoint build and its discovery) answer the cancel spike's prepared-tx shape; called outside a run they throw, which the driver records as a rebuild end; the PXE fake is the spike's `proveTx` | the worker then writes the reuse entry, the snapshot and the registry's settle by its own rules, and a rebuild still stops past the turn's snapshot lookup (audit round 2). Not taken: the driver writing those stashes, which copies the worker's eligibility, fingerprint and before-snapshot rules, the second wallet D12 rejects |
 
 ## Audit verdicts
 
@@ -247,8 +259,8 @@ Scope this plan asks approval for: S1, D5 ships in arc 1 under its own issue (it
 |---|---|---|---|---|---|
 | 1 | `worktree-fee-race-1` | 1.1-1.2 | `dev` | `fix(execute): confirm waits for the fee estimate, and its authorizations outlive the queue` | #1335, #1343 |
 | 2 | `worktree-fee-race-1` (deviation: arc 1 merged first, so arc 2 continues on the arc's branch against `dev`) | 2.0-2.3 | `dev` | `fix(fees): estimates queue behind a send, report their run, and outlive 60 s` | refs #1336 (outcome iii, D11) |
-| 3 | `fee-race-1-a3` | 3.1-3.4 | arc 2 | `test(execution): a seeded sequence test over fee estimates, queue and confirm timing` | #1337 |
-| close-out | `fee-race-1-close-out` | Outcome, lessons, archive | arc 3 | `docs(plans): close fee-race-1` | none |
+| 3 | `worktree-fee-race-1` (deviation: arc 2 merged first, as arc 1 had) | 3.1-3.4 | `dev` | `test(execution): a seeded sequence test over fee estimates, queue and confirm timing` | #1337 |
+| close-out | `worktree-fee-race-1` (deviation: the arc 3 PR's final commits) | Outcome, lessons, archive | `dev` | arc 3's | none |
 
 `code_review: off` for every arc. Start: `gh stack init --adopt worktree-fee-race-1 --base dev`; at each boundary after its loop converges, `gh stack add <next-branch>`. Merge `origin/dev` before each PR. PRs open without labels; add `e2e:extension-network` afterwards only if the path filter skips a needed suite. Serial: arc 3's driver imports arcs 1-2's rules.
 
