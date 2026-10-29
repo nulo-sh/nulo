@@ -54,3 +54,7 @@ Codex (`gpt-6.1-sol`, high, read-only) on S, a start event keyed by the estimate
   - Medium, fixed: `expectWindowHeldBehindProof` required the held send alone in the journal, but the SDK records each `sendTx` as `queued` on arrival, before approval, so the pair is always `proving` + `queued` and the helper could never pass. It now holds the pair: the held row stays `proving` under its id, the other stays `queued`; the window's Confirm is what shows the second unapproved.
   - Medium, recorded as KL6, not resized: an estimate waiting for the slot behind up to three others counts that wait against the 15-minute lifetime, so three runs ahead that each pass about five minutes get it reaped. The lifetime also bounds a dead runner's admission place and the offscreen hold, so a longer one stretches KL4; the precedent is KL4's admission wait, which I3 already excludes. I3 now excludes the slot wait too, and the lifetime's doc says it counts.
   - Low: `concurrent-sendtx-confirm`'s walkthrough cut to the constraint. The mutex header's archived plan path is pre-existing; CLAUDE.md lets it stay until that comment is rewritten.
+
+## Review round 3, 2026-10-29
+
+- Codex (same session): `clean`. The fixes verified; KL6 accepted as the lifetime's trade-off. The loop converged at round 3.
