@@ -1,7 +1,7 @@
 ---
 plan: window-queued-1
 tier: light
-status: approved by the final Codex pass; arc 1 implementing
+status: completed; delivered as #1362, which carries this close-out
 issues: "#1360 (arc 1 closes)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,19 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 15a9bd9d3
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-29. Planned and delivered the same day; one arc.
+- **Status:** completed. #1362 into `dev` carries the fix and this close-out; its merge closes #1360 and archives this plan.
+- **Shipped:** `handleFeeUpdate` clears the operation's queued reading before it schedules the replacement estimate, for every new fee setting the card emits (D1, D7); the `queuedOps` doc names the new clearing point. One window component case, red before at step 2 and green after, pinning the inert superseded answer, the replacement's own queued reading and Confirm. Three pictures under `screenshots/` (a priority pick, D8's deviation).
+- **Review loop:** plan: Codex conditional approve (4) and Opus conditional approve (6), all folded, then Codex approve; diff: Codex clean, Opus one low test-hygiene finding fixed, Codex clean.
+- **Gates:** lint, `typecheck:all`, `test:all` exit 0 on the final head; the window's tests and the fee-race composition file green; `same-token-concurrent-sends`, `tx-sendTx-noFrom` and `concurrent-sendtx-confirm` green at retry 0 on Chrome and Firefox ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dropped:** a composition hand list (D5: the driver keeps no window flag); a committed e2e scenario (D4).
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; the vitest once-value note stays in `lessons/phase-2.md`, as `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # window-queued-1: a fee method switched while queued leaves the queued sentence behind
 
