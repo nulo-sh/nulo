@@ -1,9 +1,12 @@
-/** Nothing is submitted, so no node is needed: the import and its pick are `network/send-picker.test.ts`'s. */
+/**
+ * Nothing is submitted, so no node is needed: the import and its pick are `network/send-picker.test.ts`'s.
+ * The flag on a pasted address's add row is `token-list.test.ts`'s, since only a source run's list flags a pair.
+ */
 import { expect } from "vitest"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
-import { E2E_LIST_FLAGGED, skipUnlessListPrices } from "./fixtures/token-list"
+import { skipUnlessListPrices } from "./fixtures/token-list"
 import { waitForNewTokenAddress } from "./fixtures/tokens"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { focusInPopupOf, pressEscape, waitForFocus } from "./helpers/pointer-probes"
@@ -13,7 +16,7 @@ const VISIBLE = { visible: true, timeout: 15_000 } as const
 /** A curve point no seeded token holds. */
 const UNLISTED = "0x1200000000000000000000000000000000000000000000000000000000000002"
 
-test("the Send picker: a pasted flagged address carries the flag on its add row; New token opened from it closes back onto the picker", {
+test("the Send picker: New token opened from a pasted address's add row closes back onto the picker", {
 	timeout: 180_000,
 	retry: 0,
 }, async ({ listedExtension: ctx, skip }) => {
@@ -33,14 +36,10 @@ test("the Send picker: a pasted flagged address carries the flag on its add row;
 	await page.focus(sel("send-token-trigger"))
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("select-token-search"), VISIBLE)
-	const [flagged] = E2E_LIST_FLAGGED
-	await replaceInputValue(page, sel("select-token-search"), flagged.address.toUpperCase().replace("0X", "0x"))
-	await page.waitForSelector(sel("select-token-add-token-flagged"), VISIBLE)
-	expect(await page.$eval(sel("select-token-add-token"), (el) => (el as HTMLButtonElement).disabled)).toBe(false)
-	await shotSend(page, "send-picker-flagged", "select-token-add-token")
-
 	await replaceInputValue(page, sel("select-token-search"), UNLISTED)
-	await page.waitForFunction((s: string) => document.querySelector(s) === null, { timeout: 5_000 }, sel("select-token-add-token-flagged"))
+	await page.waitForSelector(sel("select-token-add-token"), VISIBLE)
+	// No list flags this address, in either run mode.
+	expect(await page.$(sel("select-token-add-token-flagged"))).toBeNull()
 	await shotSend(page, "send-picker-add", "select-token-add-token")
 	await clickByTestId(page, "select-token-add-token")
 	await waitForNewTokenAddress(page, UNLISTED)
