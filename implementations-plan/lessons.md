@@ -16,7 +16,6 @@
 
 - A `pull_request` run builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent; a PR conflicting with `dev` gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/connect-split-1/lessons/phase-3.md)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
-- `gh stack` runs the plans gate on each arc head (no forward links); after a squash merge, `dev` into the old head is add/add; parallel arcs need disjoint decision ids; index lines auto-merge as two: `check:plans` after a `dev` merge. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/harden-security-fixes-2/plan.md#decision-ledger)
 
 ## Extension runtime
 
