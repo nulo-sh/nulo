@@ -108,6 +108,12 @@ Each finding was checked against the tree; the consults are in [lessons/phase-0.
 - **Codex, verify:** conditional approve, with conditions: the owner answers ask 1 before the PR merges; the ask's options balanced and A marked as proposed (applied). U1 confirmed sound; D2 settled; no other material finding.
 - **Owner, 2026-10-29:** ask 1 answered A (D6), which meets Codex's open condition; the plan counts as approved.
 
+## Implementation review verdicts
+
+- **Codex, round 1** (whole arc diff, `gpt-6.1-sol`, high): approve, no finding. It traced every writer of `activeTokenIdx` (only the import sets the mark; the watcher consumes it before either init), and checked that a half fix (From only) fails U1's second row.
+- **Opus** (whole arc diff, beside round 1): approve; 2 comment findings, both accepted: the mark's doc comment read as if the amount were a second thing kept, and `pickAddedToken`'s comment said a winning row pick keeps "its own amount" where it now keeps its sides too. Noted, not changed: no test pins the mark's clear on every run (rejected in planning; its one failing order is I1's), and `setActiveSendType` finds the active toggle by class (pre-existing helper).
+- **Codex, round 2** (resumed, the comment fixes): approve, no new material finding. The loop converged.
+
 ## Seeds
 
 ```
