@@ -62,13 +62,13 @@ post_implementation_hardening: not scheduled
 
 Commands run from the worktree root unless they `cd`. Every gate also runs `bun run lint` and `bun run typecheck:all`, exit 0. "Red first" marks a test that fails on the base and passes after the change. Commit each phase before the next.
 
-**1. The tests, red on the base** (F1, F5-F7, D3-D5). Do not change `send.vue` in this phase.
+**1. The tests, red on the base** ✓ (F1, F5-F7, D3-D5). Do not change `send.vue` in this phase.
 - In `E/src/popup/pages/send.test.ts`, describe "send page — a token the picker imported", add U1, red first, a `test.each` over From/To `["public", "private"]` and `["private", "public"]`. Mount on `[TOKEN]` with `realAmountCard: true`. Set the recipient and the fee card (`SPONSOR`), click `send-from-type` and/or `send-to-type` to reach the row, and type an amount. Add a `NEW` balance row that covers the amount on both sides (`balanceAdded()`), set `getTokens` to `[TOKEN, NEW]`, then call the card's `onTokenAdded` with `NEW`. Expect `NEW` active, the amount kept, and each card's `[data-selected]` span reading the row's side. After `estimateLands()`, expect an estimate asked for `NEW.id` and `NEW.contract` with the row's transfer type (`PublicToPrivate`, `PrivateToPublic`).
 - Add U2, a control: with `[TOKEN, NEW]` listed, type an amount and expect it shown. Flip both sides to Public, then set `cacheStore.activeTokenIdx = NEW.id`, as the picker's row press does. Expect both sides Private and the amount empty.
 - In `send-picker.test.ts`, after line 84 add `setActiveSendType(page, "send-to-type", "public")`. Replace lines 103-109: read `readSendView(page)` and expect `origin` `"public"` and `strip.to` `"public"`. Wait for "7 PICK" and `fee-estimate`, with no flip. Then `setActiveSendType(page, "send-from-type", "private")`, wait for "0 PICK", and take the `send-amount-zero` capture. Rename the case to say the sides are kept too.
 Gate: `cd apps/extension && bun run test src/popup/pages/send.test.ts`: U1's two rows fail at the side check, everything else green. Then `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/send-picker.test.ts` on Chrome: the import case reaches PICK and fails at the side check; the red counts only then. Record both reds in `STATUS.md`.
 
-**2. Keep the sides on an import** (F2-F4, D1, D2). Change `send.vue` as above.
+**2. Keep the sides on an import** ✓ (F2-F4, D1, D2). Change `send.vue` as above.
 Failure mode the e2e step proves: the import comes back on a side the person did not choose, or the kept side does not reach the corner and the estimate. The unit test stubs the balance read and the estimate; only a real import shows the side through them. Estimate: 19 s / 21 s (one more flip than #1342's measured 18.0 s / 19.8 s).
 Gate, in order (`e2e:agent` overwrites `dist`, so the smoke build comes after it):
 1. `cd apps/extension && bun run test src/popup`: green, U1 included.

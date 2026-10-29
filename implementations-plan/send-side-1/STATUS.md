@@ -4,3 +4,5 @@
 - 2026-10-28 audit round 1: Codex and Opus conditional approve; findings folded; D2 back to Codex
 - 2026-10-28 audit round-trip: Codex conditional approve (owner ask 1 open); D2 settled for the parameter; plan ready for the orchestrator
 - 2026-10-29 owner answered ask 1: A (D6); plan approved; arc 1 started
+- 2026-10-29 phase 1 gate: U1 red on base (2/2 at the side check), U2 green; network e2e Chrome on base red at the side check after reaching PICK (import case 14.9 s); lint and typecheck:all green
+- 2026-10-29 phase 2 gate: popup unit 3295/3295; network e2e green Chrome (import 17.4 s, file 62.8 s) and Firefox (19.7 s, 77.7 s); smoke 4 files green on both; test:all green
