@@ -1,7 +1,7 @@
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { describe, expect, test } from "vitest"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
-import { paysFromPrivateFeeJuice, waitsForFeeFigure } from "./fee-figure"
+import { holdsConfirm, paysFromPrivateFeeJuice, waitsForFeeFigure } from "./fee-figure"
 import type { DraftUIOperation } from "./types"
 
 const OWNER = `0x${"0a".repeat(32)}`
@@ -53,6 +53,31 @@ describe("waitsForFeeFigure", () => {
 		expect(waitsForFeeFigure(picked, { type: "fpc" })).toBe(false)
 		const capped = sendTx({ calls: [] }, { fee: { gasSettings: { maxFeesPerGas: {} } } })
 		expect(waitsForFeeFigure(capped, { type: "fpc" })).toBe(true)
+	})
+})
+
+describe("holdsConfirm", () => {
+	const SETTLED = { landed: false, inFlight: false }
+	const RUNNING = { landed: false, inFlight: true }
+	const sponsor = { type: "fpc" } as const
+	const noFrom = { ...(sendTx({ calls: [] }) as object), executionMode: "default_entrypoint" } as DraftUIOperation
+
+	test.each([
+		["a sponsor's estimate", sendTx({ calls: [] }), sponsor],
+		["an app's own payment", sendTx({ calls: [], feePayer: APP_FPC }), undefined],
+		["a default-entrypoint preview", noFrom, undefined],
+		["a fee the person pays", sendTx({ calls: [] }), { type: "fj" } as const],
+	])("holds while %s runs", (_case, op, payer) => {
+		expect(holdsConfirm(op, payer, RUNNING)).toBe(true)
+		expect(holdsConfirm(op, payer, { ...RUNNING, landed: true })).toBe(true)
+	})
+
+	test("once settled, only a figure the person pays must have landed", () => {
+		expect(holdsConfirm(sendTx({ calls: [] }), sponsor, SETTLED)).toBe(false)
+		expect(holdsConfirm(sendTx({ calls: [], feePayer: APP_FPC }), undefined, SETTLED)).toBe(false)
+		expect(holdsConfirm(noFrom, undefined, SETTLED)).toBe(false)
+		expect(holdsConfirm(sendTx({ calls: [] }), { type: "fj" }, SETTLED)).toBe(true)
+		expect(holdsConfirm(sendTx({ calls: [] }), { type: "fj" }, { landed: true, inFlight: false })).toBe(false)
 	})
 })
 

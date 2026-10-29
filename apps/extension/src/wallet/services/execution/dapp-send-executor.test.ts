@@ -1932,6 +1932,20 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			})
 		})
 
+		test("a later admission past 120 s leaves a landed snapshot for its approval", async () => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+			try {
+				collectOffchainEffectsMock.mockReturnValue([effect("n")])
+				const { self } = rpc()
+				const result = await self.previewOperationAuthwits("i-1", 0, "tok-early", "op")
+				vi.advanceTimersByTime(150_000)
+				await self.previewOperationAuthwits("i-2", 0, "tok-later", "op-2")
+				expect(self.previewSnapshots.take(result.previewId, identity)).toMatchObject({ kind: "found" })
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
 		test("cancelling after the stash evicts the snapshot through the settled-token path", async () => {
 			collectOffchainEffectsMock.mockReturnValue([effect("n")])
 			const { self } = rpc()
