@@ -50,6 +50,8 @@ const props = defineProps({
 	feeEstimate: { type: Object, default: null },
 	isEstimating: { type: Boolean, default: false },
 	isQueued: { type: Boolean, default: false },
+	/** Passed to the cost row: whether a queued send can still go out from this surface. */
+	offersQueue: { type: Boolean, default: true },
 	/** When mounted inside another bordered container (e.g. execute window's
 	 *  operation card), the outer wrapper's own border + overflow:hidden
 	 *  clash with the parent's border. Passing embedded=true strips the root
@@ -474,6 +476,7 @@ onBeforeUnmount(() => {
 			:estimate="estimatedFeeDisplay"
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
+			:offersQueue="offersQueue"
 			:payer="feePayer"
 			:queuedCap="queuedCapDisplay"
 		/>

@@ -5,8 +5,11 @@ import FeeAmount from "@/components/composite/FeeAmount.vue"
 const props = defineProps({
 	estimate: { type: Object, default: null },
 	isEstimating: { type: Boolean, default: false },
-	/** The wallet answered that an earlier send holds this transfer's chain state. */
+	/** The wallet answered that an earlier send holds what this estimate needs. */
 	isQueued: { type: Boolean, default: false },
+	/** A queued send can still go out from this surface, as Send's can on Nulo's sponsor or a cap; a
+	 *  surface that holds it until its estimate lands shows only the queued sentence. */
+	offersQueue: { type: Boolean, default: true },
 	/** Who pays an estimate. The parent decides: only it knows whether a sponsor is Nulo's own. */
 	payer: { type: String, default: "self", validator: (v) => ["self", "sponsor", "unvouched"].includes(v) },
 	/** Set while the send can be queued against a cap: `about` is the last fee of this token's like sends,
@@ -32,7 +35,7 @@ const sponsoredSentence = computed(() => {
 <template>
 	<!-- Pending with an amount, estimating and estimated stack label over value, so the row keeps its height when the number lands. -->
 	<Flex
-		v-if="estimating && isQueued && queuedCap"
+		v-if="estimating && isQueued && offersQueue && queuedCap"
 		direction="column"
 		gap="4"
 		:class="$style.detail_row"
@@ -45,7 +48,7 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most <FeeAmount :display="queuedCap.cap" :class="$style.fee_figure" />.</span>
 	</Flex>
 	<Flex
-		v-else-if="estimating && isQueued && payer === 'sponsor'"
+		v-else-if="estimating && isQueued && offersQueue && payer === 'sponsor'"
 		direction="column"
 		gap="4"
 		:class="$style.detail_row"

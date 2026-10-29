@@ -32,6 +32,9 @@ function makeSelf() {
 	const self = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
 		services: { get: () => interactions },
+		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
+		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
+		networkService: { getNetwork: async () => ({ chainId: 7 }) },
 		dappSendExecutor,
 	}) as ExecutionService
 	return { self, interactions, dappSendExecutor, materializeStoredOperation }

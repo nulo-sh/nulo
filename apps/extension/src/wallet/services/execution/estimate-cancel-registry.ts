@@ -35,17 +35,12 @@
 
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { PREVIEW_SNAPSHOT_TTL_MS } from "./preview-snapshots"
+import { ESTIMATE_JOB_TTL_MS } from "./spec"
 
 export const MAX_ACTIVE_ESTIMATES_PER_PROFILE = 4
 /** Parked admissions beyond this per profile are rejected outright — a
  *  many-operation dApp interaction must not mint unbounded parked promises. */
 export const MAX_PENDING_ESTIMATES_PER_PROFILE = 8
-/** A runner that hasn't settled after this long is presumed dead and reaped.
- *  MUST stay comfortably above the worst-case estimate transport chain
- *  (~5 sequential PXE RPCs × their 90 s timeouts). It is a dead-man bound, not
- *  a ceiling on the work: a held entry whose simulation still waits offscreen
- *  behind queued proofs is reaped too, and its place admits the next estimate. */
-export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
 /** How long a settled token can still evict its stash: the longest-lived stash, the authorization
  *  snapshot, so the sweep never drops a live snapshot. Signed requests still expire at their own
  *  cache's TTL. */
@@ -102,7 +97,8 @@ export class EstimateCancelRegistry {
 		return n
 	}
 
-	/** A token may be admitted once, ever — active, settled, and parked all collide. */
+	/** Refuses a token still active, parked, or holding a settled stash; a settle with nothing stashed
+	 *  leaves it free to ask again. */
 	private assertFreshToken(token: string): void {
 		if (this.active.has(token) || this.settled.has(token)) {
 			throw new Error("duplicate estimate token")

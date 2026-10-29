@@ -45,7 +45,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
@@ -57,7 +57,7 @@ import {
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { getErrorMessage } from "@nulo/wallet-core/utils"
+import { EventHandler, getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId, assertInstanceArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import {
@@ -68,6 +68,7 @@ import {
 	refuseUnknownPriorities,
 } from "@nulo/wallet-bridge"
 import {
+	ESTIMATE_JOB_TTL_MS,
 	EXECUTION_SERVICE_NAME,
 	type Methods,
 	type Operation,
@@ -91,6 +92,8 @@ import {
 	type RegisterTokenOperation,
 	type TransferFeeEstimate,
 	type TransferFeeQueued,
+	type EstimateStarted,
+	type Events,
 } from "./spec"
 import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
@@ -200,7 +203,7 @@ const FEE_SETTINGS_OF = {
 		Array.isArray(operations) ? operations.flatMap((op) => (carriesFeeSettings(op) ? [op.feeSettings] : [])) : [],
 } satisfies FeeSettingsReaders<Methods>
 
-export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
+export class ExecutionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"executeTransfer",
 		"executeOperations",
@@ -218,6 +221,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"getLastProveOutcome",
 	)
 	public static name = EXECUTION_SERVICE_NAME
+
+	public readonly onEstimateStarted = new EventHandler<EstimateStarted>()
 
 	private pxeService: PxeServiceClient = null!
 	private profileService: ProfileService = null!
@@ -446,7 +451,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
 				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
-				tryTakeSlot: (profileId, chainId) => this.lane.tryTakeSlot(profileId, chainId),
+				takeEstimateSlot: (profileId, chainId, signal) => this.lane.takeEstimateSlot(profileId, chainId, signal),
 				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
 					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
 			},
@@ -660,7 +665,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		const sequence = await this.transferExecutor.sequence(req, profile.id)
 		// A send holding the slot is proving: the PXE runs one operation at a time, so this estimate
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
-		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
+		const slotBusy = this.lane.isSendInSlot(profile.id, sequence.scope.chainId)
 		const lagging = this.chainTipGate.unconfirmed(sequence.scope, sequence.keys, networkId)
 		// The popup asks again every 2 s; the read it starts is what lets that answer change.
 		if (lagging) void this.chainTipGate.refresh(networkId)
@@ -668,7 +673,9 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			const cap = await this.queuedFeeCapFor(req, profile.id, sequence)
 			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
 		}
-		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
+		return this.withEstimateAdmission(estimateToken, "send", (signal, started) =>
+			this.transferExecutor.estimateFee(req, signal, sequence, started),
+		)
 	}
 
 	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
@@ -691,7 +698,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	private async withEstimateAdmission<T extends { estimateId?: string; previewId?: string } | TransferFeeQueued>(
 		estimateToken: string | undefined,
 		flowKey: string,
-		run: (signal?: AbortSignal) => Promise<T>,
+		run: (signal?: AbortSignal, started?: () => void) => Promise<T>,
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
@@ -703,7 +710,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
 			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			const result = await run(admission)
+			const result = await run(admission, () => this.emit("onEstimateStarted", { estimateToken }))
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
@@ -796,15 +803,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		feeSettings: FeeSettings,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<TransferFeeEstimate> {
+	): Promise<TransferFeeEstimate | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the stored request is read: a cancel then either finds the estimate or comes
-		// after the approval that deleted the request, which the read then refuses.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
-				return this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index })
-			}),
+			this.withStoredRequestSlot(interactionId, index, feeSettings, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.estimateOperationFee(operation, feeSettings, signal, { interactionId, index }),
+			),
 		)
 	}
 
@@ -813,15 +817,45 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		index: number,
 		estimateToken?: string,
 		flowKey?: string,
-	): Promise<OperationAuthwitPreview> {
+	): Promise<OperationAuthwitPreview | TransferFeeQueued> {
 		await this.ensureInitialized()
-		// Admitted before the read, as `estimateOperationFee` is.
 		return this.refusalBound(interactionId, () =>
-			this.withEstimateAdmission(estimateToken, flowKey ?? "op", async (signal) => {
-				const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index)
-				return this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal)
-			}),
+			this.withStoredRequestSlot(interactionId, index, undefined, estimateToken, flowKey ?? "op", (operation, signal) =>
+				this.dappSendExecutor.previewOperationAuthwits(operation, { interactionId, index }, signal),
+			),
 		)
+	}
+
+	/**
+	 * Runs a stored request's estimate or preview holding the slot of its chain, as a transfer's
+	 * estimate does: the PXE runs one operation at a time, so a simulation behind a proof outlasts its
+	 * request deadline. Admitted before the request is read, so a cancel either finds it or follows
+	 * the approval that deleted the request, which the read then refuses. Behind an estimate it waits
+	 * its turn; while a send holds or awaits the slot it answers queued, settled with nothing stashed,
+	 * so the same token can ask again.
+	 */
+	private withStoredRequestSlot<T extends { estimateId?: string; previewId?: string }>(
+		interactionId: string,
+		index: number,
+		feeSettings: FeeSettings | undefined,
+		estimateToken: string | undefined,
+		flowKey: string,
+		run: (operation: Operation, signal?: AbortSignal) => Promise<T>,
+	): Promise<T | TransferFeeQueued> {
+		return this.withEstimateAdmission<T | TransferFeeQueued>(estimateToken, flowKey, async (signal, started) => {
+			const operation = await this.interactionOperations().materializeStoredOperation(interactionId, index, feeSettings)
+			const profile = await requireActiveProfile(this.profileService, "Wallet locked")
+			const { chainId } = await this.networkService.getNetwork(operation.networkId)
+			const slot = this.lane.takeEstimateSlot(profile.id, chainId, signal)
+			if (!slot) return { queued: true, tokenSpent: false }
+			const release = await slot
+			try {
+				started?.()
+				return await run(operation, signal)
+			} finally {
+				release()
+			}
+		})
 	}
 
 	/** A refusal is the request's, not one attempt's: the attempt that met it may be one the window

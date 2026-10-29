@@ -44,6 +44,10 @@ const fpcEvents = await vi.hoisted(async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return { onFpcDeleted: new EventHandler<unknown>(), onFpcUpdated: new EventHandler<unknown>() }
 })
+const estimateEvents = await vi.hoisted(async () => {
+	const { EventHandler } = await import("@nulo/wallet-core/utils")
+	return { onEstimateStarted: new EventHandler<{ estimateToken: string }>() }
+})
 
 vi.mock("@/wallet/services/execution/client", () => ({
 	ExecutionServiceClient: vi.fn(function () {
@@ -55,6 +59,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			cancelEstimate: mocks.cancelEstimate,
 			getGasBalances: mocks.getGasBalances,
 			peekGasBalances: vi.fn(async () => null),
+			onEstimateStarted: estimateEvents.onEstimateStarted,
 		}
 	}),
 }))
@@ -815,6 +820,30 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(args[8]).toBeUndefined()
 		expect(args[9]).toBe("4472280000000000000")
 		expect(args[10]).toBeUndefined()
+		w.unmount()
+	})
+
+	test("once the wallet reports this estimate's run, the row leaves queued and its cap, and Send waits for the fee", async () => {
+		const { w } = await queuedPrivately(FUNDING["private Fee Juice only"])
+		expect(capShown(w)).toBe("4.47228")
+		const run = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(run.promise)
+		await vi.advanceTimersByTimeAsync(2_000)
+		await flushPromises()
+		const calls = mocks.estimateTransferFee.mock.calls
+		const token = (calls.at(-1) as unknown[])[8] as string
+		expect((calls.at(-2) as unknown[])[8]).toBe(token)
+		estimateEvents.onEstimateStarted.invoke({ estimateToken: "another-window" })
+		await flushPromises()
+		expect(queuedRow(w)).toBe(true)
+		estimateEvents.onEstimateStarted.invoke({ estimateToken: token })
+		await flushPromises()
+		expect(queuedRow(w)).toBe(false)
+		expect(capShown(w)).toBeUndefined()
+		expect(sendDisabled(w)).toBe(true)
+		run.resolve({ maxFee: "1000", gasDetails: {} })
+		await flushPromises()
+		expect(sendDisabled(w)).toBe(false)
 		w.unmount()
 	})
 

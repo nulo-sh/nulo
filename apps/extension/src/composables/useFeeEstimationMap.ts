@@ -7,8 +7,9 @@ export interface UseFeeEstimationMapOptions<TKey extends string | number, TParam
 	 * plus the caller-minted cancellation token and the per-key flow key —
 	 * thread both into `estimateOperationFee` so the SW can abort + evict on
 	 * remote cancel and coalesce overflow admissions per operation slot.
+	 * `signal` aborts once this attempt is superseded, cancelled or disposed.
 	 */
-	estimate: (params: TParams, estimateToken: string, flowKey: string) => Promise<TResult>
+	estimate: (params: TParams, estimateToken: string, flowKey: string, signal: AbortSignal) => Promise<TResult>
 	/**
 	 * Debounce window per key before the estimator actually fires. Default: 500ms,
 	 * matching the prior inline debounce in the execute window. Send-page-style
@@ -67,7 +68,7 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 	const instanceId = Math.random().toString(36).slice(2, 8)
 
 	const engine = createFeeEstimationEngine<TKey, TParams, TResult>({
-		run: (params, estimateToken, key) => estimate(params, estimateToken, `op:${instanceId}:${String(key)}`),
+		run: (params, estimateToken, key, signal) => estimate(params, estimateToken, `op:${instanceId}:${String(key)}`, signal),
 		debounceMs,
 		onResult: (key, r) => {
 			results.value[key] = r

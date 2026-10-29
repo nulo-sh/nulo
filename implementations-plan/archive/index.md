@@ -468,3 +468,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [networks-ux-1](networks-ux-1/plan.md) — completed — a Switch button on each inactive row of Manage Networks (closes #1325; known limit #1330)
 - [send-picker-1](send-picker-1/plan.md) — completed — Send's token picker is the Holdings-style list with paste-to-add, and the amount card reads a zero it read (closes #1333; known limits #1339, #1340; owner decision #1341)
 - [send-side-1](send-side-1/plan.md) — completed — after a paste-to-add, Send keeps From and To where they were when the new token supports that side (closes #1341; known limit #1345)
+- [lessons-budget-1](lessons-budget-1/plan.md) — completed — one pass over `lessons.md`: four entries routed to their homes, one retired, every clause sourced, two promoted; 8191 B to 7948 B (closes #1347)
