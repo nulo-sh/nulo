@@ -12,6 +12,7 @@ import { AccountService } from "@/wallet/services/account/service"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { svc } from "@/wallet/services/composition-harness"
 import { ContactService } from "@/wallet/services/contact/service"
+import { DAPP_INTERACTION_SERVICE_NAME } from "@/wallet/services/dapp-interaction/spec"
 import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import type { EstimateCancelRegistry } from "@/wallet/services/execution/estimate-cancel-registry"
 import type { ExecutionLane } from "@/wallet/services/execution/execution-lane"
@@ -48,6 +49,8 @@ export type ExecutionGraphStubs = {
 	legal?: Stub
 	task?: Stub
 	price?: Stub
+	/** The stored requests a window's estimates and approvals read. */
+	dappInteraction?: Stub
 }
 
 /** The service's own collaborators a composition case reads or seeds. */
@@ -82,6 +85,7 @@ export async function startExecutionGraph(stubs: ExecutionGraphStubs, proofGate:
 	collection.add(svc(PriceService.name, stubs.price ?? {}))
 	const service = new ExecutionService(logger, proofGate, () => pxeClient)
 	collection.add(service)
+	if (stubs.dappInteraction) collection.add(svc(DAPP_INTERACTION_SERVICE_NAME, stubs.dappInteraction))
 	await collection.start()
 	return { service, journal, api, logger, internals: service as unknown as ExecutionInternals }
 }
