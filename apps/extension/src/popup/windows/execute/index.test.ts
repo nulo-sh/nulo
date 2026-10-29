@@ -905,7 +905,6 @@ describe("execute window — approval envelope", () => {
 			.mockResolvedValueOnce(QUEUED as never)
 			.mockReturnValueOnce(new Promise((resolve) => (answerOld = resolve)) as never)
 			.mockReturnValueOnce(new Promise((resolve) => (answerNew = resolve)) as never)
-			.mockReturnValueOnce(new Promise(() => {}) as never)
 		vi.useFakeTimers()
 		try {
 			vm.handleFeeUpdate(0, FJ)
@@ -920,7 +919,7 @@ describe("execute window — approval envelope", () => {
 			vm.handleFeeUpdate(0, SPONSOR)
 			card().vm.$emit("updatePayer", 0, { type: "fpc" })
 			expect(fees!.api.estimate).toHaveBeenLastCalledWith(0, { index: 0, feeSettings: SPONSOR })
-			void fees!.opts.estimate({ index: 0, feeSettings: SPONSOR }, "tok-b", "flow-b", live.signal)
+			void fees!.opts.estimate({ index: 0, feeSettings: SPONSOR }, "tok-b", "flow-b", live.signal).catch(() => {})
 			await vi.advanceTimersByTimeAsync(0)
 			expect(queued()).toBe(false)
 			expect(confirmOff()).toBe(true)
@@ -943,6 +942,7 @@ describe("execute window — approval envelope", () => {
 			expect(queued()).toBe(false)
 			expect(confirmOff()).toBe(false)
 		} finally {
+			live.abort()
 			vi.useRealTimers()
 		}
 	})

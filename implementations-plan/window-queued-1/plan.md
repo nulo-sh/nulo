@@ -98,7 +98,7 @@ The window's fee row after a fee-method switch while queued, and after any other
 | D5 | The composition catalog does not gain the sequence | a hand list in `fee-race.composition.test.ts` | its driver runs no window component and keeps no window flag (F6); the sequence would test a copy written for it, the second wallet fee-race-1's D12 rejects |
 | D6 | One arc, one PR, `gh pr create` | a `gh stack` | one issue, one file and its test |
 | D7 | A priority pick and the card's re-derivations clear the reading too | filter `handleFeeUpdate` to a changed `paymentMethod`; an owner ask | each schedules a replacement, a new question; a filter keeps "Queued behind your previous send" on screen behind another estimate, which fee-race-1's D18 ruled out ("the sentence never names a send that does not exist", its signed-off UI impact) and adds a comparison for one caller. The owner's sentence names the reading after a new estimate, which Send already gives every input. Stated in UI impact and the PR body |
-| D8 | The picture comes from a scratch spec on the held window (I2) | no picture; the bug's own case in a browser | CLAUDE.md requires one for a popup surface; the held window shows the same estimating state the fix restores, and the bug's case has no existing deterministic browser fixture (D4) |
+| D8 | The picture comes from a scratch spec on the held window (I2) | no picture; the bug's own case in a browser | CLAUDE.md requires one for a popup surface; the held window shows the same estimating state the fix restores, and the bug's case has no existing deterministic browser fixture (D4). Deviation, as built: the fixture's account pays only through the sponsor (the only enabled row), so the pick is the priority row's Fast, the same `handleFeeUpdate` path (D7); a funded dApp fixture for one picture was out of proportion |
 
 ## Audit verdicts
 
@@ -114,6 +114,8 @@ The window's fee row after a fee-method switch while queued, and after any other
 - O-facts: F1's engine lines (`120-125`, abort at `97-99`); D1's "the watcher already clears" on dispose was wrong (dispose leaves estimating set) → reworded.
 - **Round 2** (Codex, resumed, verification): `approve`. Two low notes, folded: the picture arms its observation before the pick and adds no sleep or retry; D8 says "no existing deterministic browser fixture", not "no browser path". It argued D7 both ways and found it sound. It traced step 2 red on the base `index.vue` (to be confirmed by the run).
 - Both, round 1: D1-D3 and D5 hold; no new state, lifecycle, protocol, recovery policy or contract; the clear cannot land after the replacement's own queued answer (the clear and `schedule` share one synchronous stack, the replacement asks after the 500 ms timer).
+
+**Post-implementation** (diff `15a9bd9d3...HEAD -- apps/`). Round 1: Codex (gpt-6.1-sol, high, session `01a189b7`) `clean`; Opus 5.5 diff review beside it `findings: 1`, low, demonstrated, taken: the case queued a fourth answer it never consumed (`vi.clearAllMocks` keeps once-values, so a later case driving the estimator could hang) and left `tok-b` live → the once-value removed, `tok-b`'s rejection caught and `live.abort()` in `finally`. A test-only change inside the approved behaviour; Codex's clean round stands as convergence.
 
 ## Delivery
 
