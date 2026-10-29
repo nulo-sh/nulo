@@ -53,8 +53,8 @@ const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListE
 /** The source run's list: two Testnet tokens, the first priced as USDC. */
 export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
-/** The pairs the source run's list flags as a scam: a spec seeds the first as a held token and pastes the
- *  second, which nothing holds. Only a source run holds them; the published list flags none. */
+/** The pairs the source run's list flags as a scam; the published list flags none. Each is a curve point
+ *  (`…f2` is not), so a pasted one gets an add row, and no spec seeds the second. */
 export const E2E_LIST_FLAGGED: readonly TokenListPair[] = [
 	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f1` },
 	{ chainId: CHAIN_IDS.TESTNET, address: `0x${"0".repeat(62)}f3` },

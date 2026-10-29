@@ -38,7 +38,7 @@ test("the Send picker: New token opened from a pasted address's add row closes b
 	await page.waitForSelector(sel("select-token-search"), VISIBLE)
 	await replaceInputValue(page, sel("select-token-search"), UNLISTED)
 	await page.waitForSelector(sel("select-token-add-token"), VISIBLE)
-	// The add row and its flag render in one patch, and no list flags this address.
+	// No list flags this address, in either run mode.
 	expect(await page.$(sel("select-token-add-token-flagged"))).toBeNull()
 	await shotSend(page, "send-picker-add", "select-token-add-token")
 	await clickByTestId(page, "select-token-add-token")
