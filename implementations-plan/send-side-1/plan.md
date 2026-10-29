@@ -9,10 +9,20 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at af025cfb5
 trunk: dev
-status: approved; implementing arc 1
+status: completed; delivered as one PR carrying this close-out
 issues: "#1341"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-29. Planned on 2026-10-28 and implemented as one arc.
+- **Status:** completed. The arc and this close-out ship as #1346 into `dev`; its merge closes #1341 and archives this plan.
+- **Shipped:** after a paste-to-add, Send keeps From and To where they were when the new token supports that side, a side the old token forced included (F1, D6); a row pick resets as before (`send.vue`: the import's mark renamed `keepFormFor` and widened to the sides, a `keepSide` parameter on the two init functions). Tests: U1's two mixed rows and the extended import step of `network/send-picker.test.ts`, both red on the base first; U2, the row-pick control.
+- **Dropped or rejected:** skipping both inits on an import (D2, option a); a test importing a token that lacks a side (D3); a U2 run after an import to pin the mark's clear (Opus, planning). No `lessons.md` line: it holds 8191 of 8192 bytes and nothing here generalizes past this file; the run notes stay in `lessons/`.
+- **Known limits:** #1345.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 ## Goal
 
