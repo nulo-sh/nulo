@@ -1,0 +1,5 @@
+# Phase 1: the tests, red on the base
+
+- U1 (`send.test.ts`, "the swap keeps From on %s and To on %s, and the fee is asked for that transfer"), base `send.vue`: both rows red at the side check (`[private, private]` against `[public, private]` and `[private, public]`). U2 ("a row pick still puts From and To back on private and clears the amount") green on the base, as a control should be.
+- The real `AmountCard` prints "Failed to resolve component: Skeleton" in this file's tests; the existing swap test prints it too (seen with `--disableConsoleIntercept`), so it is not from the new tests.
+- Network e2e, Chrome, retry 0, base `send.vue`: the first case green (43.2 s); the import case reached PICK with the amount and recipient kept, then failed at the side check, `[private, hidden]` against `[public, public]` (14.9 s). The aztec CLI's anvil bind error at boot and a world-state "process died" line after teardown are both in the log; neither touched the run (the runner names the first as expected; the second came after anvil stopped).
