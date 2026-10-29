@@ -30,37 +30,25 @@ import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { JobCancelledError, JournaledRejection, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
+import { MockClock } from "@nulo/wallet-core/testing"
 import { buildJournalTerminalCardProps, sendOutcome } from "@/utils/journal-state"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
-import { ServiceCollection } from "@/wallet/base"
-import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { NetworkService } from "@/wallet/services/network/service"
-import { AccountService } from "@/wallet/services/account/service"
-import { ContactService } from "@/wallet/services/contact/service"
-import { TokenService } from "@/wallet/services/token/service"
-import { PriceService } from "@/wallet/services/price/service"
-import { FpcService } from "@/wallet/services/fpc/service"
-import { DROPPED_RESURRECTION_WINDOW_MS, TransactionService, TransferType } from "@/wallet/services/transaction/service"
+import { DROPPED_RESURRECTION_WINDOW_MS, TransferType } from "@/wallet/services/transaction/service"
 import { OriginType } from "@/wallet/services/transaction/spec"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
-import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
-import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import {
 	InvalidWalletArgumentsError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
-import { OperationJournalService, type OperationRecord } from "@/wallet/services/operation-journal/service"
+import type { OperationRecord } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
-import { TaskService } from "@/wallet/services/task/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
-import type { ProofGate } from "@/e2e/proof-gate"
+import { makeControllableGate, startExecutionGraph, waitFor } from "../../../../tests/helpers/execution-graph"
 import type { ExecutionLane } from "./execution-lane"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { EmbeddedStrategy } from "./fee/embedded-strategy"
@@ -74,30 +62,8 @@ import type { PreviewSnapshots } from "./preview-snapshots"
 import type { QueuedFeeAnswers } from "./queued-fee-cap"
 import type { SendSequencer } from "./send-sequencer"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
-import { ExecutionService } from "./service"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import type { FeeSettings } from "./models"
-
-// ── Controllable proof gate: holds proveTxTask until release() ──────────────
-function makeControllableGate() {
-	let resolveGate: () => void = () => {}
-	let entered = false
-	const gate: ProofGate = {
-		wait: () => {
-			entered = true
-			return new Promise<void>((r) => {
-				resolveGate = r
-			})
-		},
-	}
-	return {
-		gate,
-		release: () => resolveGate(),
-		get entered() {
-			return entered
-		},
-	}
-}
 
 const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
@@ -112,10 +78,6 @@ const NETWORK = {
 }
 
 const SPONSOR = { id: "fpc-1", type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }
-
-function svc(name: string, methods: Record<string, unknown>) {
-	return { name, dependencies: [], async start() {}, ...methods } as never
-}
 
 /** A proven tx as `proveAndSend` reads it: its hash, and the expiry part of its kernel outputs. */
 function provenTx(hash: string) {
@@ -144,13 +106,90 @@ async function makeHarness() {
 	const fakeIPXE = { proveTx } as unknown as ReturnType<PxeServiceClient["getPXE"]>
 	const fakePxeClient = { getPXE: () => fakeIPXE, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
 
-	const logger = new LoggerStore(new ConfigStore())
 	const ctrl = makeControllableGate()
+	const legalAssertCurrent = vi.fn(async () => {})
+	// One shared ProfileDeletionState so Execution's captureFence + Transaction's
+	// addTransaction assert against the SAME epoch map (fence wiring).
+	const deletionState = new ProfileDeletionState()
+	// Real handler so the facade's profile-switch invalidation is both
+	// subscribable by the service and firable by tests.
+	const profileChanged = new EventHandler<unknown>()
+	// The published session. Every `setActive` starts a new one with a fresh serial, as a lock, a
+	// switch or a re-unlock does; `fireChanged` is separate so a checkpoint case can run without
+	// the change subscribers.
+	let lastSerial = 1
+	let live: { profileId: string; serial: number } | undefined = { profileId: "p1", serial: lastSerial }
+	const captureExecutionFence = async (): Promise<ExecutionFence> => {
+		if (!live) throw new Error("Wallet locked")
+		return { profileId: live.profileId, epoch: deletionState.capture(live.profileId), session: live.serial }
+	}
+	const isFenceLive = (fence: ExecutionFence) =>
+		live?.serial === fence.session && live.profileId === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch)
+	const session = {
+		setActive: (profileId: string | undefined) => {
+			lastSerial += 1
+			live = profileId ? { profileId, serial: lastSerial } : undefined
+		},
+		fireChanged: () => profileChanged.invoke(live ? { id: live.profileId } : undefined),
+	}
+	let expiryDeferral: ((profileId: string) => Promise<boolean>) | undefined
+	const getNetwork = vi.fn(async () => NETWORK)
+	// The profiles that hold ACCOUNT; a lookup under any other profile misses.
+	const accountOwners = new Set(["p1"])
+	const getAccountContract = vi.fn(async (profileId: string) => {
+		if (!accountOwners.has(profileId)) throw new Error(`no such account under ${profileId}`)
+		return { address: ACCOUNT }
+	})
+	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
+	// calls task.cancel() on a user-cancel before returning the cancelled result.
+	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
+	fakeTask.startSubtask.mockReturnValue(fakeTask)
 
 	// REAL journal (FakeBrowserApi-backed) so the actual FSM + transition lock run.
-	const api = new FakeBrowserApi()
-	api.reset()
-	const journal = new OperationJournalService(logger, api)
+	const { service, journal, api } = await startExecutionGraph(
+		{
+			profile: {
+				getActiveProfile: async () => (live ? { id: live.profileId } : undefined),
+				// The journal's create fence checks membership here — the fake must
+				// list the profile the flow files under or every create is refused.
+				getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
+				getDeletionState: () => deletionState,
+				captureExecutionFence,
+				assertFence: async (fence: ExecutionFence) => {
+					if (live?.serial !== fence.session || live.profileId !== fence.profileId) throw new SessionEndedError()
+					deletionState.assertCurrent(fence.profileId, fence.epoch)
+				},
+				isFenceLive,
+				peekLiveSerial: () => live?.serial,
+				setExpiryDeferral: (predicate: (profileId: string) => Promise<boolean>) => {
+					expiryDeferral = predicate
+				},
+				onActiveProfileChanged: profileChanged,
+			},
+			network: { getNetwork, getNode: async () => fakeNode },
+			account: { getAccountContract },
+			transactions: {
+				getPendingForAccount: () => [],
+				// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
+				transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
+				addTransaction: vi.fn(),
+				onTransactionUpdated: { add: () => {} },
+			},
+			token: { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) },
+			fpc: {
+				onFpcUpdated: { add: () => {} },
+				onFpcDeleted: { add: () => {} },
+				getFpc: async () => ({ ...SPONSOR }),
+				getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
+			},
+			authRegistry: { assertWithinCap: async () => {} },
+			legal: { assertCurrent: legalAssertCurrent },
+			task: { startNewTask: () => fakeTask },
+			price: { getUsableQuote: async () => undefined },
+		},
+		ctrl.gate,
+		fakePxeClient,
+	)
 	let journalId = ""
 	journal.onOperationAdded.add((rec) => {
 		journalId = rec.id
@@ -180,97 +219,6 @@ async function makeHarness() {
 		})
 		return { isParked: () => parked, release: () => release() }
 	}
-
-	const legalAssertCurrent = vi.fn(async () => {})
-	const collection = new ServiceCollection()
-	// One shared ProfileDeletionState so Execution's captureFence + Transaction's
-	// addTransaction assert against the SAME epoch map (fence wiring).
-	const deletionState = new ProfileDeletionState()
-	// Real handler so the facade's profile-switch invalidation is both
-	// subscribable by the service and firable by tests.
-	const profileChanged = new EventHandler<unknown>()
-	// The published session. Every `setActive` starts a new one with a fresh serial, as a lock, a
-	// switch or a re-unlock does; `fireChanged` is separate so a checkpoint case can run without
-	// the change subscribers.
-	let lastSerial = 1
-	let live: { profileId: string; serial: number } | undefined = { profileId: "p1", serial: lastSerial }
-	const captureExecutionFence = async (): Promise<ExecutionFence> => {
-		if (!live) throw new Error("Wallet locked")
-		return { profileId: live.profileId, epoch: deletionState.capture(live.profileId), session: live.serial }
-	}
-	const isFenceLive = (fence: ExecutionFence) =>
-		live?.serial === fence.session && live.profileId === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch)
-	const session = {
-		setActive: (profileId: string | undefined) => {
-			lastSerial += 1
-			live = profileId ? { profileId, serial: lastSerial } : undefined
-		},
-		fireChanged: () => profileChanged.invoke(live ? { id: live.profileId } : undefined),
-	}
-	let expiryDeferral: ((profileId: string) => Promise<boolean>) | undefined
-	collection.add(
-		svc(ProfileService.name, {
-			getActiveProfile: async () => (live ? { id: live.profileId } : undefined),
-			// The journal's create fence checks membership here — the fake must
-			// list the profile the flow files under or every create is refused.
-			getProfiles: async () => [{ id: "p1" }, { id: "p2" }],
-			...(await rowKeysForEveryProfile()),
-			getDeletionState: () => deletionState,
-			captureExecutionFence,
-			assertFence: async (fence: ExecutionFence) => {
-				if (live?.serial !== fence.session || live.profileId !== fence.profileId) throw new SessionEndedError()
-				deletionState.assertCurrent(fence.profileId, fence.epoch)
-			},
-			isFenceLive,
-			peekLiveSerial: () => live?.serial,
-			setExpiryDeferral: (predicate: (profileId: string) => Promise<boolean>) => {
-				expiryDeferral = predicate
-			},
-			onActiveProfileChanged: profileChanged,
-		}),
-	)
-	const getNetwork = vi.fn(async () => NETWORK)
-	collection.add(svc(NetworkService.name, { getNetwork, getNode: async () => fakeNode }))
-	// The profiles that hold ACCOUNT; a lookup under any other profile misses.
-	const accountOwners = new Set(["p1"])
-	const getAccountContract = vi.fn(async (profileId: string) => {
-		if (!accountOwners.has(profileId)) throw new Error(`no such account under ${profileId}`)
-		return { address: ACCOUNT }
-	})
-	collection.add(svc(AccountService.name, { getAccountContract }))
-	collection.add(
-		svc(TransactionService.name, {
-			getPendingForAccount: () => [],
-			// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
-			transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
-			addTransaction: vi.fn(),
-			onTransactionUpdated: { add: () => {} },
-		}),
-	)
-	collection.add(svc(TokenService.name, { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) }))
-	collection.add(
-		svc(FpcService.name, {
-			onFpcUpdated: { add: () => {} },
-			onFpcDeleted: { add: () => {} },
-			getFpc: async () => ({ ...SPONSOR }),
-			getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
-		}),
-	)
-	collection.add(svc(ContactService.name, {}))
-	collection.add(svc(AuthRegistryService.name, { assertWithinCap: async () => {} }))
-	collection.add(svc(DAPP_SESSION_SERVICE_NAME, {}))
-	collection.add(svc(LegalAcceptanceService.name, { assertCurrent: legalAssertCurrent }))
-	collection.add(journal)
-	// `cancel` is part of the real WrappedTask surface — classifyOperationCatch
-	// calls task.cancel() on a user-cancel before returning the cancelled result.
-	const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), cancel: vi.fn(), startSubtask: vi.fn() }
-	fakeTask.startSubtask.mockReturnValue(fakeTask)
-	collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
-	collection.add(svc(PriceService.name, { getUsableQuote: async () => undefined }))
-
-	const service = new ExecutionService(logger, ctrl.gate, () => fakePxeClient)
-	collection.add(service)
-	await collection.start()
 
 	// Seed the reuse cache so executeTransfer takes the fast path (skips build).
 	const feeSettings: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: SPONSOR.id } }
@@ -351,14 +299,6 @@ async function makeHarness() {
 }
 
 type Harness = Awaited<ReturnType<typeof makeHarness>>
-
-const waitFor = async (pred: () => boolean, timeoutMs = 2000) => {
-	const deadline = Date.now() + timeoutMs
-	while (!pred()) {
-		if (Date.now() > deadline) throw new Error("waitFor timeout")
-		await new Promise((r) => setTimeout(r, 5))
-	}
-}
 
 describe("ExecutionService composition — cancel-mid-prove (in-process, no sandbox)", () => {
 	test("cancel while proving: real journal → cancelled, proof dropped before submit, never sent", async () => {
