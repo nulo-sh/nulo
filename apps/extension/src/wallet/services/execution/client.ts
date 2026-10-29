@@ -2,13 +2,15 @@
 import type { MethodsSpec, ServiceSpec } from "@/wallet/base"
 import { ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
-import { EXECUTION_SERVICE_NAME, type Methods } from "./spec"
+import { ESTIMATE_JOB_TTL_MS, EXECUTION_SERVICE_NAME, type Methods } from "./spec"
 
 export * from "./spec"
 
 /** A transport deadline for a send whose outcome the popup cannot know sooner: proving in the
  *  browser can take minutes. Past it the journal still holds the answer. */
 export const EXECUTE_SEND_TIMEOUT_MS = 60 * 60_000
+
+const ESTIMATE_METHODS: ReadonlySet<keyof Methods> = new Set(["estimateTransferFee", "estimateOperationFee", "previewOperationAuthwits"])
 
 // Declaration-merge the passthrough signatures onto the class type. Bodies are
 // installed at runtime by `definePassthroughs`; this is what satisfies
@@ -21,7 +23,11 @@ export class ExecutionServiceClient extends ServiceClient<Methods> implements Se
 	}
 
 	protected override getRequestTimeoutMs(method: keyof Methods): number {
-		return method === "executeTransfer" ? EXECUTE_SEND_TIMEOUT_MS : super.getRequestTimeoutMs(method)
+		if (method === "executeTransfer") return EXECUTE_SEND_TIMEOUT_MS
+		// The worker answers an estimate when its run ends, and each of the run's requests ends at the
+		// worker's own bound; this deadline only backs up a worker that stays connected and never answers.
+		if (ESTIMATE_METHODS.has(method)) return ESTIMATE_JOB_TTL_MS
+		return super.getRequestTimeoutMs(method)
 	}
 }
 // Every client method is a pure request-passthrough; the installer's

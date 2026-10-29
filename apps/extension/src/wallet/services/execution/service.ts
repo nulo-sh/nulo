@@ -45,7 +45,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	InvalidWalletArgumentsError,
@@ -68,6 +68,7 @@ import {
 	refuseUnknownPriorities,
 } from "@nulo/wallet-bridge"
 import {
+	ESTIMATE_JOB_TTL_MS,
 	EXECUTION_SERVICE_NAME,
 	type Methods,
 	type Operation,

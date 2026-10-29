@@ -15,6 +15,13 @@ import type {
 
 export const EXECUTION_SERVICE_NAME = "execution"
 
+/** How long an estimate may run: the registry reaps a runner still unsettled past it as dead, and
+ *  the popup's estimate calls end at it. MUST stay comfortably above the worst-case estimate
+ *  transport chain (~5 sequential PXE RPCs × their 90 s timeouts). It is a dead-man bound, not a
+ *  ceiling on the work: a held entry whose simulation still waits offscreen behind queued proofs is
+ *  reaped too, and its place admits the next estimate. */
+export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
+
 /** An estimate that did not run: a send sharing its chain state is in flight. A spent token was
  *  admitted and cannot be sent again. `cap` holds the last fee of this token's like sends and the cap a
  *  send may be queued against above it (`queued-fee-cap.ts`); absent when there is none. */
