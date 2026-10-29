@@ -1,7 +1,7 @@
 ---
 plan: nightly-smoke-1
 tier: light
-status: approved (auto-continue), arc 1 in progress
+status: completed
 issues: "#1349"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at 87d04118e
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-29. Planned and implemented as one arc the same day.
+- **Status:** completed. The arc and this close-out ship as #1352 into `dev`; its merge closes #1349 and archives this plan.
+- **Shipped:** #1352. The flag-on-paste check moved into `token-list.test.ts`'s source-run describe on a second, never-held flagged pair (`0x…f3`) with a listed-unheld control. `send-picker-add.test.ts` runs its stacked-popup flow in both modes, with a flag-absence check on its unlisted add row. The held-list rule is in `tests/e2e/README.md`. The red (both browsers, release-shaped build, base) and the green (both modes, both browsers) are recorded under Phases.
+- **Dropped or rejected:** options A, B and C (D1); the two-core amplifier (D7); an OWNER-ASKS entry on publishing a flagged Testnet pair (D8). There is no flake-ledger row (D10): the lane brief directs none, and the conflict with the ledger's charter went to the orchestrator. There is no `lessons.md` line: the rule's home is the e2e README, where the held list is defined.
+- **Known limits:** #1353.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # nightly-smoke-1: the flag-on-paste check runs only where the held list flags a pair
 
