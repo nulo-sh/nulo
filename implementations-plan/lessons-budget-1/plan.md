@@ -9,10 +9,21 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 87d04118e
 trunk: dev
-status: implementing
+status: completed; delivered as one PR carrying this close-out
 issues: "#1347"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-29. Planned and implemented in one session, as one arc.
+- **Status:** completed. The arc and this close-out ship as #1350 into `dev`; its merge closes #1347 and archives this plan.
+- **Shipped:** `implementations-plan/lessons.md` from 8191 B and 33 entries to 7940 B and 31, every entry checked against the tree and every clause linked to a source. Four entries routed to the doc their readers read: the chaos `passkey` fault's timing to the e2e README's session commands, `always() && !cancelled()` to `CI.md` § Adding a new gate, the stacked and parallel arc rules to `implementations-plan/README.md` § Post-implementation standard, and error text to the logging-policy skill. The HandshakeRegistry entry retired (stated at its code, enforced by the send sequencer); the MAC and contract-class rules split; the `innerText` fact merged into the success-control entry; stale wording fixed (root `test`, `PopupManager`, `viaPxe`); stamps now carry version and month, the Aztec ones re-checked on 6.0.0. Two lessons promoted from send-picker-1 (the `<script setup>` shadowing, the lifted display gate).
+- **Dropped or rejected:** the brief's 7 KiB aim, missed by 772 B: the reviews' accuracy and evidence conditions cost about 800 B and no further entry met the retirement rule, so 252 B of head-room remain. T6 in the e2e skill (its readers never load it); the merge-ref entry routed away (`lessons.md` is the only doc every PR session reads); the decision-ids clause moved out of README step 3 (planners read it before writing a plan); thirteen promotion candidates (recon § Candidates). Outside this lane and passed to the orchestrator unverified: whether a wallet-UI send paid by a fee contract can run beside a popup transfer that holds that contract's notes.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none beyond the pass itself.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 ## Goal
 
@@ -104,7 +115,7 @@ Commands run from the worktree root. Every gate: `bun run lint` exit 0; `git add
 
 **2. The pass and the promotions** ✓. Apply every other row of the table in one commit, then P1 and P2 in a second. Gate, also: `wc -c implementations-plan/lessons.md` ≤ 7950; `grep -c '^- '` is 31; reading the whole diff finds no account name, launch day or advisory finding.
 
-**3. Close-out** (the PR's final commits, after `gh pr create`). Merge `origin/dev`; read what changed in `index.md` and `lessons.md` and re-run the phase 2 gate on the merged file. Then the Outcome block, `STATUS.md` deleted, `git mv` into `archive/` in its own commit with the index line moved to `archive/index.md`. Gate: as above, plus `bun run test:ci-gating` exit 0.
+**3. Close-out** ✓ (the PR's final commits, after `gh pr create`). Merge `origin/dev`; read what changed in `index.md` and `lessons.md` and re-run the phase 2 gate on the merged file. Then the Outcome block, `STATUS.md` deleted, `git mv` into `archive/` in its own commit with the index line moved to `archive/index.md`. Gate: as above, plus `bun run test:ci-gating` exit 0.
 
 ## Security & Adversarial Considerations
 
