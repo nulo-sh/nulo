@@ -54,3 +54,8 @@ History's day header reads OCT 30, 2026, the capture date. Alice's address `0x30
 
 - Codex round 1 (gpt-6.1-sol, high, read-only, the diff `9fba3c295..e3e0ba9cd`): conditional approve, 2 findings, both accepted. 1.4 was ticked before `test:all` ran at the head (run, exit 0, recorded above); the 1.3 log lacked its hashes and commands (added above). Codex also parsed all eleven PNGs: sizes right, valid CRCs, only IHDR/IDAT/IEND, nothing after IEND.
 - Opus review (general-purpose, beside round 1): conditional approve, 2 findings, both accepted. Its pixel diff of each committed capture against the new one found #1027's repainted icons in every frame, which recon.md and the PR's list left out (checked: Security's back arrow at y182-185 x73-102); the same `test:all` gap. The PNG commit's body predates the finding; the PR body carries the full list.
+- Codex round 2 (resumed): approve; it matched the eleven recorded hashes against HEAD.
+
+## Final-head gates
+
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all` (16,420 extension tests passed), the two store tests at retry 0 (12 passed): all exit 0. The capture spec, run C, the same command: exit 0 in 160.3 s; its PNGs were discarded (`git checkout -- apps/extension/store`) and the eleven committed files re-hashed equal to run A.

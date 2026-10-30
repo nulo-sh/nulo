@@ -128,6 +128,7 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 
 - **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. `test:all` ran at the head before 1.4 counts (exit 0); the 1.3 log gains its hashes, commands and run B's prefixes. It found only IHDR/IDAT/IEND chunks and the right sizes in all eleven PNGs.
 - **Opus review** (general-purpose), beside round 1: conditional approve; 2 findings, both accepted. #1027's repainted icons show in every frame and join the per-frame list (recon.md, OA-1, the PR body); the same `test:all` gap.
+- **Codex round 2** (resumed): approve, no remaining material finding; it re-checked the eleven hashes against HEAD.
 
 ## Seeds
 
