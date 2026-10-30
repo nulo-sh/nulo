@@ -4,6 +4,9 @@
 import { isServiceReady, managers } from "@/utils/core"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
+/** Components */
+import ConfirmPopup from "@/components/ConfirmPopup.vue"
+
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"

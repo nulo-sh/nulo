@@ -12,3 +12,13 @@ Verdict: reject (a pending load check's `finally` erases a mark its own document
 - 2 No test began unmarked and marked during the check: accepted; one `resume.test.ts` case per settle direction, both red before the fix.
 - 3 Two comments restated their code: accepted; cut.
 - Ask 5: ship #1385 and reopen #686 with the capture; its fix is a layout change to every `Popup` user, outside this lane.
+
+## Opus review of the arc diff, 2026-10-30
+
+Verdict: approve. It had found round 1's race independently at `00220b67f`.
+
+- 1 Keep a loaded mark when the check fails: rejected; it reopens Codex r3-1 with no new evidence.
+- 2 Mark a restore at `"finalizing"`: rejected; finalize can still fail ("Couldn't open the imported profile"), and a mark there would send a reload to Ready over another window's session. A reload mid-finalize lands on Import, where a second attempt meets the duplicate confirm.
+- 3 I2 missed a Create left before its profile lands: accepted; I2 corrected, no code change (the mark would land on the entry the person went to).
+- 4 The shell test registered `ConfirmPopup` itself, so it could not fail the way #1385 did (an unresolved tag): accepted; the shell imports it, and the test reds without the import.
+- 5 The two settle tests share their file's module: noted; each runs last in its file.

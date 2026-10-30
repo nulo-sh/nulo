@@ -28,7 +28,6 @@ vi.mock("@/utils/core", async () => {
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile }) }))
 vi.mock("vue-router", () => ({ useRouter: () => router }))
 
-import ConfirmPopup from "@/components/ConfirmPopup.vue"
 import { useConfirm } from "@/composables/useConfirm"
 import { usePopupStore } from "@/stores/popup.store"
 import { THEME_HINT_KEY } from "@/utils/general"
@@ -177,7 +176,7 @@ describe("onboarding's confirm", () => {
 		config.getValue.mockResolvedValue("dark")
 		const pinia = createPinia()
 		setActivePinia(pinia)
-		const page = mount(App, { global: { plugins: [pinia], components: { ConfirmPopup }, stubs: SHELL_STUBS } })
+		const page = mount(App, { global: { plugins: [pinia], stubs: SHELL_STUBS } })
 		const scope = effectScope()
 		const { askConfirm } = scope.run(() => useConfirm()) as ReturnType<typeof useConfirm>
 		const popups = usePopupStore()
