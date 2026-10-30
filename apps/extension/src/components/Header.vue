@@ -449,11 +449,18 @@ onBeforeUnmount(() => {
 	}
 }
 
-/* Below the popup's width the row tightens, so the address stays whole and both chips stay inside it. */
+/* Below the popup's width the row tightens, so the address stays whole and both chips stay inside it.
+ * At 240px the network chip has no room left for its name, and only these sides and gap keep its dot
+ * inside its border. */
 @media (width < 359px) {
 	.wrapper {
 		gap: 8px;
 		padding: 0 12px 0 16px;
+	}
+
+	.network_chip {
+		gap: 4px;
+		padding: 6px 3px;
 	}
 }
 

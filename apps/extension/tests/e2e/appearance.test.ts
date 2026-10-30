@@ -191,8 +191,8 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 	expect(await networkChip(page)).toEqual(shown)
 	await shotSend(page, `577-chip-on-${BROWSER}`, "network-button")
 
-	// At the popup's width the row has no room to spare: the default network's name still shows
-	// whole, and the lock chip stands as tall as the network chip beside it.
+	// At the popup's width the default network's name shows whole, and the lock chip stands as tall as
+	// the network chip beside it.
 	await setViewport(page, { width: 360, height: 600 })
 	const row = await page.evaluate(() => {
 		const name = document.querySelector<HTMLElement>('[data-testid="network-name"]')
@@ -210,6 +210,18 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 	expect(row.name).toBe("Alpha")
 	expect(row.text, `the network name is cut: ${JSON.stringify(row)}`).toBeLessThanOrEqual(row.box ?? 0)
 	expect(row.lock).toBe(row.chip)
+
+	// At the narrowest width the row leaves the chip no room for the name: its dot stays inside the
+	// chip's 1px border.
+	await setViewport(page, { width: 240, height: 600 })
+	const narrow = await page.evaluate(() => {
+		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
+		const [chip, dot] = [box("network-button"), box("network-status-dot")]
+		return chip && dot && { left: dot.left - chip.left, right: chip.right - dot.right }
+	})
+	console.log(`[appearance] network chip's dot at 240px: ${JSON.stringify(narrow)}`)
+	expect(narrow?.left).toBeGreaterThanOrEqual(1)
+	expect(narrow?.right).toBeGreaterThanOrEqual(1)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
