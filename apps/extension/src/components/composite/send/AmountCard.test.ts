@@ -835,6 +835,48 @@ describe("composite/AmountCard — the field reads its text whole", () => {
 		expect(hints(w)).toEqual([])
 	})
 
+	test('"1e-3" typed reads 13, and the line shows while the last key was refused', async () => {
+		const w = mountCard({ token: TOKEN, modelValue: "" })
+		const shown: [string, string[]][] = []
+		for (const key of "1e-3") {
+			await typeKeys(w, key)
+			shown.push([textOf(w), hints(w)])
+		}
+		expect(shown).toEqual([
+			["1", []],
+			["1", ["unreadable"]],
+			["1", ["unreadable"]],
+			["13", []],
+		])
+	})
+
+	test('"e" typed between the digits of "12" keeps the text and the caret, and says so', async () => {
+		const w = mountCard({ token: TOKEN, modelValue: "" })
+		await typeKeys(w, "12")
+		;(input(w).element as HTMLInputElement).setSelectionRange(1, 1)
+		await typeAtCaret(w, "e")
+		const el = input(w).element as HTMLInputElement
+		expect([el.value, el.selectionStart, hints(w)]).toEqual(["12", 1, ["unreadable"]])
+	})
+
+	test.each([
+		["text that reads", "1e", "1"],
+		["an empty field", "e", ""],
+	])("leaving the field with %s after a refused key ends the line", async (_, keys, shown) => {
+		const w = mountCard({ token: TOKEN, modelValue: "" })
+		await typeKeys(w, keys)
+		expect([textOf(w), hints(w)]).toEqual([shown, ["unreadable"]])
+		await input(w).trigger("blur")
+		expect(hints(w)).toEqual([])
+	})
+
+	test("leaving the field keeps the line of a pasted text that does not read", async () => {
+		const w = mountCard({ token: TOKEN, modelValue: "" })
+		await paste(w, "1e5")
+		await input(w).trigger("blur")
+		expect([textOf(w), hints(w)]).toEqual(["1e5", ["unreadable"]])
+	})
+
 	// A browser puts the caret at the end whenever script sets the input's value.
 	test('",5" typed between the digits of "12" reads 1.52: a rewrite keeps the caret where the key went', async () => {
 		const w = mountCard({ token: TOKEN, modelValue: "" })
@@ -994,6 +1036,15 @@ describe("composite/AmountCard — the field reads its text whole", () => {
 			await paste(w, pasted, USD)
 			expect(await converted(w)).toBe(tokens)
 			expect(hints(w)).toEqual(shown)
+		})
+
+		test("a refused key shows the line, and leaving the field ends it", async () => {
+			const w = mountUsd()
+			expect(await typeKeys(w, "1e", USD)).toEqual(["1", "1"])
+			expect(hints(w)).toEqual(["unreadable"])
+			await input(w, USD).trigger("blur")
+			expect(hints(w)).toEqual([])
+			expect(await converted(w)).toBe("1")
 		})
 
 		test('"12,5" typed reads 12.5', async () => {

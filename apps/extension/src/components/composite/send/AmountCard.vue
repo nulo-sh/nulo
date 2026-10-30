@@ -72,8 +72,9 @@ const symbolBlank = computed(() => isBlank(props.token?.symbol))
  *  "Token supports N decimals" inline hint. Cleared when the user
  *  brings the input back within range or clears the field. */
 const wasClamped = ref(false)
-/** Why the field's text reads as no one amount ("unreadable" or "ambiguous"): shown at once after a
- *  paste, after a keystroke once the field is left, and gone once the text reads or empties. */
+/** The line under the field ("unreadable" or "ambiguous"): at once for a refused key, or a paste that
+ *  reads as no one amount, and after a keystroke once the field is left. It goes at the next edit
+ *  whose text reads, when the text empties, and when the field is left with text that reads. */
 const readHint = ref(null)
 
 onMounted(() => {
@@ -152,18 +153,21 @@ const handleAmountFocus = () => {
 }
 const handleAmountBlur = () => {
 	isFocused.value = false
+	if (!model.value) readHint.value = null
 	if (!model.value || tokenDecimals.value === undefined) return
 	const read = readAmountText(String(model.value), { rested: rested.value })
 	if (!read.ok) {
 		readHint.value = read.reason
 		return
 	}
+	readHint.value = null
 	const rest = restingAmount(read.plain, tokenDecimals.value)
 	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
 }
 
 const handleFiatBlur = () => {
 	isFocused.value = false
+	if (!fiatTerm.value || readAmountText(fiatTerm.value, { currency: "$" }).ok) readHint.value = null
 }
 
 /** The amount field's type, token or USD, as a fraction of its 40 px: full with focus, and at rest
