@@ -469,8 +469,8 @@ const recordOf = (step: PlannedStep, t0: number, rest: Partial<StepRecord>): Ste
 
 /** The innermost profile chaos frame of a driver's error, as `file:line`. */
 const callSite = (err: unknown): string => {
-	const frame = (err instanceof Error ? err.stack : undefined)?.split("\n").find((l) => /profile-chaos\/\w+\.ts:\d+/.test(l))
-	const at = frame && /profile-chaos\/(\w+\.ts:\d+)/.exec(frame)?.[1]
+	const frame = (err instanceof Error ? err.stack : undefined)?.split("\n").find((l) => /profile-chaos\/[\w-]+\.ts:\d+/.test(l))
+	const at = frame && /profile-chaos\/([\w-]+\.ts:\d+)/.exec(frame)?.[1]
 	return at ? ` (from ${at})` : ""
 }
 

@@ -153,6 +153,11 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 - **Opus Plan leg:** conditional approve; 9 findings, 8 accepted, 1 narrowed. PATH B's service branch is already driven over a `FakePasskeyService`, so the in-process harness is dropped and one assertion added (F3, D6); B under its own step (D4); the model test's `mintsAt` and `newVariant` learn the race (1.1); S7's hold forces the overlap (D7); estimates per browser (1.1, 1.2); A closes held (D4); `invalid` reuses the change's (1.1); the export comment is its own open issue (D11); the orchestrator Ask (Asks). Narrowed: S5 becomes a closed limit rather than an in-process case, since no person can cancel once the window holds an answer (S5).
 - **Codex, final fresh pass:** conditional approve, then approve once its conditions were folded in (the resumed session); 4 findings, all accepted. The arc 1 break stops A's signal from aborting, since a hold that ignores the abort still lets the probe see it (1.1); S7's break opens the hold after the second's real check, on distinct salts and ids (D7, 2.2); S4 runs through `withDyingPanel` and asserts `step-failed` (2.1); `Closes #1157` only with the close-out (D13). Looks fine: arc 1's schedule on Chrome, both pages' outcomes and I4, the service's snapshot of the row before the window (`PS/service.ts:949-959`), S5's limit; I5 kept as an inference until 2.1.
 
+### Arc 1 review
+
+- **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. The export race read Save's absence as a start-over, which a page whose profile is no longer a passkey one shows anyway: it now needs the picker back, with a control that Save is offered before the competitor, and a scratch build without the type reset turns it red; one comment cut to its invariant.
+- **Opus review** (general-purpose), beside round 1: conditional approve; 5 findings, all accepted. The same export finding; the network clause cited only for a new passkey; a toast-order comment corrected; an inverted refusal message; `callSite` now matches hyphenated file names.
+
 ## Seeds
 
 ```

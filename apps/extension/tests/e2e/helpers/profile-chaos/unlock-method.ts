@@ -42,8 +42,7 @@ const RUN_SHOWS: Signal[] = [
 	{ label: "refused", text: "Unlock method changed in another window." },
 	{ label: "refused", text: "Unlock method changed. Unlock Nulo again to continue." },
 ]
-/** A run's toast follows its card's rejection in the turn the reset runs, before the dialog's
- *  unmount aborts the prompt, so it renders well inside this look. */
+/** A run that outlived the reset shows its toast in the task the abort ran in. */
 const SHOWS_MS = 2_000
 
 /** The answers a change's page must show, each by the credential it names. */

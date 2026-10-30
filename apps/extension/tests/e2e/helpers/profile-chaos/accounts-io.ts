@@ -17,7 +17,7 @@ import type { ChainAddresses } from "./checkers"
 import type { CredentialRef, FileRef, ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
 import { answeredCredentials, capturePrf, drainPrf } from "./prf-capture"
 import { type Driven, type RunState, credentialId, profileId, secretFor } from "./state"
-import { PASSKEY_REFUSAL, type Signal, settle, timed, waitForRoute } from "./ui"
+import { firstSignal, PASSKEY_REFUSAL, type Signal, settle, timed, waitForRoute } from "./ui"
 
 const ACCOUNT_MS = 120_000
 /** Derived accounts' type in `Account.type`; an imported account has another. */
@@ -133,11 +133,8 @@ async function typeFilePassword(page: Page, password: string): Promise<void> {
 /** How long a change of unlock may take to reach another page's account file page. */
 const RESET_MS = 15_000
 
-/**
- * The open passkey profile's first derived account on a second page: approved by its passkey and the
- * file password typed, then `compete` runs the anchor's change of unlock. The page has the bound to
- * start over; one that still offers Save then has it pressed, and its refusal or file is reported.
- */
+/** The anchor's change of unlock must drop the approval the page holds: only the picker coming back
+ *  is a start-over, since Save also leaves a page whose profile is no longer a passkey one. */
 export async function exportDuringChange(
 	s: RunState,
 	open: ModelProfile,
@@ -160,10 +157,12 @@ export async function exportDuringChange(
 		await typeFilePassword(page, secretFor(s, p.password))
 		// The competitor's prompts ask from a focused document, and this page holds focus.
 		await bringToFront(s.anchor)
-		await compete()
 		const save = `[data-testid="${FILE_FORM.button}"]`
-		await page.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: RESET_MS, polling: 100 }, save).catch(() => {})
-		if (!(await page.$(save))) return timed(t0, 2 * ACCOUNT_MS, "cancelled")
+		if (!(await page.$(save))) throw new Error("the page started over before the competitor ran")
+		await compete()
+		const picker = await firstSignal(page, [{ label: "reset", testid: "export-account-row" }], RESET_MS)
+		if (picker.label) return timed(t0, 2 * ACCOUNT_MS, "cancelled")
+		if (!(await page.$(save))) return timed(t0, 2 * ACCOUNT_MS, "refused")
 		const saved = await saveFile(page, FILE_FORM.button, secretFor(s, p.password))
 		return "body" in saved ? timed(t0, 2 * ACCOUNT_MS, "committed") : saved
 	} finally {

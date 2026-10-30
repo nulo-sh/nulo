@@ -1608,7 +1608,7 @@ function approvedChange(rng: Rng, w: World, caps: Caps, password: SecretRef): Me
 
 function competitorInvalid(w: World, c: Competitor, caps: Caps): string | undefined {
 	if (c.competing === "delete") return deleteProfile.invalid(w, { via: "settings" }, caps)
-	return c.change.current === "approve" ? changeUnlockMethod.invalid(w, c.change, caps) : "the competing change is approved"
+	return c.change.current === "approve" ? changeUnlockMethod.invalid(w, c.change, caps) : "the competing change must be approved"
 }
 
 /** The competitor as its own step on the race's world: the driver runs it under this step, so its
@@ -1643,10 +1643,9 @@ const raceMethodChangeElsewhere: ActionSpec<"raceMethodChangeElsewhere"> = {
 	},
 }
 
-/** The account file page holds an approval for the unlock the anchor replaces. The change reopens
- *  the session in place, and the window's bootstrap that follows clears its network, so the page
- *  starts over before Save; a change to a password also changes its type. The file password was
- *  typed, so its secret is spent. */
+/** The account file page holds an approval for the unlock the anchor replaces, and starts over
+ *  before Save: on a change to a password by its type, on a new passkey by its network, which the
+ *  window's bootstrap after the in-place reopen clears. The typed file password's secret is spent. */
 const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> = {
 	name: "raceMethodChangeDuringExport",
 	family: "race",
@@ -1668,14 +1667,8 @@ const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> =
 		const competitor = changeUnlockMethod.expect(w, p.change, caps)
 		const next = clone(competitor.next)
 		bump(next, { secret: 1 })
-		const type = p.change.change === "password" ? [ACCOUNT_FILE_TYPE_RESETS] : []
-		return result(next, ["cancelled"], competitor.writes, competitor.settle, [
-			...competitor.sources,
-			ACCOUNT_FILE_PASSKEY,
-			BOOTSTRAP_CLEARS_NETWORK,
-			ACCOUNT_FILE_NETWORK_RESETS,
-			...type,
-		])
+		const reset = p.change.change === "password" ? [ACCOUNT_FILE_TYPE_RESETS] : [BOOTSTRAP_CLEARS_NETWORK, ACCOUNT_FILE_NETWORK_RESETS]
+		return result(next, ["cancelled"], competitor.writes, competitor.settle, [...competitor.sources, ACCOUNT_FILE_PASSKEY, ...reset])
 	},
 }
 

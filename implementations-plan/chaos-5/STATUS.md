@@ -7,3 +7,5 @@
 - 2026-10-30: 1.1 gate pass: model test 266 green, composition 308 green; Chrome hand list (delete, new passkey, password) green, 3.3 s / 4.9 s / 3.9 s a step; scratch break red on O5 as planned.
 - 2026-10-30: 1.1 gate pass on Firefox: 6.2 s / 7.3 s / 6.7 s a step.
 - 2026-10-30: 1.2 gate pass on Firefox after D15: new passkey 6.8 s, password 5.6 s, both `cancelled`.
+- 2026-10-30: 1.3 model test 30/30 retry-0 runs green; seeds 9001-9010 green on Chrome (mean 48 s) and Firefox (mean 73 s).
+- 2026-10-30: review round 1 (Codex + Opus) folded in; export race re-run green on Firefox; type-reset scratch break red.
