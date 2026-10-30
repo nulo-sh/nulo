@@ -88,7 +88,7 @@ The flow and the copy are unchanged; only line breaking inside four boxes change
 - **Trust boundary:** a backup file is hostile input. Its held-account name (≤ 32 cleaned characters) reaches the warning through Vue interpolation (no `v-html`). Today a crafted name can push the warning's guidance ("Add the network with chain ID …") out of view. With D1 every character stays inside the box. Network names cannot come from a backup, and no dApp or content script reaches the network service (Fact 1).
 - Nothing changes a permission, a log line, storage, a message or a dependency. Known limits: none.
 
-## Phase 1: the rules and their tests
+## Phase 1: the rules and their tests ✓
 
 Assumptions: Facts 1-6. Take each red from the base copy (`git show a4da1f36f:<path>`), never `HEAD`.
 1. Add D6's cases and SE1's change, then commit (the extension build is still base). Run the cases against the base copies: red. Build Chrome armed (gate 2's command) and run SE1: red at its 240 px checks. Record SE1's wall-clock before on both browsers with the base copy of the file, on base builds.
