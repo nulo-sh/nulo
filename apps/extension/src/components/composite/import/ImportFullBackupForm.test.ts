@@ -1,6 +1,7 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import ImportFullBackupForm from "./ImportFullBackupForm.vue"
@@ -243,6 +244,30 @@ describe("ImportFullBackupForm", () => {
 		await wrapper.setProps({ retryFailedAgain: true })
 
 		expect(reveal).toHaveBeenCalledExactlyOnceWith(wrapper.get("[data-testid=import-full-backup-warning]").element)
+	})
+})
+
+/** A typed network name is one word of up to 25 characters; a backup's held account name, of up to 32. */
+describe("ImportFullBackupForm — a long name stays inside the warning", () => {
+	it("the warning carries the whole name, and its block breaks a word wider than itself anywhere", () => {
+		const finished = { restoreStatus: "finished", isRestoreHasErrors: true }
+		const network = mount(ImportFullBackupForm, {
+			props: baseProps({ ...finished, unrestoredNetworks: ["W".repeat(25)] }),
+			global: { stubs },
+		})
+		expect(network.get("[data-testid=import-full-backup-warning]").text()).toContain(`${"W".repeat(25)} didn't answer in time`)
+		const held = mount(ImportFullBackupForm, {
+			props: baseProps({ ...finished, hasOtherErrors: true, heldAccounts: [{ name: "W".repeat(32), chainId: 1337 }] }),
+			global: { stubs },
+		})
+		expect(held.get("[data-testid=import-full-backup-warning]").text()).toContain(
+			`The imported account “${"W".repeat(32)}” was not restored.`,
+		)
+
+		const parsed = parseSource("apps/extension/src/components/composite/import/ImportFullBackupForm.vue")
+		const block = elementByTestid(parsed, "import-full-backup-warning")?.node
+		expect(block && boundAttr(block, "class")).toBe("$style.warning_block")
+		expect(declarationsOf(parsed, ".warning_block")).toEqual({ padding: "8px", "overflow-wrap": "anywhere" })
 	})
 })
 

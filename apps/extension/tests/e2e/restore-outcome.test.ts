@@ -145,6 +145,9 @@ async function renameNetwork(page: Page, from: string, to: string): Promise<void
 	await waitForHash(page, "#/popup/general", 5_000)
 }
 
+/** One word as long as the network name field allows: wider than the reminder and the intro at the narrow width. */
+const LONG_NAME = "W".repeat(25)
+
 /** Picks `file` on the Restore again page and presses Restore. */
 async function restoreAgainWith(page: Page, file: string): Promise<void> {
 	await pickFileByTestId(page, "import-full-backup-pick-file", file)
@@ -182,27 +185,27 @@ test("SE1: the banner follows renames and other pages; Restore again refuses ano
 			[bannerSentence("Local Network", "Testnet"), bannerSentence("Testnet", "Local Network")].some((s) => first.includes(s)),
 		).toBe(true)
 
-		await renameNetwork(page, "Testnet", "Old Testnet")
-		await waitForText(page, "restore-outcome-banner", "Old Testnet")
-		expect(await bannerNames()).not.toMatch(/(?<!Old )Testnet/)
+		await renameNetwork(page, "Testnet", LONG_NAME)
+		await waitForText(page, "restore-outcome-banner", LONG_NAME)
+		expect(await bannerNames()).not.toContain("Testnet")
 		await expectFitsNarrow(page, "the restore outcome banner")
 
 		const second = await openPopup(ctx)
-		await waitForText(second, "restore-outcome-banner", "Old Testnet")
+		await waitForText(second, "restore-outcome-banner", LONG_NAME)
 		await clickByTestId(second, "restore-outcome-dismiss")
 		await waitForGone(page, "restore-outcome-banner")
 		expect(await readRecord(page, profileId)).toBeUndefined()
 		await second.close()
 
 		await writeRecord(page, profileId, seeded)
-		await waitForText(page, "restore-outcome-banner", "Old Testnet")
+		await waitForText(page, "restore-outcome-banner", LONG_NAME)
 		await clickByTestId(page, "restore-outcome-restore")
 		await waitForHash(page, "#/popup/restore-again", 5_000)
 		const intro = await textOf(page, "restore-again-intro")
 		expect(
 			[
-				["Local Network", "Old Testnet"],
-				["Old Testnet", "Local Network"],
+				["Local Network", LONG_NAME],
+				[LONG_NAME, "Local Network"],
 			].map(restoreAgainIntroText),
 		).toContain(intro)
 		await expectFitsNarrow(page, "Restore again")
