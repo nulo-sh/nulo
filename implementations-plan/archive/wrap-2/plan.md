@@ -137,7 +137,7 @@ Departures from the lane brief's gate and capture: no smoke file reaches the cha
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `9ce6bb0bd`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `9ce6bb0bd`. Specific here:
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs once over `git diff origin/dev...HEAD` after Phase 1: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus 5.5 diff review (`general-purpose`) runs beside round 1. Prompts go under `~/.cache/nulo-backlog/wrap-2/`. Hard stop at three rounds; each round goes in `lessons/phase-1.md` and the table below.
 - Approval boundary (a plan change; stop): a copy change, a shortened name, the rule on any element but the chain banner, a rule in `@nulo/design`, any D5 place, a new e2e scenario.
