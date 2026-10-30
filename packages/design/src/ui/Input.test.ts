@@ -283,7 +283,7 @@ describe("Input", () => {
 			expect([f.state(), f.emitted()]).toEqual([{ value: "30", selection: [0, 2] }, undefined])
 		})
 
-		test("an input no beforeinput announced is judged whole and restores the bound value", async () => {
+		test("an input no beforeinput announced, putting in a non-digit, restores the bound value", async () => {
 			const f = mountInt("30")
 			f.el.value = "3x0"
 			await f.w.get("input").trigger("input")
@@ -345,7 +345,7 @@ describe("Input", () => {
 				},
 			],
 			["a drop placed away from the recorded caret", (f: ReturnType<typeof mountInt>) => edit(f, "3e90", 4, "insertFromDrop")],
-		])("%s is judged on its whole text and refused", async (_name, act) => {
+		])("%s, putting in a non-digit, is refused", async (_name, act) => {
 			const f = mountInt("30")
 			f.el.setSelectionRange(2, 2)
 			await act(f)
@@ -359,6 +359,13 @@ describe("Input", () => {
 			await nextTick()
 			await composeOverAll(f, "\uff14\uff15")
 			expect([f.el.value, f.emitted(), f.refused()]).toEqual(["45", undefined, true])
+		})
+
+		test("a Backspace after a caller's 1.5 is taken, and parsed from its digits", async () => {
+			const f = mountInt("1.5")
+			f.el.setSelectionRange(3, 3)
+			await edit(f, "1.", 2, "deleteContentBackward")
+			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["1", [1], false])
 		})
 
 		test("leaving the field ends the error state", async () => {

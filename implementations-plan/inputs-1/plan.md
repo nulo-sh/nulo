@@ -180,6 +180,8 @@ F2's 0 case and F7's stub corrected; D6's other two lines named.
 
 **Implementation review, round 1** (Codex gpt-6.1-sol high: `reject`; Opus general-purpose: `conditional approve`). Verified and fixed: a `beforeinput` with no `input` (a no-op Delete) left a record that misjudged the next composition or unannounced insertion (Codex F1), and a drop away from the recorded caret was judged on the wrong slice (Opus O1): the record now counts only when the new text keeps its untouched head and tail, and a blur or a caller's write ends it (O3); the overclaiming and narrating comments are rewritten (F2, O1). Kept under D2: a `$` or a space typed in USD mode shows the unreadable line, since the keystroke path drops it (O2).
 
+**Implementation review, round 2** (Codex, resumed): `conditional approve`. Round 1's fixes verified; F3, a Backspace after a caller's `1.5` refused by the head/tail frame, fixed: the edit is judged by what the new text adds against the text before it (common head and tail removed), the record giving only that text and the selection to restore.
+
 ## Seeds
 
 Not run: the orchestrator drives this plan.
