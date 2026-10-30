@@ -1,7 +1,7 @@
 ---
 plan: inputs-1
 tier: light
-status: approved by the final Codex pass; arc 1 in progress
+status: delivered (PR open, merge pending)
 issues: "#1389, #1390, #1391, #1393 (arc 1 closes all four)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,18 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 9ce6bb0bd
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30.
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Owner sign-off:** the lane brief's quote, "#1381–#1395 => yes, if they are bugs, work on them. all of them sound very worth fixing. Merge those on green, I review the captures if needed on Monday." The captures are in [screenshots/](screenshots/).
+- **Shipped:** the new-password rule and its strength line count grapheme clusters (#1391); an Import token refusal clears when the address changes, and the green check hides while one shows (#1393); a key the Send amount field drops raises its existing unreadable line, which a blur clears (#1389); the design `Input`'s `int` field refuses whole an edit that puts in a non-digit, keeping its text and selection, with its error state until it takes an edit, is left or is written (#1390). Closes #1389, #1390, #1391, #1393.
+- **Dispositions:** the strength wording stays (D7, #1401). The one-key sign is accepted, `1e-3` typed blind still ends at `13` (D9, #1402). A `$` or a space typed in USD mode shows the unreadable line though a pasted `$5` reads, kept under D2. The worker's own password checks stay as they are (Security). No e2e scenario added.
+- **Known limits:** none.
+- **Open items:** #1401, #1402.
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; the text-insertion gotcha (`execCommand` raises no `beforeinput`; Firefox's BiDi `sendCharacter` takes one character) is in the `e2e-testing` skill, § Never bypass the helpers, and [lessons/phase-6.md](lessons/phase-6.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # inputs-1: four fields that take what they should refuse
 
