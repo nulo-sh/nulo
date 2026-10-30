@@ -77,6 +77,7 @@ One arc, one PR against `dev` (§ Delivery). Recon and measurements: [recon.md](
 | `apps/extension/src/popup/windows/capabilities/index.vue` | the `Banner` gains `:class="$style.chain_banner"`; a `.chain_banner` rule with the declaration and a one-line why |
 | `apps/extension/src/popup/windows/capabilities/chain-switch.test.ts` | D4's scan case |
 | `apps/extension/src/popup/pages/settings/security/export/account.vue` | D3's comment, nothing else |
+| `apps/extension/tests/e2e/helpers/profile-chaos/model.ts` | four citations of `account.vue` lines shift by one (found by `test:all`; the plan's map had missed them) |
 | `implementations-plan/wrap-2/screenshots/` | before/after, Chrome: mismatch `real25` at 240, mismatch `w25` at 360 and 240, switched `w25` at 240 (8 PNG) |
 
 Simpler alternative: no change. Rejected, because the action and the name are clipped at 360 px with a name the field accepts.
@@ -87,7 +88,7 @@ Simpler alternative: no change. Rejected, because the action and the name are cl
 - **What the fix closes:** today a long name pushes the end of "Switch wallet to …" past the window's edge, so a person can act on a label they cannot read in full. After D1 the whole label is visible. Exploitability needs the person's own long name; no attacker capability is involved.
 - Nothing changes a permission, a log line, storage, a message, a dependency or the CSP. Known limits: none.
 
-## Phase 1: the rule, its test, the comment
+## Phase 1: the rule, its test, the comment ✓
 
 Assumptions: Facts 1-6. Take the red from the base copy (`git show 9ce6bb0bd:<path>`), never `HEAD`.
 1. Check that `git status` lists no untracked spec under `apps/extension/tests/`.
