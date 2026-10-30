@@ -9,10 +9,25 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at a4da1f36f
 trunk: dev
-status: approved
+status: closed (arc 1 #1367; arc 2 and the close-out one PR, awaiting the merge)
 issues: "#1157 (the browser items #1301, #1324 and #1331 left)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-30.
+- Status: completed. Arc 1 merged as #1367; arc 2 and this close-out ship as one PR, as the orchestrator chose (§ Delivery), awaiting the merge.
+- Shipped: closes #1157 with its browser items.
+  - #1367: two catalog races, `raceMethodChangeElsewhere` (S1, S2, both browsers) and `raceMethodChangeDuringExport` (S6a, Firefox), each with a scratch break that turned O5 red; D15 records the tree overruling the plan on S6a.
+  - Arc 2: `toolbar-panel.test.ts` drives the passkey window from Firefox's dying panel: a profile made on the passkey another profile holds (S3), and a row's `prfSalt` changed while the window waits on Try again, refused after the retry's own answer with no session written (S4). `service.integration.test.ts` checks the window is told `failed` there, and races two restores for the facade lock with a control and a committed break (S7).
+  - No product file changed, and no product fault came up. I3, two duplicate-confirmed restores taking one name, is #1206's case 1 by another path: a comment there (D16).
+- Budget: the new e2e test 13.8-16.2 s on Firefox at retry 0 (estimated 90 s), 0 on Chrome, where its file skips. The Firefox file took 125.1 s before and 123.0 s after (137.0 s in the last run, on a loaded host). The chaos files skip unarmed, so CI's time is otherwise unchanged. The restore tests take 8, 308 and 350 ms.
+- Dispositions: S8 is held by `useFullBackupImport.test.ts` and `useRestoreAgain.test.ts`, whose deferred reads pin Import overtaking a pick (size only widens the window in real time); S9 by `useRestoreAgain.test.ts` and `restore-again.test.ts`; S10 is #1222's.
+- Lessons: D15's gotcha, a profile switch or unlock change elsewhere rebooting open pages with `appStore.network` unset first, joins the `PopupManager` entry, tightened to fit; `lessons.md` holds 8192 of its 8192 bytes, and this plan supersedes no entry. Two e2e techniques went to the `e2e-testing` skill: Chrome fails a passkey prompt from a page that lost focus, and a new popup page lands on Home over an earlier route.
+- Known limits: #1373 (S5), #1374 (S6b).
+- Open items: #1375, the export page's network watcher comment.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 ## Goal
 
