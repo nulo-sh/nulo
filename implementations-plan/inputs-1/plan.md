@@ -182,6 +182,8 @@ F2's 0 case and F7's stub corrected; D6's other two lines named.
 
 **Implementation review, round 2** (Codex, resumed): `conditional approve`. Round 1's fixes verified; F3, a Backspace after a caller's `1.5` refused by the head/tail frame, fixed: the edit is judged by what the new text adds against the text before it (common head and tail removed), the record giving only that text and the selection to restore.
 
+**Implementation review, round 3** (Codex, resumed): `conditional approve`. F3's fix verified; F4, a point retyped over the selected point of a caller's `1.5` (an unchanged text, an empty diff) emitting 15, fixed: the recorded selection's slice is judged when the new text keeps the text around it, the diff otherwise. Round 3 is the hard stop: F4's fix is proven by its red-then-green case, the full gates and the browser assertions, with no verifying Codex round.
+
 ## Seeds
 
 Not run: the orchestrator drives this plan.

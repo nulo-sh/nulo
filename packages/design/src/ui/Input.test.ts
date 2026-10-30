@@ -368,6 +368,13 @@ describe("Input", () => {
 			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["1", [1], false])
 		})
 
+		test("a point typed over the selected point of a caller's 1.5 is refused", async () => {
+			const f = mountInt("1.5")
+			f.el.setSelectionRange(1, 2)
+			await edit(f, "1.5", 2, "insertText", ".")
+			expect([f.state(), f.emitted(), f.refused()]).toEqual([{ value: "1.5", selection: [1, 2] }, undefined, true])
+		})
+
 		test("leaving the field ends the error state", async () => {
 			const f = mountInt("15")
 			f.el.setSelectionRange(2, 2)

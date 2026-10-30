@@ -238,9 +238,17 @@ const handleBeforeInput = (e: InputEvent) => {
 }
 
 /**
- * The new text less the head and tail it shares with the old. Every character an edit adds lies in
- * it, whatever range the browser edited: a Backspace, a drop away from the caret, a composition.
+ * What the edit put over the recorded selection, or null when the new text no longer keeps the text
+ * around it: a Backspace from a caret, a no-op Delete's left-over record, a drop away from the caret.
  */
+function framedSlice(raw: string, start: EditStart): string | null {
+	const head = start.text.slice(0, start.start)
+	const tail = start.text.slice(start.end)
+	const framed = raw.length >= head.length + tail.length && raw.startsWith(head) && raw.endsWith(tail)
+	return framed ? raw.slice(head.length, raw.length - tail.length) : null
+}
+
+/** New text less the head and tail it shares with the old; a character retyped in place escapes. */
 function insertedText(before: string, raw: string): string {
 	let head = 0
 	while (head < before.length && head < raw.length && before[head] === raw[head]) head++
@@ -261,7 +269,7 @@ function takeIntEdit(event: Event) {
 	const start = editStart
 	editStart = null
 	const shown = start?.text ?? String(props.modelValue ?? "")
-	if (/\D/.test(insertedText(shown, el.value))) {
+	if (/\D/.test((start && framedSlice(el.value, start)) ?? insertedText(shown, el.value))) {
 		// The value first: assigning it moves the caret to the end.
 		el.value = shown
 		if (start) el.setSelectionRange(start.start, start.end)
