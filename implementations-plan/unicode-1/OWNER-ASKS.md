@@ -14,3 +14,5 @@
 **Recommendation:** A. It fixes everything #1388 and #1395 show, and it changes nothing else a person sees except explicit bidi formatting, which the brief names. The characters it keeps are filed as a closed known limit (plan D5), to reopen on a user report or a decision to strip more.
 
 **What ships now:** A. The arc builds it unchanged; B or C would be a follow-up that widens one regular expression and its tests.
+
+**Answer (2026-10-30, the orchestrator, under the owner's delegation for this wave: "if they are bugs, work on them"):** D1's narrowing is ratified as planned. The typed-text rule strips the twelve bidirectional controls, zero-width space, word joiner, the byte-order mark and the soft hyphen, and keeps the zero-width joiner and non-joiner, variation selectors and tag characters, so emoji sequences and scripts that need joiners render as typed.

@@ -12,7 +12,7 @@ base: origin/dev at 13bb2133c
 trunk: dev
 issues: "#1388, #1395 (arc 1 closes both)"
 post_implementation_hardening: not scheduled
-status: plan done; arc 1 waits for A1
+status: approved; arc 1 implementing
 ---
 
 # unicode-1: invisible and direction characters in a typed address, an app alias and a settings search
@@ -49,7 +49,7 @@ One arc, one PR against `dev` (§ Delivery). Recon: [recon.md](recon.md). Asks: 
 
 **Inferences:** I1. On one line, the soft hyphen, word joiner, BOM and zero-width space draw nothing; the last two carry only line-break and word-boundary meaning. The bidi controls' visible effect is reordering: the defect #1395 reports, and also the legitimate placement of punctuation and numbers in mixed-direction text, which the brief's "bidi controls" covers. Every other invisible or format character can shape what a field draws: joiners (emoji sequences, Persian and Indic spelling), variation selectors (❤️), tag characters (subdivision flags), Arabic number signs. The alias is the one name field that holds emoji: account, profile and contact names drop them through `sanitize`. I2. jsdom's pointer and focus order can differ from Chrome's, so the hint claim needs a Chrome check too.
 
-**Asks:** A1 ([OWNER-ASKS.md](OWNER-ASKS.md)): ratify D1's narrower contract. The brief lists "format characters" and "zero-width characters"; D1 keeps the joiners, selectors, tags and other shaping format characters. What ships now: D1.
+**Asks:** A1 ([OWNER-ASKS.md](OWNER-ASKS.md)), answered 2026-10-30 by the orchestrator under the owner's delegation for this wave: D1's narrowing is ratified as planned. The typed-text rule strips the twelve bidirectional controls, zero-width space, word joiner, the byte-order mark and the soft hyphen, and keeps the zero-width joiner and non-joiner, variation selectors and tag characters, so emoji sequences and scripts that need joiners render as typed.
 
 ## Decisions
 
@@ -57,7 +57,7 @@ One arc, one PR against `dev` (§ Delivery). Recon: [recon.md](recon.md). Asks: 
   - `stripWireControl` (round 1): it also removes joiners, variation selectors and tags, which would change emoji and scripts in an alias. That is a product decision nobody made, and neither issue needs it (I1).
   - All `\p{Cf}` but the two joiners (round 2): it still removes tags and Arabic number signs, so a subdivision flag in an alias would turn into a black flag.
   - The `sanitize` allowlist: it drops emoji and punctuation from an alias. Contact-name's `Default_Ignorable_Code_Point` class: it removes joiners and selectors too.
-  The brief also lists "format characters"; D1 takes only those that draw nothing, so nothing a person sees changes beyond explicit bidi formatting (I1). Ratification: A1. The wire rule stays the display rule for a dApp's strings.
+  The brief also lists "format characters"; D1 takes only those that draw nothing, so nothing a person sees changes beyond explicit bidi formatting (I1). Ratified: A1. The wire rule stays the display rule for a dApp's strings.
 - **D2. Strip, never refuse.** A removed character draws nothing of its own, so the field shows what it keeps. A refusal needs new copy and leaves a field that looks valid. Anything the field still refuses shows its existing hint.
 - **D3. Applied at each field:**
   - Send: `<AddressInput :normalize="stripBidiAndZeroWidth">` in `RecipientField.vue`. Not inside `AddressInput` (Fact 3).
