@@ -12,7 +12,7 @@ import { getChainName } from "@/components/ui/utils.js"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { formatCaipAccount } from "@/wallet/utils/caip"
-import { trimAddress } from "@/utils/string"
+import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 
 const props = defineProps<{
 	account: { address: string; name: string; chainId: number }
@@ -28,6 +28,7 @@ const nameId = useId()
 const aliasId = useId()
 const renaming = ref(false)
 const aliasInput = ref<HTMLInputElement | null>(null)
+const aliasText = ref("")
 
 const caip = (a: { address: string; chainId: number }) => formatCaipAccount(a.chainId, a.address)
 
@@ -40,9 +41,18 @@ const toggle = () => {
 
 const startRename = async () => {
 	if (props.disabled) return
+	aliasText.value = props.alias ?? props.account.name
 	renaming.value = true
 	await nextTick()
 	aliasInput.value?.focus()
+}
+
+// `v-model` writes the stripped text back to the field, skips while an input method composes, and
+// repeats the input once the composition commits, so a composing keystroke is never rewritten.
+const onAliasInput = (e: Event) => {
+	if ((e as InputEvent).isComposing) return
+	aliasText.value = stripBidiAndZeroWidth(aliasText.value)
+	emit("updateAlias", caip(props.account), aliasText.value)
 }
 </script>
 
@@ -101,8 +111,8 @@ const startRename = async () => {
 				:id="aliasId"
 				ref="aliasInput"
 				data-testid="cap-account-alias-input"
-				:value="alias ?? account.name"
-				@input="emit('updateAlias', caip(account), ($event.target as HTMLInputElement).value)"
+				v-model="aliasText"
+				@input="onAliasInput"
 				:class="$style.alias_input"
 				:placeholder="account.name"
 			/>
