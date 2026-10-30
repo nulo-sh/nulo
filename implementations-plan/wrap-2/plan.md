@@ -12,8 +12,19 @@ base: origin/dev at 9ce6bb0bd
 trunk: dev
 issues: "#1365, #1375 (arc 1 closes both)"
 post_implementation_hardening: not scheduled
-status: approved; arc 1 in progress
+status: delivered (PR open, merge pending)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30.
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word, after the owner signs the before/after pairs ([OWNER-ASKS.md](OWNER-ASKS.md) A1).
+- **Shipped:** `overflow-wrap: anywhere` on the capabilities window's chain banner (both states, its action included), one source-scan case, the account-file watcher's comment rewritten, and the chaos model's four line citations moved. Closes #1365 and #1375.
+- **Dispositions:** the added-networks banner stays as it is, since no name reaches it (D2; comment on #1365). The rule goes on the whole banner, not its texts (D1, measured). No e2e change (D4). No name cap and no design-package rule.
+- **Known limits:** none.
+- **Open items:** #1397.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget; the measuring gotchas (an extension page's CSP refuses an injected style, and Firefox's BiDi refuses its screenshot) are in [lessons/phase-0.md](lessons/phase-0.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # wrap-2: a long network name stays inside the capabilities window's chain banner
 
@@ -142,6 +153,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 3 | Codex, resumed | **approve**: the plan is approved | all corrections verified; no remaining finding | none |
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a18e78) | findings | the account.vue comment names a chain id that changes or clears, with the bootstrap as one writer: a reset completed in another window can reach the mounted page first (reproduced in memory) | none |
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings | `.chain_banner`'s comment says "wider than the banner", not the window; the account.vue reason fits an in-place reopen ("the session or network before") | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
+
+Over the 150-line target by 18 lines because of the Outcome and the arc's audit rows.
 
 ## Seeds
 
