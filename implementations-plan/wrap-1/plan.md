@@ -12,8 +12,28 @@ base: origin/dev at a4da1f36f
 trunk: dev
 issues: "#1276 (arc 1 closes)"
 post_implementation_hardening: not scheduled
-status: approved (final Codex pass)
+status: delivered (PR open, merge pending)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30.
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Shipped:**
+  - `overflow-wrap: anywhere` on ImportFullBackupForm's `.warning_block`, on RestoreOutcomeBanner's reminder (new testid `restore-outcome-reminder`), and on Restore again's intro and failed-Retry line;
+  - four source-scan cases with mount controls;
+  - SE1 renamed to a 25-character name, so its 240 px checks guard the banner and the intro in a real layout.
+
+  Closes #1276.
+- **Dispositions:**
+  - the onboarding and popup-import failed-Retry lines stay as they are: they show seed names only, and measured, they fit;
+  - no name cap and no global or design-package rule (D5);
+  - the held-account mount half was dropped in review (D6);
+  - no new owner ask (§ UI impact).
+- **Known limits:** none.
+- **Open items:** #1365.
+- **Lessons:** one promoted, on a flex item's automatic minimum width.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # wrap-1: a long name stays inside the restore texts
 
@@ -67,7 +87,7 @@ Claims that did not hold:
   - other places a typed name shows: Settings → full backup's added-networks banner and the capabilities window's chain banner. They are plausible but unmeasured; one `ux` issue is filed at close-out after deduping.
 - **D6. Tests:**
   - One scan case per changed place (four), red on the base copy: the element under its testid binds the class, and the class declares `overflow-wrap: anywhere`.
-  - Where the mount runs the real text builder, a control feeds a long name and reads it whole under that testid. In the form, that is a 25-`W` network and a 32-`W` held account (extending the case at `:183-196`); in the banner, a 25-`W` network. `restore-again.test.ts` stays scan-only: its `Text` stub renders no slot, and its texts are mocked refs.
+  - Where the mount runs the real text builder, a control feeds a long name and reads it whole under that testid. In the form, that is a 25-`W` network; in the banner, a 25-`W` network. The 32-`W` held half was dropped in review: the case at `:183-196` already proves the sentence's placement, and the cap is applied upstream. `restore-again.test.ts` stays scan-only: its `Text` stub renders no slot, and its texts are mocked refs.
   - **SE1 renames Testnet to `"W".repeat(25)`** through the real field, replacing "Old Testnet" in its reads. Its existing 240 px checks then guard the banner and the intro in a real layout on both browsers: red on the base build, green after. No scenario is added; the file's wall-clock is reported before and after.
 
 ## Architecture & Implementation
@@ -148,7 +168,11 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 2 | Codex, resumed | conditional approve | recon's leftover "widest" removed; `held32` checked in the warning only, labelled synthetic; both Opus rejections endorsed (the lane brief supplies the sign-off scope; the mount controls cover wiring) | none |
 | plan 3 | Codex, resumed | **approve** | both corrections verified; no remaining finding | none |
 
-Plan status: **approved** by the final Codex pass. Over the 150-line target by about ten lines because of the held-account path the audit added and the three-round audit table.
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a18d6e) | **clean** | none | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings | exact-object pins relaxed to `toMatchObject`; the unrelated `.intro` pin dropped; "is one word" changed to "can be one word"; the `.warning_block` comment's flex claim made exact; the 32-`W` held mount half dropped as redundant | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
+
+Plan status: **approved** by the final Codex pass, and arc 1 converged with Codex clean twice. Over the 150-line target by about 35 lines because of the held-account path the audit added, the Outcome and the audit table.
 
 ## Seeds
 
