@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 const NETS = [
-	{ id: "alpha", name: "Alpha V6", chainId: CHAIN_IDS.MAINNET, kind: "mainnet", endpoints: [], primaryEndpointId: "" },
+	{ id: "alpha", name: "Alpha", chainId: CHAIN_IDS.MAINNET, kind: "mainnet", endpoints: [], primaryEndpointId: "" },
 	{ id: "local", name: "Local Network", chainId: CHAIN_IDS.SANDBOX, kind: "sandbox", endpoints: [], primaryEndpointId: "" },
 	{ id: "tn", name: "Testnet", chainId: CHAIN_IDS.TESTNET, kind: "testnet", endpoints: [], primaryEndpointId: "" },
 ]
@@ -99,7 +99,7 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		).toEqual([
 			["A", "/popup/settings/networks/tn", "tn", "Testnet"],
 			["A", "/popup/settings/networks/local", "local", "Local Network"],
-			["A", "/popup/settings/networks/alpha", "alpha", "Alpha V6"],
+			["A", "/popup/settings/networks/alpha", "alpha", "Alpha"],
 		])
 	})
 
@@ -110,8 +110,8 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		expect(dots).toHaveLength(1)
 		expect(badges).toHaveLength(1)
 		expect(badges[0]?.textContent).toContain("Active")
-		expect(rowLink("Alpha V6")?.contains(dots[0] ?? null)).toBe(true)
-		expect(rowLink("Alpha V6")?.contains(badges[0] ?? null)).toBe(true)
+		expect(rowLink("Alpha")?.contains(dots[0] ?? null)).toBe(true)
+		expect(rowLink("Alpha")?.contains(badges[0] ?? null)).toBe(true)
 	})
 
 	test("each inactive row has an outlined Switch named for its network, outside every link; the active row has none", async () => {
@@ -126,7 +126,7 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 			expect(s.dataset.size).toBe("mini")
 			expect(s.closest("a")).toBeNull()
 		}
-		expect(switchOf("Alpha V6")).toBeNull()
+		expect(switchOf("Alpha")).toBeNull()
 	})
 
 	test("Tab stops follow reading order: each inactive row's link then its Switch, the active row's link alone", async () => {
@@ -140,7 +140,7 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 			"network-row-switch:Testnet",
 			"network-row:Local Network",
 			"network-row-switch:Local Network",
-			"network-row:Alpha V6",
+			"network-row:Alpha",
 		])
 	})
 
@@ -162,8 +162,7 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		const testnet = switchOf("Testnet") as HTMLElement
 		testnet.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }))
 		expect(pressOn(testnet, "Enter", { repeat: true })).toEqual([false])
-		for (const name of ["Testnet", "Alpha V6"])
-			expect(pressOn(rowLink(name) as HTMLElement, "Enter", { repeat: true })).toEqual([false])
+		for (const name of ["Testnet", "Alpha"]) expect(pressOn(rowLink(name) as HTMLElement, "Enter", { repeat: true })).toEqual([false])
 		await flushPromises()
 		expect(activate).not.toHaveBeenCalled()
 		expect(router.currentRoute.value.path).toBe("/start")

@@ -30,7 +30,7 @@ async function requestAccountsCapability(ctx: Parameters<typeof connectPlaygroun
 	await popup.waitForSelector('[data-testid="cap-chain-banner"][data-state="mismatch"]', { timeout: 60_000 })
 	const bannerText = await popup.$eval('[data-testid="cap-chain-banner"]', (el) => el.textContent ?? "")
 	expect(bannerText).toContain("Connecting on Local Network")
-	expect(bannerText).toContain("Your wallet is on Alpha V6")
+	expect(bannerText).toContain("Your wallet is on Alpha.")
 	const accountIds = await popup.$$eval('[data-testid="cap-account-item"]', (rows) => rows.map((r) => r.getAttribute("data-account-id")))
 	expect(accountIds).toHaveLength(1)
 	return { popup, fromSeq, address: accountIds[0]! }
@@ -55,7 +55,7 @@ test.skipIf(!hasConfig)(
 		const page = await connectPlayground(registeredExtensionPerTest)
 		const { popup, fromSeq, address } = await requestAccountsCapability(registeredExtensionPerTest, page)
 		// The window closes on approve — read the strip before deciding.
-		expect(await stripNetwork(popup)).toBe("Alpha V6")
+		expect(await stripNetwork(popup)).toBe("Alpha")
 		await approveAndAssertGranted(page, popup, fromSeq, address)
 	},
 )

@@ -49,7 +49,7 @@ One issue, one arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults:
 - **Header** (`Header.vue`): drop the `lock_label` span and its rule; `.lock_chip` loses `gap` and takes `padding: 0 6px` (its icon-only form below 359 px today) at every width; the `<359px` rule keeps only the row's tightening, its comment rewritten to match. `.network_chip`: `gap: 6px`, `padding: 6px 8px`; the `:402` comment goes.
 - **Not taken**: D1, D2, D4 below.
 
-### Phase 1: The name
+### Phase 1: The name ✓
 
 - The "before" captures are done (planning, base build): `~/.cache/nulo-backlog/chips-1/captures/before/`.
 - Change the seed and `getChainName`. Change to "Alpha" every expectation in recon's list (unit, component, e2e), never loosened: `components/ui/utils.test.ts:8`, `network/service.test.ts:1445,1447`, `popup/pages/settings/networks/index.test.ts` (its `kind: "mainnet"` fixture row), `appearance.test.ts:210`, `contacts-import.test.ts:166`, `settings-crud.test.ts:67,81,96,100`, `network-arrival.test.ts:83,130`, `network/cap-chain-mismatch.test.ts:33,58`.

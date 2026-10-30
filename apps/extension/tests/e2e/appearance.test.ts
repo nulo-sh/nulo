@@ -207,7 +207,7 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 		}
 	})
 	console.log(`[appearance] header row at 360px: ${JSON.stringify(row)}`)
-	expect(row.name).toBe("Alpha V6")
+	expect(row.name).toBe("Alpha")
 	expect(row.text, `the network name is cut: ${JSON.stringify(row)}`).toBeLessThanOrEqual(row.box ?? 0)
 	expect(row.lock).toBe(row.chip)
 

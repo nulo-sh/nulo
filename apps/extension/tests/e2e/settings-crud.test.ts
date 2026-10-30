@@ -64,7 +64,7 @@ test("networks page lists the default networks; an inactive row's Switch activat
 		timeout: 15_000,
 		polling: 200,
 	})
-	if ((await chip.jsonValue()) !== "Alpha V6") await switchToNetwork(page, "Alpha V6")
+	if ((await chip.jsonValue()) !== "Alpha") await switchToNetwork(page, "Alpha")
 	await navigateToSettings(page, "networks")
 	await page.waitForSelector('[data-testid="network-row"]', { visible: true, timeout: 5_000 })
 
@@ -78,7 +78,7 @@ test("networks page lists the default networks; an inactive row's Switch activat
 		expect(name).toBeTruthy()
 	}
 
-	// A new profile starts on Alpha V6; each other row carries a Switch, and every point of a row
+	// A new profile starts on Alpha; each other row carries a Switch, and every point of a row
 	// outside its Switch still opens the row (a hit-test, which no component test can run).
 	expect(await switchNames(page)).toEqual(["Testnet", "Local Network"])
 	expect(await testnetRowMisses(page)).toEqual([])
@@ -93,11 +93,11 @@ test("networks page lists the default networks; an inactive row's Switch activat
 		return [!!row?.querySelector('[data-testid="network-active-dot"]'), !!row?.querySelector('[data-testid="network-active-badge"]')]
 	})
 	expect(testnet).toEqual([true, true])
-	expect(await switchNames(page)).toEqual(["Local Network", "Alpha V6"])
+	expect(await switchNames(page)).toEqual(["Local Network", "Alpha"])
 	expect(await page.evaluate(() => window.location.hash)).toBe("#/popup/settings/networks")
 	await waitForSelectedAccount(page, (address) => !!address && address !== start, "the Switch: Testnet's account is selected", 30_000)
 
-	await pressSwitch(page, "Alpha V6", { last: true })
+	await pressSwitch(page, "Alpha", { last: true })
 	await waitForSelectedAccount(page, (address) => address === start, "the Switch back: the first account is selected again", 30_000)
 
 	expect(registeredExtension.consoleErrors).toEqual([])
