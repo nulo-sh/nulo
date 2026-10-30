@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Version 1.2 — effective 27 October 2026**
+**Version 1.2.1 — effective «FILL: effective date»**
 
 These Terms are a binding agreement between you and the developer of Nulo. Read them before you
 install or use Nulo. If you do not agree, do not install or use it.
@@ -10,7 +10,7 @@ install or use Nulo. If you do not agree, do not install or use it.
 > or custody your assets. Anyone who obtains usable credentials or an effective authorisation may be
 > able to access your assets. Recovery and transaction finality have the limitations described in
 > § 4. Nulo has not been audited by an independent security
-> firm, it connects to Aztec Mainnet, shown in Nulo as Alpha V6, by default, where assets may carry
+> firm, it connects to Aztec Mainnet, shown in Nulo as Alpha, by default, where assets may carry
 > real value, and the network
 > it connects to is early-stage. You can lose everything you put into it. Warranty exclusions and
 > liability limits appear in §§ 16–19
@@ -568,3 +568,4 @@ public feedback forms.
 | 1.0 | Never in effect | A draft, replaced by 1.1 before it took effect. |
 | 1.1 | 26 October 2026 | First version in effect. |
 | 1.2 | 27 October 2026 | Passkey profiles now have a recovery phrase. A full backup of a passkey profile is always protected with a file password. |
+| 1.2.1 | «FILL: effective date» | The summary box names the default network as Nulo shows it, Alpha. |

@@ -198,6 +198,15 @@ re-acceptance sheet. Both effective dates are the day the promote publishes them
       `nulo.sh/privacy/v1.2.6/` show no DRAFT banner, and AMO's Privacy policy field carries the
       1.2.6 text (`apps/extension/store/listing.md` § Privacy policy text)
 
+**Due at the release that publishes Terms 1.2.1:** the summary box names the default network as
+Nulo shows it, Alpha. A patch, so nobody is asked to accept again. The version is archived and in
+place; its effective date is the day the promote publishes it, so until then it reads
+`«FILL: effective date»`:
+
+- [ ] `legal/terms.md` — the version line and the 1.2.1 history row, dated the day it is published
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.2.1 (now `null`), same date
+- [ ] After the deploy, `nulo.sh/terms` and `nulo.sh/terms/v1.2.1/` show no DRAFT banner
+
 **Due at the release that first uploads an Aztec 6.0.0 build to a store** (owner's call,
 2026-10-14, for the rc.3 line, carried to 6.0.0 on 2026-10-24; [aztec-rc3](./implementations-plan/archive/aztec-rc3/plan.md) OA-1, D9):
 

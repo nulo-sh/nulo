@@ -61,7 +61,7 @@ One arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults: [lessons/p
 - Warning: revert the next edit before Phase 2. Edit the `(width < 359px)` `.network_chip` block to `gap: 6px; padding: 6px 8px`. Rebuild the armed Chrome dist, rerun the spec's first test as `1372-b-8px.png`, then `git checkout -- apps/extension/src/components/Header.vue`.
 - **Validation gate**: four takeover and two header PNGs exist; the spec logged both chips' heights and both dot offsets; `git status --porcelain apps/extension` is empty. Done at planning time ([lessons/phase-1.md](lessons/phase-1.md)): chips 30 px; A's dot 0.59 px inside the right border, B's 4 px past it.
 
-### Phase 2: Terms 1.2.1, BEFORE-LAUNCH and the reviewer note ☐
+### Phase 2: Terms 1.2.1, BEFORE-LAUNCH and the reviewer note ✓
 
 - Make the edits above, the two F8 tests included. Then `git grep -n "Alpha V6" -- legal/terms.md apps/extension/store` lists only `listing.md`'s upgrade sentence and its release notes (`:187`, `:189`).
 - **Validation gate**: `git show 9ce6bb0bd:legal/terms.md | cmp - legal/archive/terms-1.2.md` (the archive is the text people accepted; `manifest.test.ts` reads its header only); `bun run lint`; `bun run --cwd packages/legal test`; `bun run --cwd apps/landing test`; `bun run --cwd apps/landing build` (then `apps/landing/dist/terms/v1.2/index.html` exists and `dist/terms.html` holds "shown in Nulo as Alpha"); `cd apps/extension && bun --bun vitest run scripts/store-listing.test.ts src/components/LegalAcceptanceSheet.test.ts --retry=0`. Pass: exit 0, and the grep as stated. Layers: lint, unit.

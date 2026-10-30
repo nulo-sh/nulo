@@ -238,8 +238,8 @@ The block between the two markers is sent as `approval_notes` with every version
 
 <!-- reviewer-notes:start -->
 Testing without funds: install, choose "Create profile", set a password. The wallet opens on Aztec
-Alpha V6 with a zero balance. The Alpha V6 upgrade is executable on L1 from 2026-10-26; until it runs,
-the wallet shows Alpha V6 as unavailable. To try a send with sponsored fees, switch to the Aztec
+Alpha with a zero balance. The Alpha V6 upgrade is executable on L1 from 2026-10-26; until it runs,
+the wallet shows Alpha as unavailable. To try a send with sponsored fees, switch to the Aztec
 testnet under Networks. Every screen is reachable without a transaction.
 
 Build: the add-on is bundled (Vite). Source is attached to this version as a `git archive` of the
