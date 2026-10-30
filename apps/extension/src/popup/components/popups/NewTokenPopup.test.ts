@@ -135,7 +135,7 @@ const STUBS = {
 			</div>
 		`,
 	},
-	Icon: { template: "<i />" },
+	Icon: { props: ["name"], template: '<i :data-icon="name" />' },
 	Text: { template: "<span><slot /></span>" },
 	Flex: { template: "<div><slot /></div>" },
 	Transition: { template: "<div><slot /></div>" },
@@ -523,6 +523,44 @@ describe("NewTokenPopup", () => {
 		await flushPromises()
 		expect(taskServiceMock.connect.mock.calls.length).toBe(connectCallsAfterFirst)
 		expect(tokenServiceMock.addToken).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("NewTokenPopup — a refusal belongs to the address it judged", () => {
+	const listedHex = `0x${"b".repeat(64)}`
+	const check = (w: ReturnType<typeof mount>) => w.find('[data-icon="square-check"]').exists()
+	const refusalLine = (w: ReturnType<typeof mount>) => w.find('[data-testid="new-token-error"]')
+
+	async function refusedAt(address: string) {
+		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: listedHex })])
+		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await w.setProps({ show: true })
+		await flushPromises()
+		tokenServiceMock.parseTokenInterface.mockRejectedValueOnce(walletErrorFromPayload(new ContractNotFoundError().toPayload()))
+		await typeAddress(w, address)
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+		return w
+	}
+
+	test("while the address stays, the refusal stays and no check sits beside it", async () => {
+		const w = await refusedAt(validHex)
+		expect(refusalLine(w).text()).toBe("There is no token at this address on this network.")
+		expect(check(w)).toBe(false)
+	})
+
+	test("a listed token's address then reads only its own verdict", async () => {
+		const w = await refusedAt(validHex)
+		await typeAddress(w, listedHex)
+		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(refusalLine(w).exists()).toBe(false)
+	})
+
+	test("another unlisted address clears the refusal and brings the check back", async () => {
+		const w = await refusedAt(validHex)
+		await typeAddress(w, `0x${"c".repeat(64)}`)
+		expect(refusalLine(w).exists()).toBe(false)
+		expect(check(w)).toBe(true)
 	})
 })
 

@@ -368,9 +368,9 @@ const RETIRED_RESEAL = cite(SERVICE, 1292, 'if (classifyProfileRow(profile).kind
 const RETIRED_FINALIZE = cite(SERVICE, 2586, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 145, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 158, "if (isMounted()) leavePhrase()")
-const ONBOARDING_LATER = cite(ONBOARDING, 175, '@later="leavePhrase"')
+const ONBOARDING_PHRASE = cite(ONBOARDING, 147, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 160, "if (isMounted()) leavePhrase()")
+const ONBOARDING_LATER = cite(ONBOARDING, 179, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')

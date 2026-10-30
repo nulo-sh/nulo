@@ -14,7 +14,7 @@ import { useToast } from "@/composables/toast"
 /** Utils */
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
-import { doneRoute } from "../steps"
+import { clearFlowPath, doneRoute, markFlowPath } from "../steps"
 import { restoreNoticeText, retryResultText } from "@/components/composite/import/restore-warning"
 
 /** Stores */
@@ -42,6 +42,8 @@ const { bootstrapActiveProfile, hydrateKnownProfile } = useProfileBootstrap()
 // moves on with no success snack, unlike the popup's import: no later onboarding page
 // needs the session, and a profile left locked meets the popup's unlock screen.
 async function completeImport(profile: unknown) {
+	// Before the bootstrap: the profile exists already, so a reload during it resumes at Ready.
+	markFlowPath("import")
 	const p = profile as { id: string; name: string; type: "password" | "passkey" }
 	await setLastActiveProfileId(p.id)
 	await completeImportWithRecovery({
@@ -124,6 +126,14 @@ const fullBackupCta = readonly({
 	isRestoreHasErrors,
 	isRetrying: isRetryingAccountState,
 })
+
+// The restored profile holds the session from this stage on, before Continue or the account-state
+// tail ends, so a reload from here resumes at Ready.
+watch(restoreStage, (stage) => {
+	if (stage === "restoring:account-state") markFlowPath("import")
+})
+
+onMounted(clearFlowPath)
 
 onBeforeUnmount(() => {
 	dispose()
