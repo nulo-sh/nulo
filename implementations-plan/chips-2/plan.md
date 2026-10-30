@@ -1,7 +1,7 @@
 ---
 plan: chips-2
 tier: light
-status: approved (final Codex pass); arc 1 running
+status: completed; delivered as #1399, which carries this close-out
 issues: "#1370, #1371 (arc 1 closes); #1372 (captures only, stays open)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,20 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 9ce6bb0bd
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30. Planned and delivered the same day; one arc.
+- **Status:** completed. #1399 into `dev` carries the change and this close-out; its merge closes #1370 and #1371 and archives this plan.
+- **Shipped:** Terms 1.2.1, a patch whose summary box says "shown in Nulo as Alpha", with 1.2 archived byte for byte and `«FILL: effective date»` until the promote dates it (BEFORE-LAUNCH § 4); the store reviewer note names the wallet's label "Alpha"; the two acceptance-sheet tests expect the material versions' changes only; the takeovers' Lock chip is the 15 px padlock alone, named "Lock wallet", at the network chip's height. Eight takeover captures and two #1372 captures under `screenshots/`; the #1372 pair is posted on the issue.
+- **Review loop:** plan: Codex and Opus conditional approve, every finding taken, Codex verification `approve`; diff: Codex and Opus `clean` in round 1.
+- **Gates:** lint, `typecheck:all`, `test:all`, `audit:vue`, `build-storybook`, the landing build; the full smoke suite on Chrome (1680 s) and Firefox (2728 s) at retry 0; after merging `dev`, the three arc smoke files on both ([lessons/phase-4.md](lessons/phase-4.md)).
+- **For the next promote:** `launch-legal` holds the promote into `main` until a PR on `dev` dates Terms 1.2.1 (BEFORE-LAUNCH § 4).
+- **Not changed, by scope:** "Alpha V6" in `README.md:8` and `listing.md:187,189` (the protocol generation), the reviewer note's L1 upgrade sentence (the owner's claim; whether the upgrade has run is unverified), `CHANGELOG.md:28`.
+- **Known limits:** none.
+- **Open items:** #1372 (`owner-decision`; captures A and B on the issue); BEFORE-LAUNCH.md § 4, the Terms 1.2.1 block.
+- **Lessons:** none promoted; `lessons.md` is at its budget. zsh's `$var:l` modifier slip stays in `lessons/phase-1.md`.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # chips-2: "Alpha" in the Terms box and the reviewer note, the takeovers' padlock-only Lock chip, and the 240 px captures
 

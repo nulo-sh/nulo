@@ -7,3 +7,4 @@ Base `9ce6bb0bd`, armed Chrome build (16 s). Captures kept in the lane's scratch
 - #1372 A, `dev`, 240 px, Testnet active: chip 15.6×28 at `6px 3px` and a 4 px gap; name 0 wide; the dot 7 px from the left border, 0.59 px inside the right border.
 - #1372 B, the `(width < 359px)` `.network_chip` set to `6px 8px` and a 6 px gap (local edit, rebuilt, reverted; `git status` clean after): chip 18×28; the dot 14 px from the left border and 4 px past the right border (chips-1 measured 3 px).
 - Slip: the first revert ran from `apps/` and missed the path; rerun from the repo root, clean. Run every revert from the root.
+- Agent shell (zsh): `"$c:legal/x"` expanded as `$c` with the `:l` (lower-case) modifier and printed `<sha>egal/x`. Brace a variable before a colon: `"${c}:legal/x"`.
