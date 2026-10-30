@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { decryptAccountExport } from "@nulo/aztec-runtime/account"
+import { bringToFront } from "../../fixtures/browser"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { readActiveNetwork } from "../../fixtures/networks"
 import { answerWithCredential } from "../../fixtures/passkey"
@@ -16,7 +17,7 @@ import type { ChainAddresses } from "./checkers"
 import type { CredentialRef, FileRef, ModelFile, ModelProfile, ParamsMap, SecretRef } from "./model"
 import { answeredCredentials, capturePrf, drainPrf } from "./prf-capture"
 import { type Driven, type RunState, credentialId, profileId, secretFor } from "./state"
-import { PASSKEY_REFUSAL, type Signal, settle, timed } from "./ui"
+import { PASSKEY_REFUSAL, type Signal, settle, timed, waitForRoute } from "./ui"
 
 const ACCOUNT_MS = 120_000
 /** Derived accounts' type in `Account.type`; an imported account has another. */
@@ -129,14 +130,13 @@ async function typeFilePassword(page: Page, password: string): Promise<void> {
 	await replaceInputValue(page, `[data-testid="${FILE_FORM.field}-confirm-input"]`, password)
 }
 
-/** How long a change to a password may take to reach another page's account file page. */
+/** How long a change of unlock may take to reach another page's account file page. */
 const RESET_MS = 15_000
 
 /**
  * The open passkey profile's first derived account on a second page: approved by its passkey and the
- * file password typed, then `compete` runs the anchor's change of unlock, then Save if the page still
- * offers it. A change to a password must reset the page first; the page knows nothing of a new
- * passkey, so Save is pressed at once and must meet the service's refusal. A file made is reported.
+ * file password typed, then `compete` runs the anchor's change of unlock. The page has the bound to
+ * start over; one that still offers Save then has it pressed, and its refusal or file is reported.
  */
 export async function exportDuringChange(
 	s: RunState,
@@ -150,18 +150,19 @@ export async function exportDuringChange(
 	s.errors.watch(page, "export")
 	try {
 		await capturePrf(page)
+		// A new page lands on Home once its bootstrap ends, over any route set before that.
+		await waitForRoute(page, "#/popup/general", 15_000)
 		await openAccountExport(page, name)
 		const approved = await confirmPasskey(s, page, {})
 		if (approved.outcome !== "committed" || !approved.settle.reached)
 			throw new Error(`the passkey did not approve: ${approved.outcome}`)
 		await answeredCredentials(s, page, [{ kind: "get", credential: open.credential as CredentialRef }])
 		await typeFilePassword(page, secretFor(s, p.password))
+		// The competitor's prompts ask from a focused document, and this page holds focus.
+		await bringToFront(s.anchor)
 		await compete()
 		const save = `[data-testid="${FILE_FORM.button}"]`
-		if (p.change.change === "password")
-			await page
-				.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: RESET_MS, polling: 100 }, save)
-				.catch(() => {})
+		await page.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: RESET_MS, polling: 100 }, save).catch(() => {})
 		if (!(await page.$(save))) return timed(t0, 2 * ACCOUNT_MS, "cancelled")
 		const saved = await saveFile(page, FILE_FORM.button, secretFor(s, p.password))
 		return "body" in saved ? timed(t0, 2 * ACCOUNT_MS, "committed") : saved

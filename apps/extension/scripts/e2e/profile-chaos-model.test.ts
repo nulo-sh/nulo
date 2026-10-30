@@ -979,15 +979,15 @@ describe("the passkey choices", () => {
 		expect(() => steps([pk, elsewhere({ competing: "change", change: toPassword("refuse").params })])).toThrow(/approved/)
 	})
 
-	test("a change on the anchor meets the account file page on another page: reset before Save, or Save refused", () => {
+	test("a change on the anchor resets the account file page on another page before its Save", () => {
 		const during = (change: unknown) => ({ action: "raceMethodChangeDuringExport", params: { password: "S1", change } })
 		const toPw = { change: "password", current: "approve", password: "S2" }
 		const own = last([pk, { action: "changeUnlockMethod", params: toPw }], FIREFOX).expect
 		const reset = last([pk, during(toPw)], FIREFOX).expect
 		expect(reset).toMatchObject({ outcomes: ["cancelled"], writes: own.writes })
 		expect(reset.next).toEqual({ ...own.next, next: { ...own.next.next, secret: 3 } })
-		const refused = last([pk, during(newPasskey)], FIREFOX).expect
-		expect(refused).toMatchObject({ outcomes: ["refused"], next: { files: [], next: { credential: 3, secret: 2 } } })
+		const replaced = last([pk, during(newPasskey)], FIREFOX).expect
+		expect(replaced).toMatchObject({ outcomes: ["cancelled"], next: { files: [], next: { credential: 3, secret: 2 } } })
 		expect(endsOf(during(newPasskey) as ListedStep, last([pk], FIREFOX).expect.next)).toEqual([])
 		expect(() => steps([pk, during(newPasskey)])).toThrow(/second page/)
 		expect(() => steps([pk, during({ ...toPw, password: "S1" })], FIREFOX)).toThrow(/one secret/)

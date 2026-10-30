@@ -2,6 +2,7 @@
  *  current unlock answered as the step says, and a lock that meets its current passkey's prompt. */
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { waitForLockScreen } from "../../fixtures/auth"
+import { bringToFront } from "../../fixtures/browser"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet } from "../../fixtures/passkey"
 import { lockFromAnotherWindow } from "../../fixtures/session"
@@ -10,7 +11,7 @@ import type { CredentialRef, ModelProfile, ParamsMap, PlannedStep } from "./mode
 import type { Ceremony } from "./checkers"
 import { capturePrf, checkAnswers, drainPrf, minted } from "./prf-capture"
 import { credentialId, type Driven, type RunState, secretFor, wrongSecret } from "./state"
-import { firstSignal, openRoute, promptEnded, type Signal, settle, timed, unlockAttemptEnded, watchPromptAbort } from "./ui"
+import { firstSignal, openRoute, promptEnded, type Signal, settle, timed, unlockAttemptEnded, waitForRoute, watchPromptAbort } from "./ui"
 
 type Change = ParamsMap["changeUnlockMethod"]
 
@@ -146,12 +147,16 @@ export async function raceMethodChangeElsewhere(s: RunState, compete: () => Prom
 	s.errors.watch(page, "elsewhere")
 	try {
 		await capturePrf(page)
+		// A new page lands on Home once its bootstrap ends, over any route set before that.
+		await waitForRoute(page, "#/popup/general", 15_000)
 		await openRoute(page, ROUTE)
 		await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 15_000 })
 		const hold = await holdNextGet(page)
 		const aborted = await watchPromptAbort(page)
 		await clickByTestId(page, "unlock-method-use-password")
 		await hold.reached()
+		// The competitor's prompts ask from a focused document, and the page just opened took focus.
+		await bringToFront(s.anchor)
 		if (await promptEnded(page)) throw new Error("the prompt ended before the competitor ran")
 		await compete()
 		if (!(await aborted())) return timed(t0, CHANGE_MS + LOCK_MS, "committed")

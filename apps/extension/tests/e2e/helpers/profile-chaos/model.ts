@@ -403,9 +403,10 @@ const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 223, "await managers.profile.veri
 const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 227, "handleCancelOrUnconfirmed(error, openToast)) return")
 const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 92, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 110, "The file password needs at least 8 characters")
-const ACCOUNT_FILE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile?.type,")
-const ACCOUNT_FILE_SAVE_REFUSED = cite(ACCOUNT_PAGE, 261, 'openToast({ kind: "error", label: "Failed to create the file" })')
-const EXPORT_PLAIN_REFUSES = cite(SERVICE, 2102, "throw this.notOpened(key, () => new InvalidPasswordError())")
+const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile?.type,")
+const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 180, "() => appStore.network?.chainId,")
+/** A session opened in place re-runs the window's bootstrap, which clears the network first. */
+const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 153, "appStore.network = undefined")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1367, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
@@ -1642,9 +1643,10 @@ const raceMethodChangeElsewhere: ActionSpec<"raceMethodChangeElsewhere"> = {
 	},
 }
 
-/** The account file page holds an approval for the unlock the anchor replaces: a change to a password
- *  resets the page before Save, and a new passkey leaves Save to meet the service's refusal. The file
- *  password was typed, so its secret is spent either way. */
+/** The account file page holds an approval for the unlock the anchor replaces. The change reopens
+ *  the session in place, and the window's bootstrap that follows clears its network, so the page
+ *  starts over before Save; a change to a password also changes its type. The file password was
+ *  typed, so its secret is spent. */
 const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> = {
 	name: "raceMethodChangeDuringExport",
 	family: "race",
@@ -1666,12 +1668,13 @@ const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> =
 		const competitor = changeUnlockMethod.expect(w, p.change, caps)
 		const next = clone(competitor.next)
 		bump(next, { secret: 1 })
-		const reset = p.change.change === "password"
-		const page = reset ? [ACCOUNT_FILE_RESETS] : [ACCOUNT_FILE_SAVE_REFUSED, SLOTS_BIND_PASSKEY, EXPORT_PLAIN_REFUSES]
-		return result(next, [reset ? "cancelled" : "refused"], competitor.writes, competitor.settle, [
+		const type = p.change.change === "password" ? [ACCOUNT_FILE_TYPE_RESETS] : []
+		return result(next, ["cancelled"], competitor.writes, competitor.settle, [
 			...competitor.sources,
 			ACCOUNT_FILE_PASSKEY,
-			...page,
+			BOOTSTRAP_CLEARS_NETWORK,
+			ACCOUNT_FILE_NETWORK_RESETS,
+			...type,
 		])
 	},
 }
