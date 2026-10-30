@@ -489,7 +489,7 @@ onUnmounted(disposeWindow)
 	padding: 16px;
 }
 
-/* A typed network name can be one word wider than the window, and the action repeats it on a line
+/* A typed network name can be one word wider than the banner, and the action repeats it on a line
  * of its own, so the whole banner breaks such a word; the action's shorter words still fit whole. */
 .chain_banner {
 	overflow-wrap: anywhere;

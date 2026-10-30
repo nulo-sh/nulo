@@ -59,9 +59,10 @@ One arc, one PR against `dev` (§ Delivery). Recon and measurements: [recon.md](
   - a rule on an ancestor such as `.sections`, which reaches past the banner.
 - **D2. The added-networks banner stays as it is** (claim did not hold).
 - **D3. #1375:** the comment's first sentence states what fires the watcher; "A made file is kept." and the code stay. Target text:
-  `// A passkey profile's file not made yet ends when this window's bootstrap re-resolves its network`
-  `// (a profile change or a reopened session; never another window's network switch): its approval`
-  `// and any pending export were given for the previous network. A made file is kept.`
+  `// A passkey profile's file not made yet ends when this window's chain id changes or clears (its own`
+  `// bootstrap clears it; another window's network switch never reaches it): its approval and any`
+  `// pending export belong to the session or network before. A made file is kept.`
+  (Revised in the arc 1 review: a reset completed in another window can also write this store, and an in-place reopen keeps the network.)
   A switch in this window cannot fire it: the page hides the header (`account.vue:5`; `Header.vue:172`), and the takeover and the arrival replace the router view (`app.vue:659-680`).
 - **D4. Tests:**
   - One scan case in `chain-switch.test.ts`: the element under `cap-chain-banner` binds `$style.chain_banner`, and `.chain_banner` declares `overflow-wrap: anywhere`. It is red on the base copy.
@@ -139,6 +140,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | D3's target text (a profile change from another window does fire the watcher; a switch in this window cannot); Fact 3 names why wrap-1's I1 does not apply; the scratch spec removed from the worktree and a check for it; the 1 px pass bound; D4's reasons and the scan's blind spots; the departures named (no capture pair for the added-networks banner, D5 as a new issue); the picture mapping, the gate 3 command, the approval boundary and the close-out comments made exact; title length | an optional 25-`W` mount pin: no code shortens the name, and a stub has no layout |
 | plan 2 | Codex, resumed | conditional approve | Fact 3 names the nested action row of wrap-1's banner, not a direction; Fact 4's fallback for a deleted row; recon's Firefox direction reversed (its labels end further right) | none |
 | plan 3 | Codex, resumed | **approve**: the plan is approved | all corrections verified; no remaining finding | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a18e78) | findings | the account.vue comment names a chain id that changes or clears, with the bootstrap as one writer: a reset completed in another window can reach the mounted page first (reproduced in memory) | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings | `.chain_banner`'s comment says "wider than the banner", not the window; the account.vue reason fits an in-place reopen ("the session or network before") | none |
 
 ## Seeds
 
