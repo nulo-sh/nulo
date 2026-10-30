@@ -104,7 +104,7 @@ Re-render the store listing's eleven images from the current build: the five pop
 
 ## Delivery
 
-- Single arc on `worktree-store-images-1` against `dev`; plain `gh pr create`, no stack. The plan's close-out is the PR's final commits, after the orchestrator's word.
+- Single arc on `worktree-store-images-1` against `dev`; plain `gh pr create`, no stack. Opened as #1377. The plan's close-out is the PR's final commits, after the orchestrator's word.
 - PR title: `chore(store): re-render the listing images from the current build` (64 characters). Body: per frame, the caption and a before/after pair (blob links at full SHAs, `?raw=true`); what changed and why; the gates with outcomes; the reproducibility result; `Closes #<1.0's issue>`; the owner's upload list (below). Opened without labels; the spec is opt-in, so no e2e label is needed (no lane covers it).
 - Owner's upload list: Chrome Web Store → Store listing → Graphic assets: screenshots 1280×800 in order 1..5, small promo tile 440×280. AMO → Edit product page → Images: the same five screenshots. The images carry no launch date (History's day header is the capture date) and no network endpoint (frame 3 shows the local test app's origin).
 
