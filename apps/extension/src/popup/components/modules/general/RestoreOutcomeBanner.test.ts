@@ -4,8 +4,10 @@
  */
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { restoreReminderText } from "@/components/composite/import/restore-warning"
 import { restoreOutcomeKey } from "@/utils/profile-ui-keys"
 import { RESTORE_OUTCOME_LEASE_MS } from "@/utils/restore-outcome"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../../scripts/type-roles/source-scan"
 import RestoreOutcomeBanner from "./RestoreOutcomeBanner.vue"
 
 type FakeNetwork = { id: string; profileId: string; name: string }
@@ -134,6 +136,20 @@ describe("RestoreOutcomeBanner", () => {
 		await flushPromises()
 		expect(shown(w).exists()).toBe(false)
 		expect(store.has(restoreOutcomeKey("p1"))).toBe(true)
+	})
+
+	test("a typed name of the field's full 25 characters reads whole, in a text that breaks a word wider than itself anywhere", async () => {
+		const long = "W".repeat(25)
+		seed("p1", ["3f2a9c1e"])
+		const app = await appStore()
+		app.networks = [{ ...TESTNET, name: long }, LOCAL]
+		const w = await mountBanner()
+		expect(w.get('[data-testid="restore-outcome-reminder"]').text()).toBe(restoreReminderText([long]))
+
+		const parsed = parseSource("apps/extension/src/popup/components/modules/general/RestoreOutcomeBanner.vue")
+		const reminder = elementByTestid(parsed, "restore-outcome-reminder")?.node
+		expect(reminder && boundAttr(reminder, "class")).toBe("$style.reminder")
+		expect(declarationsOf(parsed, ".reminder")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 
 	test("Dismiss removes the reminder; Restore again opens its page", async () => {

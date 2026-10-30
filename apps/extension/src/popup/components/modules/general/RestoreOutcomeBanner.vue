@@ -91,7 +91,7 @@ onBeforeUnmount(() => {
 		<template #title> Some networks weren't restored </template>
 		<template #description>
 			<Flex direction="column" gap="8">
-				<Text color="secondary" height="140">{{ reminderText }}</Text>
+				<Text color="secondary" height="140" :class="$style.reminder" data-testid="restore-outcome-reminder">{{ reminderText }}</Text>
 				<Flex align="center" gap="16">
 					<button type="button" :class="$style.action" data-testid="restore-outcome-restore" @click="restoreAgain">
 						Restore again
@@ -106,6 +106,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
+/* On the sentence, not its column: the actions below must keep their words whole. */
+.reminder {
+	overflow-wrap: anywhere;
+}
+
 /* Banner's own action, for the second action its single `action` prop cannot carry. */
 .action {
 	composes: type--label-section from global;

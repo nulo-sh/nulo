@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
 		@keydown="onKeydown"
 	>
 		<div v-if="networkNames.length" :class="$style.intro">
-			<Text variant="body" height="150" color="secondary" data-testid="restore-again-intro">
+			<Text variant="body" height="150" color="secondary" :class="$style.names" data-testid="restore-again-intro">
 				{{ restoreAgainIntroText(networkNames) }}
 			</Text>
 		</div>
@@ -176,6 +176,7 @@ onBeforeUnmount(() => {
 					variant="body"
 					height="120"
 					color="txt-warning"
+					:class="$style.names"
 					data-testid="restore-again-retry-result"
 				>
 					{{ retryResult }}
@@ -216,5 +217,9 @@ onBeforeUnmount(() => {
 <style module>
 .intro {
 	padding-bottom: 12px;
+}
+
+.names {
+	overflow-wrap: anywhere;
 }
 </style>
