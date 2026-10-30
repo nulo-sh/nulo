@@ -15,9 +15,10 @@ import { settleClosedPopup } from "../../fixtures/popup-leave"
 import { waitForPopupClosed } from "../../fixtures/popups"
 import { openPopup, waitForServiceReady } from "../../fixtures/wallet-pages"
 import { setInputs } from "../import-drivers"
-import { exportAccount, importAccountFile } from "./accounts-io"
+import { exportAccount, exportDuringChange, importAccountFile } from "./accounts-io"
 import {
 	type ActionName,
+	competitorStep,
 	type CredentialRef,
 	deleteTarget,
 	isMinted,
@@ -31,8 +32,8 @@ import {
 	live,
 } from "./model"
 import { drainBeforeStop, restartBackground } from "./restart"
-import { bindProfile, type Ceremony } from "./checkers"
-import { credentialId, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
+import { bindProfile, type Ceremony, checkOutcome, checkSettle } from "./checkers"
+import { credentialId, type Drive, type Driven, profileId, type RunState, secretFor, wrongSecret } from "./state"
 import {
 	activeProfileId,
 	answerConfirm,
@@ -60,7 +61,7 @@ import {
 } from "./ui"
 import { verifyAll } from "./verify"
 import { answeredCredentials, capturePrf, checkAnswers, drainPrf, minted, pickDiscovered } from "./prf-capture"
-import { changeUnlockMethod, raceLockDuringMethodChange } from "./unlock-method"
+import { changeUnlockMethod, raceLockDuringMethodChange, raceMethodChangeElsewhere } from "./unlock-method"
 import { exportFullBackup, pickEarlierBackup, restoreFile } from "./backups"
 import { editRowDuringUnlock as editRow, tamperedUnlock as tamperSlot } from "./tamper"
 
@@ -676,6 +677,22 @@ const raceDoubleUnlock: Drivers["raceDoubleUnlock"] = async (s, _p, _step, befor
 	return settle(page, [HOME, { label: "refused", testid: "error-text" }], { home: "committed", refused: "refused" }, UNLOCK_MS)
 }
 
+/** The competitor's own step on the anchor, judged as that action: a race whose competitor did not
+ *  commit and settle raced nothing, so the race's step ends. */
+async function competeOnAnchor(s: RunState, step: PlannedStep, before: World): Promise<void> {
+	const driven = await (DRIVERS[step.action] as Drive)(s, step.params, step, before)
+	const missed = [...checkOutcome(step.action, step.expect, driven), ...checkSettle(step.action, driven.settle)]
+	if (missed.length) throw new Error(`the competing ${step.action} did not land: ${missed.map((v) => v.message).join("; ")}`)
+}
+
+const raceMethodChangeElsewhereDriver: Drivers["raceMethodChangeElsewhere"] = async (s, p, step, before) =>
+	raceMethodChangeElsewhere(s, () => competeOnAnchor(s, competitorStep(step.index, before, p, s.caps), before))
+
+const raceMethodChangeDuringExport: Drivers["raceMethodChangeDuringExport"] = async (s, p, step, before) =>
+	exportDuringChange(s, openBefore(before), p, () =>
+		competeOnAnchor(s, competitorStep(step.index, before, { competing: "change", change: p.change }, s.caps), before),
+	)
+
 // ── the network file's families ─────────────────────────────────────────
 
 const networkOnly = async (): Promise<Driven> => {
@@ -713,6 +730,8 @@ export const DRIVERS: Drivers = {
 	raceLockDuringReveal,
 	changeUnlockMethod: async (s, p, step, before) => changeUnlockMethod(s, openBefore(before), p, step),
 	raceLockDuringMethodChange: async (s) => raceLockDuringMethodChange(s),
+	raceMethodChangeElsewhere: raceMethodChangeElsewhereDriver,
+	raceMethodChangeDuringExport,
 	dappWhileLocked: networkOnly,
 	dappDuringHeldUnlock: networkOnly,
 	restoreHeld: networkOnly,
