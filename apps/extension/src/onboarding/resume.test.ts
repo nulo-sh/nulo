@@ -70,6 +70,8 @@ function deferred<T>() {
 	return { promise, resolve, reject }
 }
 
+type Check = ReturnType<typeof deferred<{ id: string } | null>>
+
 beforeEach(() => {
 	vi.stubGlobal(
 		"matchMedia",
@@ -112,6 +114,23 @@ describe("onboarding's load check and the pages it races", () => {
 		expect(errorHandler).toHaveBeenCalledTimes(1)
 		expect(router.currentRoute.value.path).toBe("/onboarding/create")
 		expect(mark()).toBeUndefined()
+		shell.unmount()
+	})
+
+	test.each([
+		["resolves", (check: Check) => check.resolve({ id: "p1" })],
+		["rejects", (check: Check) => check.reject(new Error("worker unreachable"))],
+	])("a flow that marks while the check is pending keeps its mark and its page when the check %s", async (_, settle) => {
+		const check: Check = deferred()
+		hydrateKnownProfile.mockReturnValue(check.promise)
+		const doc = await freshDocument()
+		const { router, shell, mark } = await reloadOn("/onboarding/create", {}, doc)
+		doc.steps.markFlowPath("password")
+
+		settle(check)
+		await flushPromises()
+		expect(router.currentRoute.value.path).toBe("/onboarding/create")
+		expect(mark()).toBe("password")
 		shell.unmount()
 	})
 

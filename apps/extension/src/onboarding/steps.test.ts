@@ -46,7 +46,7 @@ describe("the flow mark on the history entry", () => {
 		steps.clearFlowPath()
 		expect(steps.donePath(window.history.state)).toBe("password")
 
-		steps.settleResume()
+		steps.settleResume(true)
 		steps.clearFlowPath()
 		expect(window.history.state).toEqual({ back: "/onboarding/welcome", position: 2 })
 	})

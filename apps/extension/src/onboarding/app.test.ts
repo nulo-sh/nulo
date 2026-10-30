@@ -109,7 +109,6 @@ describe("onboarding's theme", () => {
 })
 
 describe("onboarding's resume", () => {
-	/** Reloads on `path` with `state` as the entry's history state, then runs the shell's load check. */
 	async function reloadOn(path: string, state: Record<string, unknown> | null) {
 		router.currentRoute.value.path = path
 		window.history.replaceState(state, "")

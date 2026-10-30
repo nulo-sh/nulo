@@ -633,7 +633,7 @@ describe("onboarding import — the reload mark", () => {
 	})
 
 	test("an Import mounted after the load check drops an earlier attempt's mark", async () => {
-		settleResume()
+		settleResume(true)
 		window.history.replaceState({ position: 3, onboardingPath: "import" }, "")
 		await mountImport()
 		expect(window.history.state).toEqual({ position: 3 })

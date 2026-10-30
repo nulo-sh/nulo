@@ -44,8 +44,8 @@ The claims held. #1385's "every confirm the onboarding tab asks" is exactly one 
 ## Architecture & Implementation
 
 - **#1385 (D1)**: `git mv` `src/popup/components/popups/ConfirmPopup.vue` and its test to `src/components/`, and `popup-shared.module.css` to `src/components/Popup/`. Repoint the 14 files that compose the sheet, `PopupManager`'s import, `popup-stack.pins.test.ts`, and `useConfirm.test.ts`'s import (`:15`) and `ALLOWED` path (`:287-290`). Regenerate `src/types/components.d.ts`. `onboarding/app.vue` then mounts `<ConfirmPopup :show="popupStore.isOpened('confirm')" @onClose="popupStore.close('confirm')" />` in place of `<PopupManager />`. It resolves by auto-import, as `NotificationManager` does.
-- **Flow marker (D2, D3)**: the entry key `onboardingPath` that `doneRoute` already writes, now also written one step earlier. `steps.ts` adds `markFlowPath(path)`, `clearFlowPath()` (both `history.replaceState({ ...history.state, … }, "")`) and `settleResume()`, a flag for this document; `donePath` stays the reader.
-- **Reader**: `app.vue`'s `onMounted` keeps its order. An active profile plus a marker (`donePath(window.history.state)`) → `router.replace(doneRoute(path))`; an active profile without one → stay on the route; no active profile → unchanged. A `finally` calls `settleResume()` on every exit and, unless the check routed to Ready, `clearFlowPath()`: the check either sends the marked entry to Ready or leaves a fresh form, a rejected `hydrateKnownProfile()` included (Codex r3-1).
+- **Flow marker (D2, D3)**: the entry key `onboardingPath` that `doneRoute` already writes, now also written one step earlier. `steps.ts` adds `markFlowPath(path)`, `clearFlowPath()` (both `history.replaceState({ ...history.state, … }, "")`), `resumePath()` and `settleResume(resumed)`, with two flags for this document (the check settled; the flow marked since load); `donePath` stays Ready's reader.
+- **Reader**: `app.vue`'s `onMounted` keeps its order. An active profile plus a loaded marker (`resumePath()`) → `router.replace(doneRoute(path))`; an active profile without one → stay on the route; no active profile → unchanged. A `finally` calls `settleResume(resumed)` on every exit, which, unless the check routed to Ready, drops the loaded marker: the check either sends the marked entry to Ready or leaves a fresh form, a rejected `hydrateKnownProfile()` included (Codex r3-1). A mark the flow writes while the check is pending is neither read nor dropped by it (arc 1 Codex r1-1).
 - **Writers (D5)**: `create.vue` marks first thing in `onCreated`; `import.vue` marks first thing in `completeImport`, and when `restoreStage` reaches `"restoring:account-state"` (F5). Both pages call `clearFlowPath()` on mount, because a form mounted after the load check is a fresh attempt. `clearFlowPath()` does nothing until `settleResume()` has run in this document, so a page that mounts during the check never erases what the check reads (D6, F7).
 - **Files**: `src/components/{ConfirmPopup.vue,ConfirmPopup.test.ts,Popup/popup-shared.module.css}` (moved); the 13 other popups' `<style>`; `src/popup/components/popups/{PopupManager.vue,popup-stack.pins.test.ts}`; `src/composables/useConfirm.test.ts`; `src/onboarding/{app.vue,steps.ts,pages/create.vue,pages/import.vue}` and their tests, plus a new `src/onboarding/resume.test.ts`; `tests/e2e/onboarding-tab.test.ts`.
 
@@ -66,13 +66,14 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 
 ## Arc 1: phases
 
-### Phase 1: render the confirm (#1385)
+### Phase 1: render the confirm (#1385) ✓
 
 - Do D1.
 - **Test**: `app.test.ts`, with real Pinia and the real dialog. `askConfirm` from a scope; Confirm resolves `true`, Cancel resolves `false`, and each closes the slot. Red at the base, because no dialog renders.
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0, and the new case is red on the base copy.
+- **Result** (`4d7eac61c`): exit 0 each, 952 files; the shell case red at the base (no dialog).
 
-### Phase 2: the flow marker (#1386)
+### Phase 2: the flow marker (#1386) ✓
 
 - Do D2, D3, D5 and D6.
 - **Tests**:
@@ -82,8 +83,9 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
   - `create.test.ts`: mount clears the marker; `onCreated` marks before the phrase shows.
   - `import.test.ts`: mount clears the marker; `completeImport` marks; `restoreStage` reaching `"restoring:account-state"` marks.
 - **Gate**: phase 1's commands. Pass: exit 0, and the #1386 case is red on the base copy.
+- **Result** (`c1329cc95`): exit 0 each, 953 files; the #1386 case red at the base (replaced to Ready). The chaos model's `create.vue` line cites moved with the lines.
 
-### Phase 3: browsers
+### Phase 3: browsers ✓
 
 - **E2E**: one scenario in `onboarding-tab.test.ts`: reload the phrase step through `reloadExtensionPage`, then expect `#/onboarding/done`. Failure mode: a real reload drops the marker, and the tab offers Create again over the new profile. jsdom cannot reload a document. The base also passes, so this scenario guards the new mechanism. Estimate: 6 s on Chrome, 9 s on Firefox.
 - **Gate**:
@@ -91,6 +93,7 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
   - Build each browser with CI's smoke flags: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`.
   - From `apps/extension`: `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/onboarding-tab.test.ts tests/e2e/onboarding-import.test.ts tests/e2e/duplicate-phrase-import.test.ts --retry=0`, then again with `NULO_E2E_BROWSER=firefox`.
   - Pass: every command exits 0. Record each browser's wall-clock before and after.
+- **Result** (`8304f38a0`): exit 0 each; the three files at retry 0, Chrome 63.95 s → 70.64 s, Firefox 102.67 s → 122.10 s (the scenario 6.6 s and 12.1 s, over the 6 s and 9 s estimate).
 
 ## Arc 2: Ready names an unsaved phrase (#1387; starts on OA-1)
 
@@ -107,7 +110,7 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 | D3 | Path only, no profile id (Opus 1) | the id: refusing a mismatch left a fresh Create form after a finished flow, and Ready rendered anyway (Codex r1-2) |
 | D4 | #1387's line waits for the owner (Codex r1-6, Opus 4); arc 1 keeps the reload on Ready | Re-showing the words: they open only with the password or a passkey answer (`service.ts:2225-2235`), so onboarding would need a second reveal surface beside Settings' `seed.vue`. |
 | D5 | Mark when the profile lands, including the restore tail (Opus 2, Codex r1-4) | Codex r1-5, which would leave a restore with errors unmarked. A reload drops that page's Retry and Continue in any design. Ready reaches Home, where the run's restore-outcome reminder (best effort, F5) offers the networks left. The Import form would invite a duplicate restore, and the base shows Ready there. |
-| D6 | The form pages clear the marker on mount once the load check has settled (Codex r1-3, r2-1) | Replacing the form entry with Ready: it changes Back from Ready. Holding `RouterView` until the check settles (Codex r2-1's fix): it blanks the tab for as long as the worker takes to answer. A known limit: the fix is local. |
+| D6 | The form pages clear the marker on mount once the load check has settled (Codex r1-3, r2-1). The check reads and drops only the mark the entry was loaded with: a mark this document's flow writes while the check is pending is the flow's, so the check neither resumes on it nor clears it (arc 1 Codex r1-1) | Replacing the form entry with Ready: it changes Back from Ready. Holding `RouterView` until the check settles (Codex r2-1's fix): it blanks the tab for as long as the worker takes to answer. A known limit: the fix is local. |
 
 ## Audit verdicts
 
@@ -118,6 +121,7 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 | Codex r3 | conditional approve (clear the marker when the check fails; test it) | 1 (the `finally` clears unless routed to Ready; `resume.test.ts` rejection case) | none |
 | Codex r4 | approve | none | none |
 | Opus Plan | conditional approve | 1 (D3), 2 (D5), 3 (D1), 4 (OA-1), 5 (I2, UI impact), 6 (arc 2's `path` check), tests | 7: a mark after a Back mid-import lands on the current entry. The push to Ready that follows already moves the tab, so this is noted only. |
+| Arc 1 Codex r1 | reject (a pending check's `finally` erases a mark its own document's flow wrote) | 1 (D6 amended: `resumePath()`, `settleResume(resumed)`; `resume.test.ts` case for both settle directions, red before), 2 (that case), 3 (two comments cut); ask 5: ship #1385, reopen #686 for its own change | none |
 
 Known limit, filed at close-out: a typed `#/onboarding/done` with a profile active shows Ready. The consequence does not matter: the profile exists.
 

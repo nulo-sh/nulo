@@ -15,7 +15,7 @@ import { usePopupStore } from "@/stores/popup.store"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
 import { openPopupWindowAndClose } from "./hand-over"
-import { clearFlowPath, donePath, doneRoute, settleResume } from "./steps"
+import { doneRoute, resumePath, settleResume } from "./steps"
 
 const popupStore = usePopupStore()
 const router = useRouter()
@@ -59,7 +59,7 @@ onMounted(async () => {
 			await router.isReady()
 			// An active profile alone proves nothing: another window may have unlocked it. Only an entry
 			// whose flow got a profile in resumes at Ready.
-			const path = donePath(window.history.state)
+			const path = resumePath()
 			if (path) {
 				resumed = true
 				router.replace(doneRoute(path))
@@ -74,9 +74,7 @@ onMounted(async () => {
 
 		await openPopupWindowAndClose()
 	} finally {
-		settleResume()
-		// The check either sends a marked entry to Ready or leaves a fresh form, a failed check included.
-		if (!resumed) clearFlowPath()
+		settleResume(resumed)
 	}
 })
 

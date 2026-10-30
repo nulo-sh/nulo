@@ -591,7 +591,7 @@ describe("onboarding create — the reload mark", () => {
 	})
 
 	test("a Create mounted after the load check drops an earlier attempt's mark and keeps the router's keys", async () => {
-		settleResume()
+		settleResume(true)
 		window.history.replaceState({ position: 3, onboardingPath: "passkey" }, "")
 		await mountCreate()
 		expect(window.history.state).toEqual({ position: 3 })
