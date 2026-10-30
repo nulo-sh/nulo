@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
+import { categoricalLabel, journalTerminalDisplay } from "@/utils/journal-state"
 import { JOURNAL_REAPER_ALARM_NAME, JournalReaper } from "./reaper"
 import { profileKeysStub } from "../composition-harness"
 import { OperationJournalService } from "./service"
@@ -121,7 +122,7 @@ describe("JournalReaper.reap", () => {
 		expect(after?.progress.stage).toBe("queued")
 	})
 
-	test("boot sweep marks a queued record as failed (unconditional, no grace) using stuck_queued kind", async () => {
+	test("boot sweep marks a queued record as interrupted (unconditional, no grace): stale_on_resume, nothing sent", async () => {
 		const rec = await service.createOperation({
 			...VALID_INPUT,
 			kind: "dapp_execute",
@@ -135,7 +136,11 @@ describe("JournalReaper.reap", () => {
 
 		const after = await service.getOperation(rec.id)
 		expect(after?.progress.stage).toBe("failed")
-		expect(after?.error?.kind).toBe("stuck_queued")
+		expect(after?.error?.kind).toBe("stale_on_resume")
+		// The restart ended a request nobody confirmed: History reads it as interrupted, never as a failed send.
+		const op = after as NonNullable<typeof after>
+		expect(journalTerminalDisplay(op)?.state).toBe("interrupted")
+		expect(categoricalLabel(op).label).toBe("Interrupted before sending")
 	})
 
 	// (BOOT-SWEEP PIN) The cold-start boot sweep must NOT fail a record created in the
