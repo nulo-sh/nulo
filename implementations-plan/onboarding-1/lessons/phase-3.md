@@ -22,3 +22,7 @@ Verdict: approve. It had found round 1's race independently at `00220b67f`.
 - 3 I2 missed a Create left before its profile lands: accepted; I2 corrected, no code change (the mark would land on the entry the person went to).
 - 4 The shell test registered `ConfirmPopup` itself, so it could not fail the way #1385 did (an unresolved tag): accepted; the shell imports it, and the test reds without the import.
 - 5 The two settle tests share their file's module: noted; each runs last in its file.
+
+## Codex round 2 (resumed session), 2026-10-30
+
+Verdict: approve. Its probes ran the shell callback over unmarked, loaded and live marks with both settle directions, and a mark written while `router.isReady()` waits. Both Opus rejections stand. The loop converged.

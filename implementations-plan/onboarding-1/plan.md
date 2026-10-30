@@ -1,7 +1,7 @@
 ---
 plan: onboarding-1
 tier: light
-status: approved by the panel (2026-10-30, Codex r4 approve): arc 1 (#1385, #1386) next; arc 2 (#1387) waits on OA-1
+status: arc 1 (#1385, #1386) implemented, Codex arc r2 approve; arc 2 (#1387) waits on OA-1
 issues: "#1385 #1386 (arc 1); #1387 (arc 2, after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -123,6 +123,7 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 | Opus Plan | conditional approve | 1 (D3), 2 (D5), 3 (D1), 4 (OA-1), 5 (I2, UI impact), 6 (arc 2's `path` check), tests | 7: a mark after a Back mid-import lands on the current entry. The push to Ready that follows already moves the tab, so this is noted only. |
 | Arc 1 Codex r1 | reject (a pending check's `finally` erases a mark its own document's flow wrote) | 1 (D6 amended: `resumePath()`, `settleResume(resumed)`; `resume.test.ts` case for both settle directions, red before), 2 (that case), 3 (two comments cut); ask 5: ship #1385, reopen #686 for its own change | none |
 | Arc 1 Opus | approve | 3 (I2 corrected), 4 (`ConfirmPopup` imported explicitly; the shell test reds without the import) | 1 (keep a loaded mark when the check fails: reopens Codex r3-1 with no new evidence), 2 (mark at `"finalizing"`: a finalize that then fails would send a reload to Ready over another window's session; the mid-finalize reload lands on Import, the safe side). 5 noted: the two settle tests run last in their files |
+| Arc 1 Codex r2 | approve (both races fixed, the explicit import holds, both Opus rejections stand) | none | none |
 
 Known limit, filed at close-out: a typed `#/onboarding/done` with a profile active shows Ready. The consequence does not matter: the profile exists.
 
@@ -131,8 +132,7 @@ Known limit, filed at close-out: a typed `#/onboarding/done` with a profile acti
 - **Arc 1**: branch `worktree-onboarding-1`, one PR to `dev` with `gh pr create`. Open it ready, after the Codex loop converges and the gates pass, with no labels.
   - Title: `fix(onboarding): render the duplicate confirm and keep a reload off a false ready` (81 characters).
   - Body: the owner's words, the captures, the gates with outcomes, the e2e wall-clock per browser, `Closes #1385`, `Closes #1386`.
-- **Arc 2**: after OA-1, stacked on arc 1 (`gh stack`), or off `dev` once arc 1 merges. `Closes #1387`. The close-out lands as its final commits.
-- **Serial**: the arcs share `onboarding-tab.test.ts`.
+- **Arc 2**: after OA-1, stacked on arc 1 (`gh stack`), or off `dev` once arc 1 merges. `Closes #1387`. The close-out lands as its final commits. Serial: both arcs touch `onboarding-tab.test.ts`.
 
 ## Post-implementation
 
