@@ -10,3 +10,5 @@
 - 2026-10-30: 1.3 model test 30/30 retry-0 runs green; seeds 9001-9010 green on Chrome (mean 48 s) and Firefox (mean 73 s).
 - 2026-10-30: review round 1 (Codex + Opus) folded in; export race re-run green on Firefox; type-reset scratch break red.
 - 2026-10-30: final gates on the head pass: lint, typecheck:all, test:all (extension 16415 passed), the hand lists on Chrome and Firefox, check:plans.
+- 2026-10-30: arc 2 on `chaos-5-a2` off dev at arc 1's merge. 2.1 Firefox panel test green (14.9 s alone, 16.2 s in the file; file 125.1 s before, 123.0 s after), scratch break red; `:1177` assertion added.
+- 2026-10-30: 2.2 S7 tests green (8 ms, 308 ms, 350 ms for the bypassed break); I3 commented on #1206 (D16). 2.3 README; #1373, #1374 closed known limits, #1375 open.
