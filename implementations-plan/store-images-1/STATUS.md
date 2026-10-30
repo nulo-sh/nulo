@@ -9,3 +9,4 @@
 - 2026-10-30: 1.2 pass: eleven PNGs looked at (lessons/phase-1.md table); five frames changed, tile byte-identical.
 - 2026-10-30: 1.3 pass: run B exit 0; five captures differ from A by address, hash slices and port only; store-art over A's captures reproduces all eleven hashes.
 - 2026-10-30: 1.4 pass: lint, typecheck:all, store tests green; PNGs committed (c776eb1fc). Codex loop next.
+- 2026-10-30: arc review round 1: Codex and Opus conditional approve (2 findings each, all accepted); test:all green at e3e0ba9cd; #1027 icons added to the per-frame list.

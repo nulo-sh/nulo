@@ -124,6 +124,11 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 - **Opus Plan leg:** conditional approve; 6 findings, all accepted. Alice's address is fixed per Aztec version, so 1.3 expects it equal across runs (1.3, recon.md); § Asks lists OA-1; OA-1 names History's capture date and the TESTNET staging; "no recovery word" is undecidable (BIP-39 holds "account", "home", "lock") and becomes "no import, reveal or phrase screen" (1.2); the log claim cites the trace (§ Security); the approve port is checked against the node port (1.2). Looks fine: I1, I2 (the probe's hashes), D2-D4, D8, the 1.3 restore, no PNG metadata chunk.
 - **Codex, final pass** (the same session, resumed): approve, no remaining material finding. It notes that the final PNG look, the reproducibility gate and OA-1 stay required.
 
+### Arc 1 review
+
+- **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. `test:all` ran at the head before 1.4 counts (exit 0); the 1.3 log gains its hashes, commands and run B's prefixes. It found only IHDR/IDAT/IEND chunks and the right sizes in all eleven PNGs.
+- **Opus review** (general-purpose), beside round 1: conditional approve; 2 findings, both accepted. #1027's repainted icons show in every frame and join the per-frame list (recon.md, OA-1, the PR body); the same `test:all` gap.
+
 ## Seeds
 
 ```

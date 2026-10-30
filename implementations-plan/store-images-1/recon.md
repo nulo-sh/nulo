@@ -36,11 +36,11 @@ What each capture shows against the committed one (looked at with Read):
 
 | Capture | Changed by landed work | Run-specific |
 |---|---|---|
-| home | Lock chip a padlock alone, network chip wider (#1369); the holding's privacy marks are a shield and a globe (#812) | address, two hash slices |
-| send | the same header; the strip's marks are shields (#812) | address (Alice's moved with the sandbox's initial accounts in the 6.0.0 bump, #1107; fixed per version, `fixtures/aztec.ts:146`) |
-| history | the same header | address, hash slices, "OCT 30, 2026" |
-| security | the same header; strict mode reads "asks you to unlock more often on this device" (#1221) | address |
-| approve | the origin reads `http://localhost:<port>` (#806, full origin) | address, port |
+| home | Lock chip a padlock alone, network chip wider (#1369); the holding's privacy marks are a shield and a globe (#812); icons painted once on whole pixels, the bottom bar's at 24 px (#1027) | address, two hash slices |
+| send | the same header; the strip's marks are shields (#812); the back arrow repainted (#1027) | address (Alice's moved with the sandbox's initial accounts in the 6.0.0 bump, #1107; fixed per version, `fixtures/aztec.ts:146`) |
+| history | the same header; the bottom bar and row arrows repainted (#1027) | address, hash slices, "OCT 30, 2026" |
+| security | the same header; strict mode reads "asks you to unlock more often on this device" (#1221); the back arrow repainted (#1027) | address |
+| approve | the origin reads `http://localhost:<port>` (#806, full origin); the app-grid and eye glyphs repainted (#1027) | address, port |
 
 Checks on all five: each its intended screen (no import, reveal or phrase screen), no `https://`, no Manage networks page; "TESTNET" whole with its dot inside the chip. The approve frame's port 29575 is the run's playground port; its node was on another port (`[resolve-ports]` line). The PNGs carry no metadata chunk (IHDR, IDAT and IEND only).
 
