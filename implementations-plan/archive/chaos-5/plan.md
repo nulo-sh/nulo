@@ -9,10 +9,25 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at a4da1f36f
 trunk: dev
-status: approved
+status: closed (arc 1 #1367; arc 2 and the close-out one PR, awaiting the merge)
 issues: "#1157 (the browser items #1301, #1324 and #1331 left)"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- Date: 2026-10-30.
+- Status: completed. Arc 1 merged as #1367; arc 2 and this close-out ship as one PR, as the orchestrator chose (§ Delivery), awaiting the merge.
+- Shipped: closes #1157 with its browser items.
+  - #1367: two catalog races, `raceMethodChangeElsewhere` (S1, S2, both browsers) and `raceMethodChangeDuringExport` (S6a, Firefox), each with a scratch break that turned O5 red; D15 records the tree overruling the plan on S6a.
+  - Arc 2: `toolbar-panel.test.ts` drives the passkey window from Firefox's dying panel: a profile made on the passkey another profile holds (S3), and a row's `prfSalt` changed while the window waits on Try again, refused after the retry's own answer with no session written (S4). `service.integration.test.ts` checks the window is told `failed` there, and races two restores for the facade lock with a control and a committed break (S7).
+  - No product file changed, and no product fault came up. I3, two duplicate-confirmed restores taking one name, is #1206's case 1 by another path: a comment there (D16).
+- Budget: the new e2e test 13.8-16.2 s on Firefox at retry 0 (estimated 90 s), 0 on Chrome, where its file skips. The Firefox file took 125.1 s before and 123.0 s after (137.0 s in the last run, on a loaded host). The chaos files skip unarmed, so CI's time is otherwise unchanged. The restore tests take 8, 308 and 350 ms.
+- Dispositions: S8 is held by `useFullBackupImport.test.ts` and `useRestoreAgain.test.ts`, whose deferred reads pin Import overtaking a pick (size only widens the window in real time); S9 by `useRestoreAgain.test.ts` and `restore-again.test.ts`; S10 is #1222's.
+- Lessons: D15's gotcha, a profile switch or unlock change elsewhere rebooting open pages with `appStore.network` unset first, joins the `PopupManager` entry, tightened to fit; `lessons.md` holds 8192 of its 8192 bytes, and this plan supersedes no entry. Two e2e techniques went to the `e2e-testing` skill: Chrome fails a passkey prompt from a page that lost focus, and a new popup page lands on Home over an earlier route.
+- Known limits: #1373 (S5), #1374 (S6b).
+- Open items: #1375, the export page's network watcher comment.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 ## Goal
 
@@ -67,7 +82,7 @@ Close #1157's last items: the races its comments of 2026-10-28 leave to the brow
 - `raceMethodChangeElsewhere: { competing: "delete" } | { competing: "change"; change: ParamsMap["changeUnlockMethod"] }`, weight 1, on an open passkey profile; `change.current` is `approve`. A opens Unlock method, holds the current passkey's `get` (`holdNextGet`, `watchPromptAbort`) and presses `unlock-method-use-password`. Control: A's prompt is reached and not ended before B starts. After B: A's prompt ends within the settle bound, A shows no error toast and no `unlock-method-error-text`, and A's errors are watched for O4; then A closes with its hold unreleased (D4). A prompt still waiting is reported `committed`, so O5 fails. Expectation: outcome `cancelled`; B's world, writes and settle; sources B's plus `METHOD_DROPS_PROMPT` and `METHOD_ENDS_WITH_SESSION` (delete) or a new cite of `onChangedElsewhere` (change). `endsOf` adds the delete's session end.
 - `raceMethodChangeDuringExport: { password: SecretRef; change: ParamsMap["changeUnlockMethod"] }`, weight 1, invalid without `ceremonyOffAnchor` or an exportable account. A opens the account file page, approves with the passkey (bound by `answeredCredentials`) and types the file password; B changes the unlock; A has the bound to start over, then Save is pressed if still offered. Either change: A starts over before Save (`cancelled`, no file, D15). Expectation: B's world and writes, the file password's secret spent, no held file.
 
-**Arc 2, the passkey window and restores.** One Firefox test in `E/tests/e2e/toolbar-panel.test.ts`, on its panel helpers (`stepFromDyingPanel`, `refuseInWindow`, a control page that moves no focus). Its readings (rows, the session) are judged with `checkProfiles` and the salt-home clause of `PC/checkers.ts`, whose break fixtures the model test holds. Nothing is injected into the window: S3 needs none, and S4's edit lands from the control page while the window waits on Try again. Restores: two `restore()` calls in `PS/service.integration.test.ts`, the first commit held by a one-shot gate on its `assertPrfSaltUnusedHoldingLock` until the second has called `runExclusive`.
+**Arc 2, the passkey window and restores.** One Firefox test in `E/tests/e2e/toolbar-panel.test.ts`, on its panel helpers (`stepFromDyingPanel`, `refuseInWindow`, a control page that moves no focus). Its readings (rows, the session) are read by field (D16). Nothing is injected into the window: S3 needs none, and S4's edit lands from the control page while the window waits on Try again. Restores: two `restore()` calls in `PS/service.integration.test.ts`, the first commit held by a one-shot gate on its `assertPrfSaltUnusedHoldingLock` until the second has called `runExclusive`.
 
 **File map.** Arc 1: `PC/model.ts`, `PC/unlock-method.ts`, `PC/accounts-io.ts`, `PC/drivers.ts`, `E/scripts/e2e/profile-chaos-model.test.ts`, `E/tests/e2e/README.md` § Chaos runs. Arc 2: `E/tests/e2e/toolbar-panel.test.ts`, `PS/service.integration.test.ts`, `E/tests/e2e/README.md` § Chaos runs. No `src` change.
 
@@ -92,6 +107,7 @@ Close #1157's last items: the races its comments of 2026-10-28 leave to the brow
 | D13 | Arcs 1 and 2 say Part of #1157; `Closes #1157` goes only on the PR that carries the close-out, once S5's and S6b's limits, the comment's issue and the #1157 comment are filed | close in arc 2 | #1157 must not close before its accounting exists (final Codex 4) |
 | D14 | Accessibility: none | | no product file changes |
 | D15 | S6a: a change to a new passkey also starts the account file page over before Save (`cancelled`), as a change to a password does; no `FileRef` in its params, since no file is made | `refused` at Save (draft 3) | the tree: the change reopens the session in place, the window's bootstrap that follows clears `appStore.network` (`E/src/composables/useProfileBootstrap.ts:153`), and the page's network watcher (`export/account.vue:180`) resets a passkey profile's unmade file. Seen on Firefox at 1.2. The watcher fires on every re-bootstrap, not only another window's switch, which the D11 comment issue records |
+| D16 | Arc 2's two departures. The panel test reads the rows by field (the credential shared, the salt its own, the other row untouched) rather than through `checkProfiles`. I3 is a comment on #1206, not a new issue | `checkProfiles` on a hand-built world; a new issue for I3 | `checkProfiles` judges a model world and its bindings, which a test outside the seeded run does not build. I3 is #1206's case 1 by another path, and that closed limit's reopening condition is not met; a new issue would duplicate it |
 
 ## Phases and gates
 
@@ -110,13 +126,13 @@ Gate: the model test 30 consecutive runs at retry 0; `C` with `NULO_E2E_CHAOS_SE
 
 **Arc 2.**
 
-**2.1 The passkey window on Firefox (S3, S4).** One test: from the dying panel, a profile on the passkey another profile holds (the only one on the authenticator, so no chooser): its row names that credential at a salt of its own, and both profiles open. Then its unlock with `prfSalt` rewritten from the control page while the window waits on Try again, through `withDyingPanel` directly (`stepFromDyingPanel` waits for a session): the window reaches `step-failed`, not the refusal's `failed` (`E/src/popup/windows/passkey/index.vue:85,94`), no session write lands during the attempt, the row is put back byte for byte, and a control unlock opens. Add `expect(passkeys.outcomes.at(-1)).toBe("failed")` at `PS/service.integration.test.ts:1177`. Estimate: 90 s on Firefox, 0 on Chrome (skipped).
+**2.1 The passkey window on Firefox (S3, S4).** ✓ One test: from the dying panel, a profile on the passkey another profile holds (the only one on the authenticator, so no chooser): its row names that credential at a salt of its own, and both profiles open. Then its unlock with `prfSalt` rewritten from the control page while the window waits on Try again, through `withDyingPanel` directly (`stepFromDyingPanel` waits for a session): the window reaches `step-failed`, not the refusal's `failed` (`E/src/popup/windows/passkey/index.vue:85,94`), no session write lands during the attempt, the row is put back byte for byte, and a control unlock opens. Add `expect(passkeys.outcomes.at(-1)).toBe("failed")` at `PS/service.integration.test.ts:1177`. Estimate: 90 s on Firefox, 0 on Chrome (skipped).
 Gate: `NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/toolbar-panel.test.ts --retry=0` green twice, the file's time before and after; `T src/wallet/services/profile/service.integration.test.ts` green.
 
-**2.2 Concurrent restores (S7).** D7's schedule, the two restores on distinct fresh salts and destination ids so no other collision answers: with the lock, the first commit's hold opens once the second has called `runExclusive`, and there is one row and one `DuplicateWalletError` whatever the order; control, two phrases both commit; break, `runExclusive` made a pass-through and the hold opened only after the second's real duplicate check has passed, gives two rows. Then I3: record the names in lessons/phase-2.md and comment on #1206 if its reopening condition matches, else file by D10; no probe is committed.
+**2.2 Concurrent restores (S7).** ✓ D7's schedule, the two restores on distinct fresh salts and destination ids so no other collision answers: with the lock, the first commit's hold opens once the second has called `runExclusive`, and there is one row and one `DuplicateWalletError` whatever the order; control, two phrases both commit; break, `runExclusive` made a pass-through and the hold opened only after the second's real duplicate check has passed, gives two rows. Then I3: record the names in lessons/phase-2.md and comment on #1206 if its reopening condition matches, else file by D10; no probe is committed.
 Gate: `T src/wallet/services/profile/service.integration.test.ts` green.
 
-**2.3 Record.** README § Chaos runs: the passkey window's two forms, S5's limit. Gate: `bun run test:all`; `bun run check:plans` after staging.
+**2.3 Record.** ✓ README § Chaos runs: the passkey window's two forms, S5's limit. Gate: `bun run test:all`; `bun run check:plans` after staging.
 
 ## Security & Adversarial Considerations
 
@@ -168,3 +184,10 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 ```
 /loop 15m Drive implementations-plan/chaos-5 forward per its plan.md and the README's Post-implementation standard: reality check from plan.md and lessons/ (the archived path present on dev means merged: tear down and stop); next pending step; fast gates after each edit; Codex consult instead of waiting; five failures on one step: reassess with Codex; never merge.
 ```
+
+### Arc 2 review
+
+- **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. A restore that fulfils with `restoreError` was counted as restored; one comment narrated its code.
+- **Opus review** (general-purpose), beside round 1: conditional approve; 5 findings, all accepted. The retry's own passkey answer is now asserted, so `step-failed` cannot come from a request already gone; the forged salt is standard base64, as stored; the window's outcomes are cleared before the unlock and asserted whole; the break test's title and comment claim only what it shows; the README and the Architecture line say what the test reads.
+- **Codex round 2** (resumed): approve, no new findings.
+- **Codex, fresh cross-arc pass** over the net diff from `a4da1f36f`: approve, no findings; every item lands as the table says, and #1157 has nothing left uncovered under its dispositions.
