@@ -69,6 +69,7 @@ On Firefox a click on a file input reaches the native picker, and headless Firef
 - D4. **A sandbox and an observer topic** as the relay does (F6), so the stand-in outlives every browser window.
 - D5. **Bind the arm to its page** by `browserId` (Codex; Opus found no overlapping picks): one comparison, as `answerRequests` binds, so the answered picker is the one whose input `expectPickerLists` read.
 - D6. **Unit-test the slot** with `runSerialised` (Codex; Opus optional): no e2e run reaches `release` after a failed step.
+- D8. **The contacts picks open with `pointerClick`** (a deviation the tree forced, Phase 2). Firefox 158 grants BiDi's `userActivation` for the evaluate alone (`shared/Realm.sys.mjs:220-233`: `notifyUserGestureActivation`, then `clearUserGestureActivation`), and the contacts import clicks its input 50 ms after the press (`useContactImportExport.ts:171`, `files.ts` `delay`). So `clickByTestId` opened no picker there; the base's Send Keys filled the input anyway. A real press keeps a person's activation, so `helpers/contacts.ts` and the toolbar step open the pick with the existing `pointerClick` (`helpers/legal-drivers.ts:219`); the other picks click their input at once and keep `clickByTestId`.
 - D7. **Keep ten normal runs per side** (Opus: wasteful; the orchestrator's gate names ten); the forced-focus runs carry the red/green proof.
 
 ## Phases

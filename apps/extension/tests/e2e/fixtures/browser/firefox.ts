@@ -9,7 +9,8 @@ import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
 import { E2E_FIREFOX_REVISION } from "./firefox-revision"
 import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
-import { answerPageRequests } from "./firefox-answer-requests"
+import { type FirefoxScopeCall, answerPageRequests } from "./firefox-answer-requests"
+import { installFilePicker, pickWithStandIn } from "./firefox-file-picker"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
@@ -25,7 +26,6 @@ import {
 } from "./ownership"
 import { WebDriverSession } from "./webdriver-classic"
 import { EGRESS_CANARY_HOST } from "../egress-guard"
-import { PENDING_FILE_INPUT } from "../file-accept"
 import { PollTimeoutError, pollUntil } from "../poll"
 
 const SCHEME = "moz-extension://"
@@ -135,6 +135,7 @@ async function launch({ extensionPath, userDataDir, headless, egress, grantPermi
 			if (ownedProcesses(marker).length < 2)
 				throw new Error("Firefox did not inherit the launch marker, so teardown could not own it")
 			await armPageErrorRelay(session, extensionPath)
+			await installFilePicker(session)
 		} catch (err) {
 			await abandonSession(session, record, err)
 		}
@@ -480,6 +481,15 @@ async function callInFirefoxScope(page: Page, declaration: string, args: BiDiArg
 	return outcome.result?.value
 }
 
+const firefoxScopeCall =
+	(page: Page): FirefoxScopeCall =>
+	(declaration, args) =>
+		callInFirefoxScope(
+			page,
+			declaration,
+			args.map((value) => ({ type: "string", value })),
+		)
+
 /**
  * Firefox 157 and later refuse BiDi `setViewport` on an extension page, so the resize runs from
  * Firefox's own scope.
@@ -721,22 +731,10 @@ const stopBackground = (browser: Browser): Promise<void> =>
 		pollEveryMs: 100,
 	})
 
-/**
- * The opening click, an evaluated one included, opens Firefox's native picker, which headless leaves
- * unanswered while its window has focus. So the `<input type="file">` the wallet appends before asking
- * for the picker, and removes on `change` or `cancel`, stays pending to take the file.
- * Over the classic channel: Firefox 157 and later refuse BiDi `input.setFiles` on an extension page.
- * The window it selects is the one the opening click's `prepareClick` selected.
- */
-async function pickFile(page: Page, open: () => Promise<void>, filePath: string): Promise<void> {
-	// An abandoned pick leaves its input behind, and the file would go to that dead request.
-	await page.evaluate(() => {
-		for (const stale of document.querySelectorAll('body > input[type="file"]')) stale.setAttribute("data-e2e-stale", "")
-	})
-	await open()
-	await page.waitForSelector(PENDING_FILE_INPUT, { timeout: 10_000 })
-	await classicSessionFor(page.browser()).setFileInput(contextIdOf(page), PENDING_FILE_INPUT, filePath)
-}
+/** Over the launch's file picker stand-in: Firefox 157 and later refuse BiDi `input.setFiles` on an
+ *  extension page, and the native picker answers by window focus. */
+const pickFile = (page: Page, open: () => Promise<void>, filePath: string): Promise<void> =>
+	pickWithStandIn(firefoxScopeCall(page), contextIdOf(page), open, filePath)
 
 export interface SessionAuthenticator extends VirtualAuthenticator {
 	/** False refuses every ceremony that requires verification, as a person dismissing the prompt does. */
@@ -976,17 +974,7 @@ export const firefoxDriver: BrowserDriver = {
 	waitForTarget,
 	waitForNewTab,
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
-	answerRequests: (page, answers) =>
-		answerPageRequests(
-			(declaration, args) =>
-				callInFirefoxScope(
-					page,
-					declaration,
-					args.map((value) => ({ type: "string", value })),
-				),
-			contextIdOf(page),
-			answers,
-		),
+	answerRequests: (page, answers) => answerPageRequests(firefoxScopeCall(page), contextIdOf(page), answers),
 	bringToFront,
 	setViewport,
 	viewportOf: viewports.of,

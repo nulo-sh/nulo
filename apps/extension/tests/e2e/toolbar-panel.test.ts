@@ -9,7 +9,7 @@
 import { randomBytes } from "node:crypto"
 import type { Browser, Page, Target } from "puppeteer"
 import { describe, expect } from "vitest"
-import { FIREFOX_ONLY, bringToFront, isFirefox, waitForTarget } from "./fixtures/browser"
+import { FIREFOX_ONLY, bringToFront, isFirefox, pickFile, waitForTarget } from "./fixtures/browser"
 import { type SessionAuthenticator, sessionAuthenticator } from "./fixtures/browser/firefox"
 import {
 	armPanelDeath,
@@ -23,7 +23,6 @@ import {
 	type ExtensionContext,
 	openPopup,
 	patchPagePolling,
-	pickFileByTestId,
 	registerProfile,
 	test,
 	waitForHash,
@@ -37,6 +36,7 @@ import { downloadPasskeyBackup, FILE_PASSWORD } from "./helpers/backup-export"
 import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } from "./helpers/contacts"
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { completeResetRitual } from "./helpers/crash-truth"
+import { pointerClick } from "./helpers/legal-drivers"
 import { readActiveAccount, submitEncryptedFullBackup, waitForActiveAccount, writeBackupToTemp } from "./helpers/import-drivers"
 import { pickOnLockScreen } from "./helpers/profile-chaos/ui"
 import { HANDBACK_KEY } from "@/utils/panel-handback"
@@ -567,7 +567,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			const cardWindowId = await windowIdOf(contactsWindow)
 
 			// Only a press in this window opens the picker, so the input's click must still carry it.
-			// Headless Firefox cancels that picker at once, which removes its input and keeps the card.
+			// The launch's picker cancels a pick no step asked for, removing its input and keeping the card.
 			await recordInputClicks(contactsWindow)
 			await contactsWindow.click(sel("handoff-card-choose"))
 			const firstClick = await pollUntil(
@@ -580,7 +580,8 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 
 			await watchHandback(control)
 			const profile = await sessionProfile(control)
-			await pickFileByTestId(contactsWindow, "handoff-card-choose", files.write(longImportContacts()))
+			// A real press, as in `pickContactsFile`: an evaluated click's gesture is gone by the input's click.
+			await pickFile(contactsWindow, () => pointerClick(contactsWindow, "handoff-card-choose"), files.write(longImportContacts()))
 			await contactsWindow.waitForSelector(sel("import-contact-row"), { visible: true, timeout: 15_000 })
 			expect(await contactsWindow.$(sel("header-lock")), "the header, with the session open").toBeNull()
 			await clickByTestId(contactsWindow, "import-contacts-submit")
