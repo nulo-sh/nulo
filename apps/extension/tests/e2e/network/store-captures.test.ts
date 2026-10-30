@@ -10,7 +10,9 @@
  * and Fee Juice: the harness token is never imported, and no harness transaction touches the
  * captured account. USD Coin is priced at $1 by the seeded quote, with the price host refused, so a
  * live quote cannot move the totals. The wallet arrives by phrase import, so Home shows no Get
- * started card and frames as an established user's does.
+ * started card and frames as an established user's does. The run serves the playground on a local
+ * port, so the permission frame shows it under a public-looking origin, written over the window's
+ * origin line just before that capture.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -65,6 +67,7 @@ const PRICE_HOST = "https://api.coingecko.com"
 /** One USD Coin in base units: six decimals, as on Ethereum. */
 const USDC = 10n ** 6n
 const CONTACT = "Alice"
+const PLAYGROUND_ORIGIN = "https://playground.nulo.sh"
 
 type Chain = Awaited<ReturnType<typeof stageChain>>
 
@@ -375,10 +378,26 @@ async function frameWindow(page: Page): Promise<Page> {
 	return page
 }
 
+const ORIGIN_LINE = '[data-testid="capabilities-hostname"]'
+
+async function stagePlaygroundOrigin(window: Page, runOrigin: string): Promise<void> {
+	await window.waitForSelector(ORIGIN_LINE, { visible: true, timeout: 15_000 })
+	const shown = await window.evaluate((sel) => document.querySelector(sel)?.textContent?.trim(), ORIGIN_LINE)
+	expect(shown, "the origin the window shows").toBe(runOrigin)
+	await window.evaluate(
+		(sel, origin) => {
+			const line = document.querySelector(sel)
+			if (line) line.textContent = origin
+		},
+		ORIGIN_LINE,
+		PLAYGROUND_ORIGIN,
+	)
+}
+
 /**
- * The playground's permission request, as the window first shows it. A transfer's approval card is
- * not framed: the standard token names its nonce `_nonce`, so the card falls back to the ABI decode
- * and shows the amount in base units.
+ * The playground's permission request, before any scroll. A transfer's approval card is not framed:
+ * the standard token names its nonce `_nonce`, so the card falls back to the ABI decode and shows
+ * the amount in base units.
  */
 async function captureApproval(ctx: ExtensionContext, chain: Chain): Promise<void> {
 	const playground = await openPlayground(ctx)
@@ -389,7 +408,10 @@ async function captureApproval(ctx: ExtensionContext, chain: Chain): Promise<voi
 	await grantCapBundle(ctx, playground, "transaction", async (accountIds, window) => {
 		if (!accountIds.includes(chain.account))
 			throw new Error(`the permission window did not offer ${chain.account}: ${accountIds.join(", ")}`)
+		await stagePlaygroundOrigin(window, new URL(playground.url()).origin)
 		await capture(await frameWindow(window), "approve")
+		const framed = await window.evaluate((sel) => document.querySelector(sel)?.textContent, ORIGIN_LINE)
+		expect(framed, "the framed origin line").toBe(PLAYGROUND_ORIGIN)
 		return [chain.account]
 	})
 }
