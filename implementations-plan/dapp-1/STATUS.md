@@ -2,3 +2,6 @@
 - 2026-10-30 audit: Codex round 1 (gpt-6.1-sol, high) conditional approve; folded: re-read after registration, superseded-handshake cleanup, proverless split + smoke, more controls.
 - 2026-10-30 audit: Opus round 1 conditional approve; folded (D8 onVerificationRefused, backstop narrowed, e2e list widened); D3 to the owner as OA-1.
 - 2026-10-30 gate: Codex final conditional approve → folded → verify approve. Plan approved for auto-continue (OA-1 and #1382 concern no surface arc 1 changes).
+- 2026-10-30 phase 1 green: lint, typecheck:all, dapp-interaction + wallet-sdk vitest (43 files, 632 tests) at retry 0; new cases red on 049c97f98.
+- 2026-10-30 phase 2 green: lint, typecheck:all, operation-journal + journal-state vitest (11 files, 321 tests) at retry 0; new case red on 3e8cbda1b.
+- 2026-10-30 phase 3 green: lint, typecheck:all, playground bun test (3 pass), test:all, test:ci-gating (691 pass); cases 1 and 2 red on d8053b487.
