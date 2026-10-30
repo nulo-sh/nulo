@@ -1,7 +1,7 @@
 ---
 plan: chips-1
 tier: light
-status: approved by the final Codex pass; arc 1 next
+status: arc 1 implemented and reviewed; PR next
 issues: "#1363 (arc 1 closes); known limit #1364"
 driver: claude-code
 claude_model: opus
@@ -65,7 +65,7 @@ One issue, one arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults:
   - Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/components/Header.test.ts src/components/header-layout.test.ts src/utils/type-role-ban.test.ts --retry=0`; `bun run --cwd apps/extension build-storybook`.
   - Pass: exit 0. Layers: lint, typecheck, unit, component, static scan, Storybook build.
 
-### Phase 3: Full gates and captures
+### Phase 3: Full gates and captures ✓
 
 - Run `bun run test:all` and `bun run audit:vue`.
 - Build the armed smoke dist for each browser. Run the full smoke suite, Chrome then Firefox (CLAUDE.md: a user-visible change and a `tests/e2e/fixtures/**` edit): `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- --retry=0`.
@@ -105,7 +105,7 @@ No trust boundary moves: no dApp input, message, permission, log line or depende
 
 **Final pass.** Codex, fresh (gpt-6.1-sol, high, session `01a18d57`): `conditional approve (with conditions: take the authorized stored-row fallback or obtain explicit owner approval for deliberate-name overwrites; add the required Storybook build gate)`. It found the round-1 claim that D10 was authorized unsafe: the owner's fallback covers leaving rows unchanged, not undoing a deliberate name. Taken: D1 (the fallback, #1364), the Storybook build in Phase 2. It confirmed rejecting the deletion fence (the lock order admits no orphan) and found no new security weakness. Verification (resumed): `approve`; one wording fix in Security, taken.
 
-**Post-implementation.** Round 1: Codex (gpt-6.1-sol, high, session `01a18d6c`) `findings: 1`, and the Opus 5.5 diff review beside it `findings: 4`. Both found the dot crossing the chip's border at 240 px; measured and fixed (D6, OA-3), with a 240 px check in `appearance.test.ts`. Opus also found a stale comment in `appearance.test.ts` (fixed), a false clause about the header chips in `packages/design/README.md` (removed), and a second row named "Alpha" next to a custom "Alpha" (#1119's known limit; noted on #1119).
+**Post-implementation.** Round 1: Codex (gpt-6.1-sol, high, session `01a18d6c`) `findings: 1`, and the Opus 5.5 diff review beside it `findings: 4`. Both found the dot crossing the chip's border at 240 px; measured and fixed (D6, OA-3), with a 240 px check in `appearance.test.ts`. Opus also found a stale comment in `appearance.test.ts` (fixed), a false clause about the header chips in `packages/design/README.md` (removed), and a second row named "Alpha" next to a custom "Alpha" (#1119's known limit; noted on #1119). Round 2 (Codex, resumed, over `633375807`): `clean`. The final head's `test:all` then failed `header-layout.test.ts`: `declarationsOf` merges a selector's rules, so the narrow rule's padding won; the test now reads the base and narrow rules apart (`3cf901aff`). Round 3 (Codex, resumed, over that commit): `clean`. Converged.
 
 ## Delivery
 
