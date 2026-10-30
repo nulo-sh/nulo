@@ -398,13 +398,13 @@ const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 250, "if (!logged) onSessio
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 106, 'onCeremonyReject(new Error("The unlock method page started over"))')
 const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 89, "if (!renamed) onChangedElsewhere()")
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
-const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 220, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
-const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 223, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
-const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 227, "handleCancelOrUnconfirmed(error, openToast)) return")
+const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 221, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
+const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 224, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
+const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 228, "handleCancelOrUnconfirmed(error, openToast)) return")
 const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 92, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 110, "The file password needs at least 8 characters")
 const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile?.type,")
-const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 180, "() => appStore.network?.chainId,")
+const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 181, "() => appStore.network?.chainId,")
 /** A session opened in place re-runs the window's bootstrap, which clears the network first. */
 const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 153, "appStore.network = undefined")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1367, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
