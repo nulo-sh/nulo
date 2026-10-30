@@ -18,7 +18,7 @@ function mountLayout(content: TakeoverContent, props: Record<string, unknown> = 
 		global: {
 			stubs: {
 				Flex: { template: "<div><slot /></div>" },
-				Icon: { template: '<i :data-icon="name" :data-color="color" />', props: ["name", "color"] },
+				Icon: { template: '<i :data-icon="name" :data-color="color" :data-size="size" />', props: ["name", "color", "size"] },
 			},
 		},
 	})
@@ -123,10 +123,14 @@ describe("TakeoverLayout", () => {
 		).toBe(true)
 	})
 
-	test("the lock button is labelled for assistive tech and reports a press", async () => {
+	test("the lock chip is the padlock alone, named for what it does, and reports a press", async () => {
 		const w = mountLayout(base())
-		expect(byId(w, "x-lock").attributes("aria-label")).toBe("Lock wallet")
-		await byId(w, "x-lock").trigger("click")
+		const lock = byId(w, "x-lock")
+		expect(lock.get("[data-icon]").attributes()).toMatchObject({ "data-icon": "lock", "data-size": "15" })
+		expect(lock.text()).toBe("")
+		expect(lock.attributes("aria-label")).toBe("Lock wallet")
+		expect(lock.attributes("type")).toBe("button")
+		await lock.trigger("click")
 		expect(w.emitted("lock")).toHaveLength(1)
 	})
 

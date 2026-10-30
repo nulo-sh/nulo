@@ -30,6 +30,12 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 				"A full backup of a passkey profile is always protected with a file password.",
 			],
 		},
+		{
+			version: "1.2.1",
+			effective: null,
+			material: false,
+			changes: ["The summary box names the default network as Nulo shows it, Alpha."],
+		},
 	],
 	privacy: [
 		{ version: "1.0", effective: "23 September 2026", material: true, changes: ["First published version."] },

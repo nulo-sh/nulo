@@ -262,7 +262,7 @@ describe("popup: declining never locks a person out", () => {
 		await waitForSheet(page, "changed")
 		expect(await textOf(page, "legal-sheet-title")).toBe("The terms have changed")
 		expect(await page.$$eval('[data-testid="legal-change"]', (rows) => rows.map((row) => row.textContent?.trim()))).toEqual(
-			LEGAL_MANIFEST.terms.flatMap((version) => version.changes),
+			LEGAL_MANIFEST.terms.filter((version) => version.material).flatMap((version) => version.changes),
 		)
 		expect(await textOf(page, "legal-consent-label")).toBe(`I agree to the Terms of Use, version ${CURRENT_TERMS}.`)
 		expect(await isContinueDisabled(page)).toBe(true)

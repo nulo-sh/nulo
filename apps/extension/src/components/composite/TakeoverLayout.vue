@@ -39,8 +39,8 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 			<button type="button" :class="$style.chip" :data-testid="id('chip')" @click="emit('chip')">
 				{{ chip }}<span v-if="flagged" :class="$style.chip_square" />
 			</button>
-			<button type="button" :class="$style.chip" :data-testid="id('lock')" aria-label="Lock wallet" @click="emit('lock')">
-				<Icon name="lock" :size="12" aria-hidden="true" />LOCK
+			<button type="button" :class="[$style.chip, $style.lock]" :data-testid="id('lock')" aria-label="Lock wallet" @click="emit('lock')">
+				<Icon name="lock" :size="15" aria-hidden="true" />
 			</button>
 		</div>
 
@@ -118,6 +118,12 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	background: transparent;
 	border: 1px solid var(--nulo-outline);
 	cursor: pointer;
+}
+
+/* With no text of its own, it takes the height of the network chip beside it. */
+.lock {
+	align-self: stretch;
+	padding-block: 0;
 }
 
 .chip:focus-visible,
