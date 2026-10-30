@@ -8,10 +8,8 @@
  * `text-overflow: ellipsis`) and can't be dragged. While focused, scrolling is
  * allowed (you're editing).
  *
- * The native <input> stays mounted and the pinning NEVER rewrites its value (only
- * a caller's `normalize` does) — paste, selection, the `[data-testid] input` e2e
- * selector, and screen readers are all untouched. This is the extension-side
- * affordance (NOT a `@nulo/design` change).
+ * The native <input> stays mounted, and the pinning changes `scrollLeft`, never
+ * the value. This is the extension-side affordance (NOT a `@nulo/design` change).
  */
 import { onBeforeUnmount, onMounted, ref } from "vue"
 

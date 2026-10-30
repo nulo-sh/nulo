@@ -147,6 +147,20 @@ describe("AccountSelectRow", () => {
 			expect(input.value).toBe("Alpha")
 		})
 
+		test("one removed mid-name leaves the caret where it was typed; a visible character moves nothing", async () => {
+			const { input } = await opened()
+			const insertAt = async (text: string, caret: number) => {
+				input.value = text
+				input.setSelectionRange(caret, caret)
+				input.dispatchEvent(new Event("input"))
+				await nextTick()
+				await nextTick()
+				return [input.value, input.selectionStart]
+			}
+			expect(await insertAt(`Al${zwsp}pha`, 3)).toEqual(["Alpha", 2])
+			expect(await insertAt("Alxpha", 3)).toEqual(["Alxpha", 3])
+		})
+
 		test("an input method's text is left alone while it composes, and cleaned once it commits", async () => {
 			const { w, input } = await opened()
 			input.dispatchEvent(new CompositionEvent("compositionstart"))

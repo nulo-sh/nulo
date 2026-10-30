@@ -51,8 +51,15 @@ const startRename = async () => {
 // repeats the input once the composition commits, so a composing keystroke is never rewritten.
 const onAliasInput = (e: Event) => {
 	if ((e as InputEvent).isComposing) return
-	aliasText.value = stripBidiAndZeroWidth(aliasText.value)
-	emit("updateAlias", caip(props.account), aliasText.value)
+	const el = e.target as HTMLInputElement
+	const kept = stripBidiAndZeroWidth(aliasText.value)
+	if (kept !== aliasText.value) {
+		// Rewriting the value puts the caret at the end; it goes back after what preceded it.
+		const caret = stripBidiAndZeroWidth(aliasText.value.slice(0, el.selectionStart ?? undefined)).length
+		void nextTick(() => el.setSelectionRange(caret, caret))
+	}
+	aliasText.value = kept
+	emit("updateAlias", caip(props.account), kept)
 }
 </script>
 

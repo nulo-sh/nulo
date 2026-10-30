@@ -37,6 +37,7 @@ const STUBS = {
 }
 
 const mountField = (props: Record<string, unknown> = {}) => mount(RecipientField, { props, global: { stubs: STUBS } })
+const hint = (w: ReturnType<typeof mount>) => w.find('[data-testid="recipient-invalid-hint"]').exists()
 
 const alice = { id: "1", name: "Alice", address: "0xaaaa", abbr: "AL" }
 const account1 = { id: "2", name: "Account 1", address: "0xbbbb" }
@@ -139,8 +140,6 @@ describe("modules/send/RecipientField", () => {
 			await nextTick()
 			return input.element as HTMLInputElement
 		}
-		const hint = (w: ReturnType<typeof mount>) => w.find('[data-testid="recipient-invalid-hint"]').exists()
-
 		beforeEach(() => {
 			vi.useFakeTimers()
 		})
@@ -571,8 +570,7 @@ describe("modules/send/RecipientField", () => {
 			expect(vi.getTimerCount()).toBe(0)
 		})
 
-		test("text that is no address shows the hint once the press that took the focus ends, and after a Tab out", async () => {
-			const hint = (w: ReturnType<typeof mount>) => w.find('[data-testid="recipient-invalid-hint"]').exists()
+		test("text that is no address shows the hint once the press that took the focus ends", async () => {
 			const w = await focused({ candidates: [], searchTerm: "0xbad" })
 			press("pointerdown")
 			await w.get("input").trigger("blur")
@@ -580,13 +578,15 @@ describe("modules/send/RecipientField", () => {
 			press("pointerup")
 			await afterRelease()
 			expect(hint(w)).toBe(true)
+		})
 
-			const tabbed = await focused({ candidates: [], searchTerm: "0xbad" })
-			await tabbed.get("input").trigger("blur")
-			expect(hint(tabbed)).toBe(false)
+		test("text that is no address shows the hint once a blur with no press has run its timer", async () => {
+			const w = await focused({ candidates: [], searchTerm: "0xbad" })
+			await w.get("input").trigger("blur")
+			expect(hint(w)).toBe(false)
 			vi.advanceTimersByTime(250)
 			await nextTick()
-			expect(hint(tabbed)).toBe(true)
+			expect(hint(w)).toBe(true)
 		})
 
 		test("a blur with no press shows the card at once", async () => {
