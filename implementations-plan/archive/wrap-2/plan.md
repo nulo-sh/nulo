@@ -18,7 +18,8 @@ status: delivered (PR open, merge pending)
 ## Outcome
 
 - **Date:** 2026-10-30.
-- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word, after the owner signs the before/after pairs ([OWNER-ASKS.md](OWNER-ASKS.md) A1).
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Owner sign-off:** 2026-10-30, to the orchestrator's condition "signed if only line breaking changes in the capabilities banner": "wrap-2: same, all good." The orchestrator checked the 360 px pair on head 30f9db7f1: only line breaking changed in the banner's title, sentence and action ([OWNER-ASKS.md](OWNER-ASKS.md) A1).
 - **Shipped:** `overflow-wrap: anywhere` on the capabilities window's chain banner (both states, its action included), one source-scan case, the account-file watcher's comment rewritten, and the chaos model's four line citations moved. Closes #1365 and #1375.
 - **Dispositions:** the added-networks banner stays as it is, since no name reaches it (D2; comment on #1365). The rule goes on the whole banner, not its texts (D1, measured). No e2e change (D4). No name cap and no design-package rule.
 - **Known limits:** none.
@@ -155,7 +156,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings | `.chain_banner`'s comment says "wider than the banner", not the window; the account.vue reason fits an in-place reopen ("the session or network before") | none |
 | arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
 
-Over the 150-line target by 18 lines because of the Outcome and the arc's audit rows.
+Over the 150-line target by 19 lines because of the Outcome and the arc's audit rows.
 
 ## Seeds
 
