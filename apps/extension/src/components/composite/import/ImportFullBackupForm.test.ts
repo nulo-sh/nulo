@@ -1,6 +1,7 @@
 import { Flex, Icon, Input, Text } from "@nulo/design"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto } from "../../../../tests/helpers/credential-pins"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import ImportFullBackupForm from "./ImportFullBackupForm.vue"
@@ -243,6 +244,23 @@ describe("ImportFullBackupForm", () => {
 		await wrapper.setProps({ retryFailedAgain: true })
 
 		expect(reveal).toHaveBeenCalledExactlyOnceWith(wrapper.get("[data-testid=import-full-backup-warning]").element)
+	})
+})
+
+/** A typed network name can be one word of up to 25 characters. */
+describe("ImportFullBackupForm — a long name stays inside the warning", () => {
+	it("the warning carries the whole name, and its block breaks a word wider than itself anywhere", () => {
+		const finished = { restoreStatus: "finished", isRestoreHasErrors: true }
+		const network = mount(ImportFullBackupForm, {
+			props: baseProps({ ...finished, unrestoredNetworks: ["W".repeat(25)] }),
+			global: { stubs },
+		})
+		expect(network.get("[data-testid=import-full-backup-warning]").text()).toContain(`${"W".repeat(25)} didn't answer in time`)
+
+		const parsed = parseSource("apps/extension/src/components/composite/import/ImportFullBackupForm.vue")
+		const block = elementByTestid(parsed, "import-full-backup-warning")?.node
+		expect(block && boundAttr(block, "class")).toBe("$style.warning_block")
+		expect(declarationsOf(parsed, ".warning_block")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 })
 
