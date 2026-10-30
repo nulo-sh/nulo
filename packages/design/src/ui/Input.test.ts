@@ -219,12 +219,13 @@ describe("Input", () => {
 		expect(w.text()).not.toContain("Already exist")
 	})
 
-	describe("subtype='int' emits the number the field shows", () => {
+	describe("subtype='int' takes digits and refuses any other edit whole", () => {
 		// Bound with v-model as a page binds it, so the field shows what the round trip writes back.
 		const IntHost = defineComponent({
 			props: { initial: { type: String, default: "" } },
-			setup(props) {
+			setup(props, { expose }) {
 				const model = ref<string | number>(props.initial)
+				expose({ write: (value: string) => (model.value = value) })
 				return () =>
 					h(Input, {
 						type: "text",
@@ -237,21 +238,98 @@ describe("Input", () => {
 					})
 			},
 		})
-
-		test.each([
-			{ how: "a minus typed before 5", initial: "5", text: "-5", paste: false, shows: "5", emits: 5 },
-			{ how: "-5 pasted", initial: "", text: "-5", paste: true, shows: "5", emits: 5 },
-			{ how: "a separator inside the digits", initial: "", text: "12a3", paste: false, shows: "123", emits: 123 },
-			{ how: "plain digits", initial: "", text: "12", paste: false, shows: "12", emits: 12 },
-		])("$how: shows $shows and emits $emits", async ({ initial, text, paste, shows, emits }) => {
+		const mountInt = (initial: string) => {
 			const w = mount(IntHost, { props: { initial }, global: { stubs: STUBS } })
 			const el = w.get("input").element as HTMLInputElement
-			if (paste) el.dispatchEvent(new Event("paste", { cancelable: true }))
-			el.value = text
-			el.dispatchEvent(new Event("input"))
+			const emitted = () => w.getComponent(Input).emitted("update:modelValue")
+			// The Flex stub keeps only `class`, so the error state is read as the existing error-prop test reads it.
+			const refused = () => el.getAttribute("aria-invalid") === "true" && /error/.test(w.html())
+			const state = () => ({ value: el.value, selection: [el.selectionStart, el.selectionEnd] })
+			return { w, el, emitted, refused, state }
+		}
+		/** One edit as a browser raises it: `beforeinput` on the text as it stands, the new text, `input`. */
+		async function edit(
+			w: ReturnType<typeof mountInt>,
+			value: string,
+			caret: number,
+			inputType = "insertText",
+			data: string | null = null,
+		) {
+			await w.w.get("input").trigger("beforeinput", { inputType, data })
+			w.el.value = value
+			w.el.setSelectionRange(caret, caret)
+			await w.w.get("input").trigger("input", { inputType, data })
+		}
+
+		test("e typed between 1 and 5 keeps 15 and the caret, emits nothing and shows the error state", async () => {
+			const f = mountInt("15")
+			f.el.setSelectionRange(1, 1)
+			await edit(f, "1e5", 2, "insertText", "e")
+			expect([f.state(), f.emitted(), f.refused()]).toEqual([{ value: "15", selection: [1, 1] }, undefined, true])
+		})
+
+		test("a digit typed after a refused key is taken where the caret stayed, and the error state goes", async () => {
+			const f = mountInt("15")
+			f.el.setSelectionRange(1, 1)
+			await edit(f, "1e5", 2, "insertText", "e")
+			await edit(f, "135", 2, "insertText", "3")
+			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["135", [135], false])
+		})
+
+		test("3e0 put over a selected 30 keeps 30 with the same selection", async () => {
+			const f = mountInt("30")
+			f.el.setSelectionRange(0, 2)
+			await edit(f, "3e0", 3, "insertFromPaste")
+			expect([f.state(), f.emitted()]).toEqual([{ value: "30", selection: [0, 2] }, undefined])
+		})
+
+		test("an input no beforeinput announced is judged whole and restores the bound value", async () => {
+			const f = mountInt("30")
+			f.el.value = "3x0"
+			await f.w.get("input").trigger("input")
+			expect([f.state(), f.emitted(), f.refused()]).toEqual([{ value: "30", selection: [2, 2] }, undefined, true])
+		})
+
+		test("a value the caller writes clears the error state, and a refusal after it restores that value", async () => {
+			const f = mountInt("15")
+			f.el.setSelectionRange(2, 2)
+			await edit(f, "15e", 3, "insertText", "e")
+			;(f.w.vm as unknown as { write: (v: string) => void }).write("45")
 			await nextTick()
-			expect(w.getComponent(Input).emitted("update:modelValue")?.at(-1)).toEqual([emits])
-			expect(el.value).toBe(shows)
+			expect([f.el.value, f.refused()]).toEqual(["45", false])
+			f.el.setSelectionRange(2, 2)
+			await edit(f, "45-", 3, "insertText", "-")
+			expect([f.el.value, f.emitted(), f.refused()]).toEqual(["45", undefined, true])
+		})
+
+		test("an open composition is not judged; the input Vue re-fires as it ends is", async () => {
+			const f = mountInt("15")
+			f.el.value = "15\uff15"
+			await f.w.get("input").trigger("input", { inputType: "insertCompositionText", data: "\uff15", isComposing: true })
+			expect([f.el.value, f.emitted()]).toEqual(["15\uff15", undefined])
+			await f.w.get("input").trigger("input")
+			expect([f.el.value, f.emitted(), f.refused()]).toEqual(["15", undefined, true])
+		})
+
+		test("a digit typed after a shown 1.5 the caller wrote is taken, and parsed from its digits", async () => {
+			const f = mountInt("1.5")
+			f.el.setSelectionRange(3, 3)
+			await edit(f, "1.52", 4, "insertText", "2")
+			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["152", [152], false])
+		})
+
+		test("leaving the field ends the error state", async () => {
+			const f = mountInt("15")
+			f.el.setSelectionRange(2, 2)
+			await edit(f, "15e", 3, "insertText", "e")
+			await f.w.get("input").trigger("blur")
+			expect(f.refused()).toBe(false)
+		})
+
+		test("plain digits are taken: shown and emitted", async () => {
+			const f = mountInt("")
+			await edit(f, "12", 2, "insertText", "2")
+			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["12", [12], false])
 		})
 	})
 

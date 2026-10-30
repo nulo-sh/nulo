@@ -1,5 +1,5 @@
 import { createTestingPinia } from "@pinia/testing"
-import { Flex, Icon, Text } from "@nulo/design"
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -19,10 +19,11 @@ const fakes = vi.hoisted(() => ({
 		disconnect: vi.fn(),
 	},
 	profile: { refreshSession: vi.fn(), disconnect: vi.fn() },
+	openToast: vi.fn(),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: fakes.managerProfile } }))
 vi.mock("@/composables/useLockWallet", () => ({ useLockWallet: vi.fn(() => fakes.lockWallet) }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: fakes.openToast }) }))
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
 		return fakes.config
@@ -50,7 +51,7 @@ beforeEach(() => {
 	installChromeStorage({}, { persist: false })
 })
 
-async function mountLock(type: "password" | "passkey" = "password") {
+async function mountLock(type: "password" | "passkey" = "password", { realInput = false } = {}) {
 	const wrapper = mount(LockPage, {
 		global: {
 			plugins: [
@@ -60,14 +61,14 @@ async function mountLock(type: "password" | "passkey" = "password") {
 					initialState: { app: { isLogined: true, profile: { id: "p1", name: "Primary", type } } },
 				}),
 			],
-			components: { Flex, ItemsContainer, SettingItem, Text, Icon },
+			components: { Flex, ItemsContainer, SettingItem, Text, Icon, Input },
 			stubs: {
 				SettingsPageShell: { props: ["title"], template: '<div :data-title="title"><slot /></div>' },
 				LoadingState: { template: '<div data-testid="loading" />' },
 				Toggle: true,
 				Tooltip: true,
 				Icon: true,
-				Input: true,
+				...(realInput ? {} : { Input: true }),
 			},
 		},
 	})
@@ -367,6 +368,46 @@ describe("settings/lock", () => {
 			reread.resolve(true)
 			await flushPromises()
 			expect(strict(w)).toBe("false")
+		})
+	})
+
+	describe("the auto-lock field, as the browser edits it", () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		/** One edit as a browser raises it: `beforeinput` on the text as it stands, the new text, `input`. */
+		async function edit(w: VueWrapper, value: string, inputType = "insertText") {
+			const input = w.get('[data-testid="auto-lock-input"] input')
+			await input.trigger("beforeinput", { inputType })
+			;(input.element as HTMLInputElement).value = value
+			await input.trigger("input", { inputType })
+		}
+		const mountField = async () => {
+			const w = await mountLock("password", { realInput: true })
+			await debounced()
+			// An earlier test's page stays mounted, and its pending write can land in that wait.
+			fakes.config.setValue.mockClear()
+			fakes.openToast.mockClear()
+			const el = w.get('[data-testid="auto-lock-input"] input').element as HTMLInputElement
+			return { w, el }
+		}
+
+		test("1.5 pasted over the minutes saves nothing and says nothing", async () => {
+			const { w, el } = await mountField()
+			el.setSelectionRange(0, el.value.length)
+			await edit(w, "1.5", "insertFromPaste")
+			await debounced()
+			expect([el.value, fakes.config.setValue.mock.calls, fakes.openToast.mock.calls]).toEqual(["30", [], []])
+		})
+
+		test("1 typed, then e within the wait, saves the 1 the field shows, with its toast", async () => {
+			const { w, el } = await mountField()
+			el.setSelectionRange(0, el.value.length)
+			await edit(w, "1")
+			el.setSelectionRange(1, 1)
+			await edit(w, "1e")
+			await debounced()
+			expect(el.value).toBe("1")
+			expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 60_000)
+			expect(fakes.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "Auto-lock timeout updated" })
 		})
 	})
 

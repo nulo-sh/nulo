@@ -1,0 +1,5 @@
+# Phase 5: #1390 Auto-lock
+
+- 2026-10-30 `Input`'s `int` field records the text and selection on `beforeinput` and judges only the text the edit inserted. A non-digit refuses the whole edit: value first, then the recorded selection, then the error state (red underline, `aria-invalid`), which ends on the next taken edit, blur or a caller's write. An `input` with no record is judged whole and restores the bound value. An `input` raised while composing is skipped; Vue's re-fire at `compositionend` is judged.
+- 2026-10-30 `lock.test.ts` stubbed `Input` and registers components by hand, so dropping the stub alone rendered a native `<input>`: the real `Input` is now registered, and stubbed unless a test asks for it. An earlier test's page stays mounted and its pending debounced write landed in the new tests' mount wait; they clear the two spies once the mount settles.
+- 2026-10-30 Input 36/36 and lock 29/29 at head; at the base `Input.vue`, five `int` cases and the pasted `1.5` case are red. Lint (after one Biome format fix) and `typecheck:all` exit 0. `lock.vue` is the only `int` consumer.
