@@ -8,12 +8,16 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 
+/** Stores */
+import { usePopupStore } from "@/stores/popup.store"
+
 /** Utils */
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
 import { openPopupWindowAndClose } from "./hand-over"
 import { doneRoute } from "./steps"
 
+const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
 
@@ -79,7 +83,7 @@ onBeforeUnmount(() => {
 		<div id="dropdown" />
 		<div id="popover" />
 
-		<PopupManager />
+		<ConfirmPopup :show="popupStore.isOpened('confirm')" @onClose="popupStore.close('confirm')" />
 		<ToastManager />
 		<NotificationManager />
 		<MigrationBarrier />

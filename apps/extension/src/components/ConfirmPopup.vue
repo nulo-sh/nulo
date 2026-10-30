@@ -126,15 +126,15 @@ watch(
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "./Popup/popup-shared.module.css";
 }
 
 .header {
-	composes: header from "./popup-shared.module.css";
+	composes: header from "./Popup/popup-shared.module.css";
 }
 
 .pre_title {
-	composes: pre_title from "./popup-shared.module.css";
+	composes: pre_title from "./Popup/popup-shared.module.css";
 }
 
 .toggle_row {
@@ -153,7 +153,7 @@ watch(
 }
 
 .title {
-	composes: title from "./popup-shared.module.css";
+	composes: title from "./Popup/popup-shared.module.css";
 	max-width: 280px;
 }
 

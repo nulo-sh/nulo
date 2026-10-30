@@ -1,4 +1,6 @@
-import { flushPromises, shallowMount } from "@vue/test-utils"
+import { flushPromises, mount, shallowMount } from "@vue/test-utils"
+import { createPinia, setActivePinia } from "pinia"
+import { effectScope } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const config = vi.hoisted(() => ({ getValue: vi.fn(), onConnected: undefined as unknown as { invoke: () => void } }))
@@ -26,6 +28,9 @@ vi.mock("@/utils/core", async () => {
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => ({ hydrateKnownProfile }) }))
 vi.mock("vue-router", () => ({ useRouter: () => router }))
 
+import ConfirmPopup from "@/components/ConfirmPopup.vue"
+import { useConfirm } from "@/composables/useConfirm"
+import { usePopupStore } from "@/stores/popup.store"
 import { THEME_HINT_KEY } from "@/utils/general"
 import { doneRoute } from "./steps"
 import App from "./app.vue"
@@ -59,7 +64,7 @@ afterEach(() => {
 	root.removeAttribute("theme")
 })
 
-const mountOnboarding = () => shallowMount(App, { global: { stubs: { RouterView: { template: "<div />" } } } })
+const mountOnboarding = () => shallowMount(App, { global: { plugins: [createPinia()], stubs: { RouterView: { template: "<div />" } } } })
 
 describe("onboarding's theme", () => {
 	test("the stored theme is painted once read, and nothing is painted or hinted before it", async () => {
@@ -132,6 +137,43 @@ describe("onboarding's resume", () => {
 		const page = mountOnboarding()
 		await flushPromises()
 		expect(router.replace).not.toHaveBeenCalled()
+		page.unmount()
+	})
+})
+
+describe("onboarding's confirm", () => {
+	const SHELL_STUBS = {
+		RouterView: { template: "<div />" },
+		ToastManager: true,
+		NotificationManager: true,
+		MigrationBarrier: true,
+		Flex: { template: "<div><slot /></div>" },
+		Icon: true,
+		Popup: { props: ["show"], template: "<div v-if='show'><slot /></div>" },
+		PopupCard: { template: "<div><slot /></div>" },
+		Text: { template: "<span><slot /></span>" },
+		Button: { emits: ["click"], template: "<button @click=\"$emit('click')\"><slot /></button>" },
+	}
+
+	test("a confirm the tab asks is shown, and each answer settles it and closes the dialog", async () => {
+		config.getValue.mockResolvedValue("dark")
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		const page = mount(App, { global: { plugins: [pinia], components: { ConfirmPopup }, stubs: SHELL_STUBS } })
+		const scope = effectScope()
+		const { askConfirm } = scope.run(() => useConfirm()) as ReturnType<typeof useConfirm>
+		const popups = usePopupStore()
+		for (const [control, answer] of [
+			["confirm-submit", true],
+			["confirm-cancel", false],
+		] as const) {
+			const asked = askConfirm({ title: "You already have this wallet", description: "Add it anyway?", confirm_text: "Add anyway" })
+			await flushPromises()
+			await page.get(`[data-testid="${control}"]`).trigger("click")
+			await expect(asked).resolves.toBe(answer)
+			expect(popups.isOpened("confirm")).toBe(false)
+		}
+		scope.stop()
 		page.unmount()
 	})
 })

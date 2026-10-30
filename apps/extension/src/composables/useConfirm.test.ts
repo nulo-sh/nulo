@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 
-import ConfirmPopup from "@/popup/components/popups/ConfirmPopup.vue"
+import ConfirmPopup from "@/components/ConfirmPopup.vue"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { GENERATED_TYPES, REPO_ROOT, sourceFiles, TEST_FILE } from "../../scripts/type-roles/source-scan"
@@ -286,7 +286,7 @@ describe("useConfirm — the only way to open the confirm dialog", () => {
 	]
 	const ALLOWED: Record<string, RegExp> = {
 		"composables/useConfirm.ts": /./,
-		"popup/components/popups/ConfirmPopup.vue": /^\s*cacheStore\.confirm = \{\}\s*$/,
+		"components/ConfirmPopup.vue": /^\s*cacheStore\.confirm = \{\}\s*$/,
 	}
 
 	function offenses(source: string): Array<{ line: number; text: string }> {
