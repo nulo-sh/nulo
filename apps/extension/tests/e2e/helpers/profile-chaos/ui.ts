@@ -370,6 +370,9 @@ export async function dismissNotices(page: Page): Promise<void> {
 
 type AbortProbe = Window & { __chaosPromptAborted?: boolean }
 
+/** Whether the prompt `watchPromptAbort` watches has ended by now, without waiting. */
+export const promptEnded = (page: Page): Promise<boolean> => page.evaluate(() => (window as AbortProbe).__chaosPromptAborted === true)
+
 /** Marks the page once the next passkey request's own signal aborts. Installed over a hold, so the
  *  page's call meets it first. */
 export async function watchPromptAbort(page: Page): Promise<() => Promise<boolean>> {

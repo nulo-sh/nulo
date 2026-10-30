@@ -253,10 +253,20 @@ export interface ParamsMap {
 	}
 	/** Unlock method's current-passkey prompt held while another window locks. */
 	raceLockDuringMethodChange: Record<string, never>
+	/** Unlock method's current-passkey prompt held on a second page while the anchor deletes the
+	 *  profile or makes an approved change. */
+	raceMethodChangeElsewhere: Competitor
+	/** The account file page approved by the passkey, its file `password` typed, on a second page
+	 *  while the anchor makes an approved change; then Save, if the page still offers it. */
+	raceMethodChangeDuringExport: { password: SecretRef; change: ParamsMap["changeUnlockMethod"] }
 	verifyAll: Record<string, never>
 }
 
 export type PasskeyVariant = "approve" | "refuse" | "no-prf" | "other"
+
+/** What another page's step meets, each the anchor's own action: a delete from Settings, or a
+ *  change its current passkey approves. */
+export type Competitor = { competing: "delete" } | { competing: "change"; change: ParamsMap["changeUnlockMethod"] }
 
 export type ActionName = keyof ParamsMap
 
@@ -386,12 +396,16 @@ const METHOD_CANCEL = cite(UNLOCK_METHOD, 173, "if (handleCancelOrUnconfirmed(er
 const METHOD_LEAVES = cite(UNLOCK_METHOD, 159, 'leaveFor(router, "/popup/settings")')
 const METHOD_ENDS_WITH_SESSION = cite(UNLOCK_METHOD, 250, "if (!logged) onSessionEnded()")
 const METHOD_DROPS_PROMPT = cite(UNLOCK_METHOD, 106, 'onCeremonyReject(new Error("The unlock method page started over"))')
+const METHOD_CHANGED_ELSEWHERE = cite(UNLOCK_METHOD, 89, "if (!renamed) onChangedElsewhere()")
 const ACCOUNT_PAGE = "src/popup/pages/settings/security/export/account.vue"
 const ACCOUNT_FILE_PASSKEY = cite(ACCOUNT_PAGE, 220, 'runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile"')
 const ACCOUNT_FILE_CHECKS = cite(ACCOUNT_PAGE, 223, "await managers.profile.verifyExportCredential(profileId, { passkey: answer })")
 const ACCOUNT_FILE_CANCEL = cite(ACCOUNT_PAGE, 227, "handleCancelOrUnconfirmed(error, openToast)) return")
 const ACCOUNT_FILE_RULE = cite(ACCOUNT_PAGE, 92, "const canSaveFile = computed(() => isNewPasswordValid(")
 const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 110, "The file password needs at least 8 characters")
+const ACCOUNT_FILE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile?.type,")
+const ACCOUNT_FILE_SAVE_REFUSED = cite(ACCOUNT_PAGE, 261, 'openToast({ kind: "error", label: "Failed to create the file" })')
+const EXPORT_PLAIN_REFUSES = cite(SERVICE, 2102, "throw this.notOpened(key, () => new InvalidPasswordError())")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1367, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"
@@ -1584,6 +1598,84 @@ const raceLockDuringMethodChange: ActionSpec<"raceLockDuringMethodChange"> = {
 	expect: (w) => result(lockedWorld(w), ["cancelled"], [], "lock", [METHOD_ENDS_WITH_SESSION, METHOD_DROPS_PROMPT, LOCK_CLOSES]),
 }
 
+/** A change the current passkey approves: a new passkey while a slot is free, else `password`. */
+function approvedChange(rng: Rng, w: World, caps: Caps, password: SecretRef): MethodChange {
+	return canMint(w, caps) && chance(rng, 0.5)
+		? { change: "new-passkey", current: "approve", credential: reserve(w).credential() }
+		: { change: "password", current: "approve", password }
+}
+
+function competitorInvalid(w: World, c: Competitor, caps: Caps): string | undefined {
+	if (c.competing === "delete") return deleteProfile.invalid(w, { via: "settings" }, caps)
+	return c.change.current === "approve" ? changeUnlockMethod.invalid(w, c.change, caps) : "the competing change is approved"
+}
+
+/** The competitor as its own step on the race's world: the driver runs it under this step, so its
+ *  outcome and its ceremonies are judged as that action's, whatever the race's own outcome. */
+export function competitorStep(index: number, w: World, c: Competitor, caps: Caps): PlannedStep {
+	return c.competing === "delete"
+		? stepOf(index, deleteProfile, { via: "settings" }, w, caps)
+		: stepOf(index, changeUnlockMethod, c.change, w, caps)
+}
+
+/** Another page's update or the session's end resets the page with its prompt open: the prompt ends
+ *  with no toast, and the world is the competitor's. */
+const raceMethodChangeElsewhere: ActionSpec<"raceMethodChangeElsewhere"> = {
+	name: "raceMethodChangeElsewhere",
+	family: "race",
+	weight: 1,
+	invalid: (w, p, caps) => (openProfile(w)?.method === "passkey" ? competitorInvalid(w, p, caps) : "needs an open passkey profile"),
+	params: (rng, w, caps) => {
+		if (openProfile(w)?.method !== "passkey") return undefined
+		return chance(rng, 1 / 3)
+			? { competing: "delete" }
+			: { competing: "change", change: approvedChange(rng, w, caps, reserve(w).secret()) }
+	},
+	expect: (w, p, caps) => {
+		const competitor = competitorStep(0, w, p, caps).expect
+		const reset = p.competing === "delete" ? METHOD_ENDS_WITH_SESSION : METHOD_CHANGED_ELSEWHERE
+		return result(competitor.next, ["cancelled"], competitor.writes, competitor.settle, [
+			...competitor.sources,
+			METHOD_DROPS_PROMPT,
+			reset,
+		])
+	},
+}
+
+/** The account file page holds an approval for the unlock the anchor replaces: a change to a password
+ *  resets the page before Save, and a new passkey leaves Save to meet the service's refusal. The file
+ *  password was typed, so its secret is spent either way. */
+const raceMethodChangeDuringExport: ActionSpec<"raceMethodChangeDuringExport"> = {
+	name: "raceMethodChangeDuringExport",
+	family: "race",
+	weight: 1,
+	invalid: (w, p, caps) => {
+		if (!caps.ceremonyOffAnchor) return "the export's passkey runs on a second page"
+		const open = openProfile(w)
+		if (open?.method !== "passkey" || !open.derived) return "needs an open passkey profile with a derived account"
+		if (p.password === p.change.password) return "the file password and the new password are one secret"
+		return freshRefs(w, { secret: p.password }) ?? competitorInvalid(w, { competing: "change", change: p.change }, caps)
+	},
+	params: (rng, w, caps) => {
+		const open = openProfile(w)
+		if (!caps.ceremonyOffAnchor || open?.method !== "passkey" || !open.derived) return undefined
+		const password = reserve(w).secret()
+		return { password, change: approvedChange(rng, w, caps, `S${w.next.secret + 1}`) }
+	},
+	expect: (w, p, caps) => {
+		const competitor = changeUnlockMethod.expect(w, p.change, caps)
+		const next = clone(competitor.next)
+		bump(next, { secret: 1 })
+		const reset = p.change.change === "password"
+		const page = reset ? [ACCOUNT_FILE_RESETS] : [ACCOUNT_FILE_SAVE_REFUSED, SLOTS_BIND_PASSKEY, EXPORT_PLAIN_REFUSES]
+		return result(next, [reset ? "cancelled" : "refused"], competitor.writes, competitor.settle, [
+			...competitor.sources,
+			ACCOUNT_FILE_PASSKEY,
+			...page,
+		])
+	},
+}
+
 /** Every live profile in model order: a wrong secret refused with no write, its own secret opens it,
  *  its accounts read as recorded; then the lock screen goes back to the selection, if one is known. */
 const verifyAll: ActionSpec<"verifyAll"> = {
@@ -1638,6 +1730,8 @@ export const CATALOG = [
 	raceLockDuringReveal,
 	changeUnlockMethod,
 	raceLockDuringMethodChange,
+	raceMethodChangeElsewhere,
+	raceMethodChangeDuringExport,
 	verifyAll,
 ] as const
 
@@ -1729,6 +1823,8 @@ export function endsOf(step: ListedStep, before: World): StepEnd[] {
 		case "raceLockDuringMethodChange":
 		case "verifyAll":
 			return ["session"]
+		case "raceMethodChangeElsewhere":
+			return step.params.competing === "delete" ? ["session"] : []
 		case "secondWindow":
 			return step.params.op === "lock" ? ["session"] : []
 		case "backgroundRestart":

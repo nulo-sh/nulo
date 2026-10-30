@@ -5,11 +5,12 @@ import { waitForLockScreen } from "../../fixtures/auth"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet } from "../../fixtures/passkey"
 import { lockFromAnotherWindow } from "../../fixtures/session"
+import { openPopup } from "../../fixtures/wallet-pages"
 import type { CredentialRef, ModelProfile, ParamsMap, PlannedStep } from "./model"
 import type { Ceremony } from "./checkers"
-import { checkAnswers, minted } from "./prf-capture"
+import { capturePrf, checkAnswers, drainPrf, minted } from "./prf-capture"
 import { credentialId, type Driven, type RunState, secretFor, wrongSecret } from "./state"
-import { openRoute, type Signal, settle, timed, unlockAttemptEnded, watchPromptAbort } from "./ui"
+import { firstSignal, openRoute, promptEnded, type Signal, settle, timed, unlockAttemptEnded, watchPromptAbort } from "./ui"
 
 type Change = ParamsMap["changeUnlockMethod"]
 
@@ -32,6 +33,17 @@ const REFUSALS: Signal[] = [
 ]
 
 const OUTCOMES = { committed: "committed", cancelled: "cancelled", refused: "refused" } as const
+
+/** Everything a run of the page can show once its card ends: after a reset, any one means the run
+ *  outlived it. */
+const RUN_SHOWS: Signal[] = [
+	...REFUSALS,
+	{ label: "refused", text: "Unlock method changed in another window." },
+	{ label: "refused", text: "Unlock method changed. Unlock Nulo again to continue." },
+]
+/** A run's toast follows its card's rejection in the turn the reset runs, before the dialog's
+ *  unmount aborts the prompt, so it renders well inside this look. */
+const SHOWS_MS = 2_000
 
 /** The answers a change's page must show, each by the credential it names. */
 function ceremoniesOf(p: Change, current: CredentialRef | undefined): Ceremony[] {
@@ -122,4 +134,31 @@ export async function raceLockDuringMethodChange(s: RunState): Promise<Driven> {
 	await hold.release()
 	if (!ended) await unlockAttemptEnded(page, CHANGE_MS)
 	return timed(t0, CHANGE_MS + LOCK_MS, ended ? "cancelled" : "committed")
+}
+
+/** The current passkey's prompt held on a second page while `compete` runs the anchor's own step:
+ *  the page must start over, its prompt ended and nothing shown. A prompt that outlives the
+ *  competitor is reported as the change going on. The page closes with the prompt still held: on a
+ *  page with no authenticator a released one would wait out WebAuthn's own timeout. */
+export async function raceMethodChangeElsewhere(s: RunState, compete: () => Promise<void>): Promise<Driven> {
+	const t0 = Date.now()
+	const page = await openPopup(s.ctx)
+	s.errors.watch(page, "elsewhere")
+	try {
+		await capturePrf(page)
+		await openRoute(page, ROUTE)
+		await page.waitForSelector('[data-testid="unlock-method-use-password"]', { visible: true, timeout: 15_000 })
+		const hold = await holdNextGet(page)
+		const aborted = await watchPromptAbort(page)
+		await clickByTestId(page, "unlock-method-use-password")
+		await hold.reached()
+		if (await promptEnded(page)) throw new Error("the prompt ended before the competitor ran")
+		await compete()
+		if (!(await aborted())) return timed(t0, CHANGE_MS + LOCK_MS, "committed")
+		const shown = await firstSignal(page, RUN_SHOWS, SHOWS_MS)
+		return timed(t0, CHANGE_MS + LOCK_MS, shown.label === undefined ? "cancelled" : "refused")
+	} finally {
+		await drainPrf(s, page)
+		await page.close().catch(() => {})
+	}
 }

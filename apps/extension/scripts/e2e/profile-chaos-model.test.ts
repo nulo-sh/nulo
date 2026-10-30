@@ -56,6 +56,8 @@ import {
 	type ActionName,
 	type Caps,
 	CATALOG,
+	type Competitor,
+	competitorStep,
 	coverage,
 	EARLIER_TITLE,
 	coverageLine,
@@ -147,6 +149,10 @@ function newVariant(s: PlannedStep, before: World): string | undefined {
 			return `changeUnlockMethod:${p.change}:${p.current}`
 		case "exportAccountFile":
 			return p.password ? `exportAccountFile:passkey:${p.variant ?? "approve"}` : undefined
+		case "raceMethodChangeElsewhere":
+			return `${s.action}:${s.params.competing === "delete" ? "delete" : s.params.change.change}`
+		case "raceMethodChangeDuringExport":
+			return `${s.action}:${s.params.change.change}`
 		default:
 			return undefined
 	}
@@ -166,6 +172,10 @@ function mintsAt(s: PlannedStep, before: World): boolean {
 			return p.method === "passkey" && p.variant === "right" && fresh
 		case "changeUnlockMethod":
 			return p.change !== "password" && (p.current === "right" || p.current === "approve")
+		case "raceMethodChangeElsewhere":
+			return s.params.competing === "change" && s.params.change.change !== "password"
+		case "raceMethodChangeDuringExport":
+			return s.params.change.change !== "password"
 		default:
 			return false
 	}
@@ -259,6 +269,7 @@ describe("the planner", () => {
 		const unreachable = new Set<string>([
 			...(caps.network ? [] : networkOnly),
 			...(caps.restartUnderOpenPage ? [] : ["raceRestartDuringUnlock"]),
+			...(caps.ceremonyOffAnchor ? [] : ["raceMethodChangeDuringExport"]),
 		])
 		const expected = CATALOG.map((a) => a.name).filter((n) => !unreachable.has(n))
 		expect([...expected].filter((n) => !drawn.has(n))).toEqual([])
@@ -309,6 +320,8 @@ describe("the planner", () => {
 			"changeUnlockMethod:password:refuse",
 			"changeUnlockMethod:password:other",
 			...["approve", "short", "refuse", "other"].map((v) => `exportAccountFile:passkey:${v}`),
+			...["delete", "new-passkey", "password"].map((v) => `raceMethodChangeElsewhere:${v}`),
+			...(caps.ceremonyOffAnchor ? ["new-passkey", "password"].map((v) => `raceMethodChangeDuringExport:${v}`) : []),
 		]
 		expect(expected.filter((v) => !drawn.has(v))).toEqual([])
 	})
@@ -934,6 +947,50 @@ describe("the passkey choices", () => {
 		expect(endsOf({ action: "raceLockDuringMethodChange", params: {} }, step.expect.next)).toEqual(["session"])
 		expect(endsOf({ action: "changeUnlockMethod", params: toPassword("approve").params } as ListedStep, step.expect.next)).toEqual([])
 		expect(() => steps([pw, { action: "raceLockDuringMethodChange", params: {} }])).toThrow(/open passkey profile/)
+	})
+
+	const newPasskey = { change: "new-passkey", current: "approve", credential: "K2" }
+
+	test("a delete or a change on the anchor ends Unlock method's prompt on another page, in the competitor's world", () => {
+		const elsewhere = (params: unknown) => ({ action: "raceMethodChangeElsewhere", params })
+		const opened = last([pk]).expect.next
+		for (const [competitor, alone] of [
+			[{ competing: "delete" }, { action: "deleteProfile", params: { via: "settings" } }],
+			[
+				{ competing: "change", change: newPasskey },
+				{ action: "changeUnlockMethod", params: newPasskey },
+			],
+			[{ competing: "change", change: toPassword("approve").params }, toPassword("approve")],
+		] as const) {
+			const race = last([pk, elsewhere(competitor)])
+			const own = last([pk, alone])
+			expect(race.expect).toMatchObject({ outcomes: ["cancelled"], next: own.expect.next, writes: own.expect.writes })
+			expect(race.expect.sources).toEqual(expect.arrayContaining(own.expect.sources))
+			expect(competitorStep(1, opened, competitor as Competitor, CHROME).expect).toEqual(own.expect)
+			expect(endsOf(elsewhere(competitor) as ListedStep, opened)).toEqual(competitor.competing === "delete" ? ["session"] : [])
+		}
+		const race = last([pk, elsewhere({ competing: "delete" })])
+		expect(shown("O5 a prompt that outlived its page", checkOutcome(race.action, race.expect, { outcome: "committed" }))).toHaveLength(
+			1,
+		)
+		const b = competitorStep(1, opened, { competing: "delete" }, CHROME)
+		expect(shown("O5 a competitor that did not land", checkOutcome(b.action, b.expect, { outcome: "cancelled" }))).toHaveLength(1)
+		expect(() => steps([pw, elsewhere({ competing: "delete" })])).toThrow(/open passkey profile/)
+		expect(() => steps([pk, elsewhere({ competing: "change", change: toPassword("refuse").params })])).toThrow(/approved/)
+	})
+
+	test("a change on the anchor meets the account file page on another page: reset before Save, or Save refused", () => {
+		const during = (change: unknown) => ({ action: "raceMethodChangeDuringExport", params: { password: "S1", change } })
+		const toPw = { change: "password", current: "approve", password: "S2" }
+		const own = last([pk, { action: "changeUnlockMethod", params: toPw }], FIREFOX).expect
+		const reset = last([pk, during(toPw)], FIREFOX).expect
+		expect(reset).toMatchObject({ outcomes: ["cancelled"], writes: own.writes })
+		expect(reset.next).toEqual({ ...own.next, next: { ...own.next.next, secret: 3 } })
+		const refused = last([pk, during(newPasskey)], FIREFOX).expect
+		expect(refused).toMatchObject({ outcomes: ["refused"], next: { files: [], next: { credential: 3, secret: 2 } } })
+		expect(endsOf(during(newPasskey) as ListedStep, last([pk], FIREFOX).expect.next)).toEqual([])
+		expect(() => steps([pk, during(newPasskey)])).toThrow(/second page/)
+		expect(() => steps([pk, during({ ...toPw, password: "S1" })], FIREFOX)).toThrow(/one secret/)
 	})
 
 	test("a passkey account file opens with its file password; a short one, a refused or another passkey makes none", () => {

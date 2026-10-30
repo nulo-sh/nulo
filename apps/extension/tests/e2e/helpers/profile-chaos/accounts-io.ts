@@ -8,6 +8,7 @@ import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { readActiveNetwork } from "../../fixtures/networks"
 import { answerWithCredential } from "../../fixtures/passkey"
 import { callService } from "../../fixtures/session"
+import { openPopup } from "../../fixtures/wallet-pages"
 import { exportAccountBody, openAccountExport, previewImport } from "../account-io"
 import { armDownloadCapture, readCapturedDownload } from "../download-capture"
 import { refusesShortPassword, shortFilePassword } from "./backups"
@@ -60,8 +61,7 @@ const APPROVED: Signal = { label: "approved", testid: "account-file-password-inp
 
 /** Past the agree gate, Confirm with passkey answered as `p` says: the page asks the file password
  *  once the answer opened the profile. */
-async function confirmPasskey(s: RunState, p: Pick<ParamsMap["exportAccountFile"], "variant" | "other">): Promise<Driven> {
-	const page = s.anchor
+async function confirmPasskey(s: RunState, page: Page, p: Pick<ParamsMap["exportAccountFile"], "variant" | "other">): Promise<Driven> {
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="account-file-confirm-passkey-btn"]', { visible: true, timeout: 15_000 })
 	const press = async (): Promise<Driven> => {
@@ -86,6 +86,8 @@ async function confirmPasskey(s: RunState, p: Pick<ParamsMap["exportAccountFile"
 	return press()
 }
 
+const FILE_FORM = { field: "account-file-password", button: "account-file-save-btn" } as const
+
 const SAVED: Signal[] = [
 	{ label: "saved", testid: "account-file-protected-banner" },
 	{ label: "refused", text: "Failed to create the file" },
@@ -108,9 +110,9 @@ async function passkeyFile(
 ): Promise<{ body: string; password: string } | Driven> {
 	const t0 = Date.now()
 	await openAccountExport(s.anchor, name)
-	const confirmed = await confirmPasskey(s, p)
+	const confirmed = await confirmPasskey(s, s.anchor, p)
 	if (confirmed.outcome !== "committed" || !confirmed.settle.reached) return confirmed
-	const form = { field: "account-file-password", button: "account-file-save-btn" } as const
+	const form = FILE_FORM
 	if (p.variant === "short") {
 		const short = shortFilePassword(s, p.password)
 		// An enabled Save is pressed, as a person would, so a file the rule let through is seen.
@@ -118,9 +120,55 @@ async function passkeyFile(
 		return saveFile(s.anchor, form.button, short)
 	}
 	const password = secretFor(s, p.password)
-	await replaceInputValue(s.anchor, `[data-testid="${form.field}-input"]`, password)
-	await replaceInputValue(s.anchor, `[data-testid="${form.field}-confirm-input"]`, password)
+	await typeFilePassword(s.anchor, password)
 	return saveFile(s.anchor, form.button, password)
+}
+
+async function typeFilePassword(page: Page, password: string): Promise<void> {
+	await replaceInputValue(page, `[data-testid="${FILE_FORM.field}-input"]`, password)
+	await replaceInputValue(page, `[data-testid="${FILE_FORM.field}-confirm-input"]`, password)
+}
+
+/** How long a change to a password may take to reach another page's account file page. */
+const RESET_MS = 15_000
+
+/**
+ * The open passkey profile's first derived account on a second page: approved by its passkey and the
+ * file password typed, then `compete` runs the anchor's change of unlock, then Save if the page still
+ * offers it. A change to a password must reset the page first; the page knows nothing of a new
+ * passkey, so Save is pressed at once and must meet the service's refusal. A file made is reported.
+ */
+export async function exportDuringChange(
+	s: RunState,
+	open: ModelProfile,
+	p: ParamsMap["raceMethodChangeDuringExport"],
+	compete: () => Promise<void>,
+): Promise<Driven> {
+	const t0 = Date.now()
+	const name = await exportRowName(s, open, { derivedIndex: 0 })
+	const page = await openPopup(s.ctx)
+	s.errors.watch(page, "export")
+	try {
+		await capturePrf(page)
+		await openAccountExport(page, name)
+		const approved = await confirmPasskey(s, page, {})
+		if (approved.outcome !== "committed" || !approved.settle.reached)
+			throw new Error(`the passkey did not approve: ${approved.outcome}`)
+		await answeredCredentials(s, page, [{ kind: "get", credential: open.credential as CredentialRef }])
+		await typeFilePassword(page, secretFor(s, p.password))
+		await compete()
+		const save = `[data-testid="${FILE_FORM.button}"]`
+		if (p.change.change === "password")
+			await page
+				.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: RESET_MS, polling: 100 }, save)
+				.catch(() => {})
+		if (!(await page.$(save))) return timed(t0, 2 * ACCOUNT_MS, "cancelled")
+		const saved = await saveFile(page, FILE_FORM.button, secretFor(s, p.password))
+		return "body" in saved ? timed(t0, 2 * ACCOUNT_MS, "committed") : saved
+	} finally {
+		await drainPrf(s, page)
+		await page.close().catch(() => {})
+	}
 }
 
 /** A password profile's file opens with its password; a passkey profile's with the file password
