@@ -9,3 +9,4 @@
 - 2026-10-30: 1.2 gate pass on Firefox after D15: new passkey 6.8 s, password 5.6 s, both `cancelled`.
 - 2026-10-30: 1.3 model test 30/30 retry-0 runs green; seeds 9001-9010 green on Chrome (mean 48 s) and Firefox (mean 73 s).
 - 2026-10-30: review round 1 (Codex + Opus) folded in; export race re-run green on Firefox; type-reset scratch break red.
+- 2026-10-30: final gates on the head pass: lint, typecheck:all, test:all (extension 16415 passed), the hand lists on Chrome and Firefox, check:plans.

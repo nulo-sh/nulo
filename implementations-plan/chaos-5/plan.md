@@ -105,7 +105,7 @@ Gate: `T scripts/e2e/profile-chaos-model.test.ts` and `T src/wallet/services/pro
 **1.2 `raceMethodChangeDuringExport` (S6a).** ✓ The same model-test cases, Chrome's reachability list naming it unreachable. Estimate a step: 30 s Firefox.
 Gate: as 1.1 on Firefox, both change kinds; Chrome plans never draw it.
 
-**1.3 Campaign and record.** README § Chaos runs: the two races, what Chrome cannot drive, S6b's limit.
+**1.3 Campaign and record.** ✓ README § Chaos runs: the two races, what Chrome cannot drive, S6b's limit.
 Gate: the model test 30 consecutive runs at retry 0; `C` with `NULO_E2E_CHAOS_SEED=9001 NULO_E2E_CHAOS_RUNS=10` on each browser at retry 0, each seed green or red only on a filed finding, per-seed time against chaos-3's 54 s and 76 s; `bun run test:all` once; `bun run check:plans` after staging.
 
 **Arc 2.**
@@ -156,6 +156,7 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 ### Arc 1 review
 
 - **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. The export race read Save's absence as a start-over, which a page whose profile is no longer a passkey one shows anyway: it now needs the picker back, with a control that Save is offered before the competitor, and a scratch build without the type reset turns it red; one comment cut to its invariant.
+- **Codex round 2** (resumed): approve, no new findings.
 - **Opus review** (general-purpose), beside round 1: conditional approve; 5 findings, all accepted. The same export finding; the network clause cited only for a new passkey; a toast-order comment corrected; an inverted refusal message; `callSite` now matches hyphenated file names.
 
 ## Seeds

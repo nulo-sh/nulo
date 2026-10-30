@@ -41,3 +41,7 @@ Verdict: conditional approve. Five findings, each checked; all accepted.
 ### After the fixes
 
 - `waitForSelector('[data-testid="export-account-row"]', { visible: true })` resolved null at once on Firefox without throwing, so the first fixed run read a start-over as missing and went red (`refused`). The suite's `firstSignal`, which polls visibility in the page, waits correctly: green, new passkey 4.5 s, password 5.3 s.
+
+### Codex round 2 (resumed)
+
+Verdict: approve. No new findings; the fixes match the tree and no regression was found.
