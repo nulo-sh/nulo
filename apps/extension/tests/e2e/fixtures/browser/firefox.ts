@@ -523,13 +523,29 @@ const TARGET_GONE =
 
 /**
  * Headless Firefox hands focus to every window the wallet opens and refuses WebAuthn from any
- * window but the focused one. A person's click would have focused the page; a scripted one has to
- * be given that. A window that closed itself has nothing left to focus.
+ * window but the focused one. A person's click would have focused the page and been a fresh gesture;
+ * a scripted one has to be given both. A window that closed itself has nothing left to focus.
  */
 const prepareClick = (page: Page): Promise<void> =>
-	bringToFront(page).catch((err: unknown) => {
-		if (!TARGET_GONE.test(err instanceof Error ? err.message : String(err))) throw err
-	})
+	bringToFront(page)
+		.then(() => renewActivation(page))
+		.catch((err: unknown) => {
+			if (!TARGET_GONE.test(err instanceof Error ? err.message : String(err))) throw err
+		})
+
+/**
+ * Firefox activates a document only when a realm's `userActivation` flag turns on
+ * (`shared/Realm.sys.mjs`), and Puppeteer keeps it on, so a page is activated once and a file picker
+ * consumes that. Turning the main realm's flag off and on activates the page afresh, as Chrome does
+ * for each evaluate.
+ */
+async function renewActivation(page: Page): Promise<void> {
+	const send = bidiSendOf(page)
+	const target = { context: contextIdOf(page) }
+	for (const userActivation of [false, true]) {
+		await send("script.callFunction", { functionDeclaration: "() => {}", target, awaitPromise: false, userActivation })
+	}
+}
 
 type BiDiPointerAction =
 	| { type: "pointerMove"; x: number; y: number }

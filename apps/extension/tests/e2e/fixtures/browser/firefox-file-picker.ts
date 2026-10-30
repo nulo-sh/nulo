@@ -2,13 +2,8 @@ import { pollUntil } from "../poll"
 import type { FirefoxScopeCall } from "./firefox-answer-requests"
 import type { WebDriverSession } from "./webdriver-classic"
 
-/**
- * Firefox's file picker, replaced for the launch. Headless Firefox answers its native picker by
- * focus: a focused window's pick is never answered and an unfocused one's is cancelled at once, and
- * the suite controls neither. So no pick reaches it: a pick nobody asked for is cancelled at once,
- * as a person closing the chooser does, and the pick `pickWithStandIn` asks for waits, its input
- * still in the page, until the driver answers it with the file.
- */
+/** Firefox's file picker, replaced for the launch: headless Firefox answers its native one by
+ *  window focus, which the suite does not control. */
 
 /** Commands reach the stand-in on this topic; each writes one outcome word into the subject. */
 const TOPIC = "nulo-e2e:file-picker"
@@ -62,7 +57,6 @@ export function filePickerSlot(returnOk: number, returnCancel: number, fileAt: (
 	}
 }
 
-/** The sandbox's source: the slot, a factory for the picker's contract, and the command observer. */
 const STAND_IN_SOURCE = `"use strict";
 ${filePickerSlot}
 const { NavigableManager } = ChromeUtils.importESModule("chrome://remote/content/shared/NavigableManager.sys.mjs");
@@ -128,7 +122,8 @@ const INSTALL = `
 		done("error: " + err);
 	}`
 
-/** Installs the stand-in before any page exists for the privileged call's window switch to disturb. */
+/** Installs the stand-in before any page exists for the privileged call's window switch to
+ *  disturb. */
 export async function installFilePicker(session: WebDriverSession): Promise<void> {
 	const installed = await session.chromeScript<string>(INSTALL, [STAND_IN_SOURCE])
 	if (installed !== "installed") throw new Error(`Firefox file picker stand-in: ${installed}`)
@@ -145,7 +140,8 @@ const command = async (call: FirefoxScopeCall, op: string, context = "", path = 
 
 /**
  * Answers the pick `open` asks for on the page `context` names with `filePath`. The pick is held
- * until `open` resolves, so its input stays in the page for `open` to read, as Chrome's chooser does.
+ * until `open` resolves, so its input stays in the page for `open` to read, as Chrome's chooser
+ * does.
  */
 export async function pickWithStandIn(call: FirefoxScopeCall, context: string, open: () => Promise<void>, filePath: string): Promise<void> {
 	const armed = await command(call, "arm", context, filePath)

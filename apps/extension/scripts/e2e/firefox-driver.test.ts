@@ -22,7 +22,7 @@ import {
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
-import { filePickerSlot } from "../../tests/e2e/fixtures/browser/firefox-file-picker"
+import { filePickerSlot, pickWithStandIn } from "../../tests/e2e/fixtures/browser/firefox-file-picker"
 import { E2E_FIREFOX_REVISION } from "../../tests/e2e/fixtures/browser/firefox-revision"
 import {
 	RELAY_HELPERS,
@@ -658,6 +658,7 @@ describe("the file picker stand-in", () => {
 		expect(slot.arm(7, "/picks/contacts.json")).toBe("armed")
 		const other = pick()
 		slot.open(other.picker, 8, other.callback)
+		expect(other.done).toHaveBeenCalledTimes(1)
 		expect(other.done).toHaveBeenCalledWith(CANCEL)
 		const own = pick()
 		slot.open(own.picker, 7, own.callback)
@@ -683,7 +684,55 @@ describe("the file picker stand-in", () => {
 		expect(held.picker.file).toBeNull()
 		const next = pick()
 		slot.open(next.picker, 7, next.callback)
+		expect(next.done).toHaveBeenCalledTimes(1)
 		expect(next.done).toHaveBeenCalledWith(CANCEL)
 		expect(slot.arm(7, "/picks/b.json")).toBe("armed")
+	})
+
+	test("a release before any pick disarms the page, so its late pick is cancelled", () => {
+		const slot = slotFor()
+		slot.arm(7, "/picks/a.json")
+		expect(slot.release()).toBe("idle")
+		const late = pick()
+		slot.open(late.picker, 7, late.callback)
+		expect(late.done).toHaveBeenCalledTimes(1)
+		expect(late.done).toHaveBeenCalledWith(CANCEL)
+		expect(slot.answer()).toBe("not held")
+	})
+
+	describe("a pick through it", () => {
+		/** A stand-in that answers each command from `outcomes`, recording the commands it was sent. */
+		const standIn = (outcomes: Record<string, string[] | Error>) => {
+			const sent: string[] = []
+			const call = async (_declaration: string, args: string[]) => {
+				const op = args[1]
+				sent.push(op)
+				const answer = outcomes[op]
+				if (answer instanceof Error) throw answer
+				return answer.length > 1 ? answer.shift() : answer[0]
+			}
+			return { call, sent }
+		}
+
+		test("answers once the click's pick is held, then finds nothing left to release", async () => {
+			const { call, sent } = standIn({ arm: ["armed"], answer: ["not held", "answered"], release: ["idle"] })
+			await pickWithStandIn(call, "ctx-1", async () => {}, "/picks/a.json")
+			expect(sent).toEqual(["arm", "answer", "answer", "release"])
+		})
+
+		test("a failed step still releases, and its own error survives a release that fails too", async () => {
+			const opened = new Error("the click found no control")
+			const { call, sent } = standIn({ arm: ["armed"], answer: ["answered"], release: new Error("the window closed") })
+			const step = pickWithStandIn(
+				call,
+				"ctx-1",
+				async () => {
+					throw opened
+				},
+				"/picks/a.json",
+			)
+			await expect(step).rejects.toBe(opened)
+			expect(sent).toEqual(["arm", "release"])
+		})
 	})
 })

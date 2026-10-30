@@ -15,7 +15,6 @@ import { contactRow, senderChip } from "../fixtures/helpers"
 import { callService } from "../fixtures/session"
 import { settleClosedPopup } from "../fixtures/popup-leave"
 import { armDownloadCapture, readCapturedDownload } from "./download-capture"
-import { pointerClick } from "./legal-drivers"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 export const importRow = (name: string) => `${sel("import-contact-row")}[data-contact-name="${name}"]`
@@ -70,13 +69,11 @@ export function refuseTestnet(ctx: ExtensionContext): Promise<ArmedInterception>
 	return interceptRpc(ctx.browser, ctx.extensionId, new URL(TESTNET_RPC_URL).origin, { kind: "refuse" })
 }
 
-/** Picks `path` from the Contacts menu and waits for the popup's rows. The import clicks its input
- *  50 ms after the press, and Firefox clears an evaluated click's activation when the evaluate
- *  returns, so only a pointer press, as a person's, still opens the picker then. */
+/** Picks `path` from the Contacts menu and waits for the popup's rows. */
 export async function pickContactsFile(page: Page, path: string): Promise<void> {
 	await clickByTestId(page, "contacts-menu-trigger")
 	await page.waitForSelector(sel("contacts-menu-import"), { visible: true, timeout: 5_000 })
-	await pickFile(page, () => pointerClick(page, "contacts-menu-import"), path)
+	await pickFile(page, () => clickByTestId(page, "contacts-menu-import"), path)
 	await page.waitForSelector(sel("import-contact-row"), { visible: true, timeout: 15_000 })
 }
 
