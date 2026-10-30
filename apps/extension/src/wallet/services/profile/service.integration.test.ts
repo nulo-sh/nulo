@@ -1178,6 +1178,7 @@ describe("ProfileService integration", () => {
 			const { api, service, passkeys } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
 			await service.lockActiveProfile()
+			passkeys.outcomes.length = 0
 			const realGetKey = passkeys.getKey.bind(passkeys)
 			vi.spyOn(passkeys, "getKey").mockImplementation(async (id, prfSalt, display) => {
 				await writeRawRow(api, profile.id, { ...(await readRawRow(api, profile.id)), prfSalt: freshPrfSalt() })
@@ -1186,7 +1187,7 @@ describe("ProfileService integration", () => {
 
 			await expect(service.unlockPasskeyProfile(profile.id)).rejects.toThrow(/Invalid profile id/)
 			expect(await service.getActiveProfile()).toBeUndefined()
-			expect(passkeys.outcomes.at(-1)).toBe("failed")
+			expect(passkeys.outcomes).toEqual(["failed"])
 		}, 30_000)
 
 		test("unlock refuses an answer at another input and tells the window", async () => {
@@ -1751,7 +1752,8 @@ describe("ProfileService integration", () => {
 			await held.promise
 			const password = service.restore({ id: "ignored", name: "P", type: "password" }, await restoreSecretFor(fills[1]), "pass1234")
 			const outcomes = (await Promise.allSettled([passkey, password])).map((r) => {
-				if (r.status === "fulfilled") return "restored"
+				if (r.status === "fulfilled")
+					return "restoreError" in r.value && r.value.restoreError ? String(r.value.restoreError) : "restored"
 				return r.reason instanceof DuplicateWalletError ? "duplicate" : String(r.reason)
 			})
 			return { outcomes: outcomes.sort(), rows: (await service.getProfiles()).length }
@@ -1765,8 +1767,9 @@ describe("ProfileService integration", () => {
 			expect(await raceRestores([21, 22], "held")).toEqual({ outcomes: ["restored", "restored"], rows: 2 })
 		}, 30_000)
 
-		// Proves the hold above contends the lock: the duplicate check alone does not serialize them.
-		test("with the facade lock bypassed, the same schedule commits one backup twice", async () => {
+		// Without the lock, the duplicate check alone admits one backup twice. A guard added at the
+		// write would turn this red; retire the test then.
+		test("with the facade lock bypassed and the hold opened after the second's check, one backup commits twice", async () => {
 			expect(await raceRestores([21, 21], "bypassed")).toEqual({ outcomes: ["restored", "restored"], rows: 2 })
 		}, 30_000)
 

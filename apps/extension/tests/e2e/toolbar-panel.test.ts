@@ -459,17 +459,19 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await openActionPopup(browser)
 			await panelOn(browser, "#/popup/auth")
 			await watchSessionWrites(control)
-			const forged = JSON.stringify({ ...JSON.parse(row), prfSalt: randomBytes(32).toString("base64url") })
+			const forged = JSON.stringify({ ...JSON.parse(row), prfSalt: randomBytes(32).toString("base64") })
 			const before = new Set(ctx.browser.targets())
 			await auth.setUserVerified(false)
 			const win = await withDyingPanel(browser, async (death) => {
 				await clickInPanel(browser, "auth-submit")
 				const opened = await openedWindow(ctx, before, "#/windows/passkey")
 				await opened.waitForSelector('[data-testid="passkey-window"][data-state="failed"]', { timeout: 30_000 })
+				await recordCredentialGets(opened)
 				await writeRow(control, id, forged)
 				await auth.setUserVerified(true)
 				await clickByTestId(opened, "passkey-window-retry")
 				await opened.waitForSelector('[data-testid="passkey-window"][data-state="step-failed"]', { timeout: 30_000 })
+				expect(await readCredentialGets(opened), "the retry's passkey answered").toEqual([{ prf: true }])
 				expect((await death.record()).calls, "passkey and file prompts opened in the panel").toEqual([])
 				return opened
 			})
@@ -478,7 +480,6 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await writeRow(control, id, row)
 			await win.close()
 
-			// The row put back opens, from the panel, and so does Main, from a page, on the passkey they share.
 			await openActionPopup(browser)
 			await panelOn(browser, "#/popup/auth")
 			expect((await stepFromDyingPanel(ctx, control, undefined, () => clickInPanel(browser, "auth-submit"))).profile).toBe(id)
