@@ -26,3 +26,7 @@ Verdict: approve. It had found round 1's race independently at `00220b67f`.
 ## Codex round 2 (resumed session), 2026-10-30
 
 Verdict: approve. Its probes ran the shell callback over unmarked, loaded and live marks with both settle directions, and a mark written while `router.isReady()` waits. Both Opus rejections stand. The loop converged.
+
+## CI on #1400, 2026-10-30
+
+Firefox smoke shard 2 red, real breakage: `firefox-sidebar.test.ts` opened a bare onboarding tab over an unlocked profile and waited for Ready, the shortcut this arc removes. The phase-3 gate ran only the three onboarding files; nothing else in the smoke suite named that dependency. The test now opens Ready by its route, which a profile active keeps (the plan's known limit). Local Firefox 4/4 at retry 0.

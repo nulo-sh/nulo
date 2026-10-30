@@ -185,10 +185,10 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.sidebar, () => {
 			// that died locks the wallet, and pages follow the unlock.
 			control = await openPopup(ctx)
 			await ensureUnlocked(control)
-			// With onboarding not yet complete, the shell routes a known profile to Done and stays.
+			// With onboarding not yet complete, the shell keeps a known profile on the Ready route it opens on.
 			await control.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
 			const onboarding = await newPage(browser)
-			await gotoExtensionPage(onboarding, extensionUrl(ctx.extensionId, "/src/onboarding/index.html"))
+			await gotoExtensionPage(onboarding, extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/done"))
 			await waitForHash(onboarding, "#/onboarding/done", 10_000)
 			// Alone in its window, the page stays, and the background opens the panel over it.
 			await onboarding.evaluate(async () => {
