@@ -61,7 +61,7 @@ import OnboardingProfileNameField from "../components/OnboardingProfileNameField
 import OnboardingSkipLink from "../components/OnboardingSkipLink.vue"
 import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
 import { RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
-import { doneRoute } from "../steps"
+import { donePath, doneRoute, settleResume } from "../steps"
 import Create from "./create.vue"
 import { useNotificationStore } from "@/stores/notification.store"
 
@@ -568,5 +568,32 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(shown(w)).toEqual({ words: 0, copy: false, form: false })
 		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
 		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+	})
+})
+
+describe("onboarding create — the reload mark", () => {
+	afterEach(() => window.history.replaceState(null, ""))
+
+	test("the entry is marked once the profile exists, before the bootstrap and the words", async () => {
+		let release!: (active: boolean) => void
+		bootstrapActiveProfile.mockReturnValueOnce(new Promise((resolve) => (release = resolve)))
+		const w = await mountCreate()
+		await choosePassword(w)
+		await w.get('[data-testid="onboarding-password-input"] input').setValue("password123")
+		await w.get('[data-testid="onboarding-password-confirm"] input').setValue("password123")
+		await w.get('[data-testid="onboarding-submit-create"]').trigger("click")
+		await flushPromises()
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(donePath(window.history.state)).toBe("password")
+		release(true)
+		await flushPromises()
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(true)
+	})
+
+	test("a Create mounted after the load check drops an earlier attempt's mark and keeps the router's keys", async () => {
+		settleResume()
+		window.history.replaceState({ position: 3, onboardingPath: "passkey" }, "")
+		await mountCreate()
+		expect(window.history.state).toEqual({ position: 3 })
 	})
 })

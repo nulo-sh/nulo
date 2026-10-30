@@ -109,27 +109,46 @@ describe("onboarding's theme", () => {
 })
 
 describe("onboarding's resume", () => {
-	test("a tab reopened over a profile it already made resumes at Ready", async () => {
-		config.getValue.mockResolvedValue("dark")
-		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+	/** Reloads on `path` with `state` as the entry's history state, then runs the shell's load check. */
+	async function reloadOn(path: string, state: Record<string, unknown> | null) {
+		router.currentRoute.value.path = path
+		window.history.replaceState(state, "")
 		const page = mountOnboarding()
 		await flushPromises()
-		expect(router.replace).toHaveBeenCalledWith("/onboarding/done")
+		return page
+	}
+
+	afterEach(() => {
+		router.currentRoute.value.path = "/onboarding/create"
+		window.history.replaceState(null, "")
+	})
+
+	test("a reload on Import whose import never landed stays on Import", async () => {
+		config.getValue.mockResolvedValue("dark")
+		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+		const page = await reloadOn("/onboarding/import", { position: 2 })
+		expect(router.replace).not.toHaveBeenCalled()
 		page.unmount()
 	})
 
-	test("a tab reloaded mid-import resumes at Ready on the import's path", async () => {
+	test.each([
+		["/onboarding/import", "import"],
+		["/onboarding/create", "password"],
+		["/onboarding/create", "passkey"],
+	] as const)("a reload on %s whose flow got a %s profile in resumes at Ready on its path", async (path, made) => {
 		config.getValue.mockResolvedValue("dark")
 		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
-		router.currentRoute.value.path = "/onboarding/import"
-		try {
-			const page = mountOnboarding()
-			await flushPromises()
-			expect(router.replace).toHaveBeenCalledWith(doneRoute("import"))
-			page.unmount()
-		} finally {
-			router.currentRoute.value.path = "/onboarding/create"
-		}
+		const page = await reloadOn(path, { position: 2, onboardingPath: made })
+		expect(router.replace).toHaveBeenCalledWith(doneRoute(made))
+		page.unmount()
+	})
+
+	test("a tab opened on Welcome over another window's session stays on Welcome", async () => {
+		config.getValue.mockResolvedValue("dark")
+		hydrateKnownProfile.mockResolvedValue({ id: "p1" })
+		const page = await reloadOn("/onboarding/welcome", null)
+		expect(router.replace).not.toHaveBeenCalled()
+		page.unmount()
 	})
 
 	test("a first run with no profile stays where it opened", async () => {

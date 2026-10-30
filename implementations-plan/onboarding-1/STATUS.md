@@ -6,3 +6,5 @@
 - 2026-10-30: Codex r2 conditional approve; settle gate on the clear, F5 wording, useConfirm.test import added.
 - 2026-10-30: Codex r3 conditional approve; the shell's finally clears the marker unless it routed to Ready.
 - 2026-10-30: Codex r4 approve; plan committed; OA-1 posted on #1387.
+- 2026-10-30: arc 1 phase 1 gate green: lint 0, typecheck:all 0, test 952 files passed; new shell confirm case red at base (no dialog), green after.
+- 2026-10-30: arc 1 phase 2 gate green: lint 0, typecheck:all 0, test 953 files passed; #1386 case red at base (replace to Ready), green after; chaos model's create.vue cites moved with the lines.

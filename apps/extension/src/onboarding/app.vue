@@ -15,7 +15,7 @@ import { usePopupStore } from "@/stores/popup.store"
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
 import { openPopupWindowAndClose } from "./hand-over"
-import { doneRoute } from "./steps"
+import { clearFlowPath, donePath, doneRoute, settleResume } from "./steps"
 
 const popupStore = usePopupStore()
 const router = useRouter()
@@ -51,20 +51,33 @@ onBeforeMount(() => {
 })
 
 onMounted(async () => {
-	const active = await hydrateKnownProfile()
-	if (active) {
-		// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.
-		await router.isReady()
-		router.replace(router.currentRoute.value.path === "/onboarding/import" ? doneRoute("import") : "/onboarding/done")
-		return
-	}
+	let resumed = false
+	try {
+		const active = await hydrateKnownProfile()
+		if (active) {
+			// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.
+			await router.isReady()
+			// An active profile alone proves nothing: another window may have unlocked it. Only an entry
+			// whose flow got a profile in resumes at Ready.
+			const path = donePath(window.history.state)
+			if (path) {
+				resumed = true
+				router.replace(doneRoute(path))
+			}
+			return
+		}
 
-	const profiles = await managers.profile.getProfiles()
-	if (profiles.length === 0) {
-		return
-	}
+		const profiles = await managers.profile.getProfiles()
+		if (profiles.length === 0) {
+			return
+		}
 
-	await openPopupWindowAndClose()
+		await openPopupWindowAndClose()
+	} finally {
+		settleResume()
+		// The check either sends a marked entry to Ready or leaves a fresh form, a failed check included.
+		if (!resumed) clearFlowPath()
+	}
 })
 
 onBeforeUnmount(() => {

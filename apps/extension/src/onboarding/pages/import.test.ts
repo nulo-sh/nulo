@@ -84,7 +84,7 @@ import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
 import type { BackupSelection } from "@/utils/full-backup-helpers"
 import OnboardingProfileNameField from "../components/OnboardingProfileNameField.vue"
 import OnboardingStepHeader from "../components/OnboardingStepHeader.vue"
-import { doneRoute } from "../steps"
+import { donePath, doneRoute, settleResume } from "../steps"
 import Import from "./import.vue"
 import { useNotificationStore } from "@/stores/notification.store"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
@@ -598,5 +598,44 @@ describe("onboarding import — the CTA predicates read only what each branch re
 		patch({ flow: importFlow.api!, backup: backupImport.api! })
 		await flushPromises()
 		expect(ctaReads.log).toEqual(expected)
+	})
+})
+
+describe("onboarding import — the reload mark", () => {
+	afterEach(() => window.history.replaceState(null, ""))
+
+	test("a phrase import marks the entry before its bootstrap", async () => {
+		let release!: (active: boolean) => void
+		bootstrap.bootstrapActiveProfile.mockReturnValue(new Promise((resolve) => (release = resolve)))
+		await mountImport()
+		const flow = importFlow.api!
+		flow.unlockMethod.value = "password"
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
+		flow.password.value = "password123"
+		flow.repeatedPassword.value = "password123"
+		await vi.waitFor(() => expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true))
+		const imported = flow.handleImportSeed()
+		await vi.waitFor(() => expect(bootstrap.bootstrapActiveProfile).toHaveBeenCalledTimes(1))
+		expect(donePath(window.history.state)).toBe("import")
+		release(true)
+		await imported
+	})
+
+	test("a restore marks the entry once its profile holds the session, before Continue", async () => {
+		await mountImport()
+		const backup = backupImport.api!
+		backup.restoreStage.value = "finalizing"
+		await flushPromises()
+		expect(donePath(window.history.state)).toBeUndefined()
+		backup.restoreStage.value = "restoring:account-state"
+		await flushPromises()
+		expect(donePath(window.history.state)).toBe("import")
+	})
+
+	test("an Import mounted after the load check drops an earlier attempt's mark", async () => {
+		settleResume()
+		window.history.replaceState({ position: 3, onboardingPath: "import" }, "")
+		await mountImport()
+		expect(window.history.state).toEqual({ position: 3 })
 	})
 })
