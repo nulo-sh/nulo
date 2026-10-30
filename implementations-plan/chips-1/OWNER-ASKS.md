@@ -17,3 +17,13 @@
   - B. Make it the padlock alone, named "Lock wallet", as the header's after this lane.
 - **Recommendation**: B in a later small change, so the two Lock chips read the same; the takeover bar has room, so nothing forces it.
 - **What ships now**: A. Arc 1 does not touch `TakeoverLayout.vue`.
+
+## OA-3: below 359 px the network chip keeps today's 3 px sides
+
+- **Surface**: the header network chip at widths under 359 px, which the Firefox sidebar reaches (its narrowest tested width is 240 px).
+- **What was found**: with 8 px sides at every width, at 240 px the row leaves the chip no room for its name, and its status dot sits 3 px across the chip's right border (measured, Chrome). Today's 3 px sides and 4 px gap keep the dot inside.
+- **Options**:
+  - A. 8 px sides at 359 px and wider, today's 3 px below, where the row already tightens. Nothing changes below 359 px.
+  - B. 8 px everywhere, and at the narrowest widths the chip hides its name and shows the dot alone. This needs a new layout rule.
+- **Recommendation**: A. The popup is 360 px wide, so every popup gets the 8 px sides.
+- **What ships now**: A. `appearance.test.ts` checks the dot at 240 px.

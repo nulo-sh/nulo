@@ -83,7 +83,7 @@ No trust boundary moves: no dApp input, message, permission, log line or depende
 
 ## UI impact
 
-- The header network chip: 8 px sides and a 6 px gap (was 3 px and 4 px).
+- The header network chip: 8 px sides and a 6 px gap (was 3 px and 4 px) at 359 px and wider, so in every popup; below 359 px it keeps today's 3 px and 4 px (D6, OA-3).
 - The Lock chip: the padlock alone at every width (was padlock and LOCK at 359 px and wider), named "Lock wallet". The takeovers' own Lock chip is unchanged (OA-2).
 - On a new install the default network reads "Alpha" wherever it is named: the header chip, Manage networks, the arrival title, the contacts import sender line and the chain-mismatch line. On every install, `getChainName` surfaces read "Alpha": the capabilities chain chip and a connected app's shared accounts. An install seeded before the rename keeps its row's name (#1364).
 - Sign-off, the owner on #1363 (2026-10-30): "For chips: nevermind about the seed, let's keep it as is, but maybe the user-facing thing is setting it as "ALPHA" wdyt?", then the pick **Seed "Alpha" + room**, whose stored-row clause names the known-limit fallback. The PR body quotes both, with the captures.
@@ -96,6 +96,7 @@ No trust boundary moves: no dApp input, message, permission, log line or depende
 | D2 | Lock: `padding: 0 6px` at every width, no gap, no Tooltip, `aria-label` kept | a Tooltip; a new padding | its icon-only form ships below 359 px; Header's textless buttons carry no Tooltip (F5). Accessibility call under the owner's 2026-10-19 delegation |
 | D3 | Remove `header-lock` from `NARROW_ACCEPTED` | keep it | it exempts nothing now, and kept it would hide a label that comes back |
 | D4 | No new e2e scenario; captures from a scratch spec | an assertion per seeded name | the 360 px check stays on the default; the unit layout pin holds the padding; the captures measure the rest |
+| D6 | Deviation, found in review: below 359 px the network chip keeps 3 px sides and a 4 px gap; `appearance.test.ts` checks its dot at 240 px | 8 px everywhere; hide the name at the narrowest widths | at 240 px (the Firefox sidebar) 8 px sides put the dot 3 px across the chip's border (measured); the old narrow values keep it inside. The second option is a new visible rule, so it is OA-3 |
 | D5 | Full smoke on both browsers, `audit:vue`, Storybook build, two network files | the six smoke files only; the full network suite locally; the v1.1.0 update replay | CLAUDE.md § Quality gates names the full smoke, `audit:vue` and the Storybook build for this edit; no network or stored behaviour changes, and the two network files read the name or the narrow fixture; with no row rewritten the replay meets nothing new (F3). CI's required lanes run the rest |
 
 ## Audit verdicts
@@ -103,6 +104,8 @@ No trust boundary moves: no dApp input, message, permission, log line or depende
 **Round 1.** Codex (gpt-6.1-sol, high, session `01a18d47`): `conditional approve`. Opus 5.5 Plan: `conditional approve`. Both reviewed the round-1 design, which renamed a stored row named exactly "Alpha V6" at the seed pass. Taken then and still standing: F5, F6, F7 and OA-2 (Opus); the measured fit and the 90 px arithmetic in I1 (Codex); the full UI gates, D5 (Codex); plain-language fixes (Opus). Folded into D1 by the final pass: both legs' finding that a name match overwrites a deliberate "Alpha V6" at every open, the write's failure policy, the replay change at `update-replay.test.ts:616`, the deletion-fence question (Codex rejected an orphan path itself) and the "Mainnet" rows.
 
 **Final pass.** Codex, fresh (gpt-6.1-sol, high, session `01a18d57`): `conditional approve (with conditions: take the authorized stored-row fallback or obtain explicit owner approval for deliberate-name overwrites; add the required Storybook build gate)`. It found the round-1 claim that D10 was authorized unsafe: the owner's fallback covers leaving rows unchanged, not undoing a deliberate name. Taken: D1 (the fallback, #1364), the Storybook build in Phase 2. It confirmed rejecting the deletion fence (the lock order admits no orphan) and found no new security weakness. Verification (resumed): `approve`; one wording fix in Security, taken.
+
+**Post-implementation.** Round 1: Codex (gpt-6.1-sol, high, session `01a18d6c`) `findings: 1`, and the Opus 5.5 diff review beside it `findings: 4`. Both found the dot crossing the chip's border at 240 px; measured and fixed (D6, OA-3), with a 240 px check in `appearance.test.ts`. Opus also found a stale comment in `appearance.test.ts` (fixed), a false clause about the header chips in `packages/design/README.md` (removed), and a second row named "Alpha" next to a custom "Alpha" (#1119's known limit; noted on #1119).
 
 ## Delivery
 
