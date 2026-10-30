@@ -58,6 +58,7 @@ type Internals = {
 		refreshSession: () => Promise<void>
 		getActiveProfile: () => Promise<{ id: string } | undefined>
 		captureExecutionFence: () => Promise<{ profileId: string; epoch: number; session: number }>
+		isFenceLive?: () => boolean
 	}
 	executionService: { executeOperations: (...args: unknown[]) => Promise<unknown>; claimPreviews: () => () => void }
 	dappSessionService: { tryGetDappSession: (id: string) => Promise<{ profileId: string } | undefined> }
@@ -171,26 +172,36 @@ describe("DappInteractionService forwards execution hooks (does not fire the bat
 		expect(observedFence).toEqual({ profileId: "p1", epoch: 0, session: 1 })
 	})
 
-	test("executeAndResolve aborts when the session ROW is gone — delete+re-import cannot ride an old approval", async () => {
-		// The payload's session is a snapshot from interaction CREATION; a delete
-		// + same-id re-import settling while the popup sat open makes the fence
-		// capture observe the successor's epoch (it passes). The purged session
-		// row is the discriminator: a re-import never resurrects it.
-		const executeOperations = vi.fn(async () => [])
-		const { svc, internals } = makeService({ executeOperations, tryGetDappSession: async () => undefined })
-		const id = "interaction-dead-session"
-		internals.storage.set(id, {
-			id,
-			payload: emptyPayload,
-			handleId: "handle-d",
-			cancellationToken: id,
-		} as unknown as DappInteraction)
+	test.each([
+		["live", true, "disconnect"],
+		["ended", false, undefined],
+	])(
+		"executeAndResolve aborts when the session ROW is gone; under a %s session it ends as the app's disconnect",
+		async (_name, live, end) => {
+			// The payload's session is a snapshot from interaction CREATION; a delete
+			// + same-id re-import settling while the popup sat open makes the fence
+			// capture observe the successor's epoch (it passes). The purged session
+			// row is the discriminator: a re-import never resurrects it. A read under
+			// an ended session reads no row either, and keeps the plain abort.
+			const executeOperations = vi.fn(async () => [])
+			const { svc, internals } = makeService({ executeOperations, tryGetDappSession: async () => undefined })
+			internals.profileService.isFenceLive = () => live
+			const id = "interaction-dead-session"
+			internals.storage.set(id, {
+				id,
+				payload: emptyPayload,
+				handleId: "handle-d",
+				cancellationToken: id,
+			} as unknown as DappInteraction)
 
-		await svc.approveInteraction(id, [])
-		await flush()
+			await svc.approveInteraction(id, [])
+			await flush()
 
-		expect(executeOperations).not.toHaveBeenCalled()
-	})
+			expect(executeOperations).not.toHaveBeenCalled()
+			const reason = internals.windowManager.cancel.mock.calls[0]?.[1]
+			expect(reason instanceof WindowEndedError ? reason.end : undefined).toBe(end)
+		},
+	)
 
 	test("executeAndResolve aborts (no dispatch) when the capture's profile differs from the session's", async () => {
 		const executeOperations = vi.fn(async () => [])
@@ -617,7 +628,13 @@ async function windowHarness(session: typeof SESSION = SESSION) {
 	)
 	collection.add(stub(NetworkService.name, { getNetworks: async () => [{ id: "net-1", chainId: 1 }] }))
 	collection.add(stub(AccountService.name, { getAccount: async () => ({ address: ADDRESS }) }))
-	collection.add(stub(DappSessionService.name, { tryGetDappSession: async () => session }))
+	collection.add(
+		stub(DappSessionService.name, {
+			tryGetDappSession: async () => session,
+			onDappSessionDeleted: new EventHandler(),
+			onVerificationRefused: new EventHandler(),
+		}),
+	)
 	collection.add(stub(ExecutionService.name, { executeOperations, claimPreviews: () => () => {} }))
 	collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
 	collection.add(stub(FpcService.name, {}))
@@ -899,7 +916,14 @@ describe("DappInteractionService — the capability window's known contracts", (
 		collection.add(stub(ProfileService.name, { getActiveProfile: async () => ({ id: "p1" }) }))
 		collection.add(stub(NetworkService.name, {}))
 		collection.add(stub(AccountService.name, {}))
-		collection.add(stub(DappSessionService.name, { getDappSession: async () => SESSION, tryGetDappSession: async () => SESSION }))
+		collection.add(
+			stub(DappSessionService.name, {
+				getDappSession: async () => SESSION,
+				tryGetDappSession: async () => SESSION,
+				onDappSessionDeleted: new EventHandler(),
+				onVerificationRefused: new EventHandler(),
+			}),
+		)
 		collection.add(stub(ExecutionService.name, {}))
 		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
 		collection.add(

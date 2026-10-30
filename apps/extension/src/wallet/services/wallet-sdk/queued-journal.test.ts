@@ -440,6 +440,12 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		["the window's X", "user_rejected", new WindowEndedError("User rejected", "close"), "drip_to_public"],
 		["a lock with the window open", "session_ended", new WindowEndedError("User rejected", "lock"), "Transaction"],
 		["a profile switch with the window open", "popup_bound", new WindowEndedError("User rejected", "switch"), "drip_to_public"],
+		[
+			"the app's disconnect with the window open",
+			"wallet_refused",
+			new WindowEndedError("The app was disconnected", "disconnect"),
+			"Transaction",
+		],
 		["a Reject that names no end", "popup_bound", new UserRejectedError(), "drip_to_public"],
 		["the approval window closing", "popup_bound", new JobCancelledError(), "drip_to_public"],
 		["any other failure", "popup_bound", new Error("session gone"), "drip_to_public"],
