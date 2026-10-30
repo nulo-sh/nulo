@@ -42,3 +42,19 @@ Verdict: conditional approve. Five findings, each checked against the tree; all 
 
 Re-run after the fixes: the changed integration tests 10 green; the panel test green on Firefox, 13.8 s.
 
+### Codex round 2 (resumed)
+
+Verdict: approve, no new findings.
+
+### Codex, fresh cross-arc pass (gpt-6.1-sol, high, read-only)
+
+Verdict: approve, no findings, over `git diff a4da1f36f..HEAD`. Each item of the table lands as stated; no helper shared by the two arcs drifted; #1157 has nothing uncovered under the plan's dispositions.
+
+## Gates on the head
+
+All at retry 0:
+- `bun run lint`, `bun run typecheck:all`: exit 0. `bun run test:all`: exit 0, the extension 16422 passed.
+- The model test: 30 consecutive runs, 266 tests each, all green (42-65 s a run).
+- `toolbar-panel.test.ts`: Firefox 6 passed, 137.0 s (the new test 15.5 s); Chrome 6 skipped.
+- Smoke chaos seeds 9001-9010: Chrome all pass, per seed 63.3, 34.3, 38.2, 28.2, 37.1, 37.1, 38.1, 46.0, 51.0, 39.0 s (mean 41 s; arc 1 measured 48 s). Firefox all pass, per seed 56.8, 73.5, 67.8, 57.0, 64.9, 66.4, 59.9, 71.6, 69.2, 63.7 s (mean 65 s; arc 1 73 s). No catalog change in arc 2, so the seeds plan as arc 1's did.
+

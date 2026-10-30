@@ -174,3 +174,5 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 
 - **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. A restore that fulfils with `restoreError` was counted as restored; one comment narrated its code.
 - **Opus review** (general-purpose), beside round 1: conditional approve; 5 findings, all accepted. The retry's own passkey answer is now asserted, so `step-failed` cannot come from a request already gone; the forged salt is standard base64, as stored; the window's outcomes are cleared before the unlock and asserted whole; the break test's title and comment claim only what it shows; the README and the Architecture line say what the test reads.
+- **Codex round 2** (resumed): approve, no new findings.
+- **Codex, fresh cross-arc pass** over the net diff from `a4da1f36f`: approve, no findings; every item lands as the table says, and #1157 has nothing left uncovered under its dispositions.

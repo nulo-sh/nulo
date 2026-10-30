@@ -13,3 +13,4 @@
 - 2026-10-30: arc 2 on `chaos-5-a2` off dev at arc 1's merge. 2.1 Firefox panel test green (14.9 s alone, 16.2 s in the file; file 125.1 s before, 123.0 s after), scratch break red; `:1177` assertion added.
 - 2026-10-30: 2.2 S7 tests green (8 ms, 308 ms, 350 ms for the bypassed break); I3 commented on #1206 (D16). 2.3 README; #1373, #1374 closed known limits, #1375 open.
 - 2026-10-30: arc 2 review round 1: Codex conditional approve (2 findings), Opus conditional approve (5 findings), all accepted and fixed; panel test green on Firefox 13.8 s.
+- 2026-10-30: Codex round 2 approve; cross-arc fresh pass approve. Gates on the head pass: lint, typecheck:all, test:all, model 30/30, panel file on both browsers, seeds 9001-9010 on Chrome (mean 41 s) and Firefox (mean 65 s).
