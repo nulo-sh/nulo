@@ -6,3 +6,7 @@
 - **Opus 5.5** (general-purpose): no functional bug. The same caret point (an RLM key on a Persian or Hebrew layout reaches it mid-word), the same comment, an overclaim in `stripBidiAndZeroWidth`'s TSDoc, and test hygiene (a `hint` helper defined twice; one test running two scenarios).
 - **Accepted:** the alias restores the caret after a strip (local, its own handler; a test red without it, with a visible-character control); `AddressInput`'s comment now says the pinning changes `scrollLeft`, never the value; the TSDoc says none of these characters hides in what a field keeps; `hint` at file scope; the press and Tab cases split.
 - **Not fixed here:** the caret at Send and Settings search. The fix belongs in `@nulo/design`'s `Input` (`handleInput` would restore the caret as its capped-paste path already does), which the plan's approval boundary excludes; the contact name field has the same behaviour today. Filed at close-out as a closed `known-limit` issue.
+
+## Round 2
+
+- **Codex** (resumed): **clean**. The caret restore runs after Vue's write-back, a null selection falls back, composition stays untouched until commit; the comment fixes and the split tests hold. The loop converged.

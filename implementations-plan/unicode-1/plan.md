@@ -156,6 +156,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | Holdings' token search and the account-state searches (D5 `bug` issue); a composition test; D3's reason; the security bullet; three Fact citations; the `AddressInput` comment; the probe by Tab and mouse, its `SHOTS_*` reads, a cap on its fix; NBSP and Hangul fillers in the `ux` issue | its finding 6 (an ask with stripping as default): D1 keeps the joiners instead |
 | plan 2 | Codex, resumed | reject | all `\p{Cf}` but the joiners still changes flags and Arabic number signs (D1 narrowed again); fixed-target spoofing has no work-factor analysis (exploitability unknown); the `InputEvent` guard; smoke's runtime flags; the base capture records on a timeout | none |
 | plan 3 | Codex, resumed | **conditional approve**: implementation settled; the narrowed contract needs ratification by the owner or an authorized scope decision-maker (A1) | bidi marks have a legitimate role in mixed-direction text, covered by the brief's "bidi controls"; wording made exact | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a18f1d) | findings | the alias restores its caret after a strip; the `AddressInput` comment names what holds (the pinning never changes the value) | the caret at Send and Settings search: the fix is in `@nulo/design`'s `Input`, past the approval boundary; a closed known limit |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings, no functional bug | the same two; the TSDoc overclaim; the `hint` helper hoisted and the press and Tab cases split | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified (caret after Vue's write-back, a null selection, composition untouched) | none |
 
 Over the 150-line target by the audit rows and D5's four filings.
 
