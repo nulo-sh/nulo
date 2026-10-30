@@ -8,3 +8,4 @@
 - 2026-10-30: Codex r4 approve; plan committed; OA-1 posted on #1387.
 - 2026-10-30: arc 1 phase 1 gate green: lint 0, typecheck:all 0, test 952 files passed; new shell confirm case red at base (no dialog), green after.
 - 2026-10-30: arc 1 phase 2 gate green: lint 0, typecheck:all 0, test 953 files passed; #1386 case red at base (replace to Ready), green after; chaos model's create.vue cites moved with the lines.
+- 2026-10-30: arc 1 phase 3 gate green: both builds, lint 0, typecheck:all 0, test:all green (extension 953 files); onboarding e2e files at retry 0, Chrome 63.95 s → 70.64 s, Firefox 102.67 s → 122.10 s (the reload scenario 6.6 s / 12.1 s).
