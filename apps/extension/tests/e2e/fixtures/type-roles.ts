@@ -593,7 +593,6 @@ export async function expectInsideView(page: Page, label: string): Promise<void>
  * log's box in its root), and the capabilities Details table narrows its columns instead.
  */
 export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
-	{ testid: "header-lock", why: "below 359 px the Lock chip keeps its icon; the button's name stays Lock wallet" },
 	{ testid: "network-name", why: "the network chip keeps the ellipsis it has, down to its status dot; the button names the network" },
 	{
 		testid: "activity-title-sep",

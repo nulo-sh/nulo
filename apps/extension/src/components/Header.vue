@@ -248,7 +248,6 @@ onBeforeUnmount(() => {
 				:class="$style.lock_chip"
 			>
 				<Icon name="lock" :size="15" color="primary" />
-				<span :class="$style.lock_label">Lock</span>
 			</button>
 
 		</Flex>
@@ -392,15 +391,14 @@ onBeforeUnmount(() => {
 	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 6px;
 
 	max-width: 120px;
 	flex-shrink: 1;
 	min-width: 0;
 	min-height: calc(1lh + 14px);
 
-	/* At the popup's width, 3px sides and the 4px gap hold "ALPHA V6", the default's name, whole. */
-	padding: 6px 3px;
+	padding: 6px 8px;
 	background: transparent;
 	border: 1px solid var(--nulo-border);
 	cursor: pointer;
@@ -426,11 +424,10 @@ onBeforeUnmount(() => {
 	composes: type--label-section from global;
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
 	flex-shrink: 0;
 
 	min-height: calc(1lh + 14px);
-	padding: 0 9px 0 7px;
+	padding: 0 6px;
 
 	background: transparent;
 	border: 1px solid var(--nulo-border);
@@ -452,25 +449,11 @@ onBeforeUnmount(() => {
 	}
 }
 
-.lock_label {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
-}
-
-/* Below the popup's width the row tightens and the Lock chip keeps only its icon, its name still "Lock
- * wallet", so the address stays whole and both chips stay inside the row. */
+/* Below the popup's width the row tightens, so the address stays whole and both chips stay inside it. */
 @media (width < 359px) {
 	.wrapper {
 		gap: 8px;
 		padding: 0 12px 0 16px;
-	}
-
-	.lock_chip {
-		padding: 0 6px;
-	}
-
-	.lock_label {
-		display: none;
 	}
 }
 

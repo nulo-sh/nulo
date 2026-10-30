@@ -31,7 +31,7 @@ test("with its name hidden, the network chip keeps the height the name gives it,
 	expect(declarationsOf(parsed, ".network_label").composes).toBe("type--label-section from global")
 	expect(declarationsOf(parsed, ".network_chip")).toMatchObject({
 		composes: "type--label-section from global",
-		padding: "6px 3px",
+		padding: "6px 8px",
 		border: "1px solid var(--nulo-border)",
 		"min-height": "calc(1lh + 14px)",
 	})

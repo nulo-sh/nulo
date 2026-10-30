@@ -58,7 +58,7 @@ One issue, one arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults:
   - Commands: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/network/ src/components/ui/utils.test.ts src/popup/pages/settings/networks/ --retry=0`; the `git grep` above.
   - Pass: exit 0, and the grep lists only the listing. Layers: lint, typecheck, unit, component.
 
-### Phase 2: The header
+### Phase 2: The header ✓
 
 - Make the Header change. Change `Header.test.ts:193-200` (text `""`, the title names the padlock alone) and `header-layout.test.ts:34` (`6px 8px`). Remove the `header-lock` entry of `NARROW_ACCEPTED`.
 - **Validation gate**:
