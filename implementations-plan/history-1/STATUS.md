@@ -3,3 +3,4 @@
 - 2026-10-30 panel round 1: Codex conditional approve, Opus conditional approve; all findings folded (D11, D12, D9 revised, F3 restated).
 - 2026-10-30 Codex round 2 (verification): approve; two low notes folded. Plan approved by the panel; auto-continue to arc 1.
 - 2026-10-30 arc 1 Phase 1 gate green: lint 0, typecheck:all 0, Phase 1 vitest set 416/416 at retry 0; reproducers red on base at the order assertion.
+- 2026-10-30 arc 1 Phase 2 gate green: lint 0, typecheck:all 0, 72 files / 1631 tests at retry 0, fee-race composition 24/24; reproducers red on base at the failed-row lookup, I1 pin green on base.

@@ -269,6 +269,19 @@ describe("FeeMethodSelector — in the real menu", () => {
 		w.unmount()
 	})
 
+	test("focus() puts focus on the trigger and leaves the menu closed", async () => {
+		const w = mount(FeeMethodSelector, {
+			props: { methods: baseMethods },
+			attachTo: document.body,
+			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, Icon: STUBS.Icon } },
+		})
+		;(w.vm as unknown as { focus: () => void }).focus()
+		await flushPromises()
+		expect(document.activeElement).toBe(w.get('[data-testid="send-fee-method-trigger"]').element)
+		expect(isOpen(w)).toBe(false)
+		w.unmount()
+	})
+
 	test("a loading row is out of the keyboard's reach: unfocusable and skipped by arrow keys", async () => {
 		const w = realMenu(loadingMethods)
 		await w.find("#trigger").trigger("click")

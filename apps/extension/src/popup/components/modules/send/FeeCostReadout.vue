@@ -19,7 +19,11 @@ const props = defineProps({
 	pending: { type: Boolean, default: false },
 	/** Send's amount field holds an amount. While `pending`, You pay draws a bar only then. */
 	amountTyped: { type: Boolean, default: false },
+	/** The current input's estimate failed: the row offers to ask again, as `retry`. */
+	failed: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(["retry"])
 
 const estimating = computed(() => props.isEstimating && !props.estimate && !props.pending)
 
@@ -80,6 +84,13 @@ const sponsoredSentence = computed(() => {
 		</span>
 		<FeeAmount v-else :class="$style.fee_value" :display="estimate" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 	</Flex>
+	<Flex v-else-if="failed && !pending" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-failed">
+		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.failed">
+			<span class="color--txt-danger">Couldn't estimate fee.</span>
+			<button type="button" :class="$style.retry" data-testid="fee-estimate-retry" @click="emit('retry', $event)">Try again</button>
+		</span>
+	</Flex>
 	<Flex v-else align="center" gap="4" :class="$style.detail_row">
 		<Icon name="info" size="12" color="tertiary" />
 		<Text variant="caption" color="tertiary">Fee estimated after simulation</Text>
@@ -117,6 +128,31 @@ const sponsoredSentence = computed(() => {
 
 .visually_hidden {
 	composes: visually_hidden from "./fee-shared.module.css";
+}
+
+.failed {
+	composes: type--body from global;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.retry {
+	composes: type--label-section from global;
+	line-height: inherit;
+	background: none;
+	color: var(--nulo-accent);
+	cursor: pointer;
+
+	&:hover {
+		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 }
 
 </style>

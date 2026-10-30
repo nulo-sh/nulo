@@ -77,7 +77,11 @@ const props = defineProps({
 	queuedCap: { type: Object, default: null },
 	/** Send's amount field holds an amount; read only while the card reads what can pay. */
 	amountTyped: { type: Boolean, default: false },
+	/** The current input's estimate failed: the cost row offers `retryEstimate`. */
+	estimateFailed: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(["retryEstimate"])
 
 const settings = defineModel()
 
@@ -284,6 +288,13 @@ watch(
 	{ immediate: true },
 )
 
+const methodSelector = ref(null)
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger above. */
+const onRetryEstimate = (event) => {
+	emit("retryEstimate")
+	if (event.currentTarget.matches(":focus-visible")) methodSelector.value?.focus()
+}
+
 const handleMethodPicked = (m) => {
 	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
 	if (m.checking) return
@@ -388,6 +399,7 @@ onBeforeUnmount(() => {
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
 		<FeeMethodSelector
+			ref="methodSelector"
 			v-else
 			:modelValue="displayMethod"
 			@update:modelValue="handleMethodPicked"
@@ -479,6 +491,8 @@ onBeforeUnmount(() => {
 			:offersQueue="offersQueue"
 			:payer="feePayer"
 			:queuedCap="queuedCapDisplay"
+			:failed="estimateFailed"
+			@retry="onRetryEstimate"
 		/>
 
 		<FeePriorityRow v-if="showsCostRows" v-model="selectedPriority" />

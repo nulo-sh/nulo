@@ -63,7 +63,7 @@ At 160 lines this plan is over the light target of 150: the audit verdicts keep 
   - Pass: every command exits 0; both reproducers red on the base at the order assertion and green after.
   - Layers: lint, typecheck, unit, component.
 
-### Phase 2: A failed estimate's state and retry
+### Phase 2: A failed estimate's state and retry ✓
 
 - Write the reproducer first, in `send.integration.test.ts` with `realFeeRow`; it must fail on the base at the `fee-estimate-failed` lookup, before the change: "a failed estimate shows its retry on the fee row; Try again asks the same estimate and Send turns on when it lands". The estimate rejects once. Assert: the snack call as today; `fee-estimate-failed` reads "You payCouldn't estimate fee.Try again" (whole `textContent`); Send off. Click `fee-estimate-retry` with `sendEvent`. Assert a second `estimateTransferFee` call with the first call's arguments but its token; after `estimateLands()`, `fee-estimate` shows and Send is on. After the press, the failure's snack is closed (`closeToast` called while `toast.value` is that snack); a snack opened after the failure is not.
 - Extend the existing input test (`:954`) with `realFeeRow` as the control: after the failure, a retyped amount re-asks and clears `fee-estimate-failed`; an emptied amount shows the idle hint.
@@ -111,6 +111,7 @@ No trust boundary moves: no dApp input, message, permission, stored shape, migra
 | D9 | The button is a native Tab stop in DOM order, ring on `:focus-visible`; a keyboard press moves focus to the fee method trigger; the snack's live region announces the failure | focus to the amount field; a live region on the row | accessibility calls under the owner's 2026-10-19 delegation: the trigger is the nearest control that stays, so the next Tab reaches what followed the button; one announcement, not two |
 | D10 | One arc, one PR | two stacked arcs | disjoint files, one commit per issue, half the CI runs |
 | D11 | A new question closes the failure's snack, by its id | leave it open; an owner ask | an error snack stays until closed, so after a retry lands it would contradict the card, against the brief's "make the card and the toast agree"; the id check spares any later snack; page-local, no timer or stored state; a behaviour change inside the sign-off, so no ask |
+| D13 | As built: the button takes Send's own inline action style (`requote_action`: `type--label-section`, accent, the 2 px ring), the line `color--txt-danger`; the keyboard-focus proof is split between `FeeMethodSelector.test.ts` (the real trigger takes focus, the menu stays shut) and `FeeSettingsCard.test.ts` (a `:focus-visible` press calls it, a pointer press does not) | `incoming-sync-retry`'s style; one integration case | that style shows focus by colour alone, against the house ring; the integration harness stubs `Flex` as a `div`, so focus there proves nothing |
 | D12 | Phase 2 asserts the retry's call count apart from the row, with `realFeeRow` in every case that reads the row | assert the row's absence alone | without `realFeeRow` the row is a stub and its absence passes on any code |
 
 ## Audit verdicts

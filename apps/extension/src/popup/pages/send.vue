@@ -54,7 +54,7 @@ import { vSnackFooter } from "@/composables/snackInset"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -317,6 +317,15 @@ const handleRequote = (e) => {
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
+/** The current input's estimate failed; the fee row offers to ask again. */
+const estimateFailed = ref(false)
+/** The snack that reported the failure: the next question closes it unless another replaced it. */
+let failureSnackId
+const clearEstimateFailure = () => {
+	estimateFailed.value = false
+	if (failureSnackId !== undefined && toast.value?.id === failureSnackId) closeToast()
+	failureSnackId = undefined
+}
 const clearQueued = () => {
 	feeQueued.value = false
 	queuedCap.value = null
@@ -454,7 +463,8 @@ const {
 		clearQueued()
 		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
 		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
-		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		estimateFailed.value = true
+		failureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
 })
 const isSending = ref(false)
@@ -609,6 +619,7 @@ watch(
 )
 
 function requestEstimate() {
+	clearEstimateFailure()
 	// An estimate simulates against the node: no work for a send the wall would refuse.
 	if (!legal.isCurrent.value) {
 		cancelFeeEstimate()
@@ -882,6 +893,7 @@ onBeforeUnmount(() => {
 						:isQueued="feeQueued"
 						:queuedCap="queueCap"
 						:amountTyped="Boolean(amountTerm)"
+						:estimateFailed="estimateFailed"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
@@ -891,6 +903,7 @@ onBeforeUnmount(() => {
 						v-model:feeDisplay="feeDisplay"
 						v-model:queuedCapText="queuedCapText"
 						v-model:accountUnusable="accountUnusable"
+						@retryEstimate="requestEstimate"
 					/>
 				</div>
 			</Flex>

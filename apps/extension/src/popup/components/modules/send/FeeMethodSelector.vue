@@ -15,7 +15,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(["update:modelValue", "open", "close"])
+/** Focuses the trigger without opening the menu. */
+defineExpose({ focus: () => trigger.value?.$el.focus() })
 
+const trigger = ref(null)
 const menu = computed(() => menuOrder(props.methods))
 
 /** A checking row answers nothing yet; the click stops here so the menu stays open. */
@@ -42,6 +45,7 @@ const onRowClick = (method, event) => {
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
 				<Flex
+					ref="trigger"
 					tag="button"
 					type="button"
 					align="center"
