@@ -83,3 +83,7 @@ History's day header reads OCT 30, 2026, the capture date. Alice's address `0x30
 | screenshot-3-1280x800.png | `fa4239c297182f725483835ab4399107a412271aba6c00bb957d7e7079b7c2da` |
 | screenshot-4-1280x800.png | `59cc2e6631654e9840d8c0b50cf180796b90c97a77d2fdbc9cba251884395c44` |
 | screenshot-5-1280x800.png | `6bedd04ee8f9b476b551467683288795cf4192dee22f34c167264f7ee9217235` |
+
+## Close-out
+
+- The owner signed the set on 2026-10-30, conditionally; the orchestrator checked both conditions on head c3ff40f38 (plan D5). Trunk at `9ce6bb0bd`, already merged; `index.md` and `lessons.md` unchanged since. No lesson promoted, no known limit, no open item.

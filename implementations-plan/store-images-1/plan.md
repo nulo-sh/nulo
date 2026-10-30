@@ -9,14 +9,29 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 9fba3c295
 trunk: dev
-status: approved
+status: closed (one PR, #1377, carries the set and the close-out; awaiting the merge)
 issues: "#1376 (filed in 1.0; dedupe: #364 and #627 closed, none open)"
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- Date: 2026-10-30.
+- Status: completed. One arc, #1377, with this close-out as its final commits, awaiting the merge.
+- Shipped: closes #1376.
+  - The five captures and the five 1280×800 frames, re-rendered from the current build: #1369's header, #812's marks, #1221's strict-mode line, #806's origin line and #1027's icons. The tile rendered byte-identical, so it is not in the diff.
+  - The owner's round: the spec writes `https://playground.nulo.sh` over the permission window's origin line just before frame 3's capture, after checking it named the run's own playground origin, and checks it held (D10). No product file changed.
+  - The owner signed the set (OA-1), quoted in D5.
+- Upload, the owner's, by hand: Chrome Web Store → Store listing → Graphic assets: the screenshots 1280×800 in order 1..5 and the small promo tile 440×280 (unchanged). Firefox Add-ons → Edit product page → Images: the same five screenshots. No image carries a launch date or a network endpoint.
+- Dispositions: byte-identical capture re-runs are impossible by design (the random phrase, F4, D2); `store-art.ts` reproduces every frame from fixed captures (1.3). #945, #986 and #1334 show in no frame (F3). D8 is superseded by D10. The frame's rounded device outline and #1370's `listing.md` note stay out (D7). A `waitForSelector` handle that came back null on the permission window gave way to the suite's evaluate-by-selector pattern; its cause was not traced, so nothing is promoted (lessons/phase-1.md).
+- Lessons: none promoted. Nothing here generalizes past this spec, and `lessons.md` holds 8192 of its 8192 bytes.
+- Known limits: none.
+- Open items: none.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
+
 ## Goal
 
-Re-render the store listing's eleven images from the current build: the five popup captures (`E/store/captures/*.png`), the five framed screenshots (`E/store/screenshot-{1..5}-1280x800.png`) and the promo tile (`E/store/promo-440x280.png`). `E` is `apps/extension`. Generated PNGs and, only if the staging no longer holds, the capture spec. No product file, prose, frame copy or template changes. One arc, one PR. Recon with its search trails: [recon.md](recon.md).
+Re-render the store listing's eleven images from the current build: the five popup captures (`E/store/captures/*.png`), the five framed screenshots (`E/store/screenshot-{1..5}-1280x800.png`) and the promo tile (`E/store/promo-440x280.png`). `E` is `apps/extension`. Generated PNGs and, only if the staging no longer holds, the capture spec. No product file, prose, frame copy or template changes. One arc, one PR. Recon with its search trails: [recon.md](recon.md). Over the light target (150 lines) by the Outcome and the owner's round (D10).
 
 ## Outcome & Quality Bar
 
@@ -43,7 +58,7 @@ Re-render the store listing's eleven images from the current build: the five pop
 - I2. The store-art frames and the tile are deterministic for fixed captures (embedded fonts, fixed viewport, no clock): two `store-art.ts` runs over the same captures give byte-identical PNGs. Phase 1.3 checks it.
 
 **Asks**
-- OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)): the owner signs the final set. It blocks the merge, not the arc (D5).
+- OA-1 ([OWNER-ASKS.md](OWNER-ASKS.md)): the owner signs the final set. It blocks the merge, not the arc (D5). Answered on 2026-10-30 (D5).
 
 ## Architecture & Implementation
 
@@ -58,7 +73,7 @@ Re-render the store listing's eleven images from the current build: the five pop
 - D2. No determinism work. The second run's per-file comparison is reported: which captures differ and which run-specific value causes it (address, hashes, capture date). Byte identity is required only of `store-art.ts` re-rendering the same captures (I2).
 - D3. Proverless run, the documented command (F5, I1).
 - D4. No new assertion for the chip fit. `appearance.test.ts:194-212` pins "Alpha" whole at 360 px; "TESTNET" (53.1 px of text in an 83.1 px chip, #1369's measure) is checked by eye on the 2× capture in 1.2. An assertion here would copy that inline check into an opt-in spec for one screen.
-- D5. Sign-off is OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md): the owner signs the final set at merge, by the PR's before/after table and the six SHA-256 sums it lists. Earlier PRs' sign-offs cover the changes inside the frames, not this public set (CLAUDE.md § UI changes, as Codex argued). The arc does not depend on the answer: the owner can sign only a set that exists, so the arc captures, reviews and opens the PR, and merge waits for the owner's words, quoted in the PR.
+- D5. Sign-off is OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md): the owner signs the final set at merge, by the PR's before/after table and the six SHA-256 sums it lists. Earlier PRs' sign-offs cover the changes inside the frames, not this public set (CLAUDE.md § UI changes, as Codex argued). The arc does not depend on the answer: the owner can sign only a set that exists, so the arc captures, reviews and opens the PR, and merge waits for the owner's words, quoted in the PR. **Owner sign-off**, 2026-10-30, given before the re-render, conditionally: "#1377: yes, signed if frame 3 reads that way and the rest changes only in those things." The orchestrator checked both conditions on head c3ff40f38: frame 3 reads `https://playground.nulo.sh`, and frames 1, 2, 4 and 5 differ from the previous set only in the test address and the tx-hash slices.
 - D6. The issue keeps the lane brief's title, `store: the listing images predate the chip, corner and network-switch changes`: it is true as dated (the images are older than all three). Its body says that #945, #986 and #1334 show in no frame (F3).
 - D8. Superseded by D10. First shipped as produced: `http://localhost:<port>`, #806's full-origin display over the run's own port. A fixed port is refused by run isolation. "SANDBOX" is unchanged from the signed set.
 - D10. Frame 3's origin line reads `https://playground.nulo.sh`. The owner, on #1377: "I don't like the "localhost:27493" is there a way we can have "playground" there or something? Even if we edit manually the html before the photo." Then: ""https://playground.nulo.sh" looks good, thanks". The spec writes that origin over the `capabilities-hostname` line just before the approve capture, as it already stages the network name and the quote. It first checks that the line names the run's own playground origin, and after the capture that the staged text held. No testid or product file changed. Nothing else in the window changes; the name line stays `nulo-playground`. From here, 1.2's check for frame 3 is that its origin line reads exactly `https://playground.nulo.sh`.
@@ -107,7 +122,7 @@ Re-render the store listing's eleven images from the current build: the five pop
 
 - Single arc on `worktree-store-images-1` against `dev`; plain `gh pr create`, no stack. Opened as #1377. The plan's close-out is the PR's final commits, after the orchestrator's word.
 - PR title: `chore(store): re-render the listing images from the current build` (64 characters). Body: per frame, the caption and a before/after pair (blob links at full SHAs, `?raw=true`); what changed and why; the gates with outcomes; the reproducibility result; `Closes #<1.0's issue>`; the owner's upload list (below). Opened without labels; the spec is opt-in, so no e2e label is needed (no lane covers it).
-- Owner's upload list: Chrome Web Store → Store listing → Graphic assets: screenshots 1280×800 in order 1..5, small promo tile 440×280. AMO → Edit product page → Images: the same five screenshots. The images carry no launch date (History's day header is the capture date) and no network endpoint (frame 3 shows the playground's public origin, staged by the spec, D10).
+- Owner's upload list: § Outcome. Frame 3 shows the playground's public origin, staged by the spec (D10).
 
 ## Post-implementation
 
