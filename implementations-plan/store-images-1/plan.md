@@ -10,7 +10,7 @@ eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 9fba3c295
 trunk: dev
 status: approved
-issues: "the store-images issue filed in 1.0 (none existed: `gh issue list --state all --search \"store images\"`)"
+issues: "#1376 (filed in 1.0; dedupe: #364 and #627 closed, none open)"
 post_implementation_hardening: not scheduled
 ---
 
@@ -66,28 +66,28 @@ Re-render the store listing's eleven images from the current build: the five pop
 
 ## Phases and gates
 
-### 1.0 File the issue
+### 1.0 File the issue ✓
 - Dedupe: `gh issue list --state all --search "store images"` and `--search "store captures"` (done at planning: #364, #627 closed; none open). File the issue with the five sections and the `ux` label. Write its number into this plan's front matter.
 
-### 1.1 Capture
+### 1.1 Capture ✓
 - Run from the worktree root: `STORE_CAPTURES=1 NULO_E2E_PROVERLESS=1 NULO_E2E_BROWSER=chrome NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/store-captures.test.ts`, polled to its end. The planning probe (F9) is this run if the base and this command are unchanged at approval.
 - On a red, read the cause. A stale selector or name: fix the spec (D1) and rerun. A host stall: one rerun after load falls (common brief).
 - Gate: exit 0; the log prints five `[store-captures] wrote store/captures/<name>.png` lines and every `scrollToFit` result is `{"scrolled":<n>}`.
 
-### 1.2 Frame and look
+### 1.2 Frame and look ✓
 - Run `cd apps/extension && bun scripts/store-art.ts`.
 - Look at all eleven PNGs with Read. For each: it is its intended screen, never an import, reveal or phrase screen; no URL, host or path but the playground's own origin on the approve frame, whose port must be the run's playground port, not its node port (`[resolve-ports]` line of the log); no password or key; no Manage networks page; no clipped or cut text in the header chips; Home's header reads "TESTNET" with its dot whole; the Lock chip is a padlock alone. History's day header is the capture date, not a launch date.
 - Compare each with its committed copy (`git show 9fba3c295:<path>`) and note what changed per frame for the PR body.
 - A frame that shows more than the landed changes imply (a new cut line, a missing row): stop, keep the PNGs uncommitted, and report it as an owner ask.
 - Gate: all eleven pass the checks above, recorded per file in `lessons/phase-1.md`.
 
-### 1.3 Reproducibility
+### 1.3 Reproducibility ✓
 - Copy the eleven PNGs that 1.2 looked at to a scratch directory outside the repository, with their SHA-256 sums.
 - Run 1.1's command a second time. Compare each capture's SHA-256 with run 1's. All five are expected to differ (F4, F10): view each pair with Read and record the cause per file.
 - Copy run 1's five captures back, then run `bun scripts/store-art.ts`. The six rendered PNGs must hash as run 1's did (I2); this also restores the reviewed set.
 - Gate: the store-art hashes match; every capture difference is a run-specific value (the captured account's address, hash slices, date, port). Alice's address comes from the sandbox's fixed initial accounts (`E/tests/e2e/fixtures/aztec.ts:146`), so it must match across the two runs. Any other difference stops the arc and goes to the report.
 
-### 1.4 Commit and fast gates
+### 1.4 Commit and fast gates ✓
 - Gate: `bun run lint`, `bun run typecheck:all` and `bun run test:all` exit 0; `cd apps/extension && bun --bun vitest run scripts/store-listing.test.ts scripts/store-icons.test.ts --retry=0` green. The build `audit:vue` adds already ran inside each capture run. Smoke e2e is not run: no popup file changes, and the smoke suite cannot see the store PNGs (D9).
 - Commit the changed PNGs in one commit: `chore(store): re-render the listing images from the current build`. Git records only the files that changed; the PR body names any that rendered identical (likely the tile).
 
