@@ -51,27 +51,29 @@ function splitEdit(prior: string, value: string): [head: string, inserted: strin
 }
 
 /** Where an inserted point goes: the text's only point, a re-read of the comma point as grouping,
- *  or nowhere. */
+ *  or nowhere, which `dropped` reports. */
 function placePoint(head: string, inserted: string, tail: string, typedComma: boolean, commaPoint: boolean) {
-	if (!inserted.includes(".")) return { text: head + inserted + tail, commaPoint }
-	if (!(head + tail).includes(".")) return { text: head + inserted + tail, commaPoint: typedComma }
+	if (!inserted.includes(".")) return { text: head + inserted + tail, commaPoint, dropped: false }
+	if (!(head + tail).includes(".")) return { text: head + inserted + tail, commaPoint: typedComma, dropped: false }
 	const grouping = inserted === "." && !typedComma && commaPoint ? GROUPING_POINT.exec(head) : null
-	if (grouping) return { text: `${grouping[1]}${grouping[2]}.${tail}`, commaPoint: false }
-	return { text: head + inserted.replaceAll(".", "") + tail, commaPoint }
+	if (grouping) return { text: `${grouping[1]}${grouping[2]}.${tail}`, commaPoint: false, dropped: false }
+	return { text: head + inserted.replaceAll(".", "") + tail, commaPoint, dropped: true }
 }
 
 /** A keystroke's text: a lone comma is the point, other characters go, and a text that stays plain
- *  takes `normalizeAmount`'s rules. */
-function typedText(edit: AmountEdit): { text: string; commaPoint: boolean } {
+ *  takes `normalizeAmount`'s rules. `refused` says a character the keystroke inserted went. */
+function typedText(edit: AmountEdit): { text: string; commaPoint: boolean; refused: boolean } {
 	let [head, inserted, tail] = splitEdit(edit.prior, edit.value)
 	if (edit.prior === edit.rested && edit.prior.includes(",")) {
 		head = head.replaceAll(",", "")
 		tail = tail.replaceAll(",", "")
 	}
 	const typedComma = inserted === ","
-	const placed = placePoint(clean(head), clean(typedComma ? "." : inserted), clean(tail), typedComma, edit.commaPoint)
+	const typed = typedComma ? "." : inserted
+	const taken = clean(typed)
+	const placed = placePoint(clean(head), taken, clean(tail), typedComma, edit.commaPoint)
 	const normalized = PLAIN.test(placed.text) ? normalizeAmount(placed.text) : undefined
-	return { text: normalized ?? placed.text, commaPoint: placed.commaPoint }
+	return { text: normalized ?? placed.text, commaPoint: placed.commaPoint, refused: taken !== typed || placed.dropped }
 }
 
 /** The text after the clamp, and its hint: a read hint shows at once after a paste and, after a
@@ -102,14 +104,16 @@ export function caretAfter(value: string, caret: number, text: string): number {
 /**
  * The field's text after one input event. A paste (or any `insertFrom*` or replacing edit) and an
  * edit of a kept text that does not read stay as they stand; a keystroke keeps digits, points and
- * commas, and a lone comma writes the point. Only a text that reads is clamped, on its reading.
+ * commas, and a lone comma writes the point. A keystroke that loses a character it inserted says so
+ * with the "unreadable" hint, whatever the text left reads as. Only a text that reads is clamped,
+ * on its reading.
  */
 export function nextAmountText(edit: AmountEdit): { text: string; commaPoint: boolean; hint: AmountHint } {
 	const pasteLike = isPasteLike(edit.inputType)
 	const kept = pasteLike || (edit.prior !== "" && !readAmountText(edit.prior, { rested: edit.rested, currency: edit.currency }).ok)
-	const typed = kept ? { text: edit.value, commaPoint: false } : typedText(edit)
+	const typed = kept ? { text: edit.value, commaPoint: false, refused: false } : typedText(edit)
 	const settled = settle(typed.text, edit, pasteLike)
 	// After the clamp, so a first "0" opens the decimals even for a token without them.
 	const text = !pasteLike && edit.data === "0" && edit.value === "0" ? "0." : settled.text
-	return { text, commaPoint: typed.commaPoint && text.includes("."), hint: settled.hint }
+	return { text, commaPoint: typed.commaPoint && text.includes("."), hint: typed.refused ? "unreadable" : settled.hint }
 }
