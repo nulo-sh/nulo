@@ -220,8 +220,8 @@ watch(
 
 .warning_block {
 	padding: 8px;
-	/* A name in the sentence is one word of any width. A row's flex item never shrinks below its
-	 * min-content width, which `anywhere` lowers and `break-word` does not. */
+	/* A name in the sentence can be one word of any width. A flex item's automatic minimum width
+	 * is its min-content width, which `anywhere` lowers and `break-word` does not. */
 	overflow-wrap: anywhere;
 }
 

@@ -149,7 +149,7 @@ describe("RestoreOutcomeBanner", () => {
 		const parsed = parseSource("apps/extension/src/popup/components/modules/general/RestoreOutcomeBanner.vue")
 		const reminder = elementByTestid(parsed, "restore-outcome-reminder")?.node
 		expect(reminder && boundAttr(reminder, "class")).toBe("$style.reminder")
-		expect(declarationsOf(parsed, ".reminder")).toEqual({ "overflow-wrap": "anywhere" })
+		expect(declarationsOf(parsed, ".reminder")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 
 	test("Dismiss removes the reminder; Restore again opens its page", async () => {

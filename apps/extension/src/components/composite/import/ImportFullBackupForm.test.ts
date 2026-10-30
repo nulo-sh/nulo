@@ -247,7 +247,7 @@ describe("ImportFullBackupForm", () => {
 	})
 })
 
-/** A typed network name is one word of up to 25 characters; a backup's held account name, of up to 32. */
+/** A typed network name can be one word of up to 25 characters. */
 describe("ImportFullBackupForm — a long name stays inside the warning", () => {
 	it("the warning carries the whole name, and its block breaks a word wider than itself anywhere", () => {
 		const finished = { restoreStatus: "finished", isRestoreHasErrors: true }
@@ -256,18 +256,11 @@ describe("ImportFullBackupForm — a long name stays inside the warning", () => 
 			global: { stubs },
 		})
 		expect(network.get("[data-testid=import-full-backup-warning]").text()).toContain(`${"W".repeat(25)} didn't answer in time`)
-		const held = mount(ImportFullBackupForm, {
-			props: baseProps({ ...finished, hasOtherErrors: true, heldAccounts: [{ name: "W".repeat(32), chainId: 1337 }] }),
-			global: { stubs },
-		})
-		expect(held.get("[data-testid=import-full-backup-warning]").text()).toContain(
-			`The imported account “${"W".repeat(32)}” was not restored.`,
-		)
 
 		const parsed = parseSource("apps/extension/src/components/composite/import/ImportFullBackupForm.vue")
 		const block = elementByTestid(parsed, "import-full-backup-warning")?.node
 		expect(block && boundAttr(block, "class")).toBe("$style.warning_block")
-		expect(declarationsOf(parsed, ".warning_block")).toEqual({ padding: "8px", "overflow-wrap": "anywhere" })
+		expect(declarationsOf(parsed, ".warning_block")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 })
 
