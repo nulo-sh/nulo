@@ -11,3 +11,4 @@
 - 2026-10-30: gate 3 green: network Chrome 7 passed (160 s), Firefox 6 passed 1 skipped by design (185 s).
 - 2026-10-30: gate 4 after capture done; pictures in screenshots/; phases 1 and 2 ✓.
 - 2026-10-30: review loop converged (Codex r1 findings fixed, r2 clean); final gates on the final head next.
+- 2026-10-30: final gates green on the final code head: test:all; smoke Chrome 26+1 skipped (157 s), Firefox 27 (259 s); network Chrome 7 (176 s), Firefox 6+1 skipped by design (215 s).
