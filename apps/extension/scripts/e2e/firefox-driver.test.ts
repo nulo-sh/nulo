@@ -701,7 +701,6 @@ describe("the file picker stand-in", () => {
 	})
 
 	describe("a pick through it", () => {
-		/** A stand-in that answers each command from `outcomes`, recording the commands it was sent. */
 		const standIn = (outcomes: Record<string, string[] | Error>) => {
 			const sent: string[] = []
 			const call = async (_declaration: string, args: string[]) => {
