@@ -49,7 +49,7 @@ async function text(page: Page, needle: string, timeout = 60_000): Promise<void>
 	await page.waitForFunction((t: string) => document.body.textContent?.includes(t), { timeout, polling: 100 }, needle)
 }
 
-/** Locks from wherever the popup is: the takeover replaces the Header and carries its own LOCK. */
+/** Locks from wherever the popup is: the takeover replaces the Header and carries its own Lock chip. */
 async function lockAnywhere(page: Page): Promise<void> {
 	if (await page.$('[data-testid="stale-network-lock"]')) {
 		await clickByTestId(page, "stale-network-lock")

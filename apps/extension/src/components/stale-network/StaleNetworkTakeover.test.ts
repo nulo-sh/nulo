@@ -95,7 +95,7 @@ function lines(root: Element): string[] {
 	return out
 }
 
-const TOP = ["TESTNET", "LOCK"]
+const TOP = ["TESTNET"]
 const KEEP = "Keep your profile, contacts and other networks."
 const REMOVE = "Remove old Testnet tokens and history from this device."
 /** The top bar's lock comes first; the eyebrow's mark is the second icon. */
@@ -131,8 +131,8 @@ describe("StaleNetworkTakeover — copy and order", () => {
 	test("A1 with one account, a renamed network, and the node line after the account line", () => {
 		const { wrapper } = mountTakeover(view({ name: "My Test", accounts: [view().accounts[0]!], switchToSeedNode: true }))
 		const text = lines(wrapper.element)
-		expect(text.slice(0, 2)).toEqual(["MY TEST", "LOCK"])
-		expect(text.slice(5, 9)).toEqual([
+		expect(text.slice(0, 1)).toEqual(["MY TEST"])
+		expect(text.slice(4, 8)).toEqual([
 			"RESETTING MY TEST IN NULO WILL",
 			"Move your account to the new My Test. Its address stays the same.",
 			"Use Nulo’s node for My Test. Yours is not serving the new My Test.",
@@ -162,8 +162,8 @@ describe("StaleNetworkTakeover — copy and order", () => {
 	test("both causes: A1 with the address line and no notice; one account reads singular", () => {
 		const { wrapper } = mountTakeover(view({ cause: { networkReset: true, addressesMoved: true }, accounts: [view().accounts[0]!] }))
 		const text = lines(wrapper.element)
-		expect(text[2]).toBe("NETWORK RESET")
-		expect(text[6]).toBe("Create your account again, with the same name, at a new address.")
+		expect(text[1]).toBe("NETWORK RESET")
+		expect(text[5]).toBe("Create your account again, with the same name, at a new address.")
 		expect(wrapper.find('[data-testid="stale-network-notice"]').exists()).toBe(false)
 		expect(text).toContain("You do not need your recovery phrase.")
 	})
@@ -191,7 +191,6 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		const { wrapper } = mountTakeover(view({ name: "Mainnet", blocked: true, cause: { networkReset: false, addressesMoved: true } }))
 		expect(lines(wrapper.element)).toEqual([
 			"MAINNET",
-			"LOCK",
 			"NEEDS A NULO UPDATE",
 			"Mainnet accounts paused",
 			"This version of Nulo cannot match your Mainnet accounts to their addresses, so it stopped using them. That is a fault in Nulo, not in your wallet, and a Nulo update fixes it.",
@@ -317,7 +316,6 @@ describe("StaleNetworkTakeover — copy and order", () => {
 		const { wrapper } = mountTakeover(local)
 		expect(lines(wrapper.element)).toEqual([
 			"LOCAL NETWORK",
-			"LOCK",
 			"NETWORK UPGRADE",
 			"Finish the Testnet reset first",
 			"Nulo resets one network at a time, and the Testnet reset has not finished.",
@@ -336,12 +334,11 @@ describe("StaleNetworkTakeover — copy and order", () => {
 			stale,
 		)
 		expect(eyebrowIcon(upgrade.wrapper.element)).toBe("no-signal")
-		expect(lines(upgrade.wrapper.element)[2]).toBe("NETWORK UPGRADE")
+		expect(lines(upgrade.wrapper.element)[1]).toBe("NETWORK UPGRADE")
 		const { wrapper } = mountTakeover(view({ networkId: "md", name: "My Devnet" }), stale)
 		expect(eyebrowIcon(wrapper.element)).toBe("no-signal")
 		expect(lines(wrapper.element)).toEqual([
 			"MY DEVNET",
-			"LOCK",
 			"NETWORK RESET",
 			"Cannot reach My Devnet",
 			"Nulo checks the network’s node before it removes anything. The node did not answer, so nothing was removed.",
@@ -401,7 +398,7 @@ describe("StaleNetworkTakeover — actions", () => {
 		expect(stale.start).toHaveBeenCalledWith(expect.objectContaining({ networkId: "tn" }))
 	})
 
-	test("the chip, SWITCH NETWORK and OPEN NETWORKS go to Networks; LOCK locks", async () => {
+	test("the chip, SWITCH NETWORK and OPEN NETWORKS go to Networks; the padlock locks", async () => {
 		const { wrapper } = mountTakeover(view())
 		await wrapper.find('[data-testid="stale-network-chip"]').trigger("click")
 		await wrapper.find('[data-testid="stale-network-switch"]').trigger("click")
