@@ -21,7 +21,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { markGetStarted } from "@/utils/get-started"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
-import { doneRoute } from "../steps"
+import { clearFlowPath, doneRoute, markFlowPath } from "../steps"
 
 /** Stores */
 import { useNotificationStore } from "@/stores/notification.store"
@@ -120,6 +120,8 @@ const {
 	// reminder stays until the phrase is saved.
 	onCreated: async (profile, credentialData) => {
 		if (!isMounted()) return
+		// The profile exists from here on, so a reload resumes at Ready: Create would make a second one.
+		markFlowPath(profile.type)
 		const typed = password.value
 		await watchSession(profile.id)
 		if (!isMounted()) return
@@ -157,6 +159,8 @@ async function onPhraseSaved() {
 	await markGetStarted(createdId, "phraseSaved")
 	if (isMounted()) leavePhrase()
 }
+
+onMounted(clearFlowPath)
 
 onBeforeUnmount(() => {
 	lifetime.invalidate()

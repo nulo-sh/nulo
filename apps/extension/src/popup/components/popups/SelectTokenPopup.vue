@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 
 /* The list's sticky search paints the sheet's colour, not the page's. */
