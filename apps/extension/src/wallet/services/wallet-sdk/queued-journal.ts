@@ -287,12 +287,14 @@ export type QueuedFailureKind = Extract<
 const TITLE_KEEPING_KINDS: ReadonlySet<QueuedFailureKind> = new Set(["popup_bound", "user_rejected"])
 
 /** A lock reads as the wallet's other lock refusals do; a profile switch is not the person refusing
- *  this send, so it does not read as one. */
+ *  this send, so it does not read as one; a disconnect reads as the app's calls it ended before they
+ *  ran. */
 const WINDOW_END_KINDS: Readonly<Record<WindowEnd, QueuedFailureKind>> = {
 	reject: "user_rejected",
 	close: "user_rejected",
 	lock: "session_ended",
 	switch: "popup_bound",
+	disconnect: "wallet_refused",
 }
 
 /** Fails a still-queued row with the error that ended its message before any claim, classified by
