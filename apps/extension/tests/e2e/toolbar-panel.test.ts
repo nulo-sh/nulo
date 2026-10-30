@@ -6,6 +6,7 @@
  * a file picker opened in the panel is recorded and fails the case. Outcomes are read from a control page opened beforehand, which moves
  * no focus.
  */
+import { randomBytes } from "node:crypto"
 import type { Browser, Page, Target } from "puppeteer"
 import { describe, expect } from "vitest"
 import { FIREFOX_ONLY, bringToFront, isFirefox, waitForTarget } from "./fixtures/browser"
@@ -37,6 +38,7 @@ import { contactsFiles, LONG_IMPORT_ROWS, longImportContacts, storedContacts } f
 import { expectFitsNarrow } from "./fixtures/type-roles"
 import { completeResetRitual } from "./helpers/crash-truth"
 import { readActiveAccount, submitEncryptedFullBackup, waitForActiveAccount, writeBackupToTemp } from "./helpers/import-drivers"
+import { pickOnLockScreen } from "./helpers/profile-chaos/ui"
 import { HANDBACK_KEY } from "@/utils/panel-handback"
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
@@ -355,6 +357,16 @@ async function refuseInWindow(auth: SessionAuthenticator): Promise<(win: Page) =
 	}
 }
 
+const rowKey = (id: string) => `nulo:core:profiles@${id}`
+
+const readRow = (control: Page, id: string) =>
+	control.evaluate(async (key: string) => (await chrome.storage.local.get(key))[key] as string, rowKey(id))
+
+const writeRow = (control: Page, id: string, raw: string) =>
+	control.evaluate(async (key: string, value: string) => chrome.storage.local.set({ [key]: value }), rowKey(id), raw)
+
+const rowField = (raw: string, field: "credentialId" | "prfSalt") => (JSON.parse(raw) as Record<string, string>)[field]
+
 describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 	test("create and unlock from the dying panel run in the passkey window", async ({ freshExtensionPerTest: ctx }) => {
 		const { browser } = ctx
@@ -409,6 +421,77 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			)
 			expect(unlocked.profile).toBe(created.profile)
 			await panelOn(browser, "#/popup/general")
+		} finally {
+			await auth.cleanup()
+		}
+	}, 240_000)
+
+	test("the passkey window binds another profile's passkey at an input of its own, and refuses a row changed while it waits", async ({
+		freshExtensionPerTest: ctx,
+	}) => {
+		const { browser } = ctx
+		const control = await openPopup(ctx)
+		const auth = await sessionAuthenticator(browser)
+		try {
+			await registerPasskeyProfile(control)
+			const main = await sessionProfile(control)
+			const mainRow = await readRow(control, main)
+			await clickByTestId(control, "header-lock")
+			await waitForHash(control, "#/popup/auth", 15_000)
+
+			// Main's is the only passkey on the authenticator, so the window's discovery answers with it.
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/auth")
+			for (const testid of NEW_PROFILE_FROM_LOCK_SCREEN) await clickInPanel(browser, testid)
+			const created = await stepFromDyingPanel(ctx, control, undefined, () => clickInPanel(browser, "register-passkey-reuse"))
+			const id = created.profile as string
+			const row = await readRow(control, id)
+			expect(rowField(row, "credentialId")).toBe(rowField(mainRow, "credentialId"))
+			expect(rowField(row, "prfSalt")).not.toBe(rowField(mainRow, "prfSalt"))
+			expect(await readRow(control, main)).toBe(mainRow)
+			await panelOn(browser, "#/popup/general")
+			await closeActionPopup(browser)
+
+			// The service asked the window at the row's input as it read it; a row changed while the
+			// window waits on Try again must open nothing once the passkey answers.
+			await clickByTestId(control, "header-lock")
+			await waitForHash(control, "#/popup/auth", 15_000)
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/auth")
+			await watchSessionWrites(control)
+			const forged = JSON.stringify({ ...JSON.parse(row), prfSalt: randomBytes(32).toString("base64") })
+			const before = new Set(ctx.browser.targets())
+			await auth.setUserVerified(false)
+			const win = await withDyingPanel(browser, async (death) => {
+				await clickInPanel(browser, "auth-submit")
+				const opened = await openedWindow(ctx, before, "#/windows/passkey")
+				await opened.waitForSelector('[data-testid="passkey-window"][data-state="failed"]', { timeout: 30_000 })
+				await recordCredentialGets(opened)
+				await writeRow(control, id, forged)
+				await auth.setUserVerified(true)
+				await clickByTestId(opened, "passkey-window-retry")
+				await opened.waitForSelector('[data-testid="passkey-window"][data-state="step-failed"]', { timeout: 30_000 })
+				expect(await readCredentialGets(opened), "the retry's passkey answered").toEqual([{ prf: true }])
+				expect((await death.record()).calls, "passkey and file prompts opened in the panel").toEqual([])
+				return opened
+			})
+			expect(await control.evaluate(() => (window as WriteProbe).__sessionWrites), "a session written").toEqual([])
+			expect(await readRow(control, id)).toBe(forged)
+			await writeRow(control, id, row)
+			await win.close()
+
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/auth")
+			expect((await stepFromDyingPanel(ctx, control, undefined, () => clickInPanel(browser, "auth-submit"))).profile).toBe(id)
+			await panelOn(browser, "#/popup/general")
+			await closeActionPopup(browser)
+			await clickByTestId(control, "header-lock")
+			await waitForHash(control, "#/popup/auth", 15_000)
+			await bringToFront(control)
+			await pickOnLockScreen(control, main)
+			await clickByTestId(control, "auth-submit")
+			await waitForHash(control, "#/popup/general", 60_000)
+			expect(await sessionProfile(control)).toBe(main)
 		} finally {
 			await auth.cleanup()
 		}

@@ -625,7 +625,12 @@ but a control that stops its own click (`RowAction`'s `@click.stop`) hides it th
   verification has failed, and CDP's `isBadUV` / `isBadUP` response bits fail nothing, so on Chrome
   the page answers that one request with Chrome's `NotAllowedError`. Both authenticators answer in
   milliseconds, so to read the page while a step waits on its passkey, hold the request with
-  `holdNextPasskeyRequest` and release it once read (`passkey-retry.test.ts`).
+  `holdNextPasskeyRequest` and release it once read (`passkey-retry.test.ts`). A page opened
+  mid-test takes focus, and Chrome then fails a passkey prompt from the page it left as not
+  confirmed: `bringToFront` the page that asks first (`raceMethodChangeElsewhere` in
+  `helpers/profile-chaos/unlock-method.ts`).
+- **A popup page opened while a session is open lands on Home once its bootstrap ends**, over any
+  route set before that: wait for `#/popup/general`, then route it (`secondWindow`, `raceMethodChangeElsewhere`).
 - **A mid-restore kill is two deliberately gated scenarios**, each enforcing its own contract: a
   kill at `service-restore` must roll back, a kill at `account-state` must recover. The
   `restore-gate` rendezvous anchors the kill at the named phase; a torn refusal is the failure

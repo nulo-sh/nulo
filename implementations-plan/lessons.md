@@ -20,7 +20,7 @@
 ## Extension runtime
 
 - A popup RPC fails 60 s after it began, the worker's Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it, so a send that lands reads as failed); a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s), [more](archive/account-session-life/lessons/phase-4.md), [more](archive/wallet-followups/lessons/phase-4.md)
-- `PopupManager` keeps a popup mounted while it is hidden: gate its setup on `show` or a `v-if`. A profile switch or unlock change elsewhere updates open pages in place: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/passkey-unlock-1/lessons/phase-A4.md)
+- `PopupManager` keeps hidden popups mounted: gate setup on `show` or `v-if`. A profile switch or unlock change elsewhere reboots open pages in place, unsetting `appStore.network` first: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/passkey-unlock-1/lessons/phase-A4.md), [more](archive/chaos-5/lessons/phase-1.md)
 - A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included: never name a local after a prop (Vue 3.5.42, 2026-10). [Evidence](archive/send-picker-1/lessons/phase-1.md)
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves the page only a best-effort `beforeunload`. [Evidence](archive/fee-estimate-cancel-1/plan.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
