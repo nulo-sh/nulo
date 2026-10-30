@@ -191,10 +191,10 @@ describe("Header — avatar/name/address split", () => {
 })
 
 describe("Header — lock", () => {
-	test("is a chip: the padlock and the word Lock, named for what it does", () => {
+	test("is a chip: the padlock alone, named for what it does", () => {
 		const lock = mountHeader().get('[data-testid="header-lock"]')
 		expect(lock.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("lock")
-		expect(lock.text()).toBe("Lock")
+		expect(lock.text()).toBe("")
 		expect(lock.attributes("aria-label")).toBe("Lock wallet")
 		expect(lock.attributes("type")).toBe("button")
 	})

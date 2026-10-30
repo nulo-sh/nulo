@@ -163,7 +163,7 @@ test("new contacts: Cancel and Escape change nothing, Import selected saves what
 		await pickContactsFile(page, file)
 		expect(await shownRows(page)).toEqual(allNew)
 		expect(await sectionCounts(page)).toEqual({ new: "4" })
-		expect(await senderLine(page)).toBe("1 sender will be registered on Alpha V6.")
+		expect(await senderLine(page)).toBe("1 sender will be registered on Alpha.")
 		await toastAfter(page, () => closeImportWith(page, "import-contacts-cancel"), "Contact import canceled")
 		expect(await storedContacts(page)).toEqual([])
 

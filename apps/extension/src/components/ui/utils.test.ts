@@ -5,7 +5,7 @@ import { getChainName } from "./utils"
 describe("getChainName", () => {
 	test.each([
 		[CHAIN_IDS.TESTNET, "Testnet"],
-		[CHAIN_IDS.MAINNET, "Alpha V6"],
+		[CHAIN_IDS.MAINNET, "Alpha"],
 		[CHAIN_IDS.SANDBOX, "Sandbox"],
 		[42, "Aztec:42"],
 	])("chain %i reads %s", (chainId, name) => {

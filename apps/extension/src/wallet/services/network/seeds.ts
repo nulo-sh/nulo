@@ -58,7 +58,7 @@ export const DEFAULT_SEEDS: DefaultSeed[] = [
 		isPrimaryActive: false,
 	},
 	{
-		name: "Alpha V6",
+		name: "Alpha",
 		rpcUrl: MAINNET_RPC_URL,
 		chainId: CHAIN_IDS.MAINNET,
 		l1ChainId: MAINNET_L1_CHAIN_ID,

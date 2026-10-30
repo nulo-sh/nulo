@@ -80,7 +80,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 		await pointerClick(page, "legal-consent-checkbox")
 		await pointerClick(page, "legal-continue")
 		await page.waitForSelector(ARRIVAL, { visible: true, timeout: 15_000 })
-		expect(await textOf(page, "network-arrival-title")).toBe("Alpha V6 is in your wallet")
+		expect(await textOf(page, "network-arrival-title")).toBe("Alpha is in your wallet")
 		expect(await readSurfaceTrace(page)).toEqual({ shown: ["sheet", "arrival"], arrivals: 1 })
 
 		// Closed unanswered, it is back at the next open.
@@ -127,7 +127,7 @@ describe.skipIf(CAPTURES)("network arrival", () => {
 				page = await openPopup(extension)
 				await unlockAfterBackgroundDeath(page)
 				await page.waitForSelector(`[data-testid="network-button"][data-status="${status}"]`, { visible: true, timeout: 30_000 })
-				expect(await textOf(page, "network-name")).toBe("Alpha V6")
+				expect(await textOf(page, "network-name")).toBe("Alpha")
 				expect(await page.$(ARRIVAL)).toBeNull()
 				await waitForSelectedAccount(page, (address) => address === onMainnet, "the same Mainnet account is selected", 30_000)
 
