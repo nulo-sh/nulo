@@ -255,11 +255,12 @@ function shouldSkipRecord(op: OperationRecord, age: number, unconditional: boole
  *  uses `sw_restart_post_prove` for proving — the exact post-SW-restart-mid-prove
  *  case where the new SW can't deliver the offscreen's prove result (no matching
  *  requestId); periodic ticks use `stuck_proving` — the proving op exceeded its
- *  35-min sanity ceiling within THIS SW's lifetime. Queued records past their
- *  grace window are "stuck" rather than "stale-on-resume" — they never made it
- *  past the message-arrival surface — tagged distinctly for observability. */
+ *  35-min sanity ceiling within THIS SW's lifetime. A queued record the restart
+ *  ended is interrupted like every other stage it ends; one past its grace window
+ *  within a lifetime is "stuck" — it never made it past the message-arrival
+ *  surface — tagged distinctly for observability. */
 function classifyReapKind(stage: OperationRecord["progress"]["stage"], unconditional: boolean): string {
 	if (stage === "proving") return unconditional ? "sw_restart_post_prove" : "stuck_proving"
-	if (stage === "queued") return "stuck_queued"
+	if (stage === "queued" && !unconditional) return "stuck_queued"
 	return "stale_on_resume"
 }
