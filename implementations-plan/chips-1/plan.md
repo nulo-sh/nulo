@@ -1,7 +1,7 @@
 ---
 plan: chips-1
 tier: light
-status: arc 1 implemented and reviewed; PR next
+status: completed; delivered as #1369, which carries this close-out
 issues: "#1363 (arc 1 closes); known limit #1364"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,19 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at a4da1f36f
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30. Planned and delivered the same day; one arc.
+- **Status:** completed. #1369 into `dev` carries the change and this close-out; its merge closes #1363 and archives this plan.
+- **Shipped:** the seed and `getChainName(MAINNET)` name the default "Alpha", with every expectation that named "Alpha V6" changed; the header Lock chip is its padlock alone at every width; the network chip takes 8 px sides and a 6 px gap at 359 px and wider, and keeps 3 px and 4 px below (D6); `appearance.test.ts` checks the chip's dot at 240 px; `header-layout.test.ts` reads the base and narrow rules apart. Twelve header captures under `screenshots/`.
+- **Review loop:** plan: Codex and Opus conditional approve, the final fresh Codex conditional approve (stored-row fallback, Storybook gate), verification `approve`; diff: Codex `findings: 1` and Opus `findings: 4`, then Codex `clean` twice.
+- **Gates:** lint, `typecheck:all`, `test:all`, `audit:vue`, `build-storybook` exit 0; the full smoke suite on Chrome and Firefox and two network files on both, retry 0 ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Dropped:** renaming stored rows (D1, the owner's fallback); the v1.1.0 update replay from the gates (D5).
+- **Known limits:** #1364. #1119 now also reads as two rows named "Alpha" (noted there).
+- **Open items:** #1370 (OA-1), #1371 (OA-2), #1372 (OA-3), each `owner-decision`.
+- **Lessons:** none promoted; `lessons.md` is at its budget. The `declarationsOf` merge note stays in `lessons/phase-3.md`.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # chips-1: the header's chips get room, and the default network reads "Alpha"
 

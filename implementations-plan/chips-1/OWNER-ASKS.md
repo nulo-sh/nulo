@@ -1,5 +1,7 @@
 # chips-1 owner asks
 
+Filed as `owner-decision` issues at close-out: OA-1 #1370, OA-2 #1371, OA-3 #1372.
+
 ## OA-1: two texts name the wallet's label for the default as "Alpha V6"
 
 - **Surface**: the Terms summary box (`legal/terms.md:13`: "it connects to Aztec Mainnet, shown in Nulo as Alpha V6, by default") and the store reviewer note (`apps/extension/store/listing.md:241-242`: "the wallet shows Alpha V6 as unavailable"). After this lane the wallet shows "Alpha".
