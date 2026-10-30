@@ -1,0 +1,16 @@
+# unicode-1, phase 0: planning consults
+
+## Plan audit, round 1
+
+- **Codex** (gpt-6.1-sol, high, session `01a18ee9`): **reject**. Findings: (1) the alias losing emoji joiners, variation selectors and script joiners is a behaviour a person would notice, so the owner decides it; (2) "the attacker gains nothing" overclaims: stripping turns a refused bidi paste into an accepted address; (3) the rejection of an `el.value` write-back was argued wrongly (a direct write works without a re-render); the `@input` handler still runs mid-composition; (4) `stripWireControl` keeps some invisible default-ignorables (combining grapheme joiner, Hangul fillers), so "refuses only what can be seen" is false; (5) tests miss a same-value insert, a composition and the blur auto-pick; (6) D5's "no migration because sealed" reason needs care; (7) smoke runs the last armed build, so the gate must rebuild first. Looks fine: field placement, the Chrome probe, the captures' proportion.
+- **Opus 5.5** (Plan leg, on the same round-1 draft): **conditional approve**. Accepted: Holdings' token search is the same defect on another field (D5 issue); a composition test; D3's real reason (Chrome fires no `input` after `compositionend`); the security bullet rewritten on the hex regex and on a chat sender; three Fact citations; the stale `AddressInput` comment; the probe through Tab and a mouse press, its own `SHOTS_*` reads, and a cap on the pre-authorized fix; NBSP and Hangul fillers in the `ux` issue. Its finding 6 (the alias's joined emoji as a non-blocking ask) is answered by D1 keeping the joiners instead.
+- **Decision after round 1:** both legs' joiner concern is settled by a typed-text rule that keeps the two joiners and the variation selectors (D1), so nothing a person sees changes beyond the bug and no owner ask is needed. Codex re-judges it in round 2.
+
+## Plan audit, round 2
+
+- **Codex** (resumed, same session): **reject**. (1) D1's round-2 class (all `\p{Cf}` but the joiners) still changes what a person sees (subdivision flags lose their tags, Arabic number signs go), so "nothing visible changes" was false; (2) the security bullet claimed impossibility without a work-factor analysis and did not separate a deceptive source from a fixed-target spoof; (3) the composition guard was unnamed, and the keyboard `isComposing` helper does not fit an `input` event; (4) smoke reads `NULO_E2E_CSP_REPORT` and `NULO_E2E_MIGRATION_FIXTURE` at run time, so a build flag alone silently drops those checks; (5) the base capture must record its state before a timeout.
+- **Decision:** D1 narrowed to the classes the brief names and the issues show: `\p{Bidi_Control}` plus the zero-width space, word joiner, BOM and soft hyphen. Nothing else a person could see changes, so no owner ask; the residue is a closed known limit (D5). Findings 2-5 accepted as written.
+
+## Plan audit, round 3
+
+- **Codex** (resumed): **conditional approve**. The implementation is settled. The condition: the owner or the orchestrator ratifies D1's narrower contract (A1 in OWNER-ASKS.md). Accepted: the bidi marks' legitimate role in mixed-direction text is stated (covered by the brief's "bidi controls"), and the zero-width space's word-boundary meaning is named. Under the lane's auto-continue rule a conditional verdict ends the session at the plan report.
