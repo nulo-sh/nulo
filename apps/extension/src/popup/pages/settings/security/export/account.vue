@@ -174,8 +174,9 @@ watchLockStart(
 		applyQueryPreselect()
 	},
 )
-// A passkey profile's file not made yet ends with a network switched from another window: its
-// approval and any pending export were given for the previous network. A made file is kept.
+// A passkey profile's file not made yet ends when this window's bootstrap re-resolves its network
+// (a profile change or a reopened session; never another window's network switch): its approval
+// and any pending export were given for the previous network. A made file is kept.
 watch(
 	() => appStore.network?.chainId,
 	() => {
