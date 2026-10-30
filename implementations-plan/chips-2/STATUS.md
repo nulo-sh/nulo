@@ -8,3 +8,4 @@
 - 2026-10-30 phase 2 green: cmp 0; lint 0; packages/legal 60 pass 1 skip; landing test 139 pass 1 skip; landing build 0 (terms/v1.2 and v1.2.1 built, terms.html says Alpha); store-listing + LegalAcceptanceSheet 19 pass. NULO_LAUNCH_GATE=1 refuses terms.md:3,571 as designed.
 - 2026-10-30 phase 3 green: red on the base component (13 failures), green on head; lint 0; typecheck:all 0; focused 128 pass 1 skip; test:all 0 (178 s, extension 16423 pass); audit:vue 0 (226 s); build-storybook 0.
 - 2026-10-30 phase 4: Chrome full smoke 62 files / 274 tests pass, 28 skipped, retry 0, 1680 s; after-captures taken; takeover chips 30 px and 30 px (padlock chip 37×30); review loop converged at round 1 (Codex clean, Opus clean). Firefox smoke running.
+- 2026-10-30 phase 4 green: Firefox full smoke 66 files / 278 pass, 24 skipped, retry 0, 2728 s; origin/dev merged; merged head lint, typecheck:all, test:all, three arc smoke files on Chrome and Firefox pass.

@@ -71,7 +71,7 @@ One arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults: [lessons/p
 - Make the TakeoverLayout change. In `TakeoverLayout.test.ts`, the lock test becomes "the lock chip is the padlock alone, named for what it does, and reports a press": icon `lock` at size 15 (the Icon stub gains `size`), text `""`, `aria-label` "Lock wallet", `type` button, one `lock` emit. Drop "LOCK" from the six dumps and move the five positions after it back by one, strings and order unchanged (F6). Rename the tests at `StaleNetworkTakeover.test.ts:404` and `NetworkArrival.test.ts:116`, "LOCK locks" becoming "the padlock locks". Fix the comment at `stale-network-captures.test.ts:52`.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/components/composite/TakeoverLayout.test.ts src/components/network-arrival/ src/components/stale-network/ src/utils/type-role-ban.test.ts --retry=0`; `bun run test:all`; `bun run audit:vue`; `bun run --cwd apps/extension build-storybook`. Pass: exit 0. Layers: lint, typecheck, unit, component, static scan, build, Storybook build.
 
-### Phase 4: Smoke on both browsers, captures after ☐
+### Phase 4: Smoke on both browsers, captures after ✓
 
 - Build the armed dist for Chrome and Firefox. Run the full smoke suite at retry 0, Chrome then Firefox (CLAUDE.md § Quality gates: a user-visible change): `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 [NULO_E2E_BROWSER=firefox] bun run test:e2e -- --retry=0`. It holds the takeover files, `type-roles.test.ts` and the edited `legal-acceptance.test.ts`. Record each wall-clock in `STATUS.md`.
 - Rerun Phase 1's two capture commands and the chip-height log on Chrome; save `screenshots/after-*`.
