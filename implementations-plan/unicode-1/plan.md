@@ -98,7 +98,7 @@ Simpler alternative: strip where each value is read (Confirm gate, alias project
   - Spoofing a fixed target X needs a key for Y, a bidi rearrangement of X. No work-factor analysis exists, so exploitability is unknown. Spoofing only the ends costs what a plain look-alike costs, and the field shows Y's real ends.
 - The alias reaches the dApp and now carries no bidi control or zero-width space. The rule is one character class with no quantifier, so it adds no ReDoS surface. No permission, storage shape, message, log line, dependency or CSP changes. Known limits: D5's first and third items.
 
-## Phase 1: reproduce and capture the base
+## Phase 1: reproduce and capture the base ✓
 
 Assumptions: Facts 2-6, I2. In this phase, change no file under `src/` except tests.
 1. Write D4's tests. Run them. Require red for the strip cases, and record the result of the hint case.
@@ -110,7 +110,7 @@ Assumptions: Facts 2-6, I2. In this phase, change no file under `src/` except te
 3. Copy the spec into `apps/extension/tests/e2e/network/`. Run gate 4 with `SHOTS_TAG=before`. Delete the copy.
 4. Record in `lessons/phase-1.md` whether Chrome showed the hint in (a), after a Tab out and after a mouse press. If it did not, find the cause before Phase 2. A cause inside `RecipientField.vue` is fixed there, and its test becomes the reproduction; any other cause is a plan change, so stop.
 
-## Phase 2: the rule at the three fields
+## Phase 2: the rule at the three fields ✓
 
 1. Make D1 and D3's changes. Run D4's tests and require green.
 2. Copy the capture spec in again. Run gate 4 with `SHOTS_TAG=after`, then delete the copy. Copy the pairs into `screenshots/` as `1388-<state>.png` and `1395-<field>-<state>.png`.
