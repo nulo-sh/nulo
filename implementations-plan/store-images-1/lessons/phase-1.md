@@ -59,3 +59,27 @@ History's day header reads OCT 30, 2026, the capture date. Alice's address `0x30
 ## Final-head gates
 
 - `bun run lint`, `bun run typecheck:all`, `bun run test:all` (16,420 extension tests passed), the two store tests at retry 0 (12 passed): all exit 0. The capture spec, run C, the same command: exit 0 in 160.3 s; its PNGs were discarded (`git checkout -- apps/extension/store`) and the eleven committed files re-hashed equal to run A.
+
+## Owner round: frame 3's origin (plan D10)
+
+- The spec writes `https://playground.nulo.sh` over the `capabilities-hostname` line (the testid already existed, `src/popup/windows/capabilities/index.vue:381`), after checking it reads the run's playground origin.
+- First attempt: the handle `window.waitForSelector(...)` returned was `null` on the permission window. The run failed with "the permission window has no origin line" (test 113.2 s), and no PNG was committed from it. No spec in the suite uses that handle; `waitForSelector` then `evaluate` by selector, the suite's pattern, works. Cause not traced.
+- Run 2 (the committed set): exit 0, test 110.0 s, run 160.0 s, ports node `:18448`, playground `:13608`. All eleven looked at with Read: frame 3 reads `https://playground.nulo.sh`, the name line `nulo-playground`; no node address, phrase or Manage networks page; TESTNET whole. Pixel bands against the previous set: home, send, history and security only at the header address (y70-89) and hash-slice rows; approve at y115-142 (the origin line) and y414-433 (the account row). The tile is byte-identical.
+- Run 3 (stability) and run 4 (final code, after the comment-only fixes): exit 0, test 111.2 s and 116.4 s, run 167.1 s and 169.7 s. Each one's approve differs from the committed one only at the account row: the staged line is pixel-identical. Their PNGs were discarded and the committed set re-hashed intact.
+- The `[aztec-node] Error: Address already in use` line in every run is the CLI's own anvil bind, which the runner announces as expected.
+- Gates at the final code: `bun run lint`, `bun run typecheck:all` exit 0; the store tests at retry 0, 12 passed; `bun run check:plans` 0 findings.
+- Codex (fresh session, high): approve; two comment fixes applied (plan § Owner round).
+
+| File | SHA-256 (the committed set after this round) |
+|---|---|
+| captures/approve.png | `019a214d8ac8625b3812fa601c87f07f96a13eacaf6ca65c88435c5d5ac0c4b5` |
+| captures/history.png | `5f3ad5370a05e091aea357932b2b0f53f102a072f0e2afa842e7653cb7b0e2fa` |
+| captures/home.png | `1dc0140b69570b5361da25694ab0896e89e18990a8a8e194e796ce3e1f9d9305` |
+| captures/security.png | `398a9249f3bc8d73ffb00f9f059fcbc7337aaf8eeaca970d590f981db346bdab` |
+| captures/send.png | `71dd8e16a19ecc628f9dacf1b6e8e83f6d8462440ccc8c358fa45743845d3e05` |
+| promo-440x280.png | `05381c4bdde67af68d8f1661caefc85346975f1eed81855d1a29d5b2e995999e` |
+| screenshot-1-1280x800.png | `44fc4ce8a78902edcf343e98d9e7a7d4d42819d24ad89cecd1cfe5a5473903cd` |
+| screenshot-2-1280x800.png | `7d6abe5f9bd7377a4c933888e406afecd307ac48b368102cadf2b2b25924591c` |
+| screenshot-3-1280x800.png | `fa4239c297182f725483835ab4399107a412271aba6c00bb957d7e7079b7c2da` |
+| screenshot-4-1280x800.png | `59cc2e6631654e9840d8c0b50cf180796b90c97a77d2fdbc9cba251884395c44` |
+| screenshot-5-1280x800.png | `6bedd04ee8f9b476b551467683288795cf4192dee22f34c167264f7ee9217235` |

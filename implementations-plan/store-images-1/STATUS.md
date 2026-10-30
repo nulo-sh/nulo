@@ -14,3 +14,4 @@
 - 2026-10-30: final-head gates pass: lint, typecheck:all, test:all, store tests, capture spec (run C, 160 s; committed set re-hashed intact). PR next.
 - 2026-10-30: PR #1377 opened ready (no labels), `Closes #1376`; checks running.
 - 2026-10-30: #1377 checks green: the five required (quality, smoke and network on Chrome and Firefox) pass; 50 pass, 6 skipped. Merge waits for OA-1 and the orchestrator.
+- 2026-10-30: owner round on #1377: frame 3's origin staged as https://playground.nulo.sh (D10); spec step and PNGs committed; four green capture runs after one red first attempt; Codex approve.

@@ -60,7 +60,8 @@ Re-render the store listing's eleven images from the current build: the five pop
 - D4. No new assertion for the chip fit. `appearance.test.ts:194-212` pins "Alpha" whole at 360 px; "TESTNET" (53.1 px of text in an 83.1 px chip, #1369's measure) is checked by eye on the 2× capture in 1.2. An assertion here would copy that inline check into an opt-in spec for one screen.
 - D5. Sign-off is OA-1 in [OWNER-ASKS.md](OWNER-ASKS.md): the owner signs the final set at merge, by the PR's before/after table and the six SHA-256 sums it lists. Earlier PRs' sign-offs cover the changes inside the frames, not this public set (CLAUDE.md § UI changes, as Codex argued). The arc does not depend on the answer: the owner can sign only a set that exists, so the arc captures, reviews and opens the PR, and merge waits for the owner's words, quoted in the PR.
 - D6. The issue keeps the lane brief's title, `store: the listing images predate the chip, corner and network-switch changes`: it is true as dated (the images are older than all three). Its body says that #945, #986 and #1334 show in no frame (F3).
-- D8. The approve frame's `http://localhost:<port>` ships as produced: it is #806's signed full-origin display over the run's own port, not a node address. A fixed port is refused by run isolation, and a host alias would change what the frame shows (the owner's). The PR names it beside the frame. "SANDBOX" is unchanged from the signed set.
+- D8. Superseded by D10. First shipped as produced: `http://localhost:<port>`, #806's full-origin display over the run's own port. A fixed port is refused by run isolation. "SANDBOX" is unchanged from the signed set.
+- D10. Frame 3's origin line reads `https://playground.nulo.sh`. The owner, on #1377: "I don't like the "localhost:27493" is there a way we can have "playground" there or something? Even if we edit manually the html before the photo." Then: ""https://playground.nulo.sh" looks good, thanks". The spec writes that origin over the `capabilities-hostname` line just before the approve capture, as it already stages the network name and the quote. It first checks that the line names the run's own playground origin, and after the capture that the staged text held. No testid or product file changed. Nothing else in the window changes; the name line stays `nulo-playground`. From here, 1.2's check for frame 3 is that its origin line reads exactly `https://playground.nulo.sh`.
 - D9. Gates: the lane brief's list, plus `test:all` (the common gate). Smoke e2e is left out: it drives the popup, which this arc does not change, and cannot see a store PNG.
 - D7. Out of scope, unchanged: `E/store/listing.md` (its reviewer note is #1370, the owner's), the frame copy, the templates' design (the frame's rounded device outline included), icons, a Firefox capture.
 
@@ -106,7 +107,7 @@ Re-render the store listing's eleven images from the current build: the five pop
 
 - Single arc on `worktree-store-images-1` against `dev`; plain `gh pr create`, no stack. Opened as #1377. The plan's close-out is the PR's final commits, after the orchestrator's word.
 - PR title: `chore(store): re-render the listing images from the current build` (64 characters). Body: per frame, the caption and a before/after pair (blob links at full SHAs, `?raw=true`); what changed and why; the gates with outcomes; the reproducibility result; `Closes #<1.0's issue>`; the owner's upload list (below). Opened without labels; the spec is opt-in, so no e2e label is needed (no lane covers it).
-- Owner's upload list: Chrome Web Store → Store listing → Graphic assets: screenshots 1280×800 in order 1..5, small promo tile 440×280. AMO → Edit product page → Images: the same five screenshots. The images carry no launch date (History's day header is the capture date) and no network endpoint (frame 3 shows the local test app's origin).
+- Owner's upload list: Chrome Web Store → Store listing → Graphic assets: screenshots 1280×800 in order 1..5, small promo tile 440×280. AMO → Edit product page → Images: the same five screenshots. The images carry no launch date (History's day header is the capture date) and no network endpoint (frame 3 shows the playground's public origin, staged by the spec, D10).
 
 ## Post-implementation
 
@@ -129,6 +130,10 @@ Each finding was checked against the tree; detail in [lessons/phase-0.md](lesson
 - **Codex round 1** (gpt-6.1-sol, high): conditional approve; 2 findings, both accepted. `test:all` ran at the head before 1.4 counts (exit 0); the 1.3 log gains its hashes, commands and run B's prefixes. It found only IHDR/IDAT/IEND chunks and the right sizes in all eleven PNGs.
 - **Opus review** (general-purpose), beside round 1: conditional approve; 2 findings, both accepted. #1027's repainted icons show in every frame and join the per-frame list (recon.md, OA-1, the PR body); the same `test:all` gap.
 - **Codex round 2** (resumed): approve, no remaining material finding; it re-checked the eleven hashes against HEAD.
+
+### Owner round (frame 3's origin, D10)
+
+- **Codex** (gpt-6.1-sol, high, a fresh session over `570e26e9d..HEAD`): approve, no correctness or security finding. Two comment findings, both accepted: the helper's comment restated its name and checks (deleted), and "as the window first shows it" no longer held once the origin line is staged (now "before any scroll"). It re-checked the pixel bands and the PNG chunks. On disclosure, it found the header comment's statement enough, plus one PR line saying the shown origin is staged.
 
 ## Seeds
 
