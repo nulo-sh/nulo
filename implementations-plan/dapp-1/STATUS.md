@@ -1,0 +1,4 @@
+- 2026-10-30 plan: recon done (two Sonnet explorers); plan drafted at 13bb2133c; #1382 left to the owner (not a one-line add).
+- 2026-10-30 audit: Codex round 1 (gpt-6.1-sol, high) conditional approve; folded: re-read after registration, superseded-handshake cleanup, proverless split + smoke, more controls.
+- 2026-10-30 audit: Opus round 1 conditional approve; folded (D8 onVerificationRefused, backstop narrowed, e2e list widened); D3 to the owner as OA-1.
+- 2026-10-30 gate: Codex final conditional approve → folded → verify approve. Plan approved for auto-continue (OA-1 and #1382 concern no surface arc 1 changes).
