@@ -387,6 +387,7 @@ onUnmounted(disposeWindow)
 					v-if="chainBannerState && dappChain"
 					data-testid="cap-chain-banner"
 					:data-state="chainBannerState"
+					:class="$style.chain_banner"
 					:variant="chainBannerState === 'switched' ? 'done' : 'info'"
 					direction="vertical"
 					wide
@@ -486,6 +487,12 @@ onUnmounted(disposeWindow)
 
 .sections {
 	padding: 16px;
+}
+
+/* A typed network name can be one word wider than the banner, and the action repeats it on a line
+ * of its own, so the whole banner breaks such a word; the action's shorter words still fit whole. */
+.chain_banner {
+	overflow-wrap: anywhere;
 }
 
 .note {
