@@ -318,6 +318,49 @@ describe("Input", () => {
 			expect([f.el.value, f.emitted()?.at(-1), f.refused()]).toEqual(["152", [152], false])
 		})
 
+		/** A Delete at the end of the text: the browser raises `beforeinput` and, with nothing to delete, no `input`. */
+		async function noOpDelete(f: ReturnType<typeof mountInt>) {
+			f.el.setSelectionRange(f.el.value.length, f.el.value.length)
+			await f.w.get("input").trigger("beforeinput", { inputType: "deleteContentForward" })
+		}
+		/** A composition committed over the whole text; Vue re-fires `input` as it ends. */
+		async function composeOverAll(f: ReturnType<typeof mountInt>, value: string) {
+			f.el.setSelectionRange(0, f.el.value.length)
+			f.el.value = value
+			await f.w.get("input").trigger("input", { inputType: "insertCompositionText", isComposing: true })
+			await f.w.get("input").trigger("input")
+		}
+
+		test.each([
+			[
+				"a composition after a no-op Delete",
+				(f: ReturnType<typeof mountInt>) => noOpDelete(f).then(() => composeOverAll(f, "\uff13\uff15")),
+			],
+			[
+				"an unannounced insertion after a no-op Delete",
+				async (f: ReturnType<typeof mountInt>) => {
+					await noOpDelete(f)
+					f.el.value = "1.5"
+					await f.w.get("input").trigger("input", { inputType: "insertText" })
+				},
+			],
+			["a drop placed away from the recorded caret", (f: ReturnType<typeof mountInt>) => edit(f, "3e90", 4, "insertFromDrop")],
+		])("%s is judged on its whole text and refused", async (_name, act) => {
+			const f = mountInt("30")
+			f.el.setSelectionRange(2, 2)
+			await act(f)
+			expect([f.el.value, f.emitted(), f.refused()]).toEqual(["30", undefined, true])
+		})
+
+		test("a caller's write ends a left-over record, so a refusal after it restores the written value", async () => {
+			const f = mountInt("30")
+			await noOpDelete(f)
+			;(f.w.vm as unknown as { write: (v: string) => void }).write("45")
+			await nextTick()
+			await composeOverAll(f, "\uff14\uff15")
+			expect([f.el.value, f.emitted(), f.refused()]).toEqual(["45", undefined, true])
+		})
+
 		test("leaving the field ends the error state", async () => {
 			const f = mountInt("15")
 			f.el.setSelectionRange(2, 2)

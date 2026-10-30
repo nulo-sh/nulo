@@ -153,7 +153,7 @@ const text = ref<string | number | null | undefined>(props.modelValue ? props.mo
 /** The `int` field refused an edit: its error state shows until it takes one, is left or is written. */
 const refused = ref(false)
 type EditStart = { text: string; start: number; end: number }
-/** The `int` field's text and selection as the edit in flight began; its `input` consumes it. */
+/** Text and selection at the `int` field's last `beforeinput`; an `input`, blur or write ends it. */
 let editStart: EditStart | null = null
 
 const warning = ref({
@@ -182,6 +182,7 @@ watch(
 	() => {
 		text.value = props.modelValue
 		refused.value = false
+		editStart = null
 	},
 )
 
@@ -236,15 +237,20 @@ const handleBeforeInput = (e: InputEvent) => {
 	editStart = { text: el.value, start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length }
 }
 
-/** What the edit put in: the raw text the recorded range now spans, or all of it with no record. */
-const insertedText = (raw: string, start: EditStart | null): string =>
-	start ? raw.slice(start.start, raw.length - (start.text.length - start.end)) : raw
+/**
+ * The text between the record's untouched ends, or null when the new text does not keep them: a
+ * no-op Delete raises `beforeinput` with no `input`, and a drop may land away from the selection.
+ */
+const insertedText = (raw: string, start: EditStart): string | null => {
+	const head = start.text.slice(0, start.start)
+	const tail = start.text.slice(start.end)
+	const framed = raw.length >= head.length + tail.length && raw.startsWith(head) && raw.endsWith(tail)
+	return framed ? raw.slice(head.length, raw.length - tail.length) : null
+}
 
 /**
- * The `int` field takes digits only. An edit that puts in anything else is refused whole: the field
- * shows the text and selection it had and emits nothing, so no number joined across a refused
- * character is ever emitted. Only the inserted text is judged, so a shown value that is not all
- * digits (`1.5`, from the caller) still takes a digit.
+ * Refuses whole an edit that inserts a non-digit. Only the inserted text is judged, so a caller's
+ * `1.5` still takes a digit, and the strip below joins it (`1.52` emits 152).
  */
 function takeIntEdit(event: Event) {
 	// Vue re-fires `input` once a composition ends; that edit is the one judged.
@@ -252,7 +258,7 @@ function takeIntEdit(event: Event) {
 	const el = event.target as HTMLInputElement
 	const start = editStart
 	editStart = null
-	if (/\D/.test(insertedText(el.value, start))) {
+	if (/\D/.test((start && insertedText(el.value, start)) ?? el.value)) {
 		const shown = start?.text ?? String(props.modelValue ?? "")
 		// The value first: assigning it moves the caret to the end.
 		el.value = shown
@@ -263,8 +269,7 @@ function takeIntEdit(event: Event) {
 	}
 	refused.value = false
 	const value = el.value.replace(/[^\d]/g, "")
-	// Parsed from the digits the field keeps, never the raw text, so a typed sign or separator
-	// cannot make the emitted number differ from the one shown.
+	// Parsed from the digits written back to the field, so the number emitted is the one shown.
 	let res = value ? Number.parseInt(value, 10) : 0
 	text.value = value ? value : 0
 
@@ -298,6 +303,7 @@ const handleFocus = () => {
 const handleBlur = () => {
 	isFocused.value = false
 	refused.value = false
+	editStart = null
 	emit("blur")
 }
 
