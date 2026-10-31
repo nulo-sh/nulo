@@ -68,7 +68,6 @@ describe("NetworkArrival", () => {
 		const { wrapper } = mountArrival()
 		expect(lines(wrapper.element)).toEqual([
 			"TESTNET",
-			"LOCK",
 			"NEW NETWORK",
 			"Mainnet is in your wallet",
 			"This version of Nulo adds Mainnet to your networks. You are still on Testnet.",
@@ -113,7 +112,7 @@ describe("NetworkArrival", () => {
 		expect(byId(wrapper, "network-arrival-stay").attributes("disabled")).toBeDefined()
 	})
 
-	test("the chip opens Networks and LOCK locks; neither answers", async () => {
+	test("the chip opens Networks and the padlock locks; neither answers", async () => {
 		const { wrapper, arrival } = mountArrival()
 		await byId(wrapper, "network-arrival-chip").trigger("click")
 		expect(H.push).toHaveBeenCalledWith("/popup/settings/networks")

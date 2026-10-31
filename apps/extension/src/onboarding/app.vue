@@ -4,16 +4,23 @@
 import { isServiceReady, managers } from "@/utils/core"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
+/** Components */
+import ConfirmPopup from "@/components/ConfirmPopup.vue"
+
 /** Composables */
 import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+
+/** Stores */
+import { usePopupStore } from "@/stores/popup.store"
 
 /** Utils */
 import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import type { Config } from "@/wallet/config"
 import { openPopupWindowAndClose } from "./hand-over"
-import { doneRoute } from "./steps"
+import { doneRoute, resumePath, settleResume } from "./steps"
 
+const popupStore = usePopupStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
 
@@ -47,20 +54,31 @@ onBeforeMount(() => {
 })
 
 onMounted(async () => {
-	const active = await hydrateKnownProfile()
-	if (active) {
-		// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.
-		await router.isReady()
-		router.replace(router.currentRoute.value.path === "/onboarding/import" ? doneRoute("import") : "/onboarding/done")
-		return
-	}
+	let resumed = false
+	try {
+		const active = await hydrateKnownProfile()
+		if (active) {
+			// The first navigation awaits the Terms guard, so the reloaded route may not be known yet.
+			await router.isReady()
+			// An active profile alone proves nothing: another window may have unlocked it. Only an entry
+			// whose flow got a profile in resumes at Ready.
+			const path = resumePath()
+			if (path) {
+				resumed = true
+				router.replace(doneRoute(path))
+			}
+			return
+		}
 
-	const profiles = await managers.profile.getProfiles()
-	if (profiles.length === 0) {
-		return
-	}
+		const profiles = await managers.profile.getProfiles()
+		if (profiles.length === 0) {
+			return
+		}
 
-	await openPopupWindowAndClose()
+		await openPopupWindowAndClose()
+	} finally {
+		settleResume(resumed)
+	}
 })
 
 onBeforeUnmount(() => {
@@ -79,7 +97,7 @@ onBeforeUnmount(() => {
 		<div id="dropdown" />
 		<div id="popover" />
 
-		<PopupManager />
+		<ConfirmPopup :show="popupStore.isOpened('confirm')" @onClose="popupStore.close('confirm')" />
 		<ToastManager />
 		<NotificationManager />
 		<MigrationBarrier />

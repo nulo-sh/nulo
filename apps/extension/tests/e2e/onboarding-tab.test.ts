@@ -8,6 +8,7 @@ import {
 	newPage,
 	openScratchPage,
 	prepareKeys,
+	reloadExtensionPage,
 	setViewport,
 	viewportOf,
 	waitForTarget,
@@ -143,6 +144,24 @@ describe("onboarding tab", () => {
 
 		// The step showed the wallet's own words: Settings reveals the same ones.
 		expect(await revealSeedPhrase(popup, TEST_PASSWORD)).toEqual(words)
+	})
+
+	// A real reload must keep the mark the flow wrote on its history entry, or the tab would offer
+	// Create again over the wallet it just made. jsdom cannot reload a document.
+	test("a reload on the phrase step resumes at Ready with the one wallet", async ({ freshExtensionPerTest: extension }) => {
+		const page = await openOnboarding(extension)
+		await clickByTestId(page, "onboarding-welcome-create")
+		await waitForHash(page, "#/onboarding/create", 10_000)
+		await clickByTestId(page, "onboarding-method-password")
+		await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
+		await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
+		await clickByTestId(page, "onboarding-submit-create")
+		await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 30_000 })
+
+		await reloadExtensionPage(page)
+		await waitForHash(page, "#/onboarding/done")
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		expect(await readProfileNames(page)).toEqual(["Main"])
 	})
 
 	test("create + passkey shows the phrase stage, and the passkey unlocks the same wallet after a lock", async ({

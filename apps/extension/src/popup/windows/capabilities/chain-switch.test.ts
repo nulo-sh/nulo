@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const LOCAL = { id: "n-local", chainId: 0, name: "Local Network" }
 const TESTNET = { id: "n-testnet", chainId: 1816023401, name: "Testnet" }
@@ -175,6 +176,13 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').text()).toBe("Switch wallet to Local Network")
 		expect(w?.find('[data-testid="identity-block"]').attributes("data-action-label")).toBe("wants to connect on Local Network")
 		expect(approveBtn()?.attributes("disabled")).toBeUndefined()
+	})
+
+	test("a name wider than the banner breaks at its edge: the whole banner wraps, since its action repeats the name", () => {
+		const parsed = parseSource("apps/extension/src/popup/windows/capabilities/index.vue")
+		const chainBanner = elementByTestid(parsed, "cap-chain-banner")?.node
+		expect(chainBanner && boundAttr(chainBanner, "class")).toBe("$style.chain_banner")
+		expect(declarationsOf(parsed, ".chain_banner")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 
 	test("an app asking for more: the sentence names the footer's Allow; the title and the switch stay", async () => {
