@@ -8,11 +8,12 @@ import { describe, expect, test } from "vitest"
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { Tx } from "@/wallet/services/transaction/spec"
+import { buildActivityRows } from "@/utils/activity-rows"
 import { type RecentTokenScope, buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
 const scope = { accountAddress: "0xme", chainId: 1, networkId: "net-1", profileId: "p1" }
 const tx = (over: Record<string, unknown>): Tx =>
-	({ hash: "0xh", account: "0xme", chainId: 1, profileId: "p1", updatedAt: 10, ...over }) as unknown as Tx
+	({ hash: "0xh", account: "0xme", chainId: 1, profileId: "p1", createdAt: 10, ...over }) as unknown as Tx
 const inc = (over: Record<string, unknown>): IncomingTransferRecord =>
 	({
 		id: "i",
@@ -180,7 +181,7 @@ describe("buildRecentActivityRows — read order", () => {
 		}
 		expect(reads({ account: "0xother" })).toEqual(["account"])
 		expect(reads({ chainId: 2 })).toEqual(["account", "chainId"])
-		expect(reads({})).toEqual(["account", "chainId", "profileId", "hash", "updatedAt", "hash"])
+		expect(reads({})).toEqual(["account", "chainId", "profileId", "hash", "createdAt", "hash"])
 	})
 })
 
@@ -188,7 +189,7 @@ describe("buildRecentActivityRows — order", () => {
 	test("newest first across kinds; block timestamp (seconds) is scaled to ms; a null terminalAt sorts as 0", () => {
 		const rows = buildRecentActivityRows({
 			journalOps: [op({ id: "j", terminalAt: 7 }), op({ id: "jnull", terminalAt: null })],
-			transactions: [tx({ hash: "h", updatedAt: 6_000 })],
+			transactions: [tx({ hash: "h", createdAt: 6_000 })],
 			incomingTransfers: [inc({ id: "blk", blockTimestamp: 8, discoveredAt: 1 }), inc({ id: "disc", discoveredAt: 5_000 })],
 			scope,
 			token: undefined,
@@ -196,10 +197,19 @@ describe("buildRecentActivityRows — order", () => {
 		expect(rows.map((r) => r.key)).toEqual(["incoming:blk", "tx:h", "incoming:disc", "journal:j", "journal:jnull"])
 	})
 
+	test("History and Home order sends by when they were sent, whatever their last status change", () => {
+		// A went out first and was finalized last, so its last status change is the newest.
+		const transactions = [tx({ hash: "a", createdAt: 1_000, updatedAt: 9_000 }), tx({ hash: "b", createdAt: 5_000, updatedAt: 5_000 })]
+		const history = buildActivityRows({ transactions, terminalJournalOps: [], incomingTransfers: [], ...scope })
+		const home = buildRecentActivityRows({ journalOps: [], transactions, incomingTransfers: [], scope, token: undefined })
+		expect(history.map((r) => r.key)).toEqual(["tx:b", "tx:a"])
+		expect(home.map((r) => r.key)).toEqual(["tx:b", "tx:a"])
+	})
+
 	test("equal sort keys keep insertion order: journal, then tx, then incoming", () => {
 		const rows = buildRecentActivityRows({
 			journalOps: [op({ id: "j", terminalAt: 5 })],
-			transactions: [tx({ hash: "h", updatedAt: 5 })],
+			transactions: [tx({ hash: "h", createdAt: 5 })],
 			incomingTransfers: [inc({ id: "i", discoveredAt: 5 })],
 			scope,
 			token: undefined,

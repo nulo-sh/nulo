@@ -186,6 +186,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [hd-delete-after-prove](hd-delete-after-prove/plan.md) — completed — a profile erase stops deleting bb.js's public CRS cache, which a page that loaded the CRS holds open, guarded by a prover-on e2e in the canary job
 - [hd-import-handshake-loss](hd-import-handshake-loss/plan.md) — completed — the PXE refuses to sync an account it lacks keys for and the wallet registers it first, so a backup import keeps third-party notes
 - [hd-same-token-concurrent-sends](hd-same-token-concurrent-sends/plan.md) — completed — a popup send that shares chain state with an in-flight send waits for its inclusion instead of failing; every send takes the slot
+- [history-1](history-1/plan.md) — completed — History and Home order sends by when they were sent (#1394); a failed Send fee estimate offers its retry on the fee row (#1392)
 - [holdings-loading-sync](holdings-loading-sync/plan.md) — completed — honest Home token loading states and an outcome-based incoming-scan health signal
 - [home-holdings-pin](home-holdings-pin/plan.md) — completed — Home shows three pinned tokens, and a Holdings tab owns the full list
 - [home-onboarding-2](home-onboarding-2/plan.md) — completed — the Firefox Presto permission row in place of the step and Settings → Proving, the optional loopback origins, focus to the page title when the row leaves with it; #132 already shipped
