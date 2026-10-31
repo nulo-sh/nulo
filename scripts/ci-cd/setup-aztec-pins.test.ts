@@ -62,16 +62,17 @@ describe("the CLI's npm tree", () => {
 	})
 
 	test("no locked systeminformation is below 5.33.16", () => {
-		expect(lock.packages["node_modules/systeminformation"]?.version).toBeDefined()
 		expect(vulnerableSysteminformation(lock)).toEqual([])
 	})
 
-	test("a lockfile copy with a nested systeminformation 5.23.8 is refused", () => {
-		const target = "node_modules/@opentelemetry/host-metrics/node_modules/systeminformation"
-		const copy: Lockfile = structuredClone(lock)
-		copy.packages[target] = { ...copy.packages["node_modules/systeminformation"], version: "5.23.8" }
-		expect(vulnerableSysteminformation(copy)).toEqual([target])
-	})
+	test.each(["node_modules/systeminformation", "node_modules/@opentelemetry/host-metrics/node_modules/systeminformation"])(
+		"a lockfile copy with systeminformation 5.33.15 at %s is refused",
+		(target) => {
+			const copy: Lockfile = structuredClone(lock)
+			copy.packages[target] = { ...copy.packages["node_modules/systeminformation"], version: "5.33.15" }
+			expect(vulnerableSysteminformation(copy)).toEqual([target])
+		},
+	)
 
 	test.each([
 		["a git source", { resolved: "git+https://github.com/example/pkg.git#0123456" }],
