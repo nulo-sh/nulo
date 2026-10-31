@@ -84,7 +84,7 @@ The recovery-phrase import and Create read the unlock method and the password on
 - **Gate**: phase 1's commands. Pass: exit 0; the `AuthMethodTabs` arrow case is red with the `onKeydown` guard removed.
 - **Result**: exit 0 each, 953 files; the arrow case red without the guard, and each page case red without its page's binding.
 
-### Phase 4: browsers and captures
+### Phase 4: browsers and captures ✓
 
 - Captures: a scratch spec in `~/.cache/nulo-backlog/import-tab-1/`, copied into `apps/extension/tests/e2e/` for one run and deleted after. It holds one phrase import and one create on the Password tab mid-run and clips the form, on the base build and on the arc's build. Commit the PNGs under `implementations-plan/import-tab-1/screenshots/`.
 - **Gate**:
@@ -92,6 +92,7 @@ The recovery-phrase import and Create read the unlock method and the password on
   - Build each browser with CI's smoke flags: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`.
   - From `apps/extension`: `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/onboarding-import.test.ts tests/e2e/import-paths.test.ts tests/e2e/duplicate-phrase-import.test.ts tests/e2e/registration.test.ts tests/e2e/onboarding-tab.test.ts --retry=0`, then again with `NULO_E2E_BROWSER=firefox`.
   - Pass: every command exits 0. No e2e scenario is added, so no wall-clock is owed.
+- **Result**: exit 0 each; `test:all` green in every workspace; the five smoke files at retry 0, 16 tests, Chrome 97 s, Firefox 162 s. Captures: [before-import](screenshots/before-import.png), [after-import](screenshots/after-import.png), [before-create](screenshots/before-create.png), [after-create](screenshots/after-create.png); mid-run, the base's tabs read `disabled=[false,false]` and the arc's `[true,true]`.
 
 ## Decision ledger
 
