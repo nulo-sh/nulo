@@ -5,3 +5,5 @@
 - 2026-10-30 phase 1 green: lint, typecheck:all, dapp-interaction + wallet-sdk vitest (43 files, 632 tests) at retry 0; new cases red on 049c97f98.
 - 2026-10-30 phase 2 green: lint, typecheck:all, operation-journal + journal-state vitest (11 files, 321 tests) at retry 0; new case red on 3e8cbda1b.
 - 2026-10-30 phase 3 green: lint, typecheck:all, playground bun test (3 pass), test:all, test:ci-gating (691 pass); cases 1 and 2 red on d8053b487.
+- 2026-10-30 phase 4: chrome prover-on network e2e 10 files / 19 tests green at retry 0.
+- 2026-10-30 phase 4: chrome proverless network e2e 2 files / 4 tests green at retry 0.

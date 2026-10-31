@@ -799,15 +799,18 @@ describe("DappInteractionService — a request an estimate refused ends as that 
 		expect(window.outcome.err).toBe(refusal)
 	})
 
-	test.each(["close", "lock", "switch"] as const)("a refused request ended by a %s still ends as its refusal", async (end) => {
-		const h = await windowHarness()
-		const window = await h.open()
-		const refusal = binding()
-		h.dapp.recordRefusal(window.id, refusal)
-		await h.dapp.rejectInteraction(window.id, "User rejected", end)
-		await expect.poll(() => window.outcome.settled).toBe(true)
-		expect(window.outcome.err).toBe(refusal)
-	})
+	test.each(["close", "lock", "switch", "disconnect"] as const)(
+		"a refused request ended by a %s still ends as its refusal",
+		async (end) => {
+			const h = await windowHarness()
+			const window = await h.open()
+			const refusal = binding()
+			h.dapp.recordRefusal(window.id, refusal)
+			await h.dapp.rejectInteraction(window.id, "User rejected", end)
+			await expect.poll(() => window.outcome.settled).toBe(true)
+			expect(window.outcome.err).toBe(refusal)
+		},
+	)
 
 	test("a cancel and the timeout keep their own end on a refused request", async () => {
 		const h = await windowHarness()

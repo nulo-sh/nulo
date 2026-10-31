@@ -137,7 +137,6 @@ describe("JournalReaper.reap", () => {
 		const after = await service.getOperation(rec.id)
 		expect(after?.progress.stage).toBe("failed")
 		expect(after?.error?.kind).toBe("stale_on_resume")
-		// The restart ended a request nobody confirmed: History reads it as interrupted, never as a failed send.
 		const op = after as NonNullable<typeof after>
 		expect(journalTerminalDisplay(op)?.state).toBe("interrupted")
 		expect(categoricalLabel(op).label).toBe("Interrupted before sending")

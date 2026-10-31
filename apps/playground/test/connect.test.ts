@@ -43,6 +43,8 @@ mock.module("@aztec-labs/wallet-sdk/manager", () => ({
 	WalletManager: { configure: () => ({ getAvailableWallets: () => discoveries.shift()?.session }) },
 }))
 mock.module("@nulo/wallet-sdk-schema-patch/register", () => ({}))
+// Under NODE_ENV=test the real module registers a field equality on `expect`, which Bun's lacks.
+mock.module("@aztec-labs/foundation/curves/bn254", () => ({ Fr: { ZERO: 0, fromString: (value: string) => value } }))
 Object.assign(globalThis, { window: { location: { href: "http://localhost/" } } })
 
 const { connect, disconnect, getProvider, getWallet } = await import("../src/lib/wallet")
@@ -50,7 +52,6 @@ const { getState, setState } = await import("../src/state")
 
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-/** Queues one discovery per press, in press order. */
 function presses(count: number) {
 	const queued = Array.from({ length: count }, fakeDiscovery)
 	discoveries.push(...queued)

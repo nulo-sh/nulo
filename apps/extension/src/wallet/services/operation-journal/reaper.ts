@@ -22,7 +22,7 @@
  *    per-stage grace windows. Catches records that get stuck within
  *    a single SW lifetime — rare, but possible if a downstream call
  *    hangs without throwing. Error kind = `stuck_proving` (proving) /
- *    `stale_on_resume` (others).
+ *    `stuck_queued` (queued) / `stale_on_resume` (others).
  *
  * Either way, the popup observes the transition via the journal
  * client's `subscribeJob` and shows the user a real terminal state
