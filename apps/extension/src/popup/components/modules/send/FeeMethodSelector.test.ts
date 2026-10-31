@@ -269,6 +269,23 @@ describe("FeeMethodSelector — in the real menu", () => {
 		w.unmount()
 	})
 
+	test("the trigger refuses a held Enter's repeats and takes a fresh one", async () => {
+		const w = mount(FeeMethodSelector, {
+			props: { methods: baseMethods },
+			attachTo: document.body,
+			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, Icon: STUBS.Icon } },
+		})
+		const trigger = w.get('[data-testid="send-fee-method-trigger"]').element
+		const press = (repeat: boolean) => {
+			const e = new KeyboardEvent("keydown", { key: "Enter", repeat, bubbles: true, cancelable: true })
+			trigger.dispatchEvent(e)
+			return e.defaultPrevented
+		}
+		expect(press(true)).toBe(true)
+		expect(press(false)).toBe(false)
+		w.unmount()
+	})
+
 	test("focus() puts focus on the trigger and leaves the menu closed", async () => {
 		const w = mount(FeeMethodSelector, {
 			props: { methods: baseMethods },

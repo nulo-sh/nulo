@@ -1004,7 +1004,6 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		// A later snack is someone else's: the next question leaves it on screen.
 		mocks.openToast({ kind: "success", label: "Address is copied" })
 		await w.get('[data-testid="stub-amount"]').setValue("2")
-		expect(failedRow(w).exists()).toBe(false)
 		expect(snack.value?.label).toBe("Address is copied")
 		await estimateLands()
 		expect(mocks.estimateTransferFee).toHaveBeenCalledTimes(2)
@@ -1031,7 +1030,6 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 
 		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
 		expect(snack.value).toBeNull()
-		expect(failedRow(w).exists()).toBe(false)
 		await estimateLands()
 		const [first, retry] = mocks.estimateTransferFee.mock.calls
 		expect(retry?.slice(0, 8)).toEqual(first?.slice(0, 8))

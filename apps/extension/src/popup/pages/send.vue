@@ -317,7 +317,6 @@ const handleRequote = (e) => {
 const feeQueued = ref(false)
 /** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
 const queuedCap = ref(null)
-/** The current input's estimate failed; the fee row offers to ask again. */
 const estimateFailed = ref(false)
 /** The snack that reported the failure: the next question closes it unless another replaced it. */
 let failureSnackId

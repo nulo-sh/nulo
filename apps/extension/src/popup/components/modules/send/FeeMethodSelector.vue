@@ -3,6 +3,7 @@
 import { Dropdown } from "@/components/ui/Dropdown"
 import mark from "@/components/composite/send/publish-mark.module.css"
 import { menuOrder } from "./fee-helpers"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 const props = defineProps({
 	modelValue: { type: Object, default: null },
@@ -44,10 +45,12 @@ const onRowClick = (method, event) => {
 		</Flex>
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
+				<!-- A retry below hands focus here mid-keypress: its held Enter must not open the menu. -->
 				<Flex
 					ref="trigger"
 					tag="button"
 					type="button"
+					@keydown.enter="refuseRepeatEnter"
 					align="center"
 					justify="between"
 					class="clickable"

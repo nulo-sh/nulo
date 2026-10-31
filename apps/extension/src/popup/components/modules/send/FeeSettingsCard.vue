@@ -119,6 +119,7 @@ const { shortSponsorIds, setAsideSponsorIds, lastVerdict, verifyingSponsorId } =
  *  and back to is served the store's retained list, and an id only ever names its own row. */
 const fpcEdits = reactive(new Map())
 const knownFpcs = computed(() => applyFpcEdits(registeredFpcs.value, fpcEdits))
+const methodSelector = ref(null)
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -288,7 +289,6 @@ watch(
 	{ immediate: true },
 )
 
-const methodSelector = ref(null)
 /** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger above. */
 const onRetryEstimate = (event) => {
 	emit("retryEstimate")
