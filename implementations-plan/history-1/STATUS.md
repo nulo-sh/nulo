@@ -1,9 +1,0 @@
-- 2026-10-30 planning started on base 13bb2133c; tier light (spawn prompt); recon: 2 sonnet explorers.
-- 2026-10-30 recon done (2 sonnet explorers); plan drafted (one arc, closes #1394 and #1392); OA1 (detail page time) recorded.
-- 2026-10-30 panel round 1: Codex conditional approve, Opus conditional approve; all findings folded (D11, D12, D9 revised, F3 restated).
-- 2026-10-30 Codex round 2 (verification): approve; two low notes folded. Plan approved by the panel; auto-continue to arc 1.
-- 2026-10-30 arc 1 Phase 1 gate green: lint 0, typecheck:all 0, Phase 1 vitest set 416/416 at retry 0; reproducers red on base at the order assertion.
-- 2026-10-30 arc 1 Phase 2 gate green: lint 0, typecheck:all 0, 72 files / 1631 tests at retry 0, fee-race composition 24/24; reproducers red on base at the failed-row lookup, I1 pin green on base.
-- 2026-10-30 arc 1 Phase 3: test:all exit 0 (2:34); smoke Chrome 5 files/20 tests green (2:37), Firefox green (4:08); network Chrome transfers + send-amount-exact + snack-placement 3 files/6 tests green (7:20).
-- 2026-10-31 network Firefox green (8:12). Review loop: Codex round 1 findings 2 (held Enter, comments), Opus 1 low + 2 nits; fixed in cb0371fa2; Codex round 2 clean.
-- 2026-10-31 final head (merged origin/dev): lint 0, typecheck:all 0, test:all 0; smoke Chrome 2:34 / Firefox 3:55; network Chrome 6:15 / Firefox 7:31; all retry 0. Pictures committed.

@@ -9,4 +9,4 @@
   - A. Keep the last status change (today). The page and the list can read out of step, as above.
   - B. Show when the send was made (`createdAt`, the moment the node accepted it). The page agrees with the list's order, as the journal page already shows its record's start (`popup/pages/journal/[id].vue:164-167`). The page reads, for the example, "Oct 30, 2026 at 15:08".
 - **Recommendation**: B. It is a one-line change with one test, in its own small PR.
-- **What ships now**: A, unchanged.
+- **What ships now**: A, unchanged. Filed as #1416 (owner-decision).

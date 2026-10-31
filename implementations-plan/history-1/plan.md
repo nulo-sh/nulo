@@ -1,7 +1,7 @@
 ---
 plan: history-1
 tier: light
-status: arc 1 implemented and reviewed; its PR into dev awaits the merge
+status: completed; delivered as #1415, which carries this close-out
 issues: "#1394, #1392 (arc 1 closes both)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,19 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at 13bb2133c
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-31. Planned on 2026-10-30; one arc.
+- **Status:** completed. #1415 into `dev` carries both fixes and this close-out; its merge closes #1394 and #1392 and archives this plan.
+- **Shipped:** History, Home, the token pages and the store order tx rows on `createdAt`, so a send keeps its place as it is mined and finalized (D1, D2). Send's fee row reads a failed estimate with a "Try again" button that asks the same estimate; a new question closes that failure's snack by id; a keyboard press keeps its place on the method trigger, which refuses a held Enter (D6, D9, D11). Pictures under `screenshots/`.
+- **Review loop:** plan: Codex conditional approve (5) and Opus conditional approve (9), all folded, then Codex approve; diff: Codex findings 2 and Opus 1 low + 2 nits, fixed in `cb0371fa2`, then Codex clean.
+- **Gates:** lint, `typecheck:all`, `test:all`, `check:plans` exit 0 on the final head; smoke (5 files) and network (3 files) green at retry 0 on Chrome and Firefox ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Dropped:** the integration-level focus case (D13: that harness stubs `Flex` as a `div`); C4's extra lifecycle cases (round 1, rejected with reasons).
+- **Known limits:** #1418.
+- **Open items:** #1416 (OA1, owner-decision: which time the transaction page shows); #1417 (the execute window and the authorization popups offer no retry after a failed estimate).
+- **Lessons:** none promoted; `lessons.md` is at its budget and this plan's notes are local to it.
+- **Seeds retired:** the `/goal` and `/loop` below; they are no live instructions.
 
 # history-1: History orders sends by when they were sent, and a failed fee estimate offers its retry
 
