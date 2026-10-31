@@ -1,7 +1,7 @@
 ---
 plan: sandbox-bind-1
 tier: light
-status: plan approved by the final Codex pass; arc 1 in progress
+status: delivered (PR open, merge pending)
 issues: none (the PR closes nothing)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 7bde519db
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-31.
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Shipped:** every node the network e2e setup starts takes an admin key drawn for that run; the mining hold sends it on admin calls only; after boot the setup fails the run unless the node refuses a keyless admin call and answers a keyed one. The README says how the sandbox listens and where the key goes. The PR closes no issue.
+- **Dispositions:** the node's listen address is left to upstream CLI support (D1); the listener check is dropped (D5). Anvil already listened on `127.0.0.1`. No e2e scenario added.
+- **Known limits:** none.
+- **Open items:** none filed here; what D1 leaves is tracked privately.
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; the README and the code comment at the node spawn carry both Aztec facts (no listen address; the disable option outranks the key hash).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # sandbox-bind-1: the network e2e node's admin RPC takes a per-run key
 
@@ -72,7 +83,7 @@ None. The change is test infrastructure; no screen, copy or row changes.
 
 **Validation gate**: `bun run lint && bun run typecheck:all && bun run test` exit 0, with the new test green. Layers: lint, typecheck, unit.
 
-### Phase 2: docs, browsers, CI-like runner
+### Phase 2: docs, browsers, CI-like runner ✓
 
 1. In `tests/e2e/README.md` § Running locally, add these two sentences: "Anvil listens on `127.0.0.1`; the node's listen address is Aztec's own, since 6.0.0's `aztec start` takes none." and "Each node the setup starts takes an admin key drawn for that run: the setup checks that the node refuses an admin call without it, and shares the key with the tests through `inject("aztecAdminKey")`, which only the mining hold reads."
 2. Run the mining-hold file on both browsers: `cd <worktree> && NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`.

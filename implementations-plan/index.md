@@ -3,4 +3,4 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [onboarding-1](onboarding-1/plan.md) — arc 1 in review, arc 2 waits on OA-1 — the onboarding tab's duplicate confirm, and reloads that land on a false Ready (#1385, #1386, #1387)
-- [sandbox-bind-1](sandbox-bind-1/plan.md) — arc 1 in progress — the network e2e node's admin RPC takes a per-run key
+- [sandbox-bind-1](sandbox-bind-1/plan.md) — closed, awaiting archive — the network e2e node's admin RPC takes a per-run key
