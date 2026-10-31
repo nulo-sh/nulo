@@ -12,6 +12,8 @@ const props = defineProps<{
 	activeClass: string
 	passwordTestid: string
 	passkeyTestid: string
+	/** Set while a run is in flight on the method shown: no tab takes a click or a key. */
+	disabled?: boolean
 }>()
 
 const LABELS: Record<AuthMethod, string> = { password: "Password", passkey: "Passkey" }
@@ -21,7 +23,7 @@ const testid = (m: AuthMethod) => (m === "password" ? props.passwordTestid : pro
 const tabs: Partial<Record<AuthMethod, HTMLButtonElement>> = {}
 
 const onKeydown = (e: KeyboardEvent) => {
-	if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+	if (props.disabled || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return
 	e.preventDefault()
 	method.value = method.value === "password" ? "passkey" : "password"
 	nextTick(() => tabs[method.value]?.focus())
@@ -29,7 +31,7 @@ const onKeydown = (e: KeyboardEvent) => {
 </script>
 
 <template>
-	<div role="tablist" :aria-label="ariaLabel" @keydown="onKeydown">
+	<div role="tablist" :aria-label="ariaLabel" :class="disabled && $style.disabled" @keydown="onKeydown">
 		<button
 			v-for="m in ORDER"
 			:key="m"
@@ -39,6 +41,7 @@ const onKeydown = (e: KeyboardEvent) => {
 			:aria-selected="method === m"
 			:tabindex="method === m ? 0 : -1"
 			:class="[tabClass, method === m && activeClass]"
+			:disabled="disabled"
 			:data-testid="testid(m)"
 			@click="method = m"
 		>
@@ -46,3 +49,11 @@ const onKeydown = (e: KeyboardEvent) => {
 		</button>
 	</div>
 </template>
+
+<style module>
+/* The design Input's disabled look. */
+.disabled {
+	opacity: 0.5;
+	pointer-events: none;
+}
+</style>

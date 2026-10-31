@@ -75,13 +75,14 @@ The recovery-phrase import and Create read the unlock method and the password on
 - **Gate**: phase 1's commands. Pass: exit 0; the new cases are red on the base copies of the two composables and the page.
 - **Result**: exit 0 each, 953 files; the six composable cases and the page case red on the base copies. The record is read through `admitUnlock()`, which restore's wrapper shares, so `useProfileImportFlow` stays inside its 80-line budget. The existing `onCreated` call-shape assertions name the new third argument.
 
-### Phase 3: the tabs refuse input while a run is in flight
+### Phase 3: the tabs refuse input while a run is in flight ✓
 
 - Do D5.
 - **Tests**:
   - `AuthMethodTabs.test.ts`: disabled, both tabs carry `disabled`; with the active tab focused while enabled, then disabled, ArrowRight leaves the model as it was.
   - One case in each page test (`onboarding/pages/import.test.ts`, `popup/pages/import.test.ts`, `onboarding/pages/create.test.ts`, `popup/pages/profile/new.test.ts`): the tabs are disabled while the run is pending and enabled after it ends.
 - **Gate**: phase 1's commands. Pass: exit 0; the `AuthMethodTabs` arrow case is red with the `onKeydown` guard removed.
+- **Result**: exit 0 each, 953 files; the arrow case red without the guard, and each page case red without its page's binding.
 
 ### Phase 4: browsers and captures
 

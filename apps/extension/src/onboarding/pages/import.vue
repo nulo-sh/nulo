@@ -197,6 +197,7 @@ onBeforeUnmount(() => {
 			:error="error"
 			:phraseVerdict="phraseVerdict"
 			:maxPasswordLength="maxPasswordLength"
+			:importing="isImporting"
 			@secretInput="handleSecretInput"
 			@passwordInput="handlePasswordInput"
 		/>

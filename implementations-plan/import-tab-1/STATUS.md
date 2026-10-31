@@ -7,3 +7,4 @@
 - 2026-10-31: Codex r3 approve; plan committed.
 - 2026-10-31: phase 1 gate green (lint, typecheck:all, test: 953 files); refusal rows red on base.
 - 2026-10-31: phase 2 gate green (lint, typecheck:all, test: 953 files); 7 new cases red on base.
+- 2026-10-31: phase 3 gate green (lint, typecheck:all, test: 953 files); guard and page bindings mutation-checked.

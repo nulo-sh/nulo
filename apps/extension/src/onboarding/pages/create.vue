@@ -206,6 +206,7 @@ onBeforeUnmount(() => {
 					:activeClass="$style.tabActive"
 					passwordTestid="onboarding-method-password"
 					passkeyTestid="onboarding-method-passkey"
+					:disabled="isCreating"
 				/>
 			</Flex>
 
