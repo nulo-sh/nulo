@@ -9,10 +9,24 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 9ce6bb0bd
 trunk: dev
-status: approved (final Codex pass); arc 1 in progress
+status: completed
 issues: "#1222"
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-30 to 2026-10-31. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as one PR into `dev`; its merge closes #1222 and archives this plan.
+- **Shipped:** each Firefox launch registers a stand-in for `@mozilla.org/filepicker;1` (`tests/e2e/fixtures/browser/firefox-file-picker.ts`) that cancels an unasked pick at once and holds the one `pickFile` arms for its page until it answers it with the file (D1, D3-D5); Firefox's `prepareClick` renews the page's activation before each scripted click (D8). `setFileInput`, `WEB_ELEMENT` and the `data-e2e-stale` stamp removed. Six unit cases on the slot and the pick's release (D6). `FIREFOX.md` states both mechanisms; the e2e-testing skill's flake ledger gains row 68.
+- **Review loop:** plan: Codex approve with changes, then approve; Opus approve with changes. Diff: Codex round 1 clean (a nit); Opus overturned D8's first mechanism (D8 revised); Codex round 2 chose the renewal (high confidence) with one plausible finding (D9); Codex round 3 clean (a nit).
+- **Gates:** the forced-focus red/green (base 3 of 3 missed, head 3 of 3 green); `toolbar-panel.test.ts` 10 of 10 on each side; the whole Firefox smoke suite, chaos seeds 9001-9005 and the whole Firefox network suite (proverless) green at retry 0; Chrome's `toolbar-panel` (skips) and `contacts-import` green; lint, `typecheck:all`, `test:all` exit 0 ([lessons/phase-1.md](lessons/phase-1.md), [lessons/phase-2.md](lessons/phase-2.md)).
+- **Budget:** `toolbar-panel.test.ts` on Firefox, median 119.5 s before and 118.9 s after, inside chaos-5's 115-137 s; Chrome skips the file. No scenario added.
+- **Dropped:** the named skip (D1); the BiDi dismissal (D2); D8's first fix, pointer presses for the contacts picks.
+- **Known limits:** #1410.
+- **Open items:** none.
+- **Lessons:** none promoted; the gotcha lives in `FIREFOX.md` and ledger row 68, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # flake-1: the Firefox driver answers the file picker itself
 
