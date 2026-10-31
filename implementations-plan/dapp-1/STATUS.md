@@ -7,3 +7,7 @@
 - 2026-10-30 phase 3 green: lint, typecheck:all, playground bun test (3 pass), test:all, test:ci-gating (691 pass); cases 1 and 2 red on d8053b487.
 - 2026-10-30 phase 4: chrome prover-on network e2e 10 files / 19 tests green at retry 0.
 - 2026-10-30 phase 4: chrome proverless network e2e 2 files / 4 tests green at retry 0.
+- 2026-10-31 phase 4: firefox prover-on network e2e 10 files / 19 tests green at retry 0.
+- 2026-10-31 phase 4: firefox proverless network e2e 2 files / 4 tests green at retry 0.
+- 2026-10-31 phase 4: smoke send-outcome-rows + rows green on chrome and firefox (12 tests each) at retry 0; captures shot on chrome, light and dark.
+- 2026-10-31 final local gates: audit:vue, test:all (transpiler cache off) green; Codex round 2 and Opus approve.
