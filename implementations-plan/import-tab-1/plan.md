@@ -1,7 +1,7 @@
 ---
 plan: import-tab-1
 tier: light
-status: plan approved by the panel (Codex r3 approve); arc 1 implementing
+status: arc 1 implemented, review loop converged (Codex r2 clean)
 issues: none
 driver: claude-code
 claude_model: opus
@@ -114,6 +114,9 @@ The recovery-phrase import and Create read the unlock method and the password on
 | Codex r2 | conditional approve (with conditions: keep the tests' timing out of the committed plan) | 1 (Phase 2's test lines state only the guarantee) | none |
 | Codex r3 | approve | none | none |
 | Opus Plan | conditional approve | 1 (as Codex 2), 2 (D4), 3 (the tab tests exercise the guard), 4 (the derivation sentence covers create and import only), 5 (F4, F6, `unlockFor` not called pure) | D6's 8-grapheme rule: Codex r1-6's scope argument is stronger |
+| Arc 1 Codex r1 | findings: 2 | 1 (a password create that fails after the tab moved: its test moves the tab mid-run) | 2 ("C1" is the composable layer CLAUDE.md defines; the "A1" marker sits in code this change does not touch) |
+| Arc 1 Opus | findings: 2 | 1 (`NewProfileMethodTabs` gets its own disabled case: the page test stubs it), 2 (two comments say only what holds now) | none |
+| Arc 1 Codex r2 | clean | none | none |
 
 ## Delivery
 

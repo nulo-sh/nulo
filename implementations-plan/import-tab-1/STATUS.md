@@ -9,3 +9,4 @@
 - 2026-10-31: phase 2 gate green (lint, typecheck:all, test: 953 files); 7 new cases red on base.
 - 2026-10-31: phase 3 gate green (lint, typecheck:all, test: 953 files); guard and page bindings mutation-checked.
 - 2026-10-31: phase 4 gate green (test:all; five smoke files on Chrome 97 s and Firefox 162 s, retry 0); captures committed.
+- 2026-10-31: arc review: Codex r1 two points (one accepted), Opus two points (both accepted), Codex r2 clean.

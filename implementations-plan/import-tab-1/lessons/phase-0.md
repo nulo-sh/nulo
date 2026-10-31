@@ -26,3 +26,13 @@
 ## Codex r3 (resumed)
 
 - Verdict: approve.
+
+## Arc 1 review round 1 (Codex gpt-6.1-sol high, and one Opus diff review)
+
+- Codex: two points. Accepted 1: a password create that fails after the tab moved had no test; the failure test now moves the tab mid-run. Rejected 2: "C1" is the composable layer CLAUDE.md defines, and the "A1" marker sits in error-banner code this change does not touch.
+- Opus: two low points, both accepted: `NewProfileMethodTabs` had no test of its `disabled` pass-through (the page test stubs it), and two comments described a caller or an ordering that no longer holds.
+- Each new test was checked red against its mutation.
+
+## Arc 1 review round 2 (resumed)
+
+- Codex: clean. The loop converged.
