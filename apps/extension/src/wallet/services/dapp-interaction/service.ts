@@ -75,6 +75,10 @@ export * from "./spec"
 
 const CANCELLED_BEFORE_APPROVAL = "Request was cancelled before approval"
 
+const appDisconnected = () => new WindowEndedError("The app was disconnected", "disconnect")
+
+type RevokedApp = { origin?: string; chainId?: string; profileId?: string }
+
 /** A capability payload also carries a session; only an execution payload has operations to run. */
 function isExecutionPayload(payload: DappInteraction["payload"]): payload is ExecutionPayload {
 	return "session" in payload && Array.isArray((payload as { params?: { operations?: unknown } }).params?.operations)
@@ -182,6 +186,48 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.operationJournal.onOperationUpdated.add((record) => {
 			if (record.progress.stage === "cancelled") this.cancelInteractionForJournal(record.id)
 		})
+		// The two events that end the app's channels (`wireSessionTeardown`) end its waiting requests too.
+		this.dappSessionService.onDappSessionDeleted.add((row) =>
+			this.endRequestsOfApp({ origin: row.dappMetadata?.url, chainId: row.chainId, profileId: row.profileId }),
+		)
+		this.dappSessionService.onVerificationRefused.add((app) => this.endRequestsOfApp(app))
+	}
+
+	/** Matched by origin, chain and profile, as the channels are: a purge emits a row's self-reported
+	 *  id. A fee question's send was approved already, and a disconnect does not stop an approved send. */
+	private endRequestsOfApp({ origin, chainId, profileId }: RevokedApp): void {
+		if (!origin || !chainId || !profileId) return
+		for (const interaction of [...this.storage.values()]) {
+			const { payload } = interaction
+			if (!("session" in payload) || isFeeQuestionPayload(payload)) continue
+			const { session } = payload
+			if (session.dappMetadata?.url === origin && session.chainId === chainId && session.profileId === profileId) {
+				this.endInteraction(interaction, appDisconnected())
+			}
+		}
+	}
+
+	/** A deletion that landed before registration found nothing to end. An absent row proves one only
+	 *  under a live session of its profile: a lock or a switch reads no row either, and the window's own
+	 *  guard ends it. Fire-and-forget, like the journal's reconciliation. */
+	private async reconcileRevokedSession(interactionId: string, session: DappSession): Promise<void> {
+		try {
+			const fence = await this.profileService.captureExecutionFence()
+			if (fence.profileId !== session.profileId) return
+			const row = await this.dappSessionService.tryGetDappSession(session.id)
+			if (row || !this.profileService.isFenceLive(fence)) return
+		} catch (err) {
+			this.logDebug("reconcile: session read failed", err)
+			return
+		}
+		const interaction = this.storage.get(interactionId)
+		if (interaction) this.endInteraction(interaction, appDisconnected())
+	}
+
+	/** The window closes only after the record is gone, so its close cannot reach the request first. */
+	private endInteraction(interaction: DappInteraction, rejection: Error): void {
+		this.storage.delete(interaction.id)
+		this.windowManager.cancel(interaction.handleId, rejection)
 	}
 
 	/** Close the approval popup of a live interaction whose queued journal
@@ -311,13 +357,11 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		if (!interactionRequest) {
 			return
 		}
-		this.storage.delete(id)
 		// Typed so the dApp sees EIP-1193 4001 / USER_REJECTED. `reason` is
 		// popup-authored and forwarded verbatim to the dApp — never route a
-		// dApp-influenced string here. The window closes only after this returns, so its close cannot
-		// reach the request first.
+		// dApp-influenced string here.
 		const rejection = isWindowEnd(end) ? new WindowEndedError(reason, end) : new UserRejectedError(reason)
-		this.windowManager.cancel(interactionRequest.handleId, rejection)
+		this.endInteraction(interactionRequest, rejection)
 	}
 
 	private async executeAndResolve(
@@ -371,6 +415,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			// profile) closes the creation→click window; the fence covers
 			// click→commit.
 			const liveSession = await this.dappSessionService.tryGetDappSession(payload.session.id)
+			if (!liveSession && this.profileService.isFenceLive(authorizedFence)) throw appDisconnected()
 			if (!liveSession || liveSession.profileId !== authorizedFence.profileId) {
 				throw new Error("Session no longer valid; aborting")
 			}
@@ -438,12 +483,17 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	}
 
 	/**
-	 * What the waiting dApp request is cancelled with. A Terms refusal keeps its class so the ingress
-	 * answers with the typed envelope, and logs at `debug`: it is expected, and a dApp retries.
+	 * What the waiting dApp request is cancelled with. A Terms refusal and the app's disconnect keep
+	 * their class, so the ingress answers with the typed envelope and the record reads as either, and
+	 * log at `debug`: both are expected.
 	 */
 	private describeApprovalFailure(kinds: string, error: unknown): string | Error {
 		if (error instanceof TermsAcceptanceRequiredError) {
 			this.logDebug(`executeAndResolve: refused [${kinds}]: terms not accepted`)
+			return error
+		}
+		if (error instanceof WindowEndedError) {
+			this.logDebug(`executeAndResolve: ended [${kinds}]: the app was disconnected`)
 			return error
 		}
 		this.logError(`executeAndResolve: failed [${kinds}]`, error)
@@ -599,6 +649,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// + registration, exactly as before; the caller adopts the pending
 		// promise after release.
 		let pending!: Promise<ExecutionResult | CapabilityResult | DiscoveryResult | FeeQuestionResult>
+		let registeredId!: string
 		await this.lock.withLock(async () => {
 			// 128-bit: the id names the request in a popup URL.
 			const id = randomIdNotIn((candidate) => this.storage.has(candidate), 16)
@@ -624,6 +675,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			}
 
 			this.storage.set(id, interaction)
+			registeredId = id
 
 			pending = handle.promise
 				.catch((error: unknown) => {
@@ -637,6 +689,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				})
 		})
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
+		if ("session" in payload && !isFeeQuestionPayload(payload)) void this.reconcileRevokedSession(registeredId, payload.session)
 		return pending
 	}
 
