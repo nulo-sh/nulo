@@ -1,7 +1,7 @@
 ---
 plan: history-1
 tier: light
-status: planned; panel approved (Codex round 2 approve)
+status: arc 1 implemented and reviewed; its PR into dev awaits the merge
 issues: "#1394, #1392 (arc 1 closes both)"
 driver: claude-code
 claude_model: opus
@@ -75,7 +75,7 @@ At 160 lines this plan is over the light target of 150: the audit verdicts keep 
   - Pass: every command exits 0; the reproducer red on the base as stated; the I1 pin green on base and head.
   - Layers: lint, typecheck, unit, component, composition.
 
-### Phase 3: Full gate, the e2e that reach both screens, and the pictures
+### Phase 3: Full gate, the e2e that reach both screens, and the pictures ✓
 
 - Run `bun run test:all`.
 - Smoke, Chrome then Firefox, from `apps/extension`: `[NULO_E2E_BROWSER=firefox] bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/home-links.test.ts tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts --retry=0`.
@@ -129,6 +129,8 @@ No trust boundary moves: no dApp input, message, permission, stored shape, migra
 - Both: no trust boundary moves; D2-D8 and D10 hold; the page ref is the right home (an engine option would be a contract for one caller).
 
 **Round 2** (Codex, resumed, verification): `approve, no new material findings`. Two low notes, folded: recon still read "broadcast order is Confirm order" and D1 said "only" (restated); D11 needs Send's toast double to carry ids, a `toast` ref and `closeToast` (Phase 2). It verified D11 cannot close a later snack, the trigger is always mounted on Send, the I1 pin is buildable with the sponsor paying throughout, and the C4 rejections.
+
+**Post-implementation** (diff `13bb2133c...HEAD -- apps/`). Round 1: Codex (gpt-6.1-sol, high, session `01a18f39`) `findings: 2`; Opus 5.5 diff review beside it `1 low, 2 nits`. Taken: a held Enter on Try again hands its repeats to the method trigger, whose clicks toggle the menu (both legs; plausible, the page's own `send-keyboard` pins the mechanism) → `refuseRepeatEnter` on the trigger and a selector case, CLAUDE.md § Keyboard & focus order; two absence checks hidden by the estimating bar either way (Opus) → removed; `methodSelector` into the card's state (Opus); `send.vue`'s `estimateFailed` doc (Codex). Rejected: Codex's call to drop the `failed`/`estimateFailed` prop docs (every prop in both files is documented, and these name the prop-to-event contract) and the `focus()` doc ("without opening the menu" is its contract). Round 2 (Codex, resumed): `clean`. Converged.
 
 ## Delivery
 
