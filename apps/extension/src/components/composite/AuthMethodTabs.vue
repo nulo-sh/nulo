@@ -12,7 +12,7 @@ const props = defineProps<{
 	activeClass: string
 	passwordTestid: string
 	passkeyTestid: string
-	/** Set while a run is in flight on the method shown: no tab takes a click or a key. */
+	/** No tab takes a click or a key. */
 	disabled?: boolean
 }>()
 

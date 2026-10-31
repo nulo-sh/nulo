@@ -116,8 +116,8 @@ const {
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
 	// The words open with the password the profile was created under, or with the passkey answer it
-	// was made from, so they are read before either is dropped; a failed read still reaches Ready,
-	// where Home's reminder stays until the phrase is saved.
+	// was made from; a failed read still reaches Ready, where Home's reminder stays until the phrase
+	// is saved.
 	onCreated: async (profile, credentialData, typed) => {
 		if (!isMounted()) return
 		// The profile exists from here on, so a reload resumes at Ready: Create would make a second one.

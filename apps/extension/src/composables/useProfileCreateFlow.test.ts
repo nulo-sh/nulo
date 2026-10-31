@@ -303,14 +303,20 @@ describe("useProfileCreateFlow", () => {
 		},
 	)
 
-	test("password create failure notifies with isPasskey=false", async () => {
-		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
+	test("password create failure notifies with isPasskey=false, whatever the tab shows by then", async () => {
+		const failed = deferred<never>()
+		profileApi.createProfile.mockReturnValueOnce(failed.promise)
 		const { flow, opts } = makeFlow()
 		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		await flow.handleCreate()
+		const submitted = flow.handleCreate()
+		await flushPromises()
+		expect(profileApi.createProfile).toHaveBeenCalledOnce()
+		flow.authMethod.value = "passkey"
+		failed.reject(new Error("boom"))
+		await submitted
 		expect(opts.notifyCreateFailed).toHaveBeenCalledWith(false)
 		expect(opts.onCreated).not.toHaveBeenCalled()
 		expect(flow.isCreating.value).toBe(false)

@@ -18,6 +18,7 @@
     "ActivityRowJournal": true,
     "ActivityRowTx": true,
     "ActivitySlice": true,
+    "AdmittedUnlock": true,
     "Aggregate": true,
     "AmountRead": true,
     "AppPick": true,
