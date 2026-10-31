@@ -1,7 +1,7 @@
 ---
 plan: deps-ci-1
 tier: light
-status: approved by the panel (Codex r3 approve); arc 1 implementing
+status: arc 1 implemented, Codex fix loop clean (r2); PR pending
 issues: "none; Dependabot alerts 34-37 on .github/actions/setup-aztec/cli/package-lock.json"
 driver: claude-code
 claude_model: opus
@@ -63,7 +63,7 @@ All four are known limits by reach, and no exploit path is shown. Fixing 35-37 i
 
 ## Phases
 
-### Phase 1 — the override, the lockfile, the floor test ✗
+### Phase 1 — the override, the lockfile, the floor test ✓
 
 Assumptions: F2–F5, F7. Change map:
 - `.github/actions/setup-aztec/lock.sh`: add the `overrides` block to the heredoc, with a one-sentence comment above it. The comment says host-metrics pins `systeminformation` 5.23.8 exactly, below the `networkStats()` fixes. It also says to drop the key once a fresh resolve without it locks ≥ 5.33.16, or locks no `systeminformation` at all.
@@ -80,7 +80,7 @@ Validation gate:
 - `bun run lint`, `bun run lint:actions`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run test:ci-gating` and `bun run test:release` exit 0 (bun test runs at retry 0). The new floor test is green and its refused copy fails the floor.
 - Layers: lint, typecheck, unit.
 
-### Phase 2 — the install proof in the Docker CI-like runner ✗
+### Phase 2 — the install proof in the Docker CI-like runner ✓ (install half; e2e half falls back to the PR's lanes)
 
 Assumptions: F8. Warning: the runner mounts its tree read-write as root and runs `bun install` there. So never mount the worktree; use an export. Steps:
 1. Export the Phase 1 commit: `mkdir -p <export>`, then `git archive HEAD | tar -x -C <export>`, where `<export>` is `~/.cache/nulo-backlog/deps-ci-1/docker-src`.
@@ -113,6 +113,13 @@ Validation gate: the container exits 0; its log shows the reinstall line, the te
 - **Opus Plan leg**: `reject`, two blocking. (1) The audit gate enforces on this PR, and `dev` carries 12 unacknowledged `bun.lock` advisories: verified (F9); resolved by A1/D5, with #1414 clearing them. (2) The owner's 2026-10-28 dismissals of the same package: verified; recorded as A2. Also accepted: F4's lines, one home for the removal condition, `LockEntry.version`, the quoted lockfile hunk, `audit-gate.ts mode` in the gate, the bump in deepmerge's reopening condition. Agreed with D2–D4 and the floor test.
 - **Codex r2** (resumed): `conditional approve`. D5 right (leave the gate; a narrower pathspec is a separate policy change). Open the PR blocked on #1414; a dev merge and push is needed after it lands, since `pr-quick.yml` checks out the head. Keep the standing dismissal rule verbatim in A2. `audit-gate.ts mode` prints `audit mode: …`. All applied.
 - **Codex r3** (resumed, verify only): `approve`. The conditions are met; no regression.
+
+## Implementation record
+
+- Phase 1 (`fecee7580`): every gate passed. The keyed compare showed exactly the two keys. The `npm ci` walk differed in `systeminformation` alone; its sha512 matches `npm view`. The floor test reds on the base lockfile.
+- Phase 2 (deviation, `lessons/phase-2.md`): the runner installed the new tree and the CLI booted the local node, twice. The e2e file never ran. Run 1 lacked `ipv4first`; run 2's container had no Chrome. Filed as #1419; the PR's two network lanes are the e2e proof, per the fallback.
+- Fix loop: Codex r1 `findings` (1): the presence assertion contradicted the removal condition; deleted. Opus diff review (beside r1): the refused copy covered only a nested path, so dropping the top-level match passed every test (demonstrated by mutation). Now a `test.each` over both paths at 5.33.15. The lock.sh comment names the floor, not a dated list of fixes. Rejected: flagging npm alias entries (no alias in the tree; needs conditions that do not exist). Codex r2: `clean`.
+- Known limit: #1420 (`deepmerge`), filed and closed as not planned.
 
 ## Delivery
 

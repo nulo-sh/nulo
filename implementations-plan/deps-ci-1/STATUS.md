@@ -5,3 +5,6 @@
 - 2026-10-31: Codex r1 conditional approve (5 findings accepted); waiting on the Opus leg.
 - 2026-10-31: Opus reject (audit gate enforces; owner precedent), both verified and resolved as A1/A2/D5; Codex r2 conditional approve, conditions applied.
 - 2026-10-31: Codex r3 approve; plan committed; arc 1 starts (auto-continue).
+- 2026-10-31: Phase 1 gate green (heredoc equal, keyed lock compare, npm ci walk, audit mode enforce, lint, lint:actions, typecheck:all, test, test:all, test:ci-gating, test:release).
+- 2026-10-31: Phase 2: Docker runner proved the install and the CLI (local node ready, twice); its e2e file could not launch Chrome in the container (no Puppeteer postinstall); the PR's network lanes are the e2e proof (plan fallback).
+- 2026-10-31: fix loop converged (Codex r2 clean); known limit #1420 filed and closed; runner gap #1419 filed.
