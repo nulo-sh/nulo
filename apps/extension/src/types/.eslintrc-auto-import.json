@@ -724,6 +724,7 @@
     "storageLocalSet": true,
     "storedNameKey": true,
     "stringCompare": true,
+    "stripBidiAndZeroWidth": true,
     "supersedeProfileActivations": true,
     "toRaw": true,
     "toRef": true,
