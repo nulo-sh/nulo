@@ -59,6 +59,18 @@ describe("FeeCostReadout", () => {
 		expect(drawn(landed)).toBe("You pay ~3.577824 FJ ($0.215)")
 	})
 
+	test("a failed estimate reads as such with its retry, unless the card is still reading what can pay", async () => {
+		const w = factory({ failed: true, pending: true, amountTyped: true })
+		expect(w.text()).toBe("You pay")
+		expect(w.findComponent(Skeleton).exists()).toBe(true)
+		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
+
+		await w.setProps({ pending: false })
+		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("You payCouldn't estimate fee.Try again")
+		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(w.emitted("retry")).toHaveLength(1)
+	})
+
 	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
 		const queuedCap = { about: ESTIMATE, cap: { amount: "4.47228", usd: "$0.269" } }
 		const stale = factory({ pending: true, estimate: ESTIMATE, isEstimating: true, isQueued: true, queuedCap })

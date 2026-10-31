@@ -58,6 +58,24 @@
 				"package": "systeminformation",
 				"severity": "high",
 				"vulnerable_versions": "<5.31.0"
+			},
+			{
+				"id": 1243663,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<5.33.16"
+			},
+			{
+				"id": 1243616,
+				"package": "systeminformation",
+				"severity": "low",
+				"vulnerable_versions": "<5.33.14"
+			},
+			{
+				"id": 1243617,
+				"package": "systeminformation",
+				"severity": "moderate",
+				"vulnerable_versions": "<5.33.13"
 			}
 		]
 	},
@@ -155,6 +173,36 @@
 				"package": "undici",
 				"severity": "high",
 				"vulnerable_versions": ">=7.18.0 <7.30.1"
+			},
+			{
+				"id": 1243473,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243475,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243478,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243481,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.0.0 <7.30.1"
+			},
+			{
+				"id": 1243484,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.15.0 <7.30.1"
 			}
 		]
 	},
@@ -168,6 +216,38 @@
 				"package": "elliptic",
 				"severity": "low",
 				"vulnerable_versions": "<=6.6.1"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "follow-redirects 1.16.1 under axios, which the exact-pinned Aztec 6.0.0 line's @aztec-labs/aztec.js and @aztec-labs/stdlib depend on. Neither extension zip contains axios or follow-redirects (THIRD-PARTY-NOTICES.txt). The fix, 1.16.2, was published on 2026-10-25, so the seven-day age gate holds it.",
+		"revisit": "follow-redirects 1.16.2 clearing the age gate on 2026-11-01",
+		"advisories": [
+			{
+				"id": 1244003,
+				"package": "follow-redirects",
+				"severity": "high",
+				"vulnerable_versions": ">=1.16.0 <=1.16.1"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "glob 10.5.0 and minimatch 9.0.9 under js-beautify and its editorconfig, a dependency of @vue/test-utils; glob 13.0.6 and minimatch 10.2.6 under @aztec-foundation/noir-noir_codegen, which the exact-pinned Aztec 6.0.0 line depends on. The fixes are majors (glob 14, minimatch 11) outside each dependent's range. Neither extension zip contains either package (THIRD-PARTY-NOTICES.txt), and each matches only a developer's own patterns against their own files.",
+		"revisit": "the next @vue/test-utils or Aztec bump",
+		"advisories": [
+			{
+				"id": 1244013,
+				"package": "glob",
+				"severity": "moderate",
+				"vulnerable_versions": ">=9.0.0 <=14.0.1"
+			},
+			{
+				"id": 1244012,
+				"package": "minimatch",
+				"severity": "moderate",
+				"vulnerable_versions": "<11.0.1"
 			}
 		]
 	}

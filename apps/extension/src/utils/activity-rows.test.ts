@@ -4,8 +4,8 @@ import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { buildActivityRows, journalRecordInScope, rowOnToken, txOnToken } from "./activity-rows"
 
-function tx(updatedAt: number, hash: string): Tx {
-	return { hash, updatedAt, account: "0xa", calls: [] } as unknown as Tx
+function tx(createdAt: number, hash: string): Tx {
+	return { hash, createdAt, account: "0xa", calls: [] } as unknown as Tx
 }
 
 function journal(overrides: Partial<OperationRecord>): OperationRecord {
@@ -353,8 +353,8 @@ describe("buildActivityRows — read order", () => {
 		expect(txReads({ account: "0xother" })).toEqual(["account"])
 		expect(txReads({ chainId: 2 })).toEqual(["account", "chainId"])
 		expect(txReads({ profileId: "p2" })).toEqual(["account", "chainId", "profileId"])
-		expect(txReads({})).toEqual(["account", "chainId", "profileId", "hash", "updatedAt"])
-		expect(txReads({}, {})).toEqual(["profileId", "hash", "updatedAt"])
+		expect(txReads({})).toEqual(["account", "chainId", "profileId", "hash", "createdAt"])
+		expect(txReads({}, {})).toEqual(["profileId", "hash", "createdAt"])
 	})
 
 	test("an incoming record stops at the first failed check, and a kept one reads its sort key before its id", () => {

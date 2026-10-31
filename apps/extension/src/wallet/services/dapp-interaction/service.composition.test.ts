@@ -1,12 +1,13 @@
 /**
  * Real OperationJournalService FSM + real WindowManager on one FakeBrowserApi;
  * DappInteractionService started through a ServiceCollection so `init()` wires
- * the journal subscription. Stubbed: profile, network, account, dApp session,
- * execution, FPCs. No PXE, no proving, no browser.
+ * the journal and dApp-session subscriptions. Stubbed: profile, network, account,
+ * dApp session, execution, FPCs. No PXE, no proving, no browser.
  */
 import { describe, expect, test, vi } from "vitest"
 import { JobCancelledError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { ServiceCollection } from "@/wallet/base"
@@ -20,8 +21,10 @@ import { OperationJournalService } from "@/wallet/services/operation-journal/ser
 import { TokenService } from "@/wallet/services/token/service"
 import { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
+import { failQueuedForError } from "@/wallet/services/wallet-sdk/queued-journal"
 import { DappInteractionService } from "./service"
-import type { DappInteraction } from "./spec"
+import type { DappInteraction, InteractionPayload } from "./spec"
+import { WindowEndedError } from "./window-end"
 
 function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
@@ -59,6 +62,12 @@ async function makeHarness() {
 	// its pre-popup journal read and the interaction's registration.
 	let profileGate: Promise<void> = Promise.resolve()
 	let reachedGate = () => {}
+	// The app's stored row, and whether the session the reads run under is still live.
+	let row: typeof SESSION | undefined = SESSION
+	let locked = false
+	let lockOnRead = false
+	const onDappSessionDeleted = new EventHandler<typeof SESSION>()
+	const onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
 
 	const collection = new ServiceCollection()
 	collection.add(
@@ -71,14 +80,28 @@ async function makeHarness() {
 			getProfiles: async () => [{ id: "p1" }],
 			...(await rowKeysForEveryProfile()),
 			refreshSession: async () => {},
-			captureExecutionFence: async () => ({ profileId: "p1", epoch: 0 }),
+			captureExecutionFence: async () => {
+				if (locked) throw new Error("Wallet locked")
+				return { profileId: "p1", epoch: 0 }
+			},
+			isFenceLive: () => !locked,
 		}),
 	)
 	collection.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {}, isNetworkLive: async () => true }))
 	collection.add(svc(AccountService.name, {}))
-	collection.add(svc(DappSessionService.name, { tryGetDappSession: async () => SESSION }))
+	collection.add(
+		svc(DappSessionService.name, {
+			tryGetDappSession: async () => {
+				if (lockOnRead) locked = true
+				return row
+			},
+			getDappSession: async () => SESSION,
+			onDappSessionDeleted,
+			onVerificationRefused,
+		}),
+	)
 	collection.add(svc(ExecutionService.name, { executeOperations: vi.fn(async () => []) }))
-	collection.add(svc(FpcService.name, {}))
+	collection.add(svc(FpcService.name, { getOrComputeProtocolAddresses: async () => ({ sponsored: "0x01", private: "0x02" }) }))
 	collection.add(svc(TokenService.name, { getVerifiedDefaults: async () => [] }))
 	collection.add(journal)
 	collection.add(dapp)
@@ -105,11 +128,29 @@ async function makeHarness() {
 		windowIdOf(createSpy.mock.calls.findIndex(([options]) => options.url?.endsWith(`requestId=${interaction.id}`)))
 	const interactionFor = (journalId: string) => [...storage.values()].find((x) => x.hooks?.queuedJournalId === journalId)
 
+	const internals = dapp as unknown as {
+		interaction: (type: string, payload: InteractionPayload, token?: string, hooks?: { queuedJournalId: string }) => Promise<unknown>
+	}
 	return {
 		journal,
 		dapp,
+		internals,
 		storage,
 		removeSpy,
+		onDappSessionDeleted,
+		onVerificationRefused,
+		/** Deletes the app's row as the dApp-session service does: gone, then the event. */
+		deleteRow: (deleted: typeof SESSION = SESSION) => {
+			row = undefined
+			onDappSessionDeleted.invoke(deleted)
+		},
+		dropRow: () => {
+			row = undefined
+		},
+		/** The next row read runs as the wallet locks, so it reads nothing whether or not the row is there. */
+		lockOnNextRead: () => {
+			lockOnRead = true
+		},
 		queuedRecord,
 		execute,
 		windowIdOf,
@@ -197,5 +238,121 @@ describe("DappInteractionService × OperationJournalService × WindowManager (fe
 		await vi.waitFor(async () => expect(h.removeSpy).toHaveBeenCalledWith(await h.windowIdOf(0)))
 		expect(await h.windowIdOf(0)).toBeTypeOf("number")
 		expect(h.interactionFor(recC.id)).toBeUndefined()
+	})
+})
+
+describe("DappInteractionService × DappSessionService (a revoked app's requests end)", () => {
+	const opened = async (h: Awaited<ReturnType<typeof makeHarness>>, find: () => DappInteraction | undefined) => {
+		let windowId: number | undefined
+		await vi.waitFor(async () => {
+			const interaction = find()
+			expect(interaction).toBeDefined()
+			windowId = await h.windowOf(interaction as DappInteraction)
+			expect(windowId).toBeTypeOf("number")
+		})
+		return windowId as number
+	}
+	const isCapabilities = (x: DappInteraction) => "knownContracts" in ((x.payload as { params?: object }).params ?? {})
+
+	test("deleting the app's row closes its send and capabilities windows, and the send's row reads as refused", async () => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		const sent = h.execute(rec.id)
+		const asked = settleOf(h.dapp.requestCapabilities({ sessionId: SESSION.id } as never))
+		const sendWindow = await opened(h, () => h.interactionFor(rec.id))
+		const capabilitiesWindow = await opened(h, () => [...h.storage.values()].find(isCapabilities))
+
+		h.deleteRow()
+
+		for (const outcome of [await sent, await asked]) {
+			const err = "err" in outcome ? outcome.err : undefined
+			expect(err).toBeInstanceOf(WindowEndedError)
+			expect((err as WindowEndedError).end).toBe("disconnect")
+		}
+		expect(h.removeSpy).toHaveBeenCalledWith(sendWindow)
+		expect(h.removeSpy).toHaveBeenCalledWith(capabilitiesWindow)
+		expect(h.storage.size).toBe(0)
+		const sentOutcome = await sent
+		await failQueuedForError(h.journal, rec.id, "err" in sentOutcome ? sentOutcome.err : undefined, new LoggerStore(new ConfigStore()))
+		expect((await h.journal.getOperation(rec.id))?.error?.kind).toBe("wallet_refused")
+	})
+
+	test.each([
+		["another chain", { ...SESSION, chainId: "2" }],
+		["another profile", { ...SESSION, profileId: "p2" }],
+		["another app", { ...SESSION, dappMetadata: { name: "other", url: "https://other.example" } }],
+	])("a deletion of %s leaves the app's window open", async (_name, deleted) => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		void h.execute(rec.id)
+		await opened(h, () => h.interactionFor(rec.id))
+
+		h.onDappSessionDeleted.invoke(deleted)
+
+		expect(h.removeSpy).not.toHaveBeenCalled()
+		expect(h.interactionFor(rec.id)).toBeDefined()
+		expect((await h.journal.getOperation(rec.id))?.progress.stage).toBe("queued")
+	})
+
+	test("a fee question of the app's approved send stays open", async () => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		const payload = {
+			feeQuestion: { fee: "2", approved: "1", payer: "self" },
+			operation: {},
+			session: SESSION,
+		} as unknown as InteractionPayload
+		void settleOf(h.internals.interaction("fee", payload, undefined, { queuedJournalId: rec.id }))
+		await opened(h, () => h.interactionFor(rec.id))
+
+		h.deleteRow()
+
+		expect(h.removeSpy).not.toHaveBeenCalled()
+		expect(h.interactionFor(rec.id)).toBeDefined()
+	})
+
+	test("a refused check closes the app's window even when its row stays", async () => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		const sent = h.execute(rec.id)
+		const window = await opened(h, () => h.interactionFor(rec.id))
+
+		h.onVerificationRefused.invoke({ origin: SESSION.dappMetadata.url, chainId: SESSION.chainId, profileId: SESSION.profileId })
+
+		const outcome = await sent
+		expect("err" in outcome && (outcome.err as WindowEndedError).end).toBe("disconnect")
+		expect(h.removeSpy).toHaveBeenCalledWith(window)
+	})
+
+	test("registration gap: a deletion before the window registers still closes it (reconciliation read)", async () => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		const { release, reached } = h.parkProfile()
+		const sent = h.execute(rec.id)
+		await reached
+		h.deleteRow()
+		expect(h.removeSpy).not.toHaveBeenCalled()
+
+		release()
+		const outcome = await sent
+		expect("err" in outcome && (outcome.err as WindowEndedError).end).toBe("disconnect")
+		await vi.waitFor(async () => expect(h.removeSpy).toHaveBeenCalledWith(await h.windowIdOf(0)))
+	})
+
+	test("registration gap control: a row read the wallet's lock left empty leaves the window to its own guard", async () => {
+		const h = await makeHarness()
+		const rec = await h.queuedRecord()
+		const { release, reached } = h.parkProfile()
+		void h.execute(rec.id)
+		await reached
+		h.dropRow()
+		h.lockOnNextRead()
+
+		release()
+		await opened(h, () => h.interactionFor(rec.id))
+		// The read after registration has run: the window it found is still the request's.
+		await new Promise((r) => setTimeout(r, 0))
+		expect(h.removeSpy).not.toHaveBeenCalled()
+		expect(h.interactionFor(rec.id)).toBeDefined()
 	})
 })

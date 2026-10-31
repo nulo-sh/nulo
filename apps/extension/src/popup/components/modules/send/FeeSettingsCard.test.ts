@@ -134,9 +134,10 @@ const STUBS = {
 	},
 	FeeMethodRow: { props: ["pending"], template: '<div data-testid="fee-method-row" :data-pending="String(pending)" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "payer", "pending", "amountTyped"],
+		props: ["estimate", "isEstimating", "payer", "pending", "amountTyped", "failed"],
+		emits: ["retry"],
 		template:
-			'<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" :data-amount-typed="String(amountTyped)" />',
+			'<div data-testid="fee-cost-readout" :data-payer="payer" :data-pending="String(pending)" :data-amount-typed="String(amountTyped)"><button v-if="failed" data-testid="fee-estimate-retry" @click="$emit(\'retry\', $event)" /></div>',
 	},
 	FeePriorityRow: {
 		props: ["modelValue"],
@@ -1027,6 +1028,28 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 			logged.mockRestore()
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("FeeSettingsCard — a failed estimate's retry", () => {
+	test("a keyboard press asks again and keeps its place on the method trigger; a pointer press only asks again", async () => {
+		mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsored", isProtocol: true }])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const focus = vi.fn()
+		const stubs = { ...STUBS, FeeMethodSelector: { ...STUBS.FeeMethodSelector, methods: { focus } } }
+		const w = mount(FeeSettingsCard, { props: baseProps({ estimateFailed: true }), global: { stubs } })
+		await flushPromises()
+		const retry = w.get('[data-testid="fee-estimate-retry"]')
+
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(1)
+		expect(focus).not.toHaveBeenCalled()
+
+		vi.spyOn(retry.element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(2)
+		expect(focus).toHaveBeenCalledOnce()
+		w.unmount()
 	})
 })
 

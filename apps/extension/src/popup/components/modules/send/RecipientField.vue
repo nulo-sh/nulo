@@ -17,7 +17,7 @@
  * would move whatever the press is on before its click lands.
  */
 import { isComposing } from "@/composables/usePopupEntity"
-import { trimAddress } from "@/utils/string"
+import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
 
@@ -248,6 +248,7 @@ onBeforeUnmount(() => {
 			<template v-else>
 				<AddressInput
 					v-model="searchTerm"
+					:normalize="stripBidiAndZeroWidth"
 					:autofocus="justCleared"
 					role="combobox"
 					:ariaLabelledby="labelId"
