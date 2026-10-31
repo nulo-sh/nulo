@@ -4,3 +4,5 @@
 - 2026-10-30 Codex round 2 (verification): approve; two low notes folded. Plan approved by the panel; auto-continue to arc 1.
 - 2026-10-30 arc 1 Phase 1 gate green: lint 0, typecheck:all 0, Phase 1 vitest set 416/416 at retry 0; reproducers red on base at the order assertion.
 - 2026-10-30 arc 1 Phase 2 gate green: lint 0, typecheck:all 0, 72 files / 1631 tests at retry 0, fee-race composition 24/24; reproducers red on base at the failed-row lookup, I1 pin green on base.
+- 2026-10-30 arc 1 Phase 3: test:all exit 0 (2:34); smoke Chrome 5 files/20 tests green (2:37), Firefox green (4:08); network Chrome transfers + send-amount-exact + snack-placement 3 files/6 tests green (7:20).
+- 2026-10-31 network Firefox green (8:12). Review loop: Codex round 1 findings 2 (held Enter, comments), Opus 1 low + 2 nits; fixed in cb0371fa2; Codex round 2 clean.
