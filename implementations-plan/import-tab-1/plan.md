@@ -58,11 +58,12 @@ The recovery-phrase import and Create read the unlock method and the password on
 
 ## Arc 1: phases
 
-### Phase 1: the service refuses an empty new password
+### Phase 1: the service refuses an empty new password ✓
 
 - Do D6. Re-stamp the chaos model's moved `service.ts` cites.
 - **Test** (`service.integration.test.ts`): `test.each` over `createProfile` and `importMnemonic`: `""` rejects with "Password is required for password profile" and leaves the repository's keys unchanged; the same call with `"pass1234"` resolves and adds one row.
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0; the refusal rows are red on the base copy of `service.ts`.
+- **Result**: exit 0 each, 953 files; both refusal rows red on the base copy. 25 chaos-model `service.ts` cites moved by one or two lines.
 
 ### Phase 2: the runs read the form once
 

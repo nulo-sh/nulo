@@ -767,6 +767,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	public async createProfile(name: string, password: string): Promise<ProfileInfo> {
 		await this.ensureInitialized()
+		if (!password) throw new Error("Password is required for password profile")
 		// Entropy-originated (NULO-ACCOUNT-KDF v2): 32 CSPRNG bytes — plain random, NOT
 		// Fr.random(); entropy is pre-PBKDF2 and needs no field bound — encode to the recovery
 		// words, then derive the master one-way through the standard BIP-39 step. The row stores
@@ -2037,10 +2038,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/** What a new row from an import or a restore is sealed under: a passkey answer for the new
-	 *  profile's own fresh input when given, else the password. The caller owns the passhash. */
+	 *  profile's own fresh input when given, else the password, never an empty one. The caller owns
+	 *  the passhash. */
 	private async newRowSeal(password: string | undefined, credentialData: PasskeyCredentialData | undefined): Promise<RowSeal> {
 		if (credentialData) return { credential: (await this.passkeyCoordinator.fromCredentialData(credentialData)).credential }
-		if (password === undefined) throw new Error("Password is required for password profile")
+		if (!password) throw new Error("Password is required for password profile")
 		return { passhash: await EncryptionKey.getPasshash(password) }
 	}
 

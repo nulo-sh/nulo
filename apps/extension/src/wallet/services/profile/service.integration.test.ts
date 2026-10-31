@@ -928,6 +928,29 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
+	describe("a new password profile is never sealed under an empty password", () => {
+		const seals = {
+			createProfile: (service: ProfileService, password: string) => service.createProfile("P", password),
+			importMnemonic: async (service: ProfileService, password: string) =>
+				service.importMnemonic("P", await wordsForFill(0x2e), password),
+		}
+
+		test.each(Object.keys(seals) as (keyof typeof seals)[])(
+			"%s refuses it and writes nothing; a password seals",
+			async (path) => {
+				const { api, service } = await makeService()
+				await service.getProfiles()
+				const before = await api.storage.local.get(null)
+				await expect(seals[path](service, "")).rejects.toThrow("Password is required for password profile")
+				expect(await api.storage.local.get(null)).toStrictEqual(before)
+
+				expect((await seals[path](service, "pass1234")).type).toBe("password")
+				expect(await service.getProfiles()).toHaveLength(1)
+			},
+			30_000,
+		)
+	})
+
 	describe("recovery-phrase round trip (NULO-ACCOUNT-KDF v2)", () => {
 		test("create → export words → re-import → the SAME master secret", async () => {
 			const { service } = await makeService()
