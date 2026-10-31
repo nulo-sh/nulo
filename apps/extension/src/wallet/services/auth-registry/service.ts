@@ -172,7 +172,8 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 *  authwit hashes aren't enumerable from chain. ACCEPTED RESIDUAL: a genuinely dropped tx's row
 	 *  then lingers as pending — `syncAuthwit` skips pending rows on purpose, so nothing prunes it.
 	 *  That is the safe direction (over-claiming): the row stays listed, a revoke keeps it and fails
-	 *  on it, and it costs headroom against the tracked-authwit cap. */
+	 *  on it, and it costs headroom against the tracked-authwit cap. A row whose send has no
+	 *  History row is never settled here either; a revoke that sees its grant's block prunes it. */
 	private async reconcileFromTx(tx: Tx): Promise<void> {
 		if (!tx.profileId) return
 		const scope: AuthwitScope = { profileId: tx.profileId, chainId: tx.chainId, account: tx.account }
@@ -231,14 +232,22 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 *  stay pending until `reconcileAuthwits` confirms (mined) or removes (dropped) them.
 	 *  Idempotent: a hash already tracked in this scope (pending or confirmed) is skipped, so a
 	 *  retry after a partial write does not duplicate. Ids are allocated over the PHYSICAL key
-	 *  space so a codec-hidden row (a damaged current-format row) can't be overwritten. */
+	 *  space so a codec-hidden row (a damaged current-format row) can't be overwritten.
+	 *
+	 *  `epoch` is the deletion epoch of `scope.profileId` the send captured with its fence: once a
+	 *  deletion of that profile began, the write is refused, so a restore that reuses the id never
+	 *  receives it. Checked again before each commit: the lock's watchdog can hand the lock to the
+	 *  deletion's purge while this write is stalled. */
 	public async recordPendingAuthwits(
 		scope: AuthwitScope,
 		items: { hash: string; content: AuthwitContent }[],
 		txHash: string,
+		epoch: number,
 	): Promise<void> {
 		if (items.length === 0) return
+		const deletion = this.profileService.getDeletionState()
 		await this.lock.withLock(async () => {
+			deletion.assertCurrent(scope.profileId, epoch)
 			const all = await this.authwits.getValues()
 			const seen = new Set(
 				all
@@ -262,7 +271,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 					pending: true,
 					txHash,
 				}
-				await this.authwits.set(`${authwit.id}`, authwit)
+				const write = await this.authwits.prepare(`${authwit.id}`, authwit)
+				deletion.assertCurrent(scope.profileId, epoch)
+				await write.commit()
 				occupied.add(`${authwit.id}`)
 				nextId++
 				this.emit("onAuthwitAdded", authwit)

@@ -761,34 +761,54 @@ export class DappSendExecutor {
 
 	/** One post-send closure owns BOTH the activity record AND the public-authwit index write, so the
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
-	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. */
+	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. The node has
+	 *  accepted the tx, so its grants are live: the index write runs whatever the activity record's
+	 *  outcome, and the record's error, when there is one, is the one the caller sees. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
 			const account = sent.account.address.toString()
-			await this.deps.addTransaction({
-				origin: sent.origin,
-				chainId: sent.network.chainId,
-				account,
-				calls: sent.txCalls,
-				nonce: sent.nonce.toString(),
-				feePaymentMethod: sent.feePaymentMethod,
-				hash,
-				submittedEndpointUrl: primaryEndpointUrl(sent.network),
-				estimatedFee: getEstimatedFee(sent.txRequest),
-				gasDetails: getGasDetails(sent.txRequest),
-				fence: sent.fence,
-				networkId: sent.networkId,
-				feeChoice: await feeChoice,
-			})
-			if (sent.pendingPublicAuthwits.length > 0) {
-				// Scoped to the SENDING tx's (profileId, chainId, account); the profile is the fence's.
-				await this.deps.recordPendingAuthwits(
-					{ profileId: sent.fence.profileId, chainId: sent.network.chainId, account },
-					sent.pendingPublicAuthwits,
+			let recordFailed = false
+			let recordError: unknown
+			try {
+				await this.deps.addTransaction({
+					origin: sent.origin,
+					chainId: sent.network.chainId,
+					account,
+					calls: sent.txCalls,
+					nonce: sent.nonce.toString(),
+					feePaymentMethod: sent.feePaymentMethod,
 					hash,
-				)
+					submittedEndpointUrl: primaryEndpointUrl(sent.network),
+					estimatedFee: getEstimatedFee(sent.txRequest),
+					gasDetails: getGasDetails(sent.txRequest),
+					fence: sent.fence,
+					networkId: sent.networkId,
+					feeChoice: await feeChoice,
+				})
+			} catch (error) {
+				recordFailed = true
+				recordError = error
 			}
+			await this.indexGrants(sent, account, hash, recordFailed)
+			if (recordFailed) throw recordError
+		}
+	}
+
+	/** Scoped to the SENDING tx's (profileId, chainId, account); the profile and its deletion epoch are
+	 *  the fence's. A failure is the caller's error unless the activity record already failed. */
+	private async indexGrants(sent: SentTx, account: string, hash: string, recordFailed: boolean): Promise<void> {
+		if (sent.pendingPublicAuthwits.length === 0) return
+		try {
+			await this.deps.recordPendingAuthwits(
+				{ profileId: sent.fence.profileId, chainId: sent.network.chainId, account },
+				sent.pendingPublicAuthwits,
+				hash,
+				sent.fence.epoch,
+			)
+		} catch (error) {
+			if (!recordFailed) throw error
+			this.deps.logDebug("sent tx: the authwit index write failed after its activity record did", { error })
 		}
 	}
 

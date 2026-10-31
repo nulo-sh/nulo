@@ -472,6 +472,52 @@ describe("DappSendExecutor — public-authwit recording (trust-point)", () => {
 		await expect(executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE)).rejects.toThrow("send broke")
 		expect(deps.recordPendingAuthwits).not.toHaveBeenCalled()
 	})
+
+	test("an activity record that rejects still indexes the grants once it settled, and its error reaches the caller", async () => {
+		const failure = new Error("history refused")
+		let rejectAdd: (error: unknown) => void = () => {}
+		let reachAdd: () => void = () => {}
+		const added = new Promise<void>((r) => (reachAdd = r))
+		const addTransaction = vi.fn(() => {
+			reachAdd()
+			return new Promise((_, reject) => (rejectAdd = reject))
+		})
+		const { executor, deps, built } = makeHarness({
+			addTransaction: addTransaction as never,
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		const fence = { ...FENCE, epoch: 3 }
+		const sending = executor.executeSendTransaction(grantOp, ORIGIN, undefined, fence).catch((e: unknown) => e)
+		await added
+		for (let i = 0; i < 20; i++) await Promise.resolve()
+		expect(deps.recordPendingAuthwits).not.toHaveBeenCalled()
+		rejectAdd(failure)
+		expect(await sending).toBe(failure)
+		expect((deps.recordPendingAuthwits as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+			[{ profileId: "p1", chainId: 7, account: "0xacct" }, [grant], "0xhash", 3],
+		])
+	})
+
+	test("when both writes reject, the caller gets the activity record's error and the index failure is logged", async () => {
+		const failure = new Error("history refused")
+		const indexFailure = new Error("index refused")
+		const { executor, deps, built } = makeHarness({
+			addTransaction: vi.fn(async () => Promise.reject(failure)) as never,
+			recordPendingAuthwits: vi.fn(async () => Promise.reject(indexFailure)),
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		expect(await executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE).catch((e: unknown) => e)).toBe(failure)
+		expect(deps.logDebug).toHaveBeenCalledWith(expect.stringContaining("authwit index write failed"), { error: indexFailure })
+	})
+
+	test("an index write that rejects after a recorded send reaches the caller", async () => {
+		const indexFailure = new Error("index refused")
+		const { executor, built } = makeHarness({
+			recordPendingAuthwits: vi.fn(async () => Promise.reject(indexFailure)),
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		expect(await executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE).catch((e: unknown) => e)).toBe(indexFailure)
+	})
 })
 
 describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
@@ -1298,6 +1344,7 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 			{ profileId: "p1", chainId: 7, account: "0xacct" },
 			pendingPublicAuthwits,
 			"0xhash",
+			FENCE.epoch,
 		)
 		// The reused nonce + payment method flow into the activity record.
 		const record = recordedTx(deps)
