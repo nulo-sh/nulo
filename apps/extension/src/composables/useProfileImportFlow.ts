@@ -16,7 +16,7 @@ import { isNewPasswordValid } from "@/utils/password"
 import { PHRASE_WORD_COUNT, type PhraseVerdict, readPhraseVerdict } from "@/utils/recovery-phrase"
 import { stringCompare } from "@/utils/string"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
-import { type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
+import { type AdmittedUnlock, type NewProfileUnlock, type UnlockMethod, useNewProfilePasskey } from "@/composables/useNewProfilePasskey"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import type { NewPasskeyDisplay } from "@/wallet/services/passkey/spec"
 
@@ -151,8 +151,8 @@ interface ImportHandlerDeps {
 	isAllowedToImportBySeedPhrase: Ref<boolean>
 	resolveName: () => Promise<string | null>
 	seedPhrase: Ref<string | undefined>
-	unlockMethod: Ref<UnlockMethod>
-	chooseUnlock: (display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
+	admitUnlock: () => AdmittedUnlock
+	unlockFor: (admitted: AdmittedUnlock, display: NewPasskeyDisplay, existing: boolean) => Promise<NewProfileUnlock | null>
 	allowDuplicate: Ref<boolean>
 	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
 	fillUnknownImportError: (err: unknown) => void
@@ -167,12 +167,15 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 	// `existing`: the profile takes a passkey the person already has.
 	const importSeed = async (existing: boolean) => {
 		if (!deps.isAllowedToImportBySeedPhrase.value || deps.isImporting.value) return
-		if (existing && deps.unlockMethod.value !== "passkey") return
+		// The run seals what its gate judged, whatever the form does while it waits.
+		const admitted = deps.admitUnlock()
+		if (existing && admitted.method !== "passkey") return
+		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
 		deps.isImporting.value = true
 		try {
 			const name = await deps.resolveName()
 			if (name === null) return
-			const profile = await importNamed(name, existing)
+			const profile = await importNamed(name, words, admitted, existing)
 			// `undefined` = the passkey card was cancelled or the duplicate warning declined; stay on
 			// the form.
 			if (!profile) return
@@ -184,13 +187,12 @@ function createImportHandlers(deps: ImportHandlerDeps) {
 		}
 	}
 
-	async function importNamed(name: string, existing: boolean) {
+	async function importNamed(name: string, words: string[], admitted: AdmittedUnlock, existing: boolean) {
 		// The import's own phrase checks run before the passkey card, so a phrase it refuses leaves no
 		// new passkey behind.
-		const words = canonicalizeMnemonic(deps.seedPhrase.value ?? "")
 		if (words.length !== PHRASE_WORD_COUNT) throw new Error("Invalid mnemonic length")
 		zeroize(await getEntropy(words))
-		const unlock = await deps.chooseUnlock({ step: "import", profileName: name }, existing)
+		const unlock = await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)
 		if (unlock === null) return undefined
 		// A passkey answer is held across the duplicate confirm only: the next Import asks again.
 		return deps.withDuplicateConfirm(() =>
@@ -230,10 +232,10 @@ function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>,
 	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
 	const newPasskey = useNewProfilePasskey(runCeremony)
 
-	/** The new password, or the passkey answer the page's card returns; `null` when the card was
+	/** The admitted password, or the passkey answer the page's card returns; `null` when the card was
 	 *  cancelled, which leaves the form as it was. */
-	async function chooseUnlock(display: NewPasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
-		if (unlockMethod.value === "password") return { password: password.value }
+	async function unlockFor(admitted: AdmittedUnlock, display: NewPasskeyDisplay, existing: boolean): Promise<NewProfileUnlock | null> {
+		if (admitted.method === "password") return { password: admitted.password }
 		try {
 			return { credentialData: await newPasskey.ask(display, existing) }
 		} catch (err) {
@@ -242,12 +244,17 @@ function useImportUnlock(unlockMethod: Ref<UnlockMethod>, password: Ref<string>,
 		}
 	}
 
+	const admitUnlock = (): AdmittedUnlock => ({ method: unlockMethod.value, password: password.value })
+	/** Restore's: it reads the form at its own step, which holds because a restore hides the unlock
+	 *  choice and the password fields for its whole run. */
+	const chooseUnlock = (display: NewPasskeyDisplay, existing: boolean) => unlockFor(admitUnlock(), display, existing)
+
 	const completeImport: UseProfileImportFlowOptions["completeImport"] = (profile) => {
 		newPasskey.forget()
 		return opts.completeImport(profile)
 	}
 
-	return { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport }
+	return { ceremonyRequest, onCeremonyResolve, onCeremonyReject, admitUnlock, unlockFor, chooseUnlock, completeImport }
 }
 
 async function listProfileNames(): Promise<string[]> {
@@ -307,7 +314,7 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 	// A phrase opens on Passkey, as Create does; a backup opens on the unlock it was made with.
 	const unlockMethod = ref<UnlockMethod>("passkey")
 
-	const { ceremonyRequest, onCeremonyResolve, onCeremonyReject, chooseUnlock, completeImport } = useImportUnlock(
+	const { ceremonyRequest, onCeremonyResolve, onCeremonyReject, admitUnlock, unlockFor, chooseUnlock, completeImport } = useImportUnlock(
 		unlockMethod,
 		password,
 		opts,
@@ -325,8 +332,8 @@ export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
 		isAllowedToImportBySeedPhrase,
 		resolveName: () => nameDefault.resolveName(),
 		seedPhrase,
-		unlockMethod,
-		chooseUnlock,
+		admitUnlock,
+		unlockFor,
 		allowDuplicate,
 		withDuplicateConfirm,
 		fillUnknownImportError,

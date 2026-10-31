@@ -80,7 +80,7 @@ async function watchSession(profileId: string) {
 
 async function readPhrase(
 	profile: ProfileInfo,
-	typed: string,
+	typed: string | undefined,
 	credentialData: PasskeyCredentialData | undefined,
 ): Promise<string[] | undefined> {
 	if (profile.type === "passkey" && !credentialData) return undefined
@@ -115,14 +115,13 @@ const {
 	dispose,
 } = useProfileCreateFlow({
 	// Onboarding has no popup app.vue listener, so it bootstraps the freshly created profile itself.
-	// The words open with the typed password, or with the passkey answer the create was made from,
-	// so they are read before either is dropped; a failed read still reaches Ready, where Home's
-	// reminder stays until the phrase is saved.
-	onCreated: async (profile, credentialData) => {
+	// The words open with the password the profile was created under, or with the passkey answer it
+	// was made from, so they are read before either is dropped; a failed read still reaches Ready,
+	// where Home's reminder stays until the phrase is saved.
+	onCreated: async (profile, credentialData, typed) => {
 		if (!isMounted()) return
 		// The profile exists from here on, so a reload resumes at Ready: Create would make a second one.
 		markFlowPath(profile.type)
-		const typed = password.value
 		await watchSession(profile.id)
 		if (!isMounted()) return
 		const phrase = await readPhrase(profile, typed, credentialData)

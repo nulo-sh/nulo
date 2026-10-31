@@ -65,7 +65,7 @@ The recovery-phrase import and Create read the unlock method and the password on
 - **Gate**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0; the refusal rows are red on the base copy of `service.ts`.
 - **Result**: exit 0 each, 953 files; both refusal rows red on the base copy. 25 chaos-model `service.ts` cites moved by one or two lines.
 
-### Phase 2: the runs read the form once
+### Phase 2: the runs read the form once ✓
 
 - Do D1 to D4. Re-stamp the chaos model's `useProfileImportFlow.ts` cite (line and text) and its `create.vue` cites.
 - **Tests** (each asserts the run's success in the same case):
@@ -73,6 +73,7 @@ The recovery-phrase import and Create read the unlock method and the password on
   - `useProfileCreateFlow.test.ts`: the same for create; `onCreated` gets the admitted password.
   - `onboarding/pages/create.test.ts`: the phrase read uses the admitted password.
 - **Gate**: phase 1's commands. Pass: exit 0; the new cases are red on the base copies of the two composables and the page.
+- **Result**: exit 0 each, 953 files; the six composable cases and the page case red on the base copies. The record is read through `admitUnlock()`, which restore's wrapper shares, so `useProfileImportFlow` stays inside its 80-line budget. The existing `onCreated` call-shape assertions name the new third argument.
 
 ### Phase 3: the tabs refuse input while a run is in flight
 

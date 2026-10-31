@@ -368,14 +368,14 @@ const RETIRED_RESEAL = cite(SERVICE, 1293, 'if (classifyProfileRow(profile).kind
 const RETIRED_FINALIZE = cite(SERVICE, 2588, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 147, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 160, "if (isMounted()) leavePhrase()")
-const ONBOARDING_LATER = cite(ONBOARDING, 179, '@later="leavePhrase"')
+const ONBOARDING_PHRASE = cite(ONBOARDING, 146, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 159, "if (isMounted()) leavePhrase()")
+const ONBOARDING_LATER = cite(ONBOARDING, 178, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
-const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 193, 'await deps.chooseUnlock({ step: "import", profileName: name }, existing)')
+const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
 const RESTORE_CARD = cite(IMPORT, 445, 'await opts.chooseUnlock({ step: "restore", profileName: name }, deps.existing)')
 const PASSKEY_IMPORT_SEALS = cite(SERVICE, 2030, "seal = await this.newRowSeal(password, credentialData)")
 const RESTORE_SEALS = cite(SERVICE, 2460, "seal = await this.newRowSeal(password, credentialData)")
