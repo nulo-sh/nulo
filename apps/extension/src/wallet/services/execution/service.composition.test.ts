@@ -134,6 +134,8 @@ async function makeHarness() {
 	}
 	let expiryDeferral: ((profileId: string) => Promise<boolean>) | undefined
 	const getNetwork = vi.fn(async () => NETWORK)
+	const addTransaction = vi.fn()
+	const recordPendingAuthwits = vi.fn(async (..._args: unknown[]) => {})
 	// The profiles that hold ACCOUNT; a lookup under any other profile misses.
 	const accountOwners = new Set(["p1"])
 	const getAccountContract = vi.fn(async (profileId: string) => {
@@ -172,7 +174,7 @@ async function makeHarness() {
 				getPendingForAccount: () => [],
 				// One mined tx: the account is initialized, so concurrent transfers here share no chain state.
 				transactionsOf: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }],
-				addTransaction: vi.fn(),
+				addTransaction,
 				onTransactionUpdated: { add: () => {} },
 			},
 			token: { getTokenRaw: async () => ({ contract: TOKEN_CONTRACT }) },
@@ -182,7 +184,7 @@ async function makeHarness() {
 				getFpc: async () => ({ ...SPONSOR }),
 				getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
 			},
-			authRegistry: { assertWithinCap: async () => {} },
+			authRegistry: { assertWithinCap: async () => {}, recordPendingAuthwits },
 			legal: { assertCurrent: legalAssertCurrent },
 			task: { startNewTask: () => fakeTask },
 			price: { getUsableQuote: async () => undefined },
@@ -293,6 +295,8 @@ async function makeHarness() {
 		parkJournalWrite,
 		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
+		addTransaction,
+		recordPendingAuthwits,
 		lane: (service as unknown as { lane: ExecutionLane }).lane,
 		expiryDeferral: () => expiryDeferral,
 	}
@@ -1242,6 +1246,78 @@ describe("ExecutionService composition — a dApp send names its call before sim
 		expect(outcome).toBe(simulationFailure)
 		expect(internals.txBuilder.buildStandard).toHaveBeenCalledTimes(1)
 		expect(record).not.toHaveBeenCalled()
+	}, 15_000)
+})
+
+describe("ExecutionService composition — a dApp send's public authwits are indexed whatever its activity record does", () => {
+	const HASH = `0x${"3e".repeat(32)}`
+	const GRANT = { hash: `0x${"a1".repeat(32)}`, content: { kind: "call" } }
+	const grantOp = {
+		kind: "send_transaction",
+		networkId: NETWORK.id,
+		accountAddress: ACCOUNT.toString(),
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "add_public_authwit", content: GRANT.content }],
+	} as never
+
+	/** A granted send from Settings, its build canned past `buildStandard` (no tx request is built),
+	 *  then proved and sent through the real coordinator, lane and journal. */
+	async function sendGrant(h: Harness) {
+		h.toTx.mockResolvedValueOnce(provenTx(HASH))
+		const internals = h.service as unknown as {
+			buildAndEstimateTxRequest: (...args: unknown[]) => Promise<unknown>
+			dappSendExecutor: { executeSendTransaction: (...args: unknown[]) => Promise<string> }
+		}
+		vi.spyOn(internals, "buildAndEstimateTxRequest").mockResolvedValue({
+			txRequest: h.entry.txRequest,
+			node: { sendTx: h.sendTx },
+			pxe: { proveTx: h.proveTx },
+			account: { address: ACCOUNT },
+			network: NETWORK,
+			nonce: { toString: () => "0" },
+			txCalls: [],
+			feePaymentMethod: "EXTERNAL",
+			pendingPublicAuthwits: [GRANT],
+			initializesAccount: false,
+		})
+		const fence = await h.captureExecutionFence()
+		const run = internals.dappSendExecutor
+			.executeSendTransaction(grantOp, { type: OriginType.UI }, undefined, fence)
+			.catch((error: unknown) => error)
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		return run
+	}
+
+	test("an activity record that rejects after the node accepted the send: the grant is indexed once with its hash", async () => {
+		const h = await makeHarness()
+		const failure = new Error("history write refused")
+		h.addTransaction.mockRejectedValueOnce(failure)
+
+		expect(await sendGrant(h)).toBe(failure)
+
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.addTransaction).toHaveBeenCalledWith(expect.objectContaining({ hash: HASH }))
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([
+			[{ profileId: "p1", chainId: NETWORK.chainId, account: ACCOUNT.toString() }, [GRANT], HASH, 0],
+		])
+		expect(h.recordPendingAuthwits.mock.invocationCallOrder[0]).toBeGreaterThan(h.sendTx.mock.invocationCallOrder[0])
+		expect((await h.journal.getOperation(h.getJournalId()))?.progress).toMatchObject({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+		})
+	}, 15_000)
+
+	test("a send the node refuses indexes nothing", async () => {
+		const h = await makeHarness()
+		const refusal = new Error("Invalid tx: insufficient fee")
+		h.sendTx.mockRejectedValueOnce(refusal)
+
+		expect(await sendGrant(h)).toBe(refusal)
+
+		expect(h.addTransaction).not.toHaveBeenCalled()
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
 	}, 15_000)
 })
 

@@ -42,6 +42,8 @@ const noopLogger = { log: () => {} }
 const A = "0xowner"
 const P1 = { profileId: "p1", chainId: 1, account: A }
 const content = { kind: "call" } as unknown as AuthwitContent
+/** The deletion epoch of a profile no deletion has touched. */
+const LIVE_EPOCH = 0
 /** A grant transaction hash a receipt read accepts. */
 const TX1 = `0x${"01".repeat(32)}`
 
@@ -55,8 +57,8 @@ function makeService(): AuthRegistryService {
 }
 
 /** A service built without `init()` still seals: its stores read the profile service's keys. */
-function withRowKeys(s: AuthRegistryService): AuthRegistryService {
-	;(s as unknown as { profileService: unknown }).profileService = ROW_KEY_SURFACE
+function withRowKeys(s: AuthRegistryService, deletionState = new ProfileDeletionState()): AuthRegistryService {
+	;(s as unknown as { profileService: unknown }).profileService = { ...ROW_KEY_SURFACE, getDeletionState: () => deletionState }
 	return s
 }
 
@@ -72,22 +74,22 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 	})
 
 	test("recordPendingAuthwits writes pending, tx-linked rows stamped with the scope tuple", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const rows = await rowsOf(svc)
 		expect(rows).toHaveLength(1)
 		expect(rows[0]).toMatchObject({ profileId: "p1", chainId: 1, account: A, hash: "0xh1", pending: true, txHash: TX1 })
 	})
 
 	test("recordPendingAuthwits is idempotent on (scope, hash) (no duplicate on retry)", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		expect(await rowsOf(svc)).toHaveLength(1)
 	})
 
 	test("the same hash under another profile or chain is a distinct row, not a dedup hit", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
-		await svc.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh1", content }], "0xtx2")
-		await svc.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh1", content }], "0xtx3")
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await svc.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh1", content }], "0xtx2", LIVE_EPOCH)
+		await svc.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh1", content }], "0xtx3", LIVE_EPOCH)
 		expect(await rowsOf(svc)).toHaveLength(1)
 		expect(await rowsOf(svc, { ...P1, profileId: "p2" })).toHaveLength(1)
 		expect(await rowsOf(svc, { ...P1, chainId: 2 })).toHaveLength(1)
@@ -97,14 +99,14 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 		const api = new FakeBrowserApi()
 		const s = withRowKeys(new AuthRegistryService(noopLogger as never, api))
 		await api.storage.local.set({ "nulo:core:auth-registry@1": JSON.stringify({ id: 1, account: A, hash: "0xhidden", content: null }) })
-		await s.recordPendingAuthwits(P1, [{ hash: "0xnew", content }], "0xtx")
+		await s.recordPendingAuthwits(P1, [{ hash: "0xnew", content }], "0xtx", LIVE_EPOCH)
 		const raw = (await api.storage.local.get(null)) as Record<string, string>
 		expect(JSON.parse(raw["nulo:core:auth-registry@1"])).toMatchObject({ hash: "0xhidden", content: null })
 		expect((await rowsOf(s)).map((r) => r.id)).toEqual([2])
 	})
 
 	test("reconcileAuthwits('mined') clears pending → confirmed (durable, kept), and announces the confirmed row", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const updated: Authwit[] = []
 		svc.onAuthwitUpdated.add((a) => void updated.push(a))
 		await svc.reconcileAuthwits(P1, TX1, "mined")
@@ -115,7 +117,7 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 	})
 
 	test("reconcileAuthwits('dropped') removes the pending row (grant never landed), announcing a delete and no update", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const updated: Authwit[] = []
 		const deleted: Authwit[] = []
 		svc.onAuthwitUpdated.add((a) => void updated.push(a))
@@ -127,21 +129,65 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 	})
 
 	test("reconcileAuthwits only touches rows for the matching txHash AND the tx's own scope tuple", async () => {
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
-		await svc.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], "0xtx2")
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await svc.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], "0xtx2", LIVE_EPOCH)
 		// Equal hashes across profiles/chains: another profile's tx with the same txHash must not
 		// confirm or drop this profile's rows.
-		await svc.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh1", content }], TX1)
-		await svc.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh1", content }], TX1)
+		await svc.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await svc.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		await svc.reconcileAuthwits(P1, TX1, "dropped")
 		expect((await rowsOf(svc)).map((r) => r.hash)).toEqual(["0xh2"])
 		expect(await rowsOf(svc, { ...P1, profileId: "p2" })).toHaveLength(1)
 		expect(await rowsOf(svc, { ...P1, chainId: 2 })).toHaveLength(1)
 	})
 
+	describe("a send authorized before its profile's deletion began writes no row", () => {
+		const freshService = () => {
+			const api = new FakeBrowserApi()
+			api.reset()
+			const deletion = new ProfileDeletionState()
+			return { s: withRowKeys(new AuthRegistryService(noopLogger as never, api), deletion), deletion }
+		}
+
+		test("refused at entry, the profile's id released for reuse too", async () => {
+			const { s, deletion } = freshService()
+			const store = (s as unknown as { authwits: { prepare: (...args: unknown[]) => Promise<unknown> } }).authwits
+			const prepare = vi.spyOn(store, "prepare")
+			const epoch = deletion.capture("p1")
+			deletion.beginDeletion("p1")
+			deletion.release("p1")
+			await expect(s.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, epoch)).rejects.toThrow(/being deleted/)
+			expect(prepare).not.toHaveBeenCalled()
+			expect(await rowsOf(s)).toEqual([])
+		})
+
+		test("refused at commit when the deletion begins while the row is prepared", async () => {
+			const { s, deletion } = freshService()
+			const store = (s as unknown as { authwits: { prepare: (...args: unknown[]) => Promise<unknown> } }).authwits
+			const prepare = store.prepare.bind(store)
+			vi.spyOn(store, "prepare").mockImplementation(async (...args) => {
+				const write = await prepare(...args)
+				deletion.beginDeletion("p1")
+				return write
+			})
+			await expect(s.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, deletion.capture("p1"))).rejects.toThrow(
+				/being deleted/,
+			)
+			expect(await rowsOf(s)).toEqual([])
+		})
+
+		test("control: an epoch captured after an earlier deletion of the id writes the row", async () => {
+			const { s, deletion } = freshService()
+			deletion.beginDeletion("p1")
+			deletion.release("p1")
+			await s.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, deletion.capture("p1"))
+			expect((await rowsOf(s)).map((r) => r.hash)).toEqual(["0xh1"])
+		})
+	})
+
 	test("assertWithinCap blocks pre-send: existing + unique-new over the ceiling throws (per-build, deduped, per scope)", async () => {
 		const existing = Array.from({ length: MAX_TRACKED_AUTHWITS_PER_ACCOUNT - 1 }, (_, i) => ({ hash: `0xe${i}`, content }))
-		await svc.recordPendingAuthwits(P1, existing, "0xtxe") // 255 tracked
+		await svc.recordPendingAuthwits(P1, existing, "0xtxe", LIVE_EPOCH) // 255 tracked
 		// 255 existing + 2 unique-new = 257 > 256 ⇒ blocked (the per-action bug would pass this).
 		await expect(svc.assertWithinCap(P1, ["0xnew1", "0xnew2"])).rejects.toThrow(/exceed the .* tracked public-authwit limit/)
 		// 255 existing + 1 unique-new ("0xe0" is already tracked → deduped) = 256 ≤ 256 ⇒ ok.
@@ -241,7 +287,7 @@ describe("AuthRegistryService sends run under the session the user acted in", ()
 
 	test("revoke and the registry toggle capture before their first read, and send under that capture", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		h.executeSendTransaction.mockRejectedValue(new Error("stop after send"))
 		h.captureExecutionFence.mockClear()
 		h.getNetwork.mockClear()
@@ -258,7 +304,7 @@ describe("AuthRegistryService sends run under the session the user acted in", ()
 
 	test("a session that ends and re-unlocks while the authwit read is parked is refused at the send, never re-captured", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const storage = (h.service as unknown as { authwits: { get: (key: string) => Promise<unknown> } }).authwits
 		const read = storage.get.bind(storage)
 		let releaseRead: () => void = () => {}
@@ -289,7 +335,7 @@ describe("AuthRegistryService names a send's journal record to the caller that k
 
 	async function harnessWithEvents() {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const started: unknown[] = []
 		h.service.onSendStarted.add((event) => started.push(event))
 		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
@@ -519,10 +565,10 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 
 	test("the cap and each ownership check refuse before any task or send", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
-		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh2", content }], "0xtx2")
-		await h.service.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh3", content }], "0xtx3")
-		await h.service.recordPendingAuthwits({ ...P1, account: "0xother" }, [{ hash: "0xh4", content }], "0xtx4")
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh2", content }], "0xtx2", LIVE_EPOCH)
+		await h.service.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xh3", content }], "0xtx3", LIVE_EPOCH)
+		await h.service.recordPendingAuthwits({ ...P1, account: "0xother" }, [{ hash: "0xh4", content }], "0xtx4", LIVE_EPOCH)
 		const log = instrument(h)
 		const tooMany = Array.from({ length: 29 }, (_, i) => i)
 		await expect(h.service.revokeAuthwits("net-1", A, tooMany, FEE)).rejects.toThrow(
@@ -537,8 +583,8 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 
 	test("each estimate is of the transaction its send builds, refused as the send is, and cancels through the service", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
-		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh2", content }], "0xtx2")
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
+		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xh2", content }], "0xtx2", LIVE_EPOCH)
 		instrument(h)
 
 		await h.service.estimateRevokeFee("net-1", A, [1], FEE, "tok-1", "slot-1")
@@ -570,7 +616,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 
 	test("a revoke settles in order: task, grant receipt, send under the captured fence, tx, proven, verify, complete", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
 		const fence = JSON.stringify(await h.captureExecutionFence.mock.results.at(-1)?.value)
@@ -639,7 +685,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 
 	test("a send failure fails the task; a cancellation cancels it and surfaces JobCancelledError", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
 		const boom = new Error("boom")
 		h.executeSendTransaction.mockRejectedValueOnce(boom).mockRejectedValueOnce(new JobCancelledSentinel("job-1"))
@@ -663,7 +709,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 	 *  hash reads unauthorized unless the test says otherwise. */
 	async function revoking(grantNode: unknown = receiptNode(AztecTxStatus.PROPOSED, REVOKE_BLOCK)) {
 		const h = await makeHarness({ node: {}, grantNode })
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
 		internals.transactionService.waitForTx = async () => {}
 		internals.waitForTxProven = async () => REVOKE_BLOCK
@@ -739,7 +785,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 			grantNode.getTxReceipt.mockImplementation(async () =>
 				h.executeSendTransaction.mock.calls.length ? reread : { status: AztecTxStatus.DROPPED },
 			)
-			await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2)
+			await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2, LIVE_EPOCH)
 			await h.service.reconcileAuthwits(P1, TX2, "mined")
 			const run = h.service.revokeAuthwits("net-1", A, [1, 2], FEE).catch((error: unknown) => error)
 			await vi.waitFor(() => expect(grantNode.getTxReceipt).toHaveBeenCalled())
@@ -759,7 +805,7 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 
 	test("control: rows read unauthorized are pruned, a pending one whose grant is at or below the revoke's block included", async () => {
 		const { h, hashes } = await revoking()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh2", content }], TX2, LIVE_EPOCH)
 		await h.service.reconcileAuthwits(P1, TX2, "mined")
 		await h.service.revokeAuthwits("net-1", A, [1, 2], FEE)
 		expect(await hashes()).toEqual([])
@@ -819,7 +865,7 @@ describe("AuthRegistryService under a refused Terms acceptance", () => {
 
 	test("a revoke and a registry toggle surface the typed refusal and change nothing they own", async () => {
 		const h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const before = await h.service.getAuthwits(1, A)
 		h.executeSendTransaction.mockRejectedValue(new TermsAcceptanceRequiredError())
 
@@ -836,7 +882,7 @@ describe("AuthRegistryService.reconcileFromTx — scoped by the tx's provenance;
 
 	beforeEach(async () => {
 		h = await makeHarness()
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1)
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 	})
 
 	const emitTx = (tx: Record<string, unknown>) => h.txUpdated.dispatch({ profileId: "p1", chainId: 1, account: A, ...tx })
@@ -876,12 +922,12 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		vi.spyOn(util, "isAuthwitConsumable").mockResolvedValue(false)
 		vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
 
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa")
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa", LIVE_EPOCH)
 		await h.service.reconcileAuthwits(P1, "0xtxa", "mined")
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xpending", content }], "0xtxb")
-		await h.service.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xother-chain", content }], "0xtxc")
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xpending", content }], "0xtxb", LIVE_EPOCH)
+		await h.service.recordPendingAuthwits({ ...P1, chainId: 2 }, [{ hash: "0xother-chain", content }], "0xtxc", LIVE_EPOCH)
 		await h.service.reconcileAuthwits({ ...P1, chainId: 2 }, "0xtxc", "mined")
-		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xother-profile", content }], "0xtxd")
+		await h.service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xother-profile", content }], "0xtxd", LIVE_EPOCH)
 		await h.service.reconcileAuthwits({ ...P1, profileId: "p2" }, "0xtxd", "mined")
 
 		await h.service.syncRegistry("net-1", A)
@@ -906,7 +952,7 @@ describe("AuthRegistryService.syncRegistry — scoped sync with a re-read under 
 		})
 		vi.spyOn(util, "isAuthRegistryEnabled").mockResolvedValue(true)
 
-		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa")
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xconfirmed", content }], "0xtxa", LIVE_EPOCH)
 		await h.service.reconcileAuthwits(P1, "0xtxa", "mined")
 		const [row] = await h.service.getAuthwits(1, A)
 
@@ -993,6 +1039,7 @@ describe("AuthRegistryService.restore — hostile-row validation + scoped dedup"
 				{ hash: "0xh5", content },
 			],
 			"0xtx",
+			LIVE_EPOCH,
 		)
 		const all = await api.storage.local.get()
 		const rowFiveKey = Object.keys(all).find((k) => k === "nulo:core:auth-registry@5")
@@ -1017,14 +1064,14 @@ describe("AuthRegistryService.restore — hostile-row validation + scoped dedup"
 	})
 
 	test("a tuple already in storage (live-recorded) blocks its restore", async () => {
-		await service.recordPendingAuthwits(P1, [{ hash: "0xlive", content }], "0xtx")
+		await service.recordPendingAuthwits(P1, [{ hash: "0xlive", content }], "0xtx", LIVE_EPOCH)
 		const [restored] = await service.restore([authwit(A, "0xlive")], "p1")
 		expect(restored.restoreError).toBeTruthy()
 		expect(await service.getAuthwits(1, A)).toHaveLength(1)
 	})
 
 	test("a same-address SIBLING profile's existing (account, hash) does NOT block this profile's restore", async () => {
-		await service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xshared", content }], "0xtx")
+		await service.recordPendingAuthwits({ ...P1, profileId: "p2" }, [{ hash: "0xshared", content }], "0xtx", LIVE_EPOCH)
 		const [restored] = await service.restore([authwit(A, "0xshared")], "p1")
 		expect(restored.restoreError).toBeUndefined()
 		expect(await service.getAuthwits(1, A)).toHaveLength(1)
