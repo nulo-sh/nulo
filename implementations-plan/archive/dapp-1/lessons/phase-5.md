@@ -11,3 +11,4 @@
   - `systeminformation` and `undici` are exact pins inside existing groups.
   - `glob` and `minimatch` need majors their dependents' ranges refuse.
   - Gotcha (Bun 1.4.2): `bun audit fix` wrote `follow-redirects` 1.16.2 into `bun.lock` while labelling it "newer than --minimum-release-age", bypassing the age gate. That line was reverted by hand. Read its `bun.lock` diff before committing.
+- 2026-10-31 Codex round 3 (resumed, the audit-gate commit): approve.

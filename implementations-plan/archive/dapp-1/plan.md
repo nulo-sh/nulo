@@ -24,6 +24,7 @@ issues: "#1381, #1383, #1384 (closed by the arc); #1382 (the owner's question)"
   - After a disconnect, a fee question stays open (D3). The owner decides on #1412.
   - #1382 is not fixed here: its line needs a request fingerprint and an approval record. The reason is on the issue, which stays open.
   - Codex post-implementation, "a disconnect should override a recorded refusal": rejected. Close, lock and switch already end a refused request as its refusal, and `disconnect` joins that pin.
+  - The PR's dependency change put the audit gate in enforce mode (I2), and new advisories went red. `qs` moved to 6.16.1. Eleven advisories that cannot move and are in neither zip were acknowledged, and SECURITY.md's table updated.
   - The transpiler-cache gotcha is a rule in CLAUDE.md, beside the `bun test` suites, rather than a lesson. `lessons.md` sits at its 8 KiB budget and nothing in it is superseded.
 - **Known limits:** #1413.
 - **Open items:** #1412.
@@ -149,6 +150,7 @@ Each phase lands its test red first, on its own commit, then the fix.
   - Adopted: two comments that restated their code, deleted.
   - Rejected: a disconnect overriding a recorded refusal (see the Outcome).
 - **Codex post-implementation round 2** (resumed): `approve`.
+- **Codex post-implementation round 3** (resumed, on the audit-gate commit): `approve`. All 35 acks match the live audit, none of the packages is in either zip, and `qs` 6.16.1 is in range and past the age gate.
 
 ## Delivery
 
