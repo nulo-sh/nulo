@@ -5,3 +5,4 @@
 - 2026-10-31: panel R1: Codex and Opus conditional approve; folded (D3 dropped, OA-1 now recommends B); final Codex pass next.
 - 2026-10-31: Codex R2 reject (epoch guard, committed wording), R3 conditional approve (commit-time recheck), R4 approve. Plan approved; arc 1 starts (auto-continue).
 - 2026-10-31: arc 1 implemented; fix R1 (Codex, Opus) changes needed, docs and one test, applied; fix R2 next.
+- 2026-10-31: fix R2 approve; full local gates and both network e2e lanes green; arc 1 PR opened.

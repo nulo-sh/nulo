@@ -1,7 +1,7 @@
 ---
 plan: authwit-index-1
 tier: light
-status: plan approved (Codex R4 approve); arc 1 implementing; arc 2 waits on OA-1
+status: plan approved (Codex R4 approve); arc 1 in review (fix loop converged at R2); arc 2 waits on OA-1
 issues: "none (Part of nothing; the orchestrator records the change)"
 driver: claude-code
 claude_model: opus
@@ -105,6 +105,7 @@ Planned after the pick. B needs the owner's approval of its stored field and its
 | Codex R4 (resumed, final) | approve | the held-read test must fail with only the commit-time recheck removed | none |
 | Codex fix R1 (arc 1) | changes needed | the recorder's doc claims only that the grants can land; the helper's doc loses its restated precedence | none |
 | Opus fix R1 (arc 1) | changes needed | the entry-refusal test asserts no row was prepared; the same doc points; the `pending` field doc matches the reconcile doc | none |
+| Codex fix R2 (arc 1, resumed) | approve | none | none |
 
 ## Delivery
 
