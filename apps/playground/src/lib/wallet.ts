@@ -45,6 +45,8 @@ function readChainInfo(): ChainInfo {
 let wallet: Wallet | null = null
 let provider: WalletProvider | null = null
 let cancelDiscovery: (() => void) | null = null
+/** Numbers Connect presses; only the latest press's run may write state or module globals. */
+let latestRun = 0
 
 export function getWallet(): Wallet | null {
 	return wallet
@@ -63,10 +65,24 @@ export function getProvider(): WalletProvider | null {
  * Status transitions are reflected in `state.status` so the test driver can
  * deterministically wait for "connected". Accounts arrive later via
  * `requestCapabilities()` — connect leaves `state.accounts` empty by design.
+ *
+ * A press supersedes any earlier run still in flight: that run's discovery is cancelled, it
+ * cancels its own pending channel, and it neither writes state nor reports its failure.
  */
 export async function connect(): Promise<void> {
 	if (getState().status === "connected") return
 
+	cancelDiscovery?.()
+	const run = ++latestRun
+	try {
+		await runConnect(run)
+	} catch (err) {
+		if (run === latestRun) throw err
+	}
+}
+
+async function runConnect(run: number): Promise<void> {
+	const superseded = () => run !== latestRun
 	setState({ status: "discovering", lastError: null, verificationHash: null })
 
 	const manager = WalletManager.configure({ extensions: { enabled: true } })
@@ -77,23 +93,35 @@ export async function connect(): Promise<void> {
 	})
 	cancelDiscovery = discovery.cancel
 
-	let firstProvider: WalletProvider | undefined
+	let found: WalletProvider | undefined
 	for await (const p of discovery.wallets) {
-		firstProvider = p
+		found = p
 		break
 	}
+	if (superseded()) return
 	cancelDiscovery = null
 
-	if (!firstProvider) {
+	if (!found) {
 		throw new Error("No wallet discovered")
 	}
-	provider = firstProvider
 
 	setState({ status: "verifying" })
 
-	const pending = await provider.establishSecureChannel(APP_ID)
+	// A superseded run cleans up through its own pending channel, never the module's `provider`,
+	// which may already be the newer run's.
+	const pending = await found.establishSecureChannel(APP_ID)
+	if (superseded()) {
+		pending.cancel()
+		return
+	}
 	setState({ verificationHash: pending.verificationHash })
-	wallet = await pending.confirm()
+	const connected = await pending.confirm()
+	if (superseded()) {
+		pending.cancel()
+		return
+	}
+	provider = found
+	wallet = connected
 
 	// Wallet-INITIATED disconnects (session termination, profile switch) arrive
 	// via the provider's onDisconnect push — without this subscription the

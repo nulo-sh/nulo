@@ -81,7 +81,8 @@ export function scopedTxRows(transactions: BuildActivityRowsParams["transactions
 		if (scope.accountAddress !== undefined && tx.account !== scope.accountAddress) continue
 		if (scope.chainId !== undefined && tx.chainId !== scope.chainId) continue
 		if (isForeignProfile(scope.profileId, tx.profileId)) continue
-		rows.push({ type: "tx", key: `tx:${tx.hash}`, sortKey: tx.updatedAt, tx })
+		// A send keeps its place as it is mined and finalized: `updatedAt` moves on every status change.
+		rows.push({ type: "tx", key: `tx:${tx.hash}`, sortKey: tx.createdAt, tx })
 	}
 	return rows
 }

@@ -146,11 +146,11 @@ describe("activity store — scope routing", () => {
 		expect(store.transactions[0]?.updatedAt).toBe(2)
 	})
 
-	test("transactions read newest first", () => {
+	test("transactions read newest sent first, whatever their last status change", () => {
 		const store = useActivityStore()
 		store.activateScope(A)
-		store.ingestTransaction(tx(A, "0xold", { updatedAt: 1 }), A)
-		store.ingestTransaction(tx(A, "0xnew", { updatedAt: 9 }), A)
+		store.ingestTransaction(tx(A, "0xold", { createdAt: 1, updatedAt: 9 }), A)
+		store.ingestTransaction(tx(A, "0xnew", { createdAt: 5, updatedAt: 5 }), A)
 
 		expect(store.transactions.map((t) => t.hash)).toEqual(["0xnew", "0xold"])
 	})
