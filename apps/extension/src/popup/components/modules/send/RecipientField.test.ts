@@ -37,6 +37,7 @@ const STUBS = {
 }
 
 const mountField = (props: Record<string, unknown> = {}) => mount(RecipientField, { props, global: { stubs: STUBS } })
+const hint = (w: ReturnType<typeof mount>) => w.find('[data-testid="recipient-invalid-hint"]').exists()
 
 const alice = { id: "1", name: "Alice", address: "0xaaaa", abbr: "AL" }
 const account1 = { id: "2", name: "Account 1", address: "0xbbbb" }
@@ -117,6 +118,59 @@ describe("modules/send/RecipientField", () => {
 		const w = mountField({ candidates: [], searchTerm: "0xbad" })
 		await w.find("input").trigger("focus")
 		expect(w.find('[data-testid="recipient-invalid-hint"]').exists()).toBe(false)
+	})
+
+	describe("the field keeps no bidi control or zero-width character", () => {
+		const address = `0x2${"a".repeat(63)}`
+		const zwsp = String.fromCodePoint(0x200b)
+		const rlo = String.fromCodePoint(0x202e)
+		const mounted: ReturnType<typeof mount>[] = []
+		const real = (props: Record<string, unknown>) => {
+			const global = { components: { AddressInput, Input }, stubs: { ...STUBS, AddressInput: false } }
+			const w = mount(RecipientField, { props, global, attachTo: document.body })
+			mounted.push(w)
+			return w
+		}
+		const typeAndLeave = async (w: ReturnType<typeof mount>, text: string) => {
+			const input = w.get("input")
+			await input.trigger("focus")
+			await input.setValue(text)
+			await input.trigger("blur")
+			vi.advanceTimersByTime(250)
+			await nextTick()
+			return input.element as HTMLInputElement
+		}
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+		afterEach(() => {
+			for (const w of mounted.splice(0)) w.unmount()
+			vi.useRealTimers()
+		})
+
+		test("an address pasted with a zero-width space after it reads as the address, and leaving it shows no hint", async () => {
+			const w = real({ candidates: [] })
+			const input = await typeAndLeave(w, `${address}${zwsp}`)
+			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([address])
+			expect(input.value).toBe(address)
+			expect(hint(w)).toBe(false)
+		})
+
+		test("an address with a visible wrong character stays as typed, and leaving it shows the hint", async () => {
+			const typed = `${address.slice(0, -1)}g`
+			const w = real({ candidates: [] })
+			const input = await typeAndLeave(w, typed)
+			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([typed])
+			expect(input.value).toBe(typed)
+			expect(hint(w)).toBe(true)
+		})
+
+		test("a saved address pasted inside a bidi override is picked when the field is left", async () => {
+			const bob = { id: "7", name: "Bob", address }
+			const w = real({ candidates: [bob] })
+			await typeAndLeave(w, `${rlo}${address}${zwsp}`)
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([bob])
+		})
 	})
 
 	describe("Enter picks a suggestion only from the field's own input", () => {
@@ -514,6 +568,25 @@ describe("modules/send/RecipientField", () => {
 			await nextTick()
 			expect(view(w)).toBe("card")
 			expect(vi.getTimerCount()).toBe(0)
+		})
+
+		test("text that is no address shows the hint once the press that took the focus ends", async () => {
+			const w = await focused({ candidates: [], searchTerm: "0xbad" })
+			press("pointerdown")
+			await w.get("input").trigger("blur")
+			expect(hint(w)).toBe(false)
+			press("pointerup")
+			await afterRelease()
+			expect(hint(w)).toBe(true)
+		})
+
+		test("text that is no address shows the hint once a blur with no press has run its timer", async () => {
+			const w = await focused({ candidates: [], searchTerm: "0xbad" })
+			await w.get("input").trigger("blur")
+			expect(hint(w)).toBe(false)
+			vi.advanceTimersByTime(250)
+			await nextTick()
+			expect(hint(w)).toBe(true)
 		})
 
 		test("a blur with no press shows the card at once", async () => {
