@@ -154,7 +154,7 @@ Pass criteria:
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `13bb2133c`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `13bb2133c`. Specific here:
 - Step 1 is absent (`code_review: off`).
 - Step 2 runs once over `git diff origin/dev...HEAD` after Phase 2: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`. One Opus 5.5 diff review (`general-purpose`) runs beside round 1. Prompts go under `~/.cache/nulo-backlog/unicode-1/`. Hard stop at three rounds; each round goes in `lessons/phase-2.md` and the table below.
 - Approval boundary (a plan change; stop): new copy, a refusal state, a stored-alias rewrite, widening D1's class, a change to `stripWireControl`, `fold`, `matchRecipients` or `@nulo/design`, any `AddressInput` change beyond its comment, a new e2e scenario.
