@@ -4,6 +4,8 @@ Neither ask concerns a surface arc 1 changes; the arc ships without waiting.
 
 ## OA-1: the fee question of an app you just disconnected
 
+Filed as #1412 at close-out.
+
 **Surface.** The fee question window ("the fee went up, accept?") that a dApp send the person already confirmed opens when its fee rose past the approved cap.
 
 **Today, and after arc 1.** A disconnect in Settings closes the app's send, sign and capabilities windows (arc 1), but not this one: its send is already approved. Accept there still sends at the new fee, for an app the person just disconnected; the app never learns the result, since its connection is gone.

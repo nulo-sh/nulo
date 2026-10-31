@@ -11,6 +11,24 @@ base: origin/dev 13bb2133c
 issues: "#1381, #1383, #1384 (closed by the arc); #1382 (the owner's question)"
 ---
 
+## Outcome
+
+- **Date:** 2026-10-31.
+- **Status:** completed.
+- **Shipped:** #1414, closing #1381, #1383 and #1384.
+  - A disconnect or a refused check ends the app's pending requests and closes their windows. Their records file as `wallet_refused`.
+  - The boot and unlock sweeps read a lost `queued` record as interrupted.
+  - Only the playground's latest Connect press writes its state. The playground gains a `bun test` runner.
+  - Captures are in `screenshots/`.
+- **Dispositions:**
+  - After a disconnect, a fee question stays open (D3). The owner decides on #1412.
+  - #1382 is not fixed here: its line needs a request fingerprint and an approval record. The reason is on the issue, which stays open.
+  - Codex post-implementation, "a disconnect should override a recorded refusal": rejected. Close, lock and switch already end a refused request as its refusal, and `disconnect` joins that pin.
+  - The transpiler-cache gotcha is a rule in CLAUDE.md, beside the `bun test` suites, rather than a lesson. `lessons.md` sits at its 8 KiB budget and nothing in it is superseded.
+- **Known limits:** #1413.
+- **Open items:** #1412.
+- **Seeds retired:** the `/goal` and `/loop` seeds below record history and are not live instructions.
+
 # dapp-1: what a dApp request reads after a disconnect or a restart, and the playground's connect race
 
 A Settings disconnect leaves the app's open approval window live, and Confirm there records "Popup closed early" (#1383). A request a restart ends before Confirm reads "Transaction failed", blaming fees (#1384). The playground lets a superseded Connect overwrite a newer connection (#1381). One arc, one PR against `dev`. #1382 stays open as the owner's question.
@@ -125,6 +143,12 @@ Each phase lands its test red first, on its own commit, then the fix.
 - **Opus round 1** (Plan agent): conditional approve. Adopted: retitle and GC class in UI impact; the three stubs in the map; `verify-hold`, `connect-verify-mismatch`, `connect-locked-queue`; fee control and Phase 3 assertions; backstop only on `!liveSession`, logged at `debug`; D8; the `validateSession` site; the pin fact corrected; I2 reworded with `bun audit`; three CLAUDE.md sites. Raised to the owner: D3 (OA-1). No finding rejected.
 - **Codex final** (resumed): conditional approve. Adopted: absence counts as a deletion only under a live fence (re-read and backstop), `validateSession` unchanged, D9. Confirmed: expiry re-entrancy safe, D7, the e2e selection, OA-1.
 - **Codex verify** (resumed, 2026-10-30): `approve`. The fence-checked re-read and backstop resolve its conditions; D9 bounds the rest; nothing reopened.
+- **Opus diff review** (post-implementation, 2026-10-31): `approve`. One fix: `reaper.ts`'s header named no `stuck_queued` for the periodic tick.
+- **Codex post-implementation round 1** (gpt-6.1-sol, high): changes requested.
+  - Adopted: with a cold transpiler cache the playground suite died on import, since Aztec's bn254 module calls `expect.addEqualityTesters`, which Bun's `expect` lacks under `NODE_ENV=test`. The test now mocks that module.
+  - Adopted: two comments that restated their code, deleted.
+  - Rejected: a disconnect overriding a recorded refusal (see the Outcome).
+- **Codex post-implementation round 2** (resumed): `approve`.
 
 ## Delivery
 
