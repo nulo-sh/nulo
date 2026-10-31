@@ -567,7 +567,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			const cardWindowId = await windowIdOf(contactsWindow)
 
 			// Only a press in this window opens the picker, so the input's click must still carry it.
-			// Headless Firefox cancels that picker at once, which removes its input and keeps the card.
+			// The launch's picker cancels a pick no step asked for, removing its input and keeping the card.
 			await recordInputClicks(contactsWindow)
 			await contactsWindow.click(sel("handoff-card-choose"))
 			const firstClick = await pollUntil(

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
+import { nextTick } from "vue"
 import AccountSelectRow from "./AccountSelectRow.vue"
 
 vi.mock("@/components/ui/utils.js", () => ({
@@ -120,6 +121,68 @@ describe("AccountSelectRow", () => {
 		expect((field(w).element as HTMLInputElement).value).toBe("Custom")
 		await field(w).setValue("MyAlias")
 		expect(w.emitted("updateAlias")).toEqual([[`aztec:1:${baseAccount.address}`, "MyAlias"]])
+	})
+
+	describe("the name for this app keeps no bidi control or zero-width space", () => {
+		const caip = `aztec:1:${baseAccount.address}`
+		const rlo = String.fromCodePoint(0x202e)
+		const zwsp = String.fromCodePoint(0x200b)
+		const opened = async () => {
+			const w = factory({ selected: true })
+			await rename(w).trigger("click")
+			return { w, input: field(w).element as HTMLInputElement }
+		}
+
+		test("both are dropped from what is typed, in the field and in the name sent", async () => {
+			const { w, input } = await opened()
+			await field(w).setValue(`${rlo}My${zwsp}Alias`)
+			expect(w.emitted("updateAlias")?.at(-1)).toEqual([caip, "MyAlias"])
+			expect(input.value).toBe("MyAlias")
+		})
+
+		test("one added to the name as it stands leaves the field at that name", async () => {
+			const { w, input } = await opened()
+			await field(w).setValue(`Alpha${rlo}`)
+			expect(w.emitted("updateAlias")?.at(-1)).toEqual([caip, "Alpha"])
+			expect(input.value).toBe("Alpha")
+		})
+
+		test("one removed mid-name leaves the caret where it was typed; a visible character moves nothing", async () => {
+			const { input } = await opened()
+			const insertAt = async (text: string, caret: number) => {
+				input.value = text
+				input.setSelectionRange(caret, caret)
+				input.dispatchEvent(new Event("input"))
+				await nextTick()
+				await nextTick()
+				return [input.value, input.selectionStart]
+			}
+			expect(await insertAt(`Al${zwsp}pha`, 3)).toEqual(["Alpha", 2])
+			expect(await insertAt("Alxpha", 3)).toEqual(["Alxpha", 3])
+		})
+
+		test("an input method's text is left alone while it composes, and cleaned once it commits", async () => {
+			const { w, input } = await opened()
+			input.dispatchEvent(new CompositionEvent("compositionstart"))
+			input.value = `Al${rlo}pha`
+			input.dispatchEvent(new InputEvent("input", { isComposing: true }))
+			await nextTick()
+			expect(input.value).toBe(`Al${rlo}pha`)
+			expect(w.emitted("updateAlias")).toBeUndefined()
+			input.dispatchEvent(new CompositionEvent("compositionend"))
+			await nextTick()
+			expect(input.value).toBe("Alpha")
+			expect(w.emitted("updateAlias")).toEqual([[caip, "Alpha"]])
+		})
+
+		test("joiners and variation selectors stay, so emoji sequences and joined scripts are sent as typed", async () => {
+			const { w, input } = await opened()
+			const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)
+			const named = `${family} me${String.fromCodePoint(0x200c)}dan ${String.fromCodePoint(0x2764, 0xfe0f)}`
+			await field(w).setValue(named)
+			expect(w.emitted("updateAlias")?.at(-1)).toEqual([caip, named])
+			expect(input.value).toBe(named)
+		})
 	})
 
 	test("once pressed, the field stays open, emptied or deselected and selected again", async () => {

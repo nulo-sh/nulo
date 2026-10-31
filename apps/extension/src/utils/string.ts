@@ -50,6 +50,14 @@ export function sentenceName(name: string, fallback: string): string {
 	return sanitizeString(name, 32).trim() || fallback
 }
 
+const BIDI_AND_ZERO_WIDTH = /[\p{Bidi_Control}\u00AD\u200B\u2060\uFEFF]/gu
+
+/** Text a person types or pastes, without the bidi controls (they reorder what the field shows) or
+ *  the zero-width space, word joiner, BOM and soft hyphen (they draw nothing on one line), so none of
+ *  these hides in what a field keeps. Joiners, variation selectors and tags stay: emoji sequences and joined
+ *  scripts are drawn from them. A dApp's strings take `stripWireControl` instead. */
+export const stripBidiAndZeroWidth = (text: string): string => text.replace(BIDI_AND_ZERO_WIDTH, "")
+
 /** Absent, or only whitespace once the wire sanitizer's strip has run. */
 export const isBlank = (s: string | null | undefined): boolean => stripWireControl(s ?? "").trim() === ""
 

@@ -534,12 +534,12 @@ describe("pages/activity — the title", () => {
 describe("pages/activity — opened from a token page", () => {
 	const USDC = { id: 1, chainId: 1, contract: "0xusdc", name: "USD Coin", symbol: "USDC", decimals: 6, hasDecimals: true }
 	const EURC = { id: 2, chainId: 1, contract: "0xeurc", name: "Euro Coin", symbol: "EURC", decimals: 6, hasDecimals: true }
-	const txOn = (hash: string, contract: string, updatedAt: number) => ({
+	const txOn = (hash: string, contract: string, createdAt: number) => ({
 		hash,
 		account: "0xacct",
 		chainId: 1,
 		profileId: "p1",
-		updatedAt,
+		createdAt,
 		calls: [{ contract }],
 	})
 	const opOn = (id: string, tokenId: number, terminalAt: number) => ({
