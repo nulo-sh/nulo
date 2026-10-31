@@ -63,7 +63,7 @@ None. The change is test infrastructure; no screen, copy or row changes.
 
 ## Arc 1: phases
 
-### Phase 1: the per-run admin key
+### Phase 1: the per-run admin key ✓
 
 1. In `global-setup.ts`, add `ADMIN_KEY`, the `--admin-api-key-hash` argument, the env setting, the `aztecAdminKey` provide and its type.
 2. In `boot-guard.ts`, add `assertAdminKeyRequired`. In `finishBoot`, await it after `markBootReady()` and log the success line.

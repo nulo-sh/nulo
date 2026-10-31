@@ -131,6 +131,33 @@ export function nodeStores(dir: string, marker: string, read: EnvironReader = re
 	return { inside: all.filter((file) => file.startsWith(root)), outside: all.filter((file) => !file.startsWith(root)), unreadable }
 }
 
+const ADMIN_PROBE_TIMEOUT_MS = 10_000
+
+async function adminGetConfig(
+	url: string,
+	key?: string,
+): Promise<{ status: number; body: { result?: unknown; error?: unknown } | undefined }> {
+	const res = await fetch(url, {
+		method: "POST",
+		headers: { "content-type": "application/json", ...(key ? { "x-api-key": key } : {}) },
+		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "nodeAdmin_getConfig", params: [] }),
+		signal: AbortSignal.timeout(ADMIN_PROBE_TIMEOUT_MS),
+	})
+	return { status: res.status, body: await res.json().catch(() => undefined) }
+}
+
+/** Throws unless the admin RPC at `url` refuses a call without `key` with a 401 and answers one carrying
+ *  it. Errors name the URL, never the key. */
+export async function assertAdminKeyRequired(url: string, key: string): Promise<void> {
+	const keyless = await adminGetConfig(url)
+	if (keyless.status !== 401)
+		throw new Error(`[e2e-setup] the admin RPC at ${url} answered a call without the run's key (HTTP ${keyless.status})`)
+	const keyed = await adminGetConfig(url, key)
+	const result = keyed.body?.error === undefined ? keyed.body?.result : undefined
+	if (keyed.status !== 200 || typeof result !== "object" || result === null)
+		throw new Error(`[e2e-setup] the admin RPC at ${url} did not answer a call with the run's key (HTTP ${keyed.status})`)
+}
+
 const hasExited = (child: ChildProcess) => child.exitCode !== null || child.signalCode !== null
 
 /** The probe's answer, unless the child exits or the deadline passes first: a probe can hang (the

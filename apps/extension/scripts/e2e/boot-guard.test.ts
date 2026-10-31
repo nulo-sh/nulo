@@ -6,7 +6,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest"
 import { probeAnvil } from "../../tests/e2e/anvil-probe"
-import { assertPackFree, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "../../tests/e2e/boot-guard"
+import { assertAdminKeyRequired, assertPackFree, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "../../tests/e2e/boot-guard"
 import { LAUNCH_ENV, launchEnv, newMarker, readEnviron } from "../../tests/e2e/owned-processes"
 
 const servers: http.Server[] = []
@@ -30,6 +30,30 @@ function strangerAnvil(): Promise<number> {
 	})
 	servers.push(srv)
 	return new Promise((resolve) => srv.listen(0, "127.0.0.1", () => resolve((srv.address() as AddressInfo).port)))
+}
+
+type AdminStub = "enforces" | "open" | "refusesKey" | "rpcError"
+
+/** An admin RPC shaped like the node's key middleware (401 and a JSON-RPC error without the key),
+ *  or one of the ways a node can get it wrong. */
+function stubAdmin(mode: AdminStub, key: string): Promise<string> {
+	const srv = http.createServer((req, res) => {
+		req.resume()
+		const keyed = req.headers["x-api-key"] === key
+		res.setHeader("Content-Type", "application/json")
+		if (mode === "refusesKey" || (mode !== "open" && !keyed)) {
+			res.statusCode = 401
+			res.end(
+				JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Unauthorized: invalid or missing API key" } }),
+			)
+		} else if (mode === "rpcError") {
+			res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32601, message: "Method not found" } }))
+		} else {
+			res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { minTxsPerBlock: 0 } }))
+		}
+	})
+	servers.push(srv)
+	return new Promise((resolve) => srv.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${(srv.address() as AddressInfo).port}`)))
 }
 
 /** A pack of currently free ports: each bound, read, and closed. */
@@ -102,6 +126,21 @@ describe("boot guard", () => {
 			await expect(waitWhileAlive(child, () => new Promise<boolean>(() => {}), "node", 300, 10)).rejects.toThrow(/Timed out/)
 		} finally {
 			child.kill("SIGKILL")
+		}
+	})
+
+	test("the admin key check passes a node that refuses a keyless call and answers the key, and fails the rest by URL alone", async () => {
+		const key = "9f".repeat(32)
+		await expect(assertAdminKeyRequired(await stubAdmin("enforces", key), key)).resolves.toBeUndefined()
+		for (const mode of ["open", "refusesKey", "rpcError"] as const) {
+			const url = await stubAdmin(mode, key)
+			const error = await assertAdminKeyRequired(url, key).then(
+				() => undefined,
+				(e: Error) => e,
+			)
+			expect(error, mode).toBeInstanceOf(Error)
+			expect(error?.message, mode).toContain(url)
+			expect(error?.message, mode).not.toContain(key)
 		}
 	})
 
