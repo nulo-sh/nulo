@@ -142,7 +142,7 @@ The #1414 dependency (A1, D5): open the PR once the Codex loop converges, even i
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `7bde519db`. Specific to this plan:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `7bde519db`. Specific to this plan:
 
 1. Step 1 (diff review) is absent: `code_review: off`.
 2. The review loop runs once over the whole diff from `7bde519db`, after Phase 2. Use `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`, then `resume-codex.sh` on the same session. Stop when no material finding is new; hard stop after three rounds, then report. One Opus review (`Agent`, `model: "opus"`, `general-purpose`) runs beside round 1.
