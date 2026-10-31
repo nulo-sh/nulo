@@ -78,6 +78,13 @@ describe("results", () => {
 		expect(w.find('[data-testid="settings-search-empty"]').exists()).toBe(false)
 	})
 
+	test("a bidi control or zero-width space typed into the field is dropped, so the field and the search read the same", async () => {
+		const { w } = await mountSearch()
+		await w.get('[data-testid="settings-search-input"]').setValue(`${String.fromCodePoint(0x202e)}du${String.fromCodePoint(0x200b)}st`)
+		expect(field(w).value).toBe("dust")
+		expect(results(w).map((r) => r.dataset.testid)).toEqual(["settings-search-result-display-dust"])
+	})
+
 	test("typing replaces the results as the word changes", async () => {
 		const { w } = await mountSearch()
 		await w.get('[data-testid="settings-search-input"]').setValue("dust")
