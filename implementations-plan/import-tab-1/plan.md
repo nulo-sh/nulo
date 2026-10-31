@@ -1,7 +1,7 @@
 ---
 plan: import-tab-1
 tier: light
-status: arc 1 implemented, review loop converged (Codex r2 clean)
+status: delivered (PR #1423 open, merge pending); archived
 issues: none
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at a46395071
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-31.
+- **Status:** delivered in PR #1423, which carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Shipped:** the phrase import and Create read the unlock method, the password (and the import's phrase) once in the click handler and seal under that record; Create hands its password to `onCreated`; the Passkey · Password tabs take no input while a run is in flight; `ProfileService` refuses an empty password at `createProfile` and `newRowSeal`. The PR closes no issue.
+- **Dispositions:** restore is untouched (D1); the 8-grapheme rule at every seal is out of scope (D6); the password fields stay editable (D4). No e2e scenario added.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; the chaos model's citation test names every cited line an edit moves.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # import-tab-1: a new profile's unlock is fixed when its run is admitted
 
