@@ -18,6 +18,9 @@ fi
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# @opentelemetry/host-metrics pins systeminformation 5.23.8 exactly; 5.33.16 is the first release
+# past all its advisories (2026-10). Drop the override once a fresh resolve without it locks
+# systeminformation >= 5.33.16, or locks none.
 cat > "$WORK/package.json" <<JSON
 {
   "name": "aztec-cli",
@@ -25,6 +28,9 @@ cat > "$WORK/package.json" <<JSON
   "dependencies": {
     "@aztec-labs/aztec": "$VERSION",
     "@aztec-labs/cli-wallet": "$VERSION"
+  },
+  "overrides": {
+    "systeminformation": "^5.33.16"
   }
 }
 JSON
