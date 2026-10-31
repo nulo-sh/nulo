@@ -313,7 +313,7 @@ watch(
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 	flex: 1;
 
 	min-height: 0;
@@ -342,7 +342,7 @@ watch(
 }
 
 .contact {
-	composes: select_row from "./popup-shared.module.css";
+	composes: select_row from "@/components/Popup/popup-shared.module.css";
 	user-select: none;
 	position: relative;
 

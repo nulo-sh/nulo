@@ -273,6 +273,11 @@ const handleAddToken = async () => {
 	}
 }
 
+// A refusal judged the address it was given, so a new address ends it.
+watch(contractTerm, () => {
+	error.value = null
+})
+
 usePopupEntity(
 	() => props.show,
 	{
@@ -326,7 +331,7 @@ usePopupEntity(
 			:disabled="isBusy"
 		>
 			<template #suffix>
-				<Icon v-if="isAvailableToCreateToken" name="square-check" size="14" color="green" />
+				<Icon v-if="isAvailableToCreateToken && !error" name="square-check" size="14" color="green" />
 			</template>
 			<template #right>
 				<Transition name="fade">

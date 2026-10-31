@@ -166,7 +166,7 @@ usePopupEntity(() => props.show, {
 
 <style module>
 .wrapper {
-	composes: body from "./popup-shared.module.css";
+	composes: body from "@/components/Popup/popup-shared.module.css";
 }
 
 .shake {

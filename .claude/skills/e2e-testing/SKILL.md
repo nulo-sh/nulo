@@ -393,6 +393,13 @@ redirect.
 does not have, so an icon-only `<Icon>` target throws inside the wait and times out: press it with
 `pointerClick`.
 
+A field that judges an edit on `beforeinput` (the design `Input`'s `int` subtype) needs the edit
+raised as a browser raises it: `document.execCommand("insertText")` raises no `beforeinput` on
+Chrome. `page.keyboard.sendCharacter(text)` does (`insertText`, the pre-edit selection), but Firefox's
+BiDi `sendCharacter` takes one character, so a multi-character insertion there is a real paste:
+`navigator.clipboard.writeText(text)`, then Control+V (`insertFromPaste`). (puppeteer-core 25.14,
+2026-10.)
+
 **`waitForFunction` with page-function arguments needs a non-empty options object.** `patchPagePolling`
 finds the options argument by looking for a `timeout` or `polling` key. A bare `{}` has neither, so the
 wrapper splices its own options in at index 1 and your `{}` becomes the page function's FIRST argument
