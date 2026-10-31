@@ -133,17 +133,23 @@ export function nodeStores(dir: string, marker: string, read: EnvironReader = re
 
 const ADMIN_PROBE_TIMEOUT_MS = 10_000
 
-async function adminGetConfig(
-	url: string,
-	key?: string,
-): Promise<{ status: number; body: { result?: unknown; error?: unknown } | undefined }> {
-	const res = await fetch(url, {
-		method: "POST",
-		headers: { "content-type": "application/json", ...(key ? { "x-api-key": key } : {}) },
-		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "nodeAdmin_getConfig", params: [] }),
-		signal: AbortSignal.timeout(ADMIN_PROBE_TIMEOUT_MS),
-	})
-	return { status: res.status, body: await res.json().catch(() => undefined) }
+/** `nodeAdmin_getConfig` at `url`; a JSON-RPC error answer carries no `result`. */
+async function adminGetConfig(url: string, key?: string): Promise<{ status: number; result: unknown }> {
+	let res: Response
+	try {
+		res = await fetch(url, {
+			method: "POST",
+			headers: { "content-type": "application/json", ...(key ? { "x-api-key": key } : {}) },
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "nodeAdmin_getConfig", params: [] }),
+			signal: AbortSignal.timeout(ADMIN_PROBE_TIMEOUT_MS),
+		})
+	} catch (error) {
+		throw new Error(`[e2e-setup] the admin RPC at ${url} did not answer (${error instanceof Error ? error.message : error})`, {
+			cause: error,
+		})
+	}
+	const body = (await res.json().catch(() => undefined)) as { result?: unknown } | undefined
+	return { status: res.status, result: body?.result }
 }
 
 /** Throws unless the admin RPC at `url` refuses a call without `key` with a 401 and answers one carrying
@@ -153,8 +159,7 @@ export async function assertAdminKeyRequired(url: string, key: string): Promise<
 	if (keyless.status !== 401)
 		throw new Error(`[e2e-setup] the admin RPC at ${url} answered a call without the run's key (HTTP ${keyless.status})`)
 	const keyed = await adminGetConfig(url, key)
-	const result = keyed.body?.error === undefined ? keyed.body?.result : undefined
-	if (keyed.status !== 200 || typeof result !== "object" || result === null)
+	if (keyed.status !== 200 || typeof keyed.result !== "object" || keyed.result === null)
 		throw new Error(`[e2e-setup] the admin RPC at ${url} did not answer a call with the run's key (HTTP ${keyed.status})`)
 }
 

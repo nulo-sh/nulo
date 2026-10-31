@@ -129,8 +129,8 @@ const AZTEC_P2P_PORT = Number(process.env.AZTEC_P2P_PORT ?? 40400)
 const PLAYGROUND_PORT = Number(process.env.PLAYGROUND_PORT ?? 5174)
 const PLAYGROUND_URL = process.env.PLAYGROUND_URL ?? `http://localhost:${PLAYGROUND_PORT}/`
 
-/** The admin RPC key of the node this setup starts: the node gets its hash, only the test workers
- *  get the key. The node hashes the header's string, so the hash is over the hex text. */
+/** The admin RPC key of the node this setup starts: the node gets only its hash; the setup and the
+ *  test workers hold the key. The node hashes the header's string, so the hash is over the hex text. */
 const ADMIN_KEY = randomBytes(32).toString("hex")
 const ADMIN_KEY_HASH = createHash("sha256").update(ADMIN_KEY).digest("hex")
 
@@ -926,7 +926,7 @@ declare module "vitest" {
 		egressGuard?: boolean
 		aztecTestConfig?: AztecTestConfig
 		playgroundUrl: string
-		/** The admin RPC key of the node this run started; absent when the node was reused or adopted. */
+		/** The admin RPC key of the node this run started; absent unless this run started it. */
 		aztecAdminKey?: string
 	}
 }

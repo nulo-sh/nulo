@@ -34,8 +34,8 @@ function strangerAnvil(): Promise<number> {
 
 type AdminStub = "enforces" | "open" | "refusesKey" | "rpcError"
 
-/** An admin RPC shaped like the node's key middleware (401 and a JSON-RPC error without the key),
- *  or one of the ways a node can get it wrong. */
+/** An admin RPC; `enforces` answers as the node's key middleware does, with a 401 JSON-RPC error
+ *  when the key is missing or wrong. */
 function stubAdmin(mode: AdminStub, key: string): Promise<string> {
 	const srv = http.createServer((req, res) => {
 		req.resume()
@@ -129,18 +129,24 @@ describe("boot guard", () => {
 		}
 	})
 
-	test("the admin key check passes a node that refuses a keyless call and answers the key, and fails the rest by URL alone", async () => {
+	test("the admin key check passes a node that refuses a keyless call and answers the key, and fails the rest naming the URL, never the key", async () => {
 		const key = "9f".repeat(32)
 		await expect(assertAdminKeyRequired(await stubAdmin("enforces", key), key)).resolves.toBeUndefined()
-		for (const mode of ["open", "refusesKey", "rpcError"] as const) {
-			const url = await stubAdmin(mode, key)
+		const [closed] = await freePorts(1)
+		const failing: Array<[string, string]> = [
+			["open", await stubAdmin("open", key)],
+			["refusesKey", await stubAdmin("refusesKey", key)],
+			["rpcError", await stubAdmin("rpcError", key)],
+			["closed", `http://127.0.0.1:${closed}`],
+		]
+		for (const [label, url] of failing) {
 			const error = await assertAdminKeyRequired(url, key).then(
 				() => undefined,
 				(e: Error) => e,
 			)
-			expect(error, mode).toBeInstanceOf(Error)
-			expect(error?.message, mode).toContain(url)
-			expect(error?.message, mode).not.toContain(key)
+			expect(error, label).toBeInstanceOf(Error)
+			expect(error?.message, label).toContain(url)
+			expect(error?.message, label).not.toContain(key)
 		}
 	})
 

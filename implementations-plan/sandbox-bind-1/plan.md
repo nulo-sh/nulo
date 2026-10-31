@@ -101,6 +101,8 @@ None. The change is test infrastructure; no screen, copy or row changes.
 | Codex audit r1 | conditional approve | 1 wording (plan, recon, README drafted); 2 key reach stated as every worker; 4 three-stub test; 5 D3 and placement kept; 6 Docker retry 0, named SHA, teardown, unrun is not a pass; 7 README sentences drafted | 3 and the IPv6 listener cases: moot once D5 drops the check |
 | Opus Plan | conditional approve | 1 wording, README and PR body; 2 the residual goes to the private record; 3 D5; 4 hash input stated (F3); 5 success log line, retry 0 on all runs, Firefox baseline, Docker teardown | none |
 | Codex final (fresh session) | approve | nits: the Firefox baseline before Phase 1 (taken); a fourth stub (HTTP 200 with a JSON-RPC error) and an exact header match in the pass stub | none |
+| Arc Codex r1 | approve | nits: transport failures name the URL (wrapped, closed-port case added); the stub comment cut | none |
+| Arc Opus | approve | 1 transport failures name the URL; 2 the separate `error` check dropped (the `result` check already refuses an error answer, and no test told them apart); 3 the key-holder comment; nits: test name, `ProvidedContext` doc, index line | none |
 
 ## Delivery
 
