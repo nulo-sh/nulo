@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { createHash, randomBytes } from "node:crypto"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
@@ -29,7 +30,7 @@ import { markBootReady, markBootStarted } from "./sentinel"
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
-import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "./boot-guard"
+import { assertAdminKeyRequired, assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, nodeStores, waitWhileAlive } from "./boot-guard"
 import { identityIsDead, launchEnv, newMarker, ownIdentity, readStartTime } from "./owned-processes"
 import {
 	createRunDir,
@@ -127,6 +128,11 @@ const AZTEC_ADMIN_PORT = Number(process.env.AZTEC_ADMIN_PORT ?? 8880)
 const AZTEC_P2P_PORT = Number(process.env.AZTEC_P2P_PORT ?? 40400)
 const PLAYGROUND_PORT = Number(process.env.PLAYGROUND_PORT ?? 5174)
 const PLAYGROUND_URL = process.env.PLAYGROUND_URL ?? `http://localhost:${PLAYGROUND_PORT}/`
+
+/** The admin RPC key of the node this setup starts: the node gets only its hash; the setup and the
+ *  test workers hold the key. The node hashes the header's string, so the hash is over the hex text. */
+const ADMIN_KEY = randomBytes(32).toString("hex")
+const ADMIN_KEY_HASH = createHash("sha256").update(ADMIN_KEY).digest("hex")
 
 /** Per-run aztec run dir: the node's `--data-directory` is its `data` subdir and its `TMPDIR` its
  *  `tmp` subdir, where a local network opens every store. The flag stays because it names the run
@@ -299,12 +305,17 @@ function provideWithoutSandbox(project: TestProject): void {
  *  marker. */
 async function finishBoot(project: TestProject): Promise<void> {
 	project.provide("playgroundUrl", PLAYGROUND_URL)
+	project.provide("aztecAdminKey", weStartedNode ? ADMIN_KEY : undefined)
 	await deployContractsAndProvide(project)
 	// Sandbox healthy + contracts deployed, BEFORE any test worker starts —
 	// this closes the boot-failure (exit 86) window. Any failure from here on
 	// (fixture, import, test body) is a real failure, never an infra-boot flake.
 	markBootReady()
 	assertNodeStoresInRunDir()
+	if (weStartedNode) {
+		await assertAdminKeyRequired(`http://127.0.0.1:${AZTEC_ADMIN_PORT}`, ADMIN_KEY)
+		console.log("[e2e-setup] admin RPC: a keyless call is refused, the run's key is accepted")
+	}
 }
 
 /** Teardown and `e2e:reap` remove the run dir and nothing else, so a store the node opens outside
@@ -557,7 +568,8 @@ function spawnAztecNode(dirs: { data: string; tmp: string }): ChildProcess {
 			ANVIL_URL,
 			"--data-directory",
 			dirs.data,
-			"--disable-admin-api-key",
+			"--admin-api-key-hash",
+			ADMIN_KEY_HASH,
 		],
 		{
 			stdio: "pipe",
@@ -569,6 +581,8 @@ function spawnAztecNode(dirs: { data: string; tmp: string }): ChildProcess {
 				// Inherited by every child the node spawns, so teardown and the reap remove what they write.
 				TMPDIR: dirs.tmp,
 				SEQ_MIN_TX_PER_BLOCK: "0",
+				// The disable option outranks the key hash, so an inherited one must not reach the node.
+				AZTEC_DISABLE_ADMIN_API_KEY: "false",
 				ETHEREUM_HOSTS: ANVIL_URL,
 				// The CLI (scripts/aztec.sh) starts its own anvil on $ANVIL_PORT (8545 when unset);
 				// kept on this setup's port, that anvil fails its bind instead of running a second L1.
@@ -912,5 +926,7 @@ declare module "vitest" {
 		egressGuard?: boolean
 		aztecTestConfig?: AztecTestConfig
 		playgroundUrl: string
+		/** The admin RPC key of the node this run started; absent unless this run started it. */
+		aztecAdminKey?: string
 	}
 }
