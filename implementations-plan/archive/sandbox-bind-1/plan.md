@@ -1,7 +1,7 @@
 ---
 plan: sandbox-bind-1
 tier: light
-status: delivered (PR open, merge pending)
+status: delivered (PR open, merge pending); archived
 issues: none (the PR closes nothing)
 driver: claude-code
 claude_model: opus
