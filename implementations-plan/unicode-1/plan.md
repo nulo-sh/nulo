@@ -12,8 +12,20 @@ base: origin/dev at 13bb2133c
 trunk: dev
 issues: "#1388, #1395 (arc 1 closes both)"
 post_implementation_hardening: not scheduled
-status: approved; arc 1 implementing
+status: delivered (PR open, merge pending)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-31.
+- **Status:** delivered in the PR that carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Owner sign-off:** the lane brief's quote, "#1381–#1395 => yes, if they are bugs, work on them. all of them sound very worth fixing. Merge those on green, I review the captures if needed on Monday." D1's narrowed rule is ratified by the orchestrator under that delegation (A1, 2026-10-30). The captures are in [screenshots/](screenshots/).
+- **Shipped:** one rule, `stripBidiAndZeroWidth`, drops the twelve bidirectional controls, the zero-width space, the word joiner, the byte-order mark and the soft hyphen as text is typed or pasted into Send's recipient (#1388), an app alias and Settings search (#1395), and keeps joiners, variation selectors and tags. The alias keeps its caret after a strip and leaves a composing keystroke alone. Closes #1388, #1395.
+- **Dispositions:** #1388's "no visible reason" half did not reproduce: the hint shows once the field is left, by Tab or a mouse press (comment on #1388). No e2e scenario added.
+- **Known limits:** #1404 (aliases stored before the fix), #1407 (joiners and tags D1 keeps), #1408 (the caret at Send and Settings search, whose fix is in `@nulo/design`'s `Input`).
+- **Open items:** #1405 (an address followed by a kept character), #1406 (Holdings and the developer searches).
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; the `@input`-beside-`v-model` composition guard is in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # unicode-1: invisible and direction characters in a typed address, an app alias and a settings search
 
@@ -160,7 +172,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings, no functional bug | the same two; the TSDoc overclaim; the `hint` helper hoisted and the press and Tab cases split | none |
 | arc 1 r2 | Codex, resumed | **clean** | the fixes verified (caret after Vue's write-back, a null selection, composition untouched) | none |
 
-Over the 150-line target by the audit rows and D5's four filings.
+Over the 150-line target by the audit rows and D5's filings (four, and the caret limit from the diff review).
 
 ## Seeds
 
