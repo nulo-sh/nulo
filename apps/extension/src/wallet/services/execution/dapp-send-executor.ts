@@ -762,8 +762,8 @@ export class DappSendExecutor {
 	/** One post-send closure owns BOTH the activity record AND the public-authwit index write, so the
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. The node has
-	 *  accepted the tx, so its grants are live: the index write runs whatever the activity record's
-	 *  outcome, and the record's error, when there is one, is the one the caller sees. */
+	 *  accepted the tx, so its grants can land: the index write runs once the activity record settles,
+	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
@@ -796,7 +796,7 @@ export class DappSendExecutor {
 	}
 
 	/** Scoped to the SENDING tx's (profileId, chainId, account); the profile and its deletion epoch are
-	 *  the fence's. A failure is the caller's error unless the activity record already failed. */
+	 *  the fence's. */
 	private async indexGrants(sent: SentTx, account: string, hash: string, recordFailed: boolean): Promise<void> {
 		if (sent.pendingPublicAuthwits.length === 0) return
 		try {

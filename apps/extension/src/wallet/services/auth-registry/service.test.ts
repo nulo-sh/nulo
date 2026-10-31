@@ -151,10 +151,13 @@ describe("AuthRegistryService — pending/reconcile/cap", () => {
 
 		test("refused at entry, the profile's id released for reuse too", async () => {
 			const { s, deletion } = freshService()
+			const store = (s as unknown as { authwits: { prepare: (...args: unknown[]) => Promise<unknown> } }).authwits
+			const prepare = vi.spyOn(store, "prepare")
 			const epoch = deletion.capture("p1")
 			deletion.beginDeletion("p1")
 			deletion.release("p1")
 			await expect(s.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, epoch)).rejects.toThrow(/being deleted/)
+			expect(prepare).not.toHaveBeenCalled()
 			expect(await rowsOf(s)).toEqual([])
 		})
 

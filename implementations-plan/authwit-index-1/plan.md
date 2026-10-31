@@ -47,7 +47,7 @@ A dApp send that grants a public authwit writes the grant to the wallet's index 
 - **Cause.** The index write runs only when History's write succeeds, a separate write that can refuse or fail after the node accepted the send.
 - **Change.** In `sentTxRecorder`: one try around the whole History statement, its arguments and `await feeChoice` included; then the index write; then History's error, the same object, rethrown. Precedence: History's error when only it fails; the index error when only it fails (as today); History's error when both fail, the index failure logged by `logDebug` with a fixed text and `{ error }`. A boolean, not a sentinel value, records that History failed (`throw undefined` is legal). `feeChoice` still starts before the prove.
 - **The epoch guard (D3).** `recordPendingAuthwits` takes the send's `ExecutionFence` and checks its epoch with `profileService.getDeletionState().assertCurrent(fence.profileId, fence.epoch)` first inside its locked section, then again for each row between `prepare` and `commit`, with no await between that check and the commit, as `restore()` does. The entry check refuses a send authorized before the deletion (F5); the commit check holds even when the lock's watchdog has handed the lock to the purge. No session check: a lock or switch after the send must still write (F7). No account check: it cannot close the window before account rows are deleted, which History's own check also leaves.
-- **File-level change map.** `execution/dapp-send-executor.ts` (`sentTxRecorder`, its doc; passes the fence); `auth-registry/service.ts` (`recordPendingAuthwits`: the fence parameter, the check, its doc; one clause in the `reconcileFromTx` doc: a row with no History row is never settled); `auth-registry/spec.ts:41-45` (the same clause). Tests: `execution/dapp-send-executor.test.ts`, `execution/dapp-send-authwit-record.composition.test.ts` (new), `auth-registry/service.test.ts` (its calls pass a fence; two cases).
+- **File-level change map.** `execution/dapp-send-executor.ts` (`sentTxRecorder`, its doc; passes the fence's epoch); `auth-registry/service.ts` (`recordPendingAuthwits`: the epoch parameter, the check, its doc; one clause in the `reconcileFromTx` doc: a row with no History row is never settled); `auth-registry/spec.ts:41-45` (the same clause). Tests: `execution/dapp-send-executor.test.ts`, `execution/service.composition.test.ts` (D7), `auth-registry/service.test.ts` (its calls pass an epoch; three cases); the type-roles producer digest of `auth-registry/service.ts` re-pinned after re-attesting its two `send_transaction` sites unchanged.
 - **Not taken** (ledger): the write before the broadcast (OA-1 A, D2); the grants on the journal row with a reconcile (OA-1 B, D2); the index write before History (flips P65-06's order, covers no extra path); an account check or a session check in the registry write (D3); an aggregate error (D4).
 
 ## UI impact
@@ -76,7 +76,7 @@ Information added, no layout or copy change: on a send whose History write fails
     - Never-happens: `sendTx` rejects: no index write.
 - **Validation gate.**
   - `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`: exit 0.
-  - From `apps/extension`: `bun --bun vitest run src/wallet/services/execution/dapp-send-executor.test.ts src/wallet/services/execution/dapp-send-authwit-record.composition.test.ts src/wallet/services/auth-registry/service.test.ts --retry=0` green; the composition case and the first unit case red with `sentTxRecorder` from the base SHA; the held-read case red with only the commit-time recheck removed.
+  - From `apps/extension`: `bun --bun vitest run src/wallet/services/execution/dapp-send-executor.test.ts src/wallet/services/execution/service.composition.test.ts src/wallet/services/auth-registry/service.test.ts --retry=0` green; the composition case and the first unit case red with `sentTxRecorder` from the base SHA; the held-read case red with only the commit-time recheck removed.
   - From the root: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/authwit-lifecycle.test.ts tests/e2e/network/authwit-consume-smoke.test.ts`, then with `NULO_E2E_BROWSER=firefox`: pass at retry 0.
   - `bun run check:plans` after staging: exit 0.
 
@@ -92,6 +92,7 @@ Planned after the pick. B needs the owner's approval of its stored field and its
 - D4. History's error wins and the second failure is logged: an aggregate error would change the class the caller and the journal classify (Codex asked that neither be lost; Opus proposed the log).
 - D5. Tests: unit cases for the recorder's paths and the guard, one composition case and its control. The success control is the existing unit pin.
 - D6. Committed files state the change and its guarantee; the detailed trace stays with the orchestrator (Codex R2, Opus R1).
+- D7. As built: `recordPendingAuthwits` takes the fence's deletion epoch, not the whole fence, since the epoch is all it checks; the composition cases sit in `execution/service.composition.test.ts`, the one file COMPOSITION-TESTS.md D1 lets drive a canned `proveTx`; the held read is staged by wrapping the store's `prepare`.
 
 ## Panel verdicts
 
@@ -102,6 +103,8 @@ Planned after the pick. B needs the owner's approval of its stored field and its
 | Codex R2 (final, resumed) | reject | the epoch guard back with its test; neutral committed wording; recon aligned; complete gas fixture; OA-1 qualified ("when no History row exists", "attempts to remove") | none |
 | Codex R3 (resumed) | conditional approve | the epoch rechecked before each commit, with its test | a fake-timer watchdog test (the held read pins the same recheck) |
 | Codex R4 (resumed, final) | approve | the held-read test must fail with only the commit-time recheck removed | none |
+| Codex fix R1 (arc 1) | changes needed | the recorder's doc claims only that the grants can land; the helper's doc loses its restated precedence | none |
+| Opus fix R1 (arc 1) | changes needed | the entry-refusal test asserts no row was prepared; the same doc points; the `pending` field doc matches the reconcile doc | none |
 
 ## Delivery
 
