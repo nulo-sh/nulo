@@ -1,7 +1,7 @@
 ---
 plan: deps-ci-1
 tier: light
-status: arc 1 implemented, Codex fix loop clean (r2); PR pending
+status: completed
 issues: "none; Dependabot alerts 34-37 on .github/actions/setup-aztec/cli/package-lock.json"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at 7bde519db
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-31. Planned and delivered as one arc.
+- **Status:** completed. The arc and this close-out ship as PR #1421 into `dev`; its merge archives this plan. No issue closes: the PR fixes Dependabot alerts 37, 36 and 35 once on `dev`.
+- **Shipped:** `lock.sh`'s template and `cli/package.json` carry `overrides.systeminformation: ^5.33.16`; the lockfile moved by an in-place resolve (`systeminformation` 5.23.8 → 5.33.16, one extraneous `zod` entry pruned); `setup-aztec-pins.test.ts` refuses a locked `systeminformation` below 5.33.16 at any path; one sentence in the `aztec-update` skill.
+- **Review loop:** plan: Codex r1 conditional approve, Opus reject (both blocking findings verified, resolved as A1, A2 and D5), Codex r2 conditional approve, r3 approve. Diff: Codex r1 one finding, the Opus review three accepted and one rejected, Codex r2 clean.
+- **Gates:** every Phase 1 gate green at `fecee7580` and again after the `dev` merge; the Docker runner proved the install and the CLI (local node ready, twice) but ran no test (#1419); on PR #1421, all five required checks green, both network lanes included.
+- **Dropped:** a fresh `lock.sh 6.0.0` re-resolve (D2); narrowing the audit gate's pathspec (D5, a gate change, not this lane's); flagging npm alias entries in the floor test (needs an alias the tree lacks).
+- **Known limits:** #1420.
+- **Open items:** #1419.
+- **Lessons:** none promoted. The gate's enforce trigger is CLAUDE.md § Dependency policy, the runner gap is #1419, and `lessons.md` is at its budget.
+- **Seeds retired:** the `/goal` and `/loop` below are a record, not an instruction.
 
 # deps-ci-1: systeminformation past its advisories in setup-aztec's npm lockfile
 
