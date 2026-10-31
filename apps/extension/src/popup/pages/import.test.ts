@@ -80,6 +80,7 @@ function makeFlow() {
 		repeatedPassword: ref("password123"),
 		unlockMethod: ref("password"),
 		maxPasswordLength: 128,
+		isImporting: ref(false),
 		error: ref({ type: "", title: "", tooltip: "" }),
 		isCopied: ref(false),
 		isAllowedToImportBySeedPhrase: ref(false),
@@ -195,6 +196,24 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) w.unmount()
 	for (const c of cleanups.splice(0)) c()
 	document.body.innerHTML = ""
+})
+
+describe("popup import — the phrase form while an import runs", () => {
+	test("the unlock choice takes no input while the import runs, and takes it again after", async () => {
+		holder.flow.selectedImportOption.value = "seed"
+		const w = await mountImport()
+		const disabled = () =>
+			["import-method-passkey", "import-method-password"].map(
+				(id) => w.get(`[data-testid="${id}"]`).attributes("disabled") !== undefined,
+			)
+		expect(disabled()).toEqual([false, false])
+		holder.flow.isImporting.value = true
+		await flushPromises()
+		expect(disabled()).toEqual([true, true])
+		holder.flow.isImporting.value = false
+		await flushPromises()
+		expect(disabled()).toEqual([false, false])
+	})
 })
 
 describe("popup import — full backup, a restore ready", () => {

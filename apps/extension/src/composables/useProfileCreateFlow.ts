@@ -1,6 +1,7 @@
 import { computed, ref } from "vue"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { ToastOptions } from "@/composables/toast"
+import type { AdmittedUnlock } from "@/composables/useNewProfilePasskey"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
@@ -35,9 +36,10 @@ import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
  */
 export interface UseProfileCreateFlowOptions {
 	/** Per-shell activation + routing. Popup: manual sequence (listener-based). Onboarding: `bootstrapActiveProfile` then route.
-	 *  An in-page passkey create also hands over the answer it was made from, which opens the new
-	 *  profile's recovery phrase once; the shell drops it after. */
-	onCreated: (profile: ProfileInfo, credentialData?: PasskeyCredentialData) => Promise<void> | void
+	 *  An in-page passkey create also hands over the answer it was made from, and a password create the
+	 *  password it sealed under, either of which opens the new profile's recovery phrase once; the
+	 *  shell drops it after. */
+	onCreated: (profile: ProfileInfo, credentialData?: PasskeyCredentialData, password?: string) => Promise<void> | void
 	/** Per-shell create-failure notification. `isPasskey` selects the description/note copy; the page owns `notificationStore.create`. */
 	notifyCreateFailed: (isPasskey: boolean) => void
 	/** The page's toast, for a passkey prompt that was dismissed or timed out. */
@@ -113,7 +115,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	const passkeyCreate = passkeyProfileCreator(runCeremony)
 	let disposed = false
 
-	function reportCreateFailure(e: unknown) {
+	function reportCreateFailure(e: unknown, method: AdmittedUnlock["method"]) {
 		// A create that fails after its page left reports to nobody: the step ended with the page.
 		if (disposed) return
 		if (handleCancelOrUnconfirmed(e, opts.openToast)) return
@@ -122,7 +124,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 			opts.openToast({ kind: "error", label: PASSKEY_COPY.noPrf })
 			return
 		}
-		opts.notifyCreateFailed(authMethod.value === "passkey")
+		opts.notifyCreateFailed(method === "passkey")
 		logCredentialFailure("Failed to create profile:", e)
 	}
 
@@ -130,11 +132,13 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 	async function submit(existing: boolean) {
 		if (isCreating.value) return
 		if (!isAllowedToContinue.value) return
+		// The run seals what its gate judged, whatever the form does while it waits.
+		const admitted: AdmittedUnlock = { method: authMethod.value, password: password.value }
 		// Latch FIRST, before the async getProfiles() fetch, so two rapid clicks
 		// can't both race past the validate check before the lock is set.
 		isCreating.value = true
 
-		let created: { profile: ProfileInfo; credentialData?: PasskeyCredentialData }
+		let created: { profile: ProfileInfo; credentialData?: PasskeyCredentialData; password?: string }
 		let name: string | null = null
 		try {
 			name = await resolveName()
@@ -143,12 +147,12 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 				return
 			}
 			created =
-				authMethod.value === "passkey"
+				admitted.method === "passkey"
 					? await passkeyCreate.create(name, existing)
-					: { profile: await managers.profile.createProfile(name, password.value) }
+					: { profile: await managers.profile.createProfile(name, admitted.password), password: admitted.password }
 		} catch (e) {
 			if (name !== null) passkeyCreate.remember(e, name)
-			reportCreateFailure(e)
+			reportCreateFailure(e, admitted.method)
 			isCreating.value = false
 			return
 		}
@@ -159,7 +163,7 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		// If it fails the latch stays set: the profile exists, so another Create
 		// would make a second one.
 		try {
-			await opts.onCreated(created.profile, created.credentialData)
+			await opts.onCreated(created.profile, created.credentialData, created.password)
 		} catch {
 			console.warn("profile activation failed")
 			return

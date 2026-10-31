@@ -535,6 +535,32 @@ describe("onboarding import — the CTA bar in each state", () => {
 	})
 })
 
+describe("onboarding import — the phrase form while an import runs", () => {
+	test("the unlock choice takes no input while the import runs, and takes it again when it fails", async () => {
+		let fail!: (error: Error) => void
+		profileApi.importMnemonic.mockReturnValueOnce(new Promise((_, reject) => (fail = reject)))
+		const w = await mountImport()
+		const flow = importFlow.api!
+		flow.selectedImportOption.value = "seed"
+		flow.unlockMethod.value = "password"
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
+		flow.password.value = "password123"
+		flow.repeatedPassword.value = "password123"
+		await flushPromises()
+		const disabled = () =>
+			["import-method-passkey", "import-method-password"].map(
+				(id) => w.get(`[data-testid="${id}"]`).attributes("disabled") !== undefined,
+			)
+		void flow.handleImportSeed()
+		await flushPromises()
+		expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1)
+		expect(disabled()).toEqual([true, true])
+		fail(new Error("refused"))
+		await flushPromises()
+		expect(disabled()).toEqual([false, false])
+	})
+})
+
 // A branch the inline expression skips must stay unread: an eager read adds a render dependency.
 describe("onboarding import — the CTA predicates read only what each branch reaches", () => {
 	const FORM_PROPS = ["selectedBackup", "restoreStatus", "isRestoreHasErrors"]

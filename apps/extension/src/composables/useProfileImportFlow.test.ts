@@ -22,7 +22,7 @@ vi.mock("@nulo/wallet-core/utils", async (importOriginal) => {
 
 import { managers } from "@/utils/core"
 import { pickFile } from "@/utils"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { deferred, errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { useProfileImportFlow, type UseProfileImportFlowOptions } from "./useProfileImportFlow"
 
@@ -49,6 +49,9 @@ function makeFlow(overrides: Partial<UseProfileImportFlowOptions> = {}, onPasske
 
 /** A phrase the import accepts: 24 words on the wordlist with a valid checksum. */
 const SEED_24 = `${"abandon ".repeat(23)}art`
+/** Another phrase the import accepts. */
+const OTHER_SEED_24 = `${"zoo ".repeat(23)}vote`
+const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
 /** Types a phrase and waits for its verdict, as a person sees the hint before pressing Import. */
@@ -214,13 +217,18 @@ describe("useProfileImportFlow", () => {
 
 			const p = flow.handleImportSeed()
 			await tick()
+			flow.unlockMethod.value = "passkey"
+			flow.password.value = "typed after"
+			flow.seedPhrase.value = OTHER_SEED_24
 			const confirm = await confirmDialog()
 			// The dialog NAMES the colliding profile (never key material).
 			expect(String(confirm.description)).toContain("Main")
 			await p
 
-			expect(profileApi.importMnemonic).toHaveBeenCalledTimes(2)
-			expect(profileApi.importMnemonic).toHaveBeenLastCalledWith("MyProfile", SEED_24.split(" "), "password123", true, undefined)
+			expect(profileApi.importMnemonic.mock.calls).toEqual([
+				["MyProfile", SEED_24.split(" "), "password123", false, undefined],
+				["MyProfile", SEED_24.split(" "), "password123", true, undefined],
+			])
 			expect(opts.completeImport).toHaveBeenCalledTimes(1)
 		})
 
@@ -323,7 +331,6 @@ describe("useProfileImportFlow", () => {
 	})
 
 	describe("a phrase imported under a passkey", () => {
-		const ANSWER = { id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" } as unknown as PasskeyCredentialData
 		/** A flow on the Passkey tab with a 24-word phrase and a name, and no password typed. */
 		async function passkeyFlow() {
 			const made = makeFlow({}, true)
@@ -456,6 +463,59 @@ describe("useProfileImportFlow", () => {
 			await flow.handleImportSeed()
 			expect(flow.ceremonyRequest.value).toBeNull()
 			expect(profileApi.importMnemonic).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("a run seals the unlock and the phrase it was admitted with", () => {
+		/** Runs `submit` with the profile-name read held until `change` has edited the form. */
+		async function changeFormMidRun(submit: () => Promise<void>, change: () => void) {
+			const names = deferred<Array<{ name: string }>>()
+			profileApi.getProfiles.mockReturnValueOnce(names.promise)
+			const run = submit()
+			change()
+			names.resolve([])
+			return run
+		}
+
+		test.each([
+			["handleImportSeed", "create"],
+			["handleImportSeedWithExistingPasskey", "discover"],
+		] as const)("%s admitted on Passkey asks the card and imports the admitted phrase under its answer", async (handler, mode) => {
+			const { flow, opts } = makeFlow({}, true)
+			flow.profileName.value = "MyProfile"
+			await typePhrase(flow, SEED_24)
+			const run = changeFormMidRun(flow[handler], () => {
+				flow.unlockMethod.value = "password"
+				flow.password.value = "typed after"
+				flow.repeatedPassword.value = "typed after"
+				flow.seedPhrase.value = OTHER_SEED_24
+			})
+			await vi.waitFor(() => expect(flow.ceremonyRequest.value?.mode).toBe(mode))
+			flow.onCeremonyResolve(ANSWER)
+			await run
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith("MyProfile", SEED_24.split(" "), undefined, false, ANSWER)
+			expect(opts.completeImport).toHaveBeenCalledOnce()
+		})
+
+		test("admitted on Password, it asks no card and seals under the admitted password", async () => {
+			const { flow, opts } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await typePhrase(flow, SEED_24)
+			await changeFormMidRun(flow.handleImportSeed, () => {
+				flow.unlockMethod.value = "passkey"
+				flow.password.value = "typed after"
+			})
+			expect(flow.ceremonyRequest.value).toBeNull()
+			expect(profileApi.importMnemonic).toHaveBeenCalledExactlyOnceWith(
+				"MyProfile",
+				SEED_24.split(" "),
+				"password123",
+				false,
+				undefined,
+			)
+			expect(opts.completeImport).toHaveBeenCalledOnce()
 		})
 	})
 

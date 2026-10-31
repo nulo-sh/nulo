@@ -16,6 +16,8 @@ const props = defineProps({
 	/** The flow's verdict on the typed phrase, the same one its Import button follows. */
 	phraseVerdict: { type: Object, default: () => ({ kind: "empty" }) },
 	maxPasswordLength: { type: Number, default: 128 },
+	/** An import is in flight: the unlock choice it was admitted with stays put. */
+	importing: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["secretInput", "passwordInput"])
@@ -72,7 +74,12 @@ const seedHintColor = computed(() => {
 	</div>
 
 	<div :class="$style.section_last">
-		<UnlockMethodChoice v-model="unlockMethod" passwordTestid="import-method-password" passkeyTestid="import-method-passkey">
+		<UnlockMethodChoice
+			v-model="unlockMethod"
+			passwordTestid="import-method-password"
+			passkeyTestid="import-method-passkey"
+			:disabled="importing"
+		>
 			<Flex direction="column" gap="12">
 				<Input
 					v-model="password"

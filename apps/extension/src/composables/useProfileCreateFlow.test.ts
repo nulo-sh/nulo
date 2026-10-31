@@ -2,6 +2,7 @@ import { effectScope } from "vue"
 import { flushPromises } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import { deferred } from "@nulo/wallet-core/utils"
 
 vi.mock("@/utils/core", () => {
 	const profileMock = {
@@ -66,7 +67,7 @@ describe("useProfileCreateFlow", () => {
 		await flow.handleCreate()
 		expect(profileApi.createProfile).toHaveBeenCalledWith("MyProfile", "password123")
 		expect(opts.onCreated).toHaveBeenCalledTimes(1)
-		expect(opts.onCreated).toHaveBeenCalledWith({ id: "p1", name: "Created", type: "password" }, undefined)
+		expect(opts.onCreated).toHaveBeenCalledWith({ id: "p1", name: "Created", type: "password" }, undefined, "password123")
 		expect(flow.isCreating.value).toBe(false)
 	})
 
@@ -81,6 +82,7 @@ describe("useProfileCreateFlow", () => {
 		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith(
 			{ id: "p1", name: "Created", type: "passkey" },
 			{ id: "Y3JlZA==", prf: "cHJm", prfSalt: "c2FsdA==" },
+			undefined,
 		)
 	})
 
@@ -94,7 +96,7 @@ describe("useProfileCreateFlow", () => {
 		expect(profileApi.createPasskeyProfile).toHaveBeenCalledWith("MyProfile", undefined, false)
 		expect(profileApi.generateProfileId).not.toHaveBeenCalled()
 		expect(passkeyRetry).not.toHaveBeenCalled()
-		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith({ id: "p1", name: "Created", type: "passkey" }, undefined)
+		expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith({ id: "p1", name: "Created", type: "passkey" }, undefined, undefined)
 	})
 
 	describe("with a passkey the person already has", () => {
@@ -128,6 +130,54 @@ describe("useProfileCreateFlow", () => {
 			expect(profileApi.createProfile).not.toHaveBeenCalled()
 			expect(passkeyRetry).not.toHaveBeenCalled()
 			expect(opts.onCreated).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("a run seals the unlock it was admitted with", () => {
+		/** Runs `submit` with the profile-name read held until `change` has edited the form. */
+		async function changeFormMidRun(submit: () => Promise<void> | undefined, change: () => void) {
+			const names = deferred<Array<{ name: string }>>()
+			profileApi.getProfiles.mockReturnValueOnce(names.promise)
+			const run = submit()
+			change()
+			names.resolve([])
+			await run
+		}
+
+		test.each([
+			["handleCreate", false],
+			["handleCreateWithExistingPasskey", true],
+		] as const)("%s admitted on Passkey creates the passkey profile once", async (handler, existing) => {
+			const { flow, opts } = makeFlow()
+			flow.profileName.value = "MyProfile"
+			await changeFormMidRun(flow[handler], () => {
+				flow.authMethod.value = "password"
+				flow.password.value = "typed after"
+				flow.repeatedPassword.value = "typed after"
+			})
+			expect(passkeyRetry).toHaveBeenCalledOnce()
+			expect(passkeyRetry.mock.calls[0]?.[3]).toBe(existing)
+			expect(profileApi.createProfile).not.toHaveBeenCalled()
+			expect(opts.onCreated).toHaveBeenCalledOnce()
+		})
+
+		test("admitted on Password, it creates under the admitted password and hands that password on", async () => {
+			const { flow, opts } = makeFlow()
+			flow.authMethod.value = "password"
+			flow.profileName.value = "MyProfile"
+			flow.password.value = "password123"
+			flow.repeatedPassword.value = "password123"
+			await changeFormMidRun(flow.handleCreate, () => {
+				flow.authMethod.value = "passkey"
+				flow.password.value = "typed after"
+			})
+			expect(passkeyRetry).not.toHaveBeenCalled()
+			expect(profileApi.createProfile).toHaveBeenCalledExactlyOnceWith("MyProfile", "password123")
+			expect(opts.onCreated).toHaveBeenCalledExactlyOnceWith(
+				{ id: "p1", name: "Created", type: "password" },
+				undefined,
+				"password123",
+			)
 		})
 	})
 
@@ -253,14 +303,20 @@ describe("useProfileCreateFlow", () => {
 		},
 	)
 
-	test("password create failure notifies with isPasskey=false", async () => {
-		profileApi.createProfile.mockRejectedValueOnce(new Error("boom"))
+	test("password create failure notifies with isPasskey=false, whatever the tab shows by then", async () => {
+		const failed = deferred<never>()
+		profileApi.createProfile.mockReturnValueOnce(failed.promise)
 		const { flow, opts } = makeFlow()
 		flow.authMethod.value = "password"
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		await flow.handleCreate()
+		const submitted = flow.handleCreate()
+		await flushPromises()
+		expect(profileApi.createProfile).toHaveBeenCalledOnce()
+		flow.authMethod.value = "passkey"
+		failed.reject(new Error("boom"))
+		await submitted
 		expect(opts.notifyCreateFailed).toHaveBeenCalledWith(false)
 		expect(opts.onCreated).not.toHaveBeenCalled()
 		expect(flow.isCreating.value).toBe(false)

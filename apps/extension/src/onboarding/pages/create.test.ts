@@ -453,6 +453,33 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).not.toHaveBeenCalled()
 	})
 
+	test("a password edited while the create runs leaves the words read with the one it was created under", async () => {
+		const created = defer<unknown>()
+		profileApi.createProfile.mockReturnValueOnce(created.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		await w.get('[data-testid="onboarding-password-input"] input').setValue("typed after")
+		created.resolve(worker.opens({ id: "p1", name: "Main", type: "password" }))
+		await flushPromises()
+		expect(profileApi.exportMnemonic).toHaveBeenCalledExactlyOnceWith("p1", "password123")
+		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
+	})
+
+	test("the method tabs take no input while the create runs, and take it again when it fails", async () => {
+		const created = defer<unknown>()
+		profileApi.createProfile.mockReturnValueOnce(created.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		const disabled = () =>
+			["onboarding-method-passkey", "onboarding-method-password"].map(
+				(id) => w.get(`[data-testid="${id}"]`).attributes("disabled") !== undefined,
+			)
+		expect(disabled()).toEqual([true, true])
+		created.reject(new Error("refused"))
+		await flushPromises()
+		expect(disabled()).toEqual([false, false])
+	})
+
 	test("leaving during the read publishes nothing", async () => {
 		const read = defer<string[]>()
 		profileApi.exportMnemonic.mockReturnValueOnce(read.promise)

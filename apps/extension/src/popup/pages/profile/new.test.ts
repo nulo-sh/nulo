@@ -115,6 +115,27 @@ describe("popup new profile — the profile-name field", () => {
 		expect(nativeInput(w, NAME).value).toBe(`Alice${"x".repeat(24)}`)
 	})
 
+	test("the method tabs take no input while a create runs, and take it again after", async () => {
+		let finish!: (profile: { id: string; name: string; type: string }) => void
+		profileApi.createProfile.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+		const w = await mountNew()
+		const tabs = w.findComponent({ name: "NewProfileMethodTabs" })
+		tabs.vm.$emit("update:type", "password")
+		await flushPromises()
+		const credentials = w.findComponent({ name: "NewProfileCredentials" })
+		credentials.vm.$emit("update:password", "password123")
+		credentials.vm.$emit("update:repeatedPassword", "password123")
+		await flushPromises()
+		expect(tabs.props("disabled")).toBe(false)
+		await w.get('[data-testid="register-submit-btn"]').trigger("click")
+		await flushPromises()
+		expect(profileApi.createProfile).toHaveBeenCalledOnce()
+		expect(tabs.props("disabled")).toBe(true)
+		finish({ id: "p2", name: "Profile 2", type: "password" })
+		await flushPromises()
+		expect(tabs.props("disabled")).toBe(false)
+	})
+
 	test("an emptied name fails at submit: alert, aria-invalid, shake, focus back on the field, nothing created", async () => {
 		const w = await mountShown()
 		w.findComponent({ name: "NewProfileMethodTabs" }).vm.$emit("update:type", "passkey")

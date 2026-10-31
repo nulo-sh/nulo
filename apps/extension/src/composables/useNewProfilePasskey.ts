@@ -6,6 +6,9 @@ import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 
 export type UnlockMethod = "passkey" | "password"
 
+/** The unlock a run was admitted with, read once at its click: the form may change while the run waits. */
+export type AdmittedUnlock = { method: UnlockMethod; password: string }
+
 /** What a new profile is sealed under: the password typed, or a passkey answer for it. */
 export type NewProfileUnlock =
 	| { password: string; credentialData?: undefined }

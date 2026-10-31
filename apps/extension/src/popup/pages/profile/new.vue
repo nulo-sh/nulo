@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 			/>
 		</div>
 
-		<NewProfileMethodTabs v-model:type="type" />
+		<NewProfileMethodTabs v-model:type="type" :disabled="isCreating" />
 
 		<NewProfileCredentials
 			v-if="type === 'password'"

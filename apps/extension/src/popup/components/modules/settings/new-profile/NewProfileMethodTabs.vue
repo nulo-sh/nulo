@@ -2,6 +2,7 @@
 /** The create-profile page's Method section, around the shared roving tablist. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 
+defineProps({ disabled: { type: Boolean, default: false } })
 const type = defineModel("type", { type: String, default: "passkey" })
 </script>
 
@@ -16,6 +17,7 @@ const type = defineModel("type", { type: String, default: "passkey" })
 			:activeClass="$style.tab_active"
 			passwordTestid="register-method-password"
 			passkeyTestid="register-method-passkey"
+			:disabled="disabled"
 		/>
 	</div>
 </template>

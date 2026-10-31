@@ -681,7 +681,7 @@ declare global {
   export type { UseNetworkArrivalOptions, NetworkArrivalState } from '../composables/useNetworkArrival'
   import('../composables/useNetworkArrival')
   // @ts-ignore
-  export type { UnlockMethod, NewProfileUnlock } from '../composables/useNewProfilePasskey'
+  export type { UnlockMethod, AdmittedUnlock, NewProfileUnlock } from '../composables/useNewProfilePasskey'
   import('../composables/useNewProfilePasskey')
   // @ts-ignore
   export type { PinScope, PinResult, PinStore, UsePinnedTokensDeps } from '../composables/usePinnedTokens'
