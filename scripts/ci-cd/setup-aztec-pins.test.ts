@@ -11,6 +11,7 @@ const DIR = join(ROOT, ".github/actions/setup-aztec")
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8")
 
 interface LockEntry {
+	version?: string
 	resolved?: string
 	integrity?: string
 	inBundle?: boolean
@@ -32,6 +33,14 @@ function unhashedSources(lock: Lockfile): string[] {
 		.map(([path]) => path)
 }
 
+/** Locked copies of systeminformation below 5.33.16, the first release past all its known advisories. */
+function vulnerableSysteminformation(lock: Lockfile): string[] {
+	return Object.entries(lock.packages)
+		.filter(([path]) => path === "node_modules/systeminformation" || path.endsWith("/node_modules/systeminformation"))
+		.filter(([, entry]) => !entry.version || !Bun.semver.satisfies(entry.version, ">=5.33.16"))
+		.map(([path]) => path)
+}
+
 /** Lines that fetch Foundry or an Aztec installer outside install.sh's pins. */
 function ownInstallers(script: string): string[] {
 	return script.split("\n").filter((line) => /foundry\.paradigm\.xyz|foundryup|install\.aztec(-labs)?\.(network|com)/.test(line))
@@ -50,6 +59,18 @@ describe("the CLI's npm tree", () => {
 	test("every locked package is a registry tarball with a sha512", () => {
 		expect(Object.keys(lock.packages).length).toBeGreaterThan(1000)
 		expect(unhashedSources(lock)).toEqual([])
+	})
+
+	test("no locked systeminformation is below 5.33.16", () => {
+		expect(lock.packages["node_modules/systeminformation"]?.version).toBeDefined()
+		expect(vulnerableSysteminformation(lock)).toEqual([])
+	})
+
+	test("a lockfile copy with a nested systeminformation 5.23.8 is refused", () => {
+		const target = "node_modules/@opentelemetry/host-metrics/node_modules/systeminformation"
+		const copy: Lockfile = structuredClone(lock)
+		copy.packages[target] = { ...copy.packages["node_modules/systeminformation"], version: "5.23.8" }
+		expect(vulnerableSysteminformation(copy)).toEqual([target])
 	})
 
 	test.each([
