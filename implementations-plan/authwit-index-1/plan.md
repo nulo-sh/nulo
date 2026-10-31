@@ -110,7 +110,7 @@ Planned after the pick. B needs the owner's approval of its stored field and its
 ## Delivery
 
 - **Arc 1**: branch `worktree-authwit-index-1`, one PR to `dev` with `gh pr create`, opened ready after the Codex loop converges and the gates pass, with no labels; add `e2e:extension-network` after creation only if the path filter skips the network suite.
-  - Title: `fix(authwit): a dApp send's public authwits are indexed when its history write fails` (84 characters).
+  - Title: `fix(authwit): a dapp send's public authwits are indexed when its history write fails` (84 characters; `dapp` lower-case, as commitlint's `subject-case` refuses `dApp`).
   - Body: the change and its guarantee, the gates with outcomes, the per-browser e2e wall-clock, no `Closes`.
   - The plan stays open: its close-out lands with arc 2, or as a docs-only PR if OA-1 is C.
 - **Arc 2**: after OA-1, off `dev` once arc 1 merges.
