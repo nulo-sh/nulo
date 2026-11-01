@@ -7,3 +7,4 @@
 - A zsh loop over an unquoted string did not split it (zsh does not word-split `$VAR`); the chain stopped before any checkout, nothing was lost. Redone with an array after committing.
 - Red proofs at retry 0, base sources with the new tests: 8 fail (P1, P2, P3 composition, the reverted control's kept field, four send-check listing cases); restored and green.
 - Storage: one golden `journal.authwits` (stamp 1, sealed), `bun run baseline:storage -- --additive "..."` appended stamp 1, its pin added; `src/wallet/storage/` 120 tests green at retry 0.
+- `bun run test` red once (139 s): `execution-lane.test.ts` pins the arguments `commitJournal` passes to the journal; it now also pins the field riding through. Rerun next.
