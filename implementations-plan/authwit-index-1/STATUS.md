@@ -6,3 +6,6 @@
 - 2026-10-31: Codex R2 reject (epoch guard, committed wording), R3 conditional approve (commit-time recheck), R4 approve. Plan approved; arc 1 starts (auto-continue).
 - 2026-10-31: arc 1 implemented; fix R1 (Codex, Opus) changes needed, docs and one test, applied; fix R2 next.
 - 2026-10-31: fix R2 approve; full local gates and both network e2e lanes green; arc 1 PR opened.
+- 2026-11-01: arc 2 opened on `authwit-index-1-a2` off `51ea220b1`; OA-1 answered B (decision page 94, P94-06).
+- 2026-11-01: arc 2 plan R1: Codex and Opus conditional approve; folded (D10 kept on Codex's argument).
+- 2026-11-01: arc 2 implemented; unit, composition and storage tests green at retry 0; red at base for P1, P2, P3.
