@@ -2,7 +2,8 @@
  * Claims the queued journal row a dApp send was filed under, or creates one.
  *
  *   - no `queuedJournalId`, or the row was reaped → create a fresh row
- *   - the row's read rejects                       → rethrow; `JobCancelledSentinel` once cancelled
+ *   - the row's read rejects                       → rethrow; `JobCancelledSentinel` if the pre-acquire
+ *                                                    controller is already aborted
  *   - row at `queued`                              → claim it (queued → pending)
  *   - row at `pending` (silent-path pre-claim)     → register only
  *   - any other stage                              → throw `JobCancelledSentinel` (EIP-1193 4001)
@@ -145,7 +146,7 @@ export async function claimOrCreateDappExecuteJournal(deps: ClaimHelperDeps, inp
 
 // ── Internal helpers ────────────────────────────────────────────────────
 
-/** The queued row, or `undefined` when it is gone. A failed read rejects, never reads as gone:
+/** The queued row, or `undefined` when it is gone or cannot be opened here. A failed read rejects:
  *  replacing the row would run, under a new id and a fresh controller, a send whose cancel may have
  *  landed during the read. */
 async function readQueuedRow(

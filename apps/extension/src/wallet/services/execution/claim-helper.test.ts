@@ -309,7 +309,6 @@ describe("claimOrCreateDappExecuteJournal", () => {
 		expect(result.controller).not.toBe(preController)
 	})
 
-	/** A queued claim whose pre-acquire controller is registered and whose row read the test settles. */
 	function heldQueuedClaim() {
 		const made = makeDeps()
 		const read = deferred<unknown>()
