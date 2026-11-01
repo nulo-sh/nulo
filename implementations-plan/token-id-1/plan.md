@@ -1,7 +1,7 @@
 ---
 plan: token-id-1
 tier: light
-status: plan approved (final fresh Codex pass approve); arc 1 phase 1 green, Codex loop converged
+status: completed (PR #1487, awaiting merge)
 issues: "#1457"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at f738cba62
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-01
+- **Status**: completed. One arc, delivered with this close-out as #1487.
+- **Shipped**: token ids are reserved against a device-wide plaintext high-water mark, `nulo:core:token-id-high-water`. The mark is written as `Math.max(mark, id)` before the row that takes the id, under the token lock's `ownsLock()` and `track` rule, so a deleted token's id is never given to another token while the mark is intact. A damaged mark reads as none; a rejected read fails the add. `nextNumericId` takes a floor. Additive stored-shape stamp 2 (dev gained stamp 1 meanwhile).
+- **Known limits**: #1488 (a missing, rolled-back or planted mark lets freed ids be handed out again). #693 and #262 got comments and stay closed.
+- **Dispositions**: fail closed on a damaged mark was rejected (D3). Refusing at the top of the id space was rejected (D4). A sealed per-profile mark was not taken (D1). An authenticated counter was rejected (Codex final pass).
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and the stamp-collision note supersedes nothing there; it stays in [lessons/phase-1.md](lessons/phase-1.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # token-id-1: a token id is never reused after a delete
 
