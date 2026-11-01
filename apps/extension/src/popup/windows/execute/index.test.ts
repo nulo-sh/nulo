@@ -1729,6 +1729,17 @@ describe("execute window — a failed fee estimate's retry", () => {
 		w = factory()
 		await completeInit()
 		const fees = feeMapInstances[0]!
+		// As the real map's transitions: a schedule clears the result and runs, a cancel clears both.
+		fees.api.estimate.mockImplementation((key: number) => {
+			fees.api.failed.value[key] = false
+			fees.api.results.value[key] = null
+			fees.api.estimating.value[key] = true
+		})
+		fees.api.cancel.mockImplementation((key: number) => {
+			fees.api.failed.value[key] = false
+			fees.api.results.value[key] = null
+			fees.api.estimating.value[key] = false
+		})
 		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
 		const cards = () => w!.findAllComponents(STUBS.OperationCard)
 		/** Each estimate the map would run, settled as a real error: marked before `onError`, as the map does. */
@@ -1762,8 +1773,12 @@ describe("execute window — a failed fee estimate's retry", () => {
 		await flushPromises()
 		expect(fees.api.estimate.mock.calls).toHaveLength(2)
 		expect(toast.value).toBeNull()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
 
 		fees.api.results.value = { 0: { maxFee: "1" }, 1: { maxFee: "2" } }
+		fees.api.estimating.value = { 0: false, 1: false }
 		await flushPromises()
 		expect(cards().map((c) => c.props("estimateFailed"))).toEqual([false, false])
 		expect(confirm().attributes("disabled")).toBeUndefined()
@@ -1783,6 +1798,7 @@ describe("execute window — a failed fee estimate's retry", () => {
 		expect(toast.value).toBeNull()
 		expect(fees.api.failed.value[1]).toBe(true)
 		fees.api.results.value = { 0: { maxFee: "1" }, 1: null }
+		fees.api.estimating.value = { 0: false, 1: false }
 		await flushPromises()
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()

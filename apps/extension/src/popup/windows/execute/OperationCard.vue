@@ -69,7 +69,6 @@ const props = defineProps<{
 	dapp?: DappMetadata & { logoBlobUrl?: string }
 	feeEstimate?: TransferFeeEstimate
 	isEstimating?: boolean
-	/** Its fee estimate failed: the fee card offers `retryEstimate`. */
 	estimateFailed?: boolean
 	/** The wallet-signed authorizations a `default_entrypoint` operation would
 	 *  need at send, discovered without signing (no fee estimate exists for it). */

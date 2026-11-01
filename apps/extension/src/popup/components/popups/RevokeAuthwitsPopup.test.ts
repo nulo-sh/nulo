@@ -113,7 +113,6 @@ const STUBS = {
 		},
 		emits: ["update:modelValue", "retryEstimate"],
 		setup: () => ({ feeControlClick }),
-		// A fee button and a retry button per chunk; tests target them by index.
 		template: `<div><button class="set-fee" :data-estimate="feeEstimate?.maxFee" :data-falls-back="String(fallsBack)" :data-failed="String(estimateFailed)" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button><button class="stub-retry" @click="$emit('retryEstimate')">retry</button></div>`,
 	},
 	Button: {
