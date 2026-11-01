@@ -203,7 +203,7 @@ export function probedFirstSimOpts(
 	}
 }
 
-/** Verifies witnesses and transaction validity while skipping fee enforcement; `scopes` must be the simulated build's. */
+/** `scopes` must be the simulated build's: its proof reads the same set. */
 export function validatedSimOpts(scopes: AztecAddress[]): Parameters<SimulateTxFn>[2] {
 	return { simulatePublic: true, skipFeeEnforcement: true, scopes }
 }

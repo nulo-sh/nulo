@@ -15,20 +15,11 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Two `sendTx` fields a dApp sets, through the wallet-sdk channel against a real node and PXE.
- *
- * Wait: a send that omits `wait` settles on a receipt the node reports at least checkpointed, with
- * a successful execution. Only a real node walks a transaction through its statuses and only the
- * channel carries the receipt back; the pending-then-checkpointed order itself is pinned in the
- * executor's unit tests, since a real node can answer checkpointed at the first read.
- *
- * Additional scope: the second account spends the first's private note with a witness the first
- * signed, naming the first in `additionalScopes`. Every simulation must read the first account's
- * note, which only a real PXE holds. A witness the dApp attaches routes the estimate through
- * classic discovery.
- *
- * The wait step's send also initializes the first account: its `verify_private_authwit` reads the
- * signing-key note its constructor writes, so the witness can verify only after that send succeeds.
+ * A dApp's `wait` and `additionalScopes` against a real node and PXE: the receipt's trip back
+ * through the wallet-sdk channel, and simulations that must read another account's note. A
+ * first-read checkpointed receipt is valid here; the unit tests pin the polling order. The witness
+ * the dApp attaches routes the estimate through classic discovery. The first send initializes the
+ * owner, whose `verify_private_authwit` reads the signing-key note its constructor writes.
  */
 test.skipIf(!hasConfig)(
 	"tx-sendTx-fields — a waiting send gets its checkpointed receipt; a send reads its additional scope's notes",
@@ -54,14 +45,12 @@ test.skipIf(!hasConfig)(
 			(error: unknown) => ({ error }),
 		)
 
-		// Step wait.
 		await setPgInputs(page, { tokenAddress: config.tokenAddress, recipient: config.minterAddress, amount: "1" })
 		const waited = await runApprovedPgCall(ctx, page, { button: "sendTx-wait", method: "sendTx", label: "fields:wait" })
 		const receipt = (waited.resultJson as { receipt?: { status?: string; executionResult?: string } }).receipt
 		expect(["checkpointed", "proven", "finalized"]).toContain(receipt?.status)
 		expect(receipt?.executionResult).toBe("success")
 
-		// Step additional scope.
 		const mint = await delivered
 		if ("error" in mint) throw mint.error
 		await setPgInputs(page, { from: sender, authwitOwner: owner })

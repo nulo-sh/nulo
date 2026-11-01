@@ -97,11 +97,8 @@ export async function encodeAuthwitCall(fn: FunctionAbi, args: unknown[]): Promi
 export class AuthwitDiscoverer {
 	public constructor(readonly _logger: ILogger) {}
 
-	/** Runs a simulation with `skipTxValidation: true` + `skipFeeEnforcement: true`
-	 *  under the build's scopes, inspects the `privateExecutionResult`'s
-	 *  offchain effects for `CallAuthorizationRequest`s, and emits one
-	 *  `AddPrivateAuthwitAction { kind: "message_hash" }` per authorization
-	 *  the tx proved it needs. */
+	/** One `message_hash` action per authorization request a stubbed simulation under the build's
+	 *  scopes emits; the validated simulation verifies the witnesses. */
 	public async discoverPrivateAuthwits(
 		op: Parameters<BuildTxRequestFn>[0],
 		buildTxRequest: BuildTxRequestFn,

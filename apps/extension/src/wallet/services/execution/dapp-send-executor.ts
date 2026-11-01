@@ -1473,7 +1473,7 @@ type Submitted = { txHash: TxHash; offchainOutput: ReturnType<typeof offchainOut
 const WAIT_INTERVAL_BOUNDS_S = { min: 1, max: 60 } as const
 
 /** Upstream's wait options from the dApp's raw `wait`, which the bridge checks only for types; `null`
- *  reads as omitted. As upstream, the first poll waits one interval: the send cannot be mined sooner. */
+ *  reads as omitted, and `initialDelay` defaults to the interval, as upstream's does. */
 export function dappWaitOpts(wait: unknown): WaitOpts {
 	const asked: WaitOpts = typeof wait === "object" && wait !== null ? wait : {}
 	const interval = Math.min(

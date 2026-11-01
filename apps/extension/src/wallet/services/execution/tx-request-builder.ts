@@ -113,8 +113,9 @@ export interface BuiltStandardTx {
 /** NO_FROM (DefaultEntrypoint) variant — no account nonce exists on that path. */
 export type BuiltNoFromTx = Omit<BuiltStandardTx, "nonce" | "scopes">
 
-/** The account, then each additional scope the dApp asked for, once each: discovery, sizing and
- *  proving must read the same private state, or a note one of them needs is missing from another. */
+/** The account, then each additional scope once. The bridge has admitted each as a session account,
+ *  so the parse trusts it; discovery, sizing and proving read this one set, or a note one needs is
+ *  missing from another. */
 export function sendScopes(account: AztecAddress, additionalScopes: unknown): AztecAddress[] {
 	const scopes = new Map([[account.toString(), account]])
 	for (const scope of Array.isArray(additionalScopes) ? additionalScopes : []) {

@@ -130,7 +130,7 @@ function addr(hex: string) {
 	return { toString: () => hex } as never
 }
 
-/** Real receipt classes: `waitForTx` narrows them by `instanceof`, so a plain `{ status }` reads as neither. */
+/** Real receipt classes: `waitForTx` calls their status predicates, which a plain `{ status }` lacks. */
 const TX_HASH = TxHash.fromBigInt(0x1425n)
 const pendingReceipt = (): TxReceipt => new PendingTxReceipt(TX_HASH, undefined as never)
 const minedReceipt = (status: TxStatus, result = TxExecutionResult.SUCCESS): TxReceipt =>
@@ -640,7 +640,6 @@ describe("DappSendExecutor: the dApp's wait", () => {
 	const standard = (opts: Record<string, unknown>) => makeAztecOp({ opts })
 	const asked = (wait: unknown) => ({ from: addr("0xacct"), additionalScopes: [], wait })
 
-	/** Runs a send under fake timers; each receipt read records the fake clock and whether the slot was already free. */
 	async function waitedSend(op: unknown, receipts: TxReceipt[], advanceMs: number) {
 		collectOffchainEffectsMock.mockReturnValue([])
 		const h = makeHarness()
@@ -658,7 +657,7 @@ describe("DappSendExecutor: the dApp's wait", () => {
 		return { h, reads, outcome: await settled }
 	}
 
-	// `retryUntil` reads its deadline off `performance`, so the clock it reads is faked too.
+	// Both clocks: `waitForTx` sets its deadline off `Date.now()`, `retryUntil` measures it off `performance.now()`.
 	beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] }))
 	afterEach(() => vi.useRealTimers())
 

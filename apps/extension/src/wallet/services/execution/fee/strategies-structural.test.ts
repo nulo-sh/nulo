@@ -169,7 +169,6 @@ describe("FeeJuiceStrategy structural parity", () => {
 		expect(buildStandard).toHaveBeenCalledTimes(1)
 		expect((buildStandard.mock.calls[0] as unknown[])[2]).toBe(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE)
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
-		// Sim opts: the build's scopes exactly.
 		expect((simulateTxTask.mock.calls[0] as unknown[])[2]).toEqual({
 			simulatePublic: true,
 			skipFeeEnforcement: true,

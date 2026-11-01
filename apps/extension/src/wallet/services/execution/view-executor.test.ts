@@ -175,7 +175,6 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 
 		expect(fastPathMocks.runFastPath).not.toHaveBeenCalled()
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
-		// The build derives the scopes from the dApp's additional scopes; the simulation runs under the build's.
 		const build = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
 		expect((build[0] as { opts: { additionalScopes: unknown[] } }).opts.additionalScopes).toEqual([extra])
 		const { scopes } = await (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.results[0].value

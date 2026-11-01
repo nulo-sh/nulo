@@ -6,3 +6,4 @@
 - 2026-11-01 Phase 1 ✓: lint, typecheck:all, test:all, execution suite at retry 0 green; new cases red at the base (lessons/phase-1.md). Phase 2 next.
 - 2026-11-01 Phase 2 ✓: playground test, lint, typecheck:all; five network files proverless, Chrome 9/9 and Firefox 9/9 at retry 0; each fix's revert reds its step (lessons/phase-2.md). Codex loop next.
 - 2026-11-01 Codex fix loop converged: R1 clean, Opus medium+low fixed (D14), R2 one finding = known limit #432, R3 clean. Final gates next.
+- 2026-11-01 Codex corrective pass (the standard's two verbatim rules, D15): comment-only findings applied; unit tests green.

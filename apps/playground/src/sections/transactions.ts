@@ -85,8 +85,7 @@ function gasFeesInput(name: "maxFeesPerGas" | "maxPriorityFeesPerGas"): GasFees 
 	return new GasFees(BigInt(parts[0]), BigInt(parts[1]))
 }
 
-/** The options every `sendTx` button passes: the app's own fee settings only when one is set, and
- *  `NO_WAIT` unless the button awaits the receipt. */
+/** The options every `sendTx` button passes: the app's own fee settings only when one is set. */
 function sendOpts<F>(from: F, { awaitReceipt = false } = {}) {
 	const maxFeesPerGas = gasFeesInput("maxFeesPerGas")
 	const maxPriorityFeesPerGas = gasFeesInput("maxPriorityFeesPerGas")
@@ -148,9 +147,6 @@ async function sendAppSponsored() {
 	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
-/** The sender spends the owner's private tokens with a witness the owner signed for this exact
- *  call, reading the owner's notes through `additionalScopes`, as a dApp acting for two of its
- *  session accounts does. */
 async function sendOnBehalf() {
 	const wallet = getWallet()!
 	const tokenAddress = getInput("tokenAddress")
@@ -175,7 +171,6 @@ async function sendOnBehalf() {
 	return wallet.sendTx(payload as any, { ...sendOpts(senderAddr), additionalScopes: [ownerAddr] } as any)
 }
 
-/** The default transfer, settling on its receipt rather than on submission. */
 async function sendAwaitingReceipt() {
 	const wallet = getWallet()!
 	const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())

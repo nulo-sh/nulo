@@ -108,6 +108,7 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
 - D12. The network gate runs with `NULO_E2E_PROVERLESS=1`: the agent's guard refuses `tx-sendTx-noFrom` without it, and CI runs the new file in its proverless shard pool. The new scenario also passed once prover-ON on Chrome.
 - D13. The playground binds its named sends (`sendTx-wait`, `sendTx-onBehalf`, `sendTx-appSponsored`) from one table, so `bindTransactions` stays within the 80-line budget. No suppression is added.
 - D14. A failed wait rethrows as a fixed category ("The dApp's wait for its receipt timed out", for foundation's `TimeoutError`, or "… failed"). Upstream's message quotes the transaction hash and the node's reason, and the failure line reaches every user's log at `error`. The logging-policy skill says a `txHash` links private activity, and a message quoting such input is logged as a category. Found by the Opus review. The dApp's text is unchanged: the error envelope's constant.
+- D15. The first three fix-loop prompts carried the program's panel rules, not the standard's two verbatim rules (bugs and small fixes only; the comment audit). A corrective resumed pass with the two rules and the standard's adversarial ask audited the comments: the accepted edits tighten or delete comments in the arc's diff, with no functional change. Two pre-existing comment sentences the arc did not write stay as they were.
 
 ## Panel verdicts
 
@@ -124,7 +125,8 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
 | Codex fix R1 | clean | n/a | n/a |
 | Opus review (beside R1) | one medium, one low | a failed wait's log line carried the hash and the node's reason (D14); the scope list now forms before the build's task completes | none |
 | Codex fix R2 (resumed) | one finding | D14 verified: the category reaches `task.fail`, the failure log and the dApp, with no cause kept, and the `TimeoutError` identity holds in the bundle | the retrying node client's own retry logging of a node's error text: known limit #432, the owner's option B of 2026-10-15, unchanged by the wait |
-| Codex fix R3 (resumed, final) | clean | "Checked #432's owner decision, the unchanged arc, and existing receipt polling: the wait adds reads without widening the accepted data exposure or log levels. No new material point; high confidence." | n/a |
+| Codex fix R3 (resumed) | clean | "Checked #432's owner decision, the unchanged arc, and existing receipt polling: the wait adds reads without widening the accepted data exposure or log levels. No new material point; high confidence." | n/a |
+| Codex corrective pass (resumed; the standard's two rules, D15) | comment findings only | precise wording on `dappWaitOpts`, the receipt helper, the faked clocks, `sendScopes`, the discoverer and `validatedSimOpts`; comments that restated code deleted; the e2e header trimmed to its constraints | rewriting comments the arc did not write |
 
 ## Delivery
 
