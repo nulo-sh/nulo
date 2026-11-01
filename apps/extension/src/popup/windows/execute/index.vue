@@ -646,6 +646,7 @@ onUnmounted(() => {
 					v-if="scopeBanner"
 					data-testid="execute-scope-banner"
 					:data-state="scopeBanner.state"
+					:class="$style.scope_banner"
 					variant="info"
 					direction="vertical"
 					wide
@@ -766,6 +767,12 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+/* A typed name can be one word wider than the banner, and the action repeats one on a line of its
+ * own, so the whole banner breaks such a word; the action's shorter words still fit whole. */
+.scope_banner {
+	overflow-wrap: anywhere;
 }
 
 .refusal {
