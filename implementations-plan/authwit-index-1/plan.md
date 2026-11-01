@@ -1,7 +1,7 @@
 ---
 plan: authwit-index-1
 tier: mid
-status: arc 1 merged (#1424); arc 2 (OA-1 = B, P94-06) planned, panel next
+status: closed (2026-11-01)
 issues: "none (Part of nothing; the orchestrator records the change)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at cdb61d0cf (arc 1); 51ea220b1 (arc 2)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-01
+- **Status**: completed. Arc 1 merged as #1424; arc 2 and this close-out are one PR.
+- **Shipped**: once the node accepts a dApp send, the index write of its public authwits runs whatever History's write does (arc 1, `sentTxRecorder`), refused only for a profile whose deletion began after the send's fence (`recordPendingAuthwits`). The send's journal row keeps its authwits from the `submitting` commit until the index holds them (`OperationRecord.publicAuthwits`, an additive storage stamp with its golden and pin), and the send check lists them when it reads the send went through: after a lost node answer, a worker stop between the broadcast and the record, or a failed index write (arc 2, `send-check.ts` `listing`).
+- **Owner's pick**: OA-1 = B, decision page 94, P94-06, signed 2026-11-01, no note; A (list before the broadcast) and C (arc 1 alone) not taken.
+- **Known limits**: none filed, as this plan closes and files no issue. Two accepted residuals stay as ledger entries: D10 (a stop or failed write between an index write and its journal clear, then a revoke before the check re-reads the row, lists the revoked grant again as `Pending`) and D12 (grants of an account removed after its send are written back).
+- **Dispositions**: Opus's "drop the recorder's clear" rejected (D10); skipping the inline write when History fails rejected (it delays a listing arc 1 makes at once); a tombstone of revoked grants not taken (state beyond the owner's approval).
+- **Lessons**: none promoted: the two gotchas met (a fixture hash above the field modulus; zsh not splitting `$VAR`) are already in `lessons.md`, which is at its budget.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # authwit-index-1: a dApp send's public authwits reach the index whatever History's write does
 
