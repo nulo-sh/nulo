@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { describe, expect, test } from "vitest"
 import { mount } from "@vue/test-utils"
 import postcss, { type ChildNode, type Rule } from "postcss"
+import { boundAttr, parseSource, type TemplateNode, walkElements } from "../../../scripts/type-roles/source-scan"
 import DappIdentityBlock from "./DappIdentityBlock.vue"
 
 const STUBS = {
@@ -101,6 +102,21 @@ describe("composite/DappIdentityBlock", () => {
 	test("nameTestId prop is forwarded to the name span", () => {
 		const w = factory({ dapp: { name: "MyDapp" }, nameTestId: "discover-dapp-name" })
 		expect(w.find('[data-testid="discover-dapp-name"]').exists()).toBe(true)
+	})
+
+	test("a network name wider than the action line breaks at its edge", () => {
+		const parsed = parseSource("apps/extension/src/components/composite/DappIdentityBlock.vue")
+		const actions: TemplateNode[] = []
+		if (parsed.template) {
+			walkElements(parsed.template, (node) => {
+				if (boundAttr(node, "data-testid") === "actionTestId") actions.push(node)
+			})
+		}
+		expect(actions.map((node) => boundAttr(node, "class"))).toEqual(["$style.dapp_action"])
+		const line = declarationsOf(".dapp_action")
+		expect(line).toMatchObject({ "overflow-wrap": "anywhere" })
+		expect(line).not.toHaveProperty("text-overflow")
+		expect(line).not.toHaveProperty("white-space")
 	})
 
 	test("actionTestId prop is forwarded to the action line", () => {

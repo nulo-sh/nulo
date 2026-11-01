@@ -178,7 +178,7 @@ export class FpcStrategy implements FeeStrategy {
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
-					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 				}
 			}
 			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
@@ -244,7 +244,7 @@ export class FpcStrategy implements FeeStrategy {
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
-					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 				}
 			}
 			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
@@ -263,7 +263,7 @@ export class FpcStrategy implements FeeStrategy {
 				baseFees,
 				built.txRequest.txContext.gasSettings.maxPriorityFeesPerGas,
 			)
-			simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.account.address), task)
+			simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 			maxFee = simulatedTx.gasUsed.totalGas.mul(ctx.gasPadding).computeFee(baseFees)
 			ctx.op.actions.splice(
 				0,

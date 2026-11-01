@@ -194,12 +194,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	}
 
 	/** Matched by origin, chain and profile, as the channels are: a purge emits a row's self-reported
-	 *  id. A fee question's send was approved already, and a disconnect does not stop an approved send. */
+	 *  id. Every request of the app ends, a fee question included: its end cancels the held send as a
+	 *  decline does, since a higher fee is a new consent and the app it would serve is gone. */
 	private endRequestsOfApp({ origin, chainId, profileId }: RevokedApp): void {
 		if (!origin || !chainId || !profileId) return
 		for (const interaction of [...this.storage.values()]) {
 			const { payload } = interaction
-			if (!("session" in payload) || isFeeQuestionPayload(payload)) continue
+			if (!("session" in payload)) continue
 			const { session } = payload
 			if (session.dappMetadata?.url === origin && session.chainId === chainId && session.profileId === profileId) {
 				this.endInteraction(interaction, appDisconnected())
@@ -689,7 +690,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				})
 		})
 		if (hooks?.queuedJournalId) void this.reconcileCancelledJournal(hooks.queuedJournalId)
-		if ("session" in payload && !isFeeQuestionPayload(payload)) void this.reconcileRevokedSession(registeredId, payload.session)
+		if ("session" in payload) void this.reconcileRevokedSession(registeredId, payload.session)
 		return pending
 	}
 

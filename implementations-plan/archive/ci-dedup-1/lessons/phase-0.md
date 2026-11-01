@@ -1,0 +1,7 @@
+# Phase 0: recon and plan audits
+
+- **Recon** (2026-11-01): one Explore agent (sonnet) over eight capabilities; findings in [recon.md](../recon.md). The driver read `oven-sh/setup-bun` at the pinned SHA through `gh api` (no checkout) and parsed the five filters with `Bun.YAML`.
+- **Codex audit, round 1** (gpt-6.1-sol, high, read-only; session `01a198fc-27e0-7622-815e-109f894b7542`): `conditional approve`. It ran an in-memory copy of `pr-quick`'s compute step with only `ROOT=true` and showed that dropping the `ROOT` clause turns the extension build off while every filter stays the same, so a hand-kept filter list cannot guard it (D8). It showed that removing `.github/actions/setup-bun/**` from both network filters passes every test (D10). It chose D3 (a). One side question went to it as a private consult; tracked privately: GHSA-mcpq-5jpw-c723.
+- **Opus Plan leg, round 1**: `conditional approve`, conditions C1-C5 (plan § Audit verdicts). It found the two restatements the six patterns missed (`CLAUDE.md:49`, `SOURCE-BUILD.md:35`), and argued D3 (c) and the single home for the token rule (D5).
+- **Disposition**: every finding but three accepted; the three rejections and their reasons are in plan § Audit verdicts.
+- **Final fresh Codex pass** (gpt-6.1-sol, high; session `01a19908-8196-72c3-b3e2-2df848b34adb`): `conditional approve`, one condition (D8 grammar check), demonstrated on an in-memory copy of the compute step. Folded; the resumed verification answered `approve`.
