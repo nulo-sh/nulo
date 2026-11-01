@@ -5,6 +5,7 @@
 <script setup lang="ts">
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
+import { useGetStarted } from "@/composables/useGetStarted"
 
 /** Utils */
 import { donePath } from "../steps"
@@ -15,8 +16,18 @@ import { useAppStore } from "@/stores/app.store"
 
 const appStore = useAppStore()
 
+const getStarted = useGetStarted({ profileId: () => appStore.profile?.id })
+
 // Only a reload outside Import lands here with no path: the wallet's type says which.
 const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
+
+// The flags Home's Get started card reads, so the two never disagree; `undefined` until they are read.
+// The path also rules out an import whose flags could not be read, which reads as nothing done.
+const phraseUnsaved = computed(() => {
+	const flags = getStarted.flags.value
+	if (flags === undefined) return undefined
+	return path.value !== "import" && !flags.imported && !flags.phraseSaved
+})
 
 // Detected on mount so the pin-tip only shows for users who actually need
 // it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
@@ -65,16 +76,35 @@ async function openWallet() {
 	})
 	window.close()
 }
+
+onBeforeUnmount(() => {
+	getStarted.dispose()
+})
 </script>
 
 <template>
-	<OnboardingPage align="center" :gap="40">
+	<OnboardingPage
+		align="center"
+		:gap="40"
+		data-testid="onboarding-done-page"
+		:data-phrase-unsaved="phraseUnsaved === undefined ? undefined : String(phraseUnsaved)"
+	>
 		<OnboardingStepHeader current="ready" :path="path" main="You're" sub="In" align="center" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
 				Access the private coordination internet layer.
 			</Text>
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
+			</Text>
+			<Text
+				v-if="phraseUnsaved"
+				variant="body"
+				color="secondary"
+				height="150"
+				align="center"
+				data-testid="onboarding-done-phrase-unsaved"
+			>
+				Your recovery phrase is not saved yet. Save it from Get started on Home.
 			</Text>
 		</OnboardingStepHeader>
 
