@@ -56,9 +56,9 @@ At 161 lines this plan is over the light target of 150: the round-1 audit verdic
 - **Window.** `OperationCard` gains `estimateFailed?: boolean` and emits `retryEstimate: [index]`, forwarded only on its `FeeSettingsCard` branch. `index.vue` passes `failed[i]`, binds `@retryEstimate` to `retryFeeEstimate(i)`, which calls `handleFeeUpdate(i, op.feeSettings)`, and keeps the snack id from its `onError`. The `onError` filters (refusal, then app-paid rows the person does not pay) do not change; the second becomes a named `reportsEstimateFailure(op)`, and the window's retire check counts only failed operations it holds true for (D4). `handleFeeUpdate` retires the snack after it schedules. On `!value` (the card withdrew its settings) it now cancels the key and retires the snack, as the popups' `refresh` does (D9).
 - **Locked card (D6).** In `onRetryEstimate`, a keyboard press focuses the method trigger, else the locked row (`send-fee-locked`, through its ref's `$el`, as `FeeMethodSelector` focuses its trigger; `tabindex="-1"`, the 2 px accent ring on `:focus-visible`).
 
-### Phase 1: The transaction page reads `createdAt`
+### Phase 1: The transaction page reads `createdAt` ✓
 
-- Write the reproducer first, in `popup/pages/tx/[id].test.ts`: "the hero line reads when the send was made, not its last status change". Give `settled()` a `createdAt`. Make the case's `createdAt` local 2026-10-30 15:08 and its `updatedAt` 15:20 (`DateTime.fromObject`), so the zone does not matter. Assert the whole `textContent` of the time span is `Oct 30, 2026 at 15:08`.
+- Write the reproducer first, in `popup/pages/tx/[id].test.ts`: "the hero line reads when the send was made, not its last status change". Give `settled()` a `createdAt`. Make the case's `createdAt` local 2026-10-30 15:08 and its `updatedAt` 15:20 (`new Date(2026, 9, 30, 15, 8)`), so the zone does not matter. Assert the whole `textContent` of the time span is `Oct 30, 2026 at 15:08`.
 - Run it on the base: it must fail, received `Oct 30, 2026 at 15:20`. Log the line in `lessons/phase-1.md`. Then make the change.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/pages/tx src/popup/pages/journal --retry=0`. Pass: exit 0, the reproducer red on the base and green after. Layers: lint, typecheck, component.
 
