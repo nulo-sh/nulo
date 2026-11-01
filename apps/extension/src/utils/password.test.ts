@@ -18,7 +18,7 @@ describe("new-password rule", () => {
 	// Each glyph below is one character to a person but two or more UTF-16 units or code points.
 	test.each([
 		["emoji", "😀"],
-		["accented letters", "é"],
+		["accented letters", "e\u0301"],
 		["ZWJ families", "👨‍👩‍👧"],
 	])("seven %s are fewer than 8 characters, eight are enough", (_name, glyph) => {
 		expect(isNewPasswordValid(glyph.repeat(7), glyph.repeat(7))).toBe(false)
