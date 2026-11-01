@@ -1,7 +1,7 @@
 ---
 plan: incoming-2
 tier: light
-status: panel approved; arc 1 next; arc 2 waits on OA-1
+status: arc 1 in review; arc 2 waits on OA-1
 issues: "#1429 (arc 1); #1431 (arc 2, after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -70,7 +70,7 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 
 ## Arc 1: one restart per tick (#1429)
 
-### Phase 1
+### Phase 1 ✓
 
 - Do D1, D2, D3; edit ARCHITECTURE.md:103 to say the restart stages its marker for the next tick.
 - **Tests** (`service.scenarios.test.ts`):
@@ -80,6 +80,7 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
   - `bun run lint`; `bun run typecheck:all`; `bun run --cwd apps/extension test src/wallet/services/incoming-transfer --retry=0`; `bun run test:all`.
   - From the root: `NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-arrival.test.ts tests/e2e/network/incoming-public-transfers.test.ts tests/e2e/network/incoming-transfers.test.ts`, then with `NULO_E2E_BROWSER=firefox` added.
   - Pass: every command exits 0; the new case is red on the base copy of `service.ts` (it hits the breaker). Record each browser's wall-clock. No e2e scenario is added.
+- **Result** (`dd6ff7444`, review fixes `164f53813`): exit 0 each. On the base copy the new case read 51 pages in one tick and the `:3055` case stepped the restart in the same tick. `test:all`: one saturation timeout (lessons), then green. Network e2e at retry 0, 12 tests each: Chrome 379 s, Firefox 412 s.
 
 ## Arc 2: the received page reads what its route names (#1431; after OA-1)
 
@@ -116,6 +117,9 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 | Codex r1 | conditional approve | 1 (D4 `reset()`), 2 and 3 (Security; known limits at close-out), 4 (F2), 5 (F7), 6 (I1, I2), 7 (D6 keeps a fee on screen; OA-1), 8 (D5: extract; auxiliary failures count), 9 (D7 slot; no page-wide tombstone), 10 (`:3055`), 11 (phase flags, `stopBackground`, B's content) | none |
 | Codex final (fresh) | conditional approve: a delete-race control, D5's exception boundary, an OA-1 capture, OA-1 before arc 2 | all four (phase 2 tests, D5, capture (c), OWNER-ASKS wording) | none |
 | Codex final r2 (resumed) | approve: the four conditions resolved, no regression | none | none |
+| Arc 1 Codex r1 | approve (one comment nit) | the nit: `beginReconciliation`'s doc-comment states the why | none |
+| Arc 1 Opus | conditional approve (no bug) | a test comment naming the fix, ARCHITECTURE.md's "unchanged" wording, a control at the gate's edge | none |
+| Arc 1 Codex r2 | approve | none | none |
 | Opus Plan r1 | conditional approve | A1 (known limit), A2 (D4), A3 (fence before each request; unmount test), F3, F6, F7, I1 cost, I2; OA-1; D4 `pre` flush; D5 reconnect recovery limited to a restart, `modeRead` outside the read; D7 apply at once and hold, slot per run; TDZ, unmount order, the read split; tests (second checkpoint hash, `anchored`, page reads only, a real first connect); smoke flags, `EXTENSION_PATH`, `dist/` order, `type-roles.test.ts` | D5 inline (see Alternatives); ask (b) settled by D6 |
 
 ## Delivery
