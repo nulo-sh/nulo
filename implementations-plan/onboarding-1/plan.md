@@ -1,7 +1,7 @@
 ---
 plan: onboarding-1
 tier: light
-status: arc 1 (#1385, #1386) merged as #1400; arc 2 (#1387) implemented on OA-1 A
+status: closed (2026-11-01)
 issues: "#1385 #1386 (arc 1); #1387 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 9ce6bb0bd
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** closed. Arc 1 merged as #1400 (#1385, #1386); arc 2 and this close-out ship in one PR that closes #1387, and its merge closes the plan.
+- **Shipped:** the onboarding tab renders the shared duplicate-import confirm (`ConfirmPopup` and its sheet moved to `src/components/`); a reload resumes at Ready only on a history entry its own flow marked; Ready names a created wallet's unsaved recovery phrase in the owner's words (P94-05 A), from the flags Home's Get started card reads.
+- **Dispositions:** re-showing the words on a reload rejected (D4; OA-1 B). Codex r1-5, arc 1 Opus 1 and 2, and arc 2 Opus 4 rejected with their reasons in the audit table.
+- **Known limits:** #1479 (a typed Ready address with a profile active shows Ready).
+- **Open items:** #686, reopened by arc 1 (a sheet opened from a scrolled onboarding form leaves an undimmed strip).
+- **Lessons:** none promoted: `lessons.md` holds 8192 of its 8192 bytes. The candidates stay in [lessons/phase-3.md](lessons/phase-3.md) (a gate running only the touched e2e files missed a spec that leaned on the removed shortcut) and [lessons/phase-4.md](lessons/phase-4.md) (an e2e "never shown" check waits on a settle attribute).
+- **Size:** 174 lines against light's 150: two arcs, eight decisions and eleven review rounds, each recorded once.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # onboarding-1: three onboarding states a reload or a duplicate import leaves wrong
 
@@ -137,8 +149,6 @@ Arc 2, the owner's pick on decision page 94, P94-05, signed 2026-11-01: option A
 | Arc 2 Codex r1 | approve | 1 (the line's comment names the Import divergence from Home; the e2e helper's comment cut) | none |
 | Arc 2 Opus | approve | 1 (that comment also names a lost `imported` write), 2 (the stale no-path comment and test name), 3 (direct attribute binding) | 4 (drop the Import-entry case: it stays as the realistic import control) |
 | Arc 2 Codex r2 | approve (the fixes hold; no new finding) | none | none |
-
-Known limit, filed at close-out: a typed `#/onboarding/done` with a profile active shows Ready. The consequence does not matter: the profile exists.
 
 ## Delivery
 
