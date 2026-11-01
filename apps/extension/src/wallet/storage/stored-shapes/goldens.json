@@ -1981,15 +1981,26 @@
 			"value": true
 		},
 		{
-			"id": "tokenIdHighWater.full",
+			"id": "journal.authwits",
 			"stamp": 1,
+			"shape": "journal",
+			"key": "nulo:journal@5c0e7a2b94d1f836",
+			"sealed": true,
+			"value": {
+				"profileId": "3f9a2c71",
+				"sealed": "AeqO/ks2J2+qdk68Art3rO4Kocm0Yxr57oRDhLhpiUMUcoLmqJZQy+vO2ueF0OTzb22UGhw4yC0BYWS75Vjaf06Q+JEuNYgvVwJDNXURtwt1bJHcXIJUisREQ71KusMHajgjmrVGt+oJMo4kmXfw1s8PD+K0xN3wSVhkS1FuH4YJHPi3Mzf6ni+zSzFxNwjOPDEKoRNC68mZi47snuDH7SF9wQunzqWdjjkXkXn4o0Y2Eme/P3/neF7QVA0ScuaJGhlfSkNa0x3N/IBVQcc/1JONRfVZOamkEu3yT+BtlnJbn2jtHyGwd4qCZMUUGpOPhg2iKLhu2G6X2GcipcOdtBtO9fox5Z4w743eU477xSmC7cvkX6pWbkdxEpIsIsAZsrb4N77rtoptyWIiwhg8zTdBcWCVpB5BD1sUSM31GkztDXs4wprn6N4eEW/oe0/gGRON130ikmulZL0ZrpXBGflgPTSClZZpdZZB1znL+pIY91afWXzxpajhZgaAz+9IUwUoCSr2Kl4z9rxppws3zLOLVXKVkiSm+YS2w6eWYxoIf0LT/Y0ERz1synvpoC236w0qeAfOK9rONDo+YW/uYOi8s9+4fGWPGPkjL83nhztkcJEqKm8+PWGitXFLoPB5oFkXSHU67YK2n+PjtUzg5uDLD05GCoIZfRtuNbfEVJJt/I3H1hFFoWwwoFhb02RxSIJjwzDyvehGx35dGDSySfUy7ekJVtdHnylcQq7ZC3/guPCP73+Aw2dUedZjuudHQ8TKj65RvHqIiHVv54ogOmKBY8Y0QSvmi7gZvT5DgWrgc+LGOO/SFEQZf+Pet5kUoiFSxmHPj1QzRWTbb2si3fgLisAps1qxCobGu+o4Limbscd930plWqajPR256dIXJ/GHw+fScKaXj1RRMGCprvWIHvPrLxrztvxo6JxykwE0e1hLcb82GtIWaAPnBHgMZmzv7ii/lFIXDlhH4gOFHhZpXiNdUU0aLHW33Ly9T9n01wu3CXZQ+g6GM3S7hyv3gA4zqTonF4aVQfJ2qKpoFh2eJFJSiVMWJx6aj3DGQGyZUPuWFg6LIsiflhYrUqkGNTWI+Mwse0ieyN330/mpj6y6hhgF7b5v45hlfVB7GSg7OE5avLUedM+Xm7yU8yl4P2VNyCpdyyN19Ka3wx2rlf2STKLQpyAsNWU54a9crYRe/oL2t4uAM9ic4Vx3nLaR8lx+ht3SExQMJe3QfKlElIeiIiwerqWvRUTByy6XPg7dgafcnEwO/CXDZCNE72rk0Iopm/kmeA4S8azhl1Mo5XhBHn9DWftUqirFltdNgsudcvwvNiC0rfOyhvhjyMeEVDB01euPP0mDIl2H+DBVFbkKeQp77kHGPGYRbeo+uXQBqB8a5M/AF6gGWA2ziyq2GjHULqEfN7PTHlQMA2u9l9WEMgXtW3Z1tgMu+IljQXTe62BjfQi/ZH/LyNVNYGarx9lI3x9PPsemiQmnCPLEzUSQhSFL6nXs5T1kFXE037aNIGGBlUoGbpfctm7kx+vBe7YanGQ6iMbd3pSptyGW3U0wGfLrdqsTxLD0qH/Swn47lekW8RfBYWiJ/Wx3smfQs3QxjBYTr03txTwIl3Ws0ZS2yDGGiYe7H2WEvlaAza3Vs+Duu6Tc5BWwqDaeY9TO9lo3uLZsxWJ1fXeBUifhLNUj0D9eMt1Ik7VPubOXS0YK/1NdSSNWPs6wqZrUTYE2879C9/ux+BOj2AcXSx35LtlOow=="
+			}
+		},
+		{
+			"id": "tokenIdHighWater.full",
+			"stamp": 2,
 			"shape": "tokenIdHighWater",
 			"key": "nulo:core:token-id-high-water",
 			"value": 128
 		},
 		{
 			"id": "tokenIdHighWater.minimal",
-			"stamp": 1,
+			"stamp": 2,
 			"shape": "tokenIdHighWater",
 			"key": "nulo:core:token-id-high-water",
 			"value": 1

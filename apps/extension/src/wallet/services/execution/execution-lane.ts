@@ -32,7 +32,7 @@ import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
 import type { TxCall } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
-import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalAuthwits, type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { ProfileInfo } from "@/wallet/services/profile/service"
@@ -694,9 +694,16 @@ export class ExecutionLane {
 	}
 
 	/** {@link markJournal} for a write the caller depends on: a refused write or a missing id rejects. */
-	public async commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void> {
+	public async commitJournal(journalId: string | undefined, progress: JobProgress, publicAuthwits?: JournalAuthwits): Promise<void> {
 		if (!journalId) throw new Error("journal write refused: the operation has no record")
-		await this.deps.operationJournal.transitionOperation(journalId, progress)
+		await this.deps.operationJournal.transitionOperation(journalId, progress, undefined, undefined, publicAuthwits)
+	}
+
+	/** Drops the record's copy of the send's authwits once the index holds them. With no session check:
+	 *  a lock after the send must not leave them for a second listing. */
+	public async clearJournalAuthwits(journalId: string | undefined, txHash: string): Promise<void> {
+		if (!journalId) return
+		await this.deps.operationJournal.clearPublicAuthwits(journalId, txHash, () => true)
 	}
 }
 

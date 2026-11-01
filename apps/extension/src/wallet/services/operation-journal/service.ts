@@ -14,6 +14,7 @@ import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { nextRandomId } from "@/wallet/services/id-allocators"
 import {
 	type Events,
+	type JournalAuthwits,
 	type JournalMetadata,
 	type JournalRetitle,
 	type Methods,
@@ -345,17 +346,19 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * `@nulo/wallet-core/jobs` and the "error iff failed" invariant.
 	 *
 	 * Sets `terminalAt` if the new stage is terminal. `retitle` renames the record in the same write
-	 * that fails it, so only the producer whose transition lands renames the row.
+	 * that fails it, so only the producer whose transition lands renames the row. `publicAuthwits`
+	 * rides only `submitting`, the write the broadcast waits for.
 	 */
 	public async transitionOperation(
 		id: string,
 		progress: JobProgress,
 		error?: JobError | null,
 		retitle?: JournalRetitle,
+		publicAuthwits?: JournalAuthwits,
 	): Promise<OperationRecord> {
 		validateParams(
 			OperationJournalMethodSchemas.transitionOperation.params,
-			[id, progress, error ?? null, retitle],
+			[id, progress, error ?? null, retitle, publicAuthwits],
 			"transitionOperation",
 		)
 		await this.ensureInitialized()
@@ -364,7 +367,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// the claim-vs-cancel race this closes. Critical section is small
 		// (one load + one validate + one write), so global is acceptable.
 		return await this.transitionLock.withLock(async () => {
-			return await this._transitionLocked(id, progress, error, retitle)
+			return await this._transitionLocked(id, progress, error, retitle, publicAuthwits)
 		})
 	}
 
@@ -373,6 +376,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		progress: JobProgress,
 		error?: JobError | null,
 		retitle?: JournalRetitle,
+		publicAuthwits?: JournalAuthwits,
 	): Promise<OperationRecord> {
 		const existing = await this._loadValidated(id)
 		if (!existing) {
@@ -384,6 +388,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		assertErrorInvariant(progress, error)
 		if (retitle !== undefined && progress.stage !== "failed") {
 			throw new ValidationError("transitionOperation: a title rides only a transition to 'failed'")
+		}
+		if (publicAuthwits !== undefined && progress.stage !== "submitting") {
+			throw new ValidationError("transitionOperation: authwits ride only a transition to 'submitting'")
 		}
 		if (progress.stage === "succeeded") {
 			assertSucceededKindInvariant(existing, progress)
@@ -399,10 +406,29 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			updatedAt: now,
 			title: retitle?.title ?? existing.title,
 			call: retitle ? retitle.call : existing.call,
+			publicAuthwits: progress.stage === "succeeded" ? undefined : (publicAuthwits ?? existing.publicAuthwits),
 		}
 		await this.storage.set(id, updated)
 		this.emit("onOperationUpdated", updated)
 		return updated
+	}
+
+	/**
+	 * Drops a send's stored authwits once they are in the authwit index. SW-internal, never an RPC.
+	 * Writes only while the row holds `txHash` at `submitting` or failed from it and `isLive()` holds
+	 * inside the lock; `false` means nothing was written.
+	 */
+	public async clearPublicAuthwits(id: string, txHash: string, isLive: () => boolean): Promise<boolean> {
+		await this.ensureInitialized()
+		return await this.transitionLock.withLock(async () => {
+			const existing = await this._loadValidated(id)
+			if (!existing?.publicAuthwits || submittedHashOf(existing.progress) !== txHash || !isLive()) return false
+			const { publicAuthwits: _cleared, ...rest } = existing
+			const updated: OperationRecord = { ...rest, updatedAt: Date.now() }
+			await this.storage.set(id, updated)
+			this.emit("onOperationUpdated", updated)
+			return true
+		})
 	}
 
 	/**
@@ -663,6 +689,12 @@ function failedFrom(prior: JobProgress): JobProgress {
 	if (prior.stage !== "submitting") return { stage: "failed", from: isTerminal(prior.stage) ? undefined : prior.stage }
 	const { txHash, submittedEndpointUrl, expiry } = prior
 	return { stage: "failed", from: "submitting", txHash, submittedEndpointUrl, expiry }
+}
+
+/** The hash of a send that reached `submitting`, while the row is there or failed from there. */
+function submittedHashOf(progress: JobProgress): string | undefined {
+	if (progress.stage === "submitting") return progress.txHash
+	return progress.stage === "failed" && progress.from === "submitting" ? progress.txHash : undefined
 }
 
 /** "error iff failed". */

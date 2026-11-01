@@ -1,0 +1,6 @@
+# incoming-2 phase 1 (arc 1): one restart per tick
+
+- D1-D3 landed as planned (`dd6ff7444`). The new health-suite case read 51 pages in its first tick on the base copy of `service.ts` (the breaker ended the loop), and the rewritten `:3055` case saw the restart step in the same tick; both green at head.
+- `bun run test:all`, first run: `log-payload-ban.test.ts` timed out at 5 s (6.6 s) with load1 at 119-175 on a shared host; it passes alone in 1.4 s, and the rerun of `test:all` was green. Saturation, not the change: the scan it runs reads the restart's new `logDebug` line as allowed.
+- Network e2e, Chrome, retry 0: `incoming-arrival`, `incoming-transfers`, `incoming-public-transfers`, 12 tests, 379 s.
+- Codex arc r1 (gpt-6.1-sol, high, fresh): approve; one optional nit, `beginReconciliation`'s doc-comment narrated its body. Opus diff review (opus, general-purpose): conditional approve, no bug; three nits: a test comment that named "the fix" and "the old code", ARCHITECTURE.md's "unchanged ... still" wording that now contradicted the next sentence, and an adjacent control at the gate's edge. All four applied (`164f53813`); the doc-comment now carries the why (a reorg the forward scan meets reconciles at once). Codex arc r2 (resumed): approve, no regression.

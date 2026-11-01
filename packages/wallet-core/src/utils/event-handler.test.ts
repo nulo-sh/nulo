@@ -56,6 +56,42 @@ describe("EventHandler", () => {
 		expect(after).toHaveBeenCalledTimes(1)
 	})
 
+	test("a subscriber that removes itself mid-dispatch does not skip the next one", () => {
+		const eh = new EventHandler<number>()
+		const seen: string[] = []
+		const once = (n: number) => {
+			seen.push(`once:${n}`)
+			eh.remove(once)
+		}
+		eh.add(once)
+		eh.add((n) => seen.push(`next:${n}`))
+		eh.invoke(1)
+		eh.invoke(2)
+		expect(seen).toEqual(["once:1", "next:1", "next:2"])
+	})
+
+	test("a subscriber an earlier sibling removes mid-dispatch is not called", () => {
+		const eh = new EventHandler<void>()
+		const removed = vi.fn()
+		const after = vi.fn()
+		eh.add(() => eh.remove(removed))
+		eh.add(removed)
+		eh.add(after)
+		eh.invoke()
+		expect(removed).not.toHaveBeenCalled()
+		expect(after).toHaveBeenCalledTimes(1)
+	})
+
+	test("a subscriber added mid-dispatch receives the next event, not the one in flight", () => {
+		const eh = new EventHandler<number>()
+		const late = vi.fn()
+		eh.add(() => eh.add(late))
+		eh.invoke(1)
+		expect(late).not.toHaveBeenCalled()
+		eh.invoke(2)
+		expect(late).toHaveBeenCalledExactlyOnceWith(2)
+	})
+
 	test("a THROWING reporter must not break dispatch", () => {
 		const onError = () => {
 			throw new Error("reporter down")

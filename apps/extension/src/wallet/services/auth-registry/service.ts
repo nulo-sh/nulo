@@ -234,9 +234,9 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	 *  retry after a partial write does not duplicate. Ids are allocated over the PHYSICAL key
 	 *  space so a codec-hidden row (a damaged current-format row) can't be overwritten.
 	 *
-	 *  `epoch` is the deletion epoch of `scope.profileId` the send captured with its fence: once a
-	 *  deletion of that profile began, the write is refused, so a restore that reuses the id never
-	 *  receives it. Checked again before each commit: the lock's watchdog can hand the lock to the
+	 *  `epoch` is the deletion epoch of `scope.profileId` the caller's execution fence captured:
+	 *  once a deletion of that profile began, the write is refused, so a restore that reuses the id
+	 *  never receives it. Checked again before each commit: the lock's watchdog can hand the lock to the
 	 *  deletion's purge while this write is stalled. */
 	public async recordPendingAuthwits(
 		scope: AuthwitScope,

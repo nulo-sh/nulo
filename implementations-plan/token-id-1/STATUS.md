@@ -5,3 +5,4 @@
 - 2026-11-01: panel R1: Codex and Opus conditional approve; D3 flipped to read-as-absent on Opus's argument, Codex agreed on resume; plan consolidated; final fresh Codex pass next.
 - 2026-11-01: final fresh Codex pass: approve; plan committed; arc 1 starts (auto-continue).
 - 2026-11-01: arc 1: phase 1 green (lint, typecheck:all, test, test:all, ci-gating, targeted suites at retry 0, network token-management on Chrome and Firefox at retry 0); Codex fix R1 approve, Opus changes requested and folded, Codex R2 and R3 approve.
+- 2026-11-01: merged origin/dev (dfa3d6416); the stamp became 2 after another lane's stamp 1; storage and token suites green.
