@@ -201,14 +201,16 @@ describe("buildStandard pins", () => {
 		expect(h.calls.indexOf("getNodeInfo")).toBeLessThan(h.calls.indexOf("resolveInstances"))
 	})
 
-	test("capsule actions map contract/storageSlot/values, ORDER preserved across multiple", async () => {
+	test("capsule actions map contract/storageSlot/values/scope, ORDER preserved across multiple", async () => {
+		const scope = AztecAddress.fromBigIntUnsafe(0x5c09en)
 		const result = await build(h, [
-			{ kind: "add_capsule", contract: CONTRACT, storageSlot: "0x05", capsule: ["0x01", "0x02"] },
+			{ kind: "add_capsule", contract: CONTRACT, storageSlot: "0x05", capsule: ["0x01", "0x02"], scope: scope.toString() },
 			{ kind: "add_capsule", contract: CONTRACT, storageSlot: "0x09", capsule: ["0x03"] },
 		])
 		const payload = (h.buildArgs[0] as unknown[])[2] as {
-			capsules: Array<{ contractAddress: { toString(): string }; storageSlot: Fr; data: Fr[] }>
+			capsules: Array<{ contractAddress: { toString(): string }; storageSlot: Fr; data: Fr[]; scope?: AztecAddress }>
 		}
+		expect(payload.capsules.map((c) => c.scope)).toEqual([scope, undefined])
 		expect(payload.capsules).toHaveLength(2)
 		expect(payload.capsules[0].contractAddress.toString()).toBe(CONTRACT)
 		expect(payload.capsules[0].storageSlot.toString()).toBe(new Fr(5n).toString())
@@ -216,6 +218,18 @@ describe("buildStandard pins", () => {
 		expect(payload.capsules[1].storageSlot.toString()).toBe(new Fr(9n).toString())
 		expect(payload.capsules[1].data.map((f) => f.toBigInt())).toEqual([3n])
 		expect(result.pendingPublicAuthwits).toEqual([])
+	})
+
+	test("scopes: the account, then each additional scope once, as the wire carries them", async () => {
+		const second = AztecAddress.fromBigIntUnsafe(0xb0bn)
+		expect((await build(h, [])).scopes).toEqual([ACCOUNT_ADDR])
+		const additionalScopes = [second.toString(), second.toString(), ACCOUNT_ADDR.toString()]
+		const result = await h.builder.buildStandard(
+			{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), actions: [], opts: { additionalScopes } },
+			FENCE,
+			{ fake: "feeMethod" } as never,
+		)
+		expect(result.scopes).toEqual([ACCOUNT_ADDR, second])
 	})
 
 	test("extra-args action hashes through HashedValues.fromArgs, slot 4 of the payload", async () => {

@@ -14,6 +14,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import FullExportPage from "./full.vue"
 import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../../../scripts/type-roles/source-scan"
 
 /**
  * Component pins for the export page's re-entry latch, Enter handling, error boundary, and
@@ -603,6 +604,13 @@ describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s 
 })
 
 describe("export/full.vue — a reset in progress", () => {
+	it("a network name wider than the notice breaks at its edge", () => {
+		const parsed = parseSource("apps/extension/src/popup/pages/settings/security/export/full.vue")
+		const notice = elementByTestid(parsed, "full-backup-reset-notice")?.node
+		expect(notice && boundAttr(notice, "class")).toBe("$style.reset_notice")
+		expect(declarationsOf(parsed, ".reset_notice")).toMatchObject({ "overflow-wrap": "anywhere" })
+	})
+
 	it("names the reset above the agreement and keeps Continue disabled until the journal is gone", async () => {
 		const { managers } = await import("@/utils/core")
 		pendingReset.mockResolvedValueOnce({ networkId: "net1", running: false })

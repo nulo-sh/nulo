@@ -505,6 +505,7 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		const execute = await openUnfundedDappSend(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
+		await execute.waitForSelector(sel("fee-estimate-failed"), { visible: true, timeout: 10_000 })
 
 		const at = await placement(execute, sel("dapp-approval-footer"))
 		console.log(`[snack-placement] execute: ${Math.round(at.footerTop - at.snackBottom)}px above the footer, ${at.width}px wide`)
@@ -542,6 +543,15 @@ test.skipIf(!hasConfig)(
 		const linedHits = await hitsAfterScroll(execute, BUTTONS)
 		expect(linedHits.map((h) => h.covered)).toEqual([false, false])
 		expect(linedHits[0]?.hit).toBe("execute-reject-btn")
+
+		// Try again asks the estimate again: the failed row and the snack that reported it leave at once.
+		await clickByTestId(execute, "fee-estimate-retry")
+		await execute.waitForFunction(
+			(row: string, snack: string) => document.querySelector(row) === null && document.querySelector(snack) === null,
+			{ timeout: 5_000, polling: 50 },
+			sel("fee-estimate-failed"),
+			SNACK,
+		)
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)

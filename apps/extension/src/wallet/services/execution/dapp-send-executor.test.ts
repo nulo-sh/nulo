@@ -16,12 +16,13 @@
  * `feesettings-invariant.test.ts`.
  */
 
-import { describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
+import { MinedTxReceipt, PendingTxReceipt, TxExecutionResult, TxHash, type TxReceipt, TxStatus } from "@aztec-labs/stdlib/tx"
 import { AuthRegistryRefusalError, JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { PRIVATE_FPC_ADDRESS } from "@/wallet/services/fpc/private-fpc-address"
@@ -129,6 +130,12 @@ function addr(hex: string) {
 	return { toString: () => hex } as never
 }
 
+/** Real receipt classes: `waitForTx` calls their status predicates, which a plain `{ status }` lacks. */
+const TX_HASH = TxHash.fromBigInt(0x1425n)
+const pendingReceipt = (): TxReceipt => new PendingTxReceipt(TX_HASH, undefined as never)
+const minedReceipt = (status: TxStatus, result = TxExecutionResult.SUCCESS): TxReceipt =>
+	new MinedTxReceipt(TX_HASH, status as never, result, 0n, undefined as never, 1 as never, 1 as never, 0, 0 as never, undefined as never)
+
 function makeHarness(
 	overrides: Partial<DappSendExecutorDeps> & {
 		authwit?: { discoverPrivateAuthwits: ReturnType<typeof vi.fn> }
@@ -148,7 +155,7 @@ function makeHarness(
 	} as never
 	const node = {
 		getNodeInfo: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 6 })),
-		getTxReceipt: vi.fn(async () => ({ status: "success" })),
+		getTxReceipt: vi.fn(async (): Promise<TxReceipt> => minedReceipt(TxStatus.CHECKPOINTED)),
 	}
 	const account = { address: addr("0xacct"), createAuthWit: vi.fn(async () => ({ kind: "authwit" })) }
 	const pxe = { simulateTx: vi.fn(async () => ({ privateExecutionResult: {} })) }
@@ -158,6 +165,7 @@ function makeHarness(
 		node,
 		pxe,
 		account,
+		scopes: [account.address] as unknown[],
 		network,
 		nonce: { toString: () => "42" },
 		txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }],
@@ -625,31 +633,102 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		expect(standard.buildAndEstimateFolded).toHaveBeenCalledTimes(1)
 	})
 
-	test("scopes = [account.address, ...additionalScopes]; NO_WAIT returns txHash, wait returns receipt", async () => {
-		const extra = addr("0xextra")
-		const noWait = makeHarness()
-		const res1 = (await noWait.executor.executeAztecSendTx(
-			makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [extra], wait: "NO_WAIT" } }),
-			ORIGIN,
-			undefined,
-			undefined,
-			FENCE,
-		)) as { txHash?: unknown; receipt?: unknown }
-		const ctx = (noWait.proveAndSend.mock.calls[0] as unknown[])[0] as { scopes: unknown[] }
-		expect(ctx.scopes).toEqual([noWait.built.account.address, extra])
-		expect(res1.txHash).toBeDefined()
-		expect(res1.receipt).toBeUndefined()
+	test("proves under the build's scopes, and a reused estimate under the account then this request's scopes", async () => {
+		const second = AztecAddress.fromNumberUnsafe(0x0b)
+		const fresh = makeHarness()
+		fresh.built.scopes = [fresh.account.address, second]
+		await fresh.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(((fresh.proveAndSend.mock.calls[0] as unknown[])[0] as { scopes: unknown }).scopes).toBe(fresh.built.scopes)
 
-		const waits = makeHarness()
-		const res2 = (await waits.executor.executeAztecSendTx(
-			makeAztecOp({ opts: { from: addr("0xacct"), additionalScopes: [], wait: undefined } }),
-			ORIGIN,
-			undefined,
-			undefined,
-			FENCE,
-		)) as { receipt?: unknown }
-		expect(waits.node.getTxReceipt).toHaveBeenCalledTimes(1)
-		expect(res2.receipt).toEqual({ status: "success" })
+		const entry = {
+			txRequest: makeTxRequest(),
+			initializesAccount: false,
+			nonce: { toString: () => "77" },
+			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+			txCalls: [{ contract: "0xc", method: "reused_method", args: [] }],
+			pendingPublicAuthwits: [],
+			discoveredHashes: [],
+		}
+		const reused = makeHarness({
+			operationEstimateReuse: { tryConsume: vi.fn(async () => entry), stash: vi.fn(), evict: vi.fn() } as never,
+		})
+		reused.deps.previewSnapshots.stash("est-1", { interactionId: "i-1", index: 0, fingerprint: null, discoveredHashes: [] })
+		// As the wire carries them: each additional scope is a hex string.
+		const op = makeAztecOp({
+			opts: { from: addr("0xacct"), additionalScopes: [second.toString(), second.toString()], wait: "NO_WAIT" },
+		})
+		await reused.executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+		expect(reused.deps.buildAndEstimateValidated).not.toHaveBeenCalled()
+		const scopes = ((reused.proveAndSend.mock.calls[0] as unknown[])[0] as { scopes: unknown[] }).scopes
+		expect(scopes).toEqual([reused.account.address, second])
+	})
+})
+
+describe("DappSendExecutor: the dApp's wait", () => {
+	const noFrom = (opts: Record<string, unknown>) =>
+		makeAztecOp({ executionMode: "default_entrypoint", feeSettings: { paymentMethod: { kind: "embedded" } }, opts })
+	const standard = (opts: Record<string, unknown>) => makeAztecOp({ opts })
+	const asked = (wait: unknown) => ({ from: addr("0xacct"), additionalScopes: [], wait })
+
+	async function waitedSend(op: unknown, receipts: TxReceipt[], advanceMs: number) {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		const reads: Array<{ atMs: number; slotFree: boolean }> = []
+		const start = Date.now()
+		h.node.getTxReceipt.mockImplementation(async () => {
+			reads.push({ atMs: Date.now() - start, slotFree: h.releaseSlot.mock.calls.length === 1 })
+			return receipts[Math.min(reads.length, receipts.length) - 1] as TxReceipt
+		})
+		const settled = h.executor.executeAztecSendTx(op as never, ORIGIN, undefined, undefined, FENCE).then(
+			(value) => ({ value: value as { receipt?: TxReceipt; txHash?: unknown } }),
+			(error: unknown) => ({ error }),
+		)
+		await vi.advanceTimersByTimeAsync(advanceMs)
+		return { h, reads, outcome: await settled }
+	}
+
+	// Both clocks: `waitForTx` sets its deadline off `Date.now()`, `retryUntil` measures it off `performance.now()`.
+	beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] }))
+	afterEach(() => vi.useRealTimers())
+
+	test.each([
+		["omitted", standard(asked(undefined))],
+		["null", standard(asked(null))],
+		["omitted, no account entrypoint", noFrom(asked(undefined))],
+	])("wait %s: the call reads past pending and proposed to the checkpointed receipt, the slot already free", async (_case, op) => {
+		const checkpointed = minedReceipt(TxStatus.CHECKPOINTED)
+		const { reads, outcome } = await waitedSend(op, [pendingReceipt(), minedReceipt(TxStatus.PROPOSED), checkpointed], 3_000)
+		expect(outcome).toEqual({ value: expect.objectContaining({ receipt: checkpointed }) })
+		expect(reads).toEqual([1_000, 2_000, 3_000].map((atMs) => ({ atMs, slotFree: true })))
+	})
+
+	test.each([
+		[0, 1_000],
+		[4294967.296, 60_000],
+	])("an interval of %s s polls every %s ms, never at once", async (interval, everyMs) => {
+		const op = standard(asked({ interval }))
+		const { reads, outcome } = await waitedSend(op, [pendingReceipt(), minedReceipt(TxStatus.CHECKPOINTED)], 2 * everyMs)
+		expect(reads.map((r) => r.atMs)).toEqual([everyMs, 2 * everyMs])
+		expect("value" in outcome).toBe(true)
+	})
+
+	test.each([
+		["a reverted receipt", [minedReceipt(TxStatus.CHECKPOINTED, TxExecutionResult.REVERTED)], undefined, "failed"],
+		["a passed deadline", [pendingReceipt()], { timeout: 2 }, "timed out"],
+	])("%s rejects with its category alone and leaves the journal as the send left it", async (_case, receipts, wait, category) => {
+		const { h, outcome } = await waitedSend(standard(asked(wait)), receipts, 5_000)
+		// Upstream's own message quotes the hash and the node's reason; neither may reach the log.
+		expect((outcome as { error?: Error }).error?.message).toBe(`The dApp's wait for its receipt ${category}`)
+		const stages = (h.deps.lane.markJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[1] as { stage: string }).stage)
+		expect(stages).not.toContain("failed")
+		expect(h.releaseSlot).toHaveBeenCalledTimes(1)
+	})
+
+	test("never-happens: NO_WAIT reads no receipt and returns the hash", async () => {
+		const { h, outcome } = await waitedSend(standard(asked("NO_WAIT")), [], 600_000)
+		expect(h.node.getTxReceipt).not.toHaveBeenCalled()
+		expect(outcome).toEqual({ value: expect.objectContaining({ txHash: expect.anything() }) })
+		expect("receipt" in (outcome as { value: object }).value).toBe(false)
 	})
 })
 

@@ -302,12 +302,12 @@ jobs:
             /scripts/ci-cd/
             /apps/extension/package.json
           sparse-checkout-cone-mode: false
-      # The script has no dependencies, so no `bun install` (and no setup-bun composite, which
-      # always installs). The Bun line is read from root package.json's `packageManager` — not a
-      # third pin site.
+      # Inline, not the setup-bun composite: the sparse checkout holds no `.github/actions/`, and the
+      # script has no dependencies to install.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
+          token: ""
       - name: Upsert the preview comment
         env:
           GH_TOKEN: ${{ github.token }}

@@ -336,7 +336,7 @@ export class ViewExecutor {
 		// `maxPriorityFeesPerGas`) so `nulo-account.ts`'s
 		// `completeFeeOptions` call uses the dApp-supplied values rather
 		// than silently defaulting from `node.getCurrentMinFees() * 1.5`.
-		const { txRequest, node, pxe, account } = await this.deps.txBuilder.buildStandard(
+		const { txRequest, node, pxe, account, scopes } = await this.deps.txBuilder.buildStandard(
 			{ ...op, actions },
 			fence,
 			feePaymentMethod,
@@ -345,7 +345,6 @@ export class ViewExecutor {
 		)
 		suggestGasLimits(txRequest, fee)
 		await applyEmbeddedFpcGasCap(txRequest, fee, node)
-		const additionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
 		// Thread `stubAccountAddresses` so the simulated account contract
 		// is the stubbed pass-through one (override path at
 		// `pxe/service.ts:233-246`). Real signing keys never enter PXE
@@ -359,7 +358,7 @@ export class ViewExecutor {
 				simulatePublic: true,
 				skipTxValidation: op.opts.skipTxValidation,
 				skipFeeEnforcement: op.opts.skipFeeEnforcement ?? true,
-				scopes: [account.address, ...additionalScopes],
+				scopes,
 			},
 			[account.address.toString()],
 		)
