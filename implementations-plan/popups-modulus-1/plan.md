@@ -1,7 +1,7 @@
 ---
 plan: popups-modulus-1
 tier: light
-status: arc 1 green, fix loop converged (Codex fix R2 approve); PR open
+status: completed
 issues: "#1452"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 3af5f7840
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** completed, delivered in #1500 (closes #1452); the merge is the orchestrator's call.
+- **Shipped:** `isHex32` and `BN254_FR_MODULUS` in `@nulo/wallet-core/utils`, `tokenKey` in `@nulo/token-list`; the four regex copies, the decimal modulus literal, `isValidHex` and the per-site key spellings removed, every key byte-identical for its admitted inputs. New FPC, Edit FPC, New token and New sender refuse a value at or above the modulus with "Invalid address" (P94-17 A); captures in `screenshots/`.
+- **Kept as designed (D5):** `send-submit.ts`'s `/i` regex (accepts `0X`); token-list's own modulus copy (its signer imports nothing); `token-flag.ts`'s local missing-`0x` tolerance.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget and both gotchas are local: `NewTokenPopup.test.ts` now unmounts its wrappers, and a stale auto-import file fails the build (`lessons/phase-1.md`, `lessons/phase-2.md`).
+- **Known limits:** none.
+- **Open items:** #1499 (a pre-existing New sender bug found in review).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are not to be run.
 
 # popups-modulus-1: one hex shape, one field modulus, one token key; three popups refuse a value at or above the modulus
 
