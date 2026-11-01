@@ -1,7 +1,7 @@
 ---
 plan: exec-send-1
 tier: light
-status: plan approved (Codex final approve); arc 1 (#1426) implementing; arc 2 (#1432) waits on OA-1
+status: plan approved (Codex final approve); arc 1 (#1426) phase 1 green, loop converged; arc 2 (#1432) waits on OA-1
 issues: "#1426, #1432"
 driver: claude-code
 claude_model: opus
@@ -67,7 +67,7 @@ Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading stat
 - **Fail closed**: a transient read failure without a cancel now fails the dApp's send (the dApp may retry) instead of running it under a new id; this trades availability for consent, the right side for an irreversible broadcast.
 - **Logging**: no new line; the error reaches the journal as `failUnclaimed` records it today. Crypto, supply chain, permissions: no change. One-broadcast-line rule (`sendTxTask`): untouched.
 
-## Phase 1: an unreadable queued row ends the send (#1426; arc 1)
+## Phase 1: an unreadable queued row ends the send (#1426; arc 1) ✓
 
 - Change `claim-helper.ts` as above.
 - **Tests**
@@ -78,7 +78,7 @@ Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading stat
 - **Validation gate**
   - `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/wallet/services/execution src/wallet/services/operation-journal --retry=0` green; both new cases red with the base's `claim-helper.ts` (`git show 51ea220b1:<path>`) in place.
-  - From the root, never beside a smoke run (it rebuilds `dist/chrome`): `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/cancel-mid-prove.test.ts` on Chrome: pass at retry 0.
+  - From the root, never beside a smoke run (it rebuilds `dist/chrome`): `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/cancel-mid-prove.test.ts` on Chrome: pass (the network config retries twice unless `NULO_E2E_RETRY` says otherwise).
   - `bun run check:plans` after staging: exit 0.
 
 ## Phase 2: Send's first load reads balances through the hook (#1432; arc 2, after OA-1)
@@ -108,6 +108,7 @@ No e2e scenario is added: both races are orderings inside one module that the un
 - D4. #1432 through the hook, not a page copy of its dirty rule (the app store's revision counter applies the same rule to another cache) and not a hook option (#781 removed the per-consumer rule options; `added`, `mapRow`, `scopeFence` remain). The boolean beats reading `unavailable` after the await: the state is shared by every run, keeps `loaded` across a refused re-read, and so loses which call was refused (Codex R1); Opus R1 found either workable. A refused dirty refetch after a good first read now shows the card instead of the stale balance: needs a fault between two reads on one port, accepted.
 - D5. The hook's one retry after a refused first-load read now runs under Send's failure card; the card stays and tokens stay empty, so nothing changes on screen (pinned by the control).
 - D6. Tests: the smallest set. The lane test with the real `cancelJob` is replaced by a held-read unit case, since the lane already pins that `cancelJob` aborts the registered controller (Opus R1; Codex R1 found either proportionate).
+- D7. As built: the read moved into `readQueuedRow` to keep the claim's cognitive complexity within 15. Residual (Opus fix R1): a cancel still in flight when the claim's read rejects can leave the dApp with the storage error instead of 4001, the row ending cancelled or failed by which transition commits first; nothing is broadcast and nothing is minted, the window `disambiguateClaimFailure` already has. Accepted.
 
 ## Panel verdicts
 
@@ -117,6 +118,9 @@ No e2e scenario is added: both races are orderings inside one module that the un
 | Opus R1 | conditional approve | `send.test.ts:747` changes: UI impact 3; #1426's failed card: UI impact 2; F1, F4, F7 corrected; I1 relabelled; I4; two unit cases replace the lane test (D6); the refetch mocks answer the updated row | none |
 | Codex final (fresh) | conditional approve | UI impact 3 is outside P44-02's seven rows: OA-1, and #1432 moves to arc 2; the control covers a refused dirty refetch; I4 reworded | none |
 | Codex final (resumed) | approve | none | none |
+| Codex fix R1 (arc 1) | approve | `readQueuedRow`'s doc names "gone or cannot be opened"; the test helper's comment dropped | dropping a pre-existing comment in `refileToExecutingScope` (outside the diff) |
+| Opus fix R1 (arc 1) | approve | the same doc point; the header names the aborted pre-acquire controller | none; its traced residual is D7 |
+| Codex fix R2 (arc 1, resumed) | approve | none | none |
 
 ## Delivery
 
