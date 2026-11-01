@@ -46,17 +46,22 @@ function transitiveDeps(target: string): string[] {
 
 /** Parse a workflow's dorny `changes` filters — TWO-LEVEL (workflow YAML → the `with.filters` string), never regex. */
 function filtersOf(workflow: string): Record<string, string[]> {
-	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-	const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
+	const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as GateWorkflow
+	return dornyFilters(wf, workflow)
+}
+
+type GateStep = { id?: string; uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, string> }
+type GateWorkflow = { jobs: Record<string, { steps?: GateStep[] }> }
+
+function dornyFilters(wf: GateWorkflow, label: string): Record<string, string[]> {
 	for (const job of Object.values(wf.jobs)) {
-		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-		for (const step of (job as any).steps ?? []) {
-			if (typeof step.uses === "string" && step.uses.includes("dorny/paths-filter") && step.with?.filters) {
+		for (const step of job.steps ?? []) {
+			if (step.uses?.includes("dorny/paths-filter") && step.with?.filters) {
 				return Bun.YAML.parse(step.with.filters) as Record<string, string[]>
 			}
 		}
 	}
-	throw new Error(`no dorny/paths-filter step found in ${workflow}`)
+	throw new Error(`no dorny/paths-filter step found in ${label}`)
 }
 
 /** A gate's pattern set must whole-package the target and src+manifest every transitive dep lib. */
@@ -651,7 +656,7 @@ describe("CI behavior-gating guard", () => {
 	})
 
 	test("needs-extension-build (pr-quick filter union) covers the extension graph", () => {
-		const union = [...quick["core-foundation"], ...quick["aztec-runtime"], ...quick["wallet-bridge"], ...quick.extension]
+		const union = extensionBuildFilters(workflowOf("pr-quick.yml")).filters.flatMap((name) => quick[name])
 		assertGraphCovered(union, "extension", "needs-extension-build")
 	})
 
@@ -773,6 +778,151 @@ describe("CI behavior-gating guard", () => {
 		const run = smoke.jobs.smoke.steps.find((step: any) => step.name === "Run smoke e2e")
 		expect(run.env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
 		expect(network.jobs["network-e2e"].env.NULO_E2E_RETRY).toBe("${{ inputs.retry }}")
+	})
+})
+
+const NO_GH = "#!/bin/sh\nexit 1\n"
+/** The one shape a compute-step input may take: the dispatch override, else one filter's output. */
+const COMPUTE_INPUT = /^\$\{\{ steps\.override\.outputs\.full \|\| steps\.filter\.outputs\.([\w-]+) \}\}$/
+
+/** Whether pr-quick's compute step, given only `on` true (no input, for `undefined`), builds the extension. */
+function computeBuilds(step: GateStep, on?: string): boolean {
+	const dir = mkdtempSync(join(tmpdir(), "compute-"))
+	try {
+		const output = join(dir, "output")
+		writeFileSync(output, "")
+		const env = step.env ?? {}
+		const bound = Object.fromEntries(Object.entries(env).map(([key, value]) => [value, String(key === on)]))
+		const run = runStep({ run: step.run ?? "", env }, { shim: NO_GH, bound, overrides: { GITHUB_OUTPUT: output } })
+		if (run.code !== 0) throw new Error(`compute step failed: ${run.stderr}`)
+		return readFileSync(output, "utf8").split("\n").includes("needs-extension-build=true")
+	} finally {
+		rmSync(dir, { recursive: true, force: true })
+	}
+}
+
+/**
+ * The pr-quick filters whose change builds the extension, read off its compute step by running it
+ * with each input alone true. An input in any other shape is refused: bound to a plain boolean, it
+ * would credit a filter the real expression might not pass on.
+ */
+function extensionBuildFilters(wf: GateWorkflow): { filters: string[]; findings: string[] } {
+	const step = wf.jobs.changes.steps?.find((candidate) => candidate.id === "compute") ?? {}
+	const defined = Object.keys(dornyFilters(wf, "pr-quick.yml"))
+	const inputs = Object.entries(step.env ?? {}).map(([key, value]) => ({ key, value, name: COMPUTE_INPUT.exec(value)?.[1] }))
+	const findings = inputs
+		.filter(({ name }) => name === undefined || !defined.includes(name))
+		.map(({ key, value }) => `compute input ${key} reads ${value}, not the override or one defined filter`)
+	if (findings.length > 0) return { filters: [], findings }
+	if (computeBuilds(step)) findings.push("the compute step builds the extension with every input false")
+	return { filters: inputs.filter(({ key }) => computeBuilds(step, key)).map(({ name }) => name ?? ""), findings }
+}
+
+const QUICK = "pr-quick.yml"
+const [SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX] = [
+	"pr-extension-smoke-e2e.yml",
+	"pr-extension-smoke-e2e-firefox.yml",
+	"pr-extension-network-e2e.yml",
+	"pr-extension-network-e2e-firefox.yml",
+]
+/**
+ * Entries naming the CI files a lane runs (workflows, actions, gate scripts) differ by lane by design
+ * and stay out of the comparison, `_build-extension.yml` included: on a pull request only pr-quick's
+ * builds run it, through its `.github/workflows/**` entry, and no e2e lane loads its output.
+ */
+const LANE_INFRASTRUCTURE = /^(\.github|scripts\/ci-cd)\//
+const PR_QUICK_ROOT_CONFIG = "root config that no build reads; pr-quick's `root-config` filter is one net over the root files"
+const POST_BUILD_CHECK = "read only by `_build-extension.yml`'s post-build check, and on a pull request only pr-quick's builds run it"
+/** The build-surface patterns that only some PR lanes hold: which ones, and why. */
+const SURFACE_EXCEPTIONS: Record<string, { holders: string[]; reason: string }> = {
+	"packages/third-party-notices/bin/**": { holders: [QUICK], reason: POST_BUILD_CHECK },
+	"packages/third-party-notices/expected-minimum.txt": { holders: [QUICK], reason: POST_BUILD_CHECK },
+	"biome.json": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	".commitlintrc.json": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	".githooks/**": { holders: [QUICK], reason: PR_QUICK_ROOT_CONFIG },
+	"apps/playground/**": { holders: [NETWORK, NETWORK_FIREFOX], reason: "the dApp the network suite drives" },
+}
+
+/** Each PR lane's build surface: the patterns that start its extension build, lane infrastructure aside. */
+function buildSurfaces(quick: GateWorkflow): Record<string, string[]> {
+	const quickFilters = dornyFilters(quick, QUICK)
+	const surfaceOf = (patterns: string[]) => patterns.filter((pattern) => !LANE_INFRASTRUCTURE.test(pattern))
+	const lanes = [SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX].map((file) => [file, surfaceOf(Object.values(filtersOf(file))[0])])
+	return {
+		[QUICK]: surfaceOf(extensionBuildFilters(quick).filters.flatMap((name) => quickFilters[name])),
+		...Object.fromEntries(lanes),
+	}
+}
+
+/** Every pattern whose holders are neither all the lanes nor exactly its exception's. */
+function surfaceFindings(surfaces: Record<string, string[]>, exceptions = SURFACE_EXCEPTIONS): string[] {
+	const lanes = Object.keys(surfaces)
+	const patterns = new Set([...Object.values(surfaces).flat(), ...Object.keys(exceptions)])
+	return [...patterns].flatMap((pattern) => {
+		const held = lanes.filter((lane) => surfaces[lane].includes(pattern))
+		const expected = exceptions[pattern]?.holders ?? lanes
+		const agree = held.length === expected.length && expected.every((lane) => held.includes(lane))
+		return agree ? [] : [`${pattern}: held by ${held.join(", ") || "no lane"}; expected ${expected.join(", ")}`]
+	})
+}
+
+describe("one extension build surface", () => {
+	const quick: GateWorkflow = workflowOf(QUICK)
+	const live = buildSurfaces(quick)
+	const withSurface = (lane: string, edit: (patterns: string[]) => string[]) => ({ ...live, [lane]: edit(live[lane]) })
+	const TEXTS = "packages/third-party-notices/texts/**"
+	const BIN = "packages/third-party-notices/bin/**"
+	const computeCopy = (edit: (step: GateStep) => void): GateWorkflow => {
+		const copy: GateWorkflow = structuredClone(quick)
+		const step = copy.jobs.changes.steps?.find((candidate) => candidate.id === "compute")
+		if (step) edit(step)
+		return copy
+	}
+
+	test("pr-quick builds the extension on exactly the filters its compute step reads", () => {
+		expect(extensionBuildFilters(quick)).toEqual({
+			filters: ["core-foundation", "aztec-runtime", "wallet-bridge", "extension", "workflows", "root-config"],
+			findings: [],
+		})
+	})
+
+	test("the five PR lanes gate on one build surface, apart from the reviewed exceptions", () => {
+		expect(Object.keys(live)).toEqual([QUICK, SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX])
+		for (const lane of Object.keys(live)) expect(live[lane], lane).toContain(TEXTS)
+		expect(surfaceFindings(live)).toEqual([])
+	})
+
+	test.each([
+		["a network lane without the licence texts", withSurface(NETWORK, (p) => p.filter((x) => x !== TEXTS)), SURFACE_EXCEPTIONS, TEXTS],
+		["a smoke lane with the post-build check's script", withSurface(SMOKE, (p) => [...p, BIN]), SURFACE_EXCEPTIONS, BIN],
+		[
+			"an exception no lane holds",
+			live,
+			{ ...SURFACE_EXCEPTIONS, "packages/gone/**": { holders: [QUICK], reason: "" } },
+			"packages/gone/**",
+		],
+	])("a copy with %s is refused", (_, surfaces, exceptions, pattern) => {
+		expect(surfaceFindings(surfaces, exceptions).map((finding) => finding.split(":")[0])).toEqual([pattern])
+	})
+
+	test("a compute step that stops reading root-config drops the root build inputs from pr-quick", () => {
+		const extensionClause = / \|\| \[ "\$ROOT" = "true" \](; then\s+echo "needs-extension-build=true")/
+		const copy = computeCopy((step) => {
+			step.run = step.run?.replace(extensionClause, "$1")
+		})
+		expect(extensionBuildFilters(copy).filters).toEqual(["core-foundation", "aztec-runtime", "wallet-bridge", "extension", "workflows"])
+		expect(surfaceFindings(buildSurfaces(copy))).toContain(
+			`package.json: held by ${[SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX].join(", ")}; expected ${Object.keys(live).join(", ")}`,
+		)
+	})
+
+	test("a compute input in any other shape is refused before the step runs", () => {
+		const copy = computeCopy((step) => {
+			if (step.env) step.env.CORE = "${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}"
+		})
+		expect(extensionBuildFilters(copy).findings).toEqual([
+			"compute input CORE reads ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}, not the override or one defined filter",
+		])
 	})
 })
 
