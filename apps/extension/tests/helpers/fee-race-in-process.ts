@@ -399,6 +399,7 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			node,
 			pxe,
 			account: { address: ACCOUNT },
+			scopes: [ACCOUNT],
 			network: NETWORK,
 			chainIdentity: { l1ChainId: 5, rollupVersion: 4 },
 			nonce: new Fr(BigInt(++nonce)),
@@ -709,7 +710,8 @@ function openWindow(race: Race, opRef: OpRef, method: Method): SurfaceBase {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
 		exec: { calls: [], ...(method === "app" || method === "no_from" ? { feePayer: APP_FPC } : {}) },
-		opts: { from: method === "no_from" ? AztecAddress.ZERO : ACCOUNT },
+		// The catalog follows a send to its submission, as the playground's buttons ask with `NO_WAIT`.
+		opts: { from: method === "no_from" ? AztecAddress.ZERO : ACCOUNT, wait: "NO_WAIT" },
 		...(method === "no_from" ? { executionMode: "default_entrypoint" } : {}),
 		feeSettings: method === "app" || method === "no_from" ? FEE_SETTINGS.app : undefined,
 	}

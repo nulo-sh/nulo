@@ -37,6 +37,7 @@ type Built = ReturnType<typeof makeBuilt>
 let buildSeq = 0
 function makeBuilt(opts: BuildOpts) {
 	const n = ++buildSeq
+	const address = { toString: () => "0xaccount", build: n }
 	return {
 		txRequest: {
 			origin: { toString: () => (opts.initWrapped ? "0xentrypoint" : "0xaccount") },
@@ -46,7 +47,9 @@ function makeBuilt(opts: BuildOpts) {
 		},
 		node: { getCurrentMinFees: vi.fn(async () => new GasFees(555n, 666n)) },
 		pxe: { build: n },
-		account: { address: { toString: () => "0xaccount", build: n } },
+		account: { address },
+		// An additional scope per build: a simulation that rebuilt its own list from the account drops it.
+		scopes: [address, { toString: () => "0xsecond", build: n }],
 		network: { chainId: opts.chainId },
 		nonce: { toString: () => `nonce-${n}` },
 		txCalls: [],
@@ -173,26 +176,26 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
 
 const estimateTasks = (created: Task[]) => created.filter((t) => t.content.label === "Estimating fee")
 
-/** Every simulation's options, exactly: `stub` or `valid`, scoped to the account of the build whose `pxe` it ran on. */
+/** Every simulation's options, exactly: `stub` or `valid`, under the scopes of the build whose `pxe` it ran on. */
 function expectSimOpts(h: ReturnType<typeof harness>, kinds: Array<"stub" | "valid">) {
 	const calls = h.simulateTxTask.mock.calls as unknown[][]
 	expect(calls.map((c) => ((c[2] as { skipTxValidation?: boolean }).skipTxValidation ? "stub" : "valid"))).toEqual(kinds)
 	for (const call of calls) {
 		const built = h.builds.find((b) => b.pxe === call[0])
 		expect(built).toBeDefined()
-		const address = built?.account.address
+		const scopes = built?.scopes
 		const expected =
 			(call[2] as { skipTxValidation?: boolean }).skipTxValidation === true
 				? {
 						simulatePublic: true,
 						skipFeeEnforcement: true,
 						skipTxValidation: true,
-						scopes: [address],
+						scopes,
 						stubAccountAddresses: ["0xaccount"],
 					}
-				: { simulatePublic: true, skipFeeEnforcement: true, scopes: [address] }
+				: { simulatePublic: true, skipFeeEnforcement: true, scopes }
 		expect(call[2]).toStrictEqual(expected)
-		expect((call[2] as { scopes: unknown[] }).scopes[0]).toBe(address)
+		expect((call[2] as { scopes: unknown[] }).scopes).toBe(scopes)
 	}
 }
 
@@ -578,19 +581,19 @@ describe("an app's fee settings against the wallet's", () => {
 	})
 })
 
-describe("account reads at V2 and V3", () => {
+describe("scope reads at V2 and V3", () => {
 	const ORDER: Record<"fjwc" | "embedded", string[]> = {
-		fjwc: ["built.account", "gasSettings set", "account.address", "simulate"],
-		embedded: ["built.account", "gasSettings set", "getCurrentMinFees", "gasSettings set", "account.address", "simulate"],
+		fjwc: ["built.scopes", "gasSettings set", "simulate"],
+		embedded: ["built.scopes", "gasSettings set", "getCurrentMinFees", "gasSettings set", "simulate"],
 	}
 
 	test.each(["fjwc", "embedded"] as const)(
-		"%s: the account is taken before the gas limits, its address at the simulation",
+		"%s: the build's scopes are taken before the gas limits and reach the simulation",
 		async (path) => {
 			const h = harness(path)
 			const order: string[] = []
 			const built = makeBuilt({})
-			const { address } = built.account
+			const { scopes } = built
 			const txContext = built.txRequest.txContext
 			let gasSettings = txContext.gasSettings
 			Object.defineProperty(txContext, "gasSettings", {
@@ -600,17 +603,11 @@ describe("account reads at V2 and V3", () => {
 					gasSettings = next
 				},
 			})
-			const account = {
-				get address() {
-					order.push("account.address")
-					return address
-				},
-			}
-			Object.defineProperty(built, "account", {
+			Object.defineProperty(built, "scopes", {
 				enumerable: true,
 				get: () => {
-					order.push("built.account")
-					return account
+					order.push("built.scopes")
+					return scopes
 				},
 			})
 			built.node.getCurrentMinFees.mockImplementation(async () => {
@@ -618,8 +615,9 @@ describe("account reads at V2 and V3", () => {
 				return new GasFees(555n, 666n)
 			})
 			h.buildStandard.mockResolvedValueOnce(built)
-			h.simulateTxTask.mockImplementationOnce(async () => {
+			h.simulateTxTask.mockImplementationOnce(async (...args: unknown[]) => {
 				order.push("simulate")
+				expect((args[2] as { scopes: unknown }).scopes).toBe(scopes)
 				return sentinelSim()
 			})
 			const op = h.ctx.op as { fee?: Record<string, unknown> }
