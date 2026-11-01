@@ -134,6 +134,9 @@ Arc 2, the owner's pick on decision page 94, P94-05, signed 2026-11-01: option A
 | Arc 1 Codex r1 | reject (a pending check's `finally` erases a mark its own document's flow wrote) | 1 (D6 amended: `resumePath()`, `settleResume(resumed)`; `resume.test.ts` case for both settle directions, red before), 2 (that case), 3 (two comments cut); ask 5: ship #1385, reopen #686 for its own change | none |
 | Arc 1 Opus | approve | 3 (I2 corrected), 4 (`ConfirmPopup` imported explicitly; the shell test reds without the import) | 1 (keep a loaded mark when the check fails: reopens Codex r3-1 with no new evidence), 2 (mark at `"finalizing"`: a finalize that then fails would send a reload to Ready over another window's session; the mid-finalize reload lands on Import, the safe side). 5 noted: the two settle tests run last in their files |
 | Arc 1 Codex r2 | approve (both races fixed, the explicit import holds, both Opus rejections stand) | none | none |
+| Arc 2 Codex r1 | approve | 1 (the line's comment names the Import divergence from Home; the e2e helper's comment cut) | none |
+| Arc 2 Opus | approve | 1 (that comment also names a lost `imported` write), 2 (the stale no-path comment and test name), 3 (direct attribute binding) | 4 (drop the Import-entry case: it stays as the realistic import control) |
+| Arc 2 Codex r2 | approve (the fixes hold; no new finding) | none | none |
 
 Known limit, filed at close-out: a typed `#/onboarding/done` with a profile active shows Ready. The consequence does not matter: the profile exists.
 

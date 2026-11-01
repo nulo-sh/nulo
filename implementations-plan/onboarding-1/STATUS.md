@@ -14,3 +14,4 @@
 - 2026-10-30: PR #1400 CI: Firefox smoke red on `firefox-sidebar.test.ts` (it relied on the removed any-active-profile shortcut to Ready); setup now opens the Ready route; local Firefox 4/4. Every other lane green.
 - 2026-11-01: OA-1 answered A (page 94, P94-05); arc 2 branch `onboarding-1-a2` off `dev` after #1400.
 - 2026-11-01: arc 2 phase 4 gate green: lint 0, typecheck:all 0, onboarding unit tests green (new cases red at base); both builds; `onboarding-tab.test.ts` at retry 0, Chrome 8/8 53.96 s → 69.97 s, Firefox 8/8 75.94 s → 96.23 s.
+- 2026-11-01: arc 2 review loop converged: Codex r1 approve (comment), Opus approve (comments, binding), Codex r2 approve.
