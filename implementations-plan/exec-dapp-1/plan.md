@@ -1,7 +1,7 @@
 ---
 plan: exec-dapp-1
 tier: light
-status: plan approved (Codex R2 approve); arc 1 implementing
+status: arc 1 implemented; Codex fix loop converged (R3 clean); PR next
 issues: "#1425, #1427, #1428"
 driver: claude-code
 claude_model: opus
@@ -123,6 +123,8 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
 |---|---|---|---|
 | Codex fix R1 | clean | n/a | n/a |
 | Opus review (beside R1) | one medium, one low | a failed wait's log line carried the hash and the node's reason (D14); the scope list now forms before the build's task completes | none |
+| Codex fix R2 (resumed) | one finding | D14 verified: the category reaches `task.fail`, the failure log and the dApp, with no cause kept, and the `TimeoutError` identity holds in the bundle | the retrying node client's own retry logging of a node's error text: known limit #432, the owner's option B of 2026-10-15, unchanged by the wait |
+| Codex fix R3 (resumed, final) | clean | "Checked #432's owner decision, the unchanged arc, and existing receipt polling: the wait adds reads without widening the accepted data exposure or log levels. No new material point; high confidence." | n/a |
 
 ## Delivery
 
