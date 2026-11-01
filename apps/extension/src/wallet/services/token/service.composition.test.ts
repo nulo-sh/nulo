@@ -202,11 +202,19 @@ describe("TokenService.restore — shared numeric cursor (nextNumericId + restor
 		expect((await tokenService.getTokensRaw("p1")).map((t) => t.id).sort((a, b) => a - b)).toEqual(ids)
 	})
 
-	test("a failed write records a restoreError STRING; the cursor skips it (no id consumed)", async () => {
+	test("a failed row write records a restoreError STRING; its reserved id stays consumed", async () => {
 		const { tokenService, api } = await makeHarness()
-		// Fail only the first persisted write (restore's writes are the only sets and
-		// run in row order), so the surviving rows must still restore.
-		vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("disk full"))
+		// Fail only the first row's write, after its id reservation landed; the surviving rows must
+		// still restore.
+		const set = api.storage.local.set.bind(api.storage.local)
+		let failed = false
+		vi.spyOn(api.storage.local, "set").mockImplementation(async (items: Record<string, unknown>) => {
+			if (!failed && Object.keys(items).some((key) => key.startsWith("nulo:core:tokens@"))) {
+				failed = true
+				throw new Error("disk full")
+			}
+			await set(items)
+		})
 
 		const [a, b, c] = await tokenService.restore([mkToken("0xa"), mkToken("0xb"), mkToken("0xc")])
 
@@ -214,8 +222,8 @@ describe("TokenService.restore — shared numeric cursor (nextNumericId + restor
 		expect(typeof a.restoreError).toBe("string")
 		expect(b.restoreError).toBeUndefined()
 		expect(c.restoreError).toBeUndefined()
-		// `a` failed → its id was not consumed → `b`/`c` are consecutive from the cursor start.
-		expect(c.id).toBe(b.id + 1)
+		expect([b.id, c.id]).toEqual([2, 3])
+		expect((await tokenService.getTokensRaw("p1")).map((t) => t.contract).sort()).toEqual(["0xb", "0xc"])
 	})
 })
 
