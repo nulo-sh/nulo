@@ -268,19 +268,27 @@ describe("Settings › Connected app › leaving the page", () => {
 	})
 
 	test.each([
-		{ order: "while an account read is out", settledFirst: false, disconnectErrors: 1 },
-		{ order: "after an account read settled, before the page resumes", settledFirst: true, disconnectErrors: 0 },
-	])("leaving $order makes no call after it", async ({ settledFirst, disconnectErrors }) => {
-		mocks.getAccount.mockImplementationOnce(() => clients.HOLD)
+		{ order: "while an account read is out", held: "getAccount", settledFirst: false, disconnectErrors: 1 },
+		{ order: "after an account read settled, before the page resumes", held: "getAccount", settledFirst: true, disconnectErrors: 0 },
+		{ order: "after a network read settled, before the page resumes", held: "getNetworks", settledFirst: true, disconnectErrors: 0 },
+		{
+			order: "after the session read settled, before the page resumes",
+			held: "getDappSession",
+			settledFirst: true,
+			disconnectErrors: 0,
+		},
+	] as const)("leaving $order makes no call after it", async ({ held, settledFirst, disconnectErrors }) => {
+		const answers = { getDappSession: shared(), getNetworks: [{ chainId: 1 }], getAccount: account(1, A1) }
+		mocks[held].mockImplementationOnce(() => clients.HOLD)
 		const errors: unknown[] = []
 		const w = await mountPage(shared(), (error) => errors.push(error))
 		expect(clients.held).toHaveLength(1)
 
-		if (settledFirst) clients.held[0].resolve(account(1, A1))
+		if (settledFirst) clients.held[0].resolve(answers[held])
 		w.unmount()
 		const callsAtUnmount = clients.calls.length
 		// A worker that never saw the port close still answers; a disconnected client drops it.
-		if (!settledFirst) clients.held[0].resolve(account(1, A1))
+		if (!settledFirst) clients.held[0].resolve(answers[held])
 		await flushPromises()
 
 		expect(clients.calls.slice(callsAtUnmount)).toEqual([])

@@ -47,6 +47,7 @@ const router = useRouter()
 
 const session = ref()
 const accounts = ref([])
+// A read that settled before the unmount resumes after it: its next request would open a port.
 let unmounted = false
 
 const sessionParams = computed(() => parseSessionParams(session.value?.permissions))
