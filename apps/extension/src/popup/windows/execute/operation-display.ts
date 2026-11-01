@@ -1,20 +1,57 @@
 /**
  * What a dApp approval window shows of a request: its operations resolved against the profile's
  * networks and accounts, their calls decoded for display, and the tokens amounts render in. Every
- * client is the caller's, which owns its connection.
+ * client is the caller's, which owns its connection, but the two `resolveForProfile` builds for itself.
  */
 
-import type { Account, AccountServiceClient } from "@/wallet/services/account/client"
-import type { CaipAccount, CaipChain, ExecutionPayload } from "@/wallet/services/dapp-interaction/client"
+import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
+import type { CaipAccount, CaipChain, ExecutionPayload, WindowEnd } from "@/wallet/services/dapp-interaction/client"
 import type { DecodedCall, DisplayCallInput } from "@/wallet/services/execution/client"
-import type { Network, NetworkServiceClient } from "@/wallet/services/network/client"
+import { type Network, NetworkServiceClient } from "@/wallet/services/network/client"
+import type { ProfileInfo } from "@/wallet/services/profile/client"
 import type { Ref } from "vue"
 import type { TokenInfo, TokenServiceClient, TokenUpdated } from "@/wallet/services/token/client"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
-import { displayCallsOf, undecodedAll } from "./display-calls"
+import { decodeCallsOrUnavailable, displayCallsOf } from "./display-calls"
 import { isEmbeddedFeePayment } from "./operation-validation"
 import { carriesFeeSettings, isAccountScoped, isNetworkScoped } from "@nulo/wallet-bridge"
 import type { DraftUIOperation } from "./types"
+
+/** A request made under another profile than the active one, or with none active. */
+export class WrongProfileError extends Error {
+	public constructor() {
+		super("Sign in with another profile")
+		this.name = "WrongProfileError"
+	}
+}
+
+/** Refuses a request of another profile before anything is read for it under the active one. */
+export function assertRequestProfile(active: ProfileInfo | undefined, requestProfileId: string): asserts active is ProfileInfo {
+	if (active?.id !== requestProfileId) throw new WrongProfileError()
+}
+
+/** A request of another profile than the active one was ended by that lock or switch, not by the
+ *  person, whatever then closes its window. */
+export function requestEnd(end: WindowEnd, wrongProfile: boolean, active: ProfileInfo | undefined): WindowEnd {
+	if (!wrongProfile || end !== "close") return end
+	return active ? "switch" : "lock"
+}
+
+/** {@link resolveOperations} on short-lived account and network clients, disconnected on every exit:
+ *  a throw must not leave both ports open for the window's life. */
+export async function resolveForProfile(
+	requested: ExecutionPayload["params"]["operations"],
+	profileId: string,
+): Promise<{ operations: DraftUIOperation[]; accounts: Account[] }> {
+	const accountService = new AccountServiceClient()
+	const networkService = new NetworkServiceClient()
+	try {
+		return await resolveOperations(requested, accountService, networkService, profileId)
+	} finally {
+		accountService.disconnect()
+		networkService.disconnect()
+	}
+}
 
 /** Resolve every requested operation SEQUENTIALLY (op N+1's lookups start only after op N
  *  resolved); returns the draft operations plus the unique signer accounts. */
@@ -81,15 +118,14 @@ export async function decodeOperationArguments(
 ): Promise<void> {
 	await Promise.all(
 		ops.map(async (op, index) => {
-			let calls: ReturnType<typeof displayCallsOf> = []
+			let calls: DisplayCallInput[]
 			try {
 				calls = displayCallsOf(op)
-				if (!calls.length) return
-				onDecoded(index, await executionService.decodeCallsForDisplay(op.networkId, calls))
 			} catch (error) {
-				console.warn("[Execute] Argument decode failed", { index, error })
-				onDecoded(index, undecodedAll(calls.length))
+				console.warn("[Approval] Argument read failed", { index, error })
+				return onDecoded(index, [])
 			}
+			if (calls.length) onDecoded(index, await decodeCallsOrUnavailable(executionService, op.networkId, calls))
 		}),
 	)
 }

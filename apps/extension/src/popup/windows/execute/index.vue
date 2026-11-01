@@ -23,16 +23,29 @@ import { carriesFeeSettings, isSelfPay } from "@nulo/wallet-bridge"
 import { isEmbeddedFeePayment, requiresFeeSelection } from "./operation-validation"
 import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-figure"
 import { approvalDeltas } from "./approval-deltas"
-import { authwitDisplayCall, grantContentsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import {
+	authwitDisplayCall,
+	decodeCallsOrUnavailable,
+	decodeGrantsOrUnavailable,
+	grantContentsOf,
+	pendingAuthwitDecodes,
+} from "./display-calls"
 import { REFUSAL_REASON, REFUSAL_TITLE, type RefusalKind, refusalKind } from "./refusal"
-import { grantRefusalRow, readableGrants } from "./call-surface"
-import { decodeOperationArguments, followKnownTokens, resolveOperations } from "./operation-display"
+import { grantRefusalRow } from "./call-surface"
+import {
+	WrongProfileError,
+	assertRequestProfile,
+	decodeOperationArguments,
+	followKnownTokens,
+	requestEnd,
+	resolveForProfile,
+} from "./operation-display"
+import { openJsonWindow } from "@/utils/json-window"
 import type { DraftUIOperation } from "./types"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
-import { NetworkServiceClient } from "@/wallet/services/network/client"
-import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
+import type { Account } from "@/wallet/services/account/client"
 import {
 	type DecodedCall,
 	type DecodedGrant,
@@ -309,32 +322,19 @@ const {
 		tokenFlags.dispose()
 	},
 	init: () => init(),
-	// A request of another profile than the active one was ended by that lock or switch, not by the
-	// person, whatever then closes its window.
-	reject: (end) => reject(isWrongProfile.value && end === "close" ? (profile.value ? "switch" : "lock") : end),
+	reject: (end) => reject(requestEnd(end, isWrongProfile.value, profile.value)),
 })
 
 const init = async () => {
-	// Disconnect the locally-constructed account/network clients on EVERY
-	// exit path. They were disconnected only on the success path (after the ops
-	// loop), so any throw in the loop — e.g. "Account no longer exists" — leaked
-	// both live SW ports for the failed popup's lifetime.
-	let accountService: AccountServiceClient | undefined
-	let networkService: NetworkServiceClient | undefined
 	try {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
 		if (!payload.value) return
 
-		if (profile.value?.id !== payload.value.session.profileId) {
-			// TODO: redirect to sign in page with preconfigured profile id
-			isWrongProfile.value = true
-			throw new Error("Sign in with another profile")
-		}
+		// TODO: redirect to sign in page with preconfigured profile id
+		assertRequestProfile(profile.value, payload.value.session.profileId)
 
-		accountService = new AccountServiceClient()
-		networkService = new NetworkServiceClient()
-		const resolved = await resolveOperations(payload.value.params.operations, accountService, networkService, profile.value!.id)
+		const resolved = await resolveForProfile(payload.value.params.operations, profile.value.id)
 		session.value = payload.value.session
 		operations.value = resolved.operations
 		accounts.value = resolved.accounts
@@ -351,7 +351,7 @@ const init = async () => {
 		// vocabulary reading or "Reading arguments…", and a failed one falls back to the raw fields.
 		void decodeOperationArguments(resolved.operations, executionService, (index, decoded) => decodedCalls.value.set(index, decoded))
 		void decodeOperationGrants(resolved.operations)
-		void tokenFollow.start(resolved.operations, profile.value!.id)
+		void tokenFollow.start(resolved.operations, profile.value.id)
 
 		// Pre-fetch token metadata for any `register_token` ops so the
 		// OperationCard renders name/symbol/decimals before Allow. The Allow
@@ -365,13 +365,9 @@ const init = async () => {
 			})
 		}
 	} catch (error) {
+		if (error instanceof WrongProfileError) isWrongProfile.value = true
 		console.error("Failed to initialize execution", error)
 		setError("Something went wrong")
-	} finally {
-		// Both are idle after the ops loop; disconnect on success, throw, or
-		// early-return alike (undefined when init returned before constructing them).
-		accountService?.disconnect()
-		networkService?.disconnect()
 	}
 }
 
@@ -417,13 +413,8 @@ async function decodeOperationGrants(ops: UIOperation[]): Promise<void> {
 		ops.map(async (op, index) => {
 			const count = grantContentsOf(op).length
 			if (!count) return
-			let decoded: readonly DecodedGrant[] = []
-			try {
-				decoded = await executionService.decodeGrantsForDisplay(requestId.value!, index)
-			} catch (error) {
-				console.warn("[Execute] Grant decode failed", { index, error })
-			}
-			decodedGrants.value.set(index, readableGrants(decoded, count))
+			const read = () => executionService.decodeGrantsForDisplay(requestId.value!, index)
+			decodedGrants.value.set(index, await decodeGrantsOrUnavailable(read, count))
 		}),
 	)
 }
@@ -441,13 +432,7 @@ function decodeDiscoveredAuthwits(): void {
 }
 
 async function decodeAuthwitBatch(networkId: string, fresh: DiscoveredAuthwit[]): Promise<void> {
-	let decoded: DecodedCall[]
-	try {
-		decoded = await executionService.decodeCallsForDisplay(networkId, fresh.map(authwitDisplayCall))
-	} catch (error) {
-		console.warn("[Execute] Authorization decode failed", { error })
-		decoded = undecodedAll(fresh.length)
-	}
+	const decoded = await decodeCallsOrUnavailable(executionService, networkId, fresh.map(authwitDisplayCall))
 	for (const [i, a] of fresh.entries()) {
 		decodedAuthwits.value.set(a.messageHash, decoded[i] ?? { kind: "undecoded", reason: "unavailable" })
 		authwitDecodesInFlight.delete(a.messageHash)
@@ -540,7 +525,7 @@ const reject = async (end: WindowEnd) => {
 // The notice's OK ends another profile's request as the lock or switch that made it, with the same
 // wait as Reject, so the window's close cannot reach the request first.
 const dismissWrongProfile = () =>
-	requestId.value && !isInteractionCancelled.value ? reject(profile.value ? "switch" : "lock") : closeWindow()
+	requestId.value && !isInteractionCancelled.value ? reject(requestEnd("close", true, profile.value)) : closeWindow()
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
@@ -583,10 +568,7 @@ const needsFeeSelection = computed(() =>
 )
 
 const showJson = () => {
-	if (!requestId.value) return
-	const url = new URL(chrome.runtime.getURL("src/popup/index.html#/windows/json"))
-	url.searchParams.set("requestId", requestId.value)
-	chrome.windows.create({ type: "popup", url: url.toString(), height: 700, width: 900 })
+	if (requestId.value) openJsonWindow(requestId.value)
 }
 
 const profileService = new ProfileServiceClient()

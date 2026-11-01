@@ -3,7 +3,8 @@
  * the decoder reads, and the bookkeeping that keeps one decode per discovered authorization.
  */
 
-import type { AuthwitContent, DecodedCall, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
+import type { AuthwitContent, DecodedCall, DecodedGrant, DiscoveredAuthwit, DisplayCallInput } from "@/wallet/services/execution/client"
+import { readableGrants } from "./call-surface"
 import type { DraftUIOperation } from "./types"
 
 type WireCall = { to?: unknown; name?: unknown; selector?: unknown; args?: unknown }
@@ -50,6 +51,35 @@ export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
  *  falls back to raw fields instead of waiting forever. */
 export const undecodedAll = (count: number): DecodedCall[] =>
 	Array.from({ length: count }, () => ({ kind: "undecoded", reason: "unavailable" }))
+
+/** The calls decoded for display, or every one undecoded when the decoder could not be reached. */
+export async function decodeCallsOrUnavailable(
+	decoder: { decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): Promise<DecodedCall[]> },
+	networkId: string,
+	calls: DisplayCallInput[],
+): Promise<DecodedCall[]> {
+	try {
+		return await decoder.decodeCallsForDisplay(networkId, calls)
+	} catch (error) {
+		console.warn("[Approval] Call decode failed", { error })
+		return undecodedAll(calls.length)
+	}
+}
+
+/** The request's `count` grants as the card reads them; a failed read reads as unavailable, which
+ *  refuses the request rather than leaving it pending. */
+export async function decodeGrantsOrUnavailable(
+	read: () => Promise<readonly DecodedGrant[]>,
+	count: number,
+): Promise<readonly DecodedGrant[]> {
+	let decoded: readonly DecodedGrant[] = []
+	try {
+		decoded = await read()
+	} catch (error) {
+		console.warn("[Approval] Grant decode failed", { error })
+	}
+	return readableGrants(decoded, count)
+}
 
 /** A discovered authorization decodes on its consumer contract by selector; only records not yet
  *  decoded or in flight are returned, so a re-estimate never re-decodes the same authorization. */

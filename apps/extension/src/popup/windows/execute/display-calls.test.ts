@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest"
-import { authwitDisplayCall, displayCallsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
+import { describe, expect, test, vi } from "vitest"
+import type { DecodedCall } from "@/wallet/services/execution/client"
+import { authwitDisplayCall, decodeCallsOrUnavailable, displayCallsOf, pendingAuthwitDecodes, undecodedAll } from "./display-calls"
 
 const TOKEN = `0x${"c".repeat(64)}`
 const base = { networkId: "net-1", accountAddress: "0xacc", network: { id: "net-1", chainId: 1, name: "N" } }
@@ -55,5 +56,21 @@ describe("pendingAuthwitDecodes", () => {
 			{ kind: "undecoded", reason: "unavailable" },
 			{ kind: "undecoded", reason: "unavailable" },
 		])
+	})
+})
+
+describe("decodeCallsOrUnavailable", () => {
+	const calls = [
+		{ to: TOKEN, selector: "0x11223344", args: ["0x01"] },
+		{ to: TOKEN, selector: "0x55667788", args: [] },
+	]
+
+	test("an unreachable decoder reads every call as undecoded for that reason; an answer is passed through", async () => {
+		const refused = { decodeCallsForDisplay: async () => Promise.reject(new Error("worker gone")) }
+		expect(await decodeCallsOrUnavailable(refused, "net-1", calls)).toEqual(undecodedAll(2))
+		const answer: DecodedCall[] = [{ kind: "undecoded", reason: "unknown-contract" }]
+		const decoder = { decodeCallsForDisplay: vi.fn(async () => answer) }
+		expect(await decodeCallsOrUnavailable(decoder, "net-1", calls)).toBe(answer)
+		expect(decoder.decodeCallsForDisplay).toHaveBeenCalledExactlyOnceWith("net-1", calls)
 	})
 })
