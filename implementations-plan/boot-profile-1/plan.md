@@ -77,7 +77,7 @@ None. No copy, layout or row changes; login on a stale never-opened network ends
   - `cd packages/wallet-core && bun --bun vitest run src/utils/event-handler.test.ts --retry=0`: green; (a) red with `event-handler.ts` from `51ea220b1`.
   - `cd apps/extension && bun --bun vitest run src/wallet/services/network-reset/ src/composables/useStaleNetwork.test.ts src/composables/useProfileBootstrap.test.ts --retry=0`: green; the composition case red with `event-handler.ts` from `51ea220b1`.
 
-## Phase 2: the boot resume finishes only what it inherited (#1430)
+## Phase 2: the boot resume finishes only what it inherited (#1430) ✓
 
 - Change `init` and `resumeTombstonedDeletions` as in D1 and D2; update both docs (the resume's doc names its work list and why).
 - **Tests** (unit, `profile/service.integration.test.ts`, on `makeServiceFromExistingApi` and a delegate gated per id):
