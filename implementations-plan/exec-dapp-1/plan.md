@@ -1,7 +1,7 @@
 ---
 plan: exec-dapp-1
 tier: light
-status: arc 1 implemented; Codex fix loop converged (R3 clean); PR next
+status: delivered (PR #1485 open, merge pending); archived
 issues: "#1425, #1427, #1428"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,23 @@ base: origin/dev at 51ea220b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** delivered in PR #1485, which carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Shipped:**
+  - A dApp send that does not ask `NO_WAIT` waits through upstream `waitForTx` once its slot is free, with the interval clamped to [1 s, 60 s] and `null` read as omitted. A failed wait travels as a fixed category (D14).
+  - Every simulation of a standard build, and its proof, reads `sendScopes` off the build, a reused estimate included.
+  - `newCapsule` keeps the capsule's scope.
+  - The playground gains `sendTx-wait` and `sendTx-onBehalf`, driven by the new scenario `tx-sendTx-fields`.
+  - Closes #1425, #1427 and #1428.
+- **Dispositions:** B-11 stays out (D5). #1428 has unit proof only (D6, recorded on the issue). The discovery change of OA-1 is not taken (D10). The first fix-loop prompts carried the wrong rules, and a corrective pass ran with the right ones (D15).
+- **Known limits:** #1490 (a wait with no deadline holds its request until the worker stops). The retrying client's transport logging stays #432.
+- **Open items:** #1491 (OA-1: whether the execute window lists, and the build signs, a request made on behalf of another approved account).
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget. Driving upstream `waitForTx` under fake timers means faking both `Date` and `performance` (lessons/phase-2.md).
+- **Size:** 168 lines against light's 150. The audit table of six review passes and D11-D15 were added during implementation.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # exec-dapp-1: the standard dApp send honours its wait, its additional scopes and its capsule scopes
 

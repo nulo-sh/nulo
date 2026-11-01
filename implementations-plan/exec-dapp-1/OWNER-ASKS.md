@@ -2,6 +2,8 @@
 
 ## OA-1: the execute window for a send that carries another approved account's authorization
 
+Filed for the owner as #1491 at close-out.
+
 **Surface.** The dApp execute window (`SendTxSummary.vue`, the discovered-authorization line).
 
 **Situation.** A dApp asks account A (approved for it) to authorize a private transfer of A's tokens, then sends that transfer from account B (also approved) with A's authorization attached. Today the send always fails at the fee estimate (#1427). Once arc 1 fixes that, the window reaches its approval, and the wallet's existing discovery adds one line, "Lets B move 1 from A to X", and signs a second, redundant authorization as B. The transaction uses A's; B's signature cannot authorize anything else. The call line above it already reads "1 from A to X" for a recognised token transfer; A's authorization itself renders nowhere. For a token outside the wallet's list, the arc's e2e capture (`screenshots/after-execute.png`) shows the generic forms: the call line reads "Transfer Private To Private on 0x1e25…6fa5", and the added line reads "Lets Second call Transfer Private To Private on 0x1e25…6fa5".
