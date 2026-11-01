@@ -268,9 +268,6 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 	return [...Object.keys(raw), ...viaServices]
 }
 
-/** A Testnet left behind on `OLD` (same L1, so addresses stay) beside a working Local Network,
- *  each with a row in every chain-scoped store; Testnet also holds a hidden account and an
- *  imported one. */
 const networkRow = (id: string, name: string, chainId: number, l1ChainId: number, kind: string, rpcUrl: string) => ({
 	[`nulo:core:networks@${id}`]: JSON.stringify({
 		id,
@@ -284,7 +281,7 @@ const networkRow = (id: string, name: string, chainId: number, l1ChainId: number
 	}),
 })
 
-/** The active Testnet, left behind on `OLD` and marked stale; holds no row of its own. */
+/** The active Testnet, left behind on `OLD` and marked stale; holds no account rows. */
 const staleTestnet = () => ({
 	...networkRow("tn", "Testnet", OLD, L1, "testnet", TESTNET_RPC_URL),
 	"nulo:core:active-network@p1": "tn",
@@ -295,6 +292,9 @@ const staleTestnet = () => ({
 	}),
 })
 
+/** A Testnet left behind on `OLD` (same L1, so addresses stay) beside a working Local Network,
+ *  each with a row in every chain-scoped store; Testnet also holds a hidden account and an
+ *  imported one. */
 async function twoChains(h: H) {
 	await h.api.storage.local.set({
 		...staleTestnet(),
