@@ -1,7 +1,7 @@
 ---
 plan: boot-profile-1
 tier: light
-status: plan approved (Codex R3 approve); arc 1 implemented, fix loop converged (Codex fix R2 approve)
+status: closed (2026-11-01)
 issues: "#1430, #1433"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 51ea220b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** closed. One PR to `dev` closes #1430 and #1433; the orchestrator merges it.
+- **Shipped:** `EventHandler.invoke` calls each callback subscribed when the dispatch starts and still subscribed at its turn (#1433), with three unit tests and a composition test of two unattended reset waiters. The boot resume finishes only the tombstones `init` found, taken once, and deletes only a row of the tombstone's `pxeGeneration` (#1430), with four tests. 29 chaos-model citations into the profile service renumbered, the model unchanged.
+- **Gates:** lint, `typecheck:all`, `test`, `test:all` green; the chaos model test 30 consecutive runs at retry 0; smoke `wallet-lock`, `extension-restart`, `stale-network` at retry 0 on Chrome (75 s) and Firefox (111 s); no e2e scenario added.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted; `lessons.md` is at its 8 KiB budget, and the citation test names each stale line itself.
+- **Seeds retired:** the `/goal` and `/loop` below.
 
 # boot-profile-1: a deletion resume that can erase a restored profile, and an event bus that skips a listener
 
