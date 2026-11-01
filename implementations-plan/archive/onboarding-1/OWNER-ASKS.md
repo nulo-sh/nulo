@@ -1,6 +1,8 @@
 # onboarding-1: owner asks
 
-## OA-1: what Ready says when a created wallet's recovery phrase is unsaved (#1387)
+## OA-1: what Ready says when a created wallet's recovery phrase is unsaved (#1387): answered
+
+- **Answered**: the owner, 2026-11-01, decision page 94, P94-05: option A, the wording as proposed, no note. Arc 2 builds it.
 
 - **Surface**: the onboarding tab's last page ("You're In", "Open wallet"), reached after Create.
 - **Today**: a reload on the recovery phrase step lands here, and so do "Do it later" and the phrase step's timer. The page says nothing about the phrase. Home's Get started card still shows "Save your recovery phrase" as an open step, which leads to Settings.

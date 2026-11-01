@@ -40,6 +40,7 @@ function makeExecutor(): DappSendExecutor {
 			recordBuiltCall: unreachable as never,
 			markJournal: unreachable as never,
 			commitJournal: unreachable as never,
+			clearJournalAuthwits: unreachable as never,
 			parkSlot: unreachable as never,
 			joinOriginLine: unreachable as never,
 			failUnclaimed: unreachable as never,

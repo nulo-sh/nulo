@@ -40,6 +40,17 @@ const phraseSavedFlags = (page: Page) =>
 			.map(([, value]) => value),
 	)
 
+async function readyPhraseLine(page: Page): Promise<{ unsaved: string; line: string | null }> {
+	const settled = await page.waitForFunction(
+		() => document.querySelector('[data-testid="onboarding-done-page"]')?.getAttribute("data-phrase-unsaved") ?? null,
+		{ timeout: 10_000, polling: 100 },
+	)
+	const line = await page.evaluate(
+		() => document.querySelector('[data-testid="onboarding-done-phrase-unsaved"]')?.textContent?.replace(/\s+/g, " ").trim() ?? null,
+	)
+	return { unsaved: (await settled.jsonValue()) as string, line }
+}
+
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
 
@@ -120,6 +131,7 @@ describe("onboarding tab", () => {
 		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
 		// Read before any Settings reveal, which sets the same flag.
 		expect(await phraseSavedFlags(page)).toEqual([true])
+		expect(await readyPhraseLine(page)).toEqual({ unsaved: "false", line: null })
 
 		// Onboarding opens beside a person's own tabs, so Open wallet closes it, then opens the popup.
 		const control = await openScratchPage(extension.browser, extension.extensionId)
@@ -147,8 +159,11 @@ describe("onboarding tab", () => {
 	})
 
 	// A real reload must keep the mark the flow wrote on its history entry, or the tab would offer
-	// Create again over the wallet it just made. jsdom cannot reload a document.
-	test("a reload on the phrase step resumes at Ready with the one wallet", async ({ freshExtensionPerTest: extension }) => {
+	// Create again over the wallet it just made; the reloaded Ready then reads the stored flags afresh.
+	// jsdom cannot reload a document.
+	test("a reload on the phrase step resumes at Ready with the one wallet and its phrase unsaved", async ({
+		freshExtensionPerTest: extension,
+	}) => {
 		const page = await openOnboarding(extension)
 		await clickByTestId(page, "onboarding-welcome-create")
 		await waitForHash(page, "#/onboarding/create", 10_000)
@@ -162,6 +177,10 @@ describe("onboarding tab", () => {
 		await waitForHash(page, "#/onboarding/done")
 		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
 		expect(await readProfileNames(page)).toEqual(["Main"])
+		expect(await readyPhraseLine(page)).toEqual({
+			unsaved: "true",
+			line: "Your recovery phrase is not saved yet. Save it from Get started on Home.",
+		})
 	})
 
 	test("create + passkey shows the phrase stage, and the passkey unlocks the same wallet after a lock", async ({

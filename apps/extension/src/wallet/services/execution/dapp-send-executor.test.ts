@@ -217,6 +217,7 @@ function makeHarness(
 			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
+			clearJournalAuthwits: vi.fn(async () => {}),
 			...clearLine(),
 		},
 		operationEstimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn(), evict: vi.fn() } as never,
@@ -520,11 +521,39 @@ describe("DappSendExecutor — public-authwit recording (trust-point)", () => {
 
 	test("an index write that rejects after a recorded send reaches the caller", async () => {
 		const indexFailure = new Error("index refused")
-		const { executor, built } = makeHarness({
+		const { executor, deps, built } = makeHarness({
 			recordPendingAuthwits: vi.fn(async () => Promise.reject(indexFailure)),
 			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
 		})
 		expect(await executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE).catch((e: unknown) => e)).toBe(indexFailure)
+		expect(deps.lane.clearJournalAuthwits).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["recorded", undefined],
+		["refused", new Error("history refused")],
+	])("an index write that lands drops the record's copy of the grants, its send's activity record %s", async (_label, failure) => {
+		const { executor, deps, built } = makeHarness({
+			...(failure ? { addTransaction: vi.fn(async () => Promise.reject(failure)) as never } : {}),
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		const outcome = await executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE).catch((e: unknown) => e)
+		if (failure) expect(outcome).toBe(failure)
+		expect(deps.lane.clearJournalAuthwits).toHaveBeenCalledWith("j1", "0xhash")
+		const indexed = (deps.recordPendingAuthwits as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect((deps.lane.clearJournalAuthwits as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]).toBeGreaterThan(indexed)
+	})
+
+	test("a drop that rejects is logged and the caller's outcome is unchanged", async () => {
+		const failure = new Error("history refused")
+		const clearFailure = new Error("journal refused")
+		const { executor, deps, built } = makeHarness({
+			addTransaction: vi.fn(async () => Promise.reject(failure)) as never,
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		deps.lane.clearJournalAuthwits = vi.fn(async () => Promise.reject(clearFailure))
+		expect(await executor.executeSendTransaction(grantOp, ORIGIN, undefined, FENCE).catch((e: unknown) => e)).toBe(failure)
+		expect(deps.logDebug).toHaveBeenCalledWith(expect.stringContaining("journal keeps the indexed authwits"), { error: clearFailure })
 	})
 })
 
@@ -560,6 +589,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				clearJournalAuthwits: vi.fn(async () => {}),
 				...clearLine(),
 			},
 		})
@@ -725,11 +755,35 @@ describe("DappSendExecutor: the submitting commit", () => {
 			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
 		})
 		await run(executor)
-		expect(deps.lane.commitJournal).toHaveBeenCalledWith("j1", {
-			stage: "submitting",
-			txHash: "0xhash",
-			submittedEndpointUrl: "https://rpc.submit",
-			expiry: EXPIRY,
+		expect(deps.lane.commitJournal).toHaveBeenCalledWith(
+			"j1",
+			{ stage: "submitting", txHash: "0xhash", submittedEndpointUrl: "https://rpc.submit", expiry: EXPIRY },
+			undefined,
+		)
+	})
+
+	// The embedded fee payment keeps aztec_sendTx on the build the harness cans.
+	test.each([
+		["send_transaction", (e: DappSendExecutor) => e.executeSendTransaction(sendTransactionOp, ORIGIN, undefined, FENCE)],
+		["aztec_sendTx", (e: DappSendExecutor) => e.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)],
+	])("%s stores a send's public authwits, with the scope they are indexed under, in the same commit", async (_path, run) => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const grant = { account: "0xacct", hash: "0xgrant", content: { kind: "call" } as never }
+		const embedded = { actions: [], feePaymentMethod: undefined, feeOptions: { embeddedFeePayment: "dapp" } }
+		const { executor, deps, built, proveAndSend } = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => embedded) } as never,
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
+		proveAndSend.mockImplementationOnce(async (ctx) => {
+			const bound = ctx as unknown as ProveAndSendContext
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
+			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
+		})
+		await run(executor)
+		expect((deps.lane.commitJournal as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toEqual({
+			chainId: 7,
+			account: "0xacct",
+			items: [{ hash: "0xgrant", content: { kind: "call" } }],
 		})
 	})
 })
@@ -989,6 +1043,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				clearJournalAuthwits: vi.fn(async () => {}),
 				...clearLine(),
 			},
 		})
