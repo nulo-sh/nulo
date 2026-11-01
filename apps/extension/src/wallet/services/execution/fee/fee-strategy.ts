@@ -134,6 +134,7 @@ export type FeeStrategyContext = {
 		accountAddress: string
 		actions: Action[]
 		fee?: FeeOptions
+		opts?: { additionalScopes?: unknown }
 	}
 	/** The authorization every build in the strategy runs under. */
 	fence: ExecutionFence
@@ -190,22 +191,21 @@ export interface FeeStrategy {
  *  validated sizing re-sim there regardless of discovered effects. */
 export function probedFirstSimOpts(
 	probe: DiscoveryProbe | undefined,
-	built: { account: { address: AztecAddress } },
+	built: { account: { address: AztecAddress }; scopes: AztecAddress[] },
 ): Parameters<SimulateTxFn>[2] {
-	const address = built.account.address
-	if (!probe) return validatedSimOpts(address)
+	if (!probe) return validatedSimOpts(built.scopes)
 	return {
 		simulatePublic: true,
 		skipFeeEnforcement: true,
 		skipTxValidation: true,
-		scopes: [address],
-		stubAccountAddresses: [address.toString()],
+		scopes: built.scopes,
+		stubAccountAddresses: [built.account.address.toString()],
 	}
 }
 
-/** Verifies witnesses and transaction validity while skipping fee enforcement; scope must match the simulated build. */
-export function validatedSimOpts(scope: AztecAddress): Parameters<SimulateTxFn>[2] {
-	return { simulatePublic: true, skipFeeEnforcement: true, scopes: [scope] }
+/** `scopes` must be the simulated build's: its proof reads the same set. */
+export function validatedSimOpts(scopes: AztecAddress[]): Parameters<SimulateTxFn>[2] {
+	return { simulatePublic: true, skipFeeEnforcement: true, scopes }
 }
 
 /** True when the build wraps the account's own deployment (first tx): the
