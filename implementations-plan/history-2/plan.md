@@ -88,7 +88,7 @@ At 161 lines this plan is over the light target of 150: the round-1 audit verdic
 
 ## Security & Adversarial Considerations
 
-No trust boundary moves: no dApp input, message, permission, stored shape, migration, log line or dependency. `createdAt` is a stored number every row carries; a restored backup can set any value, which only labels its own row, as `updatedAt` already could. A retry re-enters each surface's existing re-ask (`handleFeeUpdate`, `refresh`), so its guards hold, the engine mints a fresh token and supersedes the earlier attempt, and the button is gone while estimating, so presses cannot flood the node. Confirm and Send keep their gates: nothing goes out on a fee the person has not seen. A refusal still replaces the window's fee card (`#fee` slot), so no retry is offered on a request the wallet refused. No log line is added or changed.
+No trust boundary moves: no dApp input, message, permission, stored shape, migration, log line or dependency. `createdAt` is a stored number every row carries; a restored backup can set any value, which only labels its own row, as `updatedAt` already could. A retry re-enters each surface's existing re-ask (`handleFeeUpdate`, `refresh`), so its guards hold, the engine mints a fresh token and supersedes the earlier attempt, and the button is gone while estimating, so presses cannot flood the node. Confirm and Send keep their gates: nothing goes out on a fee the person has not seen. A refusal still replaces the window's fee card (`#fee` slot), so no retry is offered on a request the wallet refused. No log line is added; the window's failed-estimate log now passes its error under a named key, as the logging policy asks.
 
 ## UI impact
 
@@ -131,6 +131,10 @@ No trust boundary moves: no dApp input, message, permission, stored shape, migra
 **Round 2** (Codex, resumed, verification): `conditional approve (correct two contradictory test specifications)`. Taken: the window's recovery control could not reach Confirm on with an own-cap operation still unanswered → split into a two-person-paid recovery case and an own-cap case where Confirm stays off; the hook case asked `deps.onError(err)` for keys → each error once, keys through `failed`. Verified: D9 is a needed local fix inside the pick; the retire predicate meets no harmful refusal path (a refusal is permanent and replaces the card, `index.vue:219,485,697`).
 
 **Round 3** (Codex, resumed): `approve — both round-2 corrections verified in Phases 2-3; no new material findings`.
+
+**Diff review, round 1** (at `dca63f207`). Codex, resumed: `findings: 2` — the window test's map fake skipped the engine's result and estimating transitions, so the recovery case never passed through pending (demonstrated) → the fake mirrors them, and Confirm and `approve()` are proven held while the retries run (`8616a3829`); two narrating comments → deleted. Opus 5.5: `findings: 1` — the locked-row focus case ran on a `<div>` stub of `Flex`, not its exposed proxy (plausible) → the real `Flex` (`060f1d4a4`); its aside, the window's failed-estimate log passing a bare error, fixed in the same commit since that handler changed.
+
+**Diff review, round 2** (Codex, resumed, at `060f1d4a4`): `clean`.
 
 ## Delivery
 
