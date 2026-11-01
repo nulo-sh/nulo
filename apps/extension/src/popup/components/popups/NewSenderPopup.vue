@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
-import { isValidHex } from "@/utils/string"
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
@@ -38,7 +38,7 @@ const isAvailableToAddSender = computed(() => {
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
 	if (!senderAddress.value.length) return false
-	if (!isValidHex(senderAddress.value)) return false
+	if (!isHex32(senderAddress.value)) return false
 
 	return true
 })
@@ -51,7 +51,7 @@ const validateSenderAddress = () => {
 		return
 	}
 
-	if (!isValidHex(senderAddress.value)) {
+	if (!isHex32(senderAddress.value)) {
 		fillError("validation", "Invalid sender address")
 		return
 	}

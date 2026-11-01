@@ -1,4 +1,5 @@
 import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
+import { tokenKey } from "@nulo/token-list"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -292,7 +293,7 @@ export class TokenSeeder {
 	 */
 	public async retry(chainId: number, contract: string): Promise<boolean> {
 		const epoch = this.epoch
-		const key = seedKey(chainId, contract)
+		const key = tokenKey(chainId, contract)
 		const accepted = await this.withMarkerLock(async () => {
 			const profile = await this.deps.getActiveProfile()
 			const network = await this.deps.getActiveNetwork()
@@ -300,7 +301,7 @@ export class TokenSeeder {
 			const flight = flightKey(profile.id, key)
 			if (this.reserved.has(flight)) return undefined
 			const entries = await this.statusFor(profile.id, chainId)
-			if (entries.find((e) => seedKey(e.chainId, e.contract) === key)?.status !== "failed") return undefined
+			if (entries.find((e) => tokenKey(e.chainId, e.contract) === key)?.status !== "failed") return undefined
 			if (this.epoch !== epoch) return undefined
 			const state = await this.readMarkerState(profile.id)
 			state[key] = { attempts: 0 }
@@ -328,7 +329,7 @@ export class TokenSeeder {
 	/** User deleted a token → permanent tombstone (survives chain purges). Written for every
 	 *  delete, listed or not, so a later list that names the token cannot bring it back. */
 	public async markDeletedByUser(profileId: string, chainId: number, contract: string): Promise<void> {
-		await this.updateMarker(profileId, seedKey(chainId, contract), () => ({ attempts: 0, outcome: "deleted" }))
+		await this.updateMarker(profileId, tokenKey(chainId, contract), () => ({ attempts: 0, outcome: "deleted" }))
 		await this.announce(profileId, chainId)
 	}
 
@@ -352,7 +353,7 @@ export class TokenSeeder {
 		if (seeds.length === 0) return []
 		const state = await this.readMarkerState(profileId)
 		if (this.epoch !== epoch) return []
-		return seeds.filter((seed) => state[seedKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
+		return seeds.filter((seed) => state[tokenKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
 	}
 
 	/**
@@ -433,7 +434,7 @@ export class TokenSeeder {
 		if (!ctx) return
 		const now = Date.now()
 		for (const seed of ctx.seeds) {
-			const key = seedKey(seed.chainId, seed.contract)
+			const key = tokenKey(seed.chainId, seed.contract)
 			const stored = ctx.state[key]
 			if (stored !== undefined && awaitsCheck(stored, seed, ctx.version)) {
 				if ((await this.verifySeeded(ctx, seed, key)) === "abort") return
@@ -681,7 +682,7 @@ export class TokenSeeder {
 		const state = await this.readMarkerState(profileId)
 		const entries: SeedStatusEntry[] = []
 		for (const seed of seeds) {
-			const key = seedKey(chainId, seed.contract)
+			const key = tokenKey(chainId, seed.contract)
 			const status = deriveSeedStatus(state[key] ?? { attempts: 0 }, version, this.attempting.has(flightKey(profileId, key)))
 			if (!status) continue
 			entries.push({ chainId, contract: seed.contract, symbol: seed.expectedSymbol, displayName: seed.displayName, status })
@@ -738,7 +739,7 @@ export class TokenSeeder {
 		const state = await this.readMarkerState(profile.id)
 		let due: number | undefined
 		for (const seed of seeds) {
-			const entry = state[seedKey(seed.chainId, seed.contract)]
+			const entry = state[tokenKey(seed.chainId, seed.contract)]
 			if (entry?.nextAttemptAt === undefined) continue
 			if (deriveSeedStatus(entry, version, false) !== "pending") continue
 			due = Math.min(due ?? entry.nextAttemptAt, entry.nextAttemptAt)
@@ -781,10 +782,6 @@ export class TokenSeeder {
 	private log(level: LogLevel, ...args: unknown[]): void {
 		this.logger.log(LOG_SOURCE, level, ...args)
 	}
-}
-
-function seedKey(chainId: number, contract: string): string {
-	return `${chainId}:${contract.toLowerCase()}`
 }
 
 function scopeKey(profileId: string, chainId: number): string {

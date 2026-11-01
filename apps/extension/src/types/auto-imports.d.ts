@@ -290,7 +290,6 @@ declare global {
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
   const isValidAztecAddress: typeof import('../utils/aztec-address').isValidAztecAddress
   const isValidDecimals: typeof import('../utils/token-amount').isValidDecimals
-  const isValidHex: typeof import('../utils/string').isValidHex
   const isValidatedTokenClass: typeof import('../utils/token-class').isValidatedTokenClass
   const isWindowDocument: typeof import('../utils/window-document').isWindowDocument
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
@@ -1164,7 +1163,6 @@ declare module 'vue' {
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
     readonly isValidAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['isValidAztecAddress']>
     readonly isValidDecimals: UnwrapRef<typeof import('../utils/token-amount')['isValidDecimals']>
-    readonly isValidHex: UnwrapRef<typeof import('../utils/string')['isValidHex']>
     readonly isValidatedTokenClass: UnwrapRef<typeof import('../utils/token-class')['isValidatedTokenClass']>
     readonly isWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isWindowDocument']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>

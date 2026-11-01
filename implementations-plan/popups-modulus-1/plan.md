@@ -60,7 +60,7 @@ New FPC, Edit FPC, New token and New sender: a typed or pasted address at or abo
 - **Modulus integrity**: `BN254_FR_MODULUS` is pinned to `Fr.MODULUS` in `aztec-address.test.ts` and by a known-answer value in its own test; token-list's copy keeps its pin.
 - Crypto, supply chain, permissions: no change; no new dependency; layer order kept (wallet-core imports nothing; token-list stays a leaf).
 
-## Phase 1: one shape, one modulus, one token key (no visible change) ✗
+## Phase 1: one shape, one modulus, one token key (no visible change) ✓
 
 - Add `field.ts`, `tokenKey`, and move the callers as above, the four popups' shape checks included (`isValidHex` → `isHex32`, behaviour unchanged). Delete `isValidHex`; regenerate `types/auto-imports.d.ts` and `types/.eslintrc-auto-import.json` with a build (`dtsMode: "overwrite"`) and commit both.
 - **Tests**

@@ -8,7 +8,6 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 /** Utils */
 import { sameStoredName } from "@/utils/account-name"
 import { copyWithToast } from "@/utils/clipboard"
-import { isValidHex } from "@/utils/string"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -20,7 +19,7 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { errorMessageFromUnknown, isHex32 } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
 const { order, depth } = usePopupStack("edit_fpc")
 const cacheStore = useCacheStore()
@@ -48,7 +47,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isValidHex(v)) return "Invalid address"
+			if (!isHex32(v)) return "Invalid address"
 			if (fpcs.value.some((f) => f.id !== fpcToEdit.value?.id && sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
@@ -89,7 +88,7 @@ const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist" && nameChanged.value)
 // Only an edited address is checked, so a row that already shares its address can still be renamed.
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added" && addressChanged.value)
-const isAddressValid = computed(() => isValidHex(addressTerm.value))
+const isAddressValid = computed(() => isHex32(addressTerm.value))
 const isAvailableToUpdateFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.

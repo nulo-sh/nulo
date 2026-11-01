@@ -4,7 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
-import { isValidHex } from "@/utils/string"
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
@@ -42,7 +42,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isValidHex(v)) return "Invalid FPC address"
+			if (!isHex32(v)) return "Invalid FPC address"
 			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
@@ -54,7 +54,7 @@ const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
-const isValidAddress = computed(() => isValidHex(fpcAddressTerm.value))
+const isValidAddress = computed(() => isHex32(fpcAddressTerm.value))
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.

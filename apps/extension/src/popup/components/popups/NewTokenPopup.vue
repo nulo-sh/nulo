@@ -8,7 +8,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
-import { isValidHex } from "@/utils/string"
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -41,7 +41,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			if (!isValidHex(v)) return "Invalid address"
+			if (!isHex32(v)) return "Invalid address"
 			// Hex is case-insensitive: another spelling of a listed contract is that token.
 			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
 			return null
