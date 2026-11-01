@@ -1,7 +1,7 @@
 ---
 plan: bun-cache-1
 tier: light
-status: plan approved (final fresh Codex pass: approve); arc 1 next
+status: arc 1 implemented, Codex loop converged (round 2 clean); PR next
 issues: none (closes nothing)
 driver: claude-code
 claude_model: opus
@@ -69,7 +69,7 @@ None: CI workflows, one composite action, two tests and docs. No extension, land
 - **Precondition, stated**: "fetched for that run" holds on a fresh hosted runner where nothing installs Bun before setup (I1); setup-bun would otherwise reuse a matching `~/.bun/bin/bun`, which comes from the runner image, never from the shared cache (D7).
 - **Residuals, stated**: jobs with no credential keep the binary cache (no credential, no shipped bytes), and `source-rebuild.yml`'s two rebuilds do too (D4).
 
-## Phase 1: one rule over both caches (arc 1)
+## Phase 1: one rule over both caches (arc 1) ✓
 
 **Assumptions**: F1-F7, I1, I2.
 
@@ -101,6 +101,9 @@ None: CI workflows, one composite action, two tests and docs. No extension, land
 - **R1 Codex** (gpt-6.1-sol, high): conditional approve. Accepted: (1) caller permissions and nested composites, demonstrated by mutation (the `runs` generator, `expanded`, cases d and e); (3) the gate's impossible `changes` log, now the builds and the PR's `preview-comment`; (4) the overlap disposition (D2); (5) `test:release` wording. Partly accepted: (2) the existing-binary branch, stated as a precondition (I1); its absence check rejected (D7).
 - **R1 Opus** (Plan): conditional approve. Accepted: the same gate and nested-composite findings; the inline-form proof from the PR run and Excellent (1) reworded; case (b) removes the `cache` line, the source-rebuild control folded into the real-tree check; SECURITY.md over every credentialed job; F5, F6, F7 corrected. Rejected: dropping the `source-rebuild` dispatch (D8); "no code" for caller inheritance, since the fix is local and test-only, and Codex demonstrated the miss.
 - **Final fresh Codex pass** (gpt-6.1-sol, high, new session): approve. One stale citation (F7's filter lines), fixed. Its in-memory prototype found the six jobs before the change, `[]` after, each of cases (a)-(e), and no false finding on the network lanes, nightly, publish-token-list or release-prerelease; it kept `runs` and D7 (with the precondition stated), D3, D4 and D8.
+- **Fix loop R1 Codex** (diff `4c6e0aea3..58d8ab92d`): findings 3. Accepted: `CUSTOM_SECRET` ignores case (GitHub resolves context names in any case; demonstrated), with a mutation case; the composite description and SECURITY.md name write scopes, App tokens and stored secrets and promise no download; two doc comments cut to their invariant. Rejected: deleting the composite's pre-existing install-cache rationale.
+- **Opus diff review** (beside R1): findings 1, accepted: SECURITY.md names `behavior-gating.test.ts` for the release builds' half.
+- **Fix loop R2 Codex** (resumed, fixes at `8c14a5a20`): clean.
 - Noted, no change: `verify-store-copies.yml#compare` already passes `cache: "false"`, so it now downloads Bun too (no credential).
 
 ## Delivery
