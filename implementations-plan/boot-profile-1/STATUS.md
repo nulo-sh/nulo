@@ -6,3 +6,4 @@
 - 2026-11-01: final Codex pass: R2 conditional approve (T3 reshaped, recon aligned), R3 approve; plan committed.
 - 2026-11-01: arc 1 phase 1 gate green: lint, typecheck:all, event-handler tests (a, c red at base), network-reset + useStaleNetwork + useProfileBootstrap (118 passed; the composition case red at base).
 - 2026-11-01: arc 1 phase 2 gate green: lint, typecheck:all, profile + profile-deletion (21 files, 621 passed); T1a, T1b, T2 red at base; T3 red with the list kept after use.
+- 2026-11-01: arc 1 fix loop converged: Codex fix R1 approve (1 doc fix), Opus approve (doc fixes), Codex fix R2 approve; chaos citations renumbered (29).

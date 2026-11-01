@@ -1,7 +1,7 @@
 ---
 plan: boot-profile-1
 tier: light
-status: plan approved (Codex R3 approve); arc 1 next
+status: plan approved (Codex R3 approve); arc 1 implemented, fix loop converged (Codex fix R2 approve)
 issues: "#1430, #1433"
 driver: claude-code
 claude_model: opus
@@ -99,7 +99,7 @@ None. No copy, layout or row changes; login on a stale never-opened network ends
 
 ## Decision ledger
 
-- D1-D3 as above; D2 settled in the Panel verdicts below. D4: the login hang is pinned by a composition test on the real reset graph, not by `useProfileBootstrap.test.ts`, whose `managers` are mocks. D5: the chaos model is not extended; the unit tests hold the race deterministically, and a model change costs a 30-run gate for no failure mode they miss.
+- D1-D3 as above; D2 settled in the Panel verdicts below. D6, as built: the profile service's moved lines shift 29 line citations in the chaos model (`tests/e2e/helpers/profile-chaos/model.ts`); each is renumbered through the diff with its fragment re-checked, no clause changed. D4: the login hang is pinned by a composition test on the real reset graph, not by `useProfileBootstrap.test.ts`, whose `managers` are mocks. D5: the chaos model is not extended; the unit tests hold the race deterministically, and a model change costs a 30-run gate for no failure mode they miss.
 
 ## Panel verdicts
 
@@ -109,6 +109,9 @@ None. No copy, layout or row changes; login on a stale never-opened network ends
 | Opus R1 | conditional approve | D1 takes its list once; T1b pins D1's contract; T1a asserts its listing order; F3 names the second release site; the `Set` wording; (c) red at the base; the waiters start unawaited and the wait is a race | dropping D2's row check (see D2 below) |
 | Codex R2 (resumed, final) | conditional approve | T3 runs its two calls back to back (D2 masked a kept list); the take happens before the first await; T1b asserts the count before the gate opens; recon's reuse map updated | none |
 | Codex R3 (resumed) | approve | none | none |
+| Codex fix R1 (arc 1) | approve | `twoChains`' doc back on `twoChains`; `staleTestnet`'s doc says "no account rows" | none |
+| Opus fix R1 (arc 1) | approve | the same two docs; `invoke`'s doc names which removals a dispatch honours | none |
+| Codex fix R2 (arc 1, resumed) | approve | none (verified the 29 renumbered chaos-model citations leave the model identical) | none |
 
 D2, argued: Opus held that both of D2's checks are unreachable beside D1 and that the row check adds a hidden-profile state with no recovery; Codex held the row check is justified at the destructive step. Taken: the tombstone re-read goes (unreachable beside a take-once D1, and it never stopped the twin); the row check stays, labelled defense in depth. It is one comparison, it mirrors the torn-import reap's existing generation pin, and the lane brief asks that a resume prove the row it erases is the deleted incarnation. The hidden state it can leave needs planted storage, and the base behaviour there is erasing a row of an unknown incarnation.
 
