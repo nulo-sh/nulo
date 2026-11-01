@@ -277,6 +277,41 @@ function setupBunTokenFindings(tree: Tree): string[] {
 	)
 }
 
+const LOCAL_WORKFLOW = "./.github/workflows/"
+
+/** Every job that runs steps, with the permissions it runs with: a called workflow's job that declares none takes its caller's. */
+function* runs(
+	tree: Tree,
+	file: string,
+	inherited?: unknown,
+	via = "",
+): Generator<{ where: string; wf: Workflow; job: Job; permissions: unknown }> {
+	const wf = tree.workflows[file]
+	for (const [name, job] of Object.entries(wf.jobs ?? {})) {
+		const where = `${via}${file}#${name}`
+		const permissions = job.permissions ?? wf.permissions ?? inherited
+		if (job.uses?.startsWith(LOCAL_WORKFLOW)) yield* runs(tree, job.uses.slice(LOCAL_WORKFLOW.length), permissions, `${where} → `)
+		else if (!job.uses) yield { where, wf, job, permissions }
+	}
+}
+
+/**
+ * Every job holding a credential, its own or a caller's, whose Bun may come from the shared Actions
+ * cache. The composite's own setup step follows its `cache` input, so its callers answer for it.
+ */
+function sharedCacheFindings(tree: Tree): string[] {
+	const own = tree.actions[SETUP_BUN]?.runs.steps?.find((s) => s.uses?.startsWith("oven-sh/setup-bun@"))
+	const cached = (s: Step): boolean =>
+		(s.uses?.startsWith("oven-sh/setup-bun@") === true && s !== own && s.with?.["no-cache"] !== true) ||
+		(s.uses === SETUP_BUN && s.with?.cache !== "false")
+	return Object.keys(tree.workflows).flatMap((file) =>
+		[...runs(tree, file)]
+			.filter(({ wf, job, permissions }) => privileged(job, wf) || writes(permissions))
+			.filter(({ job }) => expanded(tree, job).some(cached))
+			.map(({ where }) => `${where}: may restore Bun from the shared cache`),
+	)
+}
+
 function cleanFindings(tree: Tree): string[] {
 	const composite = tree.actions[SETUP_BUN]?.runs.steps ?? []
 	const findings = composite
@@ -919,6 +954,43 @@ describe("Bun's setup", () => {
 		["an inline step", (t: Tree) => unset(step(t, "store-check.yml#firefox", "oven-sh/setup-bun@").with, "token")],
 	])("finds the job's token handed to it in %s", (_, edit) => {
 		expect(setupBunTokenFindings(mutated(edit)).length).toBe(1)
+	})
+	test("takes Bun from no shared cache in a job holding a credential", () => {
+		expect(sharedCacheFindings(TREE)).toEqual([])
+	})
+	const SETUP = "oven-sh/setup-bun@"
+	test.each([
+		[
+			"an inline step beside a stored secret",
+			(t: Tree) => unset(step(t, "store-check.yml#firefox", SETUP).with, "no-cache"),
+			"store-check.yml#firefox",
+		],
+		[
+			"the composite with its cache on beside a stored secret",
+			(t: Tree) => unset(step(t, "publish-token-list.yml#sign", SETUP_BUN).with, "cache"),
+			"publish-token-list.yml#sign",
+		],
+		[
+			"an inline step beside a write scope",
+			(t: Tree) => unset(step(t, "pr-quick.yml#preview-comment", SETUP).with, "no-cache"),
+			"pr-quick.yml#preview-comment",
+		],
+		[
+			"a write scope a called workflow inherits",
+			(t: Tree) => Object.assign(t.workflows["nightly.yml"].jobs["unit-tests"], { permissions: { contents: "write" } }),
+			"nightly.yml#unit-tests → _unit-tests.yml#unit-tests",
+		],
+		[
+			"a step inside another local composite",
+			(t: Tree) => {
+				const s = step(t, "store-check.yml#chrome", SETUP)
+				t.actions["./.github/actions/wrapped"] = { runs: { steps: [{ ...s, with: { ...s.with, "no-cache": undefined } }] } }
+				Object.assign(s, { uses: "./.github/actions/wrapped", with: undefined })
+			},
+			"store-check.yml#chrome",
+		],
+	])("finds %s", (_, edit, where) => {
+		expect(sharedCacheFindings(mutated(edit))).toEqual([`${where}: may restore Bun from the shared cache`])
 	})
 })
 
