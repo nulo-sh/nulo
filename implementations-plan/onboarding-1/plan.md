@@ -1,8 +1,8 @@
 ---
 plan: onboarding-1
 tier: light
-status: arc 1 (#1385, #1386) implemented, Codex arc r2 approve; arc 2 (#1387) waits on OA-1
-issues: "#1385 #1386 (arc 1); #1387 (arc 2, after OA-1)"
+status: arc 1 (#1385, #1386) merged as #1400; arc 2 (#1387) implemented on OA-1 A
+issues: "#1385 #1386 (arc 1); #1387 (arc 2)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -23,7 +23,7 @@ The onboarding tab never renders the shared confirm, so a duplicate import spins
 
 - **For whom**: a person in the onboarding tab who imports a phrase the wallet already holds, or reloads the tab mid-flow.
 - **Excellent**: (1) a duplicate import stops at the existing "You already have this wallet" confirm, and both answers end the spinner; (2) after a reload, Ready shows only when this tab's flow got a profile in, and an unfinished attempt reloads to its own page.
-- **Good enough**: Ready's text is unchanged in arc 1; how it names an unsaved phrase waits for the owner (OA-1).
+- **Good enough**: Ready names an unsaved phrase in the owner's words (OA-1 A), from the flags Home's card reads.
 
 ## Findings (paths verified at `9ce6bb0bd`)
 
@@ -39,7 +39,7 @@ The claims held. #1385's "every confirm the onboarding tab asks" is exactly one 
 
 - **Facts**: F1 the cites above. F2 CLAUDE.md requires a cross-shell component to live under `src/components/`; Biome does not ban `@/popup/components/popups/**` (`biome.json:510-521`), but the rule binds. F3 `PopupManager` connects two clients and runs `useIncomingTrustPrompts` (`PopupManager.vue:43-66`). F4 vue-router 5.2.0 merges `history.state` into the current entry on `replace` and before `push`; a pushed entry gets only the state passed (`vue-router.esm-browser.js:868-879`). F5 a backup restore opens its session at `finalizeRestore`, then runs an account-state tail of up to 45 s before `importedProfile` or `completeImport` (`useFullBackupImport.ts:501-523,727-730`). Before finalize, the run arms Home's restore-outcome reminder for the networks the tail restores. That reminder is best effort: a failed arming is caught (`:392-401`), and an empty network list arms nothing (`utils/restore-outcome.ts:58-62`). F6 the duplicate refusal is a warned choice by owner policy (`useProfileImportFlow.ts:120-140`), and #1385 asks for exactly that confirm. F7 a routed page can mount while the shell's load check still awaits `hydrateKnownProfile()` (`app.vue:49-50`, `useProfileBootstrap.ts:286-299`).
 - **Inferences**: I1 Chrome and Firefox keep `history.state` across a reload of an extension page (HTML history model; phase 3's e2e proves it). I2 with no marker and an active profile, the tab's flow got no profile in, except within one microtask between `createProfile` and `onCreated` (`useProfileCreateFlow.ts:145-162`), or when the person left Create before the profile landed, so the unmounted page marks nothing (arc 1 Opus 3). Either way the tab stays where it is: the safe side, never a false Ready.
-- **Asks**: OA-1, Ready's line for an unsaved phrase (wording, owner's call; arc 2 waits on it).
+- **Asks**: OA-1, Ready's line for an unsaved phrase: answered A (§ UI impact).
 
 ## Architecture & Implementation
 
@@ -57,6 +57,11 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 - **Reload while a profile is active and this tab's flow got none in** (on Welcome, Terms, Create or Import): before, Ready; after, the same page. This covers a tab reopened over another profile's session.
 - **Popup confirms**: no change; only the files moved.
 - The PR body carries before/after captures of the Import confirm and of a reload on Import.
+
+Arc 2, the owner's pick on decision page 94, P94-05, signed 2026-11-01: option A, "one body line under the heading, only for a created wallet whose recovery phrase is unsaved, never after \"I saved it\" or an import: \"Your recovery phrase is not saved yet. Save it from Get started on Home.\"" It reads the state Home's Get started card reads.
+
+- **Ready, a created wallet whose phrase is unsaved** (a reload on the phrase step, "Do it later", the step's timer, a failed phrase read): before, no line; after, that sentence, last in the header block, in the body role and secondary colour, as one line.
+- **Ready after "I saved it", or for an imported wallet**: no change. The PR body carries before/after captures of both (Chrome, light).
 
 ## Security & Adversarial Considerations
 
@@ -95,11 +100,14 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
   - Pass: every command exits 0. Record each browser's wall-clock before and after.
 - **Result** (`8304f38a0`): exit 0 each; the three files at retry 0, Chrome 63.95 s → 70.64 s, Firefox 102.67 s → 122.10 s (the scenario 6.6 s and 12.1 s, over the 6 s and 9 s estimate).
 
-## Arc 2: Ready names an unsaved phrase (#1387; starts on OA-1)
+## Arc 2: Ready names an unsaved phrase (#1387) ✓
 
-- Recommended (OA-1 A): `done.vue` reads `useGetStarted({ profileId: () => appStore.profile?.id })` and shows one line when `path !== "import"`, `phraseSaved === false` and `imported === false`. `dispose()` runs in `onBeforeUnmount`.
-- Tests: `done.test.ts` (unsaved shows; saved and imported do not; a failed read on an import path does not). The phase-3 e2e also expects the line, and "create with password" expects none after "I saved it".
-- Gate: as phase 3.
+### Phase 4: the line (OA-1 A) ✓
+
+- `done.vue` reads `useGetStarted({ profileId: () => appStore.profile?.id })` and shows the line when `path !== "import"`, `phraseSaved === false` and `imported === false`; `dispose()` runs in `onBeforeUnmount`. The page root carries `data-phrase-unsaved` once the flags are read (D8).
+- Tests: `done.test.ts`, one case per condition (unsaved shows on both create paths; saved, an Import entry and an imported wallet with no path show none; a failed read shows none on Import and the line on Create), each red at the base and each condition's removal red in exactly its case. The phase-3 e2e expects the line after the reload; "create + password" expects none after "I saved it". No e2e scenario added.
+- **Gate**: phase 3's commands on `onboarding-tab.test.ts`.
+- **Result** (`240d5747a`): lint 0, typecheck:all 0, `src/onboarding` + ban tests 19 files green; both builds 0; `onboarding-tab.test.ts` at retry 0, Chrome 8/8 53.96 s → 69.97 s, Firefox 8/8 75.94 s → 96.23 s (load average 62-137; every scenario moved, the untouched ones as much as the two touched).
 
 ## Decision ledger
 
@@ -108,9 +116,11 @@ The owner, 2026-10-30: "#1381–#1395 => yes, if they are bugs, work on them. al
 | D1 | Move `ConfirmPopup` to `src/components/` and its shared sheet beside `Popup` | an import from `popup/**` (Codex r1-1, Opus 3: breaks the cross-shell rule); composing the sheet from `popup/**` (a reverse dependency); `PopupManager` (F3) |
 | D2 | The marker rides the history entry, as `doneRoute` already does | `sessionStorage` (a new store); `chrome.storage.session` (one value for every tab); a route-only rule (cannot tell a profile made on Create from one unlocked elsewhere) |
 | D3 | Path only, no profile id (Opus 1) | the id: refusing a mismatch left a fresh Create form after a finished flow, and Ready rendered anyway (Codex r1-2) |
-| D4 | #1387's line waits for the owner (Codex r1-6, Opus 4); arc 1 keeps the reload on Ready | Re-showing the words: they open only with the password or a passkey answer (`service.ts:2225-2235`), so onboarding would need a second reveal surface beside Settings' `seed.vue`. |
+| D4 | #1387's line is the owner's call (Codex r1-6, Opus 4; answered A); the reload stays on Ready | Re-showing the words: they open only with the password or a passkey answer (`service.ts:2225-2235`), so onboarding would need a second reveal surface beside Settings' `seed.vue`. |
 | D5 | Mark when the profile lands, including the restore tail (Opus 2, Codex r1-4) | Codex r1-5, which would leave a restore with errors unmarked. A reload drops that page's Retry and Continue in any design. Ready reaches Home, where the run's restore-outcome reminder (best effort, F5) offers the networks left. The Import form would invite a duplicate restore, and the base shows Ready there. |
 | D6 | The form pages clear the marker on mount once the load check has settled (Codex r1-3, r2-1). The check reads and drops only the mark the entry was loaded with: a mark this document's flow writes while the check is pending is the flow's, so the check neither resumes on it nor clears it (arc 1 Codex r1-1) | Replacing the form entry with Ready: it changes Back from Ready. Holding `RouterView` until the check settles (Codex r2-1's fix): it blanks the tab for as long as the worker takes to answer. A known limit: the fix is local. |
+| D7 | The line sits last in the header block, without the subhead's 380 px cap, so it reads as one line | under the bar, before the subhead (moves the page's existing lines); with the cap (wraps, leaving "Home." alone) |
+| D8 | `data-phrase-unsaved` on the page root once the flags are read | an e2e "no line" check with no settle signal: it would pass before the read lands |
 
 ## Audit verdicts
 
@@ -132,7 +142,8 @@ Known limit, filed at close-out: a typed `#/onboarding/done` with a profile acti
 - **Arc 1**: branch `worktree-onboarding-1`, one PR to `dev` with `gh pr create`. Open it ready, after the Codex loop converges and the gates pass, with no labels.
   - Title: `fix(onboarding): render the duplicate confirm and keep a reload off a false ready` (81 characters).
   - Body: the owner's words, the captures, the gates with outcomes, the e2e wall-clock per browser, `Closes #1385`, `Closes #1386`.
-- **Arc 2**: after OA-1, stacked on arc 1 (`gh stack`), or off `dev` once arc 1 merges. `Closes #1387`. The close-out lands as its final commits. Serial: both arcs touch `onboarding-tab.test.ts`.
+- **Arc 2**: branch `onboarding-1-a2` off `dev` after #1400 merged, one ready PR with `gh pr create`, no labels. `Closes #1387`. The close-out lands as its final commits.
+  - Title: `feat(onboarding): ready names a created wallet's unsaved recovery phrase` (74 characters).
 
 ## Post-implementation
 

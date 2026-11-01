@@ -12,3 +12,5 @@
 - 2026-10-30: arc 1 review loop converged: Codex r1 reject (pending-check race, fixed), Opus approve (explicit import), Codex r2 approve.
 - 2026-10-30: arc 1 final gates on head green: lint 0, typecheck:all 0, test:all 0 (extension 953 files), both armed builds, onboarding e2e files at retry 0: Chrome 11/11 in 83.45 s, Firefox 11/11 in 116.79 s (load average 117-135).
 - 2026-10-30: PR #1400 CI: Firefox smoke red on `firefox-sidebar.test.ts` (it relied on the removed any-active-profile shortcut to Ready); setup now opens the Ready route; local Firefox 4/4. Every other lane green.
+- 2026-11-01: OA-1 answered A (page 94, P94-05); arc 2 branch `onboarding-1-a2` off `dev` after #1400.
+- 2026-11-01: arc 2 phase 4 gate green: lint 0, typecheck:all 0, onboarding unit tests green (new cases red at base); both builds; `onboarding-tab.test.ts` at retry 0, Chrome 8/8 53.96 s → 69.97 s, Firefox 8/8 75.94 s → 96.23 s.
