@@ -1,8 +1,9 @@
 /**
  * The execution service's real graph for `*.composition.test.ts`: `ExecutionService` with its lane,
  * sequencer, executors and caches, over the real `OperationJournalService` on a `FakeBrowserApi`.
- * Every other service is a stub of the calls the graph makes: a test passes the ones whose answers
- * it shapes, and the rest are inert. See `apps/extension/tests/COMPOSITION-TESTS.md`.
+ * Every other service is a stub of the calls the graph makes, except an interaction service a test
+ * builds for real: a test passes the ones whose answers it shapes, and the rest are inert. See
+ * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { ServiceCollection } from "@/wallet/base"

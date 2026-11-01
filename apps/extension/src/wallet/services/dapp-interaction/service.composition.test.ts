@@ -426,7 +426,8 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 			reachedBuild()
 			await building
 			const fence = await captureExecutionFence()
-			held.id = (await execution.lane.beginJournal(NETWORK.id, OWNER, { type: OriginType.DAPP, name: "dapp" }, [], fence)) as string
+			held.id = (await execution.lane.beginJournal(NETWORK.id, OWNER, { type: OriginType.DAPP, name: "dapp" }, [], fence)) ?? ""
+			if (!held.id) throw new Error("fixture: beginJournal returned no id")
 			await execution.lane.commitJournal(held.id, { stage: "simulating" })
 			held.live = execution.lane.registerInFlight(held.id, 1, held.controller).live
 			const deadline = Date.now() + HOUR
@@ -470,7 +471,6 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 			await dapp.approveInteraction(approvedId, [{ feeSettings: { paymentMethod: { kind: "fj" } }, feeCeiling: REASK.cap }])
 			return { sent }
 		}
-		/** The fee question once its window is open. */
 		const asked = async () => {
 			let question: DappInteraction | undefined
 			let windowId: number | undefined
@@ -479,12 +479,20 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 				windowId = question && (await windowOf(question.id))
 				expect(windowId).toBeTypeOf("number")
 			})
-			expect(held.live).toBe(true)
+			expect(held.id, "beginJournal returned an id").not.toBe("")
+			expect(held.live, "registerInFlight took the controller").toBe(true)
 			expect(createSpy.mock.calls.some(([options]) => options.url?.includes("#/windows/fee?"))).toBe(true)
 			return { id: (question as DappInteraction).id, windowId: windowId as number }
 		}
 		const record = () => graph.journal.getOperation(held.id)
+		/** Settles whatever a failed case left waiting: the build gate, the held send, every window. */
+		const dispose = async () => {
+			releaseBuild()
+			held.controller.abort()
+			await Promise.all([...storage.keys()].map((id) => dapp.rejectInteraction(id, "test ended")))
+		}
 		return {
+			dispose,
 			dapp,
 			held,
 			openSpy,
@@ -513,8 +521,10 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 		}
 	}
 
+	type Held = Awaited<ReturnType<typeof heldDappSend>>
+
 	/** How History reads the row: the declined question's reading, whatever ended it. */
-	const reading = async (h: Awaited<ReturnType<typeof heldDappSend>>) => {
+	const reading = async (h: Held) => {
 		const rec = await h.record()
 		return {
 			stage: rec?.progress.stage,
@@ -525,12 +535,9 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 	}
 
 	test.each([
-		["the app's disconnect", (h: Awaited<ReturnType<typeof heldDappSend>>) => h.deleteRow()],
-		["the app's refused check, its row left in place", (h: Awaited<ReturnType<typeof heldDappSend>>) => h.refuseCheck()],
-		[
-			"the person's decline",
-			(h: Awaited<ReturnType<typeof heldDappSend>>, id: string) => h.dapp.rejectInteraction(id, "User rejected", "reject"),
-		],
+		["the app's disconnect", (h: Held) => h.deleteRow()],
+		["the app's refused check, its row left in place", (h: Held) => h.refuseCheck()],
+		["the person's decline", (h: Held, id: string) => h.dapp.rejectInteraction(id, "User rejected", "reject")],
 	])(
 		"%s closes the window and cancels the held send, unproven, as a declined question reads; a late accept is refused",
 		async (_name, end) => {
@@ -555,7 +562,7 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 				await expect(h.dapp.resolveInteraction(question.id, { accepted: true })).rejects.toThrow("Invalid id")
 				expect("err" in (await sent)).toBe(true)
 			} finally {
-				h.held.controller.abort()
+				await h.dispose()
 			}
 		},
 	)
@@ -573,8 +580,10 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 			expect(await h.held.outcome).toEqual({ ok: undefined })
 			expect(h.held.controller.signal.aborted).toBe(false)
 			expect(await sent).toEqual({ ok: [] })
+			expect(h.held.controller.signal.aborted).toBe(false)
+			expect((await h.record())?.progress.stage).toBe("pending")
 		} finally {
-			h.held.controller.abort()
+			await h.dispose()
 		}
 	})
 
@@ -600,7 +609,7 @@ describe("DappInteractionService × ExecutionService (a disconnect answers the f
 			}
 			expect("err" in (await sent)).toBe(true)
 		} finally {
-			h.held.controller.abort()
+			await h.dispose()
 		}
 	})
 })
