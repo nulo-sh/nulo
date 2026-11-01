@@ -552,10 +552,10 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited balance purge for a SET of token ids WITHIN one profile — called by
-	 *  the deletion coordinator with the tombstone's token snapshot (finding D).
-	 *  Profile-scoped because a resumed deletion can run AFTER a successor profile
-	 *  reused a purged id (a lost token-id high-water mark allows it): an unscoped
-	 *  purge would erase the successor's rows and evict its live-map entry. Idempotent. */
+	 *  the deletion coordinator with the tombstone's token snapshot. Profile-scoped
+	 *  because a resumed deletion can run AFTER a successor profile reused a purged
+	 *  id (a lost token-id high-water mark allows it): an unscoped purge would erase
+	 *  the successor's rows and evict its live-map entry. Idempotent. */
 	public async purgeForTokens(tokenIds: readonly number[], profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		const set = new Set(tokenIds)
