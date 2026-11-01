@@ -86,7 +86,7 @@ describe("onboarding done", () => {
 	test.each([
 		["password", "password"],
 		["passkey", "passkey"],
-	])("an entry with no path (a reload from Create) draws the %s wallet's own path", async (type, path) => {
+	])("an entry with no path (a typed URL) draws the %s wallet's own path", async (type, path) => {
 		store.profile = { type }
 		const w = await mountDone(async () => ({ isOnToolbar: true }))
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "ready", path })

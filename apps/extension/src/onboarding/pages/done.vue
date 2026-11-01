@@ -18,11 +18,12 @@ const appStore = useAppStore()
 
 const getStarted = useGetStarted({ profileId: () => appStore.profile?.id })
 
-// Only a reload outside Import lands here with no path: the wallet's type says which.
+// Only a typed URL, or a Ready entry whose mark a failed load check dropped, lands here with no path:
+// the wallet's type says which.
 const path = computed(() => donePath(window.history.state) ?? (appStore.profile?.type === "password" ? "password" : "passkey"))
 
-// The flags Home's Get started card reads, so the two never disagree; `undefined` until they are read.
-// The path also rules out an import whose flags could not be read, which reads as nothing done.
+// Home's Get started flags, `undefined` until read. An Import entry never shows the line, even when its
+// flags read as nothing done (a failed read, or a lost `imported` write).
 const phraseUnsaved = computed(() => {
 	const flags = getStarted.flags.value
 	if (flags === undefined) return undefined
@@ -87,7 +88,7 @@ onBeforeUnmount(() => {
 		align="center"
 		:gap="40"
 		data-testid="onboarding-done-page"
-		:data-phrase-unsaved="phraseUnsaved === undefined ? undefined : String(phraseUnsaved)"
+		:data-phrase-unsaved="phraseUnsaved"
 	>
 		<OnboardingStepHeader current="ready" :path="path" main="You're" sub="In" align="center" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">

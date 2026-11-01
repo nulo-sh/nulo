@@ -40,7 +40,6 @@ const phraseSavedFlags = (page: Page) =>
 			.map(([, value]) => value),
 	)
 
-/** Ready's verdict on the recovery phrase, once it has read the flags Home's card reads, and its line. */
 async function readyPhraseLine(page: Page): Promise<{ unsaved: string; line: string | null }> {
 	const settled = await page.waitForFunction(
 		() => document.querySelector('[data-testid="onboarding-done-page"]')?.getAttribute("data-phrase-unsaved") ?? null,
