@@ -9,3 +9,4 @@
 
 - **Round 1, Codex (session 01a19930): findings 1**, comments only: the scope banner's comment and the e2e's paragraph narrated. Accepted.
 - **Round 1, Opus diff review: findings 3.** The e2e comment's reason for keeping the switched test on the seed name was false: `IdentityStrip`'s `.identity_network` ellipsizes at `max-width: 102px` at every width, so the 240 px check sees no newly cut text there. Removed it, and the matching clause in D9. T1 now refuses `text-overflow` and `white-space`, since an ellipsis copied onto the line would pass both the scan and the e2e while shortening the name. `.reset_notice` carries a one-line "text only" comment, as D4 and D5 will.
+- **Round 2, Codex resumed: clean.** The loop converged.

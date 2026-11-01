@@ -1,7 +1,7 @@
 ---
 plan: wrap-3
 tier: light
-status: plan approved (final Codex approve); arc 1 next; arc 2 waits on OA-1 to OA-3 for its asked parts
+status: arc 1 in review (loop converged, gates green); arc 2 waits on OA-1 to OA-3 for its asked parts
 issues: "#1397 (arc 1 part of it, arc 2 closes it)"
 driver: claude-code
 claude_model: opus
@@ -137,6 +137,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | final 2 | Codex, resumed | **approve** | the condition verified; no regression, no new owner ask | none |
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a19930) | findings: 1 | the scope banner's comment trimmed to its constraint; the e2e's paragraph cut | none |
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings: 3 | the e2e comment's switched-state reason was false (the strip's name is already ellipsized at the window's width, so the check would not flag it): sentence and D9 clause removed, `LONG_NAME` keeps the why of 25; T1 refuses an ellipsis (`text-overflow`, `white-space`), since a shortened line passes both the scan and the e2e; `.reset_notice` states it holds text only | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 
