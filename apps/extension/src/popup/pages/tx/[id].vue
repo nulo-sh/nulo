@@ -96,8 +96,8 @@ const formattedAmount = computed(() =>
 const showFeeBreakdown = ref(false)
 
 const txTime = computed(() => {
-	if (!tx.value?.updatedAt) return null
-	return DateTime.fromMillis(tx.value.updatedAt).toFormat(DETAIL_TIME_FORMAT)
+	if (!tx.value?.createdAt) return null
+	return DateTime.fromMillis(tx.value.createdAt).toFormat(DETAIL_TIME_FORMAT)
 })
 
 const handleCopy = (target) => {

@@ -120,6 +120,7 @@ const { shortSponsorIds, setAsideSponsorIds, lastVerdict, verifyingSponsorId } =
 const fpcEdits = reactive(new Map())
 const knownFpcs = computed(() => applyFpcEdits(registeredFpcs.value, fpcEdits))
 const methodSelector = ref(null)
+const lockedRow = ref(null)
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -289,10 +290,13 @@ watch(
 	{ immediate: true },
 )
 
-/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger above. */
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the trigger
+ *  above, or on the locked method's row, which has no trigger. */
 const onRetryEstimate = (event) => {
 	emit("retryEstimate")
-	if (event.currentTarget.matches(":focus-visible")) methodSelector.value?.focus()
+	if (!event.currentTarget.matches(":focus-visible")) return
+	if (methodSelector.value) methodSelector.value.focus()
+	else lockedRow.value?.$el.focus()
 }
 
 const handleMethodPicked = (m) => {
@@ -394,7 +398,7 @@ onBeforeUnmount(() => {
 		:data-read-pending="readPending || undefined"
 	>
 		<!-- A method the dApp asked for: shown, never a choice. -->
-		<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
+		<Flex v-if="lockedMethod" ref="lockedRow" tabindex="-1" align="center" justify="between" :class="[$style.card, $style.locked]" data-testid="send-fee-locked">
 			<Text variant="label-section" color="primary">Fee</Text>
 			<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 		</Flex>
@@ -511,6 +515,12 @@ onBeforeUnmount(() => {
 
 .card {
 	padding: 12px;
+}
+
+/* Inset: the card's `overflow: hidden` would clip a ring drawn outside the row. */
+.locked:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: -2px;
 }
 
 .method_size {

@@ -600,10 +600,11 @@ What is acknowledged today (35 advisories; the ack file holds each one):
 
 None of them is in either extension zip.
 
-**Bun pinned** to a specific patch version in `package.json#packageManager`
-and in `setup-bun/action.yml`, plus the five `bun-version:` literals in jobs
-that skip that composite (listed in `CLAUDE.md`, Dependency policy). Cache
-keys include the Bun version so a bump invalidates stale state. Local
+**Bun pinned** to a specific patch version in `package.json#packageManager`,
+which the `setup-bun` composite and every inline `oven-sh/setup-bun` step read
+(`bun-version-file`); the composite's install cache is keyed on the version it
+installed, though its last restore key still seeds a new version's cache from
+the previous one. Local
 development requires bun ≥1.4 (`bun run --parallel` scripts), and
 `bun.lock` is `lockfileVersion: 2`, unreadable by Bun ≤1.3.
 
@@ -685,14 +686,15 @@ we pick a scanner.
 the class-id + address invariant fixtures (`CLAUDE.md`, Account-address
 freeze).
 
-**Bun-version sync trap.** Bumping `package.json#packageManager` (the
-Bun version) does NOT touch the versions the workflows pin themselves:
-`.github/actions/setup-bun/action.yml` and the `bun-version:` literals
-in a few jobs. CI still passes, because those jobs run their own pinned
-Bun, NOT the new `packageManager` version. The discrepancy is silent:
-there's no CI step that verifies the pinned values match. Move every pin
-site together on a Bun bump (the list is in `CLAUDE.md`, Dependency
-policy) until a consistency-check script lands as a CI step.
+**Bun-version sync.** Every CI setup step reads `package.json#packageManager`,
+so a bump moves CI with it. The files that restate the version (the
+`@types/bun` pins, the Docker runner's pins, the reviewer's instructions in
+`SOURCE-BUILD.md`, the Workers Builds READMEs) fail
+`scripts/ci-cd/bun-version.test.ts` and `docker-ci-like-pins.test.ts` until
+their versions match. The archive hashes are copied by hand from the release's
+`SHASUMS256.txt`: CI checks only that the two x86_64 copies agree. The Workers
+Builds' `BUN_VERSION` dashboard variables stay manual too (the list is in
+`CLAUDE.md`, Dependency policy).
 
 ## GitHub Actions
 

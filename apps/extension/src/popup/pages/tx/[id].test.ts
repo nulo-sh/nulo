@@ -56,6 +56,7 @@ const settled = (origin: { type: OriginType; name?: string }, calls: unknown[]) 
 	chainId: 1,
 	account: ACCOUNT,
 	status: TxStatus.Proposed,
+	createdAt: 1_000,
 	updatedAt: 1_000,
 	origin,
 	calls,
@@ -107,6 +108,15 @@ async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<
 }
 
 const amountBlock = (w: Awaited<ReturnType<typeof mountPage>>) => w.find("[class*='amount_value']")
+
+describe("the transaction page's time", () => {
+	test("the hero line reads when the send was made, not its last status change", async () => {
+		// Local times, so the case reads the same in every zone.
+		const at = (minute: number) => new Date(2026, 9, 30, 15, minute).getTime()
+		const w = await mountPage({ ...sentTransfer, createdAt: at(8), updatedAt: at(20) }, Promise.resolve([listed]))
+		expect(w.get("[class*='tx_time']").element.textContent).toBe("Oct 30, 2026 at 15:08")
+	})
+})
 
 describe("the transaction page's amount", () => {
 	test("a sent transfer of one 18-decimal token reads 1 and its symbol while the token list loads", async () => {
