@@ -80,7 +80,6 @@ import {
 	type AztecRegisterSenderOperation,
 	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
-	type FeeOptions,
 	type GasBalances,
 	type FeeQuestion,
 	type OperationApprovalEnvelope,
