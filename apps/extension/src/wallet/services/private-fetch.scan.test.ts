@@ -23,9 +23,8 @@ function staticName(name: ts.Node | undefined): string | undefined {
 
 const calleeName = (callee: ts.Expression): string | undefined => {
 	if (ts.isPropertyAccessExpression(callee) && callee.expression.kind === ts.SyntaxKind.ThisKeyword) return callee.name.text
-	if (ts.isElementAccessExpression(callee) && callee.expression.kind === ts.SyntaxKind.ThisKeyword)
-		return staticName(callee.argumentExpression)
-	return undefined
+	if (!ts.isElementAccessExpression(callee) || callee.expression.kind !== ts.SyntaxKind.ThisKeyword) return undefined
+	return ts.isStringLiteralLike(callee.argumentExpression) ? callee.argumentExpression.text : undefined
 }
 
 const isPrivateInit = (init: ts.Expression | undefined): boolean =>
@@ -78,6 +77,7 @@ describe("remote fetches build their request from privateFetchInit", () => {
 			"		await this.fetchFn(url, privateFetchInit(signal))",
 			"		await this . fetchFn(url, { signal })",
 			'		await this["fetchFn"](url, init)',
+			"		await this[fetchFn](url)",
 			"	}",
 			"}",
 		].join("\n")

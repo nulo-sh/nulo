@@ -61,10 +61,10 @@ Two duplication findings the owner decided on decision page 94 (signed 2026-11-0
 
 - **Threat model**: whoever controls a price response (the host, or a party that can make it redirect). Today a redirect sends a request carrying the IP, URL and `Origin` to a host the Privacy Policy does not name; if that host permits CORS (a preflight, with the optional API-key header), the key follows (the Fetch standard strips only `Authorization`) and its quotes are accepted within the sanity bands. After: `redirect: "error"` refuses every 3xx, so the request reaches only the named host. Exploitability unknown; the fix closes it either way.
 - **Trust boundary**: `privateFetchInit` reads only `extra.headers`; the scan pins that neither service names an option in an object literal and that each fetch's init is `privateFetchInit(...)`. Responses stay capped by `readBodyCapped`.
-- **Profile boundary**: both windows refuse another profile's request before any client is built; execute's D13 and phase 2's fee case pin it.
+- **Profile boundary**: both windows refuse another profile's request before any client is built; `execute/index.test.ts` (its case "D13") and phase 2's fee case pin it.
 - **Logging**: no new line; the decode warning keeps `{ error }` under a named key at `warn`. Terms guard and the one broadcast line: untouched. Crypto, supply chain, permissions: no change.
 
-## Phase 1: one private-fetch recipe, redirects refused for both (#1475)
+## Phase 1: one private-fetch recipe, redirects refused for both (#1475) ✓
 
 - Add `private-fetch.ts` and its export; the token list calls `privateFetchInit(controller.signal)`, the price service `privateFetchInit(controller.signal, { headers })`.
 - **Tests**
@@ -78,14 +78,14 @@ Two duplication findings the owner decided on decision page 94 (signed 2026-11-0
   - Smoke, from `apps/extension`, on armed builds: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome`, then `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/token-list.test.ts --retry=0`; the same with `build:firefox` and `NULO_E2E_BROWSER=firefox`: pass.
   - Network, from the root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/hero-prices-unavailable.test.ts`, then with `NULO_E2E_BROWSER=firefox`: pass.
 
-## Phase 2: the fee window uses the execute window's prelude (#1477, part of #1472)
+## Phase 2: the fee window uses the execute window's prelude (#1477, part of #1472) ✓
 
 - Add the helpers; move both windows onto them; delete `JsonViewer`'s opener.
 - **Tests**
   - `fee/index.test.ts` (the overlay stub emits `dismiss`): `test.each` over another profile active (`switch`) and none (`lock`): no account or network client is constructed; the notice's OK ends the request as that end, once, then the window closes. The window's X on another profile's question names the switch; on the person's own, `close`; the same-profile cases are the control. Red at the base, whose OK ends nothing and whose X names `close`.
   - `display-calls.test.ts`: `decodeCallsOrUnavailable` refused (every call `undecoded`/`unavailable`) and answered (the decoder's rows); no window test refuses an authorization decode. The grant fallback is pinned by the windows already (`execute/index.test.ts:1531`, the fee grant cases).
   - `utils/json-window.test.ts`: one 900 × 700 popup on `#/windows/json` with the request id.
-  - Execute's D13, D14, D14-lock and its disconnect-on-throw case stay green unchanged: the refactor proof.
+  - `execute/index.test.ts`'s wrong-profile cases ("D13", "D14", "D14-lock") and its disconnect-on-throw case stay green unchanged: the refactor proof.
 - **Validation gate**
   - `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/popup/windows/execute src/popup/windows/fee src/utils/json-window.test.ts src/components/JsonViewer --retry=0`: green; the fee cases red with the base's `fee/index.vue`.
@@ -102,13 +102,14 @@ No e2e scenario is added: the end rule and the redirect are decided inside one m
 - D3. Error mapping stays per service: a redirect reads as the token list's `network` outcome and as price's failed refresh. Both refuse the response and keep their last good state, which is "fails as the token list's does".
 - D4. The scan covers the two services only (a tree-wide ban hits the routers' `redirect:` routes, `popup/index.ts:42`, `popup/legacy-routes.ts`), reads property names from the parser, not lines, so a quoted name, a variable value or a split line is caught and the price service's `cache` field is not (Codex R1), and requires each fetch's init to be the helper's (Opus R1).
 - D5. The redirect test fakes the standard's redirect modes, so it fails on the outcome (stored quotes), not only on the init; it is a wiring regression, and `redirect: "error"` itself is the browser's (Codex R1).
-- D6. `WrongProfileError`, `assertRequestProfile` and `resolveForProfile` as picked; logging and the error row under the notice stay as today.
+- D6. `WrongProfileError`, `assertRequestProfile` and `resolveForProfile` as picked; the error row under the notice stays as today.
 - D7. `requestEnd` beside them, not in `useDappApprovalWindow`: capabilities and discover check no profile, and the per-window reject guards stay.
 - D8. The decode warning becomes one text for both windows (it named `[Execute]` or `[Fee]`).
 - D9. `JsonViewer`'s opener is deleted, not routed through the helper: its button never renders.
 - D10. #1472: `Part of`. Left on it: execute's confirm eligibility in one computed, and the per-window `grantsPending`/`grantRefusal` computeds, which wrap rules already single-sourced over different shapes.
 - D11. No service-worker change: the fee question's end reaches no record (F6), and reading it would go past the owner's pick.
 - D12. The capture renders the real window on a smoke build with one fixture answer, not a race on the network fixture: the state needs a race in the product (I1), and the notice's pixels do not change (Codex R1, Opus R1).
+- D13. As built: the live price test passed with `redirect: "error"` (I2 holds, 2026-11-01); phase 1's Firefox network run moved to phase 2's head, one sandbox boot for both; the scan walks one AST with structural callee matching instead of `callsTo` (Codex fix R1); the decode warnings read `[Approval]`; the clients now disconnect before the token metadata prefetch (none used them).
 
 ## Panel verdicts
 
@@ -117,6 +118,8 @@ No e2e scenario is added: the end rule and the redirect are decided inside one m
 | Codex R1 | conditional approve | F6 and I1 reworded; parser-based scan (D4); fee clients never built for another profile; UI impact 2 and the threat model qualified; the redirect test bounded (D5); a required, deterministic capture (D12); `lint:actions` before the push | none |
 | Opus R1 | conditional approve | the same fee client check; harness edits (`fetchImpl` gets `init`, the overlay stub emits); UI impact 2; `headers` read, not spread (D1); the fetch-init check (D4); TS2775 and execute's ordering written down; the grant helper's unit cases dropped as duplicates; wallet-core README row | none; the capture shim it proposed is narrowed further (D12) |
 | Codex final (resumed) | approve | none | none |
+| Codex fix R1 (arc 1) | conditional approve | the scan reads static computed names and accessors and matches the fetch callee structurally; execute's init catch logs `{ error }`; the redirect fake's comment bounded; three comments deleted | none |
+| Opus fix R1 (arc 1) | approve | `privateFetchInit`'s doc and the README row narrowed (the node RPC fetch does not use it); the grant helper's doc says it holds Confirm off | none |
 
 ## Delivery
 
