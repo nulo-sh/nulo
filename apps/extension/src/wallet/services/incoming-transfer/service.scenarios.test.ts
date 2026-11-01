@@ -4663,7 +4663,8 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		})
 		let tipsReads = 0
 		reader.getScanTips = async () => (++tipsReads === 1 ? state.tips : { ...state.tips, checkpointedBlockHash: "0xmoved" })
-		// The breaker only ends a loop the fix removed, so the old code fails here instead of hanging.
+		// Serves an empty page after 50 refusals, so a restart loop inside one tick ends
+		// and fails the read count instead of hanging.
 		let pageReads = 0
 		reader.fetchTransferPage = async () => {
 			if (++pageReads > 50) return pubPage([])
@@ -4681,6 +4682,8 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		expect((await storedEpisodes(service))?.[KEY]).toEqual({ failures: 1, failingSince: T0, nextAttemptAt: T0 + 30_000 })
 		vi.setSystemTime(T0 + 29_000)
 		expect(await tick()).toBe(0)
+		vi.setSystemTime(T0 + 30_000)
+		expect(await tick()).toBe(1)
 
 		for (let minute = 1; minute <= 11; minute++) {
 			vi.setSystemTime(T0 + minute * MIN)

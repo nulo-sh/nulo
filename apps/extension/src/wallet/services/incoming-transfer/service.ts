@@ -2347,7 +2347,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 	}
 
-	/** Stage a resumable reconciliation marker, then step it once. */
+	/** Steps in the same tick, unlike a restart, so a reorg the forward scan meets starts
+	 *  reconciling at once. */
 	private async beginReconciliation(
 		target: PublicTarget,
 		cursor: PublicScanCursor,
