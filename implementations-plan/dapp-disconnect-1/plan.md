@@ -81,7 +81,7 @@ The owner, decision page 94 (P94-10, signed 2026-11-01), option A: "Close the fe
 
 ## Phases (arc 1)
 
-### Phase 1: the disconnect ends the fee question
+### Phase 1: the disconnect ends the fee question ✓
 Land the tests red on their own commit, then the fix.
 - Add the helper fields (I1). The builder runs only when `typeof dappInteraction === "function"`; an object stub still goes through `svc()`.
 - Fixtures, all real validation: a session whose `accounts` holds the request's exact CAIP account on the session's chain, and whose permission record has an empty `methods` list, which allows every method (`dapp-interaction/service.ts:824-856`). A profile stub with `captureExecutionFence` (a fence with `session`), a matching `peekLiveSerial`, `isFenceLive`, `assertFence`, `getDeletionState`, `getProfiles`, `getActiveProfile`, `refreshSession`, `onActiveProfileChanged` and `setExpiryDeferral`, plus the graph's row keys. The transactions and FPC stubs carry their startup subscriptions, as the execution harness's do. Assert that `beginJournal` returned an id and `registerInFlight` returned `{ live: true }`, so a red cannot come from the fixture.
@@ -97,10 +97,10 @@ Land the tests red on their own commit, then the fix.
 - Delete `dapp-interaction/service.composition.test.ts:297-312`.
 - **Gate:** `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/wallet/services/dapp-interaction src/wallet/services/execution src/wallet/services/operation-journal src/wallet/services/wallet-sdk --retry=0`. Pass: exit 0. Case A's disconnect and refused check, and case B, are red on the test commit; the Decline and the Accept control are green there.
 
-### Phase 2: e2e, captures and the full gate
+### Phase 2: e2e, captures and the full gate (gate pending)
 - Network e2e at retry 0 from the repo root, Chrome then Firefox (`NULO_E2E_BROWSER=firefox`), one run at a time: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/{tx-sendTx-default,tx-sendTx-reject,verify-hold,connect-verify-mismatch}.test.ts`. `tx-sendTx-default`'s fee case is the real-browser control for the re-read: its row is live, so the window stays and Accept proves. `verify-hold` drops a held call on the app's own disconnect, a reconnect and a refused check. `connect-verify-mismatch` refuses a check, the event that now also ends a fee question. The `session-*` files are left out: the app's own disconnect keeps its row, so `endRequestsOfApp` never runs there.
 - No new e2e scenario (D6), so the suite wall-clock does not change.
-- Captures: a throwaway smoke spec, never committed, seeds two rows with `seedJournalRecord`. Before: `queued` with `reask`. After: `cancelled` from that stage. It shoots History in light and dark.
+- Captures: a throwaway smoke spec, never committed, writes the held send's row and shoots History in light and dark. Before: `queued` with `reask` and no terminal time, as the journal writes it; History lists terminal rows only (`src/utils/activity-rows.ts:122`), so it shows no row for the send. After: `cancelled`. Deviation: `seedJournalRecord` stamps every row terminal, which drew the queued row as "Transaction failed", so the spec writes the row itself.
 - **Gate:** every e2e run green at retry 0; `bun run audit:vue`; `bun run test:all`; `bun run check:plans` after staging. Pass: exit 0 for each.
 
 ## Decision ledger
@@ -111,6 +111,7 @@ Land the tests red on their own commit, then the fix.
 - **D4** An Accept the worker claimed before the disconnect is not undone by it. `resolveInteraction` deletes the record first, so `endRequestsOfApp` finds nothing, as for an approved send. The question's deadline, a feed cancel and a session end still apply. The owner's decision closes an open question; an answered one is not open. Not a known limit: it is the first-claim-wins rule, pinned by case A's control.
 - **D5** Known limit #1413 case 2 now also reaches a fee question: a refused check whose row delete fails, landing before the question registers, leaves it answerable. Same path, same reopening condition. The close-out adds a comment to #1413 naming the fee question; no new limit is filed.
 - **D6** No new e2e. Opus proposed a disconnect case beside `tx-sendTx-default`'s fee case (no proof, about two minutes a browser). Codex: not required. Each link it would cross is already proven: the row's deletion emits the event (`dapp-session` composition), the event ends the question and the window's rejection cancels the send (the new cases), the cancel keeps the send from proving (`fee-reask` and the executor's refusal test, `dapp-send-executor.test.ts:3136`), and the window's removal is the `WindowManager.cancel` every worker-side end already uses (a feed cancel, a lock, #1414's disconnect). That coverage is sufficient: the case would add integration confidence, but no browser mechanism changes here, as #1414 judged for the other windows. The captures come from seeded rows.
+- **D7** (arc 1) The capture's "before" is History with no row for the held send, not a row reading "waiting": History lists terminal rows only, so while the question stayed open after a disconnect the send never reached it. Recorded so the PR body does not imply a row changed copy.
 
 ## Audit verdicts
 
@@ -126,6 +127,9 @@ Land the tests red on their own commit, then the fix.
   - Adopted: Phase 1's fixtures spelled out (the session's account and permission record, the full profile stub, the startup subscriptions, asserted journal id and live registration); the builder only for a function; recon synced with Facts 8–9; I2 names the deletion `isExpired` emits; D6 says "sufficient"; "fail closed" bounded by D4 and D5; "rare" dropped.
   - Argued: its ask for owner acknowledgement of the expiry and purge triggers and the open-then-close window. The owner chose the mechanism by name ("the request-ending step"), every trigger ends the app's connection, and #1414 already ships both effects for the other windows. Codex withdrew it; the PR body states both.
 - **Codex verify** (resumed, 2026-11-01): `approve`. Both conditions resolved; D1–D6 settled; no `OWNER-ASKS.md` entry.
+- **Post-implementation, Codex round 1** (gpt-6.1-sol, high, over `f738cba62...68382c2ac`): `approve`, two low findings, both adopted: a failed case left the build gate, the fee window and its waiter unsettled (now a `dispose()` in every `finally`); the helper's header still said every other service is a stub, and one comment narrated `asked`.
+- **Post-implementation, Opus diff review** (beside round 1): `approve`, four optional findings, all adopted: the accept control re-reads the controller and the row after the send settles; a missing journal id fails by name; a `Held` alias; `endRequestsOfApp`'s comment stands on its own.
+- **Post-implementation, Codex round 2** (resumed, over `68382c2ac..d44bef322`): `approve`, no new finding. Loop converged.
 
 ## Delivery
 
