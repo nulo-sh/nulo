@@ -77,7 +77,7 @@ At 161 lines this plan is over the light target of 150: the round-1 audit verdic
 - `FeeSettingsCard.test.ts`, mounted with `attachTo`: with `lockedMethod: "fj"`, a `:focus-visible` retry puts `document.activeElement` on `send-fee-locked`; a pointer press leaves focus alone.
 - **Validation gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/popup/windows/execute src/popup/components/modules/send src/popup/components/modules/fee-cards src/popup/pages/send --retry=0`; `bun run test` (every double that mounts a changed file). Pass: exit 0; the window case red on the base at the stub's `estimateFailed`. Layers: lint, typecheck, unit, component.
 
-### Phase 4: Full gate, e2e and captures
+### Phase 4: Full gate, e2e and captures ✓
 
 - `bun run test:all`.
 - In `tests/e2e/network/snack-placement.test.ts`'s execute case, add one check after the snack: `fee-estimate-failed` is in the window; and at the case's end, before it rejects, press `fee-estimate-retry` and wait for the row to leave and the snack to close. It proves `index.vue` → `OperationCard` → readout on a real failing estimate in a real browser; `index.test.ts` stubs `OperationCard`, and `OperationCard.fee.test.ts` fakes the estimate. No new scenario; estimated +2 s, measured in `STATUS.md`.
