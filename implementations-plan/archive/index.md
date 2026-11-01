@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
 - [aztec-5.0-rc2](aztec-5.0-rc2/plan.md) — completed — the Aztec set bumped to 5.0 release candidate 2, with the testnet redeploy in the same arc
