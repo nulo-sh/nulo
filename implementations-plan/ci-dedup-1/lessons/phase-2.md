@@ -10,3 +10,4 @@
   - Opus 2, demonstrated: "CI fails until each matches" overstated the hash check, which only compares two hand-copied x86_64 hashes. Reworded in CLAUDE.md and SECURITY.md.
   - Opus 3, plausible: the job output and the compute step's `if` were unpinned. Fix: `computeWiringFindings`, plus two mutations.
   - Nits folded: a narrating comment removed; "must check out"; the refused-shape test asserts the whole result; quoted and `env:` forms of the version; `token-list` and "extension build" in CI.md.
+- **Round 2** (Codex, resumed): `clean` (202 focused tests pass; no new finding). The loop converged in two rounds.
