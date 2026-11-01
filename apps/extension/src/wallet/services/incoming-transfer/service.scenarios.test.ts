@@ -3052,22 +3052,48 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		expect(await repo.getRecord(orphan.id)).toBeUndefined() // deleted on hash mismatch (0xoldfork ≠ 0xnewfork)
 	})
 
-	test("mid-reconcile reorg (upperBoundHash gone) → discard + restart (no cross-fork seen mixing)", async () => {
+	test("mid-reconcile reorg (upperBoundHash gone) → the tick restages on fresh tips and deletes nothing; the next tick reconciles that fork alone", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
+		await seedTrustRow({ profileId: "p1", networkId: "n1", contract: tokenA.contract, state: "trusted", updatedAt: 0 })
+		const canonical = await seedPublic({ txHash: "0xkeep", l2BlockNumber: 7, blockHash: "0xcanon7" })
+		const orphan = await seedPublic({ txHash: "0xorphan", l2BlockNumber: 8, blockHash: "0xoldfork" })
+		const oldForkPage = { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 }
 		await seedCursor({
-			cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
+			cursor: oldForkPage,
 			lastSyncedBlockHash: "0xoldfork",
 			lastScanFinalized: 5,
+			// Half-way through the old fork: its block 8 is already in `seen`.
+			reconciling: {
+				lowerBound: 6,
+				upperBound: 100,
+				upperBoundHash: "0xcheckpoint",
+				progress: oldForkPage,
+				seen: [[8, "0xoldfork"]],
+			},
 		})
-		state.responses.push(new Error("reorg")) // forward scan detects reorg
-		state.responses.push(new Error("upperBoundHash reorged mid-reconcile")) // reconcile throws → restart
-		state.responses.push(pubPage([])) // restarted reconcile completes
+		state.tips = { ...state.tips, checkpointedBlockHash: "0xnewfork" }
+		state.responses.push(new Error("upperBoundHash reorged mid-reconcile"))
 
-		await scanPublic(service)
+		expect(await scanPublic(service)).toBe("failed")
+		expect(state.fetchArgs).toHaveLength(1)
+		expect((await cursorFor())?.reconciling).toEqual({
+			lowerBound: 6,
+			upperBound: 100,
+			upperBoundHash: "0xnewfork",
+			progress: null,
+			seen: [],
+		})
+		expect(await repo.getRecord(canonical.id)).toBeDefined()
+		expect(await repo.getRecord(orphan.id)).toBeDefined()
 
-		expect(state.fetchArgs.length).toBeGreaterThanOrEqual(3)
+		state.responses.push(pubPage([pubEvent({ txHash: "0xkeep", l2BlockNumber: 7, blockHash: "0xcanon7" })]))
+		expect(await scanPublic(service)).toBe("progress")
+		expect(state.fetchArgs[1]).toMatchObject({ fromBlock: 6, toBlock: 100, referenceBlock: "0xnewfork" })
 		expect((await cursorFor())?.reconciling).toBeUndefined()
+		expect(await repo.getRecord(canonical.id)).toBeDefined()
+		// Kept only if the old fork's `seen` had leaked into the new fork's window.
+		expect(await repo.getRecord(orphan.id)).toBeUndefined()
 	})
 
 	test("a budget-incomplete forward scan CAPS the finalized watermark at the scanned block (no reconcile-gap)", async () => {
@@ -4623,6 +4649,53 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		await poll(service)
 		await poll(service)
 		expect(events).toHaveLength(2)
+		expect(await surface(service).getIncomingSyncHealth("n1")).toEqual({ stalled: false, since: null })
+		expect(await storedEpisodes(service)).toBeUndefined()
+	})
+
+	test("a node that answers its tips but refuses every log page restarts once per tick, backs off, reaches stalled, and Retry runs one tick", async () => {
+		const { reader, state } = makePublicReader()
+		const { service } = await bootPublic(reader, state)
+		await seedCursor({
+			cursor: { blockNumber: 10, txIndexWithinBlock: 0, logIndexWithinTx: 0 },
+			lastSyncedBlockHash: "0xanchor",
+			lastScanFinalized: 5,
+		})
+		let tipsReads = 0
+		reader.getScanTips = async () => (++tipsReads === 1 ? state.tips : { ...state.tips, checkpointedBlockHash: "0xmoved" })
+		// The breaker only ends a loop the fix removed, so the old code fails here instead of hanging.
+		let pageReads = 0
+		reader.fetchTransferPage = async () => {
+			if (++pageReads > 50) return pubPage([])
+			throw new Error("public logs 503")
+		}
+		const tick = async () => {
+			const before = pageReads
+			await poll(service)
+			return pageReads - before
+		}
+
+		// The anchored forward probe fails, its reconciliation's first page fails, and the restart only stages.
+		expect(await tick()).toBe(2)
+		expect((await cursorFor())?.reconciling).toMatchObject({ upperBoundHash: "0xmoved", progress: null, seen: [] })
+		expect((await storedEpisodes(service))?.[KEY]).toEqual({ failures: 1, failingSince: T0, nextAttemptAt: T0 + 30_000 })
+		vi.setSystemTime(T0 + 29_000)
+		expect(await tick()).toBe(0)
+
+		for (let minute = 1; minute <= 11; minute++) {
+			vi.setSystemTime(T0 + minute * MIN)
+			expect(await tick()).toBeLessThanOrEqual(1)
+		}
+		expect(await surface(service).getIncomingSyncHealth("n1")).toEqual({ stalled: true, since: T0 })
+
+		const beforeRetry = pageReads
+		await surface(service).retryIncomingScan("n1")
+		expect(pageReads - beforeRetry).toBe(1)
+
+		reader.fetchTransferPage = async () => pubPage([])
+		vi.setSystemTime(T0 + 20 * MIN)
+		await poll(service)
+		expect((await cursorFor())?.reconciling).toBeUndefined()
 		expect(await surface(service).getIncomingSyncHealth("n1")).toEqual({ stalled: false, since: null })
 		expect(await storedEpisodes(service)).toBeUndefined()
 	})
