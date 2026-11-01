@@ -97,6 +97,7 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ profile: undefined }),
 }))
 
+import { Flex } from "@nulo/design"
 import FeeSettingsCard from "./FeeSettingsCard.vue"
 import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
 import { readFeePicks } from "../../../../../tests/helpers/ui-preference-fake"
@@ -1049,6 +1050,30 @@ describe("FeeSettingsCard — a failed estimate's retry", () => {
 		await retry.trigger("click")
 		expect(w.emitted("retryEstimate")).toHaveLength(2)
 		expect(focus).toHaveBeenCalledOnce()
+		w.unmount()
+	})
+
+	test("on a locked method, which has no trigger, a keyboard press keeps its place on the locked row; a pointer press leaves focus", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, {
+			props: baseProps({ lockedMethod: "fj", estimateFailed: true }),
+			// The real Flex, whose template ref is its exposed proxy, not the root element.
+			global: { stubs: { ...STUBS, Flex } },
+			attachTo: document.body,
+		})
+		await flushPromises()
+		const retry = w.get('[data-testid="fee-estimate-retry"]')
+		const locked = w.get('[data-testid="send-fee-locked"]').element
+
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(1)
+		expect(document.activeElement).not.toBe(locked)
+
+		vi.spyOn(retry.element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(2)
+		expect(document.activeElement).toBe(locked)
 		w.unmount()
 	})
 })

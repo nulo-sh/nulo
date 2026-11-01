@@ -60,7 +60,7 @@ import { estimateWhenClear } from "@/utils/estimate-when-clear"
 import { useTokenFlags } from "@/composables/usePrices"
 import { useToast } from "@/composables/toast"
 
-const { openToast } = useToast()
+const { openToast, toast, closeToast } = useToast()
 
 // Local alias — kept for diff minimality. The honest type lives in `./types.ts`
 // (DraftUIOperation) so send-like `feeSettings` is optional during user editing.
@@ -187,10 +187,14 @@ const queueWatch = (index: number, estimateToken: string, signal: AbortSignal) =
 	start: { events: executionService.onEstimateStarted, estimateToken, onStarted: () => (queuedOps.value[index] = false) },
 })
 
+/** The snack that reported a failed estimate: closed once none it reported stands, unless replaced. */
+let feeFailureSnackId: number | undefined
 const {
 	results: feeEstimates,
 	estimating: estimatingOps,
+	failed: failedFeeEstimates,
 	estimate: scheduleFeeEstimate,
+	cancel: cancelFeeEstimate,
 	handoffAll: handoffFeeEstimates,
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
@@ -208,13 +212,21 @@ const {
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
-		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
-		// An app-paid operation's estimate only checks the app's fee contract, so its other failures are
-		// unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry.
-		const op = operations.value[key] as unknown as UIOperation
-		if (!isAppPaid(op) || personPaysAppPayment(op)) openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		console.error("[Execute] Fee estimation failed", { op: key, error: err })
+		if (reportsEstimateFailure(operations.value[key] as unknown as UIOperation)) {
+			feeFailureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+		}
 	},
 })
+
+/** An app-paid operation's estimate only checks the app's fee contract, so its other failures are
+ *  unknown, never a verdict. A payment the person makes all the same keeps Confirm waiting on a retry. */
+const reportsEstimateFailure = (op: UIOperation): boolean => !isAppPaid(op) || personPaysAppPayment(op)
+const retireFeeFailureSnack = () => {
+	if (operations.value.some((op, i) => failedFeeEstimates.value[i] && reportsEstimateFailure(op as unknown as UIOperation))) return
+	if (feeFailureSnackId !== undefined && toast.value?.id === feeFailureSnackId) closeToast()
+	feeFailureSnackId = undefined
+}
 
 /** The wallet's refusal of the request, met by an estimate, a preview or an approval. The worker keeps
  *  it too, so it never clears: Reject is the one way on, and it answers the dApp with the refusal. */
@@ -461,10 +473,17 @@ const handleFeeUpdate = (index: number, value: FeeSettings | undefined) => {
 	if (!carriesFeeSettings(op)) return
 	;(op as { feeSettings?: FeeSettings }).feeSettings = value
 	clearError()
-	if (!value) return
-	queuedOps.value[index] = false
-	scheduleFeeEstimate(index, { index, feeSettings: value })
+	// Settings the card withdrew are asked no more, so their failure stands no longer either.
+	if (!value) cancelFeeEstimate(index)
+	else {
+		queuedOps.value[index] = false
+		scheduleFeeEstimate(index, { index, feeSettings: value })
+	}
+	retireFeeFailureSnack()
 }
+
+const retryFeeEstimate = (index: number) =>
+	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
 
 const approve = async () => {
 	if (isInteractionCancelled.value || isLoading.value) return
@@ -646,6 +665,7 @@ onUnmounted(() => {
 					v-if="scopeBanner"
 					data-testid="execute-scope-banner"
 					:data-state="scopeBanner.state"
+					:class="$style.scope_banner"
 					variant="info"
 					direction="vertical"
 					wide
@@ -677,6 +697,7 @@ onUnmounted(() => {
 						:dapp="dapp ?? undefined"
 						:feeEstimate="feeEstimates[i] ?? undefined"
 						:isEstimating="!!estimatingOps[i]"
+						:estimateFailed="!!failedFeeEstimates[i]"
 						:authwitPreview="authwitPreviews[i] ?? undefined"
 						:isPreviewing="!!previewingOps[i]"
 						:isQueued="!!queuedOps[i]"
@@ -691,6 +712,7 @@ onUnmounted(() => {
 						:tokenFlagAcknowledged="flagAcknowledged.has(i)"
 						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
+						@retryEstimate="retryFeeEstimate"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 						@acknowledgeTokenFlag="acknowledgeTokenFlag"
 					>
@@ -766,6 +788,12 @@ onUnmounted(() => {
 
 .sections {
 	padding: 16px;
+}
+
+/* The action repeats a typed name on a line of its own, so the whole banner breaks a word wider
+ * than it. */
+.scope_banner {
+	overflow-wrap: anywhere;
 }
 
 .refusal {

@@ -108,5 +108,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 .dapp_action {
 	composes: type--body from global;
 	color: var(--nulo-secondary);
+
+	overflow-wrap: anywhere;
 }
 </style>

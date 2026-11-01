@@ -114,6 +114,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
+          token: ""
       - name: Unpack the source archive outside the checkout and rebuild
         env:
           VERSION: ${{ needs.target.outputs.version }}
@@ -143,6 +144,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
+          token: ""
       - name: Unpack the source archive outside the checkout and rebuild
         env:
           VERSION: ${{ needs.target.outputs.version }}

@@ -10,6 +10,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { SendStarted } from "@/wallet/services/auth-registry/spec"
+import { type ToastOptions, useToast } from "@/composables/toast"
 import { heldJobSubscription, LIVE_STAGES, record } from "../../../../tests/helpers/held-job-subscription"
 import { pressOn } from "../../../../tests/helpers/press-key"
 import { describeSendPopupKeyboard } from "../../../../tests/helpers/send-popup-keyboard"
@@ -70,11 +71,20 @@ vi.mock("@/stores/popup.store", () => ({
 	}),
 }))
 
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({
-		openToast: openToastMock,
-	}),
-}))
+// The real snack, so a test reads what is on screen; every open is also recorded.
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return {
+		useToast: () => {
+			const live = real.useToast()
+			const openToast = (options: ToastOptions) => {
+				openToastMock(options)
+				return live.openToast(options)
+			}
+			return { ...live, openToast }
+		},
+	}
+})
 
 const STUBS = {
 	Popup: { props: ["show", "displaceIdx"], template: `<div v-if="show"><slot /></div>` },
@@ -92,11 +102,12 @@ const STUBS = {
 			modelValue: Object,
 			feeEstimate: Object,
 			isEstimating: Boolean,
+			estimateFailed: Boolean,
 			fallsBack: Boolean,
 		},
-		emits: ["update:modelValue"],
+		emits: ["update:modelValue", "retryEstimate"],
 		setup: () => ({ feeControlClick }),
-		template: `<button data-testid="set-fee" :data-estimate="feeEstimate?.maxFee" :data-falls-back="String(fallsBack)" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button>`,
+		template: `<div><button data-testid="set-fee" :data-estimate="feeEstimate?.maxFee" :data-falls-back="String(fallsBack)" :data-failed="String(estimateFailed)" @click="feeControlClick(); $emit('update:modelValue', { gasLimit: 100 })">fee</button><button data-testid="stub-retry" @click="$emit('retryEstimate')">retry</button></div>`,
 	},
 	Button: {
 		props: ["loading", "disabled"],
@@ -154,6 +165,7 @@ afterEach(async () => {
 	}
 	wrappers.length = 0
 	document.body.innerHTML = ""
+	useToast().closeToast()
 	vi.useRealTimers()
 })
 
@@ -274,11 +286,24 @@ describe("ChangeAuthwitsRegistryPopup — the fee check before proving", () => {
 		expect(disabled(w)).toBe(false)
 	})
 
-	test("a failed estimate keeps Send off and says so", async () => {
-		authwitsServiceMock.estimateRegistryToggleFee.mockRejectedValueOnce(new Error("node down"))
+	test("a failed estimate keeps Send off and says so; Try again asks it once more, and Send turns on once it lands", async () => {
+		const estimate = authwitsServiceMock.estimateRegistryToggleFee
+		estimate.mockRejectedValueOnce(new Error("node down"))
 		const w = await mountAndOpen()
 		await setFee(w)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		expect(disabled(w)).toBe(true)
+		const failed = () => w.get('[data-testid="set-fee"]').attributes("data-failed")
+		expect(failed()).toBe("true")
+
+		await w.get('[data-testid="stub-retry"]').trigger("click")
+		expect(useToast().toast.value).toBeNull()
+		await estimatesLand()
+		expect(estimate).toHaveBeenCalledTimes(2)
+		const [first, second] = estimate.mock.calls
+		expect(second!.slice(0, 4)).toEqual(first!.slice(0, 4))
+		expect(second![4]).not.toBe(first![4])
+		expect(failed()).toBe("false")
+		expect(disabled(w)).toBe(false)
 	})
 })
