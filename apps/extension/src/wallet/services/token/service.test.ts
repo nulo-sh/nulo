@@ -1036,8 +1036,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(check.calls()).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
-		await add(h, "0xb0b")
+		expect((await add(h, "0xb0b")).id).toBe(1)
 		check.release(true)
 		await first
 
@@ -1146,9 +1147,14 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(sets).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
-		const second = add(h, "0xb0b")
+		let settled = false
+		const second = add(h, "0xb0b").finally(() => {
+			settled = true
+		})
 		await settle()
+		expect(settled).toBe(false)
 		set.resolve()
 		await Promise.all([first, second])
 		writes.restore()
@@ -1282,7 +1288,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await release()
 
 		await h.tokenService.clearChainState("p1", 1)
+		await forgetHighWater(h.api.storage.local)
 		const [restored] = await h.tokenService.restore([mk("0xccc")])
+		expect(restored.id).toBe(1)
 		chainRead.resolve(false)
 
 		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
@@ -1410,8 +1418,10 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(chainReads).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
 		const added = await add(h, "0xb0b")
+		expect(added.id).toBe(1)
 		chainRead.resolve(true)
 
 		expect((await restoring).map((r) => r.restoreError)).toEqual(["token lock lost", "token lock lost"])

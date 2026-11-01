@@ -171,7 +171,6 @@ export const AppPicksSchema = z.record(
 	}),
 )
 export const PinMapSchema = z.record(z.string(), z.array(z.string()))
-export const TokenIdHighWaterSchema = z.number().int().nonnegative()
 const sendPick = z.object({ type: feePickType, fpc: z.object({ id: z.string(), name: z.string().optional() }).nullable().optional() })
 export const SendPicksSchema = z.record(z.string(), z.object({ private: sendPick.optional(), public: sendPick.optional() }))
 
@@ -249,7 +248,7 @@ export const STORED_SHAPES = {
 	tokenIdHighWater: {
 		ref: value(TOKEN_ID_HIGH_WATER_KEY),
 		encoding: "structured",
-		schema: TokenIdHighWaterSchema,
+		schema: z.number().int().nonnegative(),
 		read: decodeTokenIdHighWater,
 	},
 	// Only earlier builds wrote it; the worker moves it into the profile holding that account.

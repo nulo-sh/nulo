@@ -631,9 +631,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	}
 
 	/**
-	 * The next token id, above every id this device ever reserved. The mark lands before the row that
-	 * takes the id, so neither a delete nor a crash between the two frees one; `undefined` once the
-	 * ticket is lost, since a released holder's mark would land over a successor's.
+	 * Reserves the next token id: the mark lands before the row that takes the id, so while the mark is
+	 * intact and below the top of the id space neither a delete nor a crash between the two frees one.
+	 * `undefined` once the ticket is lost, since a released holder's mark would land over a successor's.
 	 */
 	private async reserveTokenId(ownsLock: () => boolean, track: (write: Promise<void>) => Promise<void>): Promise<number | undefined> {
 		const area = this.browserApi.storage.local

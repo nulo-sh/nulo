@@ -312,8 +312,8 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// A profile switch during allocation or sealing makes this write belong to a departed
 		// context — skip it (the id isn't persisted, so it's reused by the next call).
 		if (gen !== this.profileGeneration) return false
-		// Token ids are `max+1`, so deleting the highest token frees its id for a
-		// successor: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
+		// A lost token-id high-water mark lets a successor take a deleted token's
+		// id: `tokens.has(id)` would pass for a DIFFERENT token. Compare the
 		// stable identity instead, so a creation for a token deleted mid-flight
 		// cannot attach to whatever now holds its id.
 		if (!this.isSameTokenLive(token)) return false
@@ -440,8 +440,8 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		return await this.ensurePairsHoldingLock(plan.missing, gen, existing)
 	}
 
-	/** Whether the map still holds THIS token rather than a successor that reused
-	 *  its id (`token/service.ts` warns about exactly that reuse). */
+	/** Whether the map still holds THIS token rather than a successor that reused its id, which a
+	 *  lost token-id high-water mark allows. */
 	private isSameTokenLive(token: Token): boolean {
 		const live = this.tokens.get(token.id)
 		return (
@@ -553,9 +553,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 
 	/** Awaited balance purge for a SET of token ids WITHIN one profile — called by
 	 *  the deletion coordinator with the tombstone's token snapshot (finding D).
-	 *  Profile-scoped because a resumed deletion can run AFTER a crash let a
-	 *  successor profile reuse a purged id (`max+1` allocation): an unscoped purge
-	 *  would erase the successor's rows and evict its live-map entry. Idempotent. */
+	 *  Profile-scoped because a resumed deletion can run AFTER a successor profile
+	 *  reused a purged id (a lost token-id high-water mark allows it): an unscoped
+	 *  purge would erase the successor's rows and evict its live-map entry. Idempotent. */
 	public async purgeForTokens(tokenIds: readonly number[], profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		const set = new Set(tokenIds)
