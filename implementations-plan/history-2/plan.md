@@ -1,7 +1,7 @@
 ---
 plan: history-2
 tier: light
-status: approved (Codex round 3); arc 1 under way
+status: completed (PR #1496, awaiting merge)
 issues: "#1416, #1417 (one arc closes both)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,17 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at f738cba62
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-01
+- **Status**: completed. One arc, delivered with this close-out as #1496.
+- **Shipped**: the transaction page's hero time reads `createdAt`. On the execute window, the Change registry popup and the Revoke popup, a failed fee estimate shows the fee readout's failed row with TRY AGAIN, which asks again through the surface's own estimate path. `useFeeEstimationMap` keeps a per-key `failed` record; the failure snack closes once no failure it reported stands, if it is still that snack; withdrawn settings cancel the window's estimate; a keyboard retry on a locked card focuses the locked row. One network e2e case gained two checks (+1.4 s on Chrome).
+- **Known limits**: none.
+- **Dispositions**: closing the snack on any re-ask was rejected (D4); a failure flag per surface was rejected for the map's (D3); app-paid rows ship unchanged (OA1, option A).
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and its line on stubbing only what production returns already covers the stubbed-`Flex` finding; the detail stays in [lessons/phase-4.md](lessons/phase-4.md).
+- **Open items**: #1494 (OA1, the app-paid row's retry, an owner decision), #1495 (the authorization preview's "Try again" has nothing to press).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # history-2: the transaction page's time, and a retry after a failed fee estimate on the execute window and two popups
 
@@ -80,11 +91,11 @@ At 161 lines this plan is over the light target of 150: the round-1 audit verdic
 ### Phase 4: Full gate, e2e and captures ✓
 
 - `bun run test:all`.
-- In `tests/e2e/network/snack-placement.test.ts`'s execute case, add one check after the snack: `fee-estimate-failed` is in the window; and at the case's end, before it rejects, press `fee-estimate-retry` and wait for the row to leave and the snack to close. It proves `index.vue` → `OperationCard` → readout on a real failing estimate in a real browser; `index.test.ts` stubs `OperationCard`, and `OperationCard.fee.test.ts` fakes the estimate. No new scenario; estimated +2 s, measured in `STATUS.md`.
+- In `tests/e2e/network/snack-placement.test.ts`'s execute case, add one check after the snack: `fee-estimate-failed` is in the window; and at the case's end, before it rejects, press `fee-estimate-retry` and wait for the row to leave and the snack to close. It proves `index.vue` → `OperationCard` → readout on a real failing estimate in a real browser; `index.test.ts` stubs `OperationCard`, and `OperationCard.fee.test.ts` fakes the estimate. No new scenario; estimated +2 s, measured in [lessons/phase-4.md](lessons/phase-4.md).
 - Smoke, Chrome then Firefox, from `apps/extension`: `[NULO_E2E_BROWSER=firefox] bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts --retry=0`. No smoke file opens the execute window.
 - Network, Chrome then Firefox, from the repository root, one `e2e:agent` at a time: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first [NULO_E2E_BROWSER=firefox] bun run e2e:agent tests/e2e/network/snack-placement.test.ts tests/e2e/network/authwit-lifecycle.test.ts tests/e2e/network/tx-sendTx-selfPay.test.ts`. `tx-sendTx-selfPay` mounts the locked card.
 - Captures, light theme, Chrome, base and head, from scratch specs under `~/.cache/nulo-backlog/history-2/`. Copy them into `tests/e2e/` for the run, then delete them. First commit the implementation and record that commit's SHA. Build the base from `git checkout f738cba62 -- <the changed source files>`. After the run, pass or fail, restore with `git checkout <that SHA> -- <the same files>`, and check `git status --porcelain` is empty. Surfaces: the tx page (seed a send with `createdAt` 15:08 and `updatedAt` 15:20); the execute window's fee card after `openUnfundedDappSend`; each popup's fee card after `interceptRpc` refuses the node, armed once the popup has read its registry state and the card its fee balances (else the card reads "Retrying in the background"); on the head, a locked card (`tx-sendTx-selfPay`'s request with the node refused) after a keyboard TRY AGAIN, with `document.activeElement` on `send-fee-locked` asserted and its ring in the frame. Commit the PNGs to `implementations-plan/history-2/screenshots/`. Add no sleep or retry to make a capture land.
-- **Validation gate**: the runs above; `bun run check:plans` after staging. Pass: exit 0 at retry 0; `git status --porcelain apps/extension/tests/e2e` shows only the snack-placement edit; each run's wall-clock in `STATUS.md` and the PR body. Read a red run before any rerun: one rerun for a known flake, a fix for real breakage. Layers: all, both browsers.
+- **Validation gate**: the runs above; `bun run check:plans` after staging. Pass: exit 0 at retry 0; `git status --porcelain apps/extension/tests/e2e` shows only the snack-placement edit; each run's wall-clock in [lessons/phase-4.md](lessons/phase-4.md) and the PR body. Read a red run before any rerun: one rerun for a known flake, a fix for real breakage. Layers: all, both browsers.
 
 ## Security & Adversarial Considerations
 
