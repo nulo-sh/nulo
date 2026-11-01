@@ -1,0 +1,7 @@
+# dapp-disconnect-1: phase 0 (planning)
+
+- 2026-11-01, recon: one Explore agent (sonnet) traced the fee question's ask, decline, close and timeout paths and the composition harnesses. Every claim it made was checked against the tree; its findings are in `recon.md`.
+- 2026-11-01, Codex plan audit round 1 (gpt-6.1-sol, high, read-only): conditional approve. Fact 9 was false (an e2e opens the fee window), Facts 3, 4 and 8 narrowed, D2 and D4 to be stated, red tests to fail by bounded assertions, refused-check and Accept-then-disconnect cases added. All adopted; see the plan's audit verdicts.
+- 2026-11-01, Opus Plan leg round 1 (opus, Plan agent): conditional approve. Fact 9 false (as Codex), red-test mechanics, real `fee-reask` in the spy, `session-explicitDisconnect` dropped, row-deletion triggers and the open-then-close window under UI impact. All adopted but a new e2e case, rejected in D6.
+- 2026-11-01, Codex final pass (fresh session, gpt-6.1-sol, high): conditional approve. Phase 1's fixtures were incomplete (`dapp.execute` validates the session's account and methods; `registerInFlight` needs a matching `peekLiveSerial`), and it asked for owner acknowledgement of the expiry/purge triggers and the open-then-close window. Fixtures adopted; the acknowledgement argued from the owner's own words and #1414.
+- 2026-11-01, Codex verify (resumed): approve. It withdrew the acknowledgement condition: the owner chose `endRequestsOfApp` by name and every trigger ends the app's connection.
