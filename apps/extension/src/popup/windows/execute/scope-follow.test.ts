@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
+import { boundAttr, declarationsOf, elementByTestid, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const TESTNET = { id: "n-testnet", chainId: 1, name: "Testnet" }
 const LOCAL = { id: "n-local", chainId: 1, name: "Local Network" }
@@ -65,6 +66,7 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn(() => ({
 		results: ref({}),
 		estimating: ref({}),
+		failed: ref({}),
 		estimate: vi.fn(),
 		cancel: vi.fn(),
 		cancelAll: vi.fn(),
@@ -302,6 +304,15 @@ describe("execute window — the scope banner", () => {
 		appStoreMock.account = SAVINGS
 		await flushPromises()
 		expect(banner().attributes("data-state")).toBe("account")
+	})
+})
+
+describe("execute window — the scope banner's wrapping", () => {
+	test("a name wider than the banner breaks at its edge: the whole banner wraps, since its action repeats a name", () => {
+		const parsed = parseSource("apps/extension/src/popup/windows/execute/index.vue")
+		const scopeBanner = elementByTestid(parsed, "execute-scope-banner")?.node
+		expect(scopeBanner && boundAttr(scopeBanner, "class")).toBe("$style.scope_banner")
+		expect(declarationsOf(parsed, ".scope_banner")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 })
 
