@@ -86,7 +86,7 @@ Simpler alternative: rules on each text instead of a box (rejected: the scope ba
 - What we trust: the before numbers come from scratch specs outside the repository, so the PR carries the table and the pictures. T2 cannot see a later `Banner` change that stops passing the class to its root, and no e2e opens the scope banner with a long name; the captures are its layout evidence (wrap-2 D4 named the same blind spot).
 - Nothing changes a permission, a log line, storage, a message, a dependency or the CSP. Known limits: none.
 
-## Phase 1 (arc 1): the rules and their scan cases
+## Phase 1 (arc 1): the rules and their scan cases ✓
 
 1. Run `git status` and require no untracked file under `apps/extension/tests/`.
 2. Add T1-T3 and run them while the `.vue` files are still the base's; require each red. Commit.
@@ -94,7 +94,7 @@ Simpler alternative: rules on each text instead of a box (rejected: the scope ba
 
 **Gate**, from the root: `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run src/components/composite/DappIdentityBlock.test.ts src/popup/windows/execute src/popup/windows/capabilities src/popup/windows/discover src/popup/pages/settings/security/export src/utils/type-role-ban.test.ts scripts/type-roles --retry=0)`; `bun run test:all`. Pass: every command exits 0; T1-T3 red before, green after.
 
-## Phase 2 (arc 1): the window guard and the evidence
+## Phase 2 (arc 1): the window guard and the evidence ✓
 
 1. Time the unchanged `cap-chain-mismatch.test.ts` once per browser: `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/cap-chain-mismatch.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox`. Record each file's wall-clock.
 2. Make D9's e2e change. Revert D1 in the tree only, run the file on Chrome, and require `expectFitsNarrow` red on the identity line. Restore D1 with `git checkout`.
