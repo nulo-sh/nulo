@@ -415,7 +415,8 @@ read without a row key in `apps/extension/src/wallet/storage/root-census.test.ts
 which fails on a family that is neither sealed nor reviewed:
 - Profile rows (name, type, the sealed master and its supporting key
   material), config, the storage version and the migration engine's state,
-  cached prices, the signed token list, the Terms-acceptance record.
+  cached prices, the signed token list, the Terms-acceptance record, and the
+  highest token id the device ever reserved.
 - Per-profile records the pre-unlock gates read: the active network's id, the
   default network kinds a profile was offered, the stale-network record and
   the integrity stamp (network and chain ids and the keyed digest), and the
@@ -438,7 +439,9 @@ What sealing does not hide or prevent:
   is a local sequence number; an account, imported-key or authwit-flag key
   shows its profile and chain (so per-chain account counts), an incoming key
   its profile and network (so per-network row counts) and an outbox key its
-  local token id (known limit #1056).
+  local token id (known limit #1056). The token-id high-water mark outlives
+  every profile's deletion and chain purge, so it keeps how many token ids the
+  device ever reserved after their rows are gone.
 - A profile's rows written before this build stay plaintext until that
   profile's next unlock seals them; until then they read as before (known
   limit #1060). The browser may keep the replaced plaintext in its storage

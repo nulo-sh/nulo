@@ -164,10 +164,11 @@ describe("described schemas match their writers' types", () => {
 			Equivalent<Registered<"uiActiveAccount">, string>,
 			Equivalent<Registered<"uiLastActiveProfile">, string>,
 			Equivalent<Registered<"onboardingCompleted">, boolean>,
-		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+			Equivalent<Registered<"tokenIdHighWater">, number>,
+		] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
 		const controls: [Equivalent<{ a: string }, { a?: string }>, Equivalent<{ a: string; b?: string }, { a: string }>] = [false, false]
 		// The check is the typecheck of these two assignments; the run only records that they compiled.
-		expect([checks.length, controls.length]).toEqual([18, 2])
+		expect([checks.length, controls.length]).toEqual([19, 2])
 	})
 
 	// Entries built through `described()` or `engine()` are typed `StoredShape`, whose schema is any
