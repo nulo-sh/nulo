@@ -97,6 +97,7 @@ vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ profile: undefined }),
 }))
 
+import { Flex } from "@nulo/design"
 import FeeSettingsCard from "./FeeSettingsCard.vue"
 import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
 import { readFeePicks } from "../../../../../tests/helpers/ui-preference-fake"
@@ -1057,7 +1058,8 @@ describe("FeeSettingsCard — a failed estimate's retry", () => {
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
 		const w = mount(FeeSettingsCard, {
 			props: baseProps({ lockedMethod: "fj", estimateFailed: true }),
-			global: { stubs: STUBS },
+			// The real Flex, whose template ref is its exposed proxy, not the root element.
+			global: { stubs: { ...STUBS, Flex } },
 			attachTo: document.body,
 		})
 		await flushPromises()

@@ -212,7 +212,7 @@ const {
 	debounceMs: 500,
 	onError: (key, err) => {
 		if (holdRefusal(err)) return
-		console.error(`[Execute] Fee estimation failed for op ${key}:`, err)
+		console.error("[Execute] Fee estimation failed", { op: key, error: err })
 		if (reportsEstimateFailure(operations.value[key] as unknown as UIOperation)) {
 			feeFailureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 		}
