@@ -768,7 +768,7 @@ export class DappSendExecutor {
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. The node has
 	 *  accepted the tx, so its grants can land: the index write runs once the activity record settles,
 	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees.
-	 *  The journal row holds the grants until this write lands, so a send that stops before it is
+	 *  The journal row holds the grants until this write lands, so a send stopped before it lands is
 	 *  listed by the send check once it reads the send went through. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
@@ -1435,7 +1435,6 @@ export class DappSendExecutor {
 	}
 }
 
-/** The send's account, then each additional scope the build reads notes for, once each. */
 /** The journal's copy of a send's grants, scoped as the recorder writes them; none for a send that
  *  grants nothing. */
 function journalAuthwitsOf(sent: SentTx): JournalAuthwits | undefined {
@@ -1447,6 +1446,7 @@ function journalAuthwitsOf(sent: SentTx): JournalAuthwits | undefined {
 	}
 }
 
+/** The send's account, then each additional scope the build reads notes for, once each. */
 function spendAccounts(account: string, additionalScopes: unknown): string[] {
 	const accounts = new Map<string, string>()
 	for (const address of [account, ...(Array.isArray(additionalScopes) ? additionalScopes.map(String) : [])]) {

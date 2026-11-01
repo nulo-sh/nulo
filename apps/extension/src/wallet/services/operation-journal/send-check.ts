@@ -47,8 +47,8 @@ type Watch = {
  *  `since` (`refusal`: the node refused it for a reason a later block rarely lifts); a `refused`
  *  one, read in that window for a send that landed after all, then at its expiry; an
  *  `unconfirmed` one whose expiry can still prove it went through or never will; or a mined one
- *  whose block is not yet final. A `sent` row that still holds its send's authwits is first a
- *  `listing` one: they go to the authwit index before any other read of the row. */
+ *  whose block is not yet final. `listing` comes first: a `sent` row's authwits reach the index
+ *  before any other read of it. */
 type OpenRow =
 	| { kind: "listing"; txHash: string; authwits: JournalAuthwits }
 	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number; refusal: boolean }

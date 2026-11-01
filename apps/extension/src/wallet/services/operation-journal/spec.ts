@@ -180,7 +180,8 @@ export interface OperationRecord extends JournalMetadata {
 	error: JobError | null
 	/** Set when the record enters a terminal stage; `null` otherwise. */
 	terminalAt: number | null
-	/** Written with `submitting`, cleared once the grants are in the authwit index. */
+	/** Written with `submitting`; dropped once the authwit index holds the grants, which `succeeded`
+	 *  implies. */
 	publicAuthwits?: JournalAuthwits
 	/** Attempt counter for the retry policy; starts at 0. */
 	attempts: number

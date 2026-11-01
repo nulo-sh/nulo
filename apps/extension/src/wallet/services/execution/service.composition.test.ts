@@ -1290,8 +1290,8 @@ async function startCheck(
 	return { check, network, balances, clock }
 }
 
-describe("ExecutionService composition — a dApp send's public authwits are indexed whatever its activity record does", () => {
-	// Below the field modulus, so the send check can read its receipt.
+describe("ExecutionService composition — a dApp send's public authwits are indexed once the network took the send", () => {
+	// Both below the field modulus: the check reads HASH's receipt, and the journal refuses a grant hash above it.
 	const HASH = `0x${"2f".repeat(32)}`
 	const GRANT = { hash: `0x${"1a".repeat(32)}`, content: { kind: "call" } }
 	const BLOCK_HASH = `0x${"0d".repeat(32)}`

@@ -8,3 +8,6 @@
 - Red proofs at retry 0, base sources with the new tests: 8 fail (P1, P2, P3 composition, the reverted control's kept field, four send-check listing cases); restored and green.
 - Storage: one golden `journal.authwits` (stamp 1, sealed), `bun run baseline:storage -- --additive "..."` appended stamp 1, its pin added; `src/wallet/storage/` 120 tests green at retry 0.
 - `bun run test` red once (139 s): `execution-lane.test.ts` pins the arguments `commitJournal` passes to the journal; it now also pins the field riding through. Rerun next.
+- `bun run test` green (148 s) and `bun run test:all` green (177 s) at retry 0 on `c28deadde`; `typecheck:all` and `lint` exit 0.
+- Codex fix R1 (gpt-6.1-sol, high, read-only, arc 2 diff from `51ea220b1` plus arc 1's squash): approve, two nits, both applied. The `recordPendingAuthwits` doc edit moved the type-roles producer digest of `auth-registry/service.ts`; its two `send_transaction` sites and evidence line are untouched, re-attested and re-pinned by hand as in arc 1.
+- Opus fix R1 (general-purpose): changes needed. Material: `proveStandardSend`'s commit was unpinned; a mutation reverting it now fails `aztec_sendTx stores a send's public authwits…`. Nits applied except the `watches` read (kept, precedent in `send-check.test.ts`).

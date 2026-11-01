@@ -683,16 +683,24 @@ describe("DappSendExecutor: the submitting commit", () => {
 		)
 	})
 
-	test("a send that grants public authwits stores them, with the scope they are indexed under, in the same commit", async () => {
+	// The embedded fee payment keeps aztec_sendTx on the build the harness cans.
+	test.each([
+		["send_transaction", (e: DappSendExecutor) => e.executeSendTransaction(sendTransactionOp, ORIGIN, undefined, FENCE)],
+		["aztec_sendTx", (e: DappSendExecutor) => e.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)],
+	])("%s stores a send's public authwits, with the scope they are indexed under, in the same commit", async (_path, run) => {
+		collectOffchainEffectsMock.mockReturnValue([])
 		const grant = { account: "0xacct", hash: "0xgrant", content: { kind: "call" } as never }
-		const { executor, deps, built, proveAndSend } = makeHarness()
-		deps.buildAndEstimateValidated = vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never)
+		const embedded = { actions: [], feePaymentMethod: undefined, feeOptions: { embeddedFeePayment: "dapp" } }
+		const { executor, deps, built, proveAndSend } = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => embedded) } as never,
+			buildAndEstimateValidated: vi.fn(async () => ({ ...built, pendingPublicAuthwits: [grant] }) as never),
+		})
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
 			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
 		})
-		await executor.executeSendTransaction(sendTransactionOp, ORIGIN, undefined, FENCE)
+		await run(executor)
 		expect((deps.lane.commitJournal as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]).toEqual({
 			chainId: 7,
 			account: "0xacct",
