@@ -84,7 +84,7 @@ import {
 } from "./spec"
 import { decodeRestoreMaterial, type RestoreMaterial } from "./restore-material"
 import { RestorePendingRepository } from "./restore-pending-repository"
-import { TombstoneRepository } from "./tombstone-repository"
+import { type Tombstone, TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
 import { WalletLockedError } from "./wallet-locked-error"
 import type { ProfileDeletionDelegate } from "../profile-deletion/types"
@@ -229,6 +229,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Durable delete-in-progress markers (finding D). NOT an EntityStorage — see
 	 *  TombstoneRepository: a corrupt tombstone must still reserve its id. */
 	private readonly tombstones: TombstoneRepository
+	/** The valid tombstones `init` found: deletions a dead worker left, which only the boot resume
+	 *  clears, since every other deleter refuses a reserved id. A later storage read would also list
+	 *  a deletion this worker began, which its own `deleteProfile` finishes. */
+	private inheritedTombstones: Tombstone[] = []
 
 	/** A restore-pending marker must be at least this old before the boot
 	 *  sweep may treat the import as ABANDONED and reap it. A marker only proves
@@ -623,7 +627,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// is fail-closed for corrupt ones; the epoch fence needs the payload). This
 		// arms assertCurrent BEFORE any execution can run (D13). Corrupt tombstones
 		// stay reserved with epoch 0 — still unreusable, just not epoch-fenced.
-		for (const t of await this.tombstones.validPayloads()) {
+		this.inheritedTombstones = await this.tombstones.validPayloads()
+		for (const t of this.inheritedTombstones) {
 			this.deletionState.hydrateDeletion(t.profileId, t.epoch)
 		}
 
@@ -1899,9 +1904,13 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.sweepTornImports(bootCutoff)
 	}
 
-	/** Finish every valid tombstone's deletion through the same three-phase shape as the
-	 *  live `deleteProfile`; per-tombstone failures log and continue. */
+	/** Finish each deletion a dead worker left through the same three-phase shape as the live
+	 *  `deleteProfile`, once per worker; per-tombstone failures log and continue. */
 	private async resumeTombstonedDeletions(delegate: ProfileDeletionDelegate): Promise<void> {
+		// Taken before the first await, so a concurrent or later call never repeats a deletion whose id
+		// it may already have released to a same-id restore.
+		const inherited = this.inheritedTombstones
+		this.inheritedTombstones = []
 		// TELEMETRY: a corrupt tombstone reserves its id (fail-closed) but can't be
 		// auto-resumed — surface it for manual recovery. We do NOT drop it (that would
 		// fail OPEN: the row is already deleted but purge may still be pending).
@@ -1912,12 +1921,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				corrupt.join(","),
 			)
 		}
-		for (const t of await this.tombstones.validPayloads()) {
+		for (const t of inherited) {
 			try {
 				// Complete phase 1 idempotently — a crash may have written the tombstone
 				// but not yet deleted the row / closed the session.
 				await this.runExclusive(async () => {
-					if (await this.repo.get(t.profileId)) await this.repo.delete(t.profileId)
+					const row = await this.repo.get(t.profileId)
+					// A reserved id gets no new row, so only planted or corrupt storage fails this.
+					if (row && row.pxeGeneration !== t.pxeGeneration) {
+						throw new Error("the stored profile is not the incarnation its tombstone deletes")
+					}
+					if (row) await this.repo.delete(t.profileId)
 					await this.sessionManager.closeProfile(t.profileId)
 					await this.restorePending.delete(t.profileId)
 					// Idempotent, same as the live `deleteProfile` phase-1 block: a deletion that

@@ -261,8 +261,8 @@ describe("TokenBalanceService.onTokenDeleted purge cascade", () => {
 	})
 
 	test("a successor's rows at a RE-MINTED token id survive the departed token's handler (identity filter)", async () => {
-		// Numeric token ids are max+1-reallocatable: after A→B, B can re-mint
-		// this very id for a DIFFERENT token. The delete filter is identity-exact
+		// A lost token-id high-water mark lets a later token re-mint this very
+		// id for a DIFFERENT token. The delete filter is identity-exact
 		// (profileId + chainId + contract, not just the id), so the departed
 		// handler must delete only its own rows and leave the successor's.
 		await seedRepo.set(balance(1, 1))
