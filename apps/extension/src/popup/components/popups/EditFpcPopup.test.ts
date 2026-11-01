@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { deferred } from "@nulo/wallet-core/utils"
 import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
+import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 
 const fpcServiceMock = {
 	getFpc: vi.fn(),
@@ -27,7 +28,7 @@ const fpcServiceMock = {
 const freshBuses = () => Object.assign(fpcServiceMock, { onFpcAdded: liveBus(), onFpcUpdated: liveBus(), onFpcDeleted: liveBus() })
 const openToastMock = vi.fn()
 
-const FPC = { id: "fpc-1", name: "Sponsor", address: `0x${"c".repeat(64)}`, isProtocol: false, type: "default_sponsored" }
+const FPC = { id: "fpc-1", name: "Sponsor", address: `0x0${"c".repeat(63)}`, isProtocol: false, type: "default_sponsored" }
 
 // Vitest requires `function` expressions (not arrows) for mocks used with `new`.
 vi.mock("@/wallet/services/fpc/client", () => ({
@@ -203,8 +204,8 @@ describe("EditFpcPopup — duplicate names", () => {
 	test("another saved name with outer spaces added warns and keeps Save disabled; another case, a blank or an unnamed FPC does not", async () => {
 		fpcServiceMock.getFpcs.mockResolvedValue([
 			{ ...FPC },
-			{ ...FPC, id: "fpc-2", name: "Alice", address: `0x${"d".repeat(64)}` },
-			{ ...FPC, id: "fpc-3", name: undefined, address: `0x${"e".repeat(64)}` },
+			{ ...FPC, id: "fpc-2", name: "Alice", address: `0x0${"d".repeat(63)}` },
+			{ ...FPC, id: "fpc-3", name: undefined, address: `0x0${"e".repeat(63)}` },
 		])
 		const w = await mountShown()
 		expect(await nameState(w, "Alice ")).toEqual({ warns: true, disabled: true })
@@ -330,7 +331,7 @@ describe("EditFpcPopup — the list under a held read", () => {
 		wrappers.push(w)
 		await w.setProps({ show: true })
 		await flushPromises()
-		const alice = { ...FPC, id: "fpc-2", name: "Alice", address: `0x${"d".repeat(64)}` }
+		const alice = { ...FPC, id: "fpc-2", name: "Alice", address: `0x0${"d".repeat(63)}` }
 		const warns = async () => {
 			await typeName(w, "Alice")
 			return w.text().includes("Already exist")
@@ -344,5 +345,36 @@ describe("EditFpcPopup — the list under a held read", () => {
 
 		fpcServiceMock.onFpcAdded.invoke(alice)
 		expect(await warns()).toBe(true)
+	})
+})
+
+describe("EditFpcPopup — the field modulus", () => {
+	test.each([
+		["the last value below the modulus saves", BELOW_MODULUS, "", 1],
+		["the modulus reads as the contact form", MODULUS, "Invalid address", 0],
+		["a value above the modulus reads as the contact form", ABOVE_MODULUS, "Invalid address", 0],
+		["63 digits read as before", DIGITS_63, "Invalid address", 0],
+	])("%s", async (_, address, warning, saves) => {
+		const w = await mountShown()
+		const input = w.find('input[data-input-label="Address"]')
+		await input.setValue(address)
+		await flushPromises()
+		expect(input.element.parentElement?.textContent?.trim()).toBe(warning)
+		expect(w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined).toBe(saves === 0)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpcAddress).toHaveBeenCalledTimes(saves)
+	})
+
+	test("a stored address at the modulus warns, and a rename beside it still saves", async () => {
+		fpcServiceMock.getFpc.mockResolvedValue({ ...FPC, address: MODULUS })
+		fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC, address: MODULUS }])
+		const w = await mountShown()
+		expect(w.find('input[data-input-label="Address"]').element.parentElement?.textContent?.trim()).toBe("Invalid address")
+		await typeName(w, "Renamed")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Renamed")
+		expect(fpcServiceMock.updateFpcAddress).not.toHaveBeenCalled()
 	})
 })

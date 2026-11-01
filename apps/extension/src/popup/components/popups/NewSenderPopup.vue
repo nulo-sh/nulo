@@ -1,6 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
+import { isFieldAddress } from "@nulo/wallet-bridge"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
@@ -38,7 +39,7 @@ const isAvailableToAddSender = computed(() => {
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
 	if (!senderAddress.value.length) return false
-	if (!isHex32(senderAddress.value)) return false
+	if (!isFieldAddress(senderAddress.value)) return false
 
 	return true
 })
@@ -53,6 +54,12 @@ const validateSenderAddress = () => {
 
 	if (!isHex32(senderAddress.value)) {
 		fillError("validation", "Invalid sender address")
+		return
+	}
+
+	// A value at or above the field modulus reads as the contact form words it.
+	if (!isFieldAddress(senderAddress.value)) {
+		fillError("validation", "Invalid address")
 		return
 	}
 }

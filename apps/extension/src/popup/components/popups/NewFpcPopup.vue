@@ -2,7 +2,7 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
-import { sameFieldAddress } from "@nulo/wallet-bridge"
+import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
@@ -29,6 +29,13 @@ const props = defineProps({
 let fpcService = null
 const fpcs = ref([])
 
+const addressRefusal = (v) => {
+	if (!isHex32(v)) return "Invalid FPC address"
+	// A value at or above the field modulus reads as the contact form words it.
+	if (!isFieldAddress(v)) return "Invalid address"
+	return null
+}
+
 const form = useFormState({
 	name: {
 		initial: "",
@@ -42,7 +49,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v) return null
-			if (!isHex32(v)) return "Invalid FPC address"
+			const refusal = addressRefusal(v)
+			if (refusal) return refusal
 			if (fpcs.value.some((f) => sameFieldAddress(v, f.address ?? ""))) return "Already added"
 			return null
 		},
@@ -54,7 +62,7 @@ const fpcAddressTerm = form.fields.address.value
 
 const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
-const isValidAddress = computed(() => isHex32(fpcAddressTerm.value))
+const isValidAddress = computed(() => addressRefusal(fpcAddressTerm.value) === null)
 const isAvailableToAddFpc = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
@@ -171,7 +179,7 @@ watch(
 		>
 			<template #right>
 				<Transition name="fade">
-					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> Invalid FPC address </FieldWarning>
+					<FieldWarning v-if="!isValidAddress && fpcAddressTerm"> {{ addressRefusal(fpcAddressTerm) }} </FieldWarning>
 					<FieldWarning v-else-if="isAddressStored"> Already added </FieldWarning>
 				</Transition>
 			</template>

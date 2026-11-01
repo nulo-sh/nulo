@@ -72,7 +72,7 @@ New FPC, Edit FPC, New token and New sender: a typed or pasted address at or abo
   - `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`: exit 0. `git grep -n isValidHex -- apps packages` prints nothing.
   - At retry 0: `bun run --cwd packages/<p> test -- --retry=0` for `wallet-core`, `token-list`, `wallet-bridge`, `aztec-runtime`; from `apps/extension`, `bun --bun vitest run src/utils src/composables src/wallet/services/token src/wallet/services/token-list src/wallet/services/price src/wallet/constants src/popup/components/modules/general src/popup/components/popups --retry=0`: green.
 
-## Phase 2: the four popups refuse a value at or above the modulus ✗
+## Phase 2: the four popups refuse a value at or above the modulus ✓
 
 - Add the range check to the four popups as above. Move each fixture at or above the modulus that a test treats as valid below it (recon.md lists them); a fixture's intent stays.
 - **Tests** (each popup's test file, `test.each`, wire-shaped `0x` + 64 hex): the modulus minus one is accepted (no warning, submit on, Enter calls the service); the modulus and the modulus plus one show exactly "Invalid address", submit off, and Enter calls no service; a 63-digit value shows today's text, the same refusal. Edit FPC types into the changed address, and one case keeps a stored address at the modulus: the warning shows and a rename saves (I2). No opener case: New token is pre-filled only after the curve check (Security). Red with phase 1's popup files for the modulus rows only.
