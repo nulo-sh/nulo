@@ -64,6 +64,7 @@ One issue, one arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults:
 - **D5 One hint for every surface** (OA-2 recommendation): the seven fields set passwords guarding the same kind of encrypted data; a second length-only hint would keep "Strong password" for `aaaaaaaa` on five of them.
 - **D6 The acceptance rule and the worker's re-checks stay** (brief: out of scope). The meter never disables a button.
 - **D7 Tests**: `password-hint.test.ts` pins `NEW_PASSWORD_HINTS` to the OWNER-ASKS list (the one place the words appear; the signed list replaces it before merge), one value per reason and band, the under-8 line on 7 versus 8 emoji, `é` and ZWJ families (moved from `password.test.ts`; the 13/25 case retires with the over-24 line). Create profile: the brief's values (`aaaaaaaa`, `12345678`, `qwertyuiop`, 12 of one emoji, 12 different emoji, a passphrase) in `useProfileCreateFlow.test.ts`, which both Create screens render; Change password: the same in `change-password.test.ts`; each proves a weak matching pair still enables submit. Export: weak, good and strong rows join `FilePasswordSection.test.ts`'s table; the broken pins keep their weak values (`password123`, `12345678`, `pass1234`). `NewProfileCredentials` only echoes its prop: no case there. No e2e scenario: the meter is pure, runs in jsdom, and no browser can change a returned string.
+- **D9 Latency budget, revised after measuring** (deviation). Phase 2 measured a matching pair's input-to-hint time: Chrome 13-36 ms realistic, 65-108 ms at 128 units; Firefox 36-66 ms realistic, 94-120 ms at 128. Firefox exceeds the 50 ms realistic budget this plan set. The budget moves to the 100 ms input-response bound (RAIL), which both browsers meet, rather than to a cached factory, which would keep the chosen password (F7); the meter runs once per matching edit, never per key while the fields differ (D4).
 - **D8 Captures**: a scratch spec outside the commit drives first-run Create profile on Chrome, light theme, and writes one PNG per string; the PNGs live in `screenshots/` and the PR links them by commit (`raw/<sha>`).
 
 ## Security & Adversarial Considerations
@@ -83,14 +84,14 @@ The owner, #1401 under `## Decision` (page 94, P94-08, signed 2026-11-01), optio
 
 ## Phases
 
-### Phase 1: The meter and the hint
+### Phase 1: The meter and the hint ✓
 1. Add the three packages to `apps/extension/package.json`; run `bun install`. Confirm `bun.lock` resolves the five reviewed versions (F4); a different one is re-scanned first.
 2. Write `utils/password-hint.ts` and its tests; export `characterCount`; move `newPasswordHint`; point the seven sites at the new module; shift the 11 citations (F9).
 3. Update the broken pins and add the cases of D7.
 
 **Gate**: `bun run lint`; `bun run typecheck:all`; `cd apps/extension && bun --bun vitest run src/utils/password src/composables/useProfileCreateFlow src/popup/pages/settings/security src/components/composite src/utils/copy-dash-ban src/utils/red-text-ban scripts/e2e/profile-chaos-model --retry=0`. Pass: exit 0; each new hint case fails against the base `newPasswordHint`. Layers: lint, typecheck, unit, component.
 
-### Phase 2: Build, e2e, captures
+### Phase 2: Build, e2e, captures ✓
 1. The armed smoke builds, Chrome and Firefox (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`). Pass: exit 0; `THIRD-PARTY-NOTICES.txt` lists each package that renders and carries `language-en`'s NOTICE; the marker `ApasswordA` exists in the build, and a scratch walk of static `import` edges from every entry (the four HTML entries and the service worker loader) never reaches its chunk; record that chunk's size.
 2. Smoke e2e at retry 0, Chrome then Firefox (`NULO_E2E_BROWSER=firefox`): `cd apps/extension && bun run test:e2e -- tests/e2e/registration.test.ts tests/e2e/onboarding-tab.test.ts tests/e2e/security.test.ts --retry=0`. Pass: all green; record each browser's wall-clock.
 3. Take the captures (D8), plus the longest line on Change password at popup width; commit them under `screenshots/`. In the same scratch spec, time a matching pair's hint in both browsers: a realistic pair (16 characters) and a 128-unit pair, cold and warm. Budget: under 50 ms realistic, under 300 ms at 128 units; over it, stop for a plan change.
