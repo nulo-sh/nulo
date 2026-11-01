@@ -52,7 +52,6 @@ export function grantContentsOf(op: DraftUIOperation): AuthwitContent[] {
 export const undecodedAll = (count: number): DecodedCall[] =>
 	Array.from({ length: count }, () => ({ kind: "undecoded", reason: "unavailable" }))
 
-/** The calls decoded for display, or every one undecoded when the decoder could not be reached. */
 export async function decodeCallsOrUnavailable(
 	decoder: { decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): Promise<DecodedCall[]> },
 	networkId: string,
@@ -67,7 +66,7 @@ export async function decodeCallsOrUnavailable(
 }
 
 /** The request's `count` grants as the card reads them; a failed read reads as unavailable, which
- *  refuses the request rather than leaving it pending. */
+ *  holds Confirm off rather than leaving it pending. */
 export async function decodeGrantsOrUnavailable(
 	read: () => Promise<readonly DecodedGrant[]>,
 	count: number,

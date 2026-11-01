@@ -1,7 +1,7 @@
 /**
  * What a dApp approval window shows of a request: its operations resolved against the profile's
  * networks and accounts, their calls decoded for display, and the tokens amounts render in. Every
- * client is the caller's, which owns its connection, but the two `resolveForProfile` builds for itself.
+ * client is the caller's, which owns its connection, but the two `resolveForProfile` builds.
  */
 
 import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
@@ -37,8 +37,8 @@ export function requestEnd(end: WindowEnd, wrongProfile: boolean, active: Profil
 	return active ? "switch" : "lock"
 }
 
-/** {@link resolveOperations} on short-lived account and network clients, disconnected on every exit:
- *  a throw must not leave both ports open for the window's life. */
+/** {@link resolveOperations} on short-lived account and network clients, disconnected on every
+ *  exit: a throw must not leave both ports open for the window's life. */
 export async function resolveForProfile(
 	requested: ExecutionPayload["params"]["operations"],
 	profileId: string,

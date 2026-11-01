@@ -242,7 +242,7 @@ describe("PriceService — refresh pipeline", () => {
 		const { service, state } = await harness()
 		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.0147)
 		const newer = reply({ aztec: { usd: 0.02, last_updated_at: 1_000_100 } })
-		// The Fetch standard's redirect modes: "error" rejects the 3xx, any other follows it to the target's reply.
+		// Returns the redirect target's reply unless the request refuses redirects, as `redirect: "error"` does.
 		const redirecting = async (init: RequestInit) => {
 			if (init.redirect === "error") throw new TypeError("Failed to fetch")
 			return newer

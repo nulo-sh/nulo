@@ -366,7 +366,7 @@ const init = async () => {
 		}
 	} catch (error) {
 		if (error instanceof WrongProfileError) isWrongProfile.value = true
-		console.error("Failed to initialize execution", error)
+		console.error("Failed to initialize execution", { error })
 		setError("Something went wrong")
 	}
 }
