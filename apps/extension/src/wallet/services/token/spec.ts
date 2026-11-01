@@ -14,6 +14,17 @@ export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"
  *  (`${root}@${profileId}`). */
 export const TOKEN_SEEDED_STORAGE_ROOT = "nulo:core:token-seeded"
 
+/** The highest token id this device ever reserved, a bare integer written before the row that takes
+ *  it. Every profile and chain shares the token root's id space, so the mark is device-wide and
+ *  outlives every purge: a delete never frees an id. */
+export const TOKEN_ID_HIGH_WATER_KEY = "nulo:core:token-id-high-water"
+
+/** The stored mark, or 0 for anything else: a damaged mark costs at most a reused id, never a token
+ *  add, seed or restore. */
+export function decodeTokenIdHighWater(raw: unknown): number {
+	return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : 0
+}
+
 /** A marker row as its store reads it: any JSON. The seeder's own decoder is its read, so a corrupt
  *  entry drops only itself, never the profile's tombstones. */
 export const SeedMarkerRowSchema = z.unknown()

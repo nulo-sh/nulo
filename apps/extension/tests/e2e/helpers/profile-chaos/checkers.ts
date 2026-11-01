@@ -354,6 +354,7 @@ export const FAMILY_GROUPS = {
 	config: device("value:nulo:config", "a person's settings change writes it"),
 	tokenPrices: background("value:nulo:core:token-prices", "the price fetch runs on a timer"),
 	tokenList: background("value:nulo:core:token-list", "the token list refresh runs on an alarm"),
+	tokenIdHighWater: background("value:nulo:core:token-id-high-water", "the token seeder reserves ids on its own schedule"),
 	tokenSeeded: background("root:nulo:core:token-seeded", "the token seeder records its markers on its own schedule", SEALED),
 	dappRegistrations: action("root:nulo:core:dappRegistrations", "a dApp's registration call writes it", SEALED),
 	activeNetwork: action("root:nulo:core:active-network", "created with a profile and moved by a person's network switch"),
