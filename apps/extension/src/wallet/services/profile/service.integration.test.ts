@@ -2375,6 +2375,133 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 	})
 })
 
+describe("the boot resume finishes only the deletions a dead worker left", () => {
+	const NO_ROWS = { addresses: [], tokenIds: [], networkIds: [] }
+	const stored = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
+	const tombstoneKey = (id: string) => `${PROFILE_TOMBSTONE_ROOT}@${id}`
+
+	/** Worker 1 leaves A's deletion pending and holds B, restored under a kept id. Worker 2 starts
+	 *  deleting B and holds its purge, then starts the resume; every purge records its id and waits
+	 *  for its profile's gate. */
+	async function aPendingAndBDeleting() {
+		const { api, service: boot1 } = await makeService()
+		boot1.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async () => {
+				throw new Error("interrupted")
+			},
+		})
+		const a = await boot1.createProfile("A", "password123")
+		await expect(boot1.deleteProfile(a.id)).rejects.toThrow("interrupted")
+		const b = await boot1.restore({ id: "abc12345", name: "B", type: "password" }, await restoreSecretFor(11), "pass1234")
+		expect(b.id).toBe("abc12345")
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		const gates = { [a.id]: Promise.withResolvers<void>(), [b.id]: Promise.withResolvers<void>() }
+		const reached = { [a.id]: Promise.withResolvers<void>(), [b.id]: Promise.withResolvers<void>() }
+		const bResumed = Promise.withResolvers<void>()
+		boot2.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async (id: string) => {
+				purges.push(id)
+				if (id === b.id && purges.filter((p) => p === b.id).length === 2) bResumed.resolve()
+				reached[id].resolve()
+				await gates[id].promise
+			},
+		})
+		const deletingB = boot2.deleteProfile(b.id)
+		await reached[b.id].promise
+		const resuming = boot2.resumePendingDeletions()
+		const openAll = () => {
+			for (const g of Object.values(gates)) g.resolve()
+		}
+		return { api, boot2, a, b, purges, gates, reached, bResumed, deletingB, resuming, openAll }
+	}
+
+	test("a profile restored under the id of a deletion begun in this worker survives the resume", async () => {
+		const { api, boot2, a, b, purges, gates, reached, deletingB, resuming, openAll } = await aPendingAndBDeleting()
+		try {
+			await reached[a.id].promise
+			// Storage lists A's tombstone first, so a resume that also listed B's reaches it after this.
+			expect(purges).toEqual([b.id, a.id])
+			gates[b.id].resolve()
+			await deletingB
+			const restored = await boot2.restore({ id: b.id, name: "B", type: "password" }, await restoreSecretFor(11), "pass1234")
+			expect(restored.id).toBe(b.id)
+			gates[a.id].resolve()
+			await resuming
+
+			expect(await stored(api, `nulo:core:profiles@${b.id}`)).toBeDefined()
+			expect(await stored(api, `${RESTORE_PENDING_ROOT}@${b.id}`)).toBeDefined()
+			expect(purges.filter((id) => id === b.id)).toHaveLength(1)
+			expect(await stored(api, tombstoneKey(a.id))).toBeUndefined()
+			expect(boot2.getDeletionState().isReserved(a.id)).toBe(false)
+		} finally {
+			openAll()
+		}
+	})
+
+	test("the resume never purges a deletion this worker began, even while that deletion is still running", async () => {
+		const { api, boot2, a, b, purges, gates, bResumed, deletingB, resuming, openAll } = await aPendingAndBDeleting()
+		try {
+			gates[a.id].resolve()
+			const outcome = await Promise.race([resuming.then(() => "resume ended"), bResumed.promise.then(() => "resume purged B")])
+			expect(outcome).toBe("resume ended")
+			expect(purges).toEqual([b.id, a.id])
+			expect(await stored(api, tombstoneKey(a.id))).toBeUndefined()
+			gates[b.id].resolve()
+			await deletingB
+			expect(await stored(api, tombstoneKey(b.id))).toBeUndefined()
+			expect(boot2.getDeletionState().isReserved(b.id)).toBe(false)
+		} finally {
+			openAll()
+		}
+	})
+
+	test("an inherited tombstone never erases a stored row of another incarnation", async () => {
+		const { api, service } = await makeService()
+		const kept = await service.createProfile("Kept", "password123")
+		const planted: Tombstone = { profileId: kept.id, ...NO_ROWS, epoch: 1, pxeGeneration: "0".repeat(32) }
+		const orphan: Tombstone = { profileId: "deadbeef", ...NO_ROWS, epoch: 1, pxeGeneration: "1".repeat(32) }
+		await api.storage.local.set({
+			[tombstoneKey(kept.id)]: JSON.stringify(planted),
+			[tombstoneKey(orphan.profileId)]: JSON.stringify(orphan),
+		})
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		boot2.setDeletionDelegate({ snapshot: async () => NO_ROWS, runFor: async (id: string) => void purges.push(id) })
+		await boot2.resumePendingDeletions()
+
+		expect(await stored(api, `nulo:core:profiles@${kept.id}`)).toBeDefined()
+		expect(await stored(api, tombstoneKey(kept.id))).toBeDefined()
+		expect(boot2.getDeletionState().isReserved(kept.id)).toBe(true)
+		expect(purges).toEqual([orphan.profileId])
+		expect(await stored(api, tombstoneKey(orphan.profileId))).toBeUndefined()
+	})
+
+	test("a second resume in the same worker runs no deletion again", async () => {
+		const { api, service: boot1 } = await makeService()
+		boot1.setDeletionDelegate({
+			snapshot: async () => NO_ROWS,
+			runFor: async () => {
+				throw new Error("interrupted")
+			},
+		})
+		const a = await boot1.createProfile("A", "password123")
+		await expect(boot1.deleteProfile(a.id)).rejects.toThrow("interrupted")
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purges: string[] = []
+		boot2.setDeletionDelegate({ snapshot: async () => NO_ROWS, runFor: async (id: string) => void purges.push(id) })
+		await boot2.resumePendingDeletions()
+		await boot2.resumePendingDeletions()
+
+		expect(purges).toEqual([a.id])
+	})
+})
+
 describe("torn-import sweep on boot resume", () => {
 	// A torn import (restore() ran; finalize never did — SW/popup death, transport
 	// death, or a persistently-failed compensating delete) leaves the profile row
