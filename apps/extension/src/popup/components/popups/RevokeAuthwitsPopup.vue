@@ -59,12 +59,9 @@ const estimates = useWalletTxEstimates({
 	},
 	keys: () => chunkedAuthwits.value.map((_, i) => i),
 	scope: () => appStore.scopeEpoch,
-	onError: (err) => {
-		console.error("Revoke fee estimate failed", { error: err })
-		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
-	},
+	onError: (err) => console.error("Revoke fee estimate failed", { error: err }),
 })
-const { results: feeEstimates, estimating: estimatingFees } = estimates
+const { results: feeEstimates, estimating: estimatingFees, failed: failedFees } = estimates
 
 /** Synchronous with the input: Confirm never reads an estimate made for the settings just replaced. */
 function setChunkFee(i, settings) {
@@ -246,9 +243,11 @@ onBeforeUnmount(() => {
 							:account="appStore.account"
 							:feeEstimate="feeEstimates[i] ?? null"
 							:isEstimating="!!estimatingFees[i]"
+							:estimateFailed="!!failedFees[i]"
 							fallsBack
 							:modelValue="ch.feeSettings"
 							@update:modelValue="($event) => setChunkFee(i, $event)"
+							@retryEstimate="estimates.refresh(i)"
 						/>
 
 						<div v-if="ch.status === 'progress'" :class="[$style.status_line, $style.runner]" />
