@@ -72,8 +72,9 @@ const thirdParty = (steps: Step[]): string[] =>
 		),
 	].sort()
 
-/** Any read of the `secrets` context, `toJSON(secrets)` included, but the job's own `secrets.GITHUB_TOKEN`. */
-const CUSTOM_SECRET = /\bsecrets\b(?!\s*\.\s*GITHUB_TOKEN\b)/
+/** Any read of the `secrets` context, `toJSON(secrets)` included, but the job's own `secrets.GITHUB_TOKEN`.
+ *  Expressions resolve context and secret names in any case. */
+const CUSTOM_SECRET = /\bsecrets\b(?!\s*\.\s*GITHUB_TOKEN\b)/i
 
 /** The `${{ }}` spans of a text. A `}}` inside a single-quoted literal (`''` escapes a quote) ends
  *  none, and an unclosed span runs to the end, so no text can hide a read from the scan. */
@@ -279,7 +280,7 @@ function setupBunTokenFindings(tree: Tree): string[] {
 
 const LOCAL_WORKFLOW = "./.github/workflows/"
 
-/** Every job that runs steps, with the permissions it runs with: a called workflow's job that declares none takes its caller's. */
+/** A called workflow's job that declares no permissions, nor does its workflow, runs with its caller's. */
 function* runs(
 	tree: Tree,
 	file: string,
@@ -295,10 +296,7 @@ function* runs(
 	}
 }
 
-/**
- * Every job holding a credential, its own or a caller's, whose Bun may come from the shared Actions
- * cache. The composite's own setup step follows its `cache` input, so its callers answer for it.
- */
+/** The composite's own setup step follows its `cache` input, so its callers answer for it. */
 function sharedCacheFindings(tree: Tree): string[] {
 	const own = tree.actions[SETUP_BUN]?.runs.steps?.find((s) => s.uses?.startsWith("oven-sh/setup-bun@"))
 	const cached = (s: Step): boolean =>
@@ -866,6 +864,10 @@ describe("credentialed jobs", () => {
 					run: "true",
 					env: { KEY: "${{ secrets.ANY_KEY }}" },
 				} as Step),
+		],
+		[
+			"a custom secret read under a capitalised context name",
+			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { KEY: "${{ Secrets.ANY_KEY }}" } }),
 		],
 		[
 			"a custom secret read by bracket",
