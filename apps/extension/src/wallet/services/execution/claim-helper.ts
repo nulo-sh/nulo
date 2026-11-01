@@ -2,6 +2,7 @@
  * Claims the queued journal row a dApp send was filed under, or creates one.
  *
  *   - no `queuedJournalId`, or the row was reaped → create a fresh row
+ *   - the row's read rejects                       → rethrow; `JobCancelledSentinel` once cancelled
  *   - row at `queued`                              → claim it (queued → pending)
  *   - row at `pending` (silent-path pre-claim)     → register only
  *   - any other stage                              → throw `JobCancelledSentinel` (EIP-1193 4001)
@@ -77,10 +78,10 @@ export async function claimOrCreateDappExecuteJournal(deps: ClaimHelperDeps, inp
 		return createAndRegisterFresh(deps, input)
 	}
 
-	let record = await operationJournal.getOperation(queuedJournalId).catch(() => null)
+	let record = await readQueuedRow(operationJournal, queuedJournalId, reuseController)
 	if (!record) {
-		// Reaped or unreadable. The fallback files under a new id, so the pre-acquire controller's
-		// entry under the old id would otherwise leak.
+		// Reaped, or a row this worker cannot open. The fallback files under a new id, so the
+		// pre-acquire controller's entry under the old id would otherwise leak.
 		if (reuseController) deps.deleteController(queuedJournalId)
 		logger?.debug(`Queued record ${queuedJournalId} not found; creating new in-flight record`)
 		return createAndRegisterFresh(deps, input)
@@ -143,6 +144,22 @@ export async function claimOrCreateDappExecuteJournal(deps: ClaimHelperDeps, inp
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────
+
+/** The queued row, or `undefined` when it is gone. A failed read rejects, never reads as gone:
+ *  replacing the row would run, under a new id and a fresh controller, a send whose cancel may have
+ *  landed during the read. */
+async function readQueuedRow(
+	operationJournal: OperationJournalService,
+	queuedJournalId: string,
+	reuseController: AbortController | undefined,
+): Promise<JournalRecord | undefined> {
+	try {
+		return await operationJournal.getOperation(queuedJournalId)
+	} catch (error) {
+		if (reuseController?.signal.aborted) throw new JobCancelledSentinel(queuedJournalId)
+		throw error
+	}
+}
 
 /** Create a fresh in-flight record and register its controller. Owns the
  *  complete `await createFreshRecord → new AbortController →
