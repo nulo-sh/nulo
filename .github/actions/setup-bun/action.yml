@@ -4,8 +4,8 @@ description: |
   is "false".
   Callers must check out the repository before invoking this action.
 
-  The Bun version is root package.json's `packageManager`, and the install cache is keyed on the
-  version that setup installed, so a Bun bump starts a fresh cache.
+  The Bun version is root package.json's `packageManager`. The install cache is keyed on the
+  version setup installed; on a bump its last restore key still seeds the new key from the old one.
 
 inputs:
   cache:

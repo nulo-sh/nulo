@@ -84,12 +84,12 @@ One arc, one PR to `dev`: `Closes #1450`, `Part of #1448`. Recon: [recon.md](rec
 
 ## Phases
 
-### Phase 1 — #1450: network lanes gain the licence texts; the five surfaces must agree
+### Phase 1 — #1450: network lanes gain the licence texts; the five surfaces must agree ✓
 1. Add the glob to both network filters. 2. Add `extensionBuildFilters`, `SURFACE_EXCEPTIONS`, `surfaceFindings`, the live test and the mutation cases.
 
 **Validation gate**: `bun run lint:actions && bun run lint && bun run typecheck:all && bun run test:ci-gating`. Pass: all exit 0; the live test passes; each mutation case reports its own finding. Layers: lint, typecheck, unit.
 
-### Phase 2 — #1448: one Bun version source
+### Phase 2 — #1448: one Bun version source ✓
 1. Composite and the nine inline steps; the `pr-quick` comment. 2. The `release-integrity` widening; `bun-version.test.ts`. 3. Docs.
 
 **Validation gate**: Phase 1's commands plus `bun run test:release && bun run test && bun run test:all`. Pass: all exit 0; `git grep -nE 'bun-version: *[0-9]' -- .github` prints nothing. Layers: lint, typecheck, unit.

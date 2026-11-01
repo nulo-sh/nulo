@@ -50,8 +50,8 @@ function filtersOf(workflow: string): Record<string, string[]> {
 	return dornyFilters(wf, workflow)
 }
 
-type GateStep = { id?: string; uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, string> }
-type GateWorkflow = { jobs: Record<string, { steps?: GateStep[] }> }
+type GateStep = { id?: string; if?: unknown; uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, string> }
+type GateWorkflow = { jobs: Record<string, { outputs?: Record<string, string>; steps?: GateStep[] }> }
 
 function dornyFilters(wf: GateWorkflow, label: string): Record<string, string[]> {
 	for (const job of Object.values(wf.jobs)) {
@@ -785,8 +785,13 @@ const NO_GH = "#!/bin/sh\nexit 1\n"
 /** The one shape a compute-step input may take: the dispatch override, else one filter's output. */
 const COMPUTE_INPUT = /^\$\{\{ steps\.override\.outputs\.full \|\| steps\.filter\.outputs\.([\w-]+) \}\}$/
 
-/** Whether pr-quick's compute step, given only `on` true (no input, for `undefined`), builds the extension. */
-function computeBuilds(step: GateStep, on?: string): boolean {
+const FLAG = "needs-extension-build="
+
+/**
+ * What pr-quick's compute step, given only `on` true (no input, for `undefined`), sets the flag to.
+ * `undefined` unless it writes the flag exactly once, as a boolean: the runner keeps the last write.
+ */
+function computeFlag(step: GateStep, on?: string): "true" | "false" | undefined {
 	const dir = mkdtempSync(join(tmpdir(), "compute-"))
 	try {
 		const output = join(dir, "output")
@@ -795,10 +800,24 @@ function computeBuilds(step: GateStep, on?: string): boolean {
 		const bound = Object.fromEntries(Object.entries(env).map(([key, value]) => [value, String(key === on)]))
 		const run = runStep({ run: step.run ?? "", env }, { shim: NO_GH, bound, overrides: { GITHUB_OUTPUT: output } })
 		if (run.code !== 0) throw new Error(`compute step failed: ${run.stderr}`)
-		return readFileSync(output, "utf8").split("\n").includes("needs-extension-build=true")
+		const writes = readFileSync(output, "utf8")
+			.split("\n")
+			.filter((line) => line.startsWith(FLAG))
+		const value = writes.length === 1 ? writes[0].slice(FLAG.length) : undefined
+		return value === "true" || value === "false" ? value : undefined
 	} finally {
 		rmSync(dir, { recursive: true, force: true })
 	}
+}
+
+/** The compute step must always run, and the job must publish its flag as the one the builds read. */
+function computeWiringFindings(wf: GateWorkflow, step: GateStep): string[] {
+	const published = wf.jobs.changes.outputs?.["needs-extension-build"]
+	return [
+		...(step.id === "compute" ? [] : ["no compute step in the changes job"]),
+		...(step.if === undefined ? [] : [`the compute step runs only if ${step.if}`]),
+		...(published === "${{ steps.compute.outputs.needs-extension-build }}" ? [] : [`changes publishes the flag as ${published}`]),
+	]
 }
 
 /**
@@ -810,12 +829,20 @@ function extensionBuildFilters(wf: GateWorkflow): { filters: string[]; findings:
 	const step = wf.jobs.changes.steps?.find((candidate) => candidate.id === "compute") ?? {}
 	const defined = Object.keys(dornyFilters(wf, "pr-quick.yml"))
 	const inputs = Object.entries(step.env ?? {}).map(([key, value]) => ({ key, value, name: COMPUTE_INPUT.exec(value)?.[1] }))
-	const findings = inputs
-		.filter(({ name }) => name === undefined || !defined.includes(name))
-		.map(({ key, value }) => `compute input ${key} reads ${value}, not the override or one defined filter`)
+	const findings = [
+		...computeWiringFindings(wf, step),
+		...inputs
+			.filter(({ name }) => name === undefined || !defined.includes(name))
+			.map(({ key, value }) => `compute input ${key} reads ${value}, not the override or one defined filter`),
+	]
 	if (findings.length > 0) return { filters: [], findings }
-	if (computeBuilds(step)) findings.push("the compute step builds the extension with every input false")
-	return { filters: inputs.filter(({ key }) => computeBuilds(step, key)).map(({ name }) => name ?? ""), findings }
+	const probes = [undefined, ...inputs.map(({ key }) => key)].map((on) => ({ on, flag: computeFlag(step, on) }))
+	findings.push(
+		...probes.filter(({ flag }) => flag === undefined).map(({ on }) => `with ${on ?? "no input"} true, the flag is not one boolean`),
+	)
+	if (probes[0].flag === "true") findings.push("the compute step builds the extension with every input false")
+	const builds = new Set(probes.filter(({ flag }) => flag === "true").map(({ on }) => on))
+	return { filters: inputs.filter(({ key }) => builds.has(key)).map(({ name }) => name ?? ""), findings }
 }
 
 const QUICK = "pr-quick.yml"
@@ -916,13 +943,36 @@ describe("one extension build surface", () => {
 		)
 	})
 
-	test("a compute input in any other shape is refused before the step runs", () => {
+	test("a compute input in any other shape is refused, and the step is not run", () => {
 		const copy = computeCopy((step) => {
 			if (step.env) step.env.CORE = "${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}"
 		})
-		expect(extensionBuildFilters(copy).findings).toEqual([
-			"compute input CORE reads ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}, not the override or one defined filter",
-		])
+		expect(extensionBuildFilters(copy)).toEqual({
+			filters: [],
+			findings: [
+				"compute input CORE reads ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation == 'false' }}, not the override or one defined filter",
+			],
+		})
+	})
+
+	test.each([
+		[
+			"a later write of the flag",
+			(step: GateStep) => Object.assign(step, { run: `${step.run}\necho "${FLAG}false" >> "$GITHUB_OUTPUT"\n` }),
+		],
+		["a condition", (step: GateStep) => Object.assign(step, { if: "github.event_name == 'push'" })],
+	])("a compute step with %s is refused", (_, edit) => {
+		expect(extensionBuildFilters(computeCopy(edit)).findings.length).toBeGreaterThan(0)
+	})
+
+	test("a changes job that publishes another flag as the extension's is refused", () => {
+		const copy: GateWorkflow = structuredClone(quick)
+		const outputs = copy.jobs.changes.outputs ?? {}
+		outputs["needs-extension-build"] = "${{ steps.compute.outputs.needs-landing-build }}"
+		expect(extensionBuildFilters(copy)).toEqual({
+			filters: [],
+			findings: ["changes publishes the flag as ${{ steps.compute.outputs.needs-landing-build }}"],
+		})
 	})
 })
 

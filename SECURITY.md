@@ -600,7 +600,8 @@ None of them is in either extension zip.
 **Bun pinned** to a specific patch version in `package.json#packageManager`,
 which the `setup-bun` composite and every inline `oven-sh/setup-bun` step read
 (`bun-version-file`); the composite's install cache is keyed on the version it
-installed, so a bump starts a fresh cache. Local
+installed, though its last restore key still seeds a new version's cache from
+the previous one. Local
 development requires bun ≥1.4 (`bun run --parallel` scripts), and
 `bun.lock` is `lockfileVersion: 2`, unreadable by Bun ≤1.3.
 
@@ -687,9 +688,10 @@ so a bump moves CI with it. The files that restate the version (the
 `@types/bun` pins, the Docker runner's pins, the reviewer's instructions in
 `SOURCE-BUILD.md`, the Workers Builds READMEs) fail
 `scripts/ci-cd/bun-version.test.ts` and `docker-ci-like-pins.test.ts` until
-they match. The Workers Builds' `BUN_VERSION` dashboard variables and
-`SOURCE-BUILD.md`'s ARM64 hash stay manual (the list is in `CLAUDE.md`,
-Dependency policy).
+their versions match. The archive hashes are copied by hand from the release's
+`SHASUMS256.txt`: CI checks only that the two x86_64 copies agree. The Workers
+Builds' `BUN_VERSION` dashboard variables stay manual too (the list is in
+`CLAUDE.md`, Dependency policy).
 
 ## GitHub Actions
 

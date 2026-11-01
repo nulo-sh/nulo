@@ -4,7 +4,7 @@
  * cache on the version setup installed, and a restatement a bump leaves behind fails here. Two sites
  * stay manual (CLAUDE.md, Dependency policy): the `BUN_VERSION` variable of each Workers Build, which
  * lives in the Cloudflare dashboard, and `SOURCE-BUILD.md`'s ARM64 archive hash. setup-bun reads the
- * file at the workspace root, so every job that sets up Bun checks out root package.json there.
+ * file at the workspace root, so every job that sets up Bun must check out root package.json there.
  *
  * Wired into CI via the root `test:ci-gating` script.
  */
@@ -28,7 +28,6 @@ function managerFindings(packageManager: string): string[] {
 	return /^bun@\d+\.\d+\.\d+$/.test(packageManager) ? [] : [`packageManager ${packageManager} is not an exact bun@X.Y.Z`]
 }
 
-/** Every job and composite action, with its own steps. */
 function setupSites(): Site[] {
 	const parse = <T>(path: string): T => Bun.YAML.parse(read(path)) as T
 	const workflows = readdirSync(join(ROOT, ".github/workflows")).filter((file) => /\.ya?ml$/.test(file))
@@ -60,7 +59,7 @@ function cacheKeyFindings(action: Action): string[] {
 	const id = steps.find((s) => s.uses?.startsWith(SETUP_BUN))?.id
 	const cache = steps.find((s) => s.uses?.startsWith("actions/cache@"))?.with ?? {}
 	const keys = [String(cache.key ?? ""), String(cache["restore-keys"] ?? "").split("\n")[0]]
-	const output = `steps.${id}.outputs.bun-version`
+	const output = `\${{ steps.${id}.outputs.bun-version }}`
 	return keys.flatMap((key) =>
 		id !== undefined && key.includes(output) && !/\d+\.\d+\.\d+/.test(key) ? [] : [`cache key ${key} is not keyed on ${output}`],
 	)
@@ -71,8 +70,8 @@ const RESTATEMENTS = [
 	/(?<![\w/-])bun@(\d+\.\d+\.\d+)/g,
 	/(?<![\w-])bun-v(\d+\.\d+\.\d+)/g,
 	/\bbun --version\s+#\s*(\d+\.\d+\.\d+)/g,
-	/\bBUN_VERSION=(\d+\.\d+\.\d+)/g,
-	/(?<![\w-])bun-version:\s*(\d+\.\d+\.\d+)/g,
+	/\bBUN_VERSION[=:]\s*["']?(\d+\.\d+\.\d+)/g,
+	/(?<![\w-])bun-version:\s*["']?(\d+\.\d+\.\d+)/g,
 	/"@types\/bun":\s*"([^"]*)"/g,
 	/(?<![\w/-])bun\/(\d+\.\d+\.\d+)\//g,
 ]
@@ -181,10 +180,13 @@ describe("the Bun version", () => {
 		expect(stepFindings([site])).toEqual(problems.map((problem) => `x.yml#job: ${problem}`))
 	})
 
-	test("a composite cache keyed on a version literal is refused", () => {
+	test.each([
+		["a version literal", `\${{ runner.os }}-bun-${otherBun}-\${{ hashFiles('bun.lock') }}`],
+		["the output's name as plain text", "${{ runner.os }}-bun-steps.bun.outputs.bun-version-${{ hashFiles('bun.lock') }}"],
+	])("a composite cache keyed on %s is refused", (_, key) => {
 		const copy: Action = structuredClone(composite)
 		const cache = copy.runs.steps?.find((s) => s.uses?.startsWith("actions/cache@"))
-		if (cache?.with) cache.with.key = `\${{ runner.os }}-bun-${otherBun}-\${{ hashFiles('bun.lock') }}`
+		if (cache?.with) cache.with.key = key
 		expect(cacheKeyFindings(copy)).toHaveLength(1)
 	})
 
@@ -194,6 +196,8 @@ describe("the Bun version", () => {
 		["a release URL", "docs/x.md", `https://github.com/oven-sh/bun/releases/download/bun-v${otherBun}/bun-linux-x64.zip`],
 		["a version check", "docs/x.md", `bun --version   # ${otherBun}`],
 		["a Workers Build variable", "infra/x/README.md", `build variable \`BUN_VERSION=${otherBun}\``],
+		["a quoted workflow input", "x.yml", `bun-version: "${otherBun}"`],
+		["a workflow env entry", "x.yml", `BUN_VERSION: ${otherBun}`],
 		["a pin key", "x.sha256", `${"0".repeat(64)}  bun/${otherBun}/bun-linux-x64.zip`],
 	])("%s one release off is refused", (_, path, text) => {
 		expect(restatementFindings([{ path, text }], version)).toHaveLength(1)
