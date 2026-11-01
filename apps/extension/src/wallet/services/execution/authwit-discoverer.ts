@@ -71,6 +71,7 @@ export type DiscoverContext = {
 	node: AztecNode
 	pxe: IPXE
 	account: IAccountContract
+	scopes: AztecAddress[]
 	/** Stored chain identity for the user-selected network. Used to rebind
 	 *  the live node's `getNodeInfo()` before deriving the authwit
 	 *  `chainInfo`. */
@@ -80,7 +81,7 @@ export type DiscoverContext = {
 /** Callback provided by the caller so the discoverer can run its
  *  kernelless simulation without reaching into facade state. */
 export type BuildTxRequestFn = (
-	op: { networkId: string; accountAddress: string; actions: Action[] },
+	op: { networkId: string; accountAddress: string; actions: Action[]; opts?: { additionalScopes?: unknown } },
 	paymentMethod: AccountFeePaymentMethodOptions,
 ) => Promise<DiscoverContext>
 
@@ -97,15 +98,18 @@ export class AuthwitDiscoverer {
 	public constructor(readonly _logger: ILogger) {}
 
 	/** Runs a simulation with `skipTxValidation: true` + `skipFeeEnforcement: true`
-	 *  and `scopes: [account.address]`, inspects the `privateExecutionResult`'s
+	 *  under the build's scopes, inspects the `privateExecutionResult`'s
 	 *  offchain effects for `CallAuthorizationRequest`s, and emits one
 	 *  `AddPrivateAuthwitAction { kind: "message_hash" }` per authorization
 	 *  the tx proved it needs. */
 	public async discoverPrivateAuthwits(
-		op: { networkId: string; accountAddress: string; actions: Action[] },
+		op: Parameters<BuildTxRequestFn>[0],
 		buildTxRequest: BuildTxRequestFn,
 	): Promise<DiscoveredPrivateAuthwits> {
-		const { txRequest, node, pxe, account, network } = await buildTxRequest(op, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE)
+		const { txRequest, node, pxe, account, scopes, network } = await buildTxRequest(
+			op,
+			AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		)
 
 		// Kernelless simulation: stub the caller's account contract so its
 		// `verify_private_authwit` returns true unconditionally. Otherwise any
@@ -124,7 +128,7 @@ export class AuthwitDiscoverer {
 				simulatePublic: true,
 				skipTxValidation: true,
 				skipFeeEnforcement: true,
-				scopes: [account.address],
+				scopes,
 			},
 			[account.address.toString()],
 		)

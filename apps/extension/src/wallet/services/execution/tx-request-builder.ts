@@ -38,7 +38,7 @@
  *
  * `buildStandard` returns a `BuiltStandardTx`; `buildNoFrom` returns a
  * `BuiltNoFromTx` (same fields minus `nonce`, since `DefaultEntrypoint`
- * doesn't use one). These feed the fee-strategy branches.
+ * doesn't use one, and minus `scopes`, since that path keeps its own sets). These feed the fee-strategy branches.
  */
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -84,6 +84,8 @@ export interface BuiltStandardTx {
 	pxe: IPXE
 	account: IAccountContract
 	network: Network
+	/** The private-state scopes every simulation and the proof of this build run under (`sendScopes`). */
+	scopes: AztecAddress[]
 	/** The EXACT chain-identity pair the build asserted and signed under —
 	 *  consumers snapshotting chain identity must use THIS, never refetch
 	 *  (a refetch after an endpoint flip would bind the snapshot to a chain
@@ -109,7 +111,18 @@ export interface BuiltStandardTx {
 }
 
 /** NO_FROM (DefaultEntrypoint) variant — no account nonce exists on that path. */
-export type BuiltNoFromTx = Omit<BuiltStandardTx, "nonce">
+export type BuiltNoFromTx = Omit<BuiltStandardTx, "nonce" | "scopes">
+
+/** The account, then each additional scope the dApp asked for, once each: discovery, sizing and
+ *  proving must read the same private state, or a note one of them needs is missing from another. */
+export function sendScopes(account: AztecAddress, additionalScopes: unknown): AztecAddress[] {
+	const scopes = new Map([[account.toString(), account]])
+	for (const scope of Array.isArray(additionalScopes) ? additionalScopes : []) {
+		const address = AztecAddress.fromStringUnsafe(String(scope))
+		if (!scopes.has(address.toString())) scopes.set(address.toString(), address)
+	}
+	return [...scopes.values()]
+}
 
 export class TxRequestBuilder {
 	public constructor(
@@ -129,7 +142,7 @@ export class TxRequestBuilder {
 	 *  contract's entrypoint. The account is the fence's profile's, never the
 	 *  active one's. */
 	public async buildStandard(
-		op: { networkId: string; accountAddress: string; actions: Action[] },
+		op: { networkId: string; accountAddress: string; actions: Action[]; opts?: { additionalScopes?: unknown } },
 		fence: ExecutionFence,
 		feePaymentMethod: AccountFeePaymentMethodOptions,
 		parentTask?: WrappedTask,
@@ -222,7 +235,7 @@ export class TxRequestBuilder {
 
 			const result = await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)
 			task.complete()
-			return result
+			return { ...result, scopes: sendScopes(account.address, op.opts?.additionalScopes) }
 		} catch (error) {
 			task.fail(error)
 			throw error
@@ -295,7 +308,7 @@ export class TxRequestBuilder {
 		feePaymentMethod: AccountFeePaymentMethodOptions,
 		gasSettings: PartialGasSettingsRPC | undefined,
 		collected: CollectedActions,
-	): Promise<BuiltStandardTx> {
+	): Promise<Omit<BuiltStandardTx, "scopes">> {
 		const { node, pxe, account, network, nodeInfo } = ctx
 		const { nonce, txCalls, pendingPublicAuthwits } = collected
 		// Per-BUILD cap (pre-send gate): block a grant that would push the account past the
@@ -535,7 +548,12 @@ function assertKnownAuthwitKind(content: AuthwitContent): void {
 }
 
 function newCapsule(action: Extract<Action, { kind: "add_capsule" }>): Capsule {
-	return new Capsule(AztecAddress.fromStringUnsafe(action.contract), Fr.fromString(action.storageSlot), action.capsule.map(Fr.fromString))
+	return new Capsule(
+		AztecAddress.fromStringUnsafe(action.contract),
+		Fr.fromString(action.storageSlot),
+		action.capsule.map(Fr.fromString),
+		action.scope === undefined ? undefined : AztecAddress.fromStringUnsafe(action.scope),
+	)
 }
 
 /** Collect for POST-send recording (pending → reconcile). Build stays PURE:

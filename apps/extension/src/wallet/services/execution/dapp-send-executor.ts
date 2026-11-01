@@ -32,12 +32,20 @@
  *     not a defensible ceiling for simulation time.
  */
 
-import { type InteractionWaitOptions, type SendReturn, extractOffchainOutput } from "@aztec-labs/aztec.js/contracts"
+import {
+	DefaultWaitOpts,
+	type InteractionWaitOptions,
+	type SendReturn,
+	type WaitOpts,
+	extractOffchainOutput,
+} from "@aztec-labs/aztec.js/contracts"
+import { waitForTx } from "@aztec-labs/aztec.js/node"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { FunctionCall } from "@aztec-labs/stdlib/abi"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { collectOffchainEffects, type TxProvingResult } from "@aztec-labs/stdlib/tx"
+import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import { collectOffchainEffects, type TxHash, type TxProvingResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeReask } from "@nulo/wallet-core/jobs"
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
@@ -84,7 +92,7 @@ import type {
 	SendTransactionOperation,
 	TransferFeeEstimate,
 } from "./spec"
-import type { TxRequestBuilder } from "./tx-request-builder"
+import { sendScopes, type TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
@@ -261,6 +269,7 @@ type StandardBuild = Pick<
 	| "node"
 	| "pxe"
 	| "account"
+	| "scopes"
 	| "txCalls"
 	| "feePaymentMethod"
 	| "pendingPublicAuthwits"
@@ -992,7 +1001,7 @@ export class DappSendExecutor {
 		// its own kernelless discovery; hooks and the approval envelope travel
 		// with it so the FIFO baton and the preview guard apply there too.
 		if (op.executionMode === "default_entrypoint") {
-			return this.executeNoFromSendTx(op, origin, parentTask, hooks, fence, approval)
+			return this.awaitRequested(op, await this.executeNoFromSendTx(op, origin, parentTask, hooks, fence, approval))
 		}
 
 		// The SW materializes every operation it executes, so a missing
@@ -1007,7 +1016,7 @@ export class DappSendExecutor {
 		// (runInSlot); its `run` owns the opts.from guard, payload parse, its own
 		// `simulating` checkpoint, authwit discovery, build, and prove/send. The
 		// primary-method extraction is a thunk so it runs after acquireSlot.
-		return this.runInSlot(
+		const sent = await this.runInSlot(
 			{
 				networkId: op.networkId,
 				accountAddress: op.accountAddress,
@@ -1063,6 +1072,16 @@ export class DappSendExecutor {
 				}
 			},
 		)
+		return this.awaitRequested(op, sent)
+	}
+
+	/** What the dApp's `wait` asks for, once the slot is free: a waiting dApp holds no slot, and a
+	 *  revert or timeout leaves the send's journal row as the send left it. */
+	private async awaitRequested(op: AztecSendTxOperation, sent: Submitted): Promise<SendReturn<InteractionWaitOptions>> {
+		const { txHash, offchainOutput, node } = sent
+		if (op.opts.wait === "NO_WAIT") return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+		const receipt = await waitForTx(node, txHash, dappWaitOpts(op.opts.wait))
+		return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
 	}
 
 	/** One build held to the preview and the approved figure; above the figure the build is stashed
@@ -1108,17 +1127,27 @@ export class DappSendExecutor {
 		fence: ExecutionFence,
 		ctx: SlotRun,
 		built: StandardBuild,
-	): Promise<SendReturn<InteractionWaitOptions>> {
-		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
-			built
-		const sendAdditionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
+	): Promise<Submitted> {
+		const {
+			txRequest,
+			node,
+			pxe,
+			account,
+			scopes,
+			network,
+			nonce,
+			txCalls,
+			feePaymentMethod,
+			pendingPublicAuthwits,
+			initializesAccount,
+		} = built
 		ctx.leaveLine()
 		const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
 			pxe,
 			node,
 			txRequest,
 			initializesAccount,
-			scopes: [account.address, ...sendAdditionalScopes],
+			scopes,
 			parentTask,
 			journalId: ctx.journalId,
 			checkCancelled: ctx.checkCancelled,
@@ -1142,12 +1171,7 @@ export class DappSendExecutor {
 				feeChosenBy: feeChooserOf(op.feeSettings),
 			}),
 		})
-
-		if (op.opts.wait === "NO_WAIT") {
-			return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
-		}
-		const receipt = await node.getTxReceipt(txHash)
-		return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+		return { txHash, offchainOutput, node }
 	}
 
 	/**
@@ -1188,6 +1212,8 @@ export class DappSendExecutor {
 				node,
 				pxe,
 				account,
+				// The preview binds the estimate to this interaction, so its scopes are this request's.
+				scopes: sendScopes(account.address, op.opts.additionalScopes),
 				network,
 				// The entry retains the exact build — its provenance rides along.
 				initializesAccount: reused.initializesAccount,
@@ -1244,7 +1270,7 @@ export class DappSendExecutor {
 		hooks: ExecutionHooks | undefined,
 		fence: ExecutionFence,
 		approval?: OperationApprovalEnvelope,
-	): Promise<SendReturn<InteractionWaitOptions>> {
+	): Promise<Submitted> {
 		this.deps.logDebug(
 			`executeNoFromSendTx: starting, accountAddress=${op.accountAddress}, calls=${op.exec?.calls?.length}, additionalScopes=${JSON.stringify(op.opts?.additionalScopes)}`,
 		)
@@ -1323,12 +1349,7 @@ export class DappSendExecutor {
 							feeChoice: await feeChoice,
 						}),
 				})
-
-				if (op.opts.wait === "NO_WAIT") {
-					return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
-				}
-				const receipt = await node.getTxReceipt(txHash)
-				return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
+				return { txHash, offchainOutput, node }
 			},
 		)
 	}
@@ -1439,6 +1460,24 @@ function primaryMethodCalls(op: AztecSendTxOperation): JournalCallCarrier[] | un
 	if (!primary) return undefined
 	const { to, args } = primary.call as Partial<Pick<FunctionCall, "to" | "args">>
 	return [{ method: primary.name, call: journalCallOf(to?.toString(), args) }]
+}
+
+/** A send the node accepted, handed out of its slot for the dApp's wait. */
+type Submitted = { txHash: TxHash; offchainOutput: ReturnType<typeof offchainOutputOf> | undefined; node: AztecNode }
+
+/** Below a second a dApp's poll is a tight loop on the node. `retryUntil` reads the deadline only
+ *  after each sleep, so above a minute the dApp's own `timeout` slips, and past 2^31 ms a timer fires at once. */
+const WAIT_INTERVAL_BOUNDS_S = { min: 1, max: 60 } as const
+
+/** Upstream's wait options from the dApp's raw `wait`, which the bridge checks only for types; `null`
+ *  reads as omitted. As upstream, the first poll waits one interval: the send cannot be mined sooner. */
+export function dappWaitOpts(wait: unknown): WaitOpts {
+	const asked: WaitOpts = typeof wait === "object" && wait !== null ? wait : {}
+	const interval = Math.min(
+		Math.max(asked.interval ?? DefaultWaitOpts.interval ?? 1, WAIT_INTERVAL_BOUNDS_S.min),
+		WAIT_INTERVAL_BOUNDS_S.max,
+	)
+	return { ...asked, interval, initialDelay: asked.initialDelay ?? interval }
 }
 
 function offchainOutputOf(provedTx: TxProvingResult) {

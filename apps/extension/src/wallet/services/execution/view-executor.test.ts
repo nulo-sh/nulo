@@ -56,6 +56,7 @@ function addr(hex: string) {
 }
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const SECOND = addr("0xsecond")
 
 function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 	const network = {
@@ -88,7 +89,16 @@ function makeHarness(overrides: Partial<ViewExecutorDeps> = {}) {
 	const deps: ViewExecutorDeps = {
 		planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: 0, feeOptions: {} })) } as never,
 		resolver: {} as never,
-		txBuilder: { buildStandard: vi.fn(async () => ({ txRequest: { kind: "txr" }, node, pxe, account, network })) } as never,
+		txBuilder: {
+			buildStandard: vi.fn(async () => ({
+				txRequest: { kind: "txr" },
+				node,
+				pxe,
+				account,
+				scopes: [account.address, SECOND],
+				network,
+			})),
+		} as never,
 		pxeService: {
 			getPXE: vi.fn(() => pxe),
 			getContractArtifact: vi.fn(async () => undefined),
@@ -157,7 +167,7 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 	test("split=null routes to the standard path: stub-account msgSender + scopes pin, and the answer comes back reduced", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue(null)
 		const extra = addr("0xextra")
-		const { executor, pxe, account, simulated } = makeHarness()
+		const { executor, deps, pxe, simulated } = makeHarness()
 		const result = await executor.executeAztecSimulateTx(makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [extra] } }))
 
 		expect(result).toEqual(toAppFacingSimulationResult(simulated))
@@ -165,8 +175,11 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 
 		expect(fastPathMocks.runFastPath).not.toHaveBeenCalled()
 		const simArgs = pxe.simulateTx.mock.calls[0] as unknown[]
-		// Scopes: account first, then dApp additionalScopes.
-		expect((simArgs[1] as { scopes: unknown[] }).scopes).toEqual([account.address, extra])
+		// The build derives the scopes from the dApp's additional scopes; the simulation runs under the build's.
+		const build = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect((build[0] as { opts: { additionalScopes: unknown[] } }).opts.additionalScopes).toEqual([extra])
+		const { scopes } = await (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.results[0].value
+		expect((simArgs[1] as { scopes: unknown[] }).scopes).toBe(scopes)
 		// THE PIN (defense-in-depth): third arg = stubAccountAddresses — the
 		// simulated account is the stubbed pass-through; real signing keys
 		// never enter PXE during a dApp simulateTx.
