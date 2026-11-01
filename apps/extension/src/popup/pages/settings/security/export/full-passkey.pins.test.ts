@@ -12,6 +12,7 @@ import { installChromeStorage } from "../../../../../../tests/helpers/chrome-sto
 import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import FullExportPage from "./full.vue"
 
 function sliceClient() {
@@ -470,9 +471,9 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 	})
 
 	it.each([
-		["", "", "At least 8 characters"],
-		["1234567", "1234567", "At least 8 characters"],
-		["12345678", "12345679", "Passwords don't match"],
+		["", "", NEW_PASSWORD_HINTS.short],
+		["1234567", "1234567", NEW_PASSWORD_HINTS.short],
+		["12345678", "12345679", NEW_PASSWORD_HINTS.mismatch],
 	])("Protect stays off for %j / %j, and the hint says %s", async (password, repeated, hint) => {
 		const wrapper = await reachBackupReady()
 		await typePair(wrapper, password, repeated)
@@ -486,7 +487,7 @@ describe("export/full.vue — a passkey profile's file leaves only under its own
 	it("the file leaves sealed under the password typed here, carrying the password body", async () => {
 		const wrapper = await reachBackupReady()
 		await typePair(wrapper, "pass1234", "pass1234")
-		expect(wrapper.get("[data-testid='backup-encrypt-password-hint']").text()).toBe("Strong password")
+		expect(wrapper.get("[data-testid='backup-encrypt-password-hint']").text()).toBe(NEW_PASSWORD_HINTS.common)
 		await protectButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
 		expect(wrapper.text()).toMatch(/Don't forget your\s+password, as it will be required to restore your backup\./)

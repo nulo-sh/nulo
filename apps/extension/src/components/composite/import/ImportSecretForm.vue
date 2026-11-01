@@ -2,7 +2,7 @@
 <script setup>
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
-import { newPasswordHint } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 import { PHRASE_WORD_COUNT, phraseHint } from "@/utils/recovery-phrase"
 /**
  * Section labels carry the visual heading; individual Inputs run
