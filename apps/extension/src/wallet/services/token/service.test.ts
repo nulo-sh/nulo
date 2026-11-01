@@ -23,7 +23,10 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { recordWrites } from "@/wallet/services/storage-write-log"
 import { TOKEN_DETAILS_CHANGED, TokenService } from "./service"
-import type { Token, TokenInterface } from "./spec"
+import { TOKEN_ID_HIGH_WATER_KEY, type Token, type TokenInterface } from "./spec"
+import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
+import { rowOnToken } from "@/utils/activity-rows"
+import { buildJournalTerminalCardProps } from "@/utils/journal-state"
 import { isSealedText } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
 
@@ -55,6 +58,10 @@ async function storedTokenRows(area: { get(keys: null): Promise<Record<string, u
 	)
 }
 
+/** A device whose token-id high-water mark is lost (an install from before it, or a storage rollback)
+ *  hands a freed id out again; the release fences still guard that state. */
+const forgetHighWater = (area: { remove(key: string): Promise<void> }) => area.remove(TOKEN_ID_HIGH_WATER_KEY)
+
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
 
 const ti = (contract: string): TokenInterface =>
@@ -67,9 +74,10 @@ const ti = (contract: string): TokenInterface =>
 		isComplete: true,
 	}) as unknown as TokenInterface
 
-async function makeHarness() {
+/** `keepStorage`: a second service over the storage an earlier harness left. */
+async function makeHarness(keepStorage = false) {
 	const api = new FakeBrowserApi()
-	api.reset()
+	if (!keepStorage) api.reset()
 	const deletionState = new ProfileDeletionState()
 	const logger = new LoggerStore(new ConfigStore())
 	const journal = {
@@ -349,6 +357,8 @@ describe("TokenService.restore — per-row allocation", () => {
 		const raw = await api.storage.local.get(null)
 		expect(raw[`nulo:core:tokens@${max}`]).toBe(junk)
 		expect(restored[0].id).not.toBe(restored[1].id)
+		// The second walk lands below the first: the mark keeps the higher one.
+		expect(raw[TOKEN_ID_HIGH_WATER_KEY]).toBe(Number.MAX_SAFE_INTEGER - 1)
 	})
 
 	test("a backup row's name and symbol are stored clean", async () => {
@@ -367,6 +377,83 @@ describe("TokenService.restore — per-row allocation", () => {
 
 		expect(restored.restoreError).toBeUndefined()
 		expect((await tokenService.getTokensRaw("p1"))[0]).toMatchObject({ name: "Tether USD", symbol: "USDC" })
+	})
+})
+
+describe("TokenService — the token-id high-water mark", () => {
+	const add = (h: Harness, contract: string) => h.tokenService.addToken("p1", NETWORK.id, "0xacc", ti(contract), { origin: "popup" })
+	const mk = (contract: string) => ({ id: 0, profileId: "p1", chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
+	const mark = async (h: Harness) => (await h.api.storage.local.get(TOKEN_ID_HIGH_WATER_KEY))[TOKEN_ID_HIGH_WATER_KEY]
+
+	test("a deleted token's id goes to no later token, so its failed transfer names no other token", async () => {
+		const h = await makeHarness()
+		h.fetchStub.mockResolvedValueOnce(["Tee", "TEE", 6]).mockResolvedValueOnce(["You", "YOU", 18])
+		const t = await add(h, "0xaaaa")
+		await h.tokenService.deleteToken(t.id)
+		const u = await add(h, "0xbbbb")
+
+		expect(u.id).toBeGreaterThan(t.id)
+		const tokens = await h.tokenService.getTokens("p1", NETWORK.chainId)
+		const failed: OperationRecord = {
+			id: "op-send",
+			kind: "transfer",
+			origin: "popup",
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc",
+			tokenId: t.id,
+			amountRaw: "1500000",
+			recipientAddress: "0xrecipient",
+			progress: { stage: "failed" },
+			error: { kind: "unknown", message: "refused", normalizedRaw: null },
+			terminalAt: 1_000,
+			attempts: 0,
+			createdAt: 0,
+			updatedAt: 1_000,
+		}
+		const card = buildJournalTerminalCardProps(failed, { tokenById: (id) => tokens.find((x) => x.id === id), tokens: [] })
+		expect(card).toMatchObject({ title: "Transfer", amount: null, amountSymbol: null })
+		expect(rowOnToken({ type: "journal", key: "op-send", sortKey: 0, op: failed }, u)).toBe(false)
+		expect([t.id, await mark(h)]).toEqual([1, u.id])
+	})
+
+	test("a restore allocates above a deleted id, and so does a later service over the same storage", async () => {
+		const h = await makeHarness()
+		await add(h, "0xa01")
+		const deleted = await add(h, "0xa02")
+		await h.tokenService.deleteToken(deleted.id)
+
+		const restored = await h.tokenService.restore([mk("0xb01"), mk("0xb02")])
+		expect(restored.map((r) => r.id)).toEqual([deleted.id + 1, deleted.id + 2])
+		await h.tokenService.deleteToken(restored[1].id)
+
+		const later = await makeHarness(true)
+		expect((await add(later, "0xc01")).id).toBe(restored[1].id + 1)
+	})
+
+	test.each([
+		["a string", "x"],
+		["a fraction", 1.5],
+	])("a mark that is %s reads as none, and the next reservation overwrites it", async (_, stored) => {
+		const h = await makeHarness()
+		await add(h, "0xa01")
+		await h.api.storage.local.set({ [TOKEN_ID_HIGH_WATER_KEY]: stored })
+
+		expect((await add(h, "0xa02")).id).toBe(2)
+		expect(await mark(h)).toBe(2)
+	})
+
+	test("a rejected read of the mark fails the add and writes no row", async () => {
+		const h = await makeHarness()
+		const get = h.api.storage.local.get.bind(h.api.storage.local)
+		h.api.storage.local.get = (async (keys?: string | string[] | null) => {
+			if (keys === TOKEN_ID_HIGH_WATER_KEY) throw new Error("storage unavailable")
+			return await get(keys)
+		}) as typeof h.api.storage.local.get
+
+		await expect(add(h, "0xa01")).rejects.toThrow("storage unavailable")
+		expect(await storedTokenRows(h.api.storage.local)).toEqual([])
+		expect(h.journal.transitionOperation).toHaveBeenLastCalledWith("op-1", { stage: "failed" }, expect.anything())
 	})
 })
 
@@ -481,9 +568,10 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 
 	test("a row whose id another token took during the read is never written", async () => {
 		const other = `0x${"0d".repeat(32)}`
-		const { tokenService, id, preview, updated } = await restored()
+		const { tokenService, api, id, preview, updated } = await restored()
 		preview.mockImplementation(async () => {
 			await tokenService.deleteToken(id)
+			await forgetHighWater(api.storage.local)
 			await tokenService.restore([{ ...backupRow, contract: other }] as never)
 			return chain
 		})
@@ -563,7 +651,7 @@ describe("TokenService.restore — deletion fence", () => {
 		let fired = false
 		api.storage.local.set = async (items: Record<string, unknown>) => {
 			await origSet(items)
-			if (!fired) {
+			if (!fired && Object.keys(items).some((key) => key.startsWith("nulo:core:tokens@"))) {
 				fired = true
 				deletionState.beginDeletion("p1")
 			}
@@ -858,6 +946,7 @@ describe("TokenService.addToken — creation fences", () => {
 			deletionState.beginDeletion("p1")
 			await tokenService.purgeForProfile("p1")
 			deletionState.release("p1")
+			await forgetHighWater(api.storage.local)
 			const [restored] = await tokenService.restore([
 				{ id: 0, profileId: "p1", chainId: 1, contract: "0xcafe", name: "T", symbol: "T", decimals: 9 },
 			])
@@ -947,8 +1036,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(check.calls()).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
-		await add(h, "0xb0b")
+		expect((await add(h, "0xb0b")).id).toBe(1)
 		check.release(true)
 		await first
 
@@ -1057,15 +1147,59 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(sets).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
-		const second = add(h, "0xb0b")
+		let settled = false
+		const second = add(h, "0xb0b").finally(() => {
+			settled = true
+		})
 		await settle()
+		expect(settled).toBe(false)
 		set.resolve()
 		await Promise.all([first, second])
 		writes.restore()
 
 		expect(Object.values(await rows(h)).sort()).toEqual(["0xa11", "0xb0b"])
 		expect(h.added.sort()).toEqual(["0xa11", "0xb0b"])
+	})
+
+	test("released while it reads the id mark, it never writes that stale mark: a freed id stays retired", async () => {
+		const h = await setup()
+		const read = holdRead(h, TOKEN_ID_HIGH_WATER_KEY)
+		const first = add(h, "0xa11")
+		await settle()
+		await read.reached
+		await release()
+
+		await add(h, "0xb01")
+		const freed = [await add(h, "0xb02"), await add(h, "0xb03")]
+		for (const { id } of freed) await h.tokenService.deleteToken(id)
+		read.release()
+
+		expect(freed.map(({ id }) => id)).not.toContain((await first).id)
+	})
+
+	test("released while its id mark is still applying, a successor waits for that mark before it allocates", async () => {
+		const h = await setup()
+		const set = deferred()
+		let sets = 0
+		const writes = recordWrites(h.api.storage.local, TOKEN_ID_HIGH_WATER_KEY, undefined, () => (++sets === 1 ? set.promise : undefined))
+		const first = add(h, "0xa11")
+		await settle()
+		expect(sets).toBe(1)
+		await release()
+
+		let second: number | undefined
+		const successor = add(h, "0xb0b").then(({ id }) => {
+			second = id
+		})
+		await settle()
+		expect(second).toBeUndefined()
+		set.resolve()
+		await Promise.all([first, successor])
+		writes.restore()
+
+		expect(second).toBeGreaterThan(1)
 	})
 
 	test("its set rejecting while a successor drains it, the successor also waits for the failure it journals", async () => {
@@ -1129,6 +1263,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 		h.networkLive.value = false
 		await h.tokenService.clearChainState("p1", 1)
+		await forgetHighWater(h.api.storage.local)
 		const [restored] = await h.tokenService.restore([replacement(ownRow)])
 		expect(`nulo:core:tokens@${restored.id}`).toBe(key)
 		const written = (await h.api.storage.local.get(key))[key]
@@ -1153,7 +1288,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await release()
 
 		await h.tokenService.clearChainState("p1", 1)
+		await forgetHighWater(h.api.storage.local)
 		const [restored] = await h.tokenService.restore([mk("0xccc")])
+		expect(restored.id).toBe(1)
 		chainRead.resolve(false)
 
 		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
@@ -1281,8 +1418,10 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await settle()
 		expect(chainReads).toBe(1)
 		await release()
+		await forgetHighWater(h.api.storage.local)
 
 		const added = await add(h, "0xb0b")
+		expect(added.id).toBe(1)
 		chainRead.resolve(true)
 
 		expect((await restoring).map((r) => r.restoreError)).toEqual(["token lock lost", "token lock lost"])
@@ -1298,6 +1437,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await release()
 
 		await h.tokenService.deleteToken(id)
+		await forgetHighWater(h.api.storage.local)
 		const [restored] = await h.tokenService.restore([mk("0xccc")])
 		expect(restored.id).toBe(id)
 		read.release()
@@ -1339,6 +1479,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		await release()
 
 		await h.tokenService.deleteToken(b.id)
+		await forgetHighWater(h.api.storage.local)
 		const [restored] = await h.tokenService.restore([mk("0xccc", "p2")])
 		expect(restored.id).toBe(b.id)
 		read.release()
