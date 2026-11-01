@@ -113,7 +113,10 @@ describe("composite/DappIdentityBlock", () => {
 			})
 		}
 		expect(actions.map((node) => boundAttr(node, "class"))).toEqual(["$style.dapp_action"])
-		expect(declarationsOf(".dapp_action")).toMatchObject({ "overflow-wrap": "anywhere" })
+		const line = declarationsOf(".dapp_action")
+		expect(line).toMatchObject({ "overflow-wrap": "anywhere" })
+		expect(line).not.toHaveProperty("text-overflow")
+		expect(line).not.toHaveProperty("white-space")
 	})
 
 	test("actionTestId prop is forwarded to the action line", () => {

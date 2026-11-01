@@ -402,6 +402,7 @@ onBeforeUnmount(() => {
 	padding: 14px 12px;
 	background: color-mix(in srgb, var(--yellow) 7%, transparent);
 	border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+	/* Text only: a button added here would inherit mid-word breaks. */
 	overflow-wrap: anywhere;
 }
 

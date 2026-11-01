@@ -769,8 +769,8 @@ onUnmounted(() => {
 	padding: 16px;
 }
 
-/* A typed name can be one word wider than the banner, and the action repeats one on a line of its
- * own, so the whole banner breaks such a word; the action's shorter words still fit whole. */
+/* The action repeats a typed name on a line of its own, so the whole banner breaks a word wider
+ * than it. */
 .scope_banner {
 	overflow-wrap: anywhere;
 }

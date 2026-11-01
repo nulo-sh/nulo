@@ -20,11 +20,9 @@ const hasConfig = aztecConfig !== undefined
  * the mismatch a user hits when the wallet is on one network and the app on another. The wallet
  * must provision the Local Network default account on demand, list it, name the chain, and let the
  * user either approve as is or switch first.
- *
- * The first test names the app's chain with the longest one-word name the network name field takes,
- * so the window is laid out at 240 px with it. The second keeps the seed name: once switched, the
- * strip names the app's chain and ends a long name in an ellipsis, which that check reads as cut.
  */
+
+/** The longest one-word name the network name field takes. */
 const LONG_NAME = "W".repeat(25)
 
 type Ctx = Parameters<typeof connectPlayground>[0]
