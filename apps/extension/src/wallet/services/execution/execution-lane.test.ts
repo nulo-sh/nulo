@@ -711,8 +711,11 @@ describe("ExecutionLane: the call a record reads by", () => {
 describe("ExecutionLane.commitJournal", () => {
 	test("writes like markJournal, but a refused write or a missing id rejects instead of logging", async () => {
 		const { lane, transitions, deps } = makeLane()
-		await lane.commitJournal("j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" })
-		expect(transitions).toEqual([["j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }]])
+		const authwits = { chainId: 1, account: "0xa", items: [{ hash: "0x1", content: { kind: "call" } as never }] }
+		await lane.commitJournal("j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }, authwits)
+		expect(transitions).toEqual([
+			["j1", { stage: "submitting", txHash: "0xh", submittedEndpointUrl: "https://rpc" }, undefined, undefined, authwits],
+		])
 		const refused = new Error("storage write failed")
 		;(deps.operationJournal.transitionOperation as ReturnType<typeof vi.fn>).mockRejectedValueOnce(refused)
 		await expect(lane.commitJournal("j1", { stage: "submitting", txHash: "0xh" })).rejects.toBe(refused)

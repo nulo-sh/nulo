@@ -44,11 +44,15 @@ import {
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import type { OperationRecord } from "@/wallet/services/operation-journal/service"
+import { JournalReaper } from "@/wallet/services/operation-journal/reaper"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
+import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { parseEnvelope } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText } from "@/wallet/storage/sealed-entity-storage.testing"
 import { makeControllableGate, startExecutionGraph, waitFor } from "../../../../tests/helpers/execution-graph"
+import { ServiceCollection } from "@/wallet/base"
+import { profileKeysStub } from "../composition-harness"
 import type { ExecutionLane } from "./execution-lane"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { EmbeddedStrategy } from "./fee/embedded-strategy"
@@ -293,6 +297,7 @@ async function makeHarness() {
 		getAccountContract,
 		proveTx,
 		parkJournalWrite,
+		api,
 		storedJournalRow: async (id: string) => (await api.storage.local.get(`nulo:journal@${id}`))[`nulo:journal@${id}`],
 		legalAssertCurrent,
 		addTransaction,
@@ -1249,9 +1254,54 @@ describe("ExecutionService composition — a dApp send names its call before sim
 	}, 15_000)
 })
 
-describe("ExecutionService composition — a dApp send's public authwits are indexed whatever its activity record does", () => {
-	const HASH = `0x${"3e".repeat(32)}`
-	const GRANT = { hash: `0x${"a1".repeat(32)}`, content: { kind: "call" } }
+/** A receipt as the node answers a tx mined in block 42. */
+const minedAt = (hash: string, blockHash: string, executionResult = "success", status = "proven") => ({
+	txHash: hash,
+	status,
+	executionResult,
+	transactionFee: 1234n,
+	blockHash: BlockHash.fromString(blockHash),
+	blockNumber: 42,
+})
+
+/** A running send check over `journal` (the harness's unless given), reading the chain from `node`. */
+async function startCheck(
+	h: Harness,
+	node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> },
+	journal: OperationJournalService = h.journal,
+) {
+	const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
+	const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
+	const clock = new MockClock(Date.now())
+	const check = new SendCheck({
+		journal,
+		network,
+		profile: {
+			captureExecutionFence: h.captureExecutionFence,
+			isFenceLive: h.isFenceLive,
+			onRowKeysReady: new EventHandler<string>(),
+		},
+		balances,
+		authwits: { recordPendingAuthwits: h.recordPendingAuthwits as never },
+		logger: new LoggerStore(new ConfigStore()),
+		clock,
+	})
+	await check.start()
+	return { check, network, balances, clock }
+}
+
+describe("ExecutionService composition — a dApp send's public authwits are indexed once the network took the send", () => {
+	// Both below the field modulus: the check reads HASH's receipt, and the journal refuses a grant hash above it.
+	const HASH = `0x${"2f".repeat(32)}`
+	const GRANT = { hash: `0x${"1a".repeat(32)}`, content: { kind: "call" } }
+	const BLOCK_HASH = `0x${"0d".repeat(32)}`
+	const SCOPE = { profileId: "p1", chainId: NETWORK.chainId, account: ACCOUNT.toString() }
+	const STORED = { chainId: NETWORK.chainId, account: ACCOUNT.toString(), items: [GRANT] }
+	const rowOf = async (journal: OperationJournalService, id: string) => journal.getOperation(id)
+	const checkOf = async (journal: OperationJournalService, id: string) => {
+		const progress = (await rowOf(journal, id))?.progress
+		return progress?.stage === "failed" ? progress.check : undefined
+	}
 	const grantOp = {
 		kind: "send_transaction",
 		networkId: NETWORK.id,
@@ -1302,11 +1352,9 @@ describe("ExecutionService composition — a dApp send's public authwits are ind
 			[{ profileId: "p1", chainId: NETWORK.chainId, account: ACCOUNT.toString() }, [GRANT], HASH, 0],
 		])
 		expect(h.recordPendingAuthwits.mock.invocationCallOrder[0]).toBeGreaterThan(h.sendTx.mock.invocationCallOrder[0])
-		expect((await h.journal.getOperation(h.getJournalId()))?.progress).toMatchObject({
-			stage: "failed",
-			from: "submitting",
-			txHash: HASH,
-		})
+		const row = await h.journal.getOperation(h.getJournalId())
+		expect(row?.progress).toMatchObject({ stage: "failed", from: "submitting", txHash: HASH })
+		expect(row?.publicAuthwits).toBeUndefined()
 	}, 15_000)
 
 	test("a send the node refuses indexes nothing", async () => {
@@ -1319,30 +1367,110 @@ describe("ExecutionService composition — a dApp send's public authwits are ind
 		expect(h.addTransaction).not.toHaveBeenCalled()
 		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
 	}, 15_000)
+
+	test("the node took the send and its answer was lost: the grant is listed once the check reads the send", async () => {
+		const h = await makeHarness()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) })
+		const lost = new TypeError("fetch failed")
+		h.sendTx.mockRejectedValueOnce(lost)
+
+		expect(await sendGrant(h)).toBe(lost)
+		const id = h.getJournalId()
+		expect(await rowOf(h.journal, id)).toMatchObject({
+			progress: { stage: "failed", from: "submitting", txHash: HASH },
+			publicAuthwits: STORED,
+		})
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(h.journal, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([[SCOPE, [GRANT], HASH, 0]])
+		expect(h.addTransaction).not.toHaveBeenCalled()
+		check.stop()
+	}, 15_000)
+
+	test("a send the network reverted lists nothing, and its row keeps the grant", async () => {
+		const h = await makeHarness()
+		const reverted = minedAt(HASH, BLOCK_HASH, "reverted", "finalized")
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => reverted })
+		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
+		await sendGrant(h)
+		const id = h.getJournalId()
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "reverted")
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+		// A final answer leaves the row nothing to read: once it is unwatched, nothing more can list it.
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(() => (check as unknown as { watches: Map<string, unknown> }).watches.size === 0)
+
+		expect(h.recordPendingAuthwits).not.toHaveBeenCalled()
+		expect((await rowOf(h.journal, id))?.publicAuthwits).toEqual(STORED)
+		check.stop()
+	}, 15_000)
+
+	test("the worker stops between the broadcast and the record: the next one lists the grant once its check reads the send", async () => {
+		const h = await makeHarness()
+		h.addTransaction.mockImplementationOnce(() => new Promise(() => {}))
+		void sendGrant(h)
+		await waitFor(() => h.addTransaction.mock.calls.length > 0)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		const id = h.getJournalId()
+
+		// The next worker: a journal over the same storage and row keys, its boot sweep, its check.
+		const next = new OperationJournalService(new LoggerStore(new ConfigStore()), h.api)
+		const services = new ServiceCollection()
+		services.add(await profileKeysStub("p1"))
+		services.add(next)
+		await services.start()
+		// Started as the runtime starts them, with no await between: the check may scan before the sweep.
+		const reaper = new JournalReaper(next, h.api.alarms, new LoggerStore(new ConfigStore()), undefined, Date.now() + 1)
+		const sweeping = reaper.start()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) }, next)
+		await sweeping
+		expect(await rowOf(next, id)).toMatchObject({
+			progress: { stage: "failed", from: "submitting", txHash: HASH },
+			publicAuthwits: STORED,
+		})
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(next, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(next, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([[SCOPE, [GRANT], HASH, 0]])
+		check.stop()
+		await reaper.stop()
+	}, 15_000)
+
+	test("an index write that fails after the activity record landed is written again once the check reads the send", async () => {
+		const h = await makeHarness()
+		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) })
+		const indexFailure = new Error("index refused")
+		h.recordPendingAuthwits.mockRejectedValueOnce(indexFailure)
+
+		expect(await sendGrant(h)).toBe(indexFailure)
+		const id = h.getJournalId()
+		expect(await rowOf(h.journal, id)).toMatchObject({ progress: { stage: "failed", from: "submitting" }, publicAuthwits: STORED })
+
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await checkOf(h.journal, id)) === "sent")
+		clock.advance(SEND_CHECK_TICK_MS)
+		await waitFor(async () => (await rowOf(h.journal, id))?.publicAuthwits === undefined)
+
+		expect(h.recordPendingAuthwits.mock.calls).toEqual([
+			[SCOPE, [GRANT], HASH, 0],
+			[SCOPE, [GRANT], HASH, 0],
+		])
+		check.stop()
+	}, 15_000)
 })
 
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
-	/** A running send check over the harness's journal, reading the chain from `node`. */
-	async function startCheck(h: Harness, node: { getTxReceipt: (hash: { toString(): string }) => Promise<unknown> }) {
-		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => node as never) }
-		const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
-		const clock = new MockClock(Date.now())
-		const check = new SendCheck({
-			journal: h.journal,
-			network,
-			profile: {
-				captureExecutionFence: h.captureExecutionFence,
-				isFenceLive: h.isFenceLive,
-				onRowKeysReady: new EventHandler<string>(),
-			},
-			balances,
-			logger: new LoggerStore(new ConfigStore()),
-			clock,
-		})
-		await check.start()
-		return { check, network, balances, clock }
-	}
-
 	/** A transfer whose `sendTx` throws `error`, run to its failed row. */
 	async function sendFailing(h: Harness, hash: string, error: Error) {
 		h.toTx.mockResolvedValueOnce(provenTx(hash))
@@ -1377,14 +1505,6 @@ describe("ExecutionService composition — a send whose answer was lost is check
 	/** As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself. */
 	const nodeRefusal = (message: string) => new Error(message, { cause: { code: -32702, message } })
 	const dropped = (hash: string) => ({ txHash: hash, status: "dropped" })
-	const minedAt = (hash: string, blockHash: string) => ({
-		txHash: hash,
-		status: "proven",
-		executionResult: "success",
-		transactionFee: 1234n,
-		blockHash: BlockHash.fromString(blockHash),
-		blockNumber: 42,
-	})
 	const cardOf = (op: OperationRecord | undefined) => op && buildJournalTerminalCardProps(op, { tokenById: () => undefined, tokens: [] })
 
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {

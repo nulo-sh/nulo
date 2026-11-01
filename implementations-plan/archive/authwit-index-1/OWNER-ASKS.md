@@ -11,4 +11,4 @@
   - **B**: keep your order. The wallet also keeps the send's authorizations with its activity record. When the wallet later reads that the send went through, it lists them, also after a restart, or when the network's answer never arrived. Such a row can appear minutes after the send. It adds one stored field to the activity record, and one step that writes the list from it after a start or an unlock and survives a stop halfway.
   - **C**: arc 1 only.
 - **Recommendation**: B. It lists every authorization the network took, and it keeps "confirm, then add". C is the smaller choice if your view that few people look for these rows still stands.
-- **Your answer**: the option. A or B is arc 2 of this plan; C closes the plan after arc 1.
+- **Your answer**: B, decision page 94, P94-06, signed 2026-11-01, no note. Arc 2 ships it.

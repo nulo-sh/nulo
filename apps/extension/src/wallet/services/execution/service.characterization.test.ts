@@ -114,6 +114,7 @@ describe("slot-for-executeSendTransaction", () => {
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
+				clearJournalAuthwits: vi.fn(async () => {}),
 				parkSlot: vi.fn() as never,
 				joinOriginLine: vi.fn(() => ({ behind: () => false, earlierDone: async () => true, leave: () => {} })),
 				failUnclaimed: vi.fn(async () => {}),
