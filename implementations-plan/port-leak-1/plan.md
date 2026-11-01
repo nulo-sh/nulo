@@ -59,7 +59,7 @@ None. Nothing a person sees changes on any surface. Sign-off: decision page 94, 
 - **Threat model**: no new trust boundary. Before the change, a session listing many chains, opened again and again, multiplied open ports (resource growth; exploitability unknown, and a dApp's control over the stored list is not established). After it, the page builds three clients whatever the list's length.
 - **Logging**: no new log statement. Leaving the page now also emits the network and account clients' existing "Disconnected" debug lines (`client.ts:106`), and a read pending at that moment lands at debug (I2); none carries a secret or an address. Storage, crypto, permissions, supply chain: no change.
 
-## Phase 1: the page owns its clients (#1435)
+## Phase 1: the page owns its clients (#1435) ✓
 
 - Reproduce first: write the two tests below and run them against the base page. Both must fail.
 - Change `[id].vue` as above.
@@ -75,6 +75,8 @@ None. Nothing a person sees changes on any surface. Sign-off: decision page 94, 
 No e2e scenario is added: the defect is the page's teardown, which a component test drives exactly; e2e cannot count ports.
 
 ## Decision ledger
+
+- As built (phase 1): the fence took `fetchAccounts` from cognitive complexity 15 to 21. It now reads from `addressesByChain` (the grouping, a local function) and skips a chain with no network by `continue`: 13. The grouping keeps own keys, not a `Map`, so chains (rollup versions, below 2^32) are read in ascending order as before. Gate: A and both B orders red at base; order (2) alone red with the fence removed; lint, `typecheck:all`, `test` (956 files), `test:all` exit 0; page 11/11 and settings 389/389 at retry 0; the three network files 11/11 at retry 0, Chrome 340 s wall, Firefox 404 s.
 
 - D1. Clients at setup, one per service, closed in `onBeforeUnmount` after the session client. Not taken: per-chain account clients; a composable.
 - D2. A page-local `unmounted` fence, checked after each read (Codex R1, I1). It is the house's page pattern and its lesson ("code paused across an await checks the live state after its last await"; a fence must be terminal, `implementations-plan/lessons.md` § Extension runtime), adds no lifecycle, and keeps the invariant inside the page instead of resting on the transport's await structure. Opus R1 dissents: I1's browser argument holds and no flag is needed. Kept, because the invariant then depends on code outside the page staying request-only between awaits, and the fence costs one boolean.
