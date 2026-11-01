@@ -1,7 +1,7 @@
 ---
 plan: token-id-1
 tier: light
-status: plan approved (final fresh Codex pass approve); arc 1 implementing
+status: plan approved (final fresh Codex pass approve); arc 1 phase 1 green, Codex loop converged
 issues: "#1457"
 driver: claude-code
 claude_model: opus
@@ -62,7 +62,7 @@ No layout, copy or format changes. A failed or cancelled transfer whose token wa
 - **Released lock holder**: the mark write is issued right after a synchronous `ownsLock()` and tracked (F5); `Math.max` over a stale read does not replace that check.
 - **Backup**: no mark in an export; an import allocates above the device's mark. Logging: no new line. Crypto, permissions, supply chain: no change.
 
-## Phase 1: the token-id mark (#1457; arc 1)
+## Phase 1: the token-id mark (#1457; arc 1) ✓
 
 - Build the mark, the allocator floor and the reservation as above. Rewrite each comment that states token ids are reused as current behaviour. Register the family; run `bun run baseline:storage -- --additive "<reason>"`; add the printed pin.
 - **Tests**
@@ -78,7 +78,7 @@ No layout, copy or format changes. A failed or cancelled transfer whose token wa
 - **Validation gate**
   - `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/wallet/services/token src/wallet/services/id-allocators.test.ts src/wallet/services/token-balance src/wallet/services/backup src/wallet/storage src/utils/journal-state.test.ts src/utils/activity-rows.test.ts src/composables/useFullBackupImport --retry=0` green; the reproduction and restore cases red with the base's `token/service.ts` and `id-allocators.ts` (`git show f738cba62:<path>`); each mutation test red with its guard removed.
-  - `bun run test:ci-gating` (the plans gate and `apps/extension/scripts/e2e/profile-chaos-model.test.ts` run under it): exit 0.
+  - `bun run test:ci-gating` (the plans gate): exit 0. `apps/extension/scripts/e2e/profile-chaos-model.test.ts` runs under the extension's `bun run test` (D9).
   - Network e2e, from the root, at retry 0: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/token-management.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`: the case passes, not skipped. No smoke file adds and deletes a token (recon), so this is the brief's add-and-delete file. No scenario is added (D6).
   - `bun run check:plans` after staging: exit 0.
 
@@ -92,6 +92,7 @@ No layout, copy or format changes. A failed or cancelled transfer whose token wa
 - D6. No e2e scenario: the failure is the allocator and an id lookup, which the unit layer drives exactly; the network file proves the add and delete still work in both browsers.
 - D7. I2 is a closed `known-limit` issue, not work: rows older than the fix are out of the lane, no store build predates the mark, and the faults need T3 or a damaged disk.
 - D8. The cases that need a successor at a freed id keep proving the release fences, which still guard the I2 state, by removing the mark; rewriting them to expect fresh ids would drop the fence they pin (both legs).
+- D9. As built: D8 covers ten existing cases, not three: six that build a successor at a freed id, and four watchdog cases that passed with their guard removed once the successor took the next id (Opus fix R1, confirmed by mutation; each now asserts the successor's id). A deletion-fence case's hook fires on the first row write. The bare-integer family carries only the writers test's type check, as `onboardingCompleted` does; the service tests assert the stored value. The schema is inlined in the registry. The chaos model test runs under `bun run test`, not `test:ci-gating`.
 
 ## Panel verdicts
 
@@ -101,6 +102,10 @@ No layout, copy or format changes. A failed or cancelled transfer whose token wa
 | Opus R1 | conditional approve | read a damaged mark as absent (D3); `Math.max` (D4); I2; D8; one reproduction case, not a `test.each` over the stage; the composition case targets the row write; the writers tuple; full paths | none |
 | Codex R1 (resumed) | conditional approve | D3 and D4 as Opus; a raw read, not a `SyntaxError` catch; the guarantee holds on an intact mark only, and #262's path returns under a damaged one (I2); the composition case asserts no row and a consumed reservation | none |
 | Codex final (fresh) | approve | F5 narrowed to token-row writes; the restore case re-adds through a second service over the same storage (optional) | an authenticated, rollback-resistant counter: key management for a display-only fault |
+| Codex fix R1 (arc 1) | approve | `reserveTokenId`'s doc names where its guarantee stops | none |
+| Opus fix R1 (arc 1) | changes requested | four watchdog cases re-armed (D9); stale reuse comments in `token-balance`; the schema inlined | none |
+| Codex fix R2 (resumed) | approve | a review reference dropped from a comment the diff touched | none |
+| Codex fix R3 (resumed) | approve | none | none |
 
 ## Delivery
 
