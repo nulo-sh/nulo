@@ -4,6 +4,7 @@ import type { SendExpiry, SendInclusion } from "@nulo/wallet-core/jobs"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 import type { ILogger } from "@/wallet/logger"
+import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { ProfileService } from "@/wallet/services/profile/service"
@@ -14,7 +15,7 @@ import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/w
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { isFinalRefusal } from "./final-refusal"
 import { isSendCheckable, type OperationJournalService, type OperationRecord, type SendCheckState } from "./service"
-import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
+import { type JournalAuthwits, OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
 export const SEND_CHECK_TICK_MS = 5_000
 /** How long after the failure a row is read on every tick; after it, every `DROPPED_RECHECK_INTERVAL_MS`. */
@@ -23,10 +24,14 @@ export const SEND_CHECK_FAST_WINDOW_MS = 2 * 60_000
 const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 
 export type SendCheckDeps = {
-	journal: Pick<OperationJournalService, "getOperation" | "getOperations" | "setSendCheck" | "onOperationUpdated" | "onOperationDeleted">
+	journal: Pick<
+		OperationJournalService,
+		"getOperation" | "getOperations" | "setSendCheck" | "clearPublicAuthwits" | "onOperationUpdated" | "onOperationDeleted"
+	>
 	network: Pick<NetworkService, "getSingleAttemptNodeForUrl">
 	profile: Pick<ProfileService, "captureExecutionFence" | "isFenceLive" | "onRowKeysReady">
 	balances: Pick<TokenBalanceService, "refreshAccountBalances">
+	authwits: Pick<AuthRegistryService, "recordPendingAuthwits">
 	logger: ILogger
 	clock: ClockPort
 }
@@ -42,8 +47,10 @@ type Watch = {
  *  `since` (`refusal`: the node refused it for a reason a later block rarely lifts); a `refused`
  *  one, read in that window for a send that landed after all, then at its expiry; an
  *  `unconfirmed` one whose expiry can still prove it went through or never will; or a mined one
- *  whose block is not yet final. */
+ *  whose block is not yet final. A `sent` row that still holds its send's authwits is first a
+ *  `listing` one: they go to the authwit index before any other read of the row. */
 type OpenRow =
+	| { kind: "listing"; txHash: string; authwits: JournalAuthwits }
 	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number; refusal: boolean }
 	| { kind: "refused"; txHash: string; url: string; since: number; expiry: SendExpiry | undefined }
 	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }
@@ -56,7 +63,8 @@ type Answer = { next: SendCheckState; refresh: boolean }
  * Records on a failed send's journal row what became of it: mined or not, then whether a mined
  * block became final or was pruned, and whether an unconfirmed or refused send's expiry passed. A row is read
  * one read at a time, only on the endpoint it was sent through and only while its profile is
- * unlocked; only the answer is persisted, so a restart resumes every open row.
+ * unlocked; only the answer is persisted, so a restart resumes every open row. A row answered
+ * `sent` that still holds its send's public authwits lists them in the authwit index.
  */
 export class SendCheck {
 	private readonly deps: SendCheckDeps
@@ -141,7 +149,7 @@ export class SendCheck {
 		const live = () => this.deps.profile.isFenceLive(fence) && generation === this.generation && this.watches.get(watch.id) === watch
 		watch.inFlight = true
 		try {
-			await this.readOnce(watch, live, now)
+			await this.readOnce(watch, fence, live, now)
 		} catch {
 			watch.nextAt = now + DROPPED_RECHECK_INTERVAL_MS
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check read failed", { journalId: watch.id, stage: "read-error" })
@@ -151,11 +159,15 @@ export class SendCheck {
 	}
 
 	/** After a write, refused or not, the next tick reads the row again to learn what is left. */
-	private async readOnce(watch: Watch, live: () => boolean, now: number): Promise<void> {
+	private async readOnce(watch: Watch, fence: ExecutionFence, live: () => boolean, now: number): Promise<void> {
 		const op = await this.deps.journal.getOperation(watch.id)
 		const row = op ? openRow(op) : undefined
 		if (!op || !row) {
 			this.unwatch(watch)
+			return
+		}
+		if (row.kind === "listing") {
+			await this.list(watch, op.profileId, row, fence.epoch, live, now)
 			return
 		}
 		const answer = await this.answer(watch, row, live, now)
@@ -170,7 +182,31 @@ export class SendCheck {
 		if (answer.refresh && op.accountAddress !== undefined && live()) await this.deps.balances.refreshAccountBalances(op.accountAddress)
 	}
 
-	private answer(watch: Watch, row: OpenRow, live: () => boolean, now: number): Promise<Answer | undefined> {
+	/** Index first, clear second: after a stop between the two the row lists again, and the index
+	 *  skips a hash its scope already holds. `epoch` refuses a profile whose deletion began since the
+	 *  tick's fence. */
+	private async list(
+		watch: Watch,
+		profileId: string,
+		row: Extract<OpenRow, { kind: "listing" }>,
+		epoch: number,
+		live: () => boolean,
+		now: number,
+	): Promise<void> {
+		watch.nextAt = now
+		if (!live()) return
+		const { chainId, account, items } = row.authwits
+		await this.deps.authwits.recordPendingAuthwits({ profileId, chainId, account }, items, row.txHash, epoch)
+		if (!live() || !(await this.deps.journal.clearPublicAuthwits(watch.id, row.txHash, live))) return
+		this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check listed the send's authwits", { journalId: watch.id })
+	}
+
+	private answer(
+		watch: Watch,
+		row: Exclude<OpenRow, { kind: "listing" }>,
+		live: () => boolean,
+		now: number,
+	): Promise<Answer | undefined> {
 		switch (row.kind) {
 			case "unanswered":
 				return this.firstAnswer(watch, row, live, now)
@@ -323,6 +359,7 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 	const { progress } = op
 	if (progress.stage !== "failed" || !progress.txHash || !isSendCheckable(op)) return undefined
 	const { txHash, submittedEndpointUrl: url, check, expiry, inclusion, checkSince } = progress
+	if (check === "sent" && op.publicAuthwits) return { kind: "listing", txHash, authwits: op.publicAuthwits }
 	const since = checkSince ?? op.terminalAt ?? op.updatedAt
 	if (check === undefined) {
 		// Mirrors `isSendCheckMove`: a write it refuses would re-read the row every tick.
@@ -336,7 +373,7 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 	return undefined
 }
 
-function expectedOf(row: OpenRow): SendCheckState {
+function expectedOf(row: Exclude<OpenRow, { kind: "listing" }>): SendCheckState {
 	if (row.kind === "unanswered") return {}
 	if (row.kind === "refused") return { check: "refused" }
 	if (row.kind === "expiring") return { check: "unconfirmed" }

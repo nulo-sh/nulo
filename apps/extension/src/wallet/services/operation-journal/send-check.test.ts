@@ -130,6 +130,18 @@ class FakeJournal {
 		return true
 	}
 
+	public readonly clears: string[] = []
+
+	public async clearPublicAuthwits(id: string, txHash: string, isLive: () => boolean): Promise<boolean> {
+		const row = this.rows.get(id)
+		if (!row?.publicAuthwits || row.progress.stage !== "failed" || row.progress.txHash !== txHash || !isLive()) return false
+		const { publicAuthwits: _cleared, ...rest } = row
+		this.rows.set(id, rest)
+		this.clears.push(id)
+		this.onOperationUpdated.invoke(rest)
+		return true
+	}
+
 	/** A row that becomes readable with no write, as a sealed one does when its keys arrive. */
 	public reveal(row: OperationRecord): void {
 		this.rows.set(row.id, row)
@@ -166,7 +178,7 @@ function makeHarness(rows: OperationRecord[] = [failedRow()]) {
 	const profile = {
 		captureExecutionFence: vi.fn(async (): Promise<ExecutionFence> => {
 			if (!session) throw new Error("Wallet locked")
-			return { profileId: session.profileId, epoch: 0, session: session.serial }
+			return { profileId: session.profileId, epoch: 4, session: session.serial }
 		}),
 		isFenceLive: (fence: ExecutionFence) => session?.serial === fence.session && session.profileId === fence.profileId,
 		onRowKeysReady: new EventHandler<string>(),
@@ -180,15 +192,17 @@ function makeHarness(rows: OperationRecord[] = [failedRow()]) {
 		getNode: vi.fn(),
 	}
 	const balances = { refreshAccountBalances: vi.fn(async (_account: string) => {}) }
+	const authwits = { recordPendingAuthwits: vi.fn(async (..._args: unknown[]) => {}) }
 	const logs: unknown[][] = []
 	const logger = {
 		log: (...args: unknown[]) => {
 			logs.push(args)
 		},
 	}
-	const check = new SendCheck({ journal, network, profile, balances, logger, clock })
+	const check = new SendCheck({ journal, network, profile, balances, authwits, logger, clock })
 	return {
 		check,
+		authwits,
 		clock,
 		journal,
 		profile,
@@ -910,6 +924,77 @@ describe("SendCheck: a mined answer's block, until it is final", () => {
 		expect(watched(h.check)).toBe(3)
 		expect(h.getTxReceipt).toHaveBeenCalledTimes(2)
 		expect(h.getBlockData).toHaveBeenCalledTimes(2)
+	})
+})
+
+describe("SendCheck: a sent row's public authwits", () => {
+	const GRANTS = { chainId: 7, account: ACCOUNT, items: [{ hash: `0x${"1a".repeat(32)}`, content: { kind: "call" } as never }] }
+	const holding = (progress: Partial<Extract<OperationRecord["progress"], { stage: "failed" }>>) =>
+		failedRow({
+			publicAuthwits: GRANTS,
+			progress: { stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, ...progress },
+		})
+	const listed = [[{ profileId: "p1", chainId: 7, account: ACCOUNT }, GRANTS.items, HASH, 4]]
+
+	test("a final sent row lists them under its own scope and the tick's epoch before any read, then drops them", async () => {
+		const h = makeHarness([holding({ check: "sent" })])
+		await h.check.start()
+		await h.tick()
+		expect(h.authwits.recordPendingAuthwits.mock.calls).toEqual(listed)
+		expect(h.journal.clears).toEqual(["op-1"])
+		expect((await h.journal.getOperation("op-1"))?.publicAuthwits).toBeUndefined()
+		await h.tick(3)
+		expect(watched(h.check)).toBe(0)
+		expect(h.authwits.recordPendingAuthwits).toHaveBeenCalledTimes(1)
+		expect(h.getTxReceipt).not.toHaveBeenCalled()
+	})
+
+	test("a sent row with its block lists them first, then goes on to its finality reads", async () => {
+		const h = makeHarness([holding({ check: "sent", inclusion: BLOCK })])
+		await h.check.start()
+		await h.tick()
+		expect(h.authwits.recordPendingAuthwits.mock.calls).toEqual(listed)
+		expect(h.getBlockData).not.toHaveBeenCalled()
+		await h.tick()
+		expect(h.getBlockData).toHaveBeenCalled()
+		expect(h.authwits.recordPendingAuthwits).toHaveBeenCalledTimes(1)
+	})
+
+	test("an index write that rejects keeps them on the row; the retry lists them and drops them", async () => {
+		const h = makeHarness([holding({ check: "sent" })])
+		h.authwits.recordPendingAuthwits.mockRejectedValueOnce(new Error("index refused"))
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.clears).toEqual([])
+		expect((await h.journal.getOperation("op-1"))?.publicAuthwits).toEqual(GRANTS)
+		await h.tick(DROPPED_RECHECK_INTERVAL_MS / SEND_CHECK_TICK_MS)
+		expect(h.authwits.recordPendingAuthwits.mock.calls).toEqual([...listed, ...listed])
+		expect(h.journal.clears).toEqual(["op-1"])
+	})
+
+	test("a stop between the index write and the drop lists them again on the next start, then drops them", async () => {
+		const h = makeHarness([holding({ check: "sent" })])
+		h.authwits.recordPendingAuthwits.mockImplementationOnce(async () => h.check.stop())
+		await h.check.start()
+		await h.tick()
+		expect(h.journal.clears).toEqual([])
+		await h.check.start()
+		await h.tick()
+		expect(h.authwits.recordPendingAuthwits.mock.calls).toEqual([...listed, ...listed])
+		expect(h.journal.clears).toEqual(["op-1"])
+	})
+
+	test.each([
+		["unanswered", {}],
+		["refused", { check: "refused" as const }],
+		["unconfirmed", { check: "unconfirmed" as const }],
+		["reverted", { check: "reverted" as const, inclusion: BLOCK }],
+	])("an %s row lists nothing and keeps them", async (_label, progress) => {
+		const h = makeHarness([holding(progress)])
+		await h.check.start()
+		await h.tick(2)
+		expect(h.authwits.recordPendingAuthwits).not.toHaveBeenCalled()
+		expect((await h.journal.getOperation("op-1"))?.publicAuthwits).toEqual(GRANTS)
 	})
 })
 

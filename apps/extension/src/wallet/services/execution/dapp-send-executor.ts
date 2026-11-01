@@ -43,7 +43,7 @@ import { type JobError, type JobProgress, JobCancelledSentinel, type QueuedFeeRe
 import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 import { feeDisplay } from "@/utils/fee-estimation"
 import { pickPrimaryIndex, pickPrimaryWireCall } from "@/utils/primary-method"
-import { type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
+import { type JournalAuthwits, type JournalCallCarrier, type JournalRetitle, journalCallOf } from "@/wallet/services/operation-journal/spec"
 import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
@@ -134,7 +134,8 @@ export interface DappSendExecutorLane {
 	): Promise<string | undefined>
 	recordBuiltCall(journalId: string | undefined, txCalls: Tx["calls"]): Promise<void>
 	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, retitle?: JournalRetitle): Promise<void>
-	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
+	commitJournal(journalId: string | undefined, progress: JobProgress, publicAuthwits?: JournalAuthwits): Promise<void>
+	clearJournalAuthwits(journalId: string | undefined, txHash: string): Promise<void>
 	parkSlot(
 		release: ExecutionMutexRelease,
 		networkId: string,
@@ -173,6 +174,7 @@ interface SentTx {
 	networkId: AddTransactionInput["networkId"]
 	pendingPublicAuthwits: Parameters<DappSendExecutorDeps["recordPendingAuthwits"]>[1]
 	feeChosenBy: FeeChooser
+	journalId: string | undefined
 }
 
 export interface DappSendExecutorDeps {
@@ -241,7 +243,8 @@ interface SlotRun {
 	markJournal: (patch: JobProgress) => Promise<void>
 	/** Names the record by the build's primary call; called after every build. */
 	recordCall: (txCalls: Tx["calls"]) => Promise<void>
-	commitSubmitting: ProveAndSendContext["commitSubmitting"]
+	/** Also stores the send's authwits, when it grants any, in the same write. */
+	commitSubmitting: (patch: Parameters<ProveAndSendContext["commitSubmitting"]>[0], publicAuthwits?: JournalAuthwits) => Promise<void>
 	/** Gives the slot back while `wait` runs, then takes it again behind the account's earlier sends,
 	 *  the record claimed back to `pending`. */
 	park: (wait: () => Promise<void>) => Promise<void>
@@ -379,7 +382,8 @@ export class DappSendExecutor {
 				checkCancelled,
 				markJournal: (patch) => this.deps.lane.markJournal(journalId, patch),
 				recordCall: (txCalls) => this.deps.lane.recordBuiltCall(journalId, txCalls),
-				commitSubmitting: (patch) => this.deps.lane.commitJournal(journalId, { stage: "submitting", ...patch }),
+				commitSubmitting: (patch, publicAuthwits) =>
+					this.deps.lane.commitJournal(journalId, { stage: "submitting", ...patch }, publicAuthwits),
 				park: async (wait) => {
 					const own = journalId
 					if (!own) throw new Error("A send with no record cannot wait")
@@ -763,7 +767,9 @@ export class DappSendExecutor {
 	 *  ordering is explicit. Recording here (not at build) is what keeps estimate/reject from leaking a
 	 *  grant; the rows land `pending` and are reconciled by the tx's on-chain outcome. The node has
 	 *  accepted the tx, so its grants can land: the index write runs once the activity record settles,
-	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees. */
+	 *  whatever its outcome, and the record's error, when there is one, is the one the caller sees.
+	 *  The journal row holds the grants until this write lands, so a send that stops before it is
+	 *  listed by the send check once it reads the send went through. */
 	private sentTxRecorder(sent: SentTx): (hash: string) => Promise<void> {
 		const feeChoice = this.feeChoiceFor(sent.feeChosenBy, sent.network.chainId, sent.txCalls)
 		return async (hash) => {
@@ -809,7 +815,11 @@ export class DappSendExecutor {
 		} catch (error) {
 			if (!recordFailed) throw error
 			this.deps.logDebug("sent tx: the authwit index write failed after its activity record did", { error })
+			return
 		}
+		await this.deps.lane.clearJournalAuthwits(sent.journalId, hash).catch((error: unknown) => {
+			this.deps.logDebug("sent tx: the journal keeps the indexed authwits", { error })
+		})
 	}
 
 	/** Started before the prove to overlap the derivation. Never rejects: an address the wallet cannot
@@ -902,6 +912,20 @@ export class DappSendExecutor {
 		const { txRequest, node, pxe, account, network, nonce, txCalls, feePaymentMethod, pendingPublicAuthwits, initializesAccount } =
 			built
 		ctx.leaveLine()
+		const sent: SentTx = {
+			origin,
+			network,
+			account,
+			txCalls,
+			nonce,
+			feePaymentMethod,
+			txRequest,
+			fence,
+			networkId: op.networkId,
+			pendingPublicAuthwits,
+			feeChosenBy: feeChooserOf(op.feeSettings),
+			journalId: ctx.journalId,
+		}
 		const { txHash } = await this.deps.coordinator.proveAndSend({
 			pxe,
 			node,
@@ -913,24 +937,10 @@ export class DappSendExecutor {
 			checkCancelled: ctx.checkCancelled,
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
-			commitSubmitting: ctx.commitSubmitting,
+			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
 			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
-			// grantPublicAuthwit routes here (kind: send_transaction), so this is where a granted
-			// authwit is recorded.
-			recordTransaction: this.sentTxRecorder({
-				origin,
-				network,
-				account,
-				txCalls,
-				nonce,
-				feePaymentMethod,
-				txRequest,
-				fence,
-				networkId: op.networkId,
-				pendingPublicAuthwits,
-				feeChosenBy: feeChooserOf(op.feeSettings),
-			}),
+			recordTransaction: this.sentTxRecorder(sent),
 		})
 		return txHash.toString()
 	}
@@ -1113,6 +1123,20 @@ export class DappSendExecutor {
 			built
 		const sendAdditionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []
 		ctx.leaveLine()
+		const sent: SentTx = {
+			origin,
+			network,
+			account,
+			txCalls,
+			nonce,
+			feePaymentMethod,
+			txRequest,
+			fence,
+			networkId: op.networkId,
+			pendingPublicAuthwits,
+			feeChosenBy: feeChooserOf(op.feeSettings),
+			journalId: ctx.journalId,
+		}
 		const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
 			pxe,
 			node,
@@ -1124,23 +1148,11 @@ export class DappSendExecutor {
 			checkCancelled: ctx.checkCancelled,
 			...fenceChecks(this.deps, fence),
 			markJournal: ctx.markJournal,
-			commitSubmitting: ctx.commitSubmitting,
+			commitSubmitting: (patch) => ctx.commitSubmitting(patch, journalAuthwitsOf(sent)),
 			submittedEndpointUrl: primaryEndpointUrl(network),
 			onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 			wantOffchainOutput: offchainOutputOf,
-			recordTransaction: this.sentTxRecorder({
-				origin,
-				network,
-				account,
-				txCalls,
-				nonce,
-				feePaymentMethod,
-				txRequest,
-				fence,
-				networkId: op.networkId,
-				pendingPublicAuthwits,
-				feeChosenBy: feeChooserOf(op.feeSettings),
-			}),
+			recordTransaction: this.sentTxRecorder(sent),
 		})
 
 		if (op.opts.wait === "NO_WAIT") {
@@ -1424,6 +1436,17 @@ export class DappSendExecutor {
 }
 
 /** The send's account, then each additional scope the build reads notes for, once each. */
+/** The journal's copy of a send's grants, scoped as the recorder writes them; none for a send that
+ *  grants nothing. */
+function journalAuthwitsOf(sent: SentTx): JournalAuthwits | undefined {
+	if (sent.pendingPublicAuthwits.length === 0) return undefined
+	return {
+		chainId: sent.network.chainId,
+		account: sent.account.address.toString(),
+		items: sent.pendingPublicAuthwits.map(({ hash, content }) => ({ hash, content })),
+	}
+}
+
 function spendAccounts(account: string, additionalScopes: unknown): string[] {
 	const accounts = new Map<string, string>()
 	for (const address of [account, ...(Array.isArray(additionalScopes) ? additionalScopes.map(String) : [])]) {
