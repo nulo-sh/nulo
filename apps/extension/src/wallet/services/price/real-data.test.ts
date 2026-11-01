@@ -4,8 +4,8 @@
  * there): run with `COINGECKO_REAL_TESTS=1 bun run test src/wallet/services/price`.
  *
  * Verifies the two load-bearing external assumptions:
- * - the mapped ids (`aztec`, `usd-coin`, `tether`, `euro-coin`) exist and resolve to quotes that
- *   pass our own sanity bands;
+ * - the endpoint answers with no redirect, which the wallet refuses, and the mapped ids (`aztec`,
+ *   `usd-coin`, `tether`, `euro-coin`) exist and resolve to quotes that pass our own sanity bands;
  * - the keyless endpoint answers with permissive CORS (the manifest ships
  *   NO CoinGecko host_permission — the fetch relies on `ACAO: *`).
  */
@@ -17,7 +17,7 @@ describe.skipIf(!process.env.COINGECKO_REAL_TESTS)("CoinGecko live API", () => {
 	test("all mapped ids resolve to in-band quotes with last_updated_at", async () => {
 		const ids = allCoingeckoIds()
 		const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_last_updated_at=true`
-		const response = await fetch(url)
+		const response = await fetch(url, { redirect: "error" })
 		expect(response.ok).toBe(true)
 
 		const body = (await response.json()) as Record<string, { usd?: number; last_updated_at?: number }>

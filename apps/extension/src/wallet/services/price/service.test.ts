@@ -51,7 +51,7 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		profile: "profile" in (opts ?? {}) ? opts?.profile : PROFILE,
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
-		fetchImpl: undefined as undefined | (() => Promise<Response>),
+		fetchImpl: undefined as undefined | ((init: RequestInit) => Promise<Response>),
 		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED] } as TokenListSnapshot | undefined,
 	}
 
@@ -76,9 +76,9 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		getSnapshot: () => state.list,
 	}
 
-	const fetchFn = vi.fn(async (url: string): Promise<Response> => {
+	const fetchFn = vi.fn(async (url: string, init: RequestInit): Promise<Response> => {
 		state.fetchCalls.push(url)
-		if (state.fetchImpl) return state.fetchImpl()
+		if (state.fetchImpl) return state.fetchImpl(init)
 		return reply(state.body)
 	})
 
@@ -129,6 +129,7 @@ describe("PriceService — refresh pipeline", () => {
 				cache: "no-store",
 				credentials: "omit",
 				referrerPolicy: "no-referrer",
+				redirect: "error",
 				signal: expect.any(AbortSignal),
 			}),
 		)
@@ -235,6 +236,28 @@ describe("PriceService — refresh pipeline", () => {
 		const merged = await service.refreshIfStale()
 		expect(state.fetchCalls).toHaveLength(3)
 		expect(merged.quotes.aztec?.usd).toBe(0.02)
+	})
+
+	test("an endpoint that redirects is refused as the token list's is: nothing merges and the backoff starts; a direct reply merges", async () => {
+		const { service, state } = await harness()
+		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.0147)
+		const newer = reply({ aztec: { usd: 0.02, last_updated_at: 1_000_100 } })
+		// The Fetch standard's redirect modes: "error" rejects the 3xx, any other follows it to the target's reply.
+		const redirecting = async (init: RequestInit) => {
+			if (init.redirect === "error") throw new TypeError("Failed to fetch")
+			return newer
+		}
+
+		state.nowMs += PRICE_REFRESH_PERIOD_MINUTES * 60_000
+		state.fetchImpl = redirecting
+		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.0147)
+		await service.refreshIfStale()
+		expect(state.fetchCalls).toHaveLength(2)
+
+		state.nowMs += 60_000
+		state.fetchImpl = async () => newer
+		expect((await service.refreshIfStale()).quotes.aztec?.usd).toBe(0.02)
+		expect(state.fetchCalls).toHaveLength(3)
 	})
 
 	test("HTTP failure backs off, then retries after the window", async () => {
