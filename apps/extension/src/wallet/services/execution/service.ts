@@ -542,7 +542,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
 				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
 				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
-				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
+				commitJournal: (journalId, progress, publicAuthwits) => this.lane.commitJournal(journalId, progress, publicAuthwits),
+				clearJournalAuthwits: (journalId, txHash) => this.lane.clearJournalAuthwits(journalId, txHash),
 				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
 					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
 				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
