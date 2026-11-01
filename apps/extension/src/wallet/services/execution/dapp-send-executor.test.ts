@@ -658,7 +658,8 @@ describe("DappSendExecutor: the dApp's wait", () => {
 		return { h, reads, outcome: await settled }
 	}
 
-	beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] }))
+	// `retryUntil` reads its deadline off `performance`, so the clock it reads is faked too.
+	beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] }))
 	afterEach(() => vi.useRealTimers())
 
 	test.each([
@@ -682,13 +683,13 @@ describe("DappSendExecutor: the dApp's wait", () => {
 		expect("value" in outcome).toBe(true)
 	})
 
-	test("a reverted receipt rejects the call and leaves the journal as the send left it", async () => {
-		const { h, outcome } = await waitedSend(
-			standard(asked(undefined)),
-			[minedReceipt(TxStatus.CHECKPOINTED, TxExecutionResult.REVERTED)],
-			1_000,
-		)
-		expect(outcome).toEqual({ error: expect.objectContaining({ message: expect.stringContaining("reverted") }) })
+	test.each([
+		["a reverted receipt", [minedReceipt(TxStatus.CHECKPOINTED, TxExecutionResult.REVERTED)], undefined, "failed"],
+		["a passed deadline", [pendingReceipt()], { timeout: 2 }, "timed out"],
+	])("%s rejects with its category alone and leaves the journal as the send left it", async (_case, receipts, wait, category) => {
+		const { h, outcome } = await waitedSend(standard(asked(wait)), receipts, 5_000)
+		// Upstream's own message quotes the hash and the node's reason; neither may reach the log.
+		expect((outcome as { error?: Error }).error?.message).toBe(`The dApp's wait for its receipt ${category}`)
 		const stages = (h.deps.lane.markJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[1] as { stage: string }).stage)
 		expect(stages).not.toContain("failed")
 		expect(h.releaseSlot).toHaveBeenCalledTimes(1)

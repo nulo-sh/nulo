@@ -42,6 +42,7 @@ import {
 import { waitForTx } from "@aztec-labs/aztec.js/node"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { TimeoutError } from "@aztec-labs/foundation/error"
 import type { FunctionCall } from "@aztec-labs/stdlib/abi"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
@@ -1080,7 +1081,9 @@ export class DappSendExecutor {
 	private async awaitRequested(op: AztecSendTxOperation, sent: Submitted): Promise<SendReturn<InteractionWaitOptions>> {
 		const { txHash, offchainOutput, node } = sent
 		if (op.opts.wait === "NO_WAIT") return { txHash, ...offchainOutput } as SendReturn<InteractionWaitOptions>
-		const receipt = await waitForTx(node, txHash, dappWaitOpts(op.opts.wait))
+		const receipt = await waitForTx(node, txHash, dappWaitOpts(op.opts.wait)).catch((error: unknown) => {
+			throw new Error(waitFailureOf(error))
+		})
 		return { receipt, ...offchainOutput } as SendReturn<InteractionWaitOptions>
 	}
 
@@ -1478,6 +1481,12 @@ export function dappWaitOpts(wait: unknown): WaitOpts {
 		WAIT_INTERVAL_BOUNDS_S.max,
 	)
 	return { ...asked, interval, initialDelay: asked.initialDelay ?? interval }
+}
+
+/** Upstream's wait errors quote the transaction hash and the node's reason, and the operation's
+ *  failure line reaches every user's log at `error`: the failure travels as its category alone. */
+function waitFailureOf(error: unknown): string {
+	return error instanceof TimeoutError ? "The dApp's wait for its receipt timed out" : "The dApp's wait for its receipt failed"
 }
 
 function offchainOutputOf(provedTx: TxProvingResult) {

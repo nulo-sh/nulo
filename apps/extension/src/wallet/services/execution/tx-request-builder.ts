@@ -233,9 +233,12 @@ export class TxRequestBuilder {
 				}
 			}
 
-			const result = await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)
+			const result = {
+				...(await this.finalizeStandardBuild(ctx, feePaymentMethod, gasSettings, collected)),
+				scopes: sendScopes(account.address, op.opts?.additionalScopes),
+			}
 			task.complete()
-			return { ...result, scopes: sendScopes(account.address, op.opts?.additionalScopes) }
+			return result
 		} catch (error) {
 			task.fail(error)
 			throw error
