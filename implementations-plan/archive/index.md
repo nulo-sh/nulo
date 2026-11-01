@@ -14,6 +14,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
 - [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
 - [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-index-1](authwit-index-1/plan.md) — completed — a dApp send's public authwits reach the index whatever History's write does, and are listed once the network took the send
 - [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
 - [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
 - [aztec-5.0-rc2](aztec-5.0-rc2/plan.md) — completed — the Aztec set bumped to 5.0 release candidate 2, with the testnet redeploy in the same arc
@@ -37,6 +38,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [balance-row-reconciliation](balance-row-reconciliation/plan.md) — completed — missing and stuck balance rows repaired through one idempotent ensure path
 - [bb-wasm-hardening](bb-wasm-hardening/plan.md) — completed — the bb.js WASM assets built from the installed package instead of vendored by hand
 - [block-time-1](block-time-1/plan.md) — completed — research: on the local network the slot is not the e2e lever; the 2 s pool age is the inclusion floor (about 1 min of the network envelope, an estimate), its lever did not hold, and no setting shipped
+- [boot-profile-1](boot-profile-1/plan.md) — completed — the boot resume finishes only the deletions a dead worker left, and an event dispatch skips no subscriber still subscribed (#1430, #1433)
 - [bootstrap-route-decouple](bootstrap-route-decouple/plan.md) — completed — a bounded chain sync at the end of a backup import, with honest skip states
 - [bug-fixes-batch](bug-fixes-batch/plan.md) — completed — five user-reported issues shipped as one change, smallest risk first
 - [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling

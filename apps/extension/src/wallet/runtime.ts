@@ -700,6 +700,7 @@ export function armPostStartWork(
 		network: services.get(NetworkService.name) as NetworkService,
 		profile: profileService,
 		balances: services.get(TokenBalanceService.name) as TokenBalanceService,
+		authwits: services.get(AuthRegistryService.name) as AuthRegistryService,
 		logger,
 		clock,
 	})
