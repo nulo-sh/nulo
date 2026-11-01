@@ -25,6 +25,7 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 }))
 
 import { asImportedKeysDek, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
+import { runsUnattended, runUnattended, type StaleNetworkClient } from "@/composables/useStaleNetwork"
 import { readImportedAccounts } from "@/popup/pages/settings/security/imported-accounts"
 import type { RestoreGateHoldPoint } from "@/e2e/restore-gate"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
@@ -270,28 +271,34 @@ async function seedChain(h: H, networkId: string, chainId: number, l1ChainId: nu
 /** A Testnet left behind on `OLD` (same L1, so addresses stay) beside a working Local Network,
  *  each with a row in every chain-scoped store; Testnet also holds a hidden account and an
  *  imported one. */
+const networkRow = (id: string, name: string, chainId: number, l1ChainId: number, kind: string, rpcUrl: string) => ({
+	[`nulo:core:networks@${id}`]: JSON.stringify({
+		id,
+		profileId: "p1",
+		name,
+		chainId,
+		l1ChainId,
+		kind,
+		primaryEndpointId: "e1",
+		endpoints: [{ id: "e1", rpcUrl }],
+	}),
+})
+
+/** The active Testnet, left behind on `OLD` and marked stale; holds no row of its own. */
+const staleTestnet = () => ({
+	...networkRow("tn", "Testnet", OLD, L1, "testnet", TESTNET_RPC_URL),
+	"nulo:core:active-network@p1": "tn",
+	"nulo:core:stale-networks@p1": JSON.stringify({
+		profileId: "p1",
+		accountSetDigest: "d",
+		entries: [{ networkId: "tn", chainId: OLD, networkReset: true, addressesMoved: false }],
+	}),
+})
+
 async function twoChains(h: H) {
-	const row = (id: string, name: string, chainId: number, l1ChainId: number, kind: string, rpcUrl: string) => ({
-		[`nulo:core:networks@${id}`]: JSON.stringify({
-			id,
-			profileId: "p1",
-			name,
-			chainId,
-			l1ChainId,
-			kind,
-			primaryEndpointId: "e1",
-			endpoints: [{ id: "e1", rpcUrl }],
-		}),
-	})
 	await h.api.storage.local.set({
-		...row("tn", "Testnet", OLD, L1, "testnet", TESTNET_RPC_URL),
-		...row("ln", "Local Network", LOCAL, LOCAL_L1_CHAIN_ID, "local", "http://localhost:8080"),
-		"nulo:core:active-network@p1": "tn",
-		"nulo:core:stale-networks@p1": JSON.stringify({
-			profileId: "p1",
-			accountSetDigest: "d",
-			entries: [{ networkId: "tn", chainId: OLD, networkReset: true, addressesMoved: false }],
-		}),
+		...staleTestnet(),
+		...networkRow("ln", "Local Network", LOCAL, LOCAL_L1_CHAIN_ID, "local", "http://localhost:8080"),
 	})
 	const stale = await seedChain(h, "tn", OLD, L1, 1)
 	const local = await seedChain(h, "ln", LOCAL, LOCAL_L1_CHAIN_ID, 2)
@@ -406,6 +413,30 @@ describe("a stale network reset through the real service graph", () => {
 		expect(after["nulo:core:network-reset@p1"]).toBeUndefined()
 		expect(after["nulo:core:stale-networks@p1"]).toBeUndefined()
 		expect(await h.reset.takeResetNotice("p1")).toEqual({ networkId: "tn", addressesMoved: false })
+	})
+
+	test("both unattended runs of a never-opened stale network end when its one reset completes", async () => {
+		const h = await harness()
+		await h.api.storage.local.set(staleTestnet())
+		const view = await h.reset.getStaleNetwork("tn")
+		if (!view) throw new Error("Testnet is not stale")
+		expect(runsUnattended(view)).toBe(true)
+		const client: StaleNetworkClient = {
+			getStaleNetwork: (networkId) => h.reset.getStaleNetwork(networkId),
+			getPendingReset: () => h.reset.getPendingReset(),
+			resetStaleNetwork: (networkId, confirmed) => h.reset.resetStaleNetwork(networkId, confirmed),
+			takeResetNotice: (profileId) => h.reset.takeResetNotice(profileId),
+			onStaleNetworkChanged: h.reset.onStaleNetworkChanged,
+			onDisconnected: new EventHandler<void>(),
+		}
+
+		// The bootstrap's and the network switch's runs: the worker joins the second to the first.
+		const runs = Promise.all([runUnattended(client, view), runUnattended(client, view)])
+		await expect(settled(h)).resolves.toMatchObject({ completed: { addressesMoved: false } })
+		// Every waiter that heard the completion settles within microtasks of it.
+		const hung = new Promise((resolve) => setTimeout(() => resolve("a run never ended"), 0))
+		await expect(Promise.race([runs, hung])).resolves.toEqual([true, true])
+		expect((await snapshot(h))["nulo:core:stale-networks@p1"]).toBeUndefined()
 	})
 
 	test("while the reset holds the old chain mid-purge, the other network stays readable and editable", async () => {

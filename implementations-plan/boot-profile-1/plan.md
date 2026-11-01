@@ -66,7 +66,7 @@ None. No copy, layout or row changes; login on a stale never-opened network ends
 - **EventHandler.** No new input. The copy costs one array per dispatch.
 - **Logging.** The refusal reuses the resume's existing `logError`; any new error text is fixed, with no profile data. Crypto, supply chain, permissions: no change.
 
-## Phase 1: the event bus calls every live subscriber (#1433)
+## Phase 1: the event bus calls every live subscriber (#1433) ✓
 
 - Change `invoke` as in D3.
 - **Tests.**
