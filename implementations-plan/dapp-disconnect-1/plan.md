@@ -11,6 +11,21 @@ base: origin/dev f738cba62
 issues: "#1412"
 ---
 
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** completed.
+- **Shipped:** #1489, closing #1412.
+  - The app's disconnect or refused check ends its open fee question too, in `endRequestsOfApp` and in the re-read after registration. The window's end cancels the held send through the decline's own path, so nothing is proved and the row reads Cancelled.
+  - A cross-service composition describe pins it over `startExecutionGraph`, which now takes a session stub and the real interaction service. Captures are in `screenshots/`.
+- **Dispositions:**
+  - Opus's new e2e case: rejected (D6); the existing coverage is sufficient.
+  - Codex's ask for owner acknowledgement of the expiry and purge triggers and the open-then-close window: withdrawn on the owner's own words (D2, audit verdicts). The PR body states both.
+  - Lessons: none promoted. `lessons.md` sits near its budget, and this plan's gotchas (an async function adopts a returned promise; `seedJournalRecord` stamps rows terminal) are local to its tests.
+- **Known limits:** #1413, extended by a comment to fee questions (D5); no new limit.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below record history and are not live instructions.
+
 # dapp-disconnect-1: disconnecting an app also closes its send's fee question
 
 A disconnect closes the app's send, sign and capabilities windows (#1414) but skips the fee question ("the fee went up, accept?"). Accept there still sends, at the higher fee, for an app the person just disconnected. The owner chose option A on #1412. One arc, one PR against `dev`. The tier is `light` by the spawn prompt: one Codex audit and the Opus Plan leg.
