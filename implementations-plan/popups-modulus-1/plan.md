@@ -101,6 +101,8 @@ No e2e scenario is added: the refusal is a pure field rule the component layer p
 | Codex R1 | conditional approve | the popups move to `isHex32` in phase 1 and phase 2's red check restores phase 1's files; I3 narrowed to admitted inputs; I1 traced; Edit FPC's unchanged stored address keeps its rename (I2, UI impact); refused rows press Enter and assert no service call | "`bun run test -- <args>` drops the args": with Bun 1.4.2 the filter and `--reporter=verbose` both applied (one file of five ran); a modulus opener case for New token (Opus R1: its only pre-fill passed the curve check) |
 | Opus R1 | conditional approve | the same phase re-sequencing; `.eslintrc-auto-import.json` in the change map; Edit FPC's warning computed named; the trust boundary restated; Outcome (2) reworded; `usePrices.test.ts` named and the retry-0 path list widened; a New sender capture | none |
 | Codex R2 (resumed) | approve | none; it retracted its `--` claim after re-probing | none |
+| Codex fix R1 (arc 1) | approve | two comments: the modulus doc no longer says every hash is below it; `tokenKey`'s doc cut to the stored-shape invariant | none |
+| Opus fix R1 (arc 1) | approve | a stale `seedKey` in a seeder comment; `field.ts`'s header and `isHex32` doc tightened; the popups' comment reworded; `field.ts` in the wallet-core README file map | a pre-existing New sender bug (Enter adds an address marked "Already exist"), out of #1452's scope: filed as #1499 |
 
 ## Delivery
 

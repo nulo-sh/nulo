@@ -98,9 +98,8 @@ function checkPriceId(value: unknown, path: string, mode: ParseMode): string | u
 	return value as string
 }
 
-/** `chainId:contract`, the contract's hex in lower case: the one key a token goes by in the list, the
- *  wallet's rows, prices, flags and seed markers. Validates nothing and adds no missing `0x`. The
- *  seeder persists it as a marker key, so its spelling is a stored shape. */
+/** `chainId:contract` with the hex lower-cased; validates nothing and adds no missing `0x`. A stored
+ *  shape: the seeder persists it as a marker key. */
 export const tokenKey = (chainId: number, contract: string): string => `${chainId}:${contract.toLowerCase()}`
 
 const pairKey = (pair: TokenListPair) => tokenKey(pair.chainId, pair.address)

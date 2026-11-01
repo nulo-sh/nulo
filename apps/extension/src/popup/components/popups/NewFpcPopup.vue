@@ -31,7 +31,7 @@ const fpcs = ref([])
 
 const addressRefusal = (v) => {
 	if (!isHex32(v)) return "Invalid FPC address"
-	// A value at or above the field modulus reads as the contact form words it.
+	// Out of field range: the contact form's wording.
 	if (!isFieldAddress(v)) return "Invalid address"
 	return null
 }

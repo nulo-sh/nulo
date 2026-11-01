@@ -204,7 +204,7 @@ export class TokenSeeder {
 	 *  new trigger may be for a DIFFERENT profile/network. Run once more after
 	 *  the pass so the coalesced context is never silently skipped. */
 	private rerunRequested = false
-	/** `${profileId}|${seedKey}` of every attempt currently running. */
+	/** `${profileId}|${tokenKey}` of every attempt currently running. */
 	private readonly attempting = new Set<string>()
 	/** Accepted retries whose pass has not reached the seed yet — what makes a
 	 *  second retry of the same default a no-op instead of a second counter reset. */

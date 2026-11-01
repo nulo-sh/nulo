@@ -57,7 +57,7 @@ const validateSenderAddress = () => {
 		return
 	}
 
-	// A value at or above the field modulus reads as the contact form words it.
+	// Out of field range: the contact form's wording.
 	if (!isFieldAddress(senderAddress.value)) {
 		fillError("validation", "Invalid address")
 		return
