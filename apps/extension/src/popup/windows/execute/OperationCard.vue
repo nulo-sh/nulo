@@ -69,6 +69,8 @@ const props = defineProps<{
 	dapp?: DappMetadata & { logoBlobUrl?: string }
 	feeEstimate?: TransferFeeEstimate
 	isEstimating?: boolean
+	/** Its fee estimate failed: the fee card offers `retryEstimate`. */
+	estimateFailed?: boolean
 	/** The wallet-signed authorizations a `default_entrypoint` operation would
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
@@ -109,6 +111,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
+	retryEstimate: [index: number]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
 	acknowledgeTokenFlag: [index: number, on: boolean]
@@ -441,9 +444,11 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			:isEstimating="isEstimating"
 			:isQueued="isQueued"
 			:offersQueue="false"
+			:estimateFailed="estimateFailed"
 			:modelValue="op.feeSettings"
 			@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
 			@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
+			@retryEstimate="emit('retryEstimate', index)"
 		/>
 	</Flex>
 

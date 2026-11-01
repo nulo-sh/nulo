@@ -121,9 +121,9 @@ const stubs = {
 }
 
 let mounted: VueWrapper | undefined
-const mountCard = async (op: unknown, dapp?: { name: string }) => {
+const mountCard = async (op: unknown, dapp?: { name: string }, props: Record<string, unknown> = {}) => {
 	const w = mount(OperationCard, {
-		props: { op: op as never, index: 0, profile: { id: "p1", name: "Main" } as never, feeEstimate: ESTIMATE, dapp },
+		props: { op: op as never, index: 0, profile: { id: "p1", name: "Main" } as never, feeEstimate: ESTIMATE, dapp, ...props },
 		global: { stubs },
 	})
 	mounted = w
@@ -203,6 +203,18 @@ describe("OperationCard — who pays a wire-shaped transaction's fee", () => {
 		expect(fee(w).text()).not.toContain("Nothing")
 		expect(fee(w).text()).not.toContain("3.577824")
 		expect(spokenText(fee(w).element)).toContain("Nulo can't tell what this fee contract charges you.")
+	})
+})
+
+describe("OperationCard — a wire-shaped transaction whose estimate failed", () => {
+	test("the fee card offers Try again, which the card hands the window with its index; without the failure the row is gone", async () => {
+		const w = await mountCard(sendTx({ feePayer: OWNER }), undefined, { feeEstimate: undefined, estimateFailed: true, index: 2 })
+		const row = w.find('[data-testid="fee-estimate-failed"]')
+		expect(row.exists()).toBe(true)
+		await row.get('[data-testid="fee-estimate-retry"]').trigger("click")
+		expect(w.emitted("retryEstimate")).toEqual([[2]])
+		await w.setProps({ estimateFailed: false })
+		expect(w.find('[data-testid="fee-estimate-failed"]').exists()).toBe(false)
 	})
 })
 

@@ -1051,6 +1051,29 @@ describe("FeeSettingsCard — a failed estimate's retry", () => {
 		expect(focus).toHaveBeenCalledOnce()
 		w.unmount()
 	})
+
+	test("on a locked method, which has no trigger, a keyboard press keeps its place on the locked row; a pointer press leaves focus", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, {
+			props: baseProps({ lockedMethod: "fj", estimateFailed: true }),
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		await flushPromises()
+		const retry = w.get('[data-testid="fee-estimate-retry"]')
+		const locked = w.get('[data-testid="send-fee-locked"]').element
+
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(1)
+		expect(document.activeElement).not.toBe(locked)
+
+		vi.spyOn(retry.element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+		await retry.trigger("click")
+		expect(w.emitted("retryEstimate")).toHaveLength(2)
+		expect(document.activeElement).toBe(locked)
+		w.unmount()
+	})
 })
 
 describe("FeeSettingsCard — the load error's live region", () => {

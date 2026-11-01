@@ -15,6 +15,7 @@ import { JobCancelledError, walletErrorFromPayload } from "@nulo/extension-messa
 import { CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { flushPromises, mount } from "@vue/test-utils"
 import { nextTick, ref, type Ref } from "vue"
+import { type ToastOptions, useToast } from "@/composables/toast"
 import { END_ACK_TIMEOUT_MS } from "@/composables/useDappApprovalWindow"
 import {
 	approval,
@@ -66,18 +67,26 @@ const feeMapInstances: Array<{
 	api: {
 		results: Ref<Record<number, unknown>>
 		estimating: Ref<Record<number, boolean>>
+		failed: Ref<Record<number, boolean>>
 		estimate: ReturnType<typeof vi.fn>
+		cancel: ReturnType<typeof vi.fn>
 		handoffAll: ReturnType<typeof vi.fn>
 		dispose: ReturnType<typeof vi.fn>
 	}
 }> = []
 vi.mock("@/composables/useFeeEstimationMap", () => ({
 	useFeeEstimationMap: vi.fn((opts: unknown) => {
+		const failed = ref<Record<number, boolean>>({})
+		// As the real map: asking a key again, or cancelling it, ends its failure at once.
+		const settle = (key: number) => {
+			failed.value[key] = false
+		}
 		const api = {
 			results: ref({}),
 			estimating: ref({}),
-			estimate: vi.fn(),
-			cancel: vi.fn(),
+			failed,
+			estimate: vi.fn(settle),
+			cancel: vi.fn(settle),
 			cancelAll: vi.fn(),
 			handoffAll: vi.fn(() => ({})),
 			rearm: vi.fn(),
@@ -97,9 +106,20 @@ const estimateEvents = await vi.hoisted(async () => {
 	const { EventHandler } = await import("@nulo/wallet-core/utils")
 	return { onEstimateStarted: new EventHandler<{ estimateToken: string }>() }
 })
-vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: toastMocks.openToast }),
-}))
+// The real snack, so a test reads what is on screen; every open is also recorded.
+vi.mock("@/composables/toast", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@/composables/toast")>()
+	return {
+		useToast: () => {
+			const live = real.useToast()
+			const openToast = (options: ToastOptions) => {
+				toastMocks.openToast(options)
+				return live.openToast(options)
+			}
+			return { ...live, openToast }
+		},
+	}
+})
 
 vi.mock("@/wallet/services/execution/client", () => ({
 	ExecutionServiceClient: vi.fn(function () {
@@ -175,6 +195,7 @@ afterEach(() => {
 	w = undefined
 	resetWindowHarness()
 	feeMapInstances.length = 0
+	useToast().closeToast()
 })
 
 // ── Stubs (children flattened; overlay stub re-emits dismiss on click) ──
@@ -198,7 +219,10 @@ const STUBS = {
 		`,
 	},
 	SectionLabel: { template: "<div />" },
-	OperationCard: { props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued"], template: '<div><slot name="fee" /></div>' },
+	OperationCard: {
+		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed"],
+		template: '<div><slot name="fee" /></div>',
+	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
 	DappIdentityBlock: {
 		template: '<div data-testid="identity-block" />',
@@ -1656,5 +1680,133 @@ describe("execute window — a request the wallet refused", () => {
 		expect(notice().exists()).toBe(false)
 		expect(refused()).toBe(false)
 		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+})
+
+// ── A failed fee estimate: the card offers Try again, which asks the same estimate through the
+//    window's own path, and the failure's snack closes once no failure it reported stands. ──
+describe("execute window — a failed fee estimate's retry", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const APP_FPC = `0x${"0f".repeat(32)}`
+	// A call as the wire carries it: 32-byte fields, never friendly test values.
+	const CALL = {
+		name: "transfer_in_private",
+		to: `0x${"1c".repeat(32)}`,
+		selector: "0x9a3b2c1d",
+		type: "private",
+		isStatic: false,
+		hideMsgSender: false,
+		args: [OWNER, `0x${"2d".repeat(32)}`, `0x${"00".repeat(31)}05`, `0x${"00".repeat(32)}`],
+		returnTypes: [],
+	}
+	const send = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [CALL] }, opts: { from: OWNER } }
+	const ownCap = {
+		kind: "aztec_sendTx",
+		account: `aztec:1:${OWNER}`,
+		exec: { calls: [CALL], feePayer: APP_FPC },
+		opts: { from: OWNER, fee: { gasSettings: { maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" } } } },
+	}
+	const FJ = { paymentMethod: { kind: "fj" } }
+	const FAILURE = "Couldn't estimate fee. Try again."
+	const { toast, openToast } = useToast()
+
+	async function opened(ops: object[]) {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: "Main" })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: { operations: ops },
+		}
+		w = factory()
+		await completeInit()
+		const fees = feeMapInstances[0]!
+		const vm = w.vm as unknown as ExecVm & { handleFeeUpdate: (index: number, value: unknown) => void }
+		const cards = () => w!.findAllComponents(STUBS.OperationCard)
+		/** Each estimate the map would run, settled as a real error: marked before `onError`, as the map does. */
+		const fail = async (...keys: number[]) => {
+			for (const key of keys) {
+				fees.api.failed.value[key] = true
+				fees.opts.onError?.(key, new Error("node down"))
+			}
+			fees.api.results.value = Object.fromEntries(keys.map((key) => [key, null]))
+			fees.api.estimating.value = Object.fromEntries(keys.map((key) => [key, false]))
+			await flushPromises()
+		}
+		return { vm, fees, cards, fail, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
+	}
+
+	test("Try again asks the same estimate once more; the snack closes once neither failure stands; Confirm turns on once both land", async () => {
+		const { vm, fees, cards, fail, confirm } = await opened([send, send])
+		vm.handleFeeUpdate(0, FJ)
+		vm.handleFeeUpdate(1, FJ)
+		await fail(0, 1)
+		expect(cards().map((c) => c.props("estimateFailed"))).toEqual([true, true])
+		expect(toast.value).toMatchObject({ kind: "error", label: FAILURE })
+		expect(confirm().attributes("disabled")).toBeDefined()
+
+		fees.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toEqual([[0, { index: 0, feeSettings: FJ }]])
+		expect(toast.value?.label).toBe(FAILURE)
+		cards()[1]!.vm.$emit("retryEstimate", 1)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toHaveLength(2)
+		expect(toast.value).toBeNull()
+
+		fees.api.results.value = { 0: { maxFee: "1" }, 1: { maxFee: "2" } }
+		await flushPromises()
+		expect(cards().map((c) => c.props("estimateFailed"))).toEqual([false, false])
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a failure that opened no snack does not hold it: an app's own cap stays failed, and Confirm stays off", async () => {
+		const { vm, fees, cards, fail, confirm } = await opened([send, ownCap])
+		vm.handleFeeUpdate(0, FJ)
+		toastMocks.openToast.mockClear()
+		await fail(0, 1)
+		expect(toastMocks.openToast).toHaveBeenCalledOnce()
+
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value).toBeNull()
+		expect(fees.api.failed.value[1]).toBe(true)
+		fees.api.results.value = { 0: { maxFee: "1" }, 1: null }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("settings the card withdraws end the failure: the estimate is cancelled and the snack closes", async () => {
+		const { vm, fees, cards, fail } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		await fail(0)
+		cards()[0]!.vm.$emit("updateFeeSettings", 0, undefined)
+		await flushPromises()
+		expect(fees.api.cancel).toHaveBeenCalledWith(0)
+		expect(cards()[0]!.props("estimateFailed")).toBe(false)
+		expect(toast.value).toBeNull()
+	})
+
+	test("a snack opened after the failure is not the window's to close", async () => {
+		const { vm, cards, fail } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		await fail(0)
+		const later = openToast({ kind: "info", label: "Another report" })
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(toast.value?.id).toBe(later)
 	})
 })
