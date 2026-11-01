@@ -6,6 +6,7 @@
  * Covers:
  *   - no queuedJournalId           → create new
  *   - record reaped (not found)    → create new
+ *   - record unreadable (read rejects) → reject, never create new
  *   - record stage === "queued"     → claim succeeds; controller registered
  *   - record stage IS NOT queued    → throw JobCancelledSentinel
  *   - transition fails + record now cancelled → throw JobCancelledSentinel
@@ -14,6 +15,7 @@
  */
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { deferred } from "@nulo/wallet-core/utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { claimOrCreateDappExecuteJournal, type ClaimHelperDeps } from "./claim-helper"
@@ -305,6 +307,40 @@ describe("claimOrCreateDappExecuteJournal", () => {
 		expect(result.journalId).toBe("fresh-id")
 		expect(activeControllers.has("fresh-id")).toBe(true)
 		expect(result.controller).not.toBe(preController)
+	})
+
+	function heldQueuedClaim() {
+		const made = makeDeps()
+		const read = deferred<unknown>()
+		made.journal.getOperation.mockReturnValueOnce(read.promise)
+		const preController = new AbortController()
+		made.activeControllers.set("queued-id", preController)
+		const claim = claimOrCreateDappExecuteJournal(made.deps, {
+			...INPUT_NO_QUEUED,
+			queuedJournalId: "queued-id",
+			reuseController: preController,
+		})
+		return { ...made, read, preController, claim }
+	}
+
+	test("a read that fails after a cancel aborted the pre-acquire controller ends the claim as cancelled; nothing is created", async () => {
+		const { read, preController, claim, createFreshRecord, registerInFlight } = heldQueuedClaim()
+		preController.abort()
+		read.reject(new Error("storage.get() failed"))
+
+		await expect(claim).rejects.toBeInstanceOf(JobCancelledSentinel)
+		expect(createFreshRecord).not.toHaveBeenCalled()
+		expect(registerInFlight).not.toHaveBeenCalled()
+	})
+
+	test("a read that fails with no cancel rejects with its own error; nothing is created", async () => {
+		const { read, claim, createFreshRecord, registerInFlight } = heldQueuedClaim()
+		const storageErr = new Error("storage.get() failed")
+		read.reject(storageErr)
+
+		await expect(claim).rejects.toBe(storageErr)
+		expect(createFreshRecord).not.toHaveBeenCalled()
+		expect(registerInFlight).not.toHaveBeenCalled()
 	})
 
 	test("queuedJournalId set + record at cancelled stage → throws JobCancelledSentinel without transitioning", async () => {
