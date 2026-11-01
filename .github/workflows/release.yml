@@ -761,7 +761,8 @@ jobs:
       # No workspace install: the script imports only node: modules and Bun built-ins.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
+          token: ""
       - name: Check the release assets' artifact id
         env:
           ARTIFACT_ID: ${{ needs.attach-assets.outputs.release_artifact_id }}
@@ -831,7 +832,8 @@ jobs:
       # No workspace install: the script imports only node: modules and Bun built-ins.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
+          token: ""
       - name: Check the release assets' artifact id
         env:
           ARTIFACT_ID: ${{ needs.attach-assets.outputs.release_artifact_id }}
