@@ -261,13 +261,27 @@ function cleanStepFindings(where: string, step: Step): string[] {
 	return findings
 }
 
+/**
+ * Every `oven-sh/setup-bun` step, in a job or a composite action, that the action's job-token default
+ * reaches. `package.json#packageManager` names an exact version, which resolves without the API.
+ */
+function setupBunTokenFindings(tree: Tree): string[] {
+	const sites = [
+		...[...jobs(tree)].map(({ where, job }) => ({ where, steps: job.steps ?? [] })),
+		...Object.entries(tree.actions).map(([where, action]) => ({ where, steps: action.runs.steps ?? [] })),
+	]
+	return sites.flatMap(({ where, steps }) =>
+		steps
+			.filter((s) => s.uses?.startsWith("oven-sh/setup-bun@") && s.with?.token !== "")
+			.map(() => `${where}: hands Bun's setup the job's token`),
+	)
+}
+
 function cleanFindings(tree: Tree): string[] {
 	const composite = tree.actions[SETUP_BUN]?.runs.steps ?? []
 	const findings = composite
 		.filter((s) => INSTALLS.test(script(s)) && s.if !== "inputs.install == 'true'")
 		.map(() => `${SETUP_BUN}: installs whatever its install input says`)
-	if (composite.some((s) => s.uses?.startsWith("oven-sh/setup-bun@") && s.with?.token !== ""))
-		findings.push(`${SETUP_BUN}: hands Bun's setup the job's token`)
 	const byWhere = new Map([...jobs(tree)].map(({ where, job }) => [where, job]))
 	for (const where of CLEAN) {
 		const job = byWhere.get(where)
@@ -862,10 +876,6 @@ describe("jobs that tag or publish", () => {
 			(t: Tree) => t.workflows["nightly.yml"].jobs["publish-nightly"].steps?.push({ run: "bun install --frozen-lockfile" }),
 		],
 		[
-			"Bun's setup with the job's token",
-			(t: Tree) => unset(t.actions[SETUP_BUN].runs.steps?.find((s) => s.uses?.startsWith("oven-sh/setup-bun@"))?.with, "token"),
-		],
-		[
 			"a checkout of the tag",
 			(t: Tree) => Object.assign(step(t, "release.yml#auto-unstick", "actions/checkout@").with ?? {}, { ref: "v1.2.3" }),
 		],
@@ -894,6 +904,21 @@ describe("jobs that tag or publish", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(cleanFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("Bun's setup", () => {
+	test("gets no token, in every job and composite action", () => {
+		expect(setupBunTokenFindings(TREE)).toEqual([])
+	})
+	test.each([
+		[
+			"the composite",
+			(t: Tree) => unset(t.actions[SETUP_BUN].runs.steps?.find((s) => s.uses?.startsWith("oven-sh/setup-bun@"))?.with, "token"),
+		],
+		["an inline step", (t: Tree) => unset(step(t, "store-check.yml#firefox", "oven-sh/setup-bun@").with, "token")],
+	])("finds the job's token handed to it in %s", (_, edit) => {
+		expect(setupBunTokenFindings(mutated(edit)).length).toBe(1)
 	})
 })
 
