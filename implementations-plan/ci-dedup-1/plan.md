@@ -1,7 +1,7 @@
 ---
 plan: ci-dedup-1
 tier: light
-status: approved by the final Codex pass; arc 1 implementing
+status: completed; delivered by PR #1492
 issues: "#1450 (closes), #1448 (Bun half; part of)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,21 @@ trunk: dev
 standard: implementations-plan/README.md § Post-implementation standard, read at fcc4da21
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01. **Status:** completed; delivered by PR #1492 to `dev` (`Closes #1450`, `Part of #1448`).
+- **Shipped:**
+  - #1450 = P94-16 A: both network lanes gate on the licence texts. `behavior-gating.test.ts` requires the five PR lanes to gate on one build surface, against a reviewed exception list that names each entry's holder lanes. pr-quick's set is derived by running its compute step.
+  - #1448, Bun half = P94-18 A: every setup-bun step reads `package.json` and passes no token. The composite's cache key comes from the installed version. `bun-version.test.ts` pins every restatement. `release-integrity.test.ts`'s no-token rule covers every step.
+  - Deviations: none from the approved design. The fix loop added a one-write probe of the flag, the compute wiring check, and two doc corrections ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Left out:**
+  - The tsconfig half of #1448 was not decided (`## Remaining` comment on the issue).
+  - `_build-extension.yml` stays in the smoke filters (D3); #1493 settles it by rule.
+- **Known limits:** none.
+- **Open items:** #1448 (tsconfig half), #1493 (D10), GHSA-mcpq-5jpw-c723 (tracked privately).
+- **Lessons:** none promoted. `lessons.md` is at its 8,192-byte budget and nothing in it is superseded. This run's gotchas live in [lessons/phase-2.md](lessons/phase-2.md): the runner keeps a step's last `$GITHUB_OUTPUT` write, and a scan over tracked files reads its own test file.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are not live instructions.
 
 # ci-dedup-1: one extension build surface across the five PR lanes, one Bun version source in CI
 
@@ -94,7 +109,7 @@ One arc, one PR to `dev`: `Closes #1450`, `Part of #1448`. Recon: [recon.md](rec
 
 **Validation gate**: Phase 1's commands plus `bun run test:release && bun run test && bun run test:all`. Pass: all exit 0; `git grep -nE 'bun-version: *[0-9]' -- .github` prints nothing. Layers: lint, typecheck, unit.
 
-### Phase 3 — proof on runners (after the Codex loop converges)
+### Phase 3 — proof on runners (after the Codex loop converges) ✓ (dispatch runs 41356013693 and 41356015938 green; the PR's checks are on PR #1492)
 1. Push the branch. Run `gh workflow run pr-quick.yml --ref worktree-ci-dedup-1` and `gh workflow run source-rebuild.yml --ref worktree-ci-dedup-1` (empty `tag`: rebuild this commit; read-only, no secret). 2. Open the PR (Delivery).
 
 **Validation gate**: both dispatches green, their setup-bun logs print `Obtained version <V> from package.json` (`<V>` = the `packageManager` version) and the composite's cache step a key with `<V>`; the PR's five required checks green with both network lanes run; the PR run's "Preview build comment" job log prints the same `Obtained version` line. Record run ids in `lessons/phase-3.md` and the PR body. Layers: CI on runners.
