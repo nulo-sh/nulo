@@ -120,6 +120,8 @@ No e2e scenario is added: the end rule and the redirect are decided inside one m
 | Codex final (resumed) | approve | none | none |
 | Codex fix R1 (arc 1) | conditional approve | the scan reads static computed names and accessors and matches the fetch callee structurally; execute's init catch logs `{ error }`; the redirect fake's comment bounded; three comments deleted | none |
 | Opus fix R1 (arc 1) | approve | `privateFetchInit`'s doc and the README row narrowed (the node RPC fetch does not use it); the grant helper's doc says it holds Confirm off | none |
+| Codex fix R2 (arc 1, resumed) | approve | its optional point: a bracket callee counts as the fetch only by a string literal | none |
+| Codex fix R3 (arc 1, resumed) | approve | none | none |
 
 ## Delivery
 
