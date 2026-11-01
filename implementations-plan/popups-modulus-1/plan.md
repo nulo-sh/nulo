@@ -1,7 +1,7 @@
 ---
 plan: popups-modulus-1
 tier: light
-status: plan approved (Codex R2 approve); arc 1 next
+status: arc 1 green, fix loop converged (Codex fix R2 approve); PR open
 issues: "#1452"
 driver: claude-code
 claude_model: opus
@@ -103,6 +103,7 @@ No e2e scenario is added: the refusal is a pure field rule the component layer p
 | Codex R2 (resumed) | approve | none; it retracted its `--` claim after re-probing | none |
 | Codex fix R1 (arc 1) | approve | two comments: the modulus doc no longer says every hash is below it; `tokenKey`'s doc cut to the stored-shape invariant | none |
 | Opus fix R1 (arc 1) | approve | a stale `seedKey` in a seeder comment; `field.ts`'s header and `isHex32` doc tightened; the popups' comment reworded; `field.ts` in the wallet-core README file map | a pre-existing New sender bug (Enter adds an address marked "Already exist"), out of #1452's scope: filed as #1499 |
+| Codex fix R2 (arc 1, resumed) | approve | none | none |
 
 ## Delivery
 

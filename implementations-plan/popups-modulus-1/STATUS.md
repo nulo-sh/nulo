@@ -7,3 +7,4 @@
 - 2026-11-01: phase 1 gate green: lint, typecheck:all, test (16588 passed), test:all (17 workspaces exit 0), the four package suites and the extension paths at retry 0; no isValidHex left.
 - 2026-11-01: phase 2 gate green: lint, typecheck:all, test (16605 passed), popups at retry 0 (446), the 9 boundary cases red on phase 1's popups and the rest green, smoke settings-crud + send-picker-add 10/10 on Chrome (27.6 s) and Firefox (46.3 s) at retry 0.
 - 2026-11-01: fix loop R1: Codex and Opus approve with comment fixes (applied); #1499 filed for a pre-existing New sender bug. Resuming Codex with the fix diff.
+- 2026-11-01: fix loop converged (Codex R2 approve). Final gates on the head: lint, typecheck:all, test:all (17/17), smoke 10/10 Chrome (25.3 s) and Firefox (39.4 s) at retry 0.
