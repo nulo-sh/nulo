@@ -40,10 +40,10 @@ export class EmbeddedStrategy implements FeeStrategy {
 
 		try {
 			const built = await buildFor(this.deps.txBuilder, ctx, embeddedMethod, task)
-			const { txRequest, node, pxe, account } = built
+			const { txRequest, node, pxe, scopes } = built
 			suggestGasLimits(txRequest, ctx.op.fee)
 			await applyEmbeddedFpcGasCap(txRequest, ctx.op.fee, node)
-			const simulatedTx = await this.deps.simulateTxTask(pxe, txRequest, validatedSimOpts(account.address), task)
+			const simulatedTx = await this.deps.simulateTxTask(pxe, txRequest, validatedSimOpts(scopes), task)
 			// `feeMultiplier` is inert: an embedded payment commits the cap set above.
 			await finalizeGasLimits(node, txRequest, simulatedTx, {
 				gasPadding: ctx.gasPadding,

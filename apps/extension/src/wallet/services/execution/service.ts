@@ -76,12 +76,10 @@ import {
 	type RegisterContractOperation,
 	type SendTransactionOperation,
 	type OperationResult,
-	type Action,
 	type FeeSettings,
 	type AztecRegisterSenderOperation,
 	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
-	type FeeOptions,
 	type GasBalances,
 	type FeeQuestion,
 	type OperationApprovalEnvelope,
@@ -502,15 +500,15 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
-				const { txRequest, node, pxe, account, network, txCalls } = await this.txBuilder.buildStandard(
-					sendOp,
+				const { txRequest, node, pxe, account, scopes, network, txCalls } = await this.txBuilder.buildStandard(
+					op,
 					fence,
 					method,
 					undefined,
 					appPriorityOf(sendOp.fee),
 				)
 				await onBuilt?.(txCalls)
-				return { txRequest, node, pxe, account, network }
+				return { txRequest, node, pxe, account, scopes, network }
 			},
 		})
 		this.dappSendExecutor = new DappSendExecutor({
@@ -1414,12 +1412,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	 *  4-way switch from the pre-strategy era. Thin delegator only —
 	 *  collaborators own the actual logic. */
 	private async buildAndEstimateTxRequest(
-		inputOp: {
-			networkId: string
-			accountAddress: string
-			actions: Action[]
-			fee?: FeeOptions
-		},
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,

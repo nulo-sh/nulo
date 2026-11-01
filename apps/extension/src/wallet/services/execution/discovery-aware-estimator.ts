@@ -25,9 +25,9 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AuthwitDiscoverer, BuildTxRequestFn } from "./authwit-discoverer"
 import { CollectingDiscoveryProbe } from "./discovery-probe"
-import type { FeeEstimate, OnBuilt } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategyContext, OnBuilt } from "./fee/fee-strategy"
 import { throwIfAborted } from "./rpc-cancel"
-import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation, SendTransactionOperation } from "./spec"
+import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation } from "./spec"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 
 /** Chain-bound extraction capability handed to folded strategies (unused by
@@ -41,7 +41,7 @@ export interface DiscoveryAwareEstimatorDeps {
 	authwit: AuthwitDiscoverer
 	/** The probe-free validated pipeline (the service's strategy map). */
 	buildAndEstimateValidated(
-		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
@@ -52,7 +52,7 @@ export interface DiscoveryAwareEstimatorDeps {
 	 *  probe-aware strategy runs its first sim stubbed and discovery collapses
 	 *  into it. Reached only through the fold routing below. */
 	buildAndEstimateFolded(
-		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
+		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
 		probe: DiscoveryProbe,
@@ -113,7 +113,7 @@ export class DiscoveryAwareEstimator {
 		const hasPreAttachedAuthwit = actions.some((a) => a.kind === "add_private_authwit")
 		const foldableKind = feeSettings.paymentMethod.kind === "fpc" || feeSettings.paymentMethod.kind === "fj"
 		const withActions = (acts: readonly Action[]) =>
-			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as SendTransactionOperation
+			({ ...operation, actions: [...acts], ...(detectedFee ? { fee: detectedFee } : {}) }) as FeeStrategyContext["op"]
 		if (foldableKind && !hasPreAttachedAuthwit) {
 			const probe = new CollectingDiscoveryProbe()
 			const built = await this.deps.buildAndEstimateFolded(
