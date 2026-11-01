@@ -51,6 +51,7 @@ import {
 	StaleNetworksRecordSchema,
 } from "@/wallet/services/stale-network/types"
 import { decodeSeedMarkers } from "@/wallet/services/token/seeder"
+import { decodeTokenIdHighWater, TOKEN_ID_HIGH_WATER_KEY } from "@/wallet/services/token/spec"
 import { decodeTokenListState } from "@/wallet/services/token-list/service"
 import { LEGACY_SELECTED_ACCOUNT_KEY } from "@/wallet/services/ui-preference/spec"
 import { SCHEMA_BLOCKED_KEY, SCHEMA_DEGRADED_KEY, SCHEMA_RETRY_REQUESTED_KEY } from "./migrations"
@@ -170,6 +171,7 @@ export const AppPicksSchema = z.record(
 	}),
 )
 export const PinMapSchema = z.record(z.string(), z.array(z.string()))
+export const TokenIdHighWaterSchema = z.number().int().nonnegative()
 const sendPick = z.object({ type: feePickType, fpc: z.object({ id: z.string(), name: z.string().optional() }).nullable().optional() })
 export const SendPicksSchema = z.record(z.string(), z.object({ private: sendPick.optional(), public: sendPick.optional() }))
 
@@ -244,6 +246,12 @@ export const STORED_SHAPES = {
 
 	activeNetwork: { ref: root(ACTIVE_NETWORK_STORAGE_ROOT), encoding: "structured", schema: z.string(), read: decodeActiveNetworkId },
 	legalAccepted: { ref: value(LEGAL_ACCEPTANCE_KEY), encoding: "structured", schema: LegalAcceptanceSchema, read: parseAcceptanceRecord },
+	tokenIdHighWater: {
+		ref: value(TOKEN_ID_HIGH_WATER_KEY),
+		encoding: "structured",
+		schema: TokenIdHighWaterSchema,
+		read: decodeTokenIdHighWater,
+	},
 	// Only earlier builds wrote it; the worker moves it into the profile holding that account.
 	uiActiveAccount: { ref: value(LEGACY_SELECTED_ACCOUNT_KEY), encoding: "structured", schema: z.string(), read: asStored },
 	uiLastActiveProfile: { ref: value(LAST_ACTIVE_PROFILE_KEY), encoding: "structured", schema: z.string(), read: asStored },

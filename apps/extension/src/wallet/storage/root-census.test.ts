@@ -27,6 +27,7 @@ const PLAINTEXT: Partial<Record<StoredShapeName, string>> = {
 	tokenList: "the signed public token list",
 	activeNetwork: "a random network id, meaningless without its sealed row, read by the pre-unlock gates",
 	legalAccepted: "device-wide terms acceptance, read before unlock and never in a backup",
+	tokenIdHighWater: "the highest token id the device ever reserved, a count kept across every profile's deletion",
 	uiActiveAccount: "the pre-seal pointer, kept until its profile claims it or a selection overwrites it",
 	uiLastActiveProfile: "the profile id the lock screen opens on",
 	uiLoggerWindowId: "the log viewer's window id",

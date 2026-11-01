@@ -541,9 +541,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// not await subscribers, so one added later would queue behind this hold
 		// rather than re-enter it.
 		await this.lock.withLock(async () => {
-			// Full-identity filter, not id-only: token ids are max+1-reallocatable,
-			// so a successor context can re-mint this id — its rows must not be
-			// deleted by the departed token's handler.
+			// Full-identity filter, not id-only: a lost token-id high-water mark lets
+			// a successor re-mint this id, and its rows must not be deleted by the
+			// departed token's handler.
 			for (const tb of (await this.repo.getAll()).filter((x) => rowMatchesToken(x, token))) {
 				await this.invalidateAndDelete(tb.id)
 				this.emit("onTokenBalanceDeleted", this.getTokenBalanceInfo(tb, token))

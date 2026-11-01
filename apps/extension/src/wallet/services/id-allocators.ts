@@ -3,10 +3,11 @@
  * store picks one explicitly rather than re-deriving it. Both scan the store's OWN
  * keys (the id space is per-root), so allocation is correct without a shared cursor.
  *
- * `nextNumericId` allocates max(allocatable ids) + 1 over the store's physical
- * keys, where "allocatable" means canonical AND safe-integer (hostile keys are
- * excluded, and the returned candidate itself must be safe and physically
- * free) — the token / token-balance cursor. `nextRandomId` mirrors the
+ * `nextNumericId` allocates max(allocatable ids, floor) + 1 over the store's
+ * physical keys, where "allocatable" means canonical AND safe-integer (hostile
+ * keys are excluded, and the returned candidate itself must be safe and
+ * physically free) — the token / token-balance cursor; the token service passes
+ * its persisted high-water mark as the floor. `nextRandomId` mirrors the
  * `do getRandomHex while contains` collision-avoidance loop — the contact / fpc /
  * network string ids. The structural param types keep these decoupled from
  * `EntityStorage` (any object with the one method works).
@@ -14,10 +15,10 @@
 import { array_max, getRandomHex } from "@/wallet/utils"
 import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
 
-export async function nextNumericId(storage: { getKeys(): Promise<string[]> }): Promise<number> {
+export async function nextNumericId(storage: { getKeys(): Promise<string[]> }, floor = 0): Promise<number> {
 	const keys = await storage.getKeys()
 	const occupied = new Set(keys)
-	return nextIdAbove(maxAllocatableId(keys), (id) => occupied.has(String(id)))
+	return nextIdAbove(Math.max(floor, maxAllocatableId(keys)), (id) => occupied.has(String(id)))
 }
 
 /** Hands out, from one listing of the store's keys, the ids successive `nextNumericId` calls would
@@ -56,8 +57,9 @@ function nextIdAbove(max: number, occupied: (id: number) => boolean): number {
 	// MAX_SAFE_INTEGER key would otherwise yield unsafe 2^53, which pins and
 	// overwrites. Clamp and walk down into the first free key — gap-fill reuse
 	// in that pathological case is deliberate (the contract is uniqueness, not
-	// monotonicity). On sane stores the walk never runs: String(max+1) is
-	// canonical, so an equal key would have raised the max instead.
+	// monotonicity), and it is the one way a floor can hand out a freed id. On
+	// sane stores the walk never runs: String(max+1) is canonical, so an equal
+	// key would have raised the max instead.
 	if (!Number.isSafeInteger(candidate)) candidate = Number.MAX_SAFE_INTEGER
 	while (occupied(candidate)) candidate -= 1
 	return candidate

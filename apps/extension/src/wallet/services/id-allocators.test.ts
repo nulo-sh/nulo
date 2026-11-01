@@ -14,6 +14,13 @@ describe("nextNumericId", () => {
 		expect(await nextNumericId({ getKeys: async () => [] })).toBe(1)
 	})
 
+	test.each([
+		["a floor above the keys", 9, 10],
+		["a floor below the keys", 1, 4],
+	])("%s: allocates above the higher of the two", async (_, floor, expected) => {
+		expect(await nextNumericId({ getKeys: async () => ["1", "3"] }, floor)).toBe(expected)
+	})
+
 	// Hardening pins. Comparing two pure reads of an UNMUTATED store proves nothing,
 	// since they are equal in every implementation, so these pin a direct exclusion
 	// assertion and a state-mutating write-back loop (the form that is red under `+x`).

@@ -1979,6 +1979,20 @@
 			"shape": "uiProfileNotFirst",
 			"key": "nulo:ui:profileNotFirst@b04e6d18",
 			"value": true
+		},
+		{
+			"id": "tokenIdHighWater.full",
+			"stamp": 1,
+			"shape": "tokenIdHighWater",
+			"key": "nulo:core:token-id-high-water",
+			"value": 128
+		},
+		{
+			"id": "tokenIdHighWater.minimal",
+			"stamp": 1,
+			"shape": "tokenIdHighWater",
+			"key": "nulo:core:token-id-high-water",
+			"value": 1
 		}
 	]
 }
