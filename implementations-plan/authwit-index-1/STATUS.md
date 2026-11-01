@@ -10,3 +10,4 @@
 - 2026-11-01: arc 2 plan R1: Codex and Opus conditional approve; folded (D10 kept on Codex's argument).
 - 2026-11-01: arc 2 implemented; unit, composition and storage tests green at retry 0; red at base for P1, P2, P3.
 - 2026-11-01: arc 2 fix R1: Codex approve (two nits), Opus changes needed (one missing pin); applied; Codex R2 next.
+- 2026-11-01: arc 2 fix R2: Codex approve; loop converged; network e2e next.

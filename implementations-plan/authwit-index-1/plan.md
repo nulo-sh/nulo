@@ -160,6 +160,7 @@ The journal root is sealed (`stores.ts`), so no numbered migration can name it; 
 | Opus plan R1 (arc 2) | conditional approve | a finalized `sent` lists (the `listing` order); a P3 composition case; P1 started as the runtime starts it; never-happens checks after each write; `succeeded` drops the field; the popup reads and the content's origin in Security; the account residual (D12) | dropping D10 (D10) |
 | Codex fix R1 (arc 2) | approve | `spendAccounts` keeps its doc; `recordPendingAuthwits`'s epoch doc names the caller's fence | none |
 | Opus fix R1 (arc 2) | changes needed | the `aztec_sendTx` arm's commit pinned (a revert of it passed every test); the field doc says `succeeded` implies the listing; the recorder doc reparsed; the composition describe and hash comment; fake read-backs replaced by the clear log; one ordering sentence | reading `SendCheck.watches` in the reverted control (the only deterministic end state; `send-check.test.ts` reads it the same way) |
+| Codex fix R2 (arc 2, resumed) | approve | none | none |
 
 ## Delivery
 

@@ -11,3 +11,4 @@
 - `bun run test` green (148 s) and `bun run test:all` green (177 s) at retry 0 on `c28deadde`; `typecheck:all` and `lint` exit 0.
 - Codex fix R1 (gpt-6.1-sol, high, read-only, arc 2 diff from `51ea220b1` plus arc 1's squash): approve, two nits, both applied. The `recordPendingAuthwits` doc edit moved the type-roles producer digest of `auth-registry/service.ts`; its two `send_transaction` sites and evidence line are untouched, re-attested and re-pinned by hand as in arc 1.
 - Opus fix R1 (general-purpose): changes needed. Material: `proveStandardSend`'s commit was unpinned; a mutation reverting it now fails `aztec_sendTx stores a send's public authwits…`. Nits applied except the `watches` read (kept, precedent in `send-check.test.ts`).
+- Codex fix R2 (resumed): approve, no new finding. Loop converged at round 2.
