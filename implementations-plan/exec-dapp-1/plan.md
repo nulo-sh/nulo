@@ -79,7 +79,7 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
   - `cd apps/extension && bun --bun vitest run src/wallet/services/execution --retry=0`: green; the new cases red with the base SHA's sources.
   - `cd packages/wallet-bridge && bun run test`: green (unchanged package, lane gate).
 
-## Phase 2: the playground exercises the fields; two e2e scenarios
+## Phase 2: the playground exercises the fields; two e2e scenarios ✓
 
 - Playground (generic, wallet-sdk only): `pg-btn-sendTx-wait` sends the default transfer with `wait` omitted; `pg-btn-sendTx-onBehalf` asks `createAuthWit` of the owner (`pg-input-authwitOwner`) for `transfer_private_to_private(owner, recipient, amount, nonce)` with the sender as caller, then sends from the sender with that witness and `additionalScopes: [owner]`. Rewrite the stale comment to say why the other buttons pass `NO_WAIT` (popup-shape tests).
 - New `apps/extension/tests/e2e/network/tx-sendTx-fields.test.ts`, one scenario in two labelled steps on fixture `dappConnectedExtensionWithFirstTwoAccountsCap` (A first, B second); first mint public and private tokens to A (as `account-switch-isolation.test.ts` delivers a private note; no sender registration, `receive-unregistered.test.ts`):
@@ -105,6 +105,8 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
 - D9. A failed wait logs at `error`, as any failed send does. Opus R1 offered `debug`; each failure costs an approved or self-funded send, and routing it lower needs a new error class for one caller.
 - D10. No discovery change in arc 1. Opus R1 proposed skipping hashes the request already witnesses; filtering on `onBehalfOf` is the cause-level form. Either changes which rows the window shows (I4), and for NO_FROM a row that can show today: the owner's call (OA-1). Codex R2: the redundant signature has no security or correctness consequence, so #1427 is complete without it.
 - D11. The capsule's scope parses with `AztecAddress.fromStringUnsafe`, as its contract beside it does: 6.0.0 has no `AztecAddress.fromString`. The planner parsed it through `Capsule.schema` first, so the string is a canonical address.
+- D12. The network gate runs with `NULO_E2E_PROVERLESS=1`: the agent's guard refuses `tx-sendTx-noFrom` without it, and CI runs the new file in its proverless shard pool. The new scenario also passed once prover-ON on Chrome.
+- D13. The playground binds its named sends (`sendTx-wait`, `sendTx-onBehalf`, `sendTx-appSponsored`) from one table, so `bindTransactions` stays within the 80-line budget. No suppression is added.
 
 ## Panel verdicts
 

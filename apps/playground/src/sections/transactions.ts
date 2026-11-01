@@ -1,5 +1,6 @@
 /**
- * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), `NoFrom`
+ * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), wait (the
+ * same, awaiting its receipt), on behalf (another session account's witness and scope), `NoFrom`
  * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, app-sponsored,
  * multicall, chunked, delegated.
  *
@@ -56,6 +57,8 @@ export function renderTransactions(): string {
 			</div>
 			<div class="pg-row">
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
+				<button data-testid="pg-btn-sendTx-wait" type="button" ${dis}>sendTx default (wait for receipt)</button>
+				<button data-testid="pg-btn-sendTx-onBehalf" type="button" ${dis}>sendTx on behalf of authwit owner</button>
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
 				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
@@ -82,12 +85,17 @@ function gasFeesInput(name: "maxFeesPerGas" | "maxPriorityFeesPerGas"): GasFees 
 	return new GasFees(BigInt(parts[0]), BigInt(parts[1]))
 }
 
-/** The options every `sendTx` button passes: the app's own fee settings only when one is set. */
-function sendOpts<F>(from: F) {
+/** The options every `sendTx` button passes: the app's own fee settings only when one is set, and
+ *  `NO_WAIT` unless the button awaits the receipt. */
+function sendOpts<F>(from: F, { awaitReceipt = false } = {}) {
 	const maxFeesPerGas = gasFeesInput("maxFeesPerGas")
 	const maxPriorityFeesPerGas = gasFeesInput("maxPriorityFeesPerGas")
 	const gasSettings = { ...(maxFeesPerGas && { maxFeesPerGas }), ...(maxPriorityFeesPerGas && { maxPriorityFeesPerGas }) }
-	return { from, wait: "NO_WAIT" as const, ...(Object.keys(gasSettings).length > 0 && { fee: { gasSettings } }) }
+	return {
+		from,
+		...(!awaitReceipt && { wait: "NO_WAIT" as const }),
+		...(Object.keys(gasSettings).length > 0 && { fee: { gasSettings } }),
+	}
 }
 
 async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_public_to_public") {
@@ -140,14 +148,50 @@ async function sendAppSponsored() {
 	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
+/** The sender spends the owner's private tokens with a witness the owner signed for this exact
+ *  call, reading the owner's notes through `additionalScopes`, as a dApp acting for two of its
+ *  session accounts does. */
+async function sendOnBehalf() {
+	const wallet = getWallet()!
+	const tokenAddress = getInput("tokenAddress")
+	const owner = getInput("authwitOwner")
+	const recipient = getInput("recipient")
+	if (!tokenAddress || !owner || !recipient) throw new Error("tokenAddress + authwitOwner + recipient inputs required")
+	const sender = getInput("simFrom") || getState().selectedAccount
+	if (!sender) throw new Error("no sender: set pg-input-from or select an account")
+	const ownerAddr = AztecAddress.fromStringUnsafe(owner)
+	const senderAddr = AztecAddress.fromStringUnsafe(sender)
+	const { TokenContract } = await import("@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js")
+	// biome-ignore lint/suspicious/noExplicitAny: structural typing across SDK boundary
+	const token: any = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet as any)
+	const amount = BigInt(getInput("amount") || "1")
+	const nonce = BigInt(getInput("authwitNonce") || "1")
+	const exec = await token.methods
+		.transfer_private_to_private(ownerAddr, AztecAddress.fromStringUnsafe(recipient), amount, nonce)
+		.request()
+	const witness = await wallet.createAuthWit(ownerAddr, { caller: senderAddr, call: exec.calls[0] })
+	const payload = { calls: exec.calls, authWitnesses: [witness], capsules: [], extraHashedArgs: [] }
+	// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
+	return wallet.sendTx(payload as any, { ...sendOpts(senderAddr), additionalScopes: [ownerAddr] } as any)
+}
+
+/** The default transfer, settling on its receipt rather than on submission. */
+async function sendAwaitingReceipt() {
+	const wallet = getWallet()!
+	const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
+	// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
+	return wallet.sendTx(exec as any, sendOpts(fromAddr, { awaitReceipt: true }) as any)
+}
+
+const NAMED_SENDS: ReadonlyArray<readonly [testId: string, send: () => Promise<unknown>]> = [
+	["pg-btn-sendTx-wait", sendAwaitingReceipt],
+	["pg-btn-sendTx-onBehalf", sendOnBehalf],
+	["pg-btn-sendTx-appSponsored", sendAppSponsored],
+]
+
 export function bindTransactions(root: HTMLElement): void {
-	// All sendTx buttons below use `wait: "NO_WAIT"` so the dApp's promise
-	// settles immediately after the wallet submits the tx (txHash + offchain
-	// data) rather than blocking on `node.getTxReceipt()`. Playground tests
-	// are popup-shape — they assert the popup flow + dApp callback, NOT
-	// receipt mining. Without NO_WAIT the dApp blocks on chain mining, which
-	// on heavy CI shards (shard 3 after fee-methods's 4 FJ transfers) takes
-	// >180s and exceeded the test budget repeatedly.
+	// Every button but `pg-btn-sendTx-wait` passes `wait: "NO_WAIT"`, so the dApp's promise settles
+	// once the wallet submits: these are popup-shape tests, and a send's mining is not what they prove.
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-default"]')?.addEventListener(
 		"click",
 		guarded("sendTx", async () => {
@@ -157,6 +201,10 @@ export function bindTransactions(root: HTMLElement): void {
 			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
+
+	for (const [testId, send] of NAMED_SENDS) {
+		root.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`)?.addEventListener("click", guarded("sendTx", send))
+	}
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom"]')?.addEventListener(
 		"click",
@@ -201,11 +249,6 @@ export function bindTransactions(root: HTMLElement): void {
 			// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
 			return wallet.sendTx(execWithFeePayer, sendOpts(fromAddr) as any)
 		}),
-	)
-
-	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-appSponsored"]')?.addEventListener(
-		"click",
-		guarded("sendTx", sendAppSponsored),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-multicall"]')?.addEventListener(
