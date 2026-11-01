@@ -127,6 +127,7 @@ No working flow changes: the approval window closes at approve (F4), dApp tasks 
 | Codex fix R2 (resumed) | one finding | D14 verified: the category reaches `task.fail`, the failure log and the dApp, with no cause kept, and the `TimeoutError` identity holds in the bundle | the retrying node client's own retry logging of a node's error text: known limit #432, the owner's option B of 2026-10-15, unchanged by the wait |
 | Codex fix R3 (resumed) | clean | "Checked #432's owner decision, the unchanged arc, and existing receipt polling: the wait adds reads without widening the accepted data exposure or log levels. No new material point; high confidence." | n/a |
 | Codex corrective pass (resumed; the standard's two rules, D15) | comment findings only | precise wording on `dappWaitOpts`, the receipt helper, the faked clocks, `sendScopes`, the discoverer and `validatedSimOpts`; comments that restated code deleted; the e2e header trimmed to its constraints | rewriting comments the arc did not write |
+| Codex verification (resumed, final) | clean | "Checked all comment edits, departures, D15 and the audit row; accepted. … No new finding; high confidence." | n/a |
 
 ## Delivery
 
