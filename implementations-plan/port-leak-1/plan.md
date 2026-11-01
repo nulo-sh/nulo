@@ -1,7 +1,7 @@
 ---
 plan: port-leak-1
 tier: light
-status: plan approved (Codex final approve); arc 1 in progress
+status: delivered (PR open, merge pending); archived
 issues: "#1435"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: fcc4da219
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-01.
+- **Status:** delivered in the PR that carries this close-out, `fix(connected-apps): the detail page closes the network and account clients it opens`, against `dev`. It merges on the orchestrator's word.
+- **Shipped:** the detail page builds its network client and one account client at setup, beside the session client; a page-local `unmounted` fence stops its reads after the unmount; `onBeforeUnmount` sets the fence, then disconnects the session, network and account clients. The CAIP grouping moved to `addressesByChain` to keep `fetchAccounts` within the complexity budget. Component tests: each client disconnected once, and four leaving orders with no call after the unmount. No e2e scenario added. Closes #1435.
+- **Dispositions:** no fence was the first draft, reversed by Codex R1 (D2; Opus's dissent recorded); the real port harness instead of the fake, rejected (Opus R1); a closed known limit for D3, rejected (the Header's network chip refutes its premise).
+- **Known limits:** none.
+- **Open items:** #1486 (D3: the late redirect after leaving during the first session read; outside P94-15).
+- **Lessons:** none promoted to `lessons.md`, which is at its 8 KiB budget; its line on terminal fences already states the rule this lane applied.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # port-leak-1: the Connected app detail page closes the clients it opens
 
