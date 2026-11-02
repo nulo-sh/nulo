@@ -13,6 +13,7 @@ import {
 	collectRestoreErrors,
 	detectBackupType,
 	FULL_BACKUP_V2_TAG,
+	fullBackupFileName,
 	normalizeAllIds,
 	openFullBackupText,
 	openSelection,
@@ -736,5 +737,36 @@ describe("collectRestoreErrors — account-state top-level records (skip/violati
 			{ networkId: "n2", senders: [null, { address: "s", restoreError: "x" }], contracts: [undefined] },
 		] as unknown as unknown[])
 		expect(result).toHaveLength(2)
+	})
+})
+
+describe("fullBackupFileName", () => {
+	/** Runs `body` with the process's time zone set to `zone`, the way a person's machine sets it. */
+	function inZone(zone: string, body: () => void) {
+		const before = process.env.TZ
+		process.env.TZ = zone
+		try {
+			body()
+		} finally {
+			if (before === undefined) delete process.env.TZ
+			else process.env.TZ = before
+		}
+	}
+
+	it("names the file by the local date, never the UTC one, and carries no profile name", () => {
+		inZone("Pacific/Auckland", () => {
+			const evening = new Date(Date.UTC(2026, 10, 2, 20, 30))
+			expect([evening.getUTCDate(), evening.getDate()]).toEqual([2, 3])
+			expect(fullBackupFileName(evening)).toBe("nulo-backup-2026-11-03.txt")
+		})
+		inZone("America/Los_Angeles", () => {
+			const morning = new Date(Date.UTC(2026, 10, 3, 3, 0))
+			expect([morning.getUTCDate(), morning.getDate()]).toEqual([3, 2])
+			expect(fullBackupFileName(morning)).toBe("nulo-backup-2026-11-02.txt")
+		})
+	})
+
+	it("pads the month and day to two digits", () => {
+		inZone("UTC", () => expect(fullBackupFileName(new Date(Date.UTC(2027, 0, 5, 12)))).toBe("nulo-backup-2027-01-05.txt"))
 	})
 })

@@ -26,7 +26,8 @@ import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityT
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+import { isNewPasswordValid } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 import { leaveFor } from "@/utils/page-back"
 const appStore = useAppStore()
 

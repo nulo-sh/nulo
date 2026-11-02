@@ -3,7 +3,7 @@
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import UnlockMethodChoice from "@/components/composite/import/UnlockMethodChoice.vue"
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
-import { newPasswordHint } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
 /**

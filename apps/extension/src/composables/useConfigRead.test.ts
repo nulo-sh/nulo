@@ -4,21 +4,19 @@ import { describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/services/config/client"
 import { useConfigRead } from "./useConfigRead"
 
-/** A config client whose first request opens the port, as the real client's does; `reconnect` is a
- *  worker restart: the port drops, the pending reads reject and the client opens it again. */
+/** A config client whose first request opens the port, as the real client's does. The reconnect
+ *  rule itself is `createReconnectRead`'s, tested beside it. */
 function harness(fetchImpl?: () => Promise<string>) {
 	const config = { onConnected: new EventHandler<void>(), onUpdate: new EventHandler<ConfigProp>() }
 	let open = false
 	const reads: PromiseWithResolvers<string>[] = []
-	const request = () => {
-		if (open) return
-		open = true
-		config.onConnected.invoke()
-	}
 	const fetch = vi.fn(
 		fetchImpl ??
 			(() => {
-				request()
+				if (!open) {
+					open = true
+					config.onConnected.invoke()
+				}
 				const read = Promise.withResolvers<string>()
 				reads.push(read)
 				return read.promise
@@ -31,19 +29,14 @@ function harness(fetchImpl?: () => Promise<string>) {
 		fetch,
 		land,
 		reads,
-		request,
 		read: reader.read,
 		dispose: reader.dispose,
 		update: (key: string) => config.onUpdate.invoke({ key, value: true } as ConfigProp),
-		reconnect() {
-			for (const read of reads) read.reject(new Error("disconnected"))
-			config.onConnected.invoke()
-		},
 	}
 }
 
 describe("useConfigRead", () => {
-	test("the mount's read opens the port and reads once", async () => {
+	test("the mount's read opens the port and lands once", async () => {
 		const h = harness()
 		void h.read()
 		h.reads[0].resolve("a")
@@ -52,37 +45,19 @@ describe("useConfigRead", () => {
 		expect(h.land).toHaveBeenCalledExactlyOnceWith("a", expect.any(Function))
 	})
 
-	test("another request that opens the port first in the mount step adds no read", async () => {
-		const h = harness()
-		h.request()
-		void h.read()
-		await flushPromises()
-		expect(h.fetch).toHaveBeenCalledTimes(1)
-	})
-
-	test("every later open reads again", async () => {
+	test("a reconnect reads again, and only the newest read lands", async () => {
 		const h = harness()
 		void h.read()
-		h.reads[0].resolve("a")
 		h.config.onConnected.invoke()
-		h.reads[1].resolve("b")
+		h.reads[1].resolve("new")
+		await flushPromises()
+		h.reads[0].resolve("old")
 		await flushPromises()
 		expect(h.fetch).toHaveBeenCalledTimes(2)
-		expect(h.land).toHaveBeenLastCalledWith("b", expect.any(Function))
+		expect(h.land).toHaveBeenCalledExactlyOnceWith("new", expect.any(Function))
 	})
 
-	test("a read the drop rejected lands nothing, and the reconnect's read lands", async () => {
-		const h = harness()
-		void h.read()
-		h.reconnect()
-		await flushPromises()
-		expect(h.land).not.toHaveBeenCalled()
-		h.reads[1].resolve("b")
-		await flushPromises()
-		expect(h.land).toHaveBeenCalledExactlyOnceWith("b", expect.any(Function))
-	})
-
-	test("a read the drop rejected before the open was announced reads again on the next open", async () => {
+	test("a failed fetch lands nothing, and the first open reads again", async () => {
 		const reads: PromiseWithResolvers<string>[] = []
 		const h = harness(() => {
 			const read = Promise.withResolvers<string>()
@@ -92,22 +67,11 @@ describe("useConfigRead", () => {
 		void h.read()
 		reads[0].reject(new Error("disconnected"))
 		await flushPromises()
+		expect(h.land).not.toHaveBeenCalled()
 		h.config.onConnected.invoke()
 		reads[1].resolve("b")
 		await flushPromises()
-		expect(h.fetch).toHaveBeenCalledTimes(2)
 		expect(h.land).toHaveBeenCalledExactlyOnceWith("b", expect.any(Function))
-	})
-
-	test("an older read that answers last is ignored", async () => {
-		const h = harness()
-		void h.read()
-		h.config.onConnected.invoke()
-		h.reads[1].resolve("new")
-		await flushPromises()
-		h.reads[0].resolve("old")
-		await flushPromises()
-		expect(h.land).toHaveBeenCalledExactlyOnceWith("new", expect.any(Function))
 	})
 
 	test("an update during the read is reported for its key only", async () => {
@@ -130,12 +94,33 @@ describe("useConfigRead", () => {
 		expect(h.land.mock.calls[0][1]("theme")).toBe(false)
 	})
 
+	test("an update during a superseded read is not reported to the newest", async () => {
+		const h = harness()
+		void h.read()
+		h.update("theme")
+		h.config.onConnected.invoke()
+		h.reads[1].resolve("b")
+		await flushPromises()
+		expect(h.land).toHaveBeenCalledExactlyOnceWith("b", expect.any(Function))
+		expect(h.land.mock.calls[0][1]("theme")).toBe(false)
+	})
+
 	test("a fetch that throws synchronously ends the read", async () => {
 		const h = harness(() => {
 			throw new Error("Failed to connect")
 		})
 		await expect(h.read()).resolves.toBeUndefined()
 		expect(h.land).not.toHaveBeenCalled()
+	})
+
+	test("a land that throws rejects the read", async () => {
+		const h = harness()
+		h.land.mockImplementation(() => {
+			throw new Error("land threw")
+		})
+		const read = h.read()
+		h.reads[0].resolve("a")
+		await expect(read).rejects.toThrow("land threw")
 	})
 
 	test("a read in flight at dispose never lands", async () => {
@@ -157,11 +142,5 @@ describe("useConfigRead", () => {
 		expect(h.fetch).toHaveBeenCalledTimes(1)
 		expect(removed.update).toHaveBeenCalledTimes(1)
 		expect(removed.connected).toHaveBeenCalledTimes(1)
-	})
-
-	test("dispose twice is safe", () => {
-		const h = harness()
-		h.dispose()
-		expect(() => h.dispose()).not.toThrow()
 	})
 })
