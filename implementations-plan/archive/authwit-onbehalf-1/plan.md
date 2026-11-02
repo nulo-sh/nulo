@@ -108,7 +108,7 @@ Sign-off: decision page 95, P95-07, signed 2026-11-02 at 17:02 UTC: "Drop reques
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `c4173bb8e`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `c4173bb8e`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff c4173bb8e...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, with one Opus 5.5 diff review (`general-purpose`) beside round 1. Prompts under `~/.cache/nulo-backlog/authwit-onbehalf-1/`. Hard stop at three rounds; log each in `lessons/phase-1.md` and § Audit verdicts.
 - Approval boundary (a plan change; stop): any screen change beyond § UI impact, a new log line, a signature as any account but the sender, a change to the preview's subset rule.
 - Close-out: the Outcome; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done authwit-onbehalf-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/authwit-onbehalf-1/plan.md`.

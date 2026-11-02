@@ -8,4 +8,3 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [fu2-onboarding-1](fu2-onboarding-1/plan.md) — approved, arc 1 next; arcs 2 and 3 wait on OA-1 to OA-4 — a phrase check, a plain Ready line, Back that stays on Ready, Create profile, one passkey text, a popup that points to the setup tab (#1511-#1516)
 - [fu2-send-1](fu2-send-1/plan.md) — arc 1 in review; arcs 2 and 3 wait on OA-1 to OA-3 and A4 — Send's origin side, a pasted address, Holdings' split lines, the priority outline, sends in progress on Home and History (#1517-#1522)
 - [fu2-copy-1](fu2-copy-1/plan.md) — arc 1 in review, arc 2 waits on OA-2, arc 3 on OA-1 — “1 token”, “Already exists”, Strict mode's line, the store note; the website row; the Glossary's new words (#1505-#1510)
-- [authwit-onbehalf-1](authwit-onbehalf-1/plan.md) — arc 1 in review — discovery signs and lists only requests on behalf of the sending account (#1491)
