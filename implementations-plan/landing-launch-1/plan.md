@@ -1,7 +1,7 @@
 ---
 plan: landing-launch-1
 tier: light
-status: plan approved (final Codex pass); arc 1 in progress
+status: completed
 issues: none (the owner's request of 2026-11-02 in chat)
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,16 @@ eli5_mode: skipped (orchestrator-owned)
 base: origin/dev at 1e6c5bc1f; standard: implementations-plan/README.md § Post-implementation standard at 1e6c5bc1f
 budget: recon 1 explorer (sonnet); one Codex gpt-6.1-sol high audit round trip and an Opus Plan leg; final fresh Codex pass
 ---
+
+## Outcome
+
+- **Date:** 2026-11-02. **Status:** completed; delivered by draft PR #1540 to `dev` (closes no issue: the owner's chat request). It merges only on the owner's word, after the owner signs the copy table in its body.
+- **Shipped:** #49's install markup restored over the unchanged `mountInstall` (the hero, the nav on both pages, the closing row); both signup forms ask for updates, the availability line is gone, and `/subscribed` no longer promises a launch email; tests hold every store link to `STORES` and `STORES` to Terms § 1; `og.png` recaptured; one CSS rule (D8); two dead rules deleted.
+- **Left out:** footer store links (OA-5); the website privacy notice's launch-email wording (a legal page, #1541); every copy and layout choice beyond the proposal waits on the owner's edits on #1540 (OA-1 to OA-7, OA-9).
+- **Known limits:** none (the plate shift on narrowing and the desktop-site phone are #49's accepted design, under Good enough).
+- **Open items:** #1541.
+- **Lessons:** none promoted: the tool behaviour found (Puppeteer's Firefox has no media emulation) is a scratch-script detail, and `lessons.md` is at its 8 KiB budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; do not run them.
 
 # Landing for launch: store buttons first, the signup for updates
 
