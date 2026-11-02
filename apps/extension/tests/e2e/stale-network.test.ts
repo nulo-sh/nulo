@@ -14,12 +14,14 @@
  *      back at their true addresses, the hidden one hidden, the imported one at its address with
  *      a key that opens.
  * S1c  Mainnet (A6): one button, no reset, and leaving it writes nothing to Mainnet's rows.
- * S1d  R2: deleting, from Networks, the network that holds the new chain brings back A1's reset.
+ * S1d  R2: deleting, from Networks, the network that holds the new chain brings back A1's reset,
+ *      which fits 240 px with a 25-character network name.
  */
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { clickByTestId, type ExtensionContext, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
 import { switchToNetwork } from "./fixtures/networks"
 import {
@@ -32,6 +34,8 @@ import {
 	readSessionRow,
 	waitForToast,
 } from "./fixtures/helpers"
+import { callService } from "./fixtures/session"
+import { expectFitsNarrow } from "./fixtures/type-roles"
 import { confirmImport, exportAccountBody, exportImportedAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "./helpers/account-io"
 import {
 	addNetwork,
@@ -49,6 +53,9 @@ import {
 	traceTakeover,
 } from "./helpers/stale-network"
 import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
+
+/** The longest one-word name the network name field takes. */
+const LONG_NAME = "W".repeat(25)
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
 
@@ -205,11 +212,13 @@ describe("stale network", () => {
 		expect(await snapshotChain(page, CHAIN_IDS.MAINNET, networkId)).toEqual(mainnetBefore)
 	})
 
-	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset", {
+	test("S1d R2: deleting the network that holds the new chain, from Networks, brings back A1's reset, which fits 240 px with a long name", {
 		timeout: 180_000,
 		retry: 0,
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openOnTestnet(ctx)
+		const testnet = await readNetwork(page, "testnet")
+		await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [testnet.id, LONG_NAME])
 		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		await seedStaleNetwork(page, "network-reset", { networks })
@@ -233,5 +242,6 @@ describe("stale network", () => {
 		await deleteNetworkRow(page, "My Testnet")
 		await navigateByHash(page, "#/popup/general", 15_000)
 		expect(await takeoverScreen(page, "network-reset", 15_000)).toBe("network-reset")
+		await expectFitsNarrow(page, "A1 on a network with a 25-character name")
 	})
 })
