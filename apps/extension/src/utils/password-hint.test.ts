@@ -47,6 +47,7 @@ describe("new-password hint", () => {
 		["qwertyuiop", H.common],
 		["Password1!", H.common],
 		["longenough", H.guessable],
+		// Eight unparsed characters estimate 10^8 + 1 guesses, under the good band's 10^8 + 5.
 		["q8Rt!vP3", H.guessable],
 		// A common password's variant past 10^8 guesses leaves the weak band.
 		["TestPassword123!", H.good],

@@ -12,3 +12,4 @@
 - 2026-11-02 final gates on the merged head: lint 0, typecheck:all 0, test:all 0 (extension 954 files), armed builds 0 (hint chunk unreachable statically), smoke e2e Chrome 16/16 (95.5 s), Firefox 16/16 (134.0 s), check:plans 0.
 - 2026-11-02 owner answered: OA-1 = A1, OA-2 = A, OA-3 = B; origin/dev merged.
 - 2026-11-02 phase 3 green: lint 0, typecheck:all 0, unit + component 71 files / 1510 tests at retry 0, production build notices without `language-en` (hint chunk 461 kB), armed builds 0, smoke Chrome 23/23 (94.8 s), Firefox 23/23 (144.3 s); captures retaken; #1561 open, #1562 known limit.
+- 2026-11-02 phase 3 review: Codex conditional approve, Opus conditional approve; doc and comment fixes applied; focused tests 36/36.

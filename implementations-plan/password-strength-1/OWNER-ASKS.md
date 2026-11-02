@@ -51,7 +51,7 @@ B is a conservative product heuristic, not a measured cracking time: a stolen wa
 - B2: B1, but a strong password over 24 characters keeps "Long enough. Don't forget it." (two sentences, against the one-sentence rule).
 - B3: B1 with one weak line and no reason ("Easy to guess"): 5 lines instead of 9.
 
-**Ships now**: B1, in the open PR, held for sign-off. Captures of each line on Create profile (light, Chrome) and the longest line on Change password are in the PR body.
+**Built when posed**: B1, in the open PR, held for sign-off. Captures of each line on Create profile (light, Chrome) and the longest line on Change password are in the PR body.
 
 ## OA-2: where the set shows
 
@@ -61,7 +61,7 @@ B is a conservative product heuristic, not a measured cracking time: a stolen wa
 - A (recommended): all seven show the new set. Each one sets a password that protects encrypted data an attacker can guess offline (a stolen profile, an exported file).
 - B: only Create profile and Change password. The other five keep the length-only line, so `aaaaaaaa` still reads "Strong password" there, through a second hint function.
 
-**Ships now**: A.
+**Built when posed**: A.
 
 ## OA-3: the English word list's data licence
 
@@ -71,5 +71,5 @@ B is a conservative product heuristic, not a measured cracking time: a stolen wa
 - A (recommended): ship the list with its notice.
 - B: leave it out. Single English words then read strong; a closed `known-limit` issue records it.
 
-**Ships now**: A.
+**Built when posed**: A.
 

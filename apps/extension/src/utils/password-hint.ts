@@ -31,7 +31,7 @@ const REASON_BY_WARNING: Readonly<Record<string, WeakReason | undefined>> = {
 
 /**
  * zxcvbn's own bands, which its warnings follow: it warns only in the weak band, scores 0 to 2.
- * No language word list: a single long English word reads strong until one ships.
+ * No language word list, so a single long English word reads strong.
  */
 const ESTIMATOR_OPTIONS = { dictionary, graphs: adjacencyGraphs }
 

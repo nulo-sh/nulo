@@ -9,3 +9,4 @@
 - Smoke e2e at retry 0, `registration`, `onboarding-tab`, `onboarding-import`, `security`, `settings-routes`: Chrome 23/23 (94.8 s), Firefox 23/23 (144.3 s). No scenario added.
 - Captures retaken on Chrome (scratch spec, deleted after): the guessable row now uses `longenough` and the good row `kettle-violet`; five PNGs changed bytes, four and the Change password capture are byte-identical. Chrome timing: realistic 6-12 ms, 128 units 38-85 ms (first check of a page 26 ms).
 - Issues: #1561 (open, `enhancement`, `blocked:external`) for the English list; #1562 (`known-limit`, closed as not planned) for non-Latin input. Both deduped first.
+- Review: Codex one round and Opus, both conditional approve, doc-level only; fixed (plan § Audit verdicts). Focused tests after the fixes: 2 files, 36 tests, green at retry 0.

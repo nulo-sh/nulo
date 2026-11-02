@@ -1,7 +1,7 @@
 ---
 plan: password-strength-1
 tier: light
-status: arc 1 in review (PR open), merge waits on the owner's sign-off of OA-1 to OA-3
+status: arc 1 in review (PR open); OA-1 to OA-3 answered 2026-11-02; merge is the orchestrator's call
 issues: "#1401 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -81,7 +81,7 @@ The owner, #1401 under `## Decision` (page 94, P94-08, signed 2026-11-01), optio
 
 - **Before**: an 8+ matching pair reads "Strong password", over 24 graphemes "Long enough. Don't forget it.", `aaaaaaaa` included.
 - **After**: the same place and style show one of OA-1's nine lines by zxcvbn's score; under-8 and mismatch lines are unchanged; "Long enough. Don't forget it." is retired; no colour, layout or button change. On the seven surfaces of F2.
-- **Sign-off** (2026-11-02, in chat): OA-1 = A1, the owner: "Sounds like zxcvbn's are the best? is that a well-used package / standard? I'd go with something utterly tested already." OA-2 = A, the owner: "Yes, all seven." OA-3 = B changes no screen (D10).
+- **Sign-off** (2026-11-02, in chat): OA-1 = A1, the owner: "Sounds like zxcvbn's are the best? is that a well-used package / standard? I'd go with something utterly tested already." OA-2 = A, the owner: "Yes, all seven." OA-3 = B adds no copy or layout; one long English word reads strong, as option B stated (D10).
 
 ## Phases
 
@@ -110,7 +110,7 @@ The owner, #1401 under `## Decision` (page 94, P94-08, signed 2026-11-01), optio
 |---|---|---|---|---|---|
 | 1 | 1-3 | `worktree-password-strength-1` | `dev` | `feat(password): the new-password hint measures guessability, not only length` (79) | #1401 |
 
-Merge `origin/dev` before the PR; `bun run check:plans` after. Open ready, without labels. Body: the owner's decision quoted; the set with its bands (OA-1), surfaces (OA-2) and data licence (OA-3), with the owner's answers quoted; the captures; every gate with its outcome; each browser's smoke wall-clock (no scenario added); `Closes #1401`. Post the set on #1401 under `## Proposed wording`.
+Merge `origin/dev` before the PR; `bun run check:plans` after. Open ready, without labels. Body: the owner's decision quoted; the set with its bands (OA-1), surfaces (OA-2) and data licence (OA-3), with the owner's answers quoted; the captures; every gate with its outcome; each browser's smoke wall-clock (no scenario added); `Closes #1401`. Arc 1 posted the set on #1401 under `## Proposed wording`.
 
 ## Post-implementation
 
@@ -134,6 +134,8 @@ The contract is this plan plus `implementations-plan/README.md` § Post-implemen
 **Implementation review, round 1** (Codex gpt-6.1-sol high: `conditional approve`; Opus general-purpose: `conditional approve`, D9 accepted). Verified and fixed: the accented rows had lost their combining mark (`e\u0301` restored, both tests); D9 claimed both browsers met 100 ms at 128 units (now: 100 ms realistic, 300 ms at 128); the warning table `satisfies` the library's warning-key type (a misspelled key now fails the typecheck, proven); comments cut to the invariants (the bands, the English subset, the factory lifetime, the one run per matching pair); the Architecture bullet matched to the private `strengthHint`. Kept under D7: the six-row tables on both forms (the brief asks per-tier values on each).
 
 **Implementation review, round 2** (Codex, resumed, verifying): `approve`. The fixes verified (combining-mark rows, the 100/300 ms budgets, the typed table with its TS2561 on a typo, the comments); no regression.
+
+**Phase 3 review** (Codex gpt-6.1-sol high, one round: `conditional approve`; Opus general-purpose: `conditional approve`). Both verified the library's default bands (1e3/1e6/1e8/1e10, DELTA 5), a line for every weak score, no retained password, no reachable `language-en` import (the Bun store still holds the package until a fresh install; nothing imports it), the one-line manifest removal and every re-pinned vector. Fixed: the stale front-matter status (both); `Ships now` read as current in OWNER-ASKS (now `Built when posed`); "OA-3 changes no screen" (now: no copy or layout, one long English word reads strong); the Delivery step's tense; a forward-looking comment; `q8Rt!vP3`'s edge stated (10^8 + 1 guesses against the good band's 10^8 + 5). No material finding, so no second round.
 
 ## Seeds
 
