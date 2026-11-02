@@ -12,7 +12,7 @@
  * "absurd" differs by four orders of magnitude between a stablecoin and AZTEC.
  */
 
-import { PRICE_IDS, type TokenListEntry } from "@nulo/token-list"
+import { PRICE_IDS, type TokenListEntry, tokenKey } from "@nulo/token-list"
 
 export type PriceMapEntry = {
 	coingeckoId: string
@@ -20,7 +20,7 @@ export type PriceMapEntry = {
 	sanity: { min: number; max: number }
 }
 
-/** `${chainId}:${lower-case contract}` → the price id the signed list names for that token. */
+/** `tokenKey` → the price id the signed list names for that token. */
 export type PricedTokens = Readonly<Record<string, string>>
 
 function entryFor(coingeckoId: string): PriceMapEntry | undefined {
@@ -41,7 +41,7 @@ export const FEE_JUICE_ENTRY: PriceMapEntry = { coingeckoId: "aztec", sanity: PR
 const E2E_SANDBOX_PRICE_MAP = (import.meta.env.VITE_NULO_E2E_PRICE_MAP ?? "") === "1"
 
 export function pricedTokensOf(entries: readonly TokenListEntry[]): PricedTokens {
-	return Object.fromEntries(entries.flatMap((e) => (e.priceId === undefined ? [] : [[`${e.chainId}:${e.address}`, e.priceId]])))
+	return Object.fromEntries(entries.flatMap((e) => (e.priceId === undefined ? [] : [[tokenKey(e.chainId, e.address), e.priceId]])))
 }
 
 export function getPriceMapEntry(priced: PricedTokens, chainId: number, contract: string): PriceMapEntry | undefined {
@@ -53,7 +53,7 @@ export function getPriceMapEntry(priced: PricedTokens, chainId: number, contract
 		// fails fast if the env var is set at all.
 		return { ...entryFor("usd-coin"), e2eStamp: "NULO_E2E_PRICE_MAP_BUILD_STAMP" } as PriceMapEntry
 	}
-	const key = `${chainId}:${contract.toLowerCase()}`
+	const key = tokenKey(chainId, contract)
 	return Object.hasOwn(priced, key) ? entryFor(priced[key]) : undefined
 }
 

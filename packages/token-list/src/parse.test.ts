@@ -11,6 +11,7 @@ import {
 	parsePayload,
 	selectEntries,
 	type TokenListEntry,
+	tokenKey,
 } from "./parse"
 import { freshKey } from "./test-keys"
 
@@ -140,6 +141,20 @@ describe("payload", () => {
 		expect(checkSource({ tokens: [], flagged: [flag(9n)] })).toEqual({ tokens: [], flagged: [flag(9n)] })
 		expect(() => checkSource({ tokens: [entry(0)], sequence: 5 })).toThrow(PayloadError)
 		expect(() => checkSource({ tokens: [entry(0, { priceId: "dogecoin" })] })).toThrow(PayloadError)
+	})
+})
+
+describe("tokenKey", () => {
+	const DIGITS = "0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+
+	test.each([
+		["a list address", 1, `0x${DIGITS}`, `1:0x${DIGITS}`],
+		["a row in upper case", 1, `0x${DIGITS.toUpperCase()}`, `1:0x${DIGITS}`],
+		["an upper-case prefix", 1, `0X${DIGITS.toUpperCase()}`, `1:0x${DIGITS}`],
+		["a row without 0x, which only the flag match restores", 1, DIGITS.toUpperCase(), `1:${DIGITS}`],
+		["the local chain, id 0", 0, `0x${DIGITS}`, `0:0x${DIGITS}`],
+	])("%s", (_, chainId, contract, key) => {
+		expect(tokenKey(chainId, contract)).toBe(key)
 	})
 })
 

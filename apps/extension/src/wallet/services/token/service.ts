@@ -25,6 +25,7 @@ import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batch
 import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
+import { tokenKey } from "@nulo/token-list"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
@@ -911,8 +912,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	private async findToken(profileId: string, chainId: number, contract: string): Promise<Token | undefined> {
 		const tokens = await this.tokens.getValues()
 		// A row stored or restored in another spelling is still this contract.
-		const key = contract.toLowerCase()
-		return tokens.find((token) => token.profileId === profileId && token.chainId === chainId && token.contract.toLowerCase() === key)
+		const key = tokenKey(chainId, contract)
+		return tokens.find((token) => token.profileId === profileId && tokenKey(token.chainId, token.contract) === key)
 	}
 
 	/** Token ids harvested from RAW rows (codec-hidden included) owned by

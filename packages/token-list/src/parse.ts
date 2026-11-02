@@ -98,7 +98,11 @@ function checkPriceId(value: unknown, path: string, mode: ParseMode): string | u
 	return value as string
 }
 
-const pairKey = (pair: TokenListPair) => `${pair.chainId}:${pair.address}`
+/** `chainId:contract` with the hex lower-cased; validates nothing and adds no missing `0x`. A stored
+ *  shape: the seeder persists it as a marker key. */
+export const tokenKey = (chainId: number, contract: string): string => `${chainId}:${contract.toLowerCase()}`
+
+const pairKey = (pair: TokenListPair) => tokenKey(pair.chainId, pair.address)
 
 function checkPair(f: Fields, path: string): TokenListPair {
 	ensure(isIntIn(f.chainId, 0, MAX_UINT32), `${path}.chainId`)

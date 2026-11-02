@@ -5,6 +5,7 @@
  * its token row sorts: adding the defaults never shows a row and then takes it away. Matched by
  * contract, never by symbol.
  */
+import { tokenKey } from "@nulo/token-list"
 import { HOME_TOKEN_ROWS, type OrderableRow, capTokenRows } from "@/utils/token-order"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { SeedStatus, SeedStatusEntry } from "@/wallet/services/token/spec"
@@ -91,7 +92,7 @@ export const isDefaultPending = (slot: DefaultSlot) => {
 	return entry !== undefined && isSeedWorking(entry.status)
 }
 
-export const defaultKey = (entry: Pick<SlotSeed, "chainId" | "contract">) => `${entry.chainId}:${contractOf(entry.contract)}`
+export const defaultKey = (entry: Pick<SlotSeed, "chainId" | "contract">) => tokenKey(entry.chainId, entry.contract)
 
 /** Home's cap, except that a default which stopped is never hidden: Home is the only place that
  *  shows it, with its reason and its Retry, so past the cap it follows the capped rows, and once

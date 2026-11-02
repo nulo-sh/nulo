@@ -21,6 +21,7 @@ export {
 	PayloadError,
 	parsePayload,
 	selectEntries,
+	tokenKey,
 	type TokenListEntry,
 	type TokenListPair,
 	type TokenListPayload,
