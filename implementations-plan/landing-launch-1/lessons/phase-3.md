@@ -6,3 +6,8 @@
 - Narrowing after first paint moves the centred plate: its top is 158.5 px in the fallback and 191.2 px when detected, 33 px (Good enough).
 - Light and dark captures hash-equal at 1280 and 390 px, top and `#get`, before and after.
 - `og.png` recaptured from the 820 px hero at a 1562 px viewport: 1200 × 630, chunks `IHDR`, `IDAT`, `IEND`, 135,980 bytes. The old one still showed the hero of two changes ago ("See what the camera sees", the hero's small print).
+
+## Codex fix loop, round 1 (with the Opus diff review)
+
+- Codex (Sol, high, session over `1e6c5bc1f..HEAD` plus `capture.ts`): `no material findings`. Two lows adopted: the Terms test's `/[.,;]+$/` retries quadratically on a punctuation run (now one character, `/[.,;]$/`); the README's install-dom row omitted `hidden`. A stale comment in the scratch script (the preview CSP allows inline styles) was deleted.
+- Opus (`general-purpose`): `no material findings`. Lows adopted: the README placed `#get`'s form under the store buttons; `.signup p.signup__avail` and `.soon` matched nothing and are deleted; the fallback span's attributes are now pinned (a stray `hidden` would have hidden it from the visitors it serves); the `scroll-margin-top` note names the links shared while the nav pointed at `#email-hero`. Noted under OA-4: the no-detection Tab path from "Get Nulo" meets the form before the store row.

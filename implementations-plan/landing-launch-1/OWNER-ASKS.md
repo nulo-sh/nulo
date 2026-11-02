@@ -25,6 +25,7 @@ The owner's words of 2026-11-02 sign the change itself (store buttons back as th
 - **Ships now**: in the existing closing row under the form plate, before "Source on GitHub" (the brief: "the bottom `cta` block gets the same buttons").
 - **Option**: the row above the form plate, so the closing section leads with the store, as the hero does.
 - **Recommendation**: the option; the primary action comes first in both places. Shipped literal because the order is a layout call.
+- Keyboard note: in the no-detection state the nav's "Get Nulo" jumps to `#get`, so the next Tab stop is the email field, then the store links. The option fixes that too.
 
 ## OA-5. Footer store links
 

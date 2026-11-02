@@ -131,6 +131,6 @@ it("names the listings the Terms name in § 1", () => {
 	const urls = section
 		.split(/\s+/)
 		.filter((word) => word.startsWith("https://"))
-		.map((word) => word.replace(/[.,;]+$/, ""))
+		.map((word) => word.replace(/[.,;]$/, ""))
 	expect(new Set(urls)).toEqual(new Set(STORE_URLS))
 })

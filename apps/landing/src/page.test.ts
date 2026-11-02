@@ -142,7 +142,9 @@ describe("the install links on the home page", () => {
 		const detected = element(block, "span", "data-install-detected")
 		expect(startTags(detected, "span")).toEqual([{ "data-install-detected": "", hidden: "" }])
 		expect(text(detected)).toBe("· about 30 seconds · also on Firefox")
-		expect(text(element(block, "span", "data-install-fallback"))).toBe("· Nulo runs on desktop Chrome or Firefox")
+		const fallback = element(block, "span", "data-install-fallback")
+		expect(startTags(fallback, "span")).toEqual([{ "data-install-fallback": "" }])
+		expect(text(fallback)).toBe("· Nulo runs on desktop Chrome or Firefox")
 	})
 
 	it("hero: the signup form comes after the store links", () => {
