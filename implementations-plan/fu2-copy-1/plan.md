@@ -114,9 +114,14 @@ Simpler alternatives rejected: string edits at each site (the brief asks for one
 - Holdings' and Import token's before pictures are the lab's own frames: on the base build the network harness read "Prices unavailable" with no seeded quote. Disconnect all at one session rests on its component test.
 - `tests/e2e/helpers/profile-chaos/model.ts` cites `accounts/import.vue` by line number; the added import moved it one down.
 
-## Phase 3 (arc 2, on OA-2) and Phase 4 (arc 3, on OA-1)
+## Phase 3 (arc 2, on OA-2) and Phase 4 (arc 3, on OA-1) ✓
 
 Each makes its decision (D7, D8) with its tests, red on the base copy. **Gate:** Phase 1's commands, then Phase 2's whole gate (steps 1-4: `audit:vue`, the full smoke suite on Chrome and Firefox); before/after captures of the surface. `tests/e2e/security-backup.test.ts` (arc 2) and `tests/e2e/tooltips-glossary.test.ts tests/e2e/settings-proving.test.ts` (arc 3) serve as quick checks while working.
+
+**Arcs 2 and 3 as built** (`fu2-copy-1-a2`). Tests red (`f66a497d6`, `245abc5af`), then green (`af24cd686`, `1897681e3`); Phase 1's commands green after each arc. Phase 2's whole gate ran once, on the final code head: both arcs land in one PR, so an intermediate head never lands alone.
+- D7: the external click row's label is read at render, not in a `computed`, since `useSlots()` is not reactive (Opus r1). In Chrome its target is named "How Aztec works 1 min · website"; the row is 72 px and the title whole at 360 px.
+- D8: a section's testid joins a multi-word title with a hyphen (`glossary-section-your-wallet`); the four existing testids are unchanged. `proving.test.ts`'s note assertion starts after "Proofs", since the term's hidden definition sits between; the new test pins the word, its key and its definition.
+- Pictures: `screenshots/{get-started-360,glossary,proving}-{before,after}.png`, Get started taken once the funds have loaded (before that the card is greyed).
 
 ## Delivery
 
@@ -143,6 +148,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a19d6f) | **approve** | no finding; the security capture's re-take judged in scope | none |
 | arc 1 r1 | Opus 5.5 (general-purpose) | conditional approve | New sender's duplicate test; the constant's comment; "secure" and "unlock" as synonyms; the store address disclosed; the PR claims D2 only for "Already exists" | an owner ask on the synonyms (they restore the base results and are never shown; Codex agreed); re-rendering all five store images |
 | arc 1 r2 | Codex, resumed | **approve** | the comment's wording | none |
+| arcs 2-3 r1 | Codex, gpt-6.1-sol (session 01a19df8) | **approve** | no finding: all 30 new strings match OA-1; no existing `SettingItem` caller changes | none |
+| arcs 2-3 r1 | Opus 5.5 (general-purpose) | **approve** | two nits: the comment's "never its title" (about.vue's "Nulo Website"); the slot read in a `computed` | none |
+| arcs 2-3 r2 | Codex, resumed | **approve** | the nits' commit verified, no regression | none |
+| net | Codex, fresh (session 01a19e0a), arc 1's squash `9cb340363` plus this branch | **approve** | the `SettingItem` label comment in two lines | comment nits on arc 1's merged files (settled there; the "Utils" import header is CLAUDE.md's SFC convention); strict mode's line held twice, in `settings-search.ts` and the Glossary, as two signed texts each pinned by its own test (no wrong output) |
 
 **Owner answers** (decision page 98, signed 2026-11-02 at 19:39 UTC, no note): OA-2 = option B, "“1 min · website” moves under the title as the row's second line, drawn as row 1's “The 24 words that restore this wallet”; the mark takes the chevron's place. The title stays whole; the row is 16 px taller. The words are the pick's."; OA-1 = option A, the ten entries as drafted with both alternatives ("The 24 words that restore your accounts, except the ones you imported."; "Your accounts, imported keys, tokens, contacts and history, in one password-protected file."), the term "Alpha", "Your wallet" first with the eight wallet words in the table's order, FPC last in Fees, Proof first in Transactions. These are the sign-off for exactly those words.
 

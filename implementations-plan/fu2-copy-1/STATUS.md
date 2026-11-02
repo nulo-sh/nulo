@@ -7,3 +7,5 @@
 - 2026-11-02: arc 1 built on `fu2-copy-1-a1`: tests red then green, D1-D6, store re-render (screenshot 4 and its security capture). Codex r1 approve; Opus r1 conditional approve, fixed; Codex r2 approve. `audit:vue` and `test:all` green; smoke on both browsers next.
 - 2026-11-02: arc 1 gate green: `audit:vue`, `test:all`, both armed builds, full smoke at retry 0 on Chrome (62 files) and Firefox (66 files), four shards each. PR next.
 - 2026-11-02: OA-1 (A) and OA-2 (B) answered on page 98; arcs 2 and 3 start on `fu2-copy-1-a2` off `dev` at `6509f2ff1`.
+- 2026-11-02: arc 2 (D7) built: tests red (`f66a497d6`), green (`af24cd686`); `lint`, `typecheck:all`, `vitest run src` (906 files) green at retry 0.
+- 2026-11-02: arc 3 (D8) built: tests red (`245abc5af`), green (`1897681e3`); `lint`, `typecheck:all` green. Codex r1 approve, Opus r1 approve (two nits, taken in `3bf5830c5`), Codex r2 approve. `audit:vue` and `test:all` green on the final code head; full smoke next.
