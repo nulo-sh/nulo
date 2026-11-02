@@ -208,7 +208,6 @@ beforeEach(() => {
 	surface.ownRoute.mockReturnValue(undefined)
 })
 
-/** The backup is made: its one button reads as the press that seals and saves it. */
 const backupMade = (wrapper: ReturnType<typeof mountPage>) =>
 	vi.waitFor(() => expect(wrapper.find("[data-testid='download-backup-btn']").text()).toBe("Download protected backup"))
 

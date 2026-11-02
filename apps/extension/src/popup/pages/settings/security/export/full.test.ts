@@ -280,7 +280,8 @@ describe("export/full.vue — re-entry latch", () => {
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		const passhash = holdEncryption()
-		// Both land before Vue re-renders the button disabled: only `isBusy` stops the second.
+		// Both land before Vue re-renders the button disabled: the first press's synchronous
+		// `encrypting` stops the second.
 		const download = downloadButton(wrapper).element as HTMLElement
 		download.click()
 		download.click()
@@ -332,11 +333,24 @@ describe("export/full.vue — what each step shows", () => {
 		for (const id of [...warnings, "backup-done-banner"]) expect(wrapper.find(`[data-testid='${id}']`).exists(), id).toBe(true)
 	})
 
-	it("a replaced key's warning shows before the press too", async () => {
-		exportFullBackupKeys.mockResolvedValue({ ...material, dekReplaced: true })
+	it.each([
+		{ banner: "backup-keys-lost-banner", file: { dekReplaced: true }, recoveryMode: false },
+		{ banner: "backup-imported-unopened-banner", file: { unopenedImportedKeys: 1 }, recoveryMode: false },
+		{
+			banner: "backup-imported-network-banner",
+			file: {
+				importedKeyRows: [{ profileId: "p1", chainId: 1337, address: "0xa", encryptedSigningKey: "sealed" }],
+				accounts: [{ profileId: "p1", chainId: 1337, address: "0xa", index: 0, type: 1, l1ChainId: 1, name: "Imp", visible: true }],
+			},
+			recoveryMode: false,
+		},
+		{ banner: "backup-chain-state-omitted-banner", file: {}, recoveryMode: true },
+	])("$banner alone shows before the press, under Backup", async ({ banner, file, recoveryMode }) => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, ...file })
 		const wrapper = mountPage()
+		if (recoveryMode) useAppStore().profile = { ...useAppStore().profile, recoveryMode } as never
 		await reachBackupReady(wrapper)
-		expect(wrapper.find("[data-testid='backup-keys-lost-banner']").exists()).toBe(true)
+		expect(wrapper.find(`[data-testid='${banner}']`).exists()).toBe(true)
 		expect(sectionLabels(wrapper)).toEqual(["Backup"])
 	})
 

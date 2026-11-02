@@ -9,7 +9,6 @@ import { newPasswordHint } from "@/utils/password"
 defineProps({
 	testid: { type: String, required: true },
 	maxLength: { type: Number, default: 128 },
-	/** Heads the repeat field with "Repeat password", which then names it. */
 	labelRepeat: { type: Boolean, default: false },
 })
 

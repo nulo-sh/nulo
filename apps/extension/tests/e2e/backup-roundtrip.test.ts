@@ -2,7 +2,7 @@
  * ENCRYPTED full-backup round-trip through the real UI — the one import leg
  * nothing else drives (`decryptBackup` had zero unit or e2e coverage):
  *
- *   export (password profile) → Protect with Password → capture the .gz
+ *   export (password profile) → Download protected backup → capture the .gz
  *   download in-page → import that .gz in a FRESH extension → wrong password rejects
  *   cleanly → right password decrypts → restore succeeds → the derived
  *   account address round-trips.

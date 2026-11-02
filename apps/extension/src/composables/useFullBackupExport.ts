@@ -376,7 +376,6 @@ async function madeInSessionStands(ctx: ExportCtx, madeIn: ProfileRunFence | nul
 
 async function runEncrypt(ctx: ExportCtx) {
 	const { state } = ctx
-	// Never mid-download: the plaintext file would land on disk while the page says it is encrypted.
 	if (ctx.disposed || state.isBusy.value || state.isDownloading.value) return
 	if (filePasswordBlocked(ctx)) return
 	state.isBusy.value = true
