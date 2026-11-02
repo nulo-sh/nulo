@@ -1,7 +1,7 @@
 ---
 plan: fu2-send-1
 tier: light
-status: arc 1 merged (#1544); arcs 2 and 3 in one PR, every ask answered and A4 approved (2026-11-02)
+status: delivered (arc 1 merged as #1544; arcs 2 and 3 and this close-out in one PR, merge pending)
 issues: "#1517, #1518, #1519, #1520, #1521, #1522, #1556, #1557"
 driver: claude-code
 claude_model: opus
@@ -16,6 +16,20 @@ post_implementation_hardening: not scheduled
 ---
 
 # fu2-send-1: Send's origin side, a pasted address, Holdings' split lines, the priority row, and sends in progress on Home and History
+
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered. Arc 1 merged as #1544; arcs 2 and 3 and this close-out are the final commits of one PR against `dev`, which merges on the orchestrator's word.
+- **Owner sign-off:** page 93's picks (2026-11-02); OA-1 to OA-3 all A and A4 approved ("The fu2-send-1 asks all A. approve A4."); P96-06 G (page 96, 18:55 UTC) and P99-01 J with the owner's note (page 99, 20:03 UTC), quoted in § UI impact.
+- **Shipped:** arc 1 (#1544): Send's opening side, a pasted address's start, one outlined priority. Arc 2: `TokenCard`'s split lines at the total's 10-character cut (Holdings, Home's list, Send's picker); Confirm reads `Estimating fee` and, 20 s into an estimate, the fee card and the review say "Taking longer than usual." with Try again; the publish strip and the token caveat in the page above the fee card, and one refusal at a time in the balance row's left slot, body and `txt-danger`, `role="alert"` and named by the input. Arc 3: the journal mirror replays events that reach it during a read (A4); one shell-owned list of sends in progress feeds a Sending toast (OA-2's rules, OA-3's forms) and History's pending rows. Closes #1519, #1521, #1522, #1556, #1557.
+- **Review loop:** plan: Codex and Opus conditional approve, folded, then Codex approve. Arc 1: Codex two rounds and Opus, folded. Arcs 2 and 3: Codex R1 changes requested and Opus changes requested, folded; Codex R2 approve (§ Panel verdicts).
+- **Gates:** lint, `typecheck:all`, `test:all`, `audit:vue` exit 0; the extension suite green after the last `dev` merge; smoke 12 files on Chrome and Firefox and seven network files on Chrome, at retry 0 ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Dispositions:** D11, D12 (the caveat's place), D13 and D14 are readings asked on the PR. The 360 and 240 px axis stays on the token-mode refusal cases, as § Phase 3 names it; jsdom lays nothing out, so the USD cases carry the width difference and the captures the layout. History's pending row has no action (D6).
+- **Known limits:** #1537 (arc 1).
+- **Open items:** #1569 (the toast's dismissal across a popup reopen, an owner decision; D14).
+- **Lessons:** none promoted; `lessons.md` is at its 8 KiB budget. The two-dot diff against a moved trunk and the smoke build's unreachable estimate stay in [lessons/phase-2.md](lessons/phase-2.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 Six signed picks from decision page 93 (first-users lab 1, signed 2026-11-02), and two Send picks the owner added to arc 2 from later pages: P96-06 (page 96, from P93-24) and P99-01 (page 99, from P93-07). No issue existed for any of them; this lane filed #1517 to #1522 and #1556, #1557, one per item, each body quoting its pick. Over the light target (150 lines) by the two picks added after approval. Recon: [recon.md](recon.md). Paths are under `apps/extension/src/` unless they name a package.
 
