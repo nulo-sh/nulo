@@ -1,7 +1,7 @@
 ---
 plan: w3-import-1
 tier: light
-status: arc 1 built, gates green; PR next
+status: completed
 issues: "#1458, #1466, #1459 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at b21fcdac8
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed, one arc as #1570.
+- **Shipped**: #1570 closes #1458 (D1: the rollback keeps the key of an account row that stays), #1466 (D2: the onboarding import page fences its completion at every await) and #1459 (D3: the export leaves out Pending rows), each proven by a test red on `dev` first.
+- **Known limits**: #1566 (a failed import whose rollback also fails keeps a working account nothing announced).
+- **Dispositions**: rejected, refusing the export while a send is Pending (a screen change; the issue recommends the filter) and a fence in `useProfileImportFlow.dispose` (D2).
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and the citation test names its own misses ([lessons/phase-2.md](lessons/phase-2.md)).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # w3-import-1: a failed import keeps a live account's key, a departed onboarding import stays put, a backup holds no pending send
 
