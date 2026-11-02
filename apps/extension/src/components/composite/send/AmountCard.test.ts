@@ -215,7 +215,11 @@ describe("composite/AmountCard", () => {
 	})
 
 	test("a paste past the decimals is read whole, then its reading is clamped at once", async () => {
-		const w = mountCard({ modelValue: "", "onUpdate:modelValue": () => {}, token: { symbol: "USDC", decimals: 6 } })
+		const w = mountCard({
+			modelValue: "",
+			"onUpdate:modelValue": (value: string) => w.setProps({ modelValue: value }),
+			token: { symbol: "USDC", decimals: 6 },
+		})
 		const input = w.find("input[data-testid='send-amount-input']")
 		;(input.element as HTMLInputElement).value = "1.234,5678901"
 		await input.trigger("input", { inputType: "insertFromPaste" })
@@ -932,11 +936,11 @@ describe("composite/AmountCard — the field reads its text whole", () => {
 		expect([textOf(w), lastRested(w)]).toEqual(["1,234.56", "1,234.56"])
 	})
 
-	test('a paste of "1e5" says it is not an amount, and prices nothing', async () => {
+	test('a paste of "1e5" says it is not an amount, in the place of the priced figure', async () => {
 		const w = mountCard({ token: TOKEN, modelValue: "", liveQuote: { usd: 1, fetchedAt: Date.now() } })
 		await paste(w, "1e5")
 		expect(w.get("[data-testid='send-amount-unreadable-hint']").text()).toBe("Not an amount. Type it like 1234.56")
-		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("1 TST ≈ $1.00")
+		expect(w.find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
 	})
 
 	test('a paste of "1,234" is held, and the line under it says so at once', async () => {
@@ -1195,10 +1199,103 @@ describe("composite/AmountCard — an amount over the balance", () => {
 		expect(input.attributes("aria-describedby")).toBe(line(w).attributes("id"))
 	})
 
-	test("an amount cut to the token's decimals and over the balance shows the hint, then the line", async () => {
+	test("an amount cut to the token's decimals and over the balance shows the refusal, then the note once it fits", async () => {
 		const w = mountOver({ modelValue: "" })
 		await w.get("[data-testid='send-amount-input']").setValue("600.1234567")
-		const hint = w.get("[data-testid='send-amount-clamp-hint']")
-		expect(hint.element.compareDocumentPosition(line(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(line(w).exists()).toBe(true)
+		expect(w.find("[data-testid='send-amount-clamp-hint']").exists()).toBe(false)
+		await w.setProps({ exceedsBalance: false })
+		expect(w.get("[data-testid='send-amount-clamp-hint']").text()).toBe("TST supports 6 decimals")
+	})
+})
+
+describe("composite/AmountCard — every refusal takes the balance row's left slot", () => {
+	const TOKEN = { symbol: "TST", decimals: 6 }
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
+	type Card = ReturnType<typeof mountCard>
+	const paste = async (w: Card, text: string) => {
+		const field = w.get("[data-testid='send-amount-input']")
+		;(field.element as HTMLInputElement).value = text
+		await field.trigger("input", { inputType: "insertFromPaste", data: null })
+	}
+	const REFUSALS: [string, string, string, (w: Card) => Promise<unknown>][] = [
+		[
+			"over the balance",
+			"send-amount-over-balance",
+			"More than your balance",
+			(w) => w.setProps({ modelValue: "600", exceedsBalance: true }),
+		],
+		["not an amount", "send-amount-unreadable-hint", "Not an amount. Type it like 1234.56", (w) => paste(w, "100 TST")],
+		["an ambiguous comma", "send-amount-ambiguous-hint", "Type it without the comma.", (w) => paste(w, "1,500")],
+		[
+			"the decimals note",
+			"send-amount-clamp-hint",
+			"TST supports 6 decimals",
+			(w) => w.get("[data-testid='send-amount-input']").setValue("1.1234567"),
+		],
+	]
+	// The 360 px popup and a 240 px sidebar give the row 312 and 192 px, and the slot what the balance and Max leave.
+	const WIDTHS: [string, Record<string, number>][] = [
+		["360", { "send-amount-row": 312, "send-amount-meta": 184 }],
+		["240", { "send-amount-row": 192, "send-amount-meta": 64 }],
+	]
+	const mountPriced = (props: Record<string, unknown> = {}) =>
+		mountCard({ token: TOKEN, tokenBalanceByType: 500, balanceRawByType: "500000000", modelValue: "", liveQuote: QUOTE, ...props })
+	const slotOf = (w: Card) => w.get("[data-testid='send-amount-meta']")
+
+	afterEach(() => {
+		rooms = {}
+	})
+
+	describe.each(WIDTHS)("at %s px", (_, widths) => {
+		beforeEach(() => {
+			rooms = { ...widths }
+		})
+
+		test.each(REFUSALS)(
+			"%s: in the slot, as body text in the danger colour, beside the balance and Max, with no line under the row",
+			async (_, testid, text, enter) => {
+				const w = mountPriced()
+				await enter(w)
+				const line = w.get(`[data-testid='${testid}']`)
+				expect(line.text()).toBe(text)
+				expect([line.attributes("variant"), line.attributes("color"), line.attributes("role")]).toEqual([
+					"body",
+					"txt-danger",
+					"alert",
+				])
+				expect(slotOf(w).element.contains(line.element)).toBe(true)
+				expect(slotOf(w).find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
+				const row = slotOf(w).element.parentElement as HTMLElement
+				expect(row.contains(w.get("[data-testid='send-amount-max']").element)).toBe(true)
+				expect(row.nextElementSibling).toBeNull()
+				const field = w.get("[data-testid='send-amount-input']")
+				expect(field.attributes("aria-describedby")).toBe(line.attributes("id"))
+			},
+		)
+	})
+
+	test("a priced token's figure gives way to the refusal and comes back once the amount fits", async () => {
+		const w = mountPriced({ modelValue: "600", exceedsBalance: true })
+		expect(slotOf(w).find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
+		await w.setProps({ modelValue: "400", exceedsBalance: false })
+		expect(slotOf(w).get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $400.00")
+		expect(slotOf(w).find("[role='alert']").exists()).toBe(false)
+		expect(w.get("[data-testid='send-amount-input']").attributes("aria-describedby")).toBeUndefined()
+	})
+
+	test("in USD the derived amount gives way in the slot, and the refusal shows there too", async () => {
+		const w = mountPriced({
+			fiatMode: true,
+			fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false },
+			modelValue: "600",
+			exceedsBalance: true,
+		})
+		await nextTick()
+		expect(slotOf(w).get("[data-testid='send-amount-over-balance']").text()).toBe("More than your balance")
+		expect(slotOf(w).find("[data-testid='send-amount-derived']").exists()).toBe(false)
+		expect(w.get("[data-testid='send-amount-fiat-input']").attributes("aria-describedby")).toBe(
+			w.get("[data-testid='send-amount-over-balance']").attributes("id"),
+		)
 	})
 })

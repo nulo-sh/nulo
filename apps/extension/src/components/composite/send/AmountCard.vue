@@ -58,7 +58,7 @@ let commaPoint = false
 /** The text the card last wrote or the page last set: the prior text of the next edit. */
 let lastText = String(model.value ?? "")
 
-const overBalanceId = useId()
+const refusalId = useId()
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
 const amountRow = useTemplateRef("amountRow")
@@ -73,10 +73,24 @@ const symbolBlank = computed(() => isBlank(props.token?.symbol))
  *  "Token supports N decimals" inline hint. Cleared when the user
  *  brings the input back within range or clears the field. */
 const wasClamped = ref(false)
-/** The line under the field ("unreadable" or "ambiguous"): at once for a refused key, or a paste that
+/** The read hint ("unreadable" or "ambiguous"): at once for a refused key, or a paste that
  *  reads as no one amount, and after a keystroke once the field is left. It goes at the next edit
  *  whose text reads, when the text empties, and when the field is left with text that reads. */
 const readHint = ref(null)
+
+/** The one refusal the balance row's left slot shows in place of its figure: over the balance first,
+ *  then a text the field could not read, then the decimals it cut, which still leaves an amount to send. */
+const refusal = computed(() => {
+	if (props.exceedsBalance) return { testid: "send-amount-over-balance", text: "More than your balance" }
+	if (readHint.value === "unreadable") return { testid: "send-amount-unreadable-hint", text: "Not an amount. Type it like 1234.56" }
+	if (readHint.value === "ambiguous") return { testid: "send-amount-ambiguous-hint", text: "Type it without the comma." }
+	if (!wasClamped.value || tokenDecimals.value === undefined) return null
+	const name = symbolBlank.value ? "Token" : props.token.symbol
+	return {
+		testid: "send-amount-clamp-hint",
+		text: `${name} supports ${tokenDecimals.value} ${pluralize(tokenDecimals.value, "decimal", "decimals")}`,
+	}
+})
 
 onMounted(() => {
 	if (props.tokenBalanceByType) inputEl.value.focus()
@@ -370,7 +384,17 @@ watch(canUseFiatInput, (can) => {
 // After the render, so each ruler holds what its line shows; the unit switch takes the field's width,
 // the balance corner the derived line's.
 watch(
-	[model, fiatTerm, isFocused, fiatMode, canUseFiatInput, derivedTokenLabel, balanceSegment, () => fiatGuard.value?.converting],
+	[
+		model,
+		fiatTerm,
+		isFocused,
+		fiatMode,
+		canUseFiatInput,
+		derivedTokenLabel,
+		balanceSegment,
+		() => fiatGuard.value?.converting,
+		() => refusal.value?.testid,
+	],
 	fitLines,
 	{ flush: "post" },
 )
@@ -453,7 +477,7 @@ const handleFiatBalanceAction = (divisor) => {
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
 						:aria-invalid="exceedsBalance"
-						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
+						:aria-describedby="refusal ? refusalId : undefined"
 						data-testid="send-amount-fiat-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -468,7 +492,7 @@ const handleFiatBalanceAction = (divisor) => {
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
 						:aria-invalid="exceedsBalance"
-						:aria-describedby="exceedsBalance ? overBalanceId : undefined"
+						:aria-describedby="refusal ? refusalId : undefined"
 						data-testid="send-amount-input"
 						:class="[$style.input_field, $style.field_type]"
 						:style="{ '--hero-scale': fieldScale }"
@@ -500,22 +524,24 @@ const handleFiatBalanceAction = (divisor) => {
 
 			<!-- Fiat mode's span has a zero basis, so its line wraps only when the balance and Max alone overflow it. -->
 			<Flex align="center" justify="between" gap="8" wrap="wrap">
-				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
-					<template v-if="fiatMode">
+				<!-- The slot of the row's figure: a refusal takes it whole, and wraps inside it beside the balance and Max. -->
+				<span ref="conversionEl" :class="[$style.conversion, (fiatMode || refusal) && $style.conversion_fit]" data-testid="send-amount-meta">
+					<Text v-if="refusal" :id="refusalId" variant="body" color="txt-danger" role="alert" :data-testid="refusal.testid">{{ refusal.text }}</Text>
+					<template v-else-if="fiatMode">
 						<template v-if="!derivedOwnRow">
 							<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
 							<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 								derivedTokenLabel
 							}}</span>
 						</template>
-						<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
-						<span v-if="derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 					</template>
 					<template v-else>
 						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label" :class="$style.fiat_label">{{
 							tokenModeFiatLabel
 						}}</span>
 					</template>
+					<!-- Here wherever the line is drawn, in the meta line's own mono 13 px, so a shortened line is fitted again. -->
+					<span v-if="fiatMode && derivedTokenLabel" aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 				</span>
 
 				<Flex align="center" gap="8" style="flex: none">
@@ -532,29 +558,6 @@ const handleFiatBalanceAction = (divisor) => {
 					</button>
 				</Flex>
 			</Flex>
-
-			<!-- A read hint first: the clamp hint can outlive a switch to USD, a read hint never outlives its text. -->
-			<span v-if="readHint === 'unreadable'" :class="$style.clamp_hint" data-testid="send-amount-unreadable-hint">
-				Not an amount. Type it like 1234.56
-			</span>
-			<span v-else-if="readHint === 'ambiguous'" :class="$style.clamp_hint" data-testid="send-amount-ambiguous-hint">
-				Type it without the comma.
-			</span>
-			<span v-else-if="wasClamped && tokenDecimals !== undefined" :class="$style.clamp_hint" data-testid="send-amount-clamp-hint">
-				{{ symbolBlank ? "Token" : token.symbol }} supports {{ tokenDecimals }} {{ pluralize(tokenDecimals, "decimal", "decimals") }}
-			</span>
-			<!-- Last, so a hint keeps its place; an alert, so the line is heard as it appears. -->
-			<Text
-				v-if="exceedsBalance"
-				:id="overBalanceId"
-				variant="body"
-				color="txt-danger"
-				role="alert"
-				:class="$style.over_balance"
-				data-testid="send-amount-over-balance"
-			>
-				More than your balance
-			</Text>
 		</Flex>
 	</Flex>
 </template>
@@ -665,16 +668,6 @@ const handleFiatBalanceAction = (divisor) => {
 .derived_type {
 	font-size: calc(13px * var(--hero-scale, 1));
 	white-space: nowrap;
-}
-
-.clamp_hint {
-	composes: type--meta from global;
-	color: var(--nulo-secondary);
-	padding-top: 4px;
-}
-
-.over_balance {
-	padding-top: 4px;
 }
 
 .action_link {

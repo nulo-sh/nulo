@@ -904,6 +904,12 @@ onBeforeUnmount(() => {
 					</Flex>
 				</div>
 
+				<!-- In the page, not the pinned footer, so it never covers the amount's balance, its refusal or the fee. -->
+				<Flex v-if="!isBlockedTransfer" direction="column" gap="10" :class="$style.publish">
+					<PublishStrip :facts="facts" @open="openReview" />
+					<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
+				</Flex>
+
 				<!-- Section: Fee Summary -->
 				<div :class="$style.section_last">
 					<FeeSettingsCard
@@ -932,8 +938,6 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
-				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
-				<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"
@@ -1023,12 +1027,16 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
+.publish {
+	padding-top: 14px;
+}
+
 .bottom {
 	position: sticky;
 	bottom: 0;
 	z-index: 5;
 
-	padding: 20px 24px;
+	padding: 12px 24px;
 	background: var(--app-bg);
 	border-top: 1px solid var(--nulo-border);
 }

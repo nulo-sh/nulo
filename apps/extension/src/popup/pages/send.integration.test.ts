@@ -454,6 +454,20 @@ describe("send page — the caveat under the strip for a token outside the valid
 		w.unmount()
 	})
 
+	test("the strip and the caveat sit in the page above the fee card; the pinned footer holds only Confirm", async () => {
+		mocks.getTokens.mockResolvedValue([{ ...TOKEN, classId: undefined }])
+		const { w } = await mountSend(FUNDING["public Fee Juice only"])
+		const footer = w.get('[data-testid="send-footer"]').element
+		const feeCard = w.get('[data-testid="fee-settings-card"]').element
+		for (const testid of ["send-publish-strip", "send-token-caveat"]) {
+			const el = w.get(`[data-testid="${testid}"]`).element
+			expect(footer.contains(el)).toBe(false)
+			expect(el.compareDocumentPosition(feeCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		}
+		expect([...footer.children].map((el) => el.getAttribute("data-testid"))).toEqual(["send-submit"])
+		w.unmount()
+	})
+
 	test("a token that cannot send has no strip and no caveat", async () => {
 		mocks.getTokens.mockResolvedValue([{ ...TOKEN, hasPrivateTransfers: false, hasPublicTransfers: false }])
 		const { w } = await mountSend(FUNDING["public Fee Juice only"])
