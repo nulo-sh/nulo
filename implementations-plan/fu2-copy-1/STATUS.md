@@ -6,3 +6,4 @@
 - 2026-11-02: final Codex pass (resumed): conditional approve (arcs 2-3 run the whole gate), applied; resumed again: **approve**. Arc 1 auto-continues; OA-1 and OA-2 touch none of its surfaces.
 - 2026-11-02: arc 1 built on `fu2-copy-1-a1`: tests red then green, D1-D6, store re-render (screenshot 4 and its security capture). Codex r1 approve; Opus r1 conditional approve, fixed; Codex r2 approve. `audit:vue` and `test:all` green; smoke on both browsers next.
 - 2026-11-02: arc 1 gate green: `audit:vue`, `test:all`, both armed builds, full smoke at retry 0 on Chrome (62 files) and Firefox (66 files), four shards each. PR next.
+- 2026-11-02: OA-1 (A) and OA-2 (B) answered on page 98; arcs 2 and 3 start on `fu2-copy-1-a2` off `dev` at `6509f2ff1`.

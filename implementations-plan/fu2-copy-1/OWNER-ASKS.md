@@ -1,8 +1,10 @@
 # fu2-copy-1: owner asks
 
-Two asks. OA-1 concerns Settings › Glossary and Settings › Proving (arc 3); OA-2 concerns Home › Get started (arc 2). Arc 1 (Holdings, the duplicate warnings, Disconnect all, Settings › Lock, the store listing) touches neither surface and depends on neither answer.
+Two asks, both answered on decision page 98 (signed 2026-11-02 at 19:39 UTC, no note): OA-1 option A, OA-2 option B. OA-1 concerns Settings › Glossary and Settings › Proving (arc 3); OA-2 concerns Home › Get started (arc 2). Arc 1 (Holdings, the duplicate warnings, Disconnect all, Settings › Lock, the store listing) touches neither surface and depends on neither answer.
 
 ## OA-1 (arc 3): the words of the ten new Glossary entries
+
+**Answered:** page 98, item OA-1, signed 2026-11-02, option A: the ten entries exactly as the table drafts them (term, definition, where), with both alternatives, so recovery phrase reads "The 24 words that restore your accounts, except the ones you imported." and full backup reads "Your accounts, imported keys, tokens, contacts and history, in one password-protected file."; the term "Alpha"; a new first section "Your wallet" with the eight wallet words in the table's order; FPC last in Fees; Proof first in Transactions, before Proving; the Proof tooltip is one sentence of at most 100 characters.
 
 - **Surface:** Settings › Glossary (`#/popup/settings/glossary`), and the tooltip on "Proofs" on Settings › Proving (`#/popup/settings/proving`).
 - **Why it is asked:** P93-34 C signed which words the Glossary gains (profile, account, network, Mainnet, recovery phrase, full backup, passkey, FPC, strict mode), and P93-52 C signed a dotted "Proof". Neither signed a definition, a "where" line or a place. Every Glossary entry so far carries words the owner signed, and its test pins them as such.
@@ -28,6 +30,8 @@ Two asks. OA-1 concerns Settings › Glossary and Settings › Proving (arc 3); 
 - **What ships now:** nothing on either page. Arc 3 runs on the answer, word for word. If another lane's signed words change, a Glossary row changes only on a newly signed revision.
 
 ## OA-2 (arc 2): How Aztec works with "website" cuts its own title at 360 px
+
+**Answered:** page 98, item OA-2, signed 2026-11-02, option B: "“1 min · website” moves under the title as the row's second line, drawn as row 1's “The 24 words that restore this wallet”; the mark takes the chevron's place. The title stays whole; the row is 16 px taller. The words are the pick's." The row's spoken name gains the word "website", as the ask said it would under every option.
 
 - **Surface:** Home › Get started, row 2, at the popup's 360 px width.
 - **What happens** (measured in the smoke harness, Chrome, light): P93-03 B puts the outside-link mark and the word "website" beside "1 min". The row's value never shrinks, so the title gives way: "How Aztec works" needs 110 px and gets 101, and reads "How Aztec w…". At 240 px nothing is cut (the value already sits below the title).

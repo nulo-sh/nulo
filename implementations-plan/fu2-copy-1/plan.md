@@ -1,7 +1,7 @@
 ---
 plan: fu2-copy-1
 tier: light
-status: arc 1 in review; arc 2 waits on OA-2, arc 3 on OA-1
+status: arc 1 merged (#1543); arcs 2 and 3 building on OA-2 B and OA-1 A (page 98)
 issues: "#1505, #1506, #1510 (arc 1); #1509 (arc 2); #1507, #1508 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -10,7 +10,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 1 explorer (sonnet); Codex gpt-6.1-sol high audit round trip + Opus Plan leg
-base: origin/dev at 1e6c5bc1f
+base: origin/dev at 1e6c5bc1f (arc 1); 6509f2ff1 (arcs 2 and 3)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
@@ -50,7 +50,7 @@ Three arcs. Arc 1 ships three signed picks whose words and layout need nothing m
 
 **Inferences:** I1. The caption with two more sentences fits its column (`frame.html:67-74`: 500 px wide, no height cap); Phase 2 renders it.
 
-**Asks:** OA-1 (arc 3), OA-2 (arc 2). Arc 1 depends on neither.
+**Asks:** OA-1 (arc 3), OA-2 (arc 2), both answered on decision page 98, signed 2026-11-02 (ledger below). Arc 1 depends on neither.
 
 **Closest readings.** R1: every "Already exist" in the wallet reads "Already exists", not only the two screens photographed; the profile popup's other wordings ("Name in use") are not slips and stay. R2: the strict line replaces the whole description, "Recommended." included. R3: the listing's qualifier follows on the same bullet; the caption repeating the claim gets the same two sentences (the lane brief: "anywhere the same claim is repeated for the stores"). R4: "a count" is a number printed beside a noun; a heading with a bare number (`SectionLabel`) and phrase-level alternations are not.
 
@@ -62,8 +62,8 @@ Three arcs. Arc 1 ships three signed picks whose words and layout need nothing m
 - **D4.** `settings-search.ts:217` reads the P93-23 line.
 - **D5. Store.** `listing.md:31` → "• No account, no telemetry. Not audited. See the Privacy Policy for what leaves your device." `store-art.ts:37` gains the same two sentences; `(cd apps/extension && bun scripts/store-art.ts)` re-renders every frame, and only `store/screenshot-4-1280x800.png` is kept (`git checkout` the rest). If the caption leaves its column, the caption stays and goes to the owner. A BEFORE-LAUNCH.md § 4 step names the owner's dashboard paste (description, screenshot 4, both stores).
 - **D6. Imports.** Callers import `pluralize` and `ALREADY_EXISTS` explicitly; the build's regenerated `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` are committed with them.
-- **D7 (arc 2, on OA-2).** `GetStartedCard.vue`'s aztec row as answered, with `external` drawing the `open` glyph. *Accessibility call (2026-10-19 delegation):* the row's `RowTarget` is named by its title only (`SettingItem.vue:130`), so `SettingItem` adds the value's or description's id to `labelledby` when `external` has no `to`; the row's spoken name then says "website".
-- **D8 (arc 3, on OA-1).** The ten entries and their place as answered; `<DottedTerm term="proof" testid="settings-proving-proof-term">Proofs</DottedTerm>` on `proving.vue:100`, the page's first dotted term.
+- **D7 (arc 2, OA-2 B).** `GetStartedCard.vue`'s aztec row: `description: "1 min · website"`, no value, and `external`, which draws the `open` glyph in the chevron's place. *Accessibility call (2026-10-19 delegation):* a click row's `RowTarget` is named by its title only (`SettingItem.vue:130`), so an `external` row with no `to` is named by its title, description and value, as the anchor form is named by its content; the spoken name then says "website".
+- **D8 (arc 3, OA-1 A).** The ten entries as OA-1's table drafts them, both alternatives taken; a first section "Your wallet" (profile, account, network, alpha, recovery-phrase, full-backup, passkey, strict-mode); `fpc` last in Fees; `proof` first in Transactions. `<DottedTerm term="proof" testid="settings-proving-proof-term">Proofs</DottedTerm>` on `proving.vue:100`, the page's first dotted term.
 - **D9. Tests.** T1 `src/utils/plural.test.ts`: 0, 1, 2. T2 `holdings.test.ts:185` reads "1 token"; `connected-apps/index.test.ts` gains "Disconnect all 1 session?" with a 2-session control. T3 each verdict test asserts the literal "Already exists". T4 `lock.test.ts:97`. T5 singular assertions at `AmountCard.test.ts` and `OperationCard.fallback.test.ts`, whose sites test only the plural today. T1-T4 red on the base copy; T5 green before and after. The other migrated sites' tests (`details-table.test.ts:106`, `permission-rows.test.ts:193`, …) pass unchanged. Arc 2: `GetStartedCard.test.ts` asserts the row's text, `open` glyph and resolved accessible name, the other rows' chevron as control. Arc 3: `glossary.test.ts`, `settings/glossary.test.ts:21` and `proving.test.ts` (the real `DottedTerm`). No new e2e scenario.
 
 ## Architecture & Implementation
@@ -83,7 +83,8 @@ Simpler alternatives rejected: string edits at each site (the brief asks for one
 ## UI impact
 
 - **Arc 1:** Holdings' count and the Disconnect all confirm at 1 (P93-13 B); "Already exists" in New and Edit account, Import account, New and Edit FPC, Import token, New sender, Edit profile, New and Edit contact (P93-13 B, R1); Settings › Lock's strict line (P93-23 B); the store listing and screenshot 4's caption (P93-46 C). The PR quotes each pick (page, item, date, option) with before/after captures (light, Chrome).
-- **Arc 2:** Get started row 2, as OA-2 answers. **Arc 3:** Settings › Glossary and Settings › Proving, as OA-1 answers.
+- **Arc 2:** Get started row 2. P93-03 B (page 93, signed 2026-11-02): "The row still ticks Done on the click, but carries the outside-link mark and the word “website” beside “1 min”." OA-2 B (page 98, signed 2026-11-02): "“1 min · website” moves under the title as the row's second line, drawn as row 1's “The 24 words that restore this wallet”; the mark takes the chevron's place. The title stays whole; the row is 16 px taller. The words are the pick's." Before/after at 360 px.
+- **Arc 3:** Settings › Glossary and Settings › Proving. P93-34 C (page 93, signed 2026-11-02): "B's new entries only, with no pointer from Home." P93-52 C (page 93, signed 2026-11-02): "“Proof” becomes a dotted Glossary term on the existing line." OA-1 A (page 98, signed 2026-11-02): OA-1's ten entries word for word, both alternatives, "Alpha", "Your wallet" first, FPC last in Fees, Proof first in Transactions; the Proof tooltip one sentence of at most 100 characters. Before/after of the new section, the two moved entries and the Proof tooltip.
 
 ## Security & Adversarial Considerations
 
@@ -119,6 +120,7 @@ Each makes its decision (D7, D8) with its tests, red on the base copy. **Gate:**
 
 ## Delivery
 
+- **As run for arcs 2 and 3** (arc 1 merged as #1543): one branch `fu2-copy-1-a2` off `dev`, one PR `feat(glossary): ten first-path entries, proof dotted, how aztec works says website`, `Closes #1507, #1508, #1509`; arc 2's commits, then arc 3's, then the close-out as its last commits. This replaces the separate PRs and close-out layer below.
 - Arc 1: branch `fu2-copy-1-a1` off this plan's commit; PR `fix(copy): plural helper, "already exists", strict mode's line and the store's audit note` (89 characters), `Closes #1505, #1506, #1510`. Arc 2: `fix(home): how aztec works says it opens a website` (50), `Closes #1509`. Arc 3: `feat(glossary): ten first-path entries, and proof dotted on the proving page` (76), `Closes #1507, #1508`. Arcs 2 and 3 are independent; each runs when its answer arrives, stacked on the tip (off `dev` if the arc below has merged). Close-out: docs-only top layer `fu2-copy-1-close-out`. `gh stack`; PRs ready, base `dev`, no label at creation.
 - Body: what changed and why; D3 with #1529; each pick quoted; R1-R4; before/after pictures (`?raw=true` at the head SHA); the owner's dashboard step (D5); runs and outcomes; "no e2e scenario added or changed", with each browser's smoke wall-clock; ending `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Commits: conventional, lower case, signed, ending `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. No lanes: arcs 2 and 3 wait on answers.
@@ -141,6 +143,8 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a19d6f) | **approve** | no finding; the security capture's re-take judged in scope | none |
 | arc 1 r1 | Opus 5.5 (general-purpose) | conditional approve | New sender's duplicate test; the constant's comment; "secure" and "unlock" as synonyms; the store address disclosed; the PR claims D2 only for "Already exists" | an owner ask on the synonyms (they restore the base results and are never shown; Codex agreed); re-rendering all five store images |
 | arc 1 r2 | Codex, resumed | **approve** | the comment's wording | none |
+
+**Owner answers** (decision page 98, signed 2026-11-02 at 19:39 UTC, no note): OA-2 = option B, "“1 min · website” moves under the title as the row's second line, drawn as row 1's “The 24 words that restore this wallet”; the mark takes the chevron's place. The title stays whole; the row is 16 px taller. The words are the pick's."; OA-1 = option A, the ten entries as drafted with both alternatives ("The 24 words that restore your accounts, except the ones you imported."; "Your accounts, imported keys, tokens, contacts and history, in one password-protected file."), the term "Alpha", "Your wallet" first with the eight wallet words in the table's order, FPC last in Fees, Proof first in Transactions. These are the sign-off for exactly those words.
 
 Both legs kept OA-1 as an owner ask over "closest reading": a definition is the entry's whole content, not a detail the option left open.
 
