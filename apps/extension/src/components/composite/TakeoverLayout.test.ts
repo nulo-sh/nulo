@@ -165,13 +165,16 @@ describe("TakeoverLayout", () => {
 			return found
 		}
 		const firstClass = (node: TemplateNode) => /\$style\.\w+/.exec(boundAttr(node, "class") ?? "")?.[0]
+		/** A native button or a component that renders one: either would inherit mid-word breaks. */
+		const isButton = (node: TemplateNode) => /^(button|Button|RowAction|RowTarget)$/.test(node.tag ?? "")
 		const interpolations = (node: TemplateNode) =>
 			(node.children ?? []).filter((child) => typeof child === "object" && child.type === NODE.INTERPOLATION) as TemplateNode[]
 
 		test("wraps in the content column, which holds no button, and grows the full-width buttons", () => {
 			const content = elements((node) => firstClass(node) === "$style.content")
 			expect(content).toHaveLength(1)
-			expect(content.flatMap((node) => elements((inner) => inner.tag === "button", node))).toEqual([])
+			expect(elements(isButton)).toHaveLength(4)
+			expect(content.flatMap((node) => elements(isButton, node))).toEqual([])
 			expect(declarationsOf(layout, ".content")).toMatchObject({ "overflow-wrap": "anywhere" })
 
 			expect(
@@ -182,7 +185,8 @@ describe("TakeoverLayout", () => {
 				"padding-block": "5px",
 				"overflow-wrap": "anywhere",
 			})
-			for (const button of [".primary", ".secondary"]) expect(declarationsOf(layout, button)).not.toHaveProperty("height")
+			for (const rule of [".primary, .secondary", ".primary", ".secondary"])
+				expect(declarationsOf(layout, rule)).not.toHaveProperty("height")
 		})
 
 		test("ends in an ellipsis inside the chip, which shares its row with the Lock button", () => {

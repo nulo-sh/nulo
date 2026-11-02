@@ -134,7 +134,7 @@ const id = (part: string) => `${props.testidPrefix}-${part}`
 	outline-offset: 2px;
 }
 
-/* The chip shares its row with the Lock button, so a long name ends in an ellipsis; the title names it in full. */
+/* The chip shares its row with the Lock button, so a long name ends in an ellipsis. */
 .chip_label {
 	min-width: 0;
 	overflow: hidden;

@@ -4,6 +4,7 @@ import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { clickByTestId, connectPlayground, openPopup, test, waitForHash } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
 import { waitForPopup, approveCapabilities } from "../fixtures/popups"
+import { LONG_NETWORK_NAME } from "../fixtures/networks"
 import { callService } from "../fixtures/session"
 import { expectFitsNarrow } from "../fixtures/type-roles"
 import type { AztecTestConfig } from "../fixtures/aztec"
@@ -21,9 +22,6 @@ const hasConfig = aztecConfig !== undefined
  * must provision the Local Network default account on demand, list it, name the chain, and let the
  * user either approve as is or switch first.
  */
-
-/** The longest one-word name the network name field takes. */
-const LONG_NAME = "W".repeat(25)
 
 type Ctx = Parameters<typeof connectPlayground>[0]
 
@@ -71,9 +69,9 @@ test.skipIf(!hasConfig)(
 	"cap-chain-mismatch — approve as is: the wallet stays on Mainnet, the app gets its chain's account, and a long chain name fits at 240 px",
 	{ timeout: 180_000 },
 	async ({ registeredExtensionPerTest }) => {
-		await renameDappChain(registeredExtensionPerTest, LONG_NAME)
+		await renameDappChain(registeredExtensionPerTest, LONG_NETWORK_NAME)
 		const page = await connectPlayground(registeredExtensionPerTest)
-		const { popup, fromSeq, address } = await requestAccountsCapability(registeredExtensionPerTest, page, LONG_NAME)
+		const { popup, fromSeq, address } = await requestAccountsCapability(registeredExtensionPerTest, page, LONG_NETWORK_NAME)
 		// The window closes on approve — read the strip and the layout before deciding.
 		expect(await stripNetwork(popup)).toBe("Alpha")
 		await expectFitsNarrow(popup, "the capabilities window on a chain with a 25-character name")

@@ -23,7 +23,7 @@ import { CHAIN_IDS, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { getStartedFeeJuiceHeldKey } from "@/utils/profile-ui-keys"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { clickByTestId, type ExtensionContext, launchExtension, openPopup, registerProfile, test, waitForHash } from "./fixtures/extension"
-import { switchToNetwork } from "./fixtures/networks"
+import { LONG_NETWORK_NAME, switchToNetwork } from "./fixtures/networks"
 import {
 	closeStuckPopup,
 	createAccount,
@@ -53,9 +53,6 @@ import {
 	traceTakeover,
 } from "./helpers/stale-network"
 import { getStartedRows, waitForHomeReminders } from "./fixtures/tokens"
-
-/** The longest one-word name the network name field takes. */
-const LONG_NAME = "W".repeat(25)
 
 const identity = ({ address, name, index, type, visible }: StoredAccount) => ({ address, name, index, type, visible })
 
@@ -218,7 +215,7 @@ describe("stale network", () => {
 	}, async ({ registeredExtensionPerTest: ctx }) => {
 		const page = await openOnTestnet(ctx)
 		const testnet = await readNetwork(page, "testnet")
-		await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [testnet.id, LONG_NAME])
+		await callService(page, NETWORK_SERVICE_NAME, "renameNetwork", [testnet.id, LONG_NETWORK_NAME])
 		const networks = await readNetworkRows(page)
 		await lockWallet(page)
 		await seedStaleNetwork(page, "network-reset", { networks })

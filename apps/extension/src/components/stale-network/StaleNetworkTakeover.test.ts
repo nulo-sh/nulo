@@ -459,7 +459,11 @@ describe("StaleNetworkTakeover — a long network name", () => {
 		if (parsed.template) {
 			walkElements(parsed.template, (node, ancestors) => {
 				if (boundAttr(node, "class") === "$style.progress") screens.push(node)
-				if (node.tag === "button" && ancestors.some((up) => boundAttr(up, "class") === "$style.progress")) buttons.push(node)
+				if (
+					/^(button|Button|RowAction|RowTarget)$/.test(node.tag ?? "") &&
+					ancestors.some((up) => boundAttr(up, "class") === "$style.progress")
+				)
+					buttons.push(node)
 			})
 		}
 		expect(screens.map((node) => node.props?.find((prop) => prop.name === "data-screen")?.value?.content)).toEqual([
