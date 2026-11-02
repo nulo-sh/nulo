@@ -1,7 +1,7 @@
 ---
 plan: fu2-copy-1
 tier: light
-status: arc 1 merged (#1543); arcs 2 and 3 building on OA-2 B and OA-1 A (page 98)
+status: delivered (arc 1 merged as #1543; arcs 2 and 3 and this close-out in one PR, merge pending)
 issues: "#1505, #1506, #1510 (arc 1); #1509 (arc 2); #1507, #1508 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 1e6c5bc1f (arc 1); 6509f2ff1 (arcs 2 and 3)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered. Arc 1 merged as #1543; arcs 2 and 3 and this close-out are the final commits of one PR against `dev`, which merges on the orchestrator's word.
+- **Owner sign-off:** decision page 93 (signed 2026-11-02): P93-13 B, P93-23 B, P93-46 C (arc 1), P93-03 B (arc 2), P93-34 C and P93-52 C (arc 3); decision page 98 (signed 2026-11-02): OA-2 B, OA-1 A, quoted in the ledger below.
+- **Shipped:** arc 1: one plural helper for every count beside a noun, one "Already exists" constant every entity popup reads, strict mode's line, and the store listing's and screenshot 4's audit note (#1505, #1506, #1510). Arc 2: How Aztec works says "1 min · website" on its second line with the outside-link mark, and its spoken name says website (#1509). Arc 3: ten Glossary entries in the signed words, a first section "Your wallet", FPC and Proof placed, and "Proofs" dotted on the Proving page (#1507, #1508).
+- **Dispositions:** P93-13's third slip (Delete profile's box) is rewritten by P93-40 C under #1529, another lane's (D3). Arcs 2 and 3 shipped as one PR rather than two stacked ones, with Phase 2's gate run once on the final head. Strict mode's sentence lives in two signed places, Settings › Lock and the Glossary, each pinned by its own test. #1449 keeps its reducers and limits; a comment there says the verdict part shipped.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and the smoke-shard gotcha is already in the `e2e-testing` skill; the plan's own are in [lessons/phase-1.md](lessons/phase-1.md) and [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # fu2-copy-1: grammar slips, Strict mode's line, the store note; the website row; the Glossary's new words
 
