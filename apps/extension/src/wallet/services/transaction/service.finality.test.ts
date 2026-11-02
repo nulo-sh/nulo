@@ -243,7 +243,8 @@ describe("TransactionService — a mined row until its block is final", () => {
 		expect(service.getPendingForAccount(ACCOUNT)).toEqual([])
 
 		await tick(FINALITY_READ_INTERVAL_MS)
-		expect(await service.getTransaction(HASH)).toMatchObject({ status: TxStatus.Pending, block: undefined })
+		const pruned = await service.getTransaction(HASH)
+		expect([pruned.status, pruned.block]).toEqual([TxStatus.Pending, undefined])
 		expect(service.getPendingForAccount(ACCOUNT).map((tx) => tx.hash)).toEqual([HASH])
 	})
 
