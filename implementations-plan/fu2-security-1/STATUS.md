@@ -8,3 +8,7 @@
 - 2026-11-02: final fresh Codex pass: conditional approve (arm profile chaos; full local smoke on both browsers), folded; resumed: approve. Plan approved; no owner ask on arc 1's surfaces; arc 1 next.
 - 2026-11-02: arc 1 base timings of the touched smoke files (armed build): Chrome 315 s (7 files passed, 1 skipped; 29 tests passed, 6 skipped), Firefox 669 s (8 files, 35 tests).
 - 2026-11-02: arc 1 phase 1: T1-T5 and the pins test's ports red on the base code (105), green after D2-D7; gate green (`audit:vue` 168 s, the vitest list, `test:all` 201 s). The chaos model's three line citations into the composable moved with it.
+- 2026-11-02: arc 1 phase 2: network file green on Chrome and Firefox; touched smoke files at head Chrome 332 s (base 315 s), Firefox 722 s (base 669 s); Codex round 1 approve, Opus conditional approve (folded), Codex round 2 approve.
+- 2026-11-02: arc 1 phase 2: armed chaos green, Chrome seeds 1-10 (committed exports in 7 seeds; seed 10's `short` refused), Firefox seeds 1-10 (committed exports in 4 seeds; seeds 8 and 9 `short` refused); full smoke Chrome green, 1850 s (62 files, 275 tests).
+- 2026-11-02: arc 1 phase 2: full smoke Firefox green, 2791 s (66 files, 279 tests); after pictures captured from the head build, the scratch specs deleted, 16 pictures in `screenshots/`.
+- 2026-11-02: arc 1 rebased onto `dev` at 6509f2ff1 (an index-line conflict only); `audit:vue`, `test:all`, `lint` green; touched smoke files on the rebased armed build green, Chrome 279 s, Firefox 532 s; final gates green.

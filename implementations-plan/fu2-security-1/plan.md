@@ -1,7 +1,7 @@
 ---
 plan: fu2-security-1
 tier: light
-status: approved (final Codex pass); arc 1 next
+status: arc 1 in review (Codex loop converged); arc 2 next
 issues: "#1528 #1529 #1530 (arc 2), #1531 #1532 #1533 #1534 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -61,6 +61,7 @@ Seven signed picks from decision page 93 (First users lab 1, signed 2026-11-02).
 - **D10. Toast.** The label becomes "Password changed"; nothing else changes.
 - **D11. Tests.** Component tests carry the copy and the rules: T1 `full.test.ts` (P93-38's words and "Continue", single button per profile type, the four warnings still shown before the press, retry after a failed download without a second seal, a failed seal, the label rule), T2 `useFullBackupExport.test.ts` (the downloaded data is the sealed text; a stale press after a reset and a successor's failed download starts no download; a password change before, during and after the seal refuses as today; one superseded-run row per new `await`, with the guard's count raised to match, `:628-631`), the ported uses of `handleEncrypt` and `downloadBackup`, `full-passkey.pins.test.ts` retargeted through the one button with every password-change pin kept (`:585`, `:595`, `:605`, `:623`), deferred mocks holding open the windows that two presses used to give and an invalid file password refused, T3 `full-backup-helpers.test.ts` (`fullBackupFileName` under a non-UTC `TZ`, at a local time whose UTC date differs), T4 `FilePasswordSection.test.ts` (label with and without the flag, bringing it to the 10 cases an L3 composite needs), T5 an `export/index.test.ts` (three lines, FAQ line, wrap flag), T6 `auth.test.ts` (link text per type, hidden while unknown, no tooltip; the focus check at `:1202-1209` moves to a known profile), T7 `reset.test.ts` (the third box's words; the mismatch line absent when empty, equal or a prefix, present for a lookalike), T8 `change-password.test.ts` (hoisted spy, label). Each new assertion fails on the base copy.
 - **D12. E2E: no new scenario.** Helpers and specs follow the new controls and words. `tooltips-glossary.test.ts`'s lock-screen test keeps its Space press, first Escape and focus return on the real lock screen, retitled, and drops only its tooltip checks.
+- **D13. Arc 1's deviations from the file map.** `tests/e2e/helpers/download-capture.ts` takes a `withinMs` window, which the full-backup helpers set to 90 s (the old seal wait plus the capture), since one press now seals before it saves; `tests/e2e/helpers/profile-chaos/model.ts` cites three composable lines, which moved; `scripts/e2e/file-accept.test.ts`'s example name is the new one; the composable's `canDownload` went with the second button. Two extra after pictures: the retry state and the FAQ line below the fold.
 
 ## Architecture & Implementation
 
@@ -88,7 +89,7 @@ Sign-off, decision page 93, signed 2026-11-02, quoted:
 - **Deletion stays gated** by the card, three boxes and the exact name; the mismatch line echoes a name the page already shows, through Vue text interpolation.
 - No permission, storage shape, message, log line, dependency or CSP change. Known limits: none.
 
-## Phase 1 (arc 1): the backup screens
+## Phase 1 (arc 1): the backup screens ✓
 
 1. Before any edit, write a scratch capture spec under `~/.cache/nulo-backlog/fu2-security-1/capture/` on the smoke harness (`registeredExtension`, the default 360 px popup, light theme, `shotSend`'s settle and screenshot steps), copy it into `tests/e2e/`, and run it on an armed Chrome build made from this base: Back up profile, the warning, both profile types' finished and done states, and the requested file name. Never commit it. Time Phase 2's touched smoke files at the base on both browsers. Both runs reproduce the lab's screens.
 2. Add T1-T5 and the pins test's ports; run them on the base code; require each new assertion red. Commit.
@@ -96,7 +97,7 @@ Sign-off, decision page 93, signed 2026-11-02, quoted:
 
 **Gate:** `bun run audit:vue` (typecheck, tests and lint, then build); `(cd apps/extension && bun --bun vitest run src/popup/pages/settings/security/export src/composables/useFullBackupExport.test.ts src/components/composite/FilePasswordSection.test.ts src/components/ui/Settings src/utils/full-backup-helpers.test.ts src/utils/copy-dash-ban.test.ts src/utils/red-text-ban.test.ts src/utils/type-role-ban.test.ts src/utils/toast-call-sites.test.ts --retry=0)`; `bun run test:all`. Pass: every command exits 0; T1-T5 red before, green after.
 
-## Phase 2 (arc 1): e2e and evidence
+## Phase 2 (arc 1): e2e and evidence ✓
 
 1. Update the e2e helpers and specs (table). Warning: `e2e:agent` writes its build into `dist/<browser>`, so run the network file before the armed smoke build. Run `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/backup-restore-integrity.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox`.
 2. Build armed: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox` the same way.
@@ -138,6 +139,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the await-count guard's rows; the composable returns only `protectAndDownload`; Fact 3; T4 to 10 cases; T6's focus check; T1 and T7 assert the new words; the mismatch testid; `audit:vue` in the gates; D9's trigger as OA-5, shipping the prefix-quiet form; D3, the FAQ line and "Before you continue" recorded as readings R1-R3 | D3 and the FAQ line as owner asks on arc 1: the lane's rule takes the closest reading of an option's open detail and says so, both follow the pick's title or the signed render, and the PR shows their pictures |
 | final 1 | Codex, gpt-6.1-sol, fresh (session 01a19d50) | conditional approve | `profile-chaos` runs only with `NULO_E2E_CHAOS=1`: armed with a recorded seed, and its records must show the touched actions; the full smoke suite runs locally on both browsers before each PR (CLAUDE.md § Quality gates), reversing round 1's rejection on that evidence. D2, the readings, OA-3's scope and the kept wrapper verified | none |
 | final 2 | Codex, resumed | **approve** | both conditions verified; no new finding or regression | none |
+| arc 1, round 1 | Codex, gpt-6.1-sol (session 01a19d82) | **approve** | three comment fixes: a stale "Protect with Password", a stale plaintext-download line in `runEncrypt`, two narrating comments | none |
+| arc 1, round 1 | Opus 5.5 (general-purpose) | conditional approve | a per-warning case for the "Backup" label rule (mutation-checked); the same-tick press comment corrected; the file-accept example name | an owner ask for the password profile's ready state: reading R1, shown and named in the PR; collapsing the one-child `Flex`: no visible effect, churn on a signed surface; a retry-state narrow-fit e2e: its parts are narrow-checked and the PR pictures the state |
+| arc 1, round 2 | Codex, resumed | **approve** | `f14dc9f29` verified, the three rejections hold | none |
 
 ## Seeds (not run; orchestrator-owned)
 
