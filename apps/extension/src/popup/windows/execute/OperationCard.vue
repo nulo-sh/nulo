@@ -22,6 +22,7 @@
  * estimator.
  */
 import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
+import FeeCostReadout from "@/popup/components/modules/send/FeeCostReadout.vue"
 import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
@@ -43,7 +44,7 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import { type FeePayerPick, paysFromPrivateFeeJuice } from "./fee-figure"
+import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
 import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
 import { trimAddress } from "@/utils/string"
@@ -143,6 +144,14 @@ const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
+/** The app's estimate failed and none replaces it: the row reads as the fee card's failed state. */
+const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
+const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. */
+const onRetryAppEstimate = (event: MouseEvent) => {
+	emit("retryEstimate", props.index)
+	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) appFeeRow.value?.$el.focus()
+}
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -394,22 +403,34 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 		<slot v-if="$slots.fee" name="fee" />
 		<template v-else-if="isEmbeddedFeePayment(op)">
 			<Flex
+				ref="appFeeRow"
 				data-testid="execute-op-fee-set-badge"
-				align="start"
-				gap="8"
+				direction="column"
 				wide
+				tabindex="-1"
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
-				:class="$style.op_fee_set"
+				:class="$style.app_fee"
 			>
-				<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
-				<Flex direction="column" :class="$style.fee_lines">
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
-						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
-					</AppFeeLine>
-					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
-						Fee payment method set by
-						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
-					</Text>
+				<Flex v-if="appFeeFailed" direction="column" wide data-testid="execute-op-app-fee-failed" :class="$style.app_fee_failed">
+					<Flex direction="column" gap="4" :class="$style.app_fee_method">
+						<Text variant="label-section" color="secondary">Fee</Text>
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-fee-method">
+							{{ privateFeeJuice ? `Private Fee Juice · set by ${appName}` : `Set by ${appName}` }}
+						</Text>
+					</Flex>
+					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${appName} pays`" @retry="onRetryAppEstimate" />
+				</Flex>
+				<Flex v-else align="start" gap="8" wide :class="$style.op_fee_set">
+					<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
+					<Flex direction="column" :class="$style.fee_lines">
+						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
+							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
+						</AppFeeLine>
+						<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
+							Fee payment method set by
+							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
+						</Text>
+					</Flex>
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
@@ -426,7 +447,14 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
-			<Flex v-if="privateFeeJuice" align="start" gap="6" wide :class="$style.op_fee_set" data-testid="execute-op-private-fee-notice">
+			<Flex
+				v-if="privateFeeJuice"
+				align="start"
+				gap="6"
+				wide
+				:class="[$style.op_fee_set, appFeeFailed && $style.hairline]"
+				data-testid="execute-op-private-fee-notice"
+			>
 				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
 				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
 			</Flex>
@@ -686,6 +714,28 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+/* Inset: the card's `overflow: hidden` would clip a ring drawn outside the row. */
+.app_fee:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: -2px;
+}
+
+/* An app's name may be 64 characters with no break in them, in the method and in the payer's label.
+ * The fee card's row pads 10 px below its words; this row's frame has 12. */
+.app_fee_failed {
+	padding-bottom: 2px;
+	background: var(--nulo-surface-low);
+	overflow-wrap: anywhere;
+}
+
+.app_fee_method {
+	padding: 12px;
+}
+
+.hairline {
+	border-top: 1px solid var(--hairline-soft);
 }
 
 .flag_banner {

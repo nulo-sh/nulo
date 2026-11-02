@@ -90,9 +90,10 @@ For a person approving a dApp's transaction in the 400 × 800 window.
 
 Before building: write each pick under `## Decision` on #1494 and #1495 (`gh issue comment`). Tests use wire-shaped values (`0x` + 64 hex) and the valid addresses of `execute.fixture.ts`. Red proofs take the old copy from `c17dfc1bc`. Every phase gate runs: `bun run lint && bun run typecheck:all`, then `cd apps/extension && bun --bun vitest run src/popup/windows/execute src/popup/components/modules/send src/utils/type-role-ban.test.ts src/utils/copy-dash-ban.test.ts src/utils/red-text-ban.test.ts --retry=0`. Pass: exit 0, and the phase's new component test fails on the base copy.
 
-### Phase 1 — #1494
+### Phase 1 — #1494 ✓
 - Change: `FeeCostReadout.vue` (`label`), `fee-shared.module.css` (D7), `OperationCard.vue` (wrapper, failed block, focus).
 - Tests: `OperationCard.fee.test.ts`: Private Fee Juice (person pays), own cap and sponsored ops with `estimateFailed` show the failed block with the exact method and label text and no legend; TRY AGAIN emits `retryEstimate` with the index; a keyboard press focuses the wrapper, a pointer press does not (FeeSettingsCard.test.ts:1036-1077's spy). Rewrite the two tests named "after a failed estimate … the legend" (`:359`, `:448`). `index.test.ts`: an own-cap op's retry asks `[0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }]`. `FeeCostReadout.test.ts`: `label` reaches the failed row.
+- **Status ✓ (2026-11-02).** Gate green (lint, typecheck:all, 936 tests in 40 files at retry 0). The five new or rewritten D tests and the `label` test fail against the base `OperationCard.vue` and `FeeCostReadout.vue`.
 
 ### Phase 2 — #1495
 - Change: `index.vue` (`failed`, `retryPreview`), `OperationCard.vue` (prop, emit, surface kind, focus, `refuseRepeatEnter` on the toggle), `SendTxSummary.vue` (line, emit).

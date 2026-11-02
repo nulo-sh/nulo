@@ -1805,6 +1805,23 @@ describe("execute window — a failed fee estimate's retry", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
+	test("an app-paid row's Try again asks the estimate the window asked at load, with the app's own payment", async () => {
+		const { fees, cards, fail, confirm } = await opened([ownCap])
+		const atLoad = fees.api.estimate.mock.calls
+		expect(atLoad).toEqual([[0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }]])
+		const asked = atLoad[0]
+		await fail(0)
+		expect(cards()[0]!.props("estimateFailed")).toBe(true)
+
+		fees.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toEqual([asked])
+		expect(fees.api.cancel).not.toHaveBeenCalled()
+		expect(cards()[0]!.props("estimateFailed")).toBe(false)
+		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
 	test("settings the card withdraws end the failure: the estimate is cancelled and the snack closes", async () => {
 		const { vm, fees, cards, fail } = await opened([send])
 		vm.handleFeeUpdate(0, FJ)
