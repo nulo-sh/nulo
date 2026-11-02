@@ -138,7 +138,7 @@ Make D4-D7b with T4-T6 (red on the base copies) and D9's guard (red on the base 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `f738cba62`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `f738cba62`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 2, one fresh Codex session over the net diff for cross-arc issues. Prompts go under `~/.cache/nulo-backlog/wrap-3/`. Hard stop at three rounds; each round goes in `lessons/phase-N.md` and the table below.
 - Approval boundary (a plan change; stop): a copy change, a shortened name, a height or layout change outside OA-1's answer, a rule on a row whose buttons share a line, a rule in `@nulo/design`, a new e2e scenario beyond D9.
 - Close-out: the Outcome; OA-1 to OA-3, if still open, filed as one `owner-decision` issue; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done wrap-3 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/wrap-3/plan.md`.
