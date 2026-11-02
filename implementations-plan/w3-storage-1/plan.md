@@ -1,7 +1,7 @@
 ---
 plan: w3-storage-1
 tier: light
-status: approved (final Codex pass approve); arc 1 next
+status: completed
 issues: "#1462 #1463 #1464 #1465"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 2575c86c4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed, one arc as #1576.
+- **Shipped**: #1576 closes #1462 (D2: a poll or finality verdict commits a copy, so a rejected write is retried), #1463 (D3: the quarantine drops only after the purge), #1464 (D4-D7: `ValueDecodeError` tells a bad value from a failed read, and config, the seeder and the token list never write after a failed read) and #1465 (D8: the log import lands first and retention waits for it), each proven by a test red on `dev` first.
+- **Known limits**: #1577 (the price cache treats a failed read as empty), #1578 (a token-list refresh whose read fails schedules no next attempt), #1579 (after a failed config boot read, the worker honours default privacy settings until it restarts).
+- **Dispositions**: rejected, D5's `loaded` flag, adopting every stored prop at `set()`, a rejecting `load()` and refusing `set()` until the next boot (D5); a "retention settled" flag and a wait in `index.ts` (D8); a repeated `discarded` warn on a `verify-unsupported` envelope, kept (fix loop round 1).
+- **Lessons**: "only `ValueDecodeError` resets" joined the rejected-read line of `lessons.md`; a second passkey-unlock-1 link there merged into its plan's ledger to stay in budget.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # w3-storage-1: writes that outrun their persistence: the poller, a failed deletion, a failed read, the log boot
 
@@ -98,7 +109,7 @@ None. No screen, copy, row or format changes, and no `onUpdate` fires that does 
 
 **Gate:** `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run src/wallet/services/transaction src/wallet/services/network src/wallet/config src/wallet/services/token src/wallet/services/token-list src/wallet/logger --retry=0)`; `bun run --cwd packages/wallet-core test`; `bun run test:all`. Pass: every command exits 0; T1-T8's failure-mode assertions red before, green after.
 
-## Phase 2: e2e regression and delivery
+## Phase 2: e2e regression and delivery ✓
 
 Warning: `e2e:agent` writes its own build into `dist/<browser>`, so the network runs come first and the armed build follows them.
 
