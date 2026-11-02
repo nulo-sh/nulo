@@ -1,7 +1,7 @@
 ---
 plan: authwit-onbehalf-1
 tier: light
-status: Phase 1 green, review loop converged; PR next
+status: delivered (PR #1552 open, merge pending); archived
 issues: "#1491"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,19 @@ base: origin/dev at c4173bb8e
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered in PR #1552, which carries this close-out, against `dev`. It merges on the orchestrator's word.
+- **Shipped:**
+  - The shared decoder hashes and returns only authorization requests on behalf of the account the wallet signs as, on the classic, folded and `default_entrypoint` paths, so the execute window (at rest, under the details, in the fee re-ask window) lists and the build signs no request naming another account (D1, D2).
+  - The folded fee-juice and sponsored fast paths keep their validated simulation whenever any request decoded, signed or not (D3).
+  - Tests red on base for the decoder, the real preimage, the probe and `default_entrypoint`; a fold-matrix cell; a summary pin; the e2e window assertions in `tx-sendTx-fields`. Closes #1491.
+- **Dispositions:** Codex's raw-effects trigger and Opus's known-limit alternative for the dropped-only fold were not taken (L4). No receipt wait and no playground change (L5). The public-authwit e2e files ran because the lane brief names them, though they reach no decoder. No lesson promoted: `lessons.md` sits at its 8 KiB budget, and this run's one gotcha (an execute-window capture shows only its own scrolled viewport) is recorded in `lessons/phase-1.md`.
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # authwit-onbehalf-1: discovery signs and lists only requests on behalf of the sending account
 
@@ -51,7 +64,7 @@ The owner's pick B on #1491, in one arc. Recon: [recon.md](recon.md). Asks: [OWN
 - **D3.** The probe's `extractEffects` returns `{ actions, requested }`. The fee-juice and sponsored fast paths rebuild and simulate validated when `requested` or the build is init-wrapped, as they do today for any decoded request; the FPC two-pass reads `actions` (its Pass 2 is always validated). So a dropped-only extraction still meets the validated pass before the estimate is approvable.
 - **D4.** No component change, no new log line, no new state. The window loses the line because the record no longer exists.
 - **D5 (tests; the first four red on base).** `decode-authwit-effects.test.ts`: a request on behalf of another account is dropped and never hashed, with `requested` true; the sender's request beside it stays (control). `authwit-discoverer.real.test.ts`: the existing case (another account) gives no record; one with `onBehalfOf` the account gives the recorded KAT record (the real field position). `discovery-probe.test.ts`: the signer's effect and another account's give one action and one record. `dapp-send-executor.test.ts`: on `default_entrypoint`, the preview lists and the confirm signs only the account's request (one `createAuthWit`). `strategies-lifecycle.test.ts`: `chain.signer` is the build's account, and a new `FOLD_MATRIX` cell, a dropped-only extraction on a deployed account, runs the validated rebuild on the fee-juice and fast paths (the cell with no effects keeps one simulation). The other fakes name the test's sending account; the probe fakes in `fee/strategies-structural.test.ts:442,474,550` take the new return shape. `OperationCard.summary.test.ts`: a third case in the sender test (`:388-400`), wire-shaped, B's `transfer_private_to_private` of a listed token from A, reads "1 USDC from A to X"; it pins the signed window's explicit-sender line, green on base, not proof of the fix.
-- **D6 (e2e; no new scenario).** The additional-scope step of `tx-sendTx-fields.test.ts` gains, after `waitForExecuteApprovable`: one summary call, no `execute-discovered-authwit-line`, no `execute-op-summary-authwits-section`. It keeps `NO_WAIT` and its ok-with-hash assertion: the hash returns only after the private execution inside `proveTx` ran A's `verify_private_authwit` with A's witness alone (proverless runs keep that execution), and inclusion does not read witnesses, so a receipt adds no failure mode. Failure mode: a real Noir-emitted request whose `onBehalfOf` the SW must read, and a real PXE that must accept the send on A's witness alone; no unit layer runs either. Red on base: the window lists one line. Estimated ±1 s per browser; measured (the test's own time, one run each on a loaded host): Chrome 39.8 s before, 45.3 s after; Firefox 48.2 s before and after.
+- **D6 (e2e; no new scenario).** The additional-scope step of `tx-sendTx-fields.test.ts` gains, after `waitForExecuteApprovable`: one summary call, no `execute-discovered-authwit-line`, no `execute-op-summary-authwits-section`. It keeps `NO_WAIT` and its ok-with-hash assertion: the hash returns only after the private execution inside `proveTx` ran A's `verify_private_authwit` with A's witness alone (proverless runs keep that execution), and inclusion does not read witnesses, so a receipt adds no failure mode. Failure mode: a real Noir-emitted request whose `onBehalfOf` the SW must read, and a real PXE that must accept the send on A's witness alone; no unit layer runs either. Red on base: the window lists one line. Estimated ±1 s per browser; measured (the test's own time, one run each on a loaded host): Chrome 39.8 s before, 45.3, 45.0 and 39.8 s after (three runs; host load); Firefox 48.2 s before and after.
 
 ## Architecture & Implementation
 
