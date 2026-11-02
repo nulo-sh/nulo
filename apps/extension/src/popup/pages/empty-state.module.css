@@ -1,0 +1,16 @@
+/* History's empty state. A page whose body fails to load reads the same, its own colour on the title. */
+.banner {
+	max-width: 280px;
+	margin: 48px auto 0 auto;
+	text-align: center;
+}
+
+.title {
+	composes: type--title-page from global;
+}
+
+.description {
+	composes: type--body from global;
+	line-height: 1.5;
+	color: var(--nulo-secondary);
+}

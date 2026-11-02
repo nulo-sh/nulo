@@ -174,6 +174,7 @@ declare global {
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
+  const createReconnectRead: typeof import('../composables/reconnectRead').createReconnectRead
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const dashIfBlank: typeof import('../utils/string').dashIfBlank
@@ -1049,6 +1050,7 @@ declare module 'vue' {
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
+    readonly createReconnectRead: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectRead']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly dashIfBlank: UnwrapRef<typeof import('../utils/string')['dashIfBlank']>

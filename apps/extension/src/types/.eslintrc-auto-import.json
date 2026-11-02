@@ -418,6 +418,7 @@
     "createApp": true,
     "createContactImportGuard": true,
     "createFailedNotice": true,
+    "createReconnectRead": true,
     "createRunFence": true,
     "customRef": true,
     "dashIfBlank": true,
