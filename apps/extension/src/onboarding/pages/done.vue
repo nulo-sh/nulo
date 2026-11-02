@@ -30,8 +30,8 @@ const phraseUnsaved = computed(() => {
 	return path.value !== "import" && !flags.imported && !flags.phraseSaved
 })
 
-// Ready ends onboarding's history: every way back leads to a Create that would make a second
-// profile. Open wallet leaves without a route change, and a reload resumes here.
+// Ready ends onboarding's history: every way back leads to Create or Import, either of which would
+// make a second profile. Open wallet leaves without a route change, and a reload resumes here.
 onBeforeRouteLeave(() => false)
 
 // Detected on mount so the pin-tip only shows for users who actually need

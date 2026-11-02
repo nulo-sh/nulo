@@ -54,7 +54,6 @@ afterEach(() => {
 
 const page = { template: "<div />" }
 
-/** Ready behind a real router, by default entered from Create; the other routes are blank pages. */
 async function mountRouted(
 	getUserSettings: () => Promise<{ isOnToolbar?: boolean }>,
 	history: RouterHistory,
@@ -89,7 +88,7 @@ async function mountDone(getUserSettings: () => Promise<{ isOnToolbar?: boolean 
 	return (await mountRouted(getUserSettings, createMemoryHistory())).w
 }
 
-/** Presses Back and resolves with the navigation's outcome once the router has settled it. */
+/** Resolves on `afterEach`, which reports a refusal before the URL rollback lands. */
 function back(router: Router): Promise<NavigationFailure | undefined> {
 	return new Promise((resolve) => {
 		const stop = router.afterEach((_to, _from, failure) => {

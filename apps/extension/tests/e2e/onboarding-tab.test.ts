@@ -133,8 +133,7 @@ describe("onboarding tab", () => {
 		expect(await phraseSavedFlags(page)).toEqual([true])
 		expect(await readyPhraseLine(page)).toEqual({ unsaved: "false", line: null })
 
-		// Back on Ready stays there: Create would offer a second profile. `history.back()` rather than
-		// `goBack()`, which waits for a navigation the refused pop never finishes.
+		// Back on Ready stays there: Create would offer a second profile.
 		await page.evaluate(
 			() =>
 				new Promise<void>((resolve) => {
