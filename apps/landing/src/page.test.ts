@@ -38,9 +38,9 @@ function element(html: string, tag: string, marker: string): string {
 
 const forms = (html: string) => [...html.matchAll(/<form\b[^>]*>[\s\S]*?<\/form>/g)].map((m) => m[0])
 
-const AVAILABILITY = "Available early November · Chrome and Firefox stores"
-const PRINT = "One email at launch, then occasional updates. Unsubscribe in one click."
-const PRINT_FULL = `${PRINT} Resend sends them for us; see the website privacy notice.`
+const LABEL = "Get updates by email"
+const SUBMIT = "Subscribe"
+const PRINT = "Occasional updates. Unsubscribe in one click. Resend sends them for us; see the website privacy notice."
 
 describe("the signup forms on the home page", () => {
 	const html = source("index.html")
@@ -64,7 +64,7 @@ describe("the signup forms on the home page", () => {
 	it.each([
 		["hero", "email-hero"],
 		["get", "email-get"],
-	])("%s: labels an email field with the copy, and submits with one Notify me button", (_where, id) => {
+	])("%s: labels an email field with the copy, and submits with one Subscribe button", (_where, id) => {
 		const form = id === "email-hero" ? hero : get
 		const email = startTags(form, "input").filter((a) => a.name === "email")
 		expect(email).toEqual([
@@ -77,10 +77,10 @@ describe("the signup forms on the home page", () => {
 				placeholder: "you@example.com",
 			}),
 		])
-		expect(text(element(form, "label", `for="${id}"`))).toBe("Get an email when Nulo is live")
+		expect(text(element(form, "label", `for="${id}"`))).toBe(LABEL)
 		const buttons = startTags(form, "button")
 		expect(buttons).toEqual([expect.objectContaining({ type: "submit" })])
-		expect(text(element(form, "button", 'type="submit"'))).toBe("Notify me")
+		expect(text(element(form, "button", 'type="submit"'))).toBe(SUBMIT)
 		const [status] = startTags(form, "p").filter((a) => "data-signup-status" in a)
 		expect(status).toMatchObject({ role: "status" })
 		expect(text(element(form, "p", "data-signup-status"))).toBe("")
@@ -96,19 +96,27 @@ describe("the signup forms on the home page", () => {
 		}
 	})
 
-	it("hero: the availability line and no small print, with nothing about Resend or the privacy notice", () => {
-		expect(text(element(hero, "p", 'id="avail-hero"'))).toBe(AVAILABILITY)
-		expect(hero).not.toMatch(/signup__print|print-hero/)
+	it("hero: no availability line and no small print, with nothing about Resend or the privacy notice", () => {
+		expect(hero).not.toMatch(/signup__avail|signup__print|Available/)
 		expect(hero).not.toMatch(/Resend|privacy/i)
-		expect(startTags(hero, "input").find((a) => a.name === "email")?.["aria-describedby"]).toBe("avail-hero")
+		expect(startTags(hero, "input").find((a) => a.name === "email")).not.toHaveProperty("aria-describedby")
 	})
 
-	it("#get: the availability line and the full small print, linking the website privacy notice", () => {
-		expect(text(element(get, "p", 'id="avail-get"'))).toBe(AVAILABILITY)
+	it("#get: no availability line, and the small print linking the website privacy notice", () => {
+		expect(get).not.toMatch(/signup__avail|Available/)
 		const print = element(get, "p", 'id="print-get"')
-		expect(text(print)).toBe(PRINT_FULL)
+		expect(text(print)).toBe(PRINT)
 		expect(startTags(print, "a")).toEqual([{ href: "/website-privacy" }])
-		expect(startTags(get, "input").find((a) => a.name === "email")?.["aria-describedby"]).toBe("avail-get print-get")
+		expect(startTags(get, "input").find((a) => a.name === "email")?.["aria-describedby"]).toBe("print-get")
+	})
+
+	it("every aria-describedby names an element of its own form", () => {
+		for (const form of [hero, get]) {
+			const ids = new Set(startTags(form, "[a-z]+").map((a) => a.id))
+			for (const tokens of startTags(form, "[a-z]+").flatMap((a) => a["aria-describedby"] ?? [])) {
+				for (const id of tokens.split(/\s+/)) expect(ids).toContain(id)
+			}
+		}
 	})
 
 	it("no em dash joins two clauses in the new copy", () => {
@@ -116,18 +124,53 @@ describe("the signup forms on the home page", () => {
 	})
 })
 
+describe("the install links on the home page", () => {
+	const html = source("index.html")
+	const blocks = { hero: element(html, "section", 'class="hero"'), get: element(html, "section", 'id="get"') }
+
+	// `mountInstall` narrows exactly these: the primary becomes the detected store, the secondary and
+	// the fallback hide, and the detected span with its other-store link shows.
+	it.each(Object.entries(blocks))("%s: both stores, the hidden other-store line and the fallback line", (_where, block) => {
+		const links = startTags(block, "a").filter((a) => Object.keys(a).some((k) => k.startsWith("data-install")))
+		expect(links).toEqual([
+			{ class: "btn", "data-install": "primary", href: STORES.chrome.url },
+			{ class: "btn", "data-install": "secondary", href: STORES.firefox.url },
+			{ "data-install-other": "", href: STORES.firefox.url },
+		])
+		expect(text(element(block, "a", 'data-install="primary"'))).toBe("Chrome Web Store")
+		expect(text(element(block, "a", 'data-install="secondary"'))).toBe("Firefox Add-ons")
+		const detected = element(block, "span", "data-install-detected")
+		expect(startTags(detected, "span")).toEqual([{ "data-install-detected": "", hidden: "" }])
+		expect(text(detected)).toBe("· about 30 seconds · also on Firefox")
+		const fallback = element(block, "span", "data-install-fallback")
+		expect(startTags(fallback, "span")).toEqual([{ "data-install-fallback": "" }])
+		expect(text(fallback)).toBe("· Nulo runs on desktop Chrome or Firefox")
+	})
+
+	it("hero: the signup form comes after the store links", () => {
+		const secondary = blocks.hero.indexOf('data-install="secondary"')
+		expect(secondary).toBeGreaterThan(-1)
+		expect(blocks.hero.indexOf("<form")).toBeGreaterThan(secondary)
+	})
+
+	it("nothing else on the page carries an install attribute", () => {
+		expect(html.match(/data-install/g)).toHaveLength(11)
+		expect(source("how-aztec-works.html").match(/data-install/g)).toHaveLength(1)
+	})
+})
+
 describe.each([
-	["index.html", "#email-hero"],
-	["how-aztec-works.html", "/#email-hero"],
+	["index.html", "#get"],
+	["how-aztec-works.html", "/#get"],
 ])("%s", (page, navTarget) => {
 	const html = source(page)
 
-	it(`the nav's Notify me goes to the hero field (${navTarget}); Coming soon is gone`, () => {
+	it(`the nav's button is the install link, served as Get Nulo to ${navTarget}`, () => {
 		const nav = element(html, "nav", 'aria-label="Main navigation"')
 		const button = startTags(nav, "a").filter((a) => a.class === "btn")
-		expect(button).toEqual([{ class: "btn", href: navTarget }])
-		expect(text(element(nav, "a", 'class="btn"'))).toBe("Notify me")
-		expect(html).not.toContain("Coming soon")
+		expect(button).toEqual([{ class: "btn", "data-install": "nav", href: navTarget }])
+		expect(text(element(nav, "a", 'class="btn"'))).toBe("Get Nulo")
+		expect(html).not.toMatch(/Notify me|Coming soon/)
 	})
 })
 
@@ -164,7 +207,7 @@ describe("the built site", () => {
 	it("serves /subscribed: the no-script landing of a form post, unindexed, with a way back", () => {
 		const html = readFileSync(join(OUT, "subscribed.html"), "utf8")
 		const main = element(html, "main", "<main")
-		expect(text(main)).toBe("You're on the list. We'll write when Nulo is live. Back to nulo.sh")
+		expect(text(main)).toBe("You're on the list. We'll send occasional updates. Back to nulo.sh")
 		expect(startTags(main, "a")).toEqual([expect.objectContaining({ href: "/" })])
 		expect(startTags(html, "meta")).toContainEqual({ name: "robots", content: "noindex" })
 		expect(text(main)).not.toContain("—")
