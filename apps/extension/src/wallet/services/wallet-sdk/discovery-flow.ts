@@ -97,7 +97,7 @@ export async function handleDiscovery(discovery: PendingDiscovery, deps: Discove
 async function handleSecureDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps): Promise<void> {
 	const { handler, logger } = deps
 	try {
-		// Resolve chainId up-front — the locked-queue coalesce/cap and the
+		// Resolve chainId up-front — the locked queue's pair rule and caps and the
 		// popup caps below all key on `(origin,chainId)`, not just the
 		// auto-approve lookup and new-session creation.
 		const chainId = String(chainInfoToChainId(discovery))
@@ -110,16 +110,9 @@ async function handleSecureDiscovery(discovery: PendingDiscovery, deps: Discover
 		const entryEpoch = deps.switchEpoch.current()
 		const profile = await deps.profileService.getActiveProfile()
 		if (!profile) {
-			// `enqueue` returns false when it coalesces a duplicate or hits a
-			// cap. The upstream `pendingDiscoveries` map (keyed by the dApp-controlled
-			// requestId) is NOT bounded, so a dropped request must be rejected there
-			// or it leaks one pending entry per requestId — a flood of distinct
-			// requestIds under a single (origin,chainId) would grow it without limit,
-			// defeating the queue cap. The still-queued first entry has a different
-			// requestId and is untouched; it drains on unlock.
-			if (!deps.discoveryQueue.enqueue(discovery.requestId, discovery.origin, chainId)) {
-				handler.rejectDiscovery(discovery.requestId)
-			}
+			// The queue rejects what it refuses or supersedes, and only while the SDK's row is still
+			// this request's: a reject here could drop a resend that has since replaced it.
+			deps.discoveryQueue.enqueue(discovery, chainId)
 			return
 		}
 
