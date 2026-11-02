@@ -30,6 +30,10 @@ const phraseUnsaved = computed(() => {
 	return path.value !== "import" && !flags.imported && !flags.phraseSaved
 })
 
+// Ready ends onboarding's history: every way back leads to Create or Import, either of which would
+// make a second profile. Open wallet leaves without a route change, and a reload resumes here.
+onBeforeRouteLeave(() => false)
+
 // Detected on mount so the pin-tip only shows for users who actually need
 // it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
 // to "not pinned" if the API is missing or rejects.
@@ -91,8 +95,8 @@ onBeforeUnmount(() => {
 		:data-phrase-unsaved="phraseUnsaved"
 	>
 		<OnboardingStepHeader current="ready" :path="path" main="You're" sub="In" align="center" :class="$style.hero">
-			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
-				Access the private coordination internet layer.
+			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead" data-testid="onboarding-done-line">
+				Your wallet is ready. Open it to get your address and your first token.
 			</Text>
 			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
