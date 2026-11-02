@@ -126,7 +126,7 @@ Warning: `e2e:agent` writes its own build into `dist/<browser>`, so the network 
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `2575c86c4`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `2575c86c4`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff <plan commit>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. Prompts under `~/.cache/nulo-backlog/w3-storage-1/`. Hard stop at three rounds; each round in `lessons/phase-1.md` and the table below.
 - Approval boundary (a plan change; stop): a retry loop, a timer, an alarm created on a failed read, or any read beyond D5's one inside `set()` and D7's adoption; a change to what any screen shows; a stored shape change; a fix to the price cache.
 - Close-out: the Outcome; the three known limits filed and closed; the lessons line on rejected reads extended within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done w3-storage-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/w3-storage-1/plan.md`.
