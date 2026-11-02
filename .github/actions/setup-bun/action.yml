@@ -10,8 +10,9 @@ description: |
 inputs:
   cache:
     description: |
-      "true" restores and saves the Bun install cache. A build that produces release bytes, and a
-      job that holds a write token, pass "false" and install from the registry against bun.lock:
+      "true" restores and saves the Bun install cache and setup-bun's cached Bun binary; "false"
+      skips both. A build that produces release bytes, and a job that holds a write scope, an App
+      token or a stored secret, pass "false" and install from the registry against bun.lock:
       Bun never re-checks cached files against the lockfile, and the install runs trusted
       packages' lifecycle scripts, so a poisoned cache would ship in the zips or run beside the
       token.
@@ -34,6 +35,7 @@ runs:
       with:
         bun-version-file: package.json
         token: ""
+        no-cache: ${{ inputs.cache != 'true' }}
 
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       if: inputs.cache == 'true'
