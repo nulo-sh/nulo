@@ -28,8 +28,8 @@ export function isDiscoveryExpired(discovery: PendingDiscovery, now: number = Da
 // Bound the locked-wallet discovery queue so a flooding dApp cannot grow
 // it without limit. A legitimate dApp needs at most a handful of concurrent
 // discoveries; anything past these caps is dropped (the dApp re-discovers on
-// its next broadcast). Reject-new, never evict — evicting could drop a
-// legitimate earlier discovery the user was about to approve.
+// its next broadcast). At a cap, reject the new request, never evict a queued
+// one: evicting could drop a legitimate discovery of another pair.
 const GLOBAL_CAP = 32
 const PER_ORIGIN_CAP = 4
 
@@ -134,7 +134,7 @@ export class DiscoveryQueue {
 		}
 		this.queue.push(entry)
 		this.updateBadge()
-		this.logger.log("wallet-sdk", LogLevel.Info, "Discovery queued (wallet locked)", { queued: this.queue.length })
+		this.logger.log("wallet-sdk", LogLevel.Debug, "Discovery queued (wallet locked)", { queued: this.queue.length })
 	}
 
 	private capRefusal(origin: string): string | undefined {

@@ -451,13 +451,13 @@ describe("WindowManager", () => {
 			expect(outcome).toEqual({ state: "rejected", value: WINDOW_CLOSED_BY_USER })
 		})
 
-		it("a handle detached before its window arrives leaves the removal to its owner, whose settle wins", async () => {
+		it("a removal buffered before its handle was detached is left to the owner, whose settle wins", async () => {
 			const release = holdCreateAnswer()
 			const { handleId, promise } = manager.openAndAwait<string>(OPTS)
 			const outcome = outcomeOf(promise)
 			await flushCreate()
-			manager.detach(handleId)
 			fakeWindows.closeByUser(FIRST_WINDOW_ID)
+			manager.detach(handleId)
 			release()
 			await flushCreate()
 			expect(outcome).toEqual({ state: "pending" })
