@@ -5,6 +5,7 @@ import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { trimAddress } from "@/utils/string"
 import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites } from "@/utils/contact-import-rows"
 import { contactListReducers } from "@/utils/entity-list"
+import { pluralize } from "@/utils/plural"
 
 /** Components */
 import RowTarget from "@/components/ui/RowTarget.vue"
@@ -177,7 +178,7 @@ watch(
 							data-testid="import-contacts-senders"
 						>
 							<Text variant="value" color="primary">{{ incomingSenderCount }}</Text>
-							{{ incomingSenderCount === 1 ? "sender" : "senders" }} will be registered on
+							{{ pluralize(incomingSenderCount, "sender", "senders") }} will be registered on
 							<Text variant="value" color="primary">{{ appStore.network.name }}</Text>.
 						</Text>
 						<Text v-else-if="incomingSenderCount > 0" variant="body" color="secondary" align="center" data-testid="import-contacts-senders">

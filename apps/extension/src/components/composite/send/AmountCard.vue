@@ -5,6 +5,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
+import { pluralize } from "@/utils/plural"
 import { isValidDecimals, parseSide } from "@/utils/token-amount"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -540,7 +541,7 @@ const handleFiatBalanceAction = (divisor) => {
 				Type it without the comma.
 			</span>
 			<span v-else-if="wasClamped && tokenDecimals !== undefined" :class="$style.clamp_hint" data-testid="send-amount-clamp-hint">
-				{{ symbolBlank ? "Token" : token.symbol }} supports {{ tokenDecimals }} decimal{{ tokenDecimals === 1 ? "" : "s" }}
+				{{ symbolBlank ? "Token" : token.symbol }} supports {{ tokenDecimals }} {{ pluralize(tokenDecimals, "decimal", "decimals") }}
 			</span>
 			<!-- Last, so a hint keeps its place; an alert, so the line is heard as it appears. -->
 			<Text

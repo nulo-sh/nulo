@@ -474,7 +474,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(skeleton(w).exists()).toBe(false)
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$0.00")
-		expect(meta(w)).toBe("1 tokens · priced assets only")
+		expect(meta(w)).toBe("1 token · priced assets only")
 	})
 })
 

@@ -2,7 +2,8 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
@@ -44,9 +45,9 @@ const contactAddressTerm = form.fields.address.value
 
 // Existing template uses these inline-warning predicates. Map to the form's
 // error messages so the visual contract is unchanged.
-const isAlreadyExistName = computed(() => form.fields.name.error.value === CONTACT_EXISTS)
+const isAlreadyExistName = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
-const isAlreadyExistAddress = computed(() => form.fields.address.error.value === CONTACT_EXISTS)
+const isAlreadyExistAddress = computed(() => form.fields.address.error.value === ALREADY_EXISTS)
 
 const isAvailableToAddContact = computed(() =>
 	canSubmitContact({
