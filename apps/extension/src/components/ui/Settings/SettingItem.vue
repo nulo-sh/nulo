@@ -75,9 +75,8 @@ const titleId = useId()
 const descriptionId = useId()
 const valueId = useId()
 
-/** An `external` row's anchor is named by all its text, so its click form is too: the words that
- *  say it leaves the wallet may sit in its description or value. Read at render, since slots are
- *  not reactive. */
+/** An `external` click row is named by all its text, as its anchor form is, so the words saying it
+ *  leaves the wallet are spoken. Read at render: slots are not reactive. */
 const clickLabel = () => {
 	if (!props.external) return titleId
 	const description = (props.description || rowSlots.description) && descriptionId
