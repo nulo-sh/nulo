@@ -1,0 +1,8 @@
+# Phase 0: planning consults
+
+- Recon: two Sonnet Explore agents (reuse sweep over Send, address fields, Holdings and the priority row; mapper of the in-progress send data and the toast). Every cited line re-read by the planner.
+- Reproduction at the base (`1e6c5bc1f`, armed Chrome build, a scratch spec under the lane's cache dir, uncommitted): a 999.999 USDC public-only row opens Send on PRIVATE with Max disabled (P93-01); the pointer on Fast paints Normal and Fast with the same accent border, `rgb(168, 72, 12)` (P93-26); Holdings reads "999.999" over "0 999.99" and "2,469.1356" over "1,234 1,234" (P93-57). At 240 px the rows do not overflow today.
+- P93-55 reproduction: `document.execCommand("insertText")` after `focus()` leaves `scrollLeft` at 0, so it does not reproduce the tail-only field and is no witness. A real paste does: type the address into the field, Ctrl+A, Ctrl+C, Backspace, Ctrl+V (key events only, no clipboard permission) gives `paste`, then `input` with `inputType: "insertFromPaste"`, and `scrollLeft` 242 of 554 over a 312 px field, on headless Chrome and on Firefox 158. Puppeteer's BiDi `keyboard.sendCharacter` refuses more than one character on Firefox; `keyboard.type` works on both.
+- Codex R1 (gpt-6.1-sol, high, read-only; session kept in the run's temp dir): conditional approve. Findings and dispositions are in plan.md § Panel verdicts.
+- Opus R1 (Plan agent, opus): conditional approve. Its findings and dispositions are in plan.md § Panel verdicts; the late-balance case became known limit #1537.
+- Codex final (fresh session, gpt-6.1-sol, high): conditional approve, arc 1 may proceed; four corrections folded (OA-1 wording, the testid-only base-red proof, the pending seed, the mirror's event replay as A4). Resumed: approve.
