@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { z } from "zod"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
@@ -211,19 +212,19 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// NOT a fire-and-forget `onProfileDeleted` subscriber.
 		this.networkService = services.get(NetworkService.name) as NetworkService
 		this.networkService.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profileService.onRowKeysReady.add((profileId) => void this.onRowKeysReady(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"converting or sweeping the profile's accounts failed; the next worker retries",
+			(profileId) => this.onRowKeysReady(profileId),
+		)
 	}
 
 	/** Converts the profile's plaintext rows, then sweeps its orphan key rows: both need the row
-	 *  keys, so both wait for the profile's unlock. A failure is logged; the next worker retries,
-	 *  since a later unlock in this one finds the keys held and announces nothing. */
+	 *  keys, so both wait for the profile's unlock. */
 	private async onRowKeysReady(profileId: string): Promise<void> {
-		try {
-			await this.sealLegacyRows(profileId)
-			await this.sweepOrphanImportedKeys(profileId)
-		} catch (error) {
-			this.logWarn("converting or sweeping the profile's accounts failed; the next worker retries", { error })
-		}
+		await this.sealLegacyRows(profileId)
+		await this.sweepOrphanImportedKeys(profileId)
 	}
 
 	/** Seals the profile's plaintext accounts, one row lock per row, each with its plaintext key row

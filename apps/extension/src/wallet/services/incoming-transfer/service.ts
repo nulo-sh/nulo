@@ -1,3 +1,4 @@
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -345,15 +346,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  only while its section still owns the lock and no deleter runs, as a receipt does, so a wipe
 	 *  that a watchdog handoff let in never finds a sealed copy it did not list. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.repo.sealLegacy(
-				profileId,
-				(fn) => this.withServiceLock(fn),
-				() => this.deletersRunning === 0,
-			)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext incoming rows failed; the next worker retries", { error })
-		}
+		await this.repo.sealLegacy(
+			profileId,
+			(fn) => this.withServiceLock(fn),
+			() => this.deletersRunning === 0,
+		)
 	}
 
 	/** Bump the lifecycle epoch — call from clear / delete paths so any
@@ -402,7 +399,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			tasks: services.get<TaskService>(TaskService.name),
 			warn: (...data) => this.logWarn(...data),
 		})
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext incoming rows failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Public-event scan arm: its own PXE client + the injected indexer collaborator.
 		// The reader curries `networkId → NetworkInfo` (via the same `networkInfoFrom` the note arm

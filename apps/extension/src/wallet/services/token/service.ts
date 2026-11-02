@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -191,7 +192,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profiles,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext tokens failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Default-token seeding: lazy, single-flight, TOFU-pinned (see
 		// default-tokens.ts + seeder.ts). Triggered on unlock, on active-network
@@ -234,17 +240,13 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 * write would otherwise be undone.
 	 */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.tokens.sealLegacy(profileId, (fn) =>
-				this.withTokenLock((ownsLock) => {
-					const sweeps = this.chainSweepEpoch
-					return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
-				}),
-			)
-			await this.seeder.sealLegacyMarker(profileId)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext tokens failed; the next worker retries", { error })
-		}
+		await this.tokens.sealLegacy(profileId, (fn) =>
+			this.withTokenLock((ownsLock) => {
+				const sweeps = this.chainSweepEpoch
+				return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
+			}),
+		)
+		await this.seeder.sealLegacyMarker(profileId)
 	}
 
 	private readonly onActiveProfileChangedSeed = (profile: ProfileInfo | undefined): void => {

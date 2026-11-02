@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
@@ -150,17 +151,18 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// reverts, so the revocation index never claims a grant that never landed. Best-effort and
 		// idempotent: a failed pass is retried on the next tx update, or by sync.
 		this.transactionService.onTransactionUpdated.add((tx) => this.reconcileFromTx(tx).catch(() => {}))
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext authorizations failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext authwits and flags under the lock every writer of both holds. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext authorizations failed; the next worker retries", { error })
-		}
+		await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
 	/** Map a tx's settled on-chain outcome to a pending-authwit reconcile, scoped to the tx's own

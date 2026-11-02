@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
@@ -161,7 +162,12 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
 		this.tokenService.onTokenUpdated.add(this.onTokenUpdated)
 		this.transactionService.onTransactionUpdated.add(this.onTransactionUpdated)
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext balances failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Subscriptions are already live above, so a profile switch can land during
 		// these awaits: capture the generation first and commit only if it — and the
@@ -194,15 +200,11 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	 *  row never comes back. The queue's unlocked writers can still lose one refresh to an older
 	 *  value in the read-to-commit window; the next refresh rewrites it. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.repo.sealLegacy(
-				profileId,
-				(fn) => this.lock.withLock(fn),
-				(id) => this.invalidatedBalanceIds.has(id),
-			)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext balances failed; the next worker retries", { error })
-		}
+		await this.repo.sealLegacy(
+			profileId,
+			(fn) => this.lock.withLock(fn),
+			(id) => this.invalidatedBalanceIds.has(id),
+		)
 	}
 
 	public async getTokenBalance(id: number): Promise<TokenBalanceInfo> {
