@@ -720,13 +720,6 @@ describe("CI behavior-gating guard", () => {
 		expect(JSON.stringify(wf.jobs.status.steps)).toContain("needs.build-landing.result")
 	})
 
-	test("each e2e lane's filter covers the gate scripts it runs", () => {
-		for (const file of Object.keys(E2E_LANES)) {
-			const [patterns] = Object.values(filtersOf(file))
-			for (const script of GATE_SCRIPTS) expect(patterns, `${file} → ${script}`).toContain(script)
-		}
-	})
-
 	test("cross-cutting inputs (patches + root build inputs) gate the e2e suites", () => {
 		for (const [label, pats] of [
 			["smoke", smoke],
@@ -853,9 +846,8 @@ const [SMOKE, SMOKE_FIREFOX, NETWORK, NETWORK_FIREFOX] = [
 	"pr-extension-network-e2e-firefox.yml",
 ]
 /**
- * Entries naming the CI files a lane runs (workflows, actions, gate scripts) differ by lane by design
- * and stay out of the comparison, `_build-extension.yml` included: on a pull request only pr-quick's
- * builds run it, through its `.github/workflows/**` entry, and no e2e lane loads its output.
+ * Entries naming the CI files a lane runs differ by lane by design and stay out of the comparison;
+ * "each e2e lane's filter names the CI files it runs" derives them instead.
  */
 const LANE_INFRASTRUCTURE = /^(\.github|scripts\/ci-cd)\//
 const PR_QUICK_ROOT_CONFIG = "root config that no build reads; pr-quick's `root-config` filter is one net over the root files"
@@ -973,6 +965,176 @@ describe("one extension build surface", () => {
 			filters: [],
 			findings: ["changes publishes the flag as ${{ steps.compute.outputs.needs-landing-build }}"],
 		})
+	})
+})
+
+type Inputs = Record<string, unknown>
+type Declared = Record<string, { default?: unknown } | null>
+type WalkStep = { uses?: string; if?: unknown; run?: unknown; with?: Record<string, unknown> }
+type WalkFile = {
+	on?: { workflow_call?: { inputs?: Declared } }
+	jobs?: Record<string, WalkStep & { steps?: WalkStep[] }>
+	inputs?: Declared
+	runs?: { steps?: WalkStep[] }
+}
+type ReadFile = (path: string) => WalkFile
+
+const readRepoYaml: ReadFile = (path) => {
+	if (!existsSync(join(ROOT, path))) throw new Error(`${path} does not exist`)
+	return Bun.YAML.parse(readFileSync(join(ROOT, path), "utf8")) as WalkFile
+}
+const LOCAL_WORKFLOW = "./.github/workflows/"
+const LOCAL_ACTION = "./.github/actions/"
+const CI_SCRIPT = /(?<![\w./-])scripts\/ci-cd\/[\w.-]+/g
+const DECIDABLE = /^inputs\.(\w+) (==|!=) '([^']*)'$/
+
+/**
+ * A condition comparing one input to a literal, decided as GitHub does (strings case-insensitively)
+ * when the input is bound to a literal string; undefined for anything else, which the walk counts as
+ * reached, so an undecidable step can only add a trigger, never drop one.
+ */
+function decided(condition: unknown, inputs: Inputs | undefined): boolean | undefined {
+	if (condition === undefined) return true
+	if (typeof condition !== "string") return undefined
+	const text = condition.trim()
+	const bare = text.startsWith("${{") && text.endsWith("}}") ? text.slice(3, -2).trim() : text
+	const match = DECIDABLE.exec(bare)
+	const bound = match ? inputs?.[match[1]] : undefined
+	if (!match || typeof bound !== "string" || bound.includes("${{")) return undefined
+	return (bound.toLowerCase() === match[3].toLowerCase()) === (match[2] === "==")
+}
+
+/** A callee's inputs: its declared defaults, overridden by what the caller hands it, bound in the caller's scope. */
+function calleeInputs(
+	declared: Declared | undefined,
+	handed: Record<string, unknown> | undefined,
+	scope: Inputs | undefined,
+	at: string,
+): Inputs {
+	const inputs: Inputs = Object.fromEntries(Object.entries(declared ?? {}).map(([key, spec]) => [key, spec?.default]))
+	for (const [key, value] of Object.entries(handed ?? {})) inputs[key] = bind(value, { inputs: scope }, at)
+	return inputs
+}
+
+/** The `scripts/ci-cd/` files a step's command lines name; a name with no file behind it throws. */
+function ciScripts(run: unknown, at: string): string[] {
+	const scripts = commandLines(run).flatMap((line) => line.match(CI_SCRIPT) ?? [])
+	for (const script of scripts) if (!existsSync(join(ROOT, script))) throw new Error(`${at} runs ${script}, which does not exist`)
+	return scripts
+}
+
+/** The CI files a PR e2e lane runs: see the describe below. */
+function laneInfrastructure(lane: string, read: ReadFile = readRepoYaml): string[] {
+	const reached = new Set<string>()
+	const visitSteps = (steps: WalkStep[] | undefined, inputs: Inputs | undefined, at: string): void => {
+		for (const step of steps ?? []) {
+			if (decided(step.if, inputs) === false) continue
+			for (const script of ciScripts(step.run, at)) reached.add(script)
+			if (step.uses?.startsWith(LOCAL_ACTION)) visitAction(step.uses.slice(2), step.with, inputs, at)
+		}
+	}
+	const visitAction = (dir: string, handed: Record<string, unknown> | undefined, scope: Inputs | undefined, at: string): void => {
+		const action = read(`${dir}/action.yml`)
+		reached.add(`${dir}/**`)
+		visitSteps(action.runs?.steps, calleeInputs(action.inputs, handed, scope, at), dir)
+	}
+	const visitWorkflow = (path: string, inputs: Inputs | undefined): void => {
+		reached.add(path)
+		for (const [id, job] of Object.entries(read(path).jobs ?? {})) {
+			if (decided(job.if, inputs) === false) continue
+			if (job.uses?.startsWith(LOCAL_WORKFLOW)) {
+				const callee = job.uses.slice(2)
+				visitWorkflow(callee, calleeInputs(read(callee).on?.workflow_call?.inputs, job.with, inputs, `${path} → ${id}`))
+			}
+			visitSteps(job.steps, inputs, `${path} → ${id}`)
+		}
+	}
+	visitWorkflow(`.github/workflows/${lane}`, undefined)
+	return [...reached].sort()
+}
+
+/** Every CI entry of the lane's filter that it does not run (`dead`), and every CI file it runs that the filter lacks (`missing`). */
+function infrastructureFindings(lane: string, read: ReadFile = readRepoYaml): string[] {
+	const [patterns] = Object.values(dornyFilters(read(`.github/workflows/${lane}`) as GateWorkflow, lane))
+	const listed = patterns.filter((pattern) => LANE_INFRASTRUCTURE.test(pattern))
+	const runs = laneInfrastructure(lane, read)
+	return [
+		...runs.filter((path) => !listed.includes(path)).map((path) => `${lane}: missing ${path}`),
+		...listed.filter((path) => !runs.includes(path)).map((path) => `${lane}: dead ${path}`),
+	]
+}
+
+/**
+ * An edit to a CI file a lane runs must run the lane, and an edit to one it never runs must not, so
+ * each lane's CI entries are exactly: its workflow, every local reusable workflow and action it
+ * reaches (an `if:` decided on bound literal inputs, any other counted as reached), and every
+ * `scripts/ci-cd/` file a reached `run:` names. What such a script imports or reads is not derived.
+ */
+describe("each e2e lane's filter names the CI files it runs", () => {
+	const LANES = Object.keys(E2E_LANES)
+	const live = Object.fromEntries(LANES.map((lane) => [lane, infrastructureFindings(lane)]))
+	const overlay =
+		(copies: Record<string, WalkFile>): ReadFile =>
+		(path) =>
+			copies[path] ?? readRepoYaml(path)
+	const added = (read: ReadFile): string[] =>
+		LANES.flatMap((lane) => infrastructureFindings(lane, read).filter((line) => !live[lane].includes(line)))
+	const withPatterns = (lane: string, edit: (patterns: string[]) => string[]): ReadFile => {
+		const path = `.github/workflows/${lane}`
+		const copy = structuredClone(readRepoYaml(path))
+		const step = Object.values(copy.jobs ?? {})
+			.flatMap((job) => job.steps ?? [])
+			.find((candidate) => candidate.uses?.includes("dorny/paths-filter"))
+		const [[name, patterns]] = Object.entries(dornyFilters(copy as GateWorkflow, lane))
+		if (step?.with) step.with.filters = JSON.stringify({ [name]: edit(patterns) })
+		return overlay({ [path]: copy })
+	}
+	const withGeckodriverIf = (condition: string): ReadFile => {
+		const copies: Record<string, WalkFile> = {}
+		for (const suite of [".github/workflows/_extension-smoke-e2e.yml", `.github/workflows/${NETWORK_SUITE}`]) {
+			const copy = structuredClone(readRepoYaml(suite))
+			for (const step of Object.values(copy.jobs ?? {}).flatMap((job) => job.steps ?? []))
+				if (step.uses === `${LOCAL_ACTION}setup-geckodriver`) step.if = condition
+			copies[suite] = copy
+		}
+		return overlay(copies)
+	}
+	const SETUP_BUN = ".github/actions/setup-bun/action.yml"
+	const setupBun = readRepoYaml(SETUP_BUN)
+
+	test("every lane's filter names exactly the CI files it runs", () => {
+		expect(live).toEqual(Object.fromEntries(LANES.map((lane) => [lane, []])))
+	})
+
+	test.each([
+		[
+			"a network filter without an action the lane runs",
+			withPatterns(NETWORK, (patterns) => patterns.filter((pattern) => pattern !== ".github/actions/setup-bun/**")),
+			[`${NETWORK}: missing .github/actions/setup-bun/**`],
+		],
+		[
+			"a smoke filter naming a workflow the lane never runs",
+			withPatterns(SMOKE, (patterns) => [...patterns, `.github/workflows/${NETWORK_SUITE}`]),
+			[`${SMOKE}: dead .github/workflows/${NETWORK_SUITE}`],
+		],
+		[
+			"a composite that calls another local action",
+			overlay({
+				[SETUP_BUN]: {
+					...setupBun,
+					runs: { ...setupBun.runs, steps: [...(setupBun.runs?.steps ?? []), { uses: `${LOCAL_ACTION}setup-x` }] },
+				},
+				".github/actions/setup-x/action.yml": { runs: { steps: [] } },
+			}),
+			LANES.map((lane) => `${lane}: missing .github/actions/setup-x/**`),
+		],
+		[
+			"a browser condition the walk cannot decide",
+			withGeckodriverIf("inputs.browser == inputs.other"),
+			[SMOKE, NETWORK].map((lane) => `${lane}: missing .github/actions/setup-geckodriver/**`),
+		],
+	])("a copy with %s is refused", (_, read, expected) => {
+		expect(added(read)).toEqual(expected)
 	})
 })
 
