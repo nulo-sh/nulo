@@ -91,7 +91,7 @@ Simpler alternatives rejected: string edits at each site (the brief asks for one
 - The risk is a false claim: the strict line describes a security behaviour (Fact 2 proves it); OA-1 flags two signed definitions that over-promise recovery. The store note sends the reader to the policy. D2 removes the path where a reworded verdict silently stops a popup's warning.
 - Known limits: none.
 
-## Phase 1 (arc 1): reproduce, tests, fixes
+## Phase 1 (arc 1): reproduce, tests, fixes ✓
 
 1. Write a capture spec under `~/.cache/nulo-backlog/fu2-copy-1/capture/`, copy it to `tests/e2e/zz-copy1.test.ts`, and run it on the base armed build (`~/.cache/nulo-backlog/fu2-copy-1/dist-base-chrome` via `EXTENSION_PATH`). Capture, light, Chrome, 360 px: Holdings with one token, Settings › Lock, New account and Import token with a taken name, each other verdict popup the smoke harness reaches, and Disconnect all with one session if it can seed one (else its component test is the evidence, said in the PR). Delete the spec.
 2. Add T1-T5 with the base sources; require T1-T4 red. Commit.
@@ -105,6 +105,13 @@ Simpler alternatives rejected: string edits at each site (the brief asks for one
 2. Run the capture spec on the armed build again (`after`), copy the pictures to `screenshots/<surface>-{before,after}.png`, and delete the spec.
 
 **Gate:** 1. `bun run audit:vue`; `bun run test:all`; `(cd apps/extension && bun --bun vitest run scripts/store-listing.test.ts --retry=0)`. 2. `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`. 3. The full smoke suite (CLAUDE.md § Quality gates): `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`, then with `NULO_E2E_BROWSER=firefox`; record each wall-clock. 4. `bun run check:plans` after staging. Pass: every run green at retry 0 (a red reruns once on base first, per lessons); `git status` lists nothing untracked under `apps/extension/tests/`.
+
+**Arc 1 as built** (`fu2-copy-1-a1`):
+- D5: screenshot 4's popup capture still showed strict mode's earlier line, so one run of the opt-in `store-captures` spec re-captured it and only `store/captures/security.png` is kept. Its sandbox address differs from screenshots 1-3 and 5; the PR says so (Codex: proportionate). `git status --short apps/extension/store` lists `listing.md`, screenshot 4 and that capture. The caption fits its column.
+- T5's execute-window singular sits in `call-surface.test.ts` (`rawToggleLabel` is a pure export), not `OperationCard.fallback.test.ts`.
+- Strict mode's row gains "secure" and "unlock" as search synonyms: the signed line names neither, and both searches found the row at the base. Synonyms are never shown.
+- Holdings' and Import token's before pictures are the lab's own frames: on the base build the network harness read "Prices unavailable" with no seeded quote. Disconnect all at one session rests on its component test.
+- `tests/e2e/helpers/profile-chaos/model.ts` cites `accounts/import.vue` by line number; the added import moved it one down.
 
 ## Phase 3 (arc 2, on OA-2) and Phase 4 (arc 3, on OA-1)
 
@@ -131,6 +138,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the same OA-1 corrections ("Alpha" is the word on screen); the website row's accessible name (D7); the stop rule at 360 px, then measured: it fires, so P93-03 became arc 2 behind OA-2; the owner's dashboard step; both plural forms required; singular assertions where only plurals are tested; the profile popup's "Already exist" is its unchanged-name state (R1 reworded); #1529 named | an owner ask on the profile popup's "Name in use" (not a slip; no change); an owner ask on the Get Fee Juice row (it is P93-04's own item on the same page) |
 | final 1 | Codex, resumed (session 01a19d40) | conditional approve | arcs 2 and 3 run `audit:vue` and the full smoke suite on both browsers, the named files only as quick checks; arc 2's title is 50 characters | none |
 | final 2 | Codex, resumed | **approve** | the condition verified; no regression | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a19d6f) | **approve** | no finding; the security capture's re-take judged in scope | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | conditional approve | New sender's duplicate test; the constant's comment; "secure" and "unlock" as synonyms; the store address disclosed; the PR claims D2 only for "Already exists" | an owner ask on the synonyms (they restore the base results and are never shown; Codex agreed); re-rendering all five store images |
+| arc 1 r2 | Codex, resumed | **approve** | the comment's wording | none |
 
 Both legs kept OA-1 as an owner ask over "closest reading": a definition is the entry's whole content, not a detail the option left open.
 
