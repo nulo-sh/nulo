@@ -133,6 +133,20 @@ describe("onboarding tab", () => {
 		expect(await phraseSavedFlags(page)).toEqual([true])
 		expect(await readyPhraseLine(page)).toEqual({ unsaved: "false", line: null })
 
+		// Back on Ready stays there: Create would offer a second profile. `history.back()` rather than
+		// `goBack()`, which waits for a navigation the refused pop never finishes.
+		await page.evaluate(
+			() =>
+				new Promise<void>((resolve) => {
+					window.addEventListener("popstate", () => resolve(), { once: true })
+					history.back()
+				}),
+		)
+		await waitForHash(page, "#/onboarding/done", 10_000)
+		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
+		expect(await page.$('[data-testid="onboarding-create-page"]')).toBeNull()
+		expect(await readProfileNames(page)).toEqual(["Main"])
+
 		// Onboarding opens beside a person's own tabs, so Open wallet closes it, then opens the popup.
 		const control = await openScratchPage(extension.browser, extension.extensionId)
 		if ((await tabsInWindow(page)) === 1) {
