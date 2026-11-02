@@ -58,14 +58,21 @@ vi.mock("@aztec-labs/stdlib/tx", async (importOriginal) => ({
 	collectOffchainEffects: collectOffchainEffectsMock,
 }))
 
-// Real authwit decoding + hashing run Barretenberg WASM (e2e-only); the seam
-// decodes a request from its first field and hashes deterministically.
+// Real authwit decoding + hashing run Barretenberg WASM (e2e-only); the seam decodes a request from
+// its first field, the account it names from its second (the harness's account when absent), and
+// hashes deterministically.
 vi.mock("@aztec-labs/aztec.js/authorization", async (importOriginal) => ({
 	...(await importOriginal<object>()),
 	CallAuthorizationRequest: {
 		fromFields: async (data: unknown[]) => {
 			if (!data.length) throw new Error("not a CallAuthorizationRequest")
-			return { innerHash: `ih:${data[0]}`, msgSender: `caller:${data[0]}`, functionSelector: "0xsel", args: [`arg:${data[0]}`] }
+			return {
+				innerHash: `ih:${data[0]}`,
+				onBehalfOf: { toString: () => String(data[1] ?? "0xacct") },
+				msgSender: `caller:${data[0]}`,
+				functionSelector: "0xsel",
+				args: [`arg:${data[0]}`],
+			}
 		},
 	},
 	computeAuthWitMessageHash: async (intent: { innerHash: string }) => ({ toString: () => `mh:${intent.innerHash}` }),
@@ -1719,7 +1726,10 @@ describe("DappSendExecutor — the authorizing session", () => {
 describe("DappSendExecutor — discovered authwits, the preview snapshot and the confirm guard", () => {
 	const CTX = { interactionId: "i-1", index: 0 }
 	const identity = { ...CTX, fingerprint: null }
-	const effect = (tag: string) => ({ data: [tag], contractAddress: addr("0xconsumer") })
+	const effect = (tag: string, onBehalfOf?: string) => ({
+		data: onBehalfOf ? [tag, onBehalfOf] : [tag],
+		contractAddress: addr("0xconsumer"),
+	})
 	const record = (tag: string) => ({
 		consumer: "0xconsumer",
 		caller: `caller:${tag}`,
@@ -1898,6 +1908,17 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			await expect(executor.previewOperationAuthwits(makeAztecOp(), CTX)).rejects.toThrow("default_entrypoint")
 		})
 
+		test("only the account's own request is previewed and signed; another account's is neither", async () => {
+			collectOffchainEffectsMock.mockReturnValue([effect("theirs", "0xother"), effect("ours")])
+			const { executor, account, proveAndSend } = makeHarness()
+			const op = noFromOp()
+			const preview = await executor.previewOperationAuthwits(op, CTX)
+			expect(preview.discoveredAuthwits).toEqual([record("ours")])
+			await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: preview.previewId })
+			expect(account.createAuthWit.mock.calls.map(([hash]) => String(hash))).toEqual(["mh:ih:ours"])
+			expect(proveAndSend).toHaveBeenCalledTimes(1)
+		})
+
 		test("preview and confirm agree on the fingerprint: an unchanged request matches, a changed argument does not", async () => {
 			collectOffchainEffectsMock.mockReturnValue([effect("n")])
 			const same = makeHarness()
@@ -1989,7 +2010,10 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const base = makeHarness()
 			const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
 				const probe = args[3] as CollectingDiscoveryProbe
-				await probe.extractEffects({ privateExecutionResult: {} }, { node: base.node as never, network: base.built.network })
+				await probe.extractEffects(
+					{ privateExecutionResult: {} },
+					{ node: base.node as never, network: base.built.network, signer: base.account.address },
+				)
 				return base.built as never
 			})
 			return makeHarness({ buildAndEstimateFolded })

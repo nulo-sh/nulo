@@ -9,6 +9,8 @@ import { describe, expect, test, vi } from "vitest"
 import { CollectingDiscoveryProbe, type DiscoveryProbeCrypto } from "./discovery-probe"
 
 const NETWORK = { chainId: 0, l1ChainId: 31337 } as never // local: only the exact l1ChainId binds
+const SIGNER = { toString: () => "0xsigner" } as never
+const OTHER = { toString: () => "0xother" } as never
 
 function fakeSim(effects: { contractAddress: unknown; data: unknown[] }[]) {
 	return {
@@ -27,7 +29,13 @@ function fakeCrypto(hashByEffect: (data: unknown[]) => string | Error): Discover
 		fromFields: async (data) => {
 			const h = hashByEffect(data as unknown[])
 			if (h instanceof Error) throw h
-			return { innerHash: h as never, msgSender: `caller:${h}`, functionSelector: "0xsel", args: [`arg:${h}`] }
+			return {
+				innerHash: h as never,
+				onBehalfOf: data[1] as never,
+				msgSender: `caller:${h}`,
+				functionSelector: "0xsel",
+				args: [`arg:${h}`],
+			}
 		},
 		computeMessageHash: async (intent) => ({ toString: () => `mh:${intent.innerHash}` }) as never,
 	}
@@ -38,7 +46,9 @@ function fakeNode() {
 	return { node: { getNodeInfo } as never, getNodeInfo }
 }
 
-const effect = (tag: string) => ({ contractAddress: { toString: () => "0xtoken" }, data: [tag] })
+/** A request's tag and the account it names, as the fake decodes them. */
+const effect = (tag: string, onBehalfOf: unknown = SIGNER) => ({ contractAddress: { toString: () => "0xtoken" }, data: [tag, onBehalfOf] })
+const ctxOf = (node: never, network: never = NETWORK) => ({ node, network, signer: SIGNER })
 
 describe("CollectingDiscoveryProbe", () => {
 	test("no effects: returns [] without fetching node info (lazy chain fetch)", async () => {
@@ -48,9 +58,9 @@ describe("CollectingDiscoveryProbe", () => {
 		)
 		const { node, getNodeInfo } = fakeNode()
 
-		const out = await probe.extractEffects(fakeSim([]), { node, network: NETWORK })
+		const out = await probe.extractEffects(fakeSim([]), ctxOf(node))
 
-		expect(out).toEqual([])
+		expect(out).toEqual({ actions: [], requested: false })
 		expect(probe.collected).toEqual([])
 		expect(getNodeInfo).not.toHaveBeenCalled()
 	})
@@ -62,13 +72,14 @@ describe("CollectingDiscoveryProbe", () => {
 		)
 		const { node } = fakeNode()
 
-		const out = await probe.extractEffects(fakeSim([effect("a"), effect("a"), effect("b")]), { node, network: NETWORK })
+		const out = await probe.extractEffects(fakeSim([effect("a"), effect("a"), effect("b")]), ctxOf(node))
 
-		expect(out).toEqual([
+		expect(out.actions).toEqual([
 			{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:a" } },
 			{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:b" } },
 		])
-		expect(probe.collected).toEqual(out)
+		expect(out.requested).toBe(true)
+		expect(probe.collected).toEqual(out.actions)
 		// The decoded call rides beside each hash, deduped in step with it.
 		expect(probe.discovered).toEqual([
 			{ consumer: "0xentry", caller: "caller:a", selector: "0xsel", args: ["arg:a"], innerHash: "a", messageHash: "mh:a" },
@@ -83,9 +94,30 @@ describe("CollectingDiscoveryProbe", () => {
 		)
 		const { node } = fakeNode()
 
-		const out = await probe.extractEffects(fakeSim([effect("a"), effect("b")]), { node, network: NETWORK })
+		const out = await probe.extractEffects(fakeSim([effect("a"), effect("b")]), ctxOf(node))
 
-		expect(out).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:b" } }])
+		expect(out.actions).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:b" } }])
+	})
+
+	test("only the signer's request becomes an action; another account's still counts as requested", async () => {
+		const probe = new CollectingDiscoveryProbe(
+			new Set(),
+			fakeCrypto((d) => String(d[0])),
+		)
+		const { node } = fakeNode()
+
+		const out = await probe.extractEffects(fakeSim([effect("theirs", OTHER), effect("ours")]), ctxOf(node))
+
+		expect(out).toEqual({
+			actions: [{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ours" } }],
+			requested: true,
+		})
+		expect(probe.discovered.map((d) => d.messageHash)).toEqual(["mh:ours"])
+		const onlyTheirs = new CollectingDiscoveryProbe(
+			new Set(),
+			fakeCrypto((d) => String(d[0])),
+		)
+		expect(await onlyTheirs.extractEffects(fakeSim([effect("theirs", OTHER)]), ctxOf(node))).toEqual({ actions: [], requested: true })
 	})
 
 	test("first-sim-only: the second extraction is inert and leaves collected untouched", async () => {
@@ -95,12 +127,12 @@ describe("CollectingDiscoveryProbe", () => {
 		)
 		const { node, getNodeInfo } = fakeNode()
 
-		const first = await probe.extractEffects(fakeSim([effect("a")]), { node, network: NETWORK })
-		const second = await probe.extractEffects(fakeSim([effect("b")]), { node, network: NETWORK })
+		const first = await probe.extractEffects(fakeSim([effect("a")]), ctxOf(node))
+		const second = await probe.extractEffects(fakeSim([effect("b")]), ctxOf(node))
 
-		expect(first).toHaveLength(1)
-		expect(second).toEqual([])
-		expect(probe.collected).toEqual(first)
+		expect(first.actions).toHaveLength(1)
+		expect(second).toEqual({ actions: [], requested: false })
+		expect(probe.collected).toEqual(first.actions)
 		expect(getNodeInfo).toHaveBeenCalledTimes(1)
 	})
 
@@ -111,9 +143,9 @@ describe("CollectingDiscoveryProbe", () => {
 		)
 		const { node } = fakeNode()
 
-		const out = await probe.extractEffects(fakeSim([effect("bad"), effect("ok")]), { node, network: NETWORK })
+		const out = await probe.extractEffects(fakeSim([effect("bad"), effect("ok")]), ctxOf(node))
 
-		expect(out).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ok" } }])
+		expect(out.actions).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:ok" } }])
 	})
 
 	test("chain-identity drift fails the extraction loudly (no silent hash derivation)", async () => {
@@ -127,7 +159,7 @@ describe("CollectingDiscoveryProbe", () => {
 
 		let refused: unknown
 		try {
-			await probe.extractEffects(fakeSim([effect("a")]), { node: { getNodeInfo } as never, network })
+			await probe.extractEffects(fakeSim([effect("a")]), ctxOf({ getNodeInfo } as never, network))
 		} catch (error) {
 			refused = error
 		}
@@ -142,6 +174,7 @@ describe("CollectingDiscoveryProbe", () => {
 		const crypto: DiscoveryProbeCrypto = {
 			fromFields: async (data) => ({
 				innerHash: "x" as never,
+				onBehalfOf: SIGNER,
 				msgSender: "caller:x",
 				functionSelector: "0xsel",
 				// `toDiscoveredAuthwit` maps the args, so a missing list fails the record after the hash.
@@ -152,9 +185,9 @@ describe("CollectingDiscoveryProbe", () => {
 		const probe = new CollectingDiscoveryProbe(new Set(), crypto)
 		const { node } = fakeNode()
 
-		const out = await probe.extractEffects(fakeSim([effect("broken"), effect("whole")]), { node, network: NETWORK })
+		const out = await probe.extractEffects(fakeSim([effect("broken"), effect("whole")]), ctxOf(node))
 
-		expect(out).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:x" } }])
+		expect(out.actions).toEqual([{ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "mh:x" } }])
 		expect(probe.discovered).toEqual([
 			{ consumer: "0xentry", caller: "caller:x", selector: "0xsel", args: ["arg:x"], innerHash: "x", messageHash: "mh:x" },
 		])
