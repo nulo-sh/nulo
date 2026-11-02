@@ -1,4 +1,4 @@
-import { Flex } from "@nulo/design"
+import { Flex, Tooltip } from "@nulo/design"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { Ref } from "vue"
@@ -32,6 +32,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 	}),
 }))
 
+import DottedTerm from "@/components/composite/DottedTerm.vue"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import * as prestoCheck from "@/composables/usePrestoCheck"
@@ -46,7 +47,7 @@ const mountProving = ({ withHeader = false } = {}) =>
 	mount(Proving, {
 		attachTo: withHeader ? document.body : undefined,
 		global: {
-			components: { Flex, SettingsPageShell, SubPageHeader },
+			components: { DottedTerm, Flex, SettingsPageShell, SubPageHeader, Tooltip },
 			stubs: {
 				SettingsPageShell: withHeader ? false : { template: "<div><slot /></div>" },
 				PrestoStatusCard: true,
@@ -66,7 +67,8 @@ const mountProving = ({ withHeader = false } = {}) =>
 	})
 
 const sections = (w: ReturnType<typeof mountProving>) => w.findAll("section").map((s) => s.attributes("data-title"))
-const NOTE = "Proofs are always generated on your machine."
+/** The note's words after its first, which is a dotted term whose hidden definition sits between. */
+const NOTE = "are always generated on your machine."
 
 afterEach(() => {
 	state.value = { kind: "idle" }
@@ -111,6 +113,20 @@ describe("settings proving", () => {
 
 		await w.find('[data-testid="presto-permission-allow"]').trigger("click")
 		expect(permission.request).toHaveBeenCalledOnce()
+		w.unmount()
+	})
+
+	test("the note's first word, Proofs, is the dotted term for the glossary's proof", async () => {
+		const w = mountProving()
+		await flushPromises()
+		const term = w.get('[data-testid="settings-proving-proof-term"]')
+		expect(term.text()).toBe("Proofs")
+		expect(w.findComponent(DottedTerm).props("term")).toBe("proof")
+		expect(w.get(`#${term.attributes("aria-describedby")}`).text()).toBe(
+			"What your device builds to show a transaction is valid without revealing what's in it.",
+		)
+		expect(term.element.closest("p")?.firstElementChild?.contains(term.element)).toBe(true)
+		expect(w.findAllComponents(DottedTerm)).toHaveLength(1)
 		w.unmount()
 	})
 
