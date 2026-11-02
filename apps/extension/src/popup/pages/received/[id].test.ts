@@ -605,6 +605,24 @@ describe("the received page reads what its route names", () => {
 		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
 	})
 
+	test("a press of Show fee during a reconnect's read survives its same-block snapshot", async () => {
+		mocks.config = makeConfig([async () => true])
+		const held = deferred<IncomingTransferRecord | undefined>()
+		const lookup = deferred<Fee>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => PUBLIC_RECEIPT, () => held.promise])
+		incoming().getReceiptFee.mockReturnValueOnce(lookup.promise)
+		const w = await mountPage(Promise.resolve([tst]))
+		await reconnect()
+		await testid(w, "received-fee-show").trigger("click")
+		held.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		lookup.resolve({ feeJuice: "2500000000000000" })
+		await flushPromises()
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ")
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+		expect(incoming().getCachedReceiptFee).toHaveBeenCalledTimes(1)
+	})
+
 	test("leaving during the receipt read sends no network or token read", async () => {
 		const held = deferred<IncomingTransferRecord | undefined>()
 		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [() => held.promise])

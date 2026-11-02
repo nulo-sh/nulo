@@ -203,7 +203,8 @@ function portDropped(error) {
 	return isClientDisconnectRejection(error) || error instanceof RpcDisconnectedError
 }
 
-/** The fee is cached per block, and a re-mine moves it. */
+/** The fee is cached per block, and a re-mine moves it. An armed row for the same block keeps its fee,
+ *  its tap or its lookup in flight; one whose lookup failed looks again. */
 function sameBlock(shown, next) {
 	return Boolean(shown && next && shown.id === next.id && shown.blockHash === next.blockHash)
 }
@@ -225,7 +226,7 @@ async function readReceipt(isCurrent) {
 	}
 	const last = events.last
 	const record = last?.deleted ? null : outcome.record && (last?.record ?? outcome.record)
-	const keepFee = (feeState.value === "shown" || feeState.value === "tap") && sameBlock(received.value, record)
+	const keepFee = feeArmed && feeState.value !== "none" && sameBlock(received.value, record)
 	if (!keepFee) {
 		feeArmed = false
 		resetFee()
