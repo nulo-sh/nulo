@@ -390,13 +390,13 @@ test("a success that opens under a still pointer closes itself after 2 s, though
 	await recordSnackLife(page)
 	await countCardEvents(page)
 
-	const at = await page.$eval(sel("receive-address"), (el) => {
+	// The snack opens above Close, over the network line under the address, so the pointer rests there.
+	const at = await page.$eval(sel("receive-network"), (el) => {
 		const box = el.getBoundingClientRect()
-		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.bottom - 3) }
+		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
 	})
 	await page.mouse.move(at.x, at.y, { steps: 5 })
-	await page.mouse.down()
-	await page.mouse.up()
+	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })
 	await settledSnack(page)
 	const under = await page.evaluate(

@@ -34,7 +34,8 @@ const FRAMES = [
 	{
 		capture: "security",
 		title: "Your keys stay with you.",
-		caption: "Protected by your password or your passkey. No server, no account, no telemetry.",
+		caption:
+			"Protected by your password or your passkey. No server, no account, no telemetry. Not audited. See the Privacy Policy for what leaves your device.",
 	},
 	{
 		capture: "history",

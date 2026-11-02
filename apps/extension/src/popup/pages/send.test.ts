@@ -548,6 +548,36 @@ describe("send page — the asset section", () => {
 	})
 })
 
+describe("send page — the side a token opens on", () => {
+	const PUBLIC_ONLY = { ...BALANCE, privateBalance: "0", publicBalance: "3000000" }
+	const OTHER = { ...TOKEN, id: 8, contract: `0x${"8".repeat(64)}`, symbol: "OTH" }
+	const fromSide = (w: W) => w.get('[data-testid="send-from-type"] [data-selected]').text()
+	const shownBalance = (w: W) => w.get('[data-testid="stub-amount"]').attributes("data-balance")
+
+	test.each([
+		["all public opens on Public, with its balance", PUBLIC_ONLY, "PUBLIC", "3"],
+		["both sides open on Private", BALANCE, "PRIVATE", "5"],
+	])("a balance %s", async (_, balance, side, shown) => {
+		mocks.getTokenBalances.mockResolvedValue([balance])
+		const { w } = await mountSend()
+		expect(fromSide(w)).toBe(side)
+		expect(shownBalance(w)).toBe(shown)
+		w.unmount()
+	})
+
+	test("picking a token whose balance is all public moves From to Public", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...PUBLIC_ONLY, id: "b8", token: OTHER }])
+		const { w, cacheStore } = await mountSend()
+		expect(fromSide(w)).toBe("PRIVATE")
+		cacheStore.activeTokenIdx = OTHER.id
+		await flushPromises()
+		expect(fromSide(w)).toBe("PUBLIC")
+		expect(shownBalance(w)).toBe("3")
+		w.unmount()
+	})
+})
+
 describe("send page — the footer", () => {
 	test("no settings from the card: nothing is sendable", async () => {
 		const { w } = await mountSend()

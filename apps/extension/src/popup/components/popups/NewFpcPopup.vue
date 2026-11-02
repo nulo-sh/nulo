@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { isFieldAddress, sameFieldAddress } from "@nulo/wallet-bridge"
 import { sameStoredName } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** Services */
@@ -41,7 +42,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.replace(/\s/g, "").length) return null
-			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return "Already exist"
+			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -60,7 +61,7 @@ const form = useFormState({
 const nameTerm = form.fields.name.value
 const fpcAddressTerm = form.fields.address.value
 
-const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added")
 const isValidAddress = computed(() => addressRefusal(fpcAddressTerm.value) === null)
 const isAvailableToAddFpc = computed(() => {
@@ -165,7 +166,7 @@ watch(
 			data-testid="fpc-name-input"
 		>
 			<template v-if="isAlreadyExist" #right>
-				<FieldWarning> Already exist </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 

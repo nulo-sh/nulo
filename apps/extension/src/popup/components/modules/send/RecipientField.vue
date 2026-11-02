@@ -17,6 +17,7 @@
  * would move whatever the press is on before its click lands.
  */
 import { isComposing } from "@/composables/usePopupEntity"
+import { pluralize } from "@/utils/plural"
 import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
@@ -57,7 +58,7 @@ const shownContacts = computed(() => filteredContacts.value.slice(0, MAX_SHOWN))
 const moreCount = computed(() => filteredContacts.value.length - shownContacts.value.length)
 const moreSentence = computed(() => {
 	const n = moreCount.value
-	return `Keep typing to narrow ${n.toLocaleString("en-US")} more ${n === 1 ? "match" : "matches"}.`
+	return `Keep typing to narrow ${n.toLocaleString("en-US")} more ${pluralize(n, "match", "matches")}.`
 })
 
 const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))

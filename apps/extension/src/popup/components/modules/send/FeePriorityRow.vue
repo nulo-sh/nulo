@@ -63,8 +63,9 @@ const emit = defineEmits(["update:modelValue"])
 
 	transition: all 0.15s ease;
 
+	/* The accent border marks the chosen level alone; a hovered one only tints. */
 	&:hover {
-		border-color: var(--nulo-accent);
+		background: var(--nulo-surface-low);
 	}
 }
 

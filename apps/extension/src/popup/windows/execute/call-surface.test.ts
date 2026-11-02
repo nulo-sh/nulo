@@ -12,6 +12,7 @@ import {
 	callSurface,
 	nonceValue,
 	rawRows,
+	rawToggleLabel,
 	readableGrants,
 	rowTitle,
 	tokenAt,
@@ -482,5 +483,13 @@ describe("uncheckedCallsLine", () => {
 		],
 	] as const)("%s", (_, surfaces, line) => {
 		expect(uncheckedCallsLine(surfaces)).toBe(line)
+	})
+})
+
+describe("rawToggleLabel", () => {
+	test("counts one raw value in the singular and more in the plural; open, it reads Hide", () => {
+		expect(rawToggleLabel(1, false)).toBe("Show 1 raw value")
+		expect(rawToggleLabel(4, false)).toBe("Show 4 raw values")
+		expect(rawToggleLabel(1, true)).toBe("Hide raw values")
 	})
 })

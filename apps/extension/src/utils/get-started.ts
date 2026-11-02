@@ -108,6 +108,8 @@ export interface GetStartedView {
 	steps: GetStartedStep[]
 	/** Whether the card offers Hide: only steps a person may dismiss count. */
 	canHide: boolean
+	/** Set while the funds are unread: the card stands as the flags draw it, its steps inert. */
+	pending?: true
 }
 
 /** Combines the token and Fee Juice reads: any positive side holds funds. */
@@ -131,14 +133,18 @@ function firstProfileSteps(i: Ready): GetStartedStep[] {
 }
 
 /**
- * Home's reminders for the active profile, or `null` while anything they depend on is unread:
- * a loading balance never moves the reminder, and an old profile's flags never show for a new one.
+ * Home's reminders for the active profile, or `null` while the profile's own reads are out, so an
+ * old profile's flags never show for a new one. Unread funds hold the card in place, `pending`, as
+ * they only tick Fee Juice; a loading balance never raises or drops the banner.
  */
 export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	const { type, flags, prestoReached, funds } = input
-	if (type === undefined || flags === undefined || prestoReached === undefined || funds === "unknown") return null
+	if (type === undefined || flags === undefined || prestoReached === undefined) return null
 	// A wallet the person brought in is an established one: Home asks nothing of it.
 	if (flags.imported) return { banner: false, steps: [], canHide: false }
+	const pending = funds === "unknown"
+	// Hidden with the phrase unsaved, a funded read turns the card into the banner, so it waits.
+	if (pending && flags.hidden && !flags.phraseSaved) return null
 	// The phrase step cannot be hidden: it stays in the card, and only once Hide has put the card away
 	// does a funded wallet's phrase become the banner, so the two never show together.
 	const banner = !flags.phraseSaved && funds === "some" && flags.hidden
@@ -146,7 +152,7 @@ export function getStartedView(input: GetStartedInput): GetStartedView | null {
 	if (!banner) steps.push({ item: "phrase", done: flags.phraseSaved })
 	steps.push(...firstProfileSteps({ ...input, flags, prestoReached }))
 	if (steps.every((step) => step.done)) return { banner, steps: [], canHide: false }
-	return { banner, steps, canHide: steps.some((step) => step.item !== "phrase") }
+	return { banner, steps, canHide: steps.some((step) => step.item !== "phrase"), ...(pending ? { pending: true } : {}) }
 }
 
 /** Fee Juice from the gas slice: a failed first read claims nothing held, so the step stays open. */

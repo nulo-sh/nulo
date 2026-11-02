@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
 import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { listOwnAccountRow } from "@/utils/account-rows"
 import { managers } from "@/utils/core"
 
@@ -31,7 +32,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			if (appStore.accounts.some((a) => sameStoredName(a.name, v))) return "Already exist"
+			if (appStore.accounts.some((a) => sameStoredName(a.name, v))) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -39,7 +40,7 @@ const form = useFormState({
 
 const name = form.fields.name.value
 
-const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isAvailableToCreateAccount = computed(() => {
 	// Full-lifetime submit latch: a running create closes the form on EVERY
 	// route (button, Enter, future callers) — the name-uniqueness check below
@@ -79,6 +80,9 @@ const handleCreateAccount = async () => {
 			emit("onClose")
 			return
 		}
+		// A lock or another profile during the create ends this view's scope; the name never reaches the lock screen.
+		if (appStore.isLogined && appStore.profile?.id === profileId)
+			openToast({ kind: "success", label: `Now using ${appStore.account.name}` })
 
 		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 
@@ -123,7 +127,7 @@ usePopupEntity(() => props.show, {
 			v-model="name"
 		>
 			<template v-if="isAlreadyExist" #right>
-				<FieldWarning> Already exist </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 

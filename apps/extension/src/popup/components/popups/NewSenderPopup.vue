@@ -4,6 +4,9 @@ import { FieldWarning } from "@nulo/design"
 import { isFieldAddress } from "@nulo/wallet-bridge"
 import { isHex32 } from "@nulo/wallet-core/utils"
 
+/** Utils */
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
+
 /** Services */
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 
@@ -48,7 +51,7 @@ const validateSenderAddress = () => {
 	if (!senderAddress.value) return
 
 	if (isAlreadyExist.value) {
-		fillError("validation", "Already exist")
+		fillError("validation", ALREADY_EXISTS)
 		return
 	}
 

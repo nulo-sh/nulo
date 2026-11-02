@@ -182,7 +182,7 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(1)
-		expect(w.find('[data-testid="holdings-summary"]').text()).toContain("1 tokens")
+		expect(w.get('[data-testid="holdings-meta"]').text()).toMatch(/^1 token( · |$)/)
 	})
 
 	test("the add row opens the New token popup with the pasted address handed over", async () => {
@@ -474,7 +474,7 @@ describe("holdings page — before the first price answer", () => {
 		expect(skeleton(w).exists()).toBe(false)
 		expect(total(w).attributes("aria-busy")).toBeUndefined()
 		expect(total(w).text()).toBe("$0.00")
-		expect(meta(w)).toBe("1 tokens · priced assets only")
+		expect(meta(w)).toBe("1 token · priced assets only")
 	})
 })
 

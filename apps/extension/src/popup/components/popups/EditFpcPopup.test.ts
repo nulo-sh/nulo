@@ -196,7 +196,7 @@ describe("EditFpcPopup — duplicate names", () => {
 	async function nameState(w: VueWrapper, name: string) {
 		await typeName(w, name)
 		return {
-			warns: w.text().includes("Already exist"),
+			warns: w.text().includes("Already exists"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}
@@ -334,7 +334,7 @@ describe("EditFpcPopup — the list under a held read", () => {
 		const alice = { ...FPC, id: "fpc-2", name: "Alice", address: `0x0${"d".repeat(63)}` }
 		const warns = async () => {
 			await typeName(w, "Alice")
-			return w.text().includes("Already exist")
+			return w.text().includes("Already exists")
 		}
 
 		fpcServiceMock.onFpcAdded.invoke(alice)

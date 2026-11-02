@@ -7,6 +7,7 @@ import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
 import { sameStoredName } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { copyWithToast } from "@/utils/clipboard"
 
 /** Composables */
@@ -39,7 +40,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v?.length) return null
 			const conflicting = fpcs.value.find((f) => sameStoredName(f.name, v) && f.id !== fpcToEdit.value?.id)
-			if (conflicting) return "Already exist"
+			if (conflicting) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -85,7 +86,7 @@ const addressChanged = computed(() => {
 })
 const hasChanges = computed(() => nameChanged.value || addressChanged.value)
 
-const isAlreadyExist = computed(() => form.fields.name.error.value === "Already exist" && nameChanged.value)
+const isAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS && nameChanged.value)
 // Only an edited address is checked, so a row that already shares its address can still be renamed.
 const isAddressStored = computed(() => form.fields.address.error.value === "Already added" && addressChanged.value)
 const isAddressValid = computed(() => isFieldAddress(addressTerm.value))
@@ -263,7 +264,7 @@ watch(
 			data-testid="fpc-name-input"
 		>
 			<template v-if="isAlreadyExist" #right>
-				<FieldWarning> Already exist </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 

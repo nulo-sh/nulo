@@ -18,6 +18,7 @@ import { getSafeDisplay } from "@/wallet/services/dapp-session/capability-meta"
 
 /** Utils */
 import { withoutId } from "@/utils/entity-list"
+import { pluralize } from "@/utils/plural"
 
 /** Composables */
 import { useConfirm } from "@/composables/useConfirm"
@@ -92,7 +93,7 @@ const handleDropAllSessions = () => {
 	requestConfirm({
 		confirm_color: "red",
 		confirm_text: "Yes, disconnect all",
-		description: `Disconnect all ${dappSessions.value.length} sessions?`,
+		description: `Disconnect all ${dappSessions.value.length} ${pluralize(dappSessions.value.length, "session", "sessions")}?`,
 		callback: async () => {
 			for (const session of [...dappSessions.value]) {
 				await dappSessionService.deleteDappSession(session.id)
