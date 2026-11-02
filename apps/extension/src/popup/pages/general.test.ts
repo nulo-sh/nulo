@@ -175,12 +175,20 @@ describe("Home — the backup reminder's sources", () => {
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
 	})
 
-	test("while the gas read is still out, an empty token list shows nothing yet", async () => {
+	test("while the gas read is still out, the card already stands greyed in its place, and Home settles once the read lands", async () => {
 		gas = { status: "fetching", version: 0 }
 		const w = await mountHome()
-		expect(has(w, "get-started")).toBe(false)
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
+		expect(w.get('[data-testid="get-started"] [role="list"]').attributes("aria-busy")).toBe("true")
+		expect(w.findAll('[data-testid="get-started"] [data-done]').every((row) => row.attributes("disabled") !== undefined)).toBe(true)
 		expect(has(w, "backup-reminder-banner")).toBe(false)
 		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("false")
+
+		gasByScope.set(activityScopeKey(HOME_SCOPE), ZERO)
+		await flushPromises()
+		expect(rows(w)).toEqual(["phrase", "aztec", "feeJuice", "presto"])
+		expect(w.get('[data-testid="get-started"] [role="list"]').attributes("aria-busy")).toBeUndefined()
+		expect(w.get('[data-testid="home-scroller"]').attributes("data-reminders-settled")).toBe("true")
 	})
 
 	// A passkey profile's recovery phrase is the one thing that brings it back on another device.
@@ -235,13 +243,16 @@ describe("Home — Get Fee Juice stays done once the profile holds Fee Juice", (
 		app.account = { address: HOME_SCOPE.accountAddress } as never
 		await flushPromises()
 		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice done", "presto"])
-		// A network whose chain id moved, as after a Testnet reset, is a scope with no read yet.
+		// A network whose chain id moved, as after a Testnet reset, is a scope with no read yet: the
+		// card holds its place, greyed, until it lands.
 		app.network = { id: "n1", chainId: 2 } as never
 		await flushPromises()
-		expect(has(w, "get-started")).toBe(false)
+		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice done", "presto"])
+		expect(w.get('[data-testid="get-started"] [role="list"]').attributes("aria-busy")).toBe("true")
 		gasByScope.set(activityScopeKey({ ...HOME_SCOPE, chainId: 2 }), ZERO)
 		await flushPromises()
 		expect(rows(w)).toEqual(["phrase", "aztec done", "feeJuice done", "presto"])
+		expect(w.get('[data-testid="get-started"] [role="list"]').attributes("aria-busy")).toBeUndefined()
 	})
 })
 

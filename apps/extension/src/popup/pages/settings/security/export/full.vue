@@ -24,6 +24,7 @@ import { managers } from "@/utils/core"
 import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { goBack } from "@/utils/page-back"
+import { pluralize } from "@/utils/plural"
 import { backupNotice } from "@/components/stale-network/copy"
 
 /** Composables */
@@ -251,7 +252,7 @@ onBeforeUnmount(() => {
 						<template #title> Some imported accounts are not in this backup </template>
 						<template #description>
 							<Text color="secondary" height="140">
-								{{ unopenedImportedKeys === 1 ? "1 imported account" : `${unopenedImportedKeys} imported accounts` }}
+								{{ unopenedImportedKeys }} imported {{ pluralize(unopenedImportedKeys, "account", "accounts") }}
 								could not be opened, so {{ unopenedImportedKeys === 1 ? "it" : "they" }} will not be restored. Import
 								their keys again after the restore.
 							</Text>

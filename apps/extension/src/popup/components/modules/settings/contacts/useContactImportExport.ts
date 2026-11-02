@@ -20,6 +20,7 @@ import type { RunFence } from "@/wallet/services/profile/spec"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { usePopupStore } from "@/stores/popup.store"
+import { pluralize } from "@/utils/plural"
 import { type Outcome, type Snack, showSnack } from "@/utils/snack"
 
 interface ContactRecord {
@@ -452,7 +453,7 @@ function logImportErrors(errors: UpsertError[]): void {
 /** `written` counts confirmed writes, so a write whose reply the stop cut off may be saved uncounted.
  *  `selected` counts every row the person chose, refused ones included. */
 function stoppedImportSnack(tally: ImportTally, selected: number): Snack {
-	const noun = selected === 1 ? "contact" : "contacts"
+	const noun = pluralize(selected, "contact", "contacts")
 	return { kind: "error", label: `Import incomplete · ${tally.written} of ${selected} ${noun} written` }
 }
 
@@ -471,6 +472,6 @@ function importOutcomeSnack(tally: ImportTally): Snack {
 		return { kind: "error", label: `Contacts imported · ${detail}` }
 	}
 	if (senderTotal > 0)
-		return { kind: "success", label: `Contacts imported · ${senderOk} ${senderOk === 1 ? "sender" : "senders"} registered` }
+		return { kind: "success", label: `Contacts imported · ${senderOk} ${pluralize(senderOk, "sender", "senders")} registered` }
 	return { kind: "success", label: "Import completed successfully" }
 }

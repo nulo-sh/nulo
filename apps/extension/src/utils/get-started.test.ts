@@ -153,8 +153,29 @@ describe("get started view (pure)", () => {
 		})
 	})
 
-	test("never a banner while funds are unknown: nothing shows until they are read", () => {
-		expect(view({ funds: "unknown" })).toBeNull()
+	test("while the funds are unread the card stands from the flags, pending and never a banner; only a hidden card with an unsaved phrase waits", () => {
+		expect(view({ funds: "unknown", feeJuice: "unknown" })).toEqual({
+			banner: false,
+			steps: [
+				{ item: "phrase", done: false },
+				{ item: "aztec", done: false },
+				{ item: "feeJuice", done: false },
+				{ item: "presto", done: false },
+			],
+			canHide: true,
+			pending: true,
+		})
+		expect(drawn({ funds: "unknown", feeJuice: "unknown" }, { phraseSaved: true, feeJuiceHeld: true })).toEqual([
+			"phrase done",
+			"aztec",
+			"feeJuice done",
+			"presto",
+		])
+		// Hidden with the phrase unsaved: a funded read turns the card into the banner, so it waits.
+		expect(view({ funds: "unknown" }, { hidden: true })).toBeNull()
+		expect(view({ funds: "unknown" }, { hidden: true, phraseSaved: true })).toEqual({ banner: false, steps: [], canHide: false })
+		expect(view({ funds: "unknown" }, { imported: true })).toEqual({ banner: false, steps: [], canHide: false })
+		expect(view({ funds: "none" })?.pending).toBeUndefined()
 	})
 
 	// A passkey profile keeps a recovery phrase too, so its card is the password card, step for step.

@@ -149,19 +149,6 @@ footer {
 	background: rgba(245, 240, 230, 0.08);
 }
 
-/* A date, not a control: unfilled and dashed so it never reads as a button. */
-.soon {
-	display: inline-flex;
-	align-items: center;
-	color: var(--txt-primary);
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 15px;
-	letter-spacing: 0.02em;
-	padding: 14px 22px;
-	border: 1px dashed var(--txt-primary);
-}
-
 .eb {
 	font-family: var(--font-mono);
 	font-size: 11px;
@@ -194,6 +181,11 @@ footer {
 	color: var(--txt-primary);
 	text-decoration: underline;
 	text-underline-offset: 3px;
+}
+
+/* Two small lines side by side in one row read as one sentence; the second starts its own line. */
+.cta small + small {
+	flex-basis: 100%;
 }
 
 .bar {
@@ -532,14 +524,6 @@ footer {
 .signup p {
 	margin: 0;
 	max-width: none;
-}
-
-.signup p.signup__avail {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--txt-primary);
 }
 
 .signup p.signup__print {

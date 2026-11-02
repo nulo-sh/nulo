@@ -14,6 +14,7 @@ import {
 	sameFieldAddress,
 } from "@nulo/wallet-bridge"
 import { isObjectLike } from "@nulo/wallet-core/utils"
+import { pluralize } from "@/utils/plural"
 
 export type RowKey =
 	| "account-address"
@@ -87,7 +88,7 @@ export function reachOf(contracts: readonly string[], names: readonly KnownName[
 	const keys = new Set(contracts.map(contractKey))
 	const [only] = keys
 	const name = keys.size === 1 ? names.find((entry) => entry.address === only)?.name : undefined
-	return name ?? `${keys.size} ${keys.size === 1 ? "contract" : "contracts"}`
+	return name ?? `${keys.size} ${pluralize(keys.size, "contract", "contracts")}`
 }
 
 const DATA_OFF: SubSegment[] = [{ text: "Not shared. The app may ask again later." }]
@@ -177,7 +178,7 @@ export function contractClassesRow(networkName: string, classes: "*" | readonly 
 		title:
 			count === undefined
 				? `Look up contract code on ${networkName}`
-				: `Look up the code of ${count} contract ${count === 1 ? "class" : "classes"} on ${networkName}`,
+				: `Look up the code of ${count} contract ${pluralize(count, "class", "classes")} on ${networkName}`,
 		subOn: [{ text: "Whether it is on chain, and if this wallet has its code." }],
 		flagged: count === undefined,
 		...(count === undefined ? { chip: ANY_CLASS } : {}),
@@ -233,7 +234,7 @@ export function unknownRow(count: number, state: { broadRequest: boolean }): Per
 		key: "unknown",
 		group: "if-you-allow",
 		icon: "help",
-		title: `Use ${count} ${count === 1 ? "permission" : "permissions"} Nulo doesn't recognize`,
+		title: `Use ${count} ${pluralize(count, "permission", "permissions")} Nulo doesn't recognize`,
 		subOn: UNKNOWN_SUB,
 		subOff: UNKNOWN_SUB,
 		switchLabel: "Unknown permission",

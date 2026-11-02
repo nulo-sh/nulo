@@ -13,8 +13,10 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
 import { getChainPosition } from "@/components/ui/utils"
+import { SWITCH_SETTLED_KEY } from "@/popup/network-switch"
 import { managers } from "@/utils/core"
 import { stringCompare } from "@/utils/string"
+import { switchAndAnnounce } from "./switch-toast"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -32,6 +34,7 @@ const { activate } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
 })
+const switchSettled = inject(SWITCH_SETTLED_KEY)
 
 // Custom chains are a developer surface: "Add network" is offered only under Developer Mode.
 // Endpoints on the built-in networks, and rows that already exist, stay manageable for everyone.
@@ -58,7 +61,7 @@ const setRow = (id, row) => (row ? rows.set(id, row) : rows.delete(id))
 // outcome toast inside the composable.
 async function handleSwitch(network, event) {
 	if (event.detail > 1) return
-	if ((await activate(network)) === "activated") openToast({ kind: "success", label: "Active network updated" })
+	await switchAndAnnounce(network, { store: appStore, activate, settled: switchSettled, openToast })
 }
 
 /** A row's link: the row itself while it is active, else the target stretched under its Switch. */
