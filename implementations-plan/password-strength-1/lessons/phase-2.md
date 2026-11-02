@@ -11,3 +11,8 @@
 
 - Codex (gpt-6.1-sol, high): conditional approve, three findings, all verified: the base test's accented letter was decomposed (`e` + U+0301, checked with `od`), the rewrite had made it precomposed; D9's "both browsers meet 100 ms" was false at 128 units; three comments restated code. D9's design judged right: the public API has no prepared configuration, and scrubbing a cached factory relies on internals.
 - Opus (general-purpose): conditional approve, D9 accepted (a cached factory scrubbed by a dummy check would still leave the repeat matcher's own scoring object holding the repeated chunk). Adopted: the typed warning table (`satisfies`, proven by a deliberate typo), two missing invariants in comments, the stale Architecture bullet. Declined: trimming the per-form tables (D7, the brief's per-tier values).
+
+## Implementation review, round 2, and the final gates
+
+- Codex (resumed): approve; no regression.
+- After merging `origin/dev` (index line conflict only, both lines kept): lint, typecheck:all, test:all, both armed builds and the three smoke files on both browsers green at retry 0 (Chrome 95.5 s, Firefox 134.0 s; host shared with other lanes).

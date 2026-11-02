@@ -8,3 +8,5 @@
 - 2026-11-01 arc 1 phase 1 gate green: lint 0, typecheck:all 0, targeted vitest 67 files / 1413 tests at retry 0; 31 new cases red on the base hint.
 - 2026-11-01 armed builds Chrome and Firefox exit 0; notices list the five packages and the ODC-BY notice; hint chunk 1.66 MB, statically unreachable from every entry (walk control passes).
 - 2026-11-01 arc 1 phase 2 green: smoke e2e Chrome 16/16 (82.9 s), Firefox 16/16 (118.6 s); captures taken; timing within 100 ms (D9 deviation: 50 ms budget missed on Firefox).
+- 2026-11-01 review round 1 (Codex + Opus) fixed; Codex round 2 approve.
+- 2026-11-02 final gates on the merged head: lint 0, typecheck:all 0, test:all 0 (extension 954 files), armed builds 0 (hint chunk unreachable statically), smoke e2e Chrome 16/16 (95.5 s), Firefox 16/16 (134.0 s), check:plans 0.

@@ -1,7 +1,7 @@
 ---
 plan: password-strength-1
 tier: light
-status: approved by the panel; arc 1 in progress
+status: arc 1 in review (PR open), merge waits on the owner's sign-off of OA-1 to OA-3
 issues: "#1401 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -125,6 +125,8 @@ The contract is this plan plus `implementations-plan/README.md` § Post-implemen
 **Codex, final pass round 2** (resumed, verifying): `approve`. The A/B classifications, the English-word fixes and the aligned warning reproduced independently; no new material defect.
 
 **Implementation review, round 1** (Codex gpt-6.1-sol high: `conditional approve`; Opus general-purpose: `conditional approve`, D9 accepted). Verified and fixed: the accented rows had lost their combining mark (`e\u0301` restored, both tests); D9 claimed both browsers met 100 ms at 128 units (now: 100 ms realistic, 300 ms at 128); the warning table `satisfies` the library's warning-key type (a misspelled key now fails the typecheck, proven); comments cut to the invariants (the bands, the English subset, the factory lifetime, the one run per matching pair); the Architecture bullet matched to the private `strengthHint`. Kept under D7: the six-row tables on both forms (the brief asks per-tier values on each).
+
+**Implementation review, round 2** (Codex, resumed, verifying): `approve`. The fixes verified (combining-mark rows, the 100/300 ms budgets, the typed table with its TS2561 on a typo, the comments); no regression.
 
 ## Seeds
 
