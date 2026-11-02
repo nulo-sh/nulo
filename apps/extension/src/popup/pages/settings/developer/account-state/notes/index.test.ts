@@ -60,5 +60,6 @@ test.each([
 	expect(w.findAll('[data-testid="note-contract"]')).toHaveLength(2)
 	await w.get("input").setValue(pasted)
 	expect(w.findAll('[data-testid="note-contract"]')).toHaveLength(shown)
-	expect(w.find('[data-testid="status"]').attributes("data-variant")).toBe(status)
+	const line = w.find('[data-testid="status"]')
+	expect(line.exists() ? line.attributes("data-variant") : undefined).toBe(status)
 })

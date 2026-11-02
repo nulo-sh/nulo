@@ -58,5 +58,6 @@ test.each([
 	const w = await mountPage()
 	await w.get("input").setValue(pasted)
 	expect(w.findAll('[data-testid="contract"]').map((c) => c.attributes("data-address"))).toEqual(shown)
-	expect(w.find('[data-testid="status"]').attributes("data-variant")).toBe(status)
+	const line = w.find('[data-testid="status"]')
+	expect(line.exists() ? line.attributes("data-variant") : undefined).toBe(status)
 })
