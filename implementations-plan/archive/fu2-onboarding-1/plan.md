@@ -127,7 +127,7 @@ Build with the "what ships now" form of OA-1, OA-3 and OA-4 unless answered firs
 ## Delivery
 
 - Arc 1: `fu2-onboarding-1-a1`, off this plan's commit. PR `fix(onboarding): ready's line in plain words, and back stays on ready` (69 characters), `Closes #1512`, `Closes #1515`.
-- Arcs 2 and 3 with the close-out (D13): `fu2-onboarding-1-a2` off `dev`, one PR `feat(onboarding): a phrase check before ready, create profile, a popup that points to the tab` (89), `Closes #1511`, `#1513`, `#1514`, `#1516`. Ready, base `dev`, no label at creation.
+- Arcs 2 and 3 with the close-out (D13): `fu2-onboarding-1-a2` off `dev`, one PR `feat(onboarding): a phrase check before ready, create profile, a popup pointing to the tab` (90), `Closes #1511`, `#1513`, `#1514`, `#1516`. Ready, base `dev`, no label at creation.
 - Each body: what changed and why; the claims that did not hold; the sign-off quotes and each ask's state; the captures (`?raw=true` at the head SHA); the touched e2e files' local times and each browser's smoke suite wall-clock from CI, before (the latest green run of the same workflow on another PR) and after; runs and outcomes; the accessibility calls under the owner's 2026-10-19 delegation; ending `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Commits: conventional, lower case, signed, ending `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The arcs share `create.vue` and `onboarding-tab.test.ts`, so no lanes.
 

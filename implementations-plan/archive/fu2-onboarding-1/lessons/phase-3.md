@@ -9,3 +9,4 @@
 - **Codex, gpt-6.1-sol, high (session 01a19df7), r1: findings 3.** The second press could pass with no focus at all; no browser drives the check's keys; three comments narrate. All accepted.
 - **Opus 5.5 (general-purpose), r1: findings 6.** The shifted citation; the same witness; the untracked tab; a one-shot tab count over BiDi; a second Confirm marking twice; stale fixture comments. All accepted.
 - **Codex r2: clean.** Then the Firefox run of the r2 head failed twice on the test-only defects above, fixed; **Codex r3: clean.**
+- **Final head, rebased on `ed30c2565`, the same eight files at retry 0: 42/42 on both.** Chrome 336 s (onboarding-tab 49.5 s, keyboard-guards 12.0 s, the popup scenario 5.7 s). Firefox 503 s at load about 115 (onboarding-tab 74.2 s, keyboard-guards 21.6 s, the popup scenario 9.8 s); files this PR leaves alone slowed as much (legal-acceptance 204.8 s, auth-flows 51.9 s), so the rise is the host's.
