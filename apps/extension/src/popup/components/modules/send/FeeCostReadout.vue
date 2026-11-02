@@ -23,6 +23,8 @@ const props = defineProps({
 	failed: { type: Boolean, default: false },
 	/** The running estimate has passed the page's patience: the bar gives way to an offer to ask again. */
 	slow: { type: Boolean, default: false },
+	/** Who the row says pays, over its value. */
+	label: { type: String, default: "You pay" },
 })
 
 const emit = defineEmits(["retry"])
@@ -47,7 +49,7 @@ const sponsoredSentence = computed(() => {
 		:class="$style.detail_row"
 		data-testid="fee-estimate-queued-cap"
 	>
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.fee_value">
 			About <FeeAmount :display="queuedCap.about" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 		</span>
@@ -60,27 +62,27 @@ const sponsoredSentence = computed(() => {
 		:class="$style.detail_row"
 		data-testid="fee-estimate-queued-sponsored"
 	>
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.fee_value">Nothing</span>
 		<span :class="$style.queued" data-testid="fee-estimate-queued-sponsored-line">{{ QUEUED_SPONSORED_COPY }}</span>
 	</Flex>
 	<Flex v-else-if="estimating && isQueued" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.queued">{{ QUEUED_FEE_COPY }}</span>
 	</Flex>
 	<Flex v-else-if="estimating && slow" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-slow">
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.failed">
 			<span class="color--secondary">Taking longer than usual.</span>
 			<button type="button" :class="$style.retry" data-testid="fee-estimate-retry" @click="emit('retry', $event)">Try again</button>
 		</span>
 	</Flex>
 	<Flex v-else-if="estimating || (pending && amountTyped)" direction="column" gap="4" :class="$style.detail_row">
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.fee_value"><Skeleton /></span>
 	</Flex>
 	<Flex v-else-if="estimate && !pending" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate">
-		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
+		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">{{ label }}</span>
 		<span v-if="payer === 'sponsor'" :class="$style.fee_value">
 			<span aria-hidden="true">
 				<span>Nothing</span> <s :class="$style.fee_usd"><FeeAmount :display="estimate" usdTestid="fee-estimate-usd" /></s>
@@ -94,7 +96,7 @@ const sponsoredSentence = computed(() => {
 		<FeeAmount v-else :class="$style.fee_value" :display="estimate" :usdClass="$style.fee_usd" usdTestid="fee-estimate-usd" />
 	</Flex>
 	<Flex v-else-if="failed && !pending" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-failed">
-		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_label">{{ label }}</span>
 		<span :class="$style.failed">
 			<span class="color--txt-danger">Couldn't estimate fee.</span>
 			<button type="button" :class="$style.retry" data-testid="fee-estimate-retry" @click="emit('retry', $event)">Try again</button>
@@ -140,11 +142,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .failed {
-	composes: type--body from global;
-	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 6px;
+	composes: failed from "./fee-shared.module.css";
 }
 
 .retry {

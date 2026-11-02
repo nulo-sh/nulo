@@ -29,7 +29,14 @@
 	border: 0;
 }
 
-/* "Try again" beside a fee line: an accent action in the label role, on the line's baseline. */
+.failed {
+	composes: type--body from global;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+}
+
 .retry {
 	composes: type--label-section from global;
 	line-height: inherit;

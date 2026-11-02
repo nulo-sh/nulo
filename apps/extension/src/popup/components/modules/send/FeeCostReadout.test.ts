@@ -69,6 +69,9 @@ describe("FeeCostReadout", () => {
 		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("You payCouldn't estimate fee.Try again")
 		await w.get('[data-testid="fee-estimate-retry"]').trigger("click")
 		expect(w.emitted("retry")).toHaveLength(1)
+
+		await w.setProps({ label: "Swap pays" })
+		expect(w.get('[data-testid="fee-estimate-failed"]').text()).toBe("Swap paysCouldn't estimate fee.Try again")
 	})
 
 	test("pending with no amount typed, the row reads the hint, whatever estimate or queue is still on the props", async () => {
