@@ -229,10 +229,11 @@ const FJ = { settings: { paymentMethod: { kind: "fj" } }, payer: { type: "fj", i
 /** A protocol sponsor: hidden, one tap. */
 const SPONSOR = { settings: { paymentMethod: { kind: "fpc", fpcId: "s1" } }, payer: { type: "fpc", fpcId: "s1", isProtocol: true } }
 
-/** The identity the page reads for; a cold tab's settles after mount. */
-function setIdentity(appStore: ReturnType<typeof useAppStore>) {
+/** The identity the page reads for; a cold tab's settles after mount. Balance rows land only for
+ *  its chain. */
+function setIdentity(appStore: ReturnType<typeof useAppStore>, chainId = TOKEN.chainId) {
 	appStore.profile = { id: "p1" } as never
-	appStore.network = { id: "n1", chainId: TOKEN.chainId } as never
+	appStore.network = { id: "n1", chainId } as never
 	appStore.account = { address: ACCOUNT } as never
 }
 
@@ -246,14 +247,20 @@ async function estimateLands() {
 }
 
 async function mountSend(
-	opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; realAmountCard?: boolean; cold?: boolean } = {},
+	opts: {
+		errorHandler?: (error: unknown) => void
+		realTokenCard?: boolean
+		realAmountCard?: boolean
+		cold?: boolean
+		chainId?: number
+	} = {},
 ) {
 	vi.useFakeTimers()
 	installChromeStorage()
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
-	if (!opts.cold) setIdentity(appStore)
+	if (!opts.cold) setIdentity(appStore, opts.chainId)
 	const cacheStore = useCacheStore(pinia)
 	const popupStore = usePopupStore(pinia)
 	const w = mount(Send, {
@@ -747,17 +754,19 @@ describe("send page — the balance beside Max", () => {
 		w.unmount()
 	})
 
-	test("with no row, a refused balance read draws nothing until a read lands", async () => {
+	test("with no row, a refused re-read keeps the skeleton the load's read showed, and so does the retry's read", async () => {
 		mocks.getTokenBalances.mockResolvedValue([])
 		const { w } = await mountSend({ realAmountCard: true })
+		expect(corner(w)).toBe("skeleton")
 		balanceConnected().invoke()
 		mocks.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
 		balanceConnected().invoke()
 		await flushPromises()
-		expect(corner(w)).toBe("nothing")
+		expect(corner(w)).toBe("skeleton")
 
 		await vi.advanceTimersByTimeAsync(2_000)
 		await flushPromises()
+		expect(mocks.getTokenBalances).toHaveBeenCalledTimes(3)
 		expect(corner(w)).toBe("skeleton")
 		w.unmount()
 	})
@@ -1241,7 +1250,7 @@ describe("send page — a token the picker imported", () => {
 		const added = { ...NEW, chainId }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
-		const { w, cacheStore } = await mountSend({ realAmountCard: true })
+		const { w, cacheStore } = await mountSend({ realAmountCard: true, chainId })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
 		price.onQuotesUpdated.invoke({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
@@ -1519,6 +1528,63 @@ describe("send page — the token card while the tokens load", () => {
 		balanceDeleted().invoke(BALANCE)
 		await flushPromises()
 		expect(amount(w).attributes("data-balance")).toBe("0")
+		w.unmount()
+	})
+
+	test.each([
+		["after the balance read answers", false],
+		["while the balance read is out", true],
+	])("an update for the selected token during the load is what it shows: %s", async (_when, whileOut) => {
+		const tokenReads = holdTokenReads()
+		const balanceReads = holdReads<unknown[]>(mocks.getTokenBalances)
+		const UPDATED = { ...BALANCE, privateBalance: "9000000", updatedAt: 2 }
+		const { w } = await mountSend()
+		if (whileOut) balanceUpdated().invoke(UPDATED)
+		balanceReads[0]?.resolve([BALANCE])
+		await flushPromises()
+		if (!whileOut) balanceUpdated().invoke(UPDATED)
+		for (const read of balanceReads.slice(1)) read.resolve([UPDATED])
+		tokenReads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("9")
+		w.unmount()
+	})
+
+	test("a delete of the selected row after the balance read answers keeps it gone when the load ends", async () => {
+		const tokenReads = holdTokenReads()
+		const { w } = await mountSend()
+		balanceDeleted().invoke(BALANCE)
+		tokenReads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(amount(w).attributes("data-balance")).toBe("0")
+		w.unmount()
+	})
+
+	test.each([
+		["the first read", false],
+		["the refetch an update during the first read asks for", true],
+	])("a refused balance read shows the failed card at once and keeps it: %s", async (_which, refetch) => {
+		const tokenReads = holdTokenReads()
+		const balanceReads = holdReads<unknown[]>(mocks.getTokenBalances)
+		const { w } = await mountSend()
+		if (refetch) {
+			balanceUpdated().invoke({ ...BALANCE, privateBalance: "9000000", updatedAt: 2 })
+			balanceReads[0]?.resolve([BALANCE])
+			await flushPromises()
+		}
+		balanceReads.at(-1)?.reject(refused())
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
+		expect(failed(w)).toBe("true")
+
+		tokenReads[0]?.resolve([TOKEN])
+		await vi.advanceTimersByTimeAsync(2_000)
+		for (const read of balanceReads) read.resolve([BALANCE])
+		await flushPromises()
+		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
+		expect(failed(w)).toBe("true")
 		w.unmount()
 	})
 
@@ -1953,7 +2019,7 @@ describe("send page — Refresh quote by keyboard", () => {
 		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
-		const { w } = await mountSend({ realAmountCard: true })
+		const { w } = await mountSend({ realAmountCard: true, chainId })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
 		const quote = (usd: number) => ({
 			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },

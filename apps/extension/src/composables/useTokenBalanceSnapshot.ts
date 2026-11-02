@@ -98,7 +98,9 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 		state.value = "loaded"
 	}
 
-	async function fetchTokenBalances(isTimedRetry = false): Promise<void> {
+	/** Never rejects. Resolves `false` only when this run's read, or the refetch a dirty mark asked
+	 *  for, was refused and settled here; a superseded run resolves `true`, its outcome the newer run's. */
+	async function fetchTokenBalances(isTimedRetry = false): Promise<boolean> {
 		const inScope = scopeFence?.()
 		const isCurrent = fence.begin()
 		const superseded = () => (inScope && !inScope()) || !isCurrent()
@@ -109,18 +111,20 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 		if (!address) {
 			rows.value = []
 			state.value = "loaded"
-			return
+			return true
 		}
 		let fetched: TokenBalanceInfo[]
 		try {
 			fetched = await client.getTokenBalances(undefined, address)
 		} catch {
-			if (!superseded()) settleRejected(isTimedRetry)
-			return
+			if (superseded()) return true
+			settleRejected(isTimedRetry)
+			return false
 		}
-		if (superseded()) return
+		if (superseded()) return true
 		if (dirty) return fetchTokenBalances()
 		land(fetched, chainId)
+		return true
 	}
 
 	function onReconnected() {

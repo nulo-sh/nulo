@@ -38,7 +38,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("the active chain's rows land through mapRow and the state becomes loaded", async () => {
 		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
 		s.client.getTokenBalances.mockResolvedValue([row(1), row(2, 2)])
-		await s.snap.fetchTokenBalances()
+		expect(await s.snap.fetchTokenBalances()).toBe(true)
 		expect(s.client.getTokenBalances).toHaveBeenCalledWith(undefined, "0xa")
 		expect(s.rows.value).toEqual([{ ...row(1), mapped: true }])
 		expect(s.state.value).toBe("loaded")
@@ -103,7 +103,7 @@ describe("useTokenBalanceSnapshot", () => {
 	test("a first rejection reads unavailable and retries once; the retry's rejection arms none", async () => {
 		const s = setup()
 		s.client.getTokenBalances.mockRejectedValue(new Error("port closed"))
-		await s.snap.fetchTokenBalances()
+		expect(await s.snap.fetchTokenBalances()).toBe(false)
 		expect(s.state.value).toBe("unavailable")
 		await vi.advanceTimersByTimeAsync(2_000)
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
