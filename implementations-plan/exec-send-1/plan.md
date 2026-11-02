@@ -1,7 +1,7 @@
 ---
 plan: exec-send-1
 tier: light
-status: plan approved (Codex final approve); arc 1 (#1426) phase 1 green, loop converged; arc 2 (#1432) waits on OA-1
+status: arc 1 (#1426) merged as #1481; arc 2 (#1432) phase 2 green, loop converged
 issues: "#1426, #1432"
 driver: claude-code
 claude_model: opus
@@ -39,11 +39,11 @@ Two Major bugs from the bugs harden at `51ea220b1`, the base, so the issues' lin
 **Inferences**
 - I1. The #1426 trigger (a `storage.local.get` rejection overlapping a cancel in the claim window) is rare; its consequence, a broadcast the person refused, is irreversible. Labelled demonstrated by trace (F2-F3); phase 1's tests reproduce it.
 - I2. The #1432 race is common (Send opened right after unlock, while `refreshBalances` runs). The wallet re-checks the amount at estimate and prove (the issue's statement, not re-verified here), so the loss is a wrong number and a refused send, not a wrong send.
-- I3. A newer read can supersede the first load's balance read only through a reconnect, and a reconnect follows a dropped port, which rejects every request posted on it before the client reconnects, and `onConnected` fires only after Ready (`packages/extension-messaging/src/background/client.ts`, `onDisconnect`). So the hook dropping a superseded good read (the case #781's review guarded) needs conditions the wallet does not support.
+- I3. A newer read can supersede the first load's balance read only through a reconnect, and a reconnect follows a dropped port, which rejects every request posted on it before the client reconnects, and `onConnected` fires only after Ready (`packages/extension-messaging/src/background/client.ts`, `onDisconnect`). So the hook dropping a superseded good read (the case #781's review guarded) needs conditions the wallet does not support. Did not hold (Codex fix R1, arc 2): a load read started while the port reopens posts on the new port, and the reconnect's re-read superseded it; D9.
 - I4. In a `refreshBalances` burst, events that overlap one balance read coalesce into one refetch, but events that keep overlapping each refetch prolong the first load, as on Home. Plausible; no code.
 
 **Asks**
-- A1. [OWNER-ASKS.md](OWNER-ASKS.md) OA-1: Send's corner for a selected token with no balance row after a refused re-read, the skeleton (A, recommended) or the blank until the retry (B). P44-02 = B showed seven named rows and this was not one of them (`archive/ui-dedupe-1/OWNER-ASKS.md` OA-1, OA-3), so the panel does not decide it. Working assumption: arc 1 (#1426) ships now; arc 2 (#1432) waits for the answer, since both options shape its design.
+- A1. [OWNER-ASKS.md](OWNER-ASKS.md) OA-1: Send's corner for a selected token with no balance row after a refused re-read, the skeleton (A, recommended) or the blank until the retry (B). P44-02 = B showed seven named rows and this was not one of them (`archive/ui-dedupe-1/OWNER-ASKS.md` OA-1, OA-3), so the panel does not decide it. Answered: A, decision page 95, P95-01, signed 2026-11-02, no note: "The corner keeps its loading skeleton through the refused re-read, as it showed before it and as Home and Holdings keep their list. No blank flash." (D8).
 
 ## Architecture & Implementation
 
@@ -56,9 +56,9 @@ Two Major bugs from the bugs harden at `51ea220b1`, the base, so the issues' lin
 
 1. Send's balance corner and Max, in the race: the newest balance instead of the older snapshot; a row deleted during the load stays gone. The PR body carries before and after captures.
 2. A dApp send whose queued row cannot be read ends as failed (its card reads failed, the dApp gets an error) instead of running under a new card; with a cancel already landed it stays cancelled and the dApp gets 4001. #1426's "Expected" states this.
-3. Arc 2 only, on OA-1 = A: Send with a selected token that has no balance row, after a refused re-read (a worker restart): the corner keeps its skeleton instead of going blank until the 2 s retry, because Send's first read now counts as a read, as Home's and Holdings' do; `send.test.ts:747` is re-premised on that rule. On B, arc 2 is re-planned to keep the blank.
+3. Send with a selected token that has no balance row, after a refused re-read (a worker restart): the corner keeps its skeleton instead of going blank until the 2 s retry, because Send's first read now counts as a read, as Home's and Holdings' do; `send.test.ts:747` is re-premised on that rule. Signed: decision page 95, P95-01 (2026-11-02), option A: "The corner keeps its loading skeleton through the refused re-read, as it showed before it and as Home and Holdings keep their list. No blank flash."
 
-Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading state and every other value are unchanged. Sign-off: decision page 94, P94-01 (signed 2026-11-01), "the nine Major bugs the bugs harden found at dev 51ea220b1 are fixed as lanes merged on green", under the owner's rule of 2026-10-30: "if they are bugs, work on them. all of them sound very worth fixing. Merge those on green, I review the captures if needed."
+Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading state and every other value are unchanged. Sign-off for item 3: P95-01 above. Sign-off for items 1 and 2: decision page 94, P94-01 (signed 2026-11-01), "the nine Major bugs the bugs harden found at dev 51ea220b1 are fixed as lanes merged on green", under the owner's rule of 2026-10-30: "if they are bugs, work on them. all of them sound very worth fixing. Merge those on green, I review the captures if needed."
 
 ## Security & Adversarial Considerations
 
@@ -81,7 +81,7 @@ Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading stat
   - From the root, never beside a smoke run (it rebuilds `dist/chrome`): `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/cancel-mid-prove.test.ts` on Chrome: pass (the network config retries twice unless `NULO_E2E_RETRY` says otherwise).
   - `bun run check:plans` after staging: exit 0.
 
-## Phase 2: Send's first load reads balances through the hook (#1432; arc 2, after OA-1)
+## Phase 2: Send's first load reads balances through the hook (#1432; arc 2) ✓
 
 - Change the hook and `send.vue` as above.
 - **Tests**
@@ -98,6 +98,8 @@ Items 1 and 3 are arc 2's; item 2 is arc 1's. The failure card, the loading stat
   - `bun run check:plans` after staging: exit 0.
 - **Captures** (PR body; not a gate): a scratch Puppeteer spec (the repository's e2e runner and fixtures), uncommitted, under `~/.cache/nulo-backlog/exec-send-1/`, on armed Chrome builds of the base and the branch: hold the popup's token read, deliver a balance update for the selected token on the balance port, release the read, screenshot Send at 360 × 600 px. The two PNGs go under `screenshots/` and are linked by blob permalink.
 
+- **As built**: the control also asserts the hook's retry ran; the review loop added the reconnect guard (D9) and the unmount fence (D10), each with a red-first test. Captures: both races and the OA-1 state, before and after (D11).
+
 No e2e scenario is added: both races are orderings inside one module that the unit and component layers drive exactly; the smoke row count stays as it is.
 
 ## Decision ledger
@@ -108,7 +110,11 @@ No e2e scenario is added: both races are orderings inside one module that the un
 - D4. #1432 through the hook, not a page copy of its dirty rule (the app store's revision counter applies the same rule to another cache) and not a hook option (#781 removed the per-consumer rule options; `added`, `mapRow`, `scopeFence` remain). The boolean beats reading `unavailable` after the await: the state is shared by every run, keeps `loaded` across a refused re-read, and so loses which call was refused (Codex R1); Opus R1 found either workable. A refused dirty refetch after a good first read now shows the card instead of the stale balance: needs a fault between two reads on one port, accepted.
 - D5. The hook's one retry after a refused first-load read now runs under Send's failure card; the card stays and tokens stay empty, so nothing changes on screen (pinned by the control).
 - D6. Tests: the smallest set. The lane test with the real `cancelJob` is replaced by a held-read unit case, since the lane already pins that `cancelJob` aborts the registered controller (Opus R1; Codex R1 found either proportionate).
-- D7. As built: the read moved into `readQueuedRow` to keep the claim's cognitive complexity within 15. Residual (Opus fix R1): a cancel still in flight when the claim's read rejects can leave the dApp with the storage error instead of 4001, the row ending cancelled or failed by which transition commits first; nothing is broadcast and nothing is minted, the window `disambiguateClaimFailure` already has. Accepted.
+- D7. As built (arc 1): the read moved into `readQueuedRow` to keep the claim's cognitive complexity within 15. Residual (Opus fix R1): a cancel still in flight when the claim's read rejects can leave the dApp with the storage error instead of 4001, the row ending cancelled or failed by which transition commits first; nothing is broadcast and nothing is minted, the window `disambiguateClaimFailure` already has. Accepted.
+- D8. OA-1 = A (P95-01, 2026-11-02): the skeleton stays through a refused re-read; with it, P94-01's rule for the race still binds.
+- D9. Codex fix R1 (arc 2), demonstrated by trace: after a port drop the client reopens at once, so a load read started before Ready posts on the new port, and the reconnect's re-read superseded it; refused, Send got `true` and showed tokens with a blank corner instead of the card. Fix at the cause, in the hook: `readOut` holds the current run while its read is out, and a later connect leaves that read to settle the run, since a drop rejects every read posted before it. Not taken: a superseded run awaiting the newer run (it would delay every caller's `await`). Two Home tests had staged an ordering the client never produces (`onConnected` in the rejection's task; a reconnect overlapping the mount's read) and were re-staged on real orderings with the same assertions.
+- D10. Codex fix R1 (arc 2): the hook's dispose made the unmounted load's balance leg resolve `true`, so the load went on to write `cacheStore.activeTokenIdx` and read tokens on a disconnected client; at the base the disconnect's rejection ended it. `onBeforeUnmount` now bumps `identityFetchSeq`.
+- D11. The cross-arc pass ran inside arc 2's round 1 (arc 1 landed as one squash commit, `f738cba62`, on disjoint files); no seam found. The hook keeps only the active chain's rows, which Send's own install did not: two Send fixtures served a row on another chain and now name the token's chain. Captures: a scratch Puppeteer spec on armed Chrome builds of `origin/dev` and the branch holds Send's token read in the popup, emits a balance update on Send's balance port, and for OA-1 filters the first answer to no rows, drops the port and refuses the re-read.
 
 ## Panel verdicts
 
@@ -121,11 +127,14 @@ No e2e scenario is added: both races are orderings inside one module that the un
 | Codex fix R1 (arc 1) | approve | `readQueuedRow`'s doc names "gone or cannot be opened"; the test helper's comment dropped | dropping a pre-existing comment in `refileToExecutingScope` (outside the diff) |
 | Opus fix R1 (arc 1) | approve | the same doc point; the header names the aborted pre-acquire controller | none; its traced residual is D7 |
 | Codex fix R2 (arc 1, resumed) | approve | none | none |
+| Codex fix R1 (arc 2; cross-arc) | conditional approve | the reconnect guard (D9); the unmount fence (D10); the hook doc no longer says a superseded run takes the newer one's outcome | none |
+| Opus fix R1 (arc 2) | approve | the control asserts the retry ran; a superseded refused run resolves `true`, pinned; an overclaiming Send test title renamed; the hook doc reworded | none |
+| Codex fix R2 (arc 2, resumed) | approve | none | none |
 
 ## Delivery
 
 - **Arc 1** (phase 1, #1426), now: branch `worktree-exec-send-1` to `dev` with `gh pr create`, opened ready after the Codex loop converges and the gates pass, no labels at creation; add `e2e:extension-network` afterwards only if the path filter skips the network suite. Title: `fix(execution): a cancelled dapp send never restarts when its queued row cannot be read` (87 characters; `dapp` lower-case for commitlint). Body: the change, UI impact 2 with both quotes, the gates with outcomes, no added e2e scenario, `Closes #1426`. Arc 1's gate is phase 1's.
-- **Arc 2** (phase 2, #1432), after OA-1, off `dev` once arc 1 merges: the same flow; title `fix(send): send's first load keeps a balance update that lands during it` (72 characters); body with UI impact 1 and 3, the captures, `Closes #1432`. The close-out is arc 2's final commits.
+- **Arc 2** (phase 2, #1432), on branch `exec-send-1-a2` off `dev` after arc 1 merged: the same flow; title `fix(send): send's first load keeps a balance update that lands during it` (72 characters); body with UI impact 1 and 3, the captures, `Closes #1432`. The close-out is arc 2's final commits.
 - Parallelism: the two arcs touch disjoint files; they are serial only because arc 2 waits on OA-1.
 
 ## Post-implementation
