@@ -1,7 +1,7 @@
 ---
 plan: w3-ci-1
 tier: light
-status: approved by the final Codex pass; arc 1 next
+status: phases 1 and 2 green; Codex fix loop next
 issues: "#1419, #1493"
 driver: claude-code
 claude_model: opus
@@ -63,7 +63,7 @@ Recon, the reproductions and the reuse map are in [recon.md](recon.md). The owne
    - `:723` checks only that two gate scripts are present.
    - `:996` pins each Firefox filter to its Chrome twin's, repointed at its own file, plus `setup-geckodriver`.
    - `:860` (`LANE_INFRASTRUCTURE`) keeps CI entries out of the build-surface comparison.
-6. This host has no global IPv6 address. `apps/extension/tests/e2e/README.md:210,246` pass `ipv4first` to `e2e:agent`. No workflow sets it.
+6. This host has no global IPv6 address. `apps/extension/tests/e2e/README.md:210,246` pass `ipv4first` to `e2e:agent`. No workflow sets it. *Corrected in Phase 2:* the host has a link-local IPv6 address on `docker0`, which `ADDRCONFIG` counts, so its client keeps `::1`. The host is outside the failing class, and it is the proof environment where clients try `::1` first.
 7. The harness already binds `127.0.0.1` while naming `localhost`:
    - `fixtures/egress-guard.ts:153` listens on `127.0.0.1`;
    - `fixtures/token-list.ts:138` serves at `http://localhost:<port>`;
@@ -74,7 +74,7 @@ Recon, the reproductions and the reuse map are in [recon.md](recon.md). The owne
    - Proven for hosts without non-loopback IPv6 by Phase 2: the container and this host.
    - Proven for GitHub's runners, whatever their IPv6 status, by the PR's four lanes.
    - Expected, not proven, for other hosts with IPv6.
-2. On this host, `e2e:agent` without the flag fails today with cause (b). Phase 2 step 2 records that failure before the fix.
+2. ~~On this host, `e2e:agent` without the flag fails today with cause (b).~~ *Did not hold:* step 2 passed on base (Fact 6, corrected). Cause (b) is demonstrated in the container only (recon; Docker proof).
 
 **Asks:** none blocking. OA-1: the smoke filters stop listing `_build-extension.yml`, which narrows a required lane's trigger. The PR body states this, and the orchestrator decides at merge.
 
@@ -88,7 +88,7 @@ Recon, the reproductions and the reuse map are in [recon.md](recon.md). The owne
 | D4 | The walker decides only `inputs.<k> == '<lit>'` or `!= '<lit>'` (with or without `${{ }}`), and only when the input is bound to a string with no `${{`. The value comes from the caller's `with:`, else from the callee's default, and the comparison ignores case, as GitHub's does. Any other `if:` counts as reached. | Ignoring `if:`: both Chrome filters would gain `setup-geckodriver` as a dead trigger. Failing closed, as `laneCalls` does: the compound `if:` on `setup-presto-server` would stop the walk. Comparing unresolved text: a future `==` would drop a step. |
 | D5 | The walker lives in `behavior-gating.test.ts`, beside `bind`, `filtersOf`, `commandLines` and `LANE_INFRASTRUCTURE`. It reads through an injected `read(path)`, so tests overlay copies in memory. | A new module: these helpers are local to the file, so a second module would copy them. A generic `callsOf`: it carries the network suite's job-name semantics, which other tests pin. |
 | D6 | Remove the containment test at `:723`; the derived equality is strictly stronger. Keep the twin test at `:996`, which still holds. Keep `GATE_SCRIPTS` for the draft-flag test at `:1059`. | Keeping both: two tests for one property. Moving the draft-flag test onto the derived scripts (Opus): a different property, outside these issues. |
-| D7 | `README.md:210,246` drop the flag only after Phase 2 step 4 passes without it on both browsers. Otherwise keep it and record the other cause in lessons. | Dropping it untested: the README is the documented path. |
+| D7 | *Revised in Phase 2:* `README.md:210,246` keep the flag. The host base run passed without it, so no run here shows that those two documented runs are safe without it. The flag is harmless after D2. | Dropping it on the evidence of `connect-dapp` alone: those two runs were not re-proven. |
 
 The set D3 requires:
 - the lane file;
@@ -151,7 +151,7 @@ The set D3 requires:
 - These then exit 0: `bun run lint`, `lint:actions`, `typecheck:all`, `test`, `test:all`, `test:ci-gating`, `test:release`, `check:plans`.
 - Layers: lint, typecheck, unit.
 
-## Phase 2: #1419, the runner reaches its tests
+## Phase 2: #1419, the runner reaches its tests ✓
 
 1. Commit the tests first:
    - In `scripts/ci-cd/docker-ci-like-pins.test.ts`: the script's line `(cd apps/extension && bun --no-install ./node_modules/.bin/puppeteer browsers install)` comes after its `bun install --frozen-lockfile` line.
@@ -169,7 +169,7 @@ The set D3 requires:
 
 **Validation gate:**
 - Both new tests fail at step 1 and pass after step 3.
-- Step 2 fails at the playground probe.
+- Step 2 fails at the playground probe. *Did not hold: it passed (Inference 2); the red is the container's (recon).*
 - Step 4 passes on both browsers at retry 0.
 - Both Docker runs pass.
 - The Phase 1 commands, `bun run --cwd apps/playground test` and `bun run --cwd apps/playground typecheck` exit 0.
