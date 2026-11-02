@@ -84,6 +84,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 - **Validation gate**
   - `bun run lint`, `bun run typecheck:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/popup/pages/send src/popup/components/modules/send --retry=0`: green; the two page cases red with the base's `send.vue` (`git show 1e6c5bc1f:<path>`).
+  - Network, from the repo root: `NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/fee-methods.test.ts --retry=0`, and the same with `NULO_E2E_BROWSER=firefox`: pass. Its fee walks hold a public-only balance, so they assert the public opening, then pick Private (D9).
 
 ## Phase 2: the pasted address, and both browser checks (arc 1) ✓
 
@@ -122,6 +123,8 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 - D7. Arc order: arc 1 needs no answer and ships now; arcs 2 and 3 wait on their asks and touch files arc 1 leaves alone.
 - D8. As built: the paste reset runs on the next animation frame. With `nextTick` the real paste still read `scrollLeft` 242 of 554 two frames later on Chrome and Firefox 158, since both reveal the caret after the `input` event; with `requestAnimationFrame` both read 0, and a typed character then scrolls to the caret (250). The hover check waits for `:hover` to apply: a wait on settled transitions alone read Chrome before the hover and passed at the base.
 
+- D9. P93-01 moves the opening side of two network fee walks (`fee-methods.test.ts`, "no gas at all" and "both gases held"), whose fixtures mint public only: both timed out at the base of this fix waiting for a Private origin (Opus fix R1). Each now asserts Send opens on Public, a network witness for P93-01, then picks Private. No other e2e spec reads the side it opens on.
+
 ## Panel verdicts
 
 | Round | Verdict | Accepted | Rejected |
@@ -130,6 +133,8 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 | Opus R1 | conditional approve | the real-paste witness (the execCommand emulation is none, confirmed in `lessons/phase-0.md`); the `nextTick` versus animation-frame question settled by that witness; the split line's testid; Send's picker and Home's list named for OA-1; the late-balance known limit (#1537); the toast's token lookup and its races; the unlock rule; History's progress word and empty state; History injects the shell's list | none |
 | Codex final (fresh) | conditional approve, arc 1 may proceed | OA-1's wording (no "adds up" promise; "at most" under B); the base-red proof with the testid alone; the pending seed for the arc 3 captures; the mirror's event replay as an arc 3 amendment needing approval (A4); `utils/in-flight-send.ts` named and set apart | none |
 | Codex final (resumed) | approve | none; arc 1 may proceed, arcs 2 and 3 wait on their asks; A4 not granted by the review | none |
+| Codex fix R1 (arc 1) | changes requested | cancel a pending paste reset on every input, so a key typed before the frame keeps the caret (test red with the old order); two comments trimmed | none |
+| Opus fix R1 (arc 1) | changes requested | the network fee walks pick Private after the public opening (D9), and `fee-methods.test.ts` joins the gate on both browsers; messages on the two new smoke assertions; Send's `flagged-send` capture in `token-list.test.ts` now shows Public, noted in the PR | none |
 
 ## Delivery
 
