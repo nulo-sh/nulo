@@ -56,11 +56,13 @@ const fakeTask = { complete: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() }
 /** Distinct identities per passthrough slot — a node/pxe/account swap
  *  shows up as a failed identity assertion. */
 function makeBuilt() {
+	const address = { toString: () => "0xaccount" }
 	return {
 		txRequest: sentinelTxRequest(),
 		node: { getCurrentMinFees: async () => new GasFees(555n, 666n), marker: "node" },
 		pxe: { marker: "pxe" },
-		account: { address: { toString: () => "0xaccount" }, marker: "account" },
+		account: { address, marker: "account" },
+		scopes: [address],
 		network: { marker: "network" },
 		nonce: { toString: () => "nonce-1" },
 		txCalls: [{ contract: "0xc", method: "m", args: [] }],
@@ -167,7 +169,6 @@ describe("FeeJuiceStrategy structural parity", () => {
 		expect(buildStandard).toHaveBeenCalledTimes(1)
 		expect((buildStandard.mock.calls[0] as unknown[])[2]).toBe(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE)
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
-		// Sim opts: scopes = [account.address] exactly.
 		expect((simulateTxTask.mock.calls[0] as unknown[])[2]).toEqual({
 			simulatePublic: true,
 			skipFeeEnforcement: true,
