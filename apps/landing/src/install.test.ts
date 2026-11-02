@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { detectInstall, type Install, type NavigatorLike } from "./install"
+import { detectInstall, type Install, type NavigatorLike, STORES } from "./install"
 
 const WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
 const CHROME = `${WIN} Chrome/129.0.0.0 Safari/537.36`
@@ -110,11 +110,27 @@ describe("detectInstall", () => {
 	})
 })
 
+const source = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+const STORE_URLS = [STORES.chrome.url, STORES.firefox.url]
+const storeLinks = (html: string) =>
+	[...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1] as string).filter((href) => /chromewebstore|mozilla/.test(href))
+
 describe.each(["index.html", "how-aztec-works.html"])("%s", (page) => {
-	// Until the store listings open, a page links no store and serves no button for
-	// `mountInstall` to turn into one.
-	it("links no store and serves no install button before the listings open", () => {
-		const html = readFileSync(new URL(`../${page}`, import.meta.url), "utf8")
-		expect(html).not.toMatch(/chromewebstore\.google\.com|addons\.mozilla\.org|data-install/)
+	it("links a store only through a URL the script uses", () => {
+		for (const link of storeLinks(source(page))) expect(STORE_URLS).toContain(link)
 	})
+})
+
+it("index.html serves both stores, for a visitor without JavaScript", () => {
+	expect(new Set(storeLinks(source("index.html")))).toEqual(new Set(STORE_URLS))
+})
+
+it("names the listings the Terms name in § 1", () => {
+	const terms = source("../../legal/terms.md")
+	const section = terms.slice(terms.indexOf("\n## 1."), terms.indexOf("\n## 2."))
+	const urls = section
+		.split(/\s+/)
+		.filter((word) => word.startsWith("https://"))
+		.map((word) => word.replace(/[.,;]$/, ""))
+	expect(new Set(urls)).toEqual(new Set(STORE_URLS))
 })

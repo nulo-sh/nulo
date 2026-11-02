@@ -252,7 +252,7 @@ describe("NewTokenPopup", () => {
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
-	test("duplicate contract surfaces 'Already exist'", async () => {
+	test("duplicate contract surfaces 'Already exists'", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, {
 			props: { show: false },
@@ -261,16 +261,16 @@ describe("NewTokenPopup", () => {
 		await w.setProps({ show: true })
 		await flushPromises()
 		await typeAddress(w, validHex)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 	})
 
-	test("a listed contract typed in upper case is the same token: 'Already exist', button off", async () => {
+	test("a listed contract typed in upper case is the same token: 'Already exists', button off", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await w.setProps({ show: true })
 		await flushPromises()
 		await typeAddress(w, `0x0${"A".repeat(63)}`)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
@@ -556,7 +556,7 @@ describe("NewTokenPopup — a refusal belongs to the address it judged", () => {
 	test("a listed token's address then reads only its own verdict", async () => {
 		const w = await refusedAt(validHex)
 		await typeAddress(w, listedHex)
-		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exists")
 		expect(refusalLine(w).exists()).toBe(false)
 	})
 

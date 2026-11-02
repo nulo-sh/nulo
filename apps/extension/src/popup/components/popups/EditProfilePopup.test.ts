@@ -367,7 +367,7 @@ describe("EditProfilePopup — name normalization per site", () => {
 	})
 
 	test.each([
-		["its own name with an outer space", "Main ", "Already exist"],
+		["its own name with an outer space", "Main ", "Already exists"],
 		["only spaces", "   ", undefined],
 	])("%s is no change, so Update stays disabled", async (_case, typed, warning) => {
 		const w = await mountShown()

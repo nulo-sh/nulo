@@ -22,6 +22,7 @@ import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import { pluralize } from "@/utils/plural"
 import { aggregateFiat, awaitingFirstPriceAnswer, pricesUnavailable } from "@/utils/token-aggregate"
 import { fitHero } from "@/utils/hero-fit"
 import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
@@ -116,7 +117,7 @@ const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
 const summaryMeta = computed(() => {
 	if (isLoading.value || error.value) return ""
 	if (unavailable.value) return "Prices unavailable"
-	return `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
+	return `${rows.value.length} ${pluralize(rows.value.length, "token", "tokens")}${showFiatValues.value && aggregate.value.partial && !awaitingPrices.value ? " · priced assets only" : ""}`
 })
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
  *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */

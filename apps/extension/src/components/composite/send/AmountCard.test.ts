@@ -471,6 +471,12 @@ describe("composite/AmountCard — a symbol of spaces reads as a noun", () => {
 		expect(w.find("[data-testid='send-amount-balance']").element.textContent).toBe("1.5    ")
 	})
 
+	test("a one-decimal token's clamp hint is singular", async () => {
+		const w = mountCard({ token: { symbol: "   ", decimals: 1 }, modelValue: "", tokenBalanceByType: 1.5, balanceRawByType: "15" })
+		await w.find("input[data-testid='send-amount-input']").setValue("1.12")
+		expect(w.find("[data-testid='send-amount-clamp-hint']").text()).toBe("Token supports 1 decimal")
+	})
+
 	test("the rate line and the unit switch", () => {
 		const w = mountCard({ token: BLANK, liveQuote: QUOTE, modelValue: "" })
 		expect(w.find("[data-testid='send-amount-fiat-label']").text()).toBe("1 token ≈ $1.00")

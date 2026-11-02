@@ -2,7 +2,7 @@
  * Component pins for NewAccountPopup — the severe instance of the submit
  * re-entrancy class: it had NO in-flight latch at all, and its name-uniqueness
  * check is synchronous against a post-await `accounts.push`, so two concurrent
- * submits could both pass "Already exist" and create two same-named accounts.
+ * submits could both pass "Already exists" and create two same-named accounts.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -175,7 +175,7 @@ describe("NewAccountPopup — duplicate names", () => {
 		await w.find('input[data-testid="account-name-input"]').setValue(name)
 		await flushPromises()
 		return {
-			warns: w.text().includes("Already exist"),
+			warns: w.text().includes("Already exists"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}

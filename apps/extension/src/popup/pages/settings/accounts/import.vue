@@ -20,6 +20,7 @@ import { managers } from "@/utils/core"
 /** Utils */
 import { FileTooLargeError, pickFile } from "@/utils"
 import { sameStoredName } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { listOwnAccountRow } from "@/utils/account-rows"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, isCardWindow, leavePanelFor, ownWindowRoute, returnToPanel } from "@/utils/own-window"
 import { showSnack } from "@/utils/snack"
@@ -296,7 +297,7 @@ const collapsingLabel = "Import Account"
 					v-model="accountName"
 				>
 					<template v-if="nameTaken" #right>
-						<FieldWarning> Already exist </FieldWarning>
+						<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 					</template>
 				</Input>
 			</div>

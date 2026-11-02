@@ -192,7 +192,7 @@ describe("NewFpcPopup — duplicate names", () => {
 		await w.findAll("input")[0].setValue(name)
 		await flushPromises()
 		return {
-			warns: w.text().includes("Already exist"),
+			warns: w.text().includes("Already exists"),
 			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
 		}
 	}
@@ -265,7 +265,7 @@ describe("NewFpcPopup — the list under a held read", () => {
 		const warns = async () => {
 			await w.findAll("input")[0].setValue("Alice")
 			await flushPromises()
-			return w.text().includes("Already exist")
+			return w.text().includes("Already exists")
 		}
 
 		fpcServiceMock.onFpcAdded.invoke(alice)

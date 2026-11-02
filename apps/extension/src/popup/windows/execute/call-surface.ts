@@ -19,6 +19,7 @@ import {
 	VOCABULARY_SELECTORS,
 	vocabularySelector,
 } from "@/utils/token-transfer-vocabulary"
+import { pluralize } from "@/utils/plural"
 import { callTitle } from "@/utils/tx-enrichment"
 import { parseTransferIntent, projectArgument, smallFieldDecimal } from "@/utils/transfer-intent"
 import { safeWire } from "./humanize"
@@ -302,4 +303,4 @@ export function grantRefusalRow(grants: Iterable<DecodedGrant>): { title: string
 }
 
 export const rawToggleLabel = (count: number, open: boolean): string =>
-	open ? "Hide raw values" : `Show ${count} raw value${count === 1 ? "" : "s"}`
+	open ? "Hide raw values" : `Show ${count} raw ${pluralize(count, "value", "values")}`

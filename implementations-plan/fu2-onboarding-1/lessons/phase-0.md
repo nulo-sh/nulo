@@ -1,0 +1,12 @@
+# fu2-onboarding-1: phase 0 (planning)
+
+## Recon
+
+- Two Sonnet explorers: the reuse sweep (randomness, choice groups, the phrase stages, the Get started flag, the popup redirect, tab finding, vue-router's pop undo, shared copy, the glossary) and the test map (every e2e path through the phrase step, Ready and the popup redirect; the texts the change touches; logging).
+- Claims checked against the tree: #1516's "before the Terms" is one case of "no profile and onboarding not completed"; the other five held as written.
+
+## Consults
+- **Codex, gpt-6.1-sol, high, read-only (session 01a19d3f), plan round 1: conditional approve.** Findings: (1) the check's strings and the lane brief's no-tab sentence need the owner; (2) a live tracked tab id is not proof of an onboarding document; (3) register's predicate waits on `migrationIdle` and can reject, so a blank page needs a defined outcome; (4) native radios break the literal tablist rule, so record the exception; (5) the decoy builder must be bounded on a low-diversity phrase; (6) keep `translate="no"` on the check's words; (7) the PR reports the suite wall-clock, and the full smoke before a UI PR. Dispositions in plan § Audit verdicts.
+- **Opus 5.5 (Plan), plan round 1: conditional approve.** Findings: the strings no owner wrote (the check's, the popup's button, the link on the import pages) and the no-tab case need asks; the chaos model cites `create.vue` lines and its citation test would go red; the logging rule asks for redaction keys on any type holding words; the check need not keep all 24 words; Puppeteer's `goBack()` is unverified on Firefox's extension pages, so press Back through `history.back()`; a rejected predicate read must not leave the popup blank; record the radio departure; the tracked tab id is a known limit.
+- **Folded:** the lane splits into three arcs. Arc 1 ships the two picks with no open wording (Ready's line, Back on Ready). Arc 2 (the check) waits on OA-2, and arc 3 (Create, the passkey text, the popup) on OA-1, OA-3 and OA-4. Known limit #1536 filed and closed. Codex's "full smoke locally before each PR" rejected: the lane brief's gate names the touched files, and CI's required smoke lanes run the whole suite.
+- **Codex, gpt-6.1-sol, high, fresh session (01a19d52), final pass: approve.** Two low notes folded: I2's cited tests run Back, not the undo (D10's test proves it); arc 3's popup step drives Firefox's toolbar panel through the existing helpers. No ask concerns Ready, so arc 1 may proceed.
