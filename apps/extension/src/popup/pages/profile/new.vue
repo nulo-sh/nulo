@@ -17,7 +17,7 @@ import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 /** Utils */
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { capitalize } from "@/utils/string"
-import { PASSKEY_CHOICE_TEXT } from "@/utils/passkey-choice"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
 import { openingFlowLive } from "@/popup/opening-flow"
@@ -124,7 +124,7 @@ onBeforeUnmount(() => {
 		<!-- Passkey info -->
 		<div v-else :class="$style.section_last">
 			<span :class="$style.section_label">Passkey</span>
-			<Text variant="body" height="150" color="body" data-testid="register-passkey-info">{{ PASSKEY_CHOICE_TEXT }}</Text>
+			<Text variant="body" height="150" color="body" data-testid="register-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 		</div>
 
 		<template #bottom>

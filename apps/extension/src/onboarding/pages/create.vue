@@ -19,7 +19,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
-import { PASSKEY_CHOICE_TEXT } from "@/utils/passkey-choice"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
-				<Text variant="body" color="secondary" height="150" data-testid="onboarding-passkey-info">{{ PASSKEY_CHOICE_TEXT }}</Text>
+				<Text variant="body" color="secondary" height="150" data-testid="onboarding-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 			</div>
 
 			<Button
