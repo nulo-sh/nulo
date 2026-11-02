@@ -343,19 +343,15 @@ onBeforeUnmount(() => {
 }
 
 .empty_banner {
-	max-width: 280px;
-	margin: 48px auto 0 auto;
-	text-align: center;
+	composes: banner from "./empty-state.module.css";
 }
 
 .empty_title {
-	composes: type--title-page from global;
+	composes: title from "./empty-state.module.css";
 	color: var(--txt-primary);
 }
 
 .empty_description {
-	composes: type--body from global;
-	line-height: 1.5;
-	color: var(--nulo-secondary);
+	composes: description from "./empty-state.module.css";
 }
 </style>

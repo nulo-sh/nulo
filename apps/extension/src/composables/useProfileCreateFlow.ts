@@ -16,7 +16,8 @@ import {
 } from "@/wallet/utils/create-passkey-profile"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
-import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+import { isNewPasswordValid } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 
 /**
  * Shared orchestration for the profile-CREATE flow, consumed by both the popup
