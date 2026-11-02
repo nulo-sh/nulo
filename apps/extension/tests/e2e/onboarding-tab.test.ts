@@ -15,7 +15,7 @@ import {
 } from "./fixtures/browser"
 import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
 import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
+import { passPhraseCheck, readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
@@ -126,7 +126,12 @@ describe("onboarding tab", () => {
 		const words = await readRecoveryWords(page, "onboarding-phrase")
 		expect(words).toHaveLength(24)
 
+		// I saved it opens the check, which asks three of those words by their position.
 		await clickByTestId(page, "onboarding-phrase-saved")
+		await page.waitForSelector('[data-testid="onboarding-phrase-check-page"]', { visible: true, timeout: 10_000 })
+		expect(await page.$('[data-testid="onboarding-phrase-word"]')).toBeNull()
+		expect(await phraseSavedFlags(page)).toEqual([])
+		await passPhraseCheck(page, words)
 		await waitForHash(page, "#/onboarding/done", 10_000)
 		await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
 		// Read before any Settings reveal, which sets the same flag.
@@ -161,7 +166,7 @@ describe("onboarding tab", () => {
 		// A toolbar popup in headless Chrome is beyond what a test can find.
 		if (isFirefox) await waitForOpenPanel(control)
 
-		// "I saved it" reached Home: its card opens with the phrase step checked.
+		// The passed check reached Home: its card opens with the phrase step checked.
 		const popup = await openPopup(extension)
 		await waitForHash(popup, "#/popup/general", 15_000)
 		await popup.waitForSelector('[data-testid="get-started-aztec"]', { visible: true, timeout: 30_000 })
@@ -212,8 +217,10 @@ describe("onboarding tab", () => {
 			await clickByTestId(page, "onboarding-submit-create")
 
 			await page.waitForSelector('[data-testid="onboarding-phrase-saved"]', { visible: true, timeout: 60_000 })
-			expect(await readRecoveryWords(page, "onboarding-phrase")).toHaveLength(24)
+			const words = await readRecoveryWords(page, "onboarding-phrase")
+			expect(words).toHaveLength(24)
 			await clickByTestId(page, "onboarding-phrase-saved")
+			await passPhraseCheck(page, words)
 			await waitForHash(page, "#/onboarding/done", 10_000)
 			expect(await phraseSavedFlags(page)).toEqual([true])
 

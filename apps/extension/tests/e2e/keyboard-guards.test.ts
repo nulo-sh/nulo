@@ -9,7 +9,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { clickByTestId, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, readProfileNames } from "./fixtures/helpers"
+import { navigateByHash, passPhraseCheck, readProfileNames, readRecoveryWords } from "./fixtures/helpers"
 import { waitForFocus } from "./helpers/pointer-probes"
 
 type KeyRecord = { type: "keydown"; on: string | null; repeat: boolean } | { type: "click"; on: string | null } | { type: "submit" }
@@ -141,9 +141,13 @@ test("Enter in the confirm field creates the wallet once, and its repeat cannot 
 	expect(await readProfileNames(page)).toEqual(["Main"])
 	expect(await phraseSavedFlags(page)).toEqual([])
 
-	// Control: one plain press on I saved it is what records the phrase as saved.
+	// Control: one plain press on I saved it opens the check, and passing it records the phrase as saved.
+	const words = await readRecoveryWords(page, "onboarding-phrase")
 	await focusWhenEnabled(page, "onboarding-phrase-saved")
 	await page.keyboard.press("Enter")
+	await page.waitForSelector(sel("onboarding-phrase-check-page"), { visible: true, timeout: 10_000 })
+	expect(await phraseSavedFlags(page)).toEqual([])
+	await passPhraseCheck(page, words)
 	await waitForHash(page, "#/onboarding/done", 10_000)
 	expect(await phraseSavedFlags(page)).toEqual([true])
 
