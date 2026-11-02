@@ -117,7 +117,7 @@ None. No screen's layout, copy, rows or formatting changes. Behaviour returns to
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `b21fcdac8`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `b21fcdac8`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff b21fcdac8...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. Prompts under `~/.cache/nulo-backlog/w3-import-1/`. Hard stop at three rounds; each round in `lessons/phase-2.md` and the table below.
 - Approval boundary (a plan change; stop): any change to a screen; a fence in the composable; a new retry, lock or stored field; a new e2e scenario.
 - Close-out as the PR's final commits: the Outcome; a comment on any issue not fixed; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done w3-import-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/w3-import-1/plan.md`. The orchestrator notices the merge; this session does not wait for it.
