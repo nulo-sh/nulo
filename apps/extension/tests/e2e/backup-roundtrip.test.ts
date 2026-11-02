@@ -43,25 +43,13 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 	// the security-backup export test uses, with headroom.
 	await page.waitForFunction(
 		() => {
-			const btn = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')
+			const btn = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
 			return !!btn && !btn.disabled
 		},
 		{ timeout: 120_000, polling: 250 },
 	)
-	// For a PASSWORD profile, Protect encrypts with the profile password
-	// immediately (no extra inputs). Encrypted state = protect CTA gone +
-	// download enabled.
-	await clickByTestId(page, "protect-password-btn")
-	await page.waitForFunction(
-		() => {
-			const protect = document.querySelector('[data-testid="protect-password-btn"]')
-			const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			return protect === null && !!download && !download.disabled
-		},
-		{ timeout: 60_000, polling: 250 },
-	)
-
-	await armDownloadCapture(page, { gzip: true })
+	// A password profile's one press seals the file under the profile password, then saves it.
+	await armDownloadCapture(page, { gzip: true, withinMs: 90_000 })
 	await clickByTestId(page, "download-backup-btn")
 	const ciphertext = await readCapturedDownload(page)
 	const exported = await readCapturedFile(page)
@@ -72,7 +60,7 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 	expect(ciphertext.trim().startsWith(`${FULL_BACKUP_V2_TAG}:`)).toBe(true)
 
 	// The import is fed the file exactly as the export named and wrote it, so the picker must list it.
-	expect(exported.name).toMatch(/^NuloEncryptedBackup_.+\.gz$/)
+	expect(exported.name).toMatch(/^nulo-backup-\d{4}-\d{2}-\d{2}\.gz$/)
 	const dir = mkdtempSync(join(tmpdir(), "nulo-e2e-enc-backup-"))
 	const filePath = join(dir, exported.name)
 	writeFileSync(filePath, exported.bytes)
