@@ -1,7 +1,7 @@
 ---
 plan: authwit-onbehalf-1
 tier: light
-status: approved by the final Codex pass; Phase 1 next
+status: Phase 1 green, review loop converged; PR next
 issues: "#1491"
 driver: claude-code
 claude_model: opus
@@ -51,7 +51,7 @@ The owner's pick B on #1491, in one arc. Recon: [recon.md](recon.md). Asks: [OWN
 - **D3.** The probe's `extractEffects` returns `{ actions, requested }`. The fee-juice and sponsored fast paths rebuild and simulate validated when `requested` or the build is init-wrapped, as they do today for any decoded request; the FPC two-pass reads `actions` (its Pass 2 is always validated). So a dropped-only extraction still meets the validated pass before the estimate is approvable.
 - **D4.** No component change, no new log line, no new state. The window loses the line because the record no longer exists.
 - **D5 (tests; the first four red on base).** `decode-authwit-effects.test.ts`: a request on behalf of another account is dropped and never hashed, with `requested` true; the sender's request beside it stays (control). `authwit-discoverer.real.test.ts`: the existing case (another account) gives no record; one with `onBehalfOf` the account gives the recorded KAT record (the real field position). `discovery-probe.test.ts`: the signer's effect and another account's give one action and one record. `dapp-send-executor.test.ts`: on `default_entrypoint`, the preview lists and the confirm signs only the account's request (one `createAuthWit`). `strategies-lifecycle.test.ts`: `chain.signer` is the build's account, and a new `FOLD_MATRIX` cell, a dropped-only extraction on a deployed account, runs the validated rebuild on the fee-juice and fast paths (the cell with no effects keeps one simulation). The other fakes name the test's sending account; the probe fakes in `fee/strategies-structural.test.ts:442,474,550` take the new return shape. `OperationCard.summary.test.ts`: a third case in the sender test (`:388-400`), wire-shaped, B's `transfer_private_to_private` of a listed token from A, reads "1 USDC from A to X"; it pins the signed window's explicit-sender line, green on base, not proof of the fix.
-- **D6 (e2e; no new scenario).** The additional-scope step of `tx-sendTx-fields.test.ts` gains, after `waitForExecuteApprovable`: one summary call, no `execute-discovered-authwit-line`, no `execute-op-summary-authwits-section`. It keeps `NO_WAIT` and its ok-with-hash assertion: the hash returns only after the private execution inside `proveTx` ran A's `verify_private_authwit` with A's witness alone (proverless runs keep that execution), and inclusion does not read witnesses, so a receipt adds no failure mode. Failure mode: a real Noir-emitted request whose `onBehalfOf` the SW must read, and a real PXE that must accept the send on A's witness alone; no unit layer runs either. Red on base: the window lists one line. Estimate ±1 s per browser; measured in Phase 1.
+- **D6 (e2e; no new scenario).** The additional-scope step of `tx-sendTx-fields.test.ts` gains, after `waitForExecuteApprovable`: one summary call, no `execute-discovered-authwit-line`, no `execute-op-summary-authwits-section`. It keeps `NO_WAIT` and its ok-with-hash assertion: the hash returns only after the private execution inside `proveTx` ran A's `verify_private_authwit` with A's witness alone (proverless runs keep that execution), and inclusion does not read witnesses, so a receipt adds no failure mode. Failure mode: a real Noir-emitted request whose `onBehalfOf` the SW must read, and a real PXE that must accept the send on A's witness alone; no unit layer runs either. Red on base: the window lists one line. Estimated ±1 s per browser; measured (the test's own time, one run each on a loaded host): Chrome 39.8 s before, 45.3 s after; Firefox 48.2 s before and after.
 
 ## Architecture & Implementation
 
@@ -79,7 +79,7 @@ Sign-off: decision page 95, P95-07, signed 2026-11-02 at 17:02 UTC: "Drop reques
 - **Logging:** no new line; never a request's contents (CLAUDE.md § Logging policy).
 - **Keyboard:** the window's Enter handling is untouched (no document-level Enter on a signing popup).
 
-## Phase 1: the filter, its tests and the e2e ✓?
+## Phase 1: the filter, its tests and the e2e ✓
 
 1. Time the unchanged `tx-sendTx-fields.test.ts` once per browser. Write D6's e2e assertions first. Run the file on Chrome on base sources and require red with one discovered line (the reproduction). Capture the window before, at rest and with the details open.
 2. Write D5's tests; require the first four red on base. Commit. Make D1-D3. Require all green, the new `FOLD_MATRIX` cell included. Commit.
@@ -117,6 +117,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Codex, gpt-6.1-sol (session 01a19daa) | reject | the dropped-only fold boundary (D3, narrowed trigger L4); I1 false, I2 narrowed; F2/F3 qualified; the fake inventory; `sameFieldAddress` named; the invariant's scope sentence | raw-effects trigger (L4); the receipt wait (L5); the two public-authwit files as optional (the lane brief names them) |
 | plan 1 | Opus 5.5 (Plan) | conditional approve | two more renderings in § UI impact; no receipt wait, no playground change; the probe test; the component pin folded; `signer: AztecAddress`; F6 corrected; the gate's redundant wallet-bridge line | the known limit instead of D3 (L4); dropping the public-authwit files (the lane brief names them) |
 | final 1 | Codex, gpt-6.1-sol, fresh (session 01a19db7) | **approve** | L4 qualified (a request that decodes but fails to hash now forces the rebuild); L5 worded as the private execution inside `proveTx`; the structural test's probe fakes added to D5 | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a19dcf) | findings: 3, comments only | the decoder's comment no longer claims the dropped request's witness is what the check reads; the summary pin's comment says what it checks; six redundant comments cut | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings: 3, comments only | the fold headers and two TSDocs name the new trigger (any decoded request); the same two comments | none |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 
