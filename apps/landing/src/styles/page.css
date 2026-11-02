@@ -196,6 +196,11 @@ footer {
 	text-underline-offset: 3px;
 }
 
+/* Two small lines side by side in one row read as one sentence; the second starts its own line. */
+.cta small + small {
+	flex-basis: 100%;
+}
+
 .bar {
 	position: sticky;
 	top: 0;
