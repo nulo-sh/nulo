@@ -29,7 +29,6 @@
 	border: 0;
 }
 
-/* A failed read and the button that asks it again, wherever the window shows one. */
 .failed {
 	composes: type--body from global;
 	display: flex;

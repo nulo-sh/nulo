@@ -26,7 +26,6 @@ const props = defineProps<{
 	tokens?: readonly TokenInfo[]
 	/** The window's closing advice follows the list of calls. */
 	advice?: boolean
-	/** The wallet could not find the authorizations; the line asks again, as `retryPreview`. */
 	previewFailed?: boolean
 }>()
 

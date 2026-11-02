@@ -87,7 +87,6 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
-	/** The preview failed: where the list would be, the card offers to ask again, as `retryPreview`. */
 	previewFailed?: boolean
 	/** Its estimate or preview waits behind another send. */
 	isQueued?: boolean
@@ -164,10 +163,10 @@ const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
-/** The app's estimate failed and none replaces it: the row reads as the fee card's failed state. */
 const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
 const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
-/** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. */
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read
+ *  `currentTarget` here, inside the click's dispatch: it is null once the dispatch ends. */
 const onRetryAppEstimate = (event: MouseEvent) => {
 	emit("retryEstimate", props.index)
 	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) appFeeRow.value?.$el.focus()
@@ -262,7 +261,8 @@ const summaryAuthwits = computed(() =>
 const detailsOpen = ref(false)
 const detailsId = useId()
 const detailsToggle = ref<{ $el: HTMLElement } | null>(null)
-/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it. */
+/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it,
+ *  read inside the click's dispatch as above. */
 const onRetryPreview = (event: MouseEvent) => {
 	emit("retryPreview", props.index)
 	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) detailsToggle.value?.$el.focus()
@@ -435,7 +435,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 		<div :class="$style.op_divider" />
 
-		<!-- What leaves opens the card's own fee section; a block that replaces it draws neither. -->
+		<!-- Part of the card's own fee section: where a slot replaces that section, this goes too. -->
 		<template v-if="outflows.length && !$slots.fee">
 			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
 				<Text variant="label-section" color="secondary">Leaves your account</Text>
@@ -461,7 +461,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			>
 				<Flex v-if="appFeeFailed" direction="column" wide data-testid="execute-op-app-fee-failed" :class="$style.app_fee_failed">
 					<Flex direction="column" gap="4" :class="$style.app_fee_method">
-						<Text variant="label-section" color="secondary">Fee</Text>
+						<span :class="$style.fee_label">Fee</span>
 						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-fee-method">
 							{{ privateFeeJuice ? `Private Fee Juice · set by ${appName}` : `Set by ${appName}` }}
 						</Text>
@@ -781,7 +781,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 }
 
 /* An app's name may be 64 characters with no break in them, in the method and in the payer's label.
- * The fee card's row pads 10 px below its words; this row's frame has 12. */
+ * The fee card's row pads 10 px below its words; this block pads 12, as its method line does. */
 .app_fee_failed {
 	padding-bottom: 2px;
 	background: var(--nulo-surface-low);
@@ -790,6 +790,10 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 .app_fee_method {
 	padding: 12px;
+}
+
+.fee_label {
+	composes: fee_label from "@/popup/components/modules/send/fee-shared.module.css";
 }
 
 .hairline {

@@ -397,10 +397,13 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			await retry(w).trigger("click")
 			expect(document.activeElement).not.toBe(row(w).element)
 
+			const destination = row(w).element
 			vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
 			await retry(w).trigger("click")
 			expect(w.emitted("retryEstimate")).toEqual([[0], [0]])
-			expect(document.activeElement).toBe(row(w).element)
+			await w.setProps({ estimateFailed: false, isEstimating: true })
+			expect(w.find('[data-testid="execute-op-app-fee-failed"]').exists()).toBe(false)
+			expect([row(w).element, document.activeElement]).toEqual([destination, destination])
 			expect(row(w).attributes("tabindex")).toBe("-1")
 		})
 

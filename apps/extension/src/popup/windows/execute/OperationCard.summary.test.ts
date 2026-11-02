@@ -461,12 +461,15 @@ describe("OperationCard — a default-entrypoint send whose authorization previe
 		await retry(w).trigger("click")
 		expect(document.activeElement).not.toBe(toggle(w).element)
 
+		const destination = toggle(w).element
 		vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
 		await retry(w).trigger("click")
 		expect(w.emitted("retryPreview")).toEqual([[0], [0]])
-		expect(document.activeElement).toBe(toggle(w).element)
-		expect(sendEvent(toggle(w).element, "keydown", { key: "Enter", repeat: true })?.defaultPrevented).toBe(true)
-		expect(sendEvent(toggle(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
+		await w.setProps({ previewFailed: false, isPreviewing: true })
+		expect(failedLine(w).exists()).toBe(false)
+		expect([toggle(w).element, document.activeElement]).toEqual([destination, destination])
+		expect(sendEvent(destination, "keydown", { key: "Enter", repeat: true })?.defaultPrevented).toBe(true)
+		expect(sendEvent(destination, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
 		w.unmount()
 	})
 })
@@ -514,7 +517,7 @@ describe("OperationCard — what leaves the account opens the fee section", () =
 	const leaves = (w: VueWrapper) => w.find('[data-testid="execute-op-leaves-account"]')
 	const rows = (w: VueWrapper) => w.findAll('[data-testid="execute-op-leaves-row"]').map((r) => r.findAll("span").map((t) => t.text()))
 
-	test("a three-call request: per token, how many transfers and their sum, after the calls and before the fee; a call that is not a transfer adds no row", async () => {
+	test("three transfers and a hub call: per token, how many transfers and their sum, after the calls and before the fee; the hub call adds no row", async () => {
 		const { op, decodedCalls } = request([
 			transfer(VAULT, MAIN, 4n * e18),
 			exit,

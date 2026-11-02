@@ -207,8 +207,7 @@ export const amountOf = (
 
 export type AccountOutflow = { contract: string; count: number; amount: { text: string; baseUnits: boolean } }
 
-const sentBy = (sender: TransferSender, account: string): boolean =>
-	sender.kind === "account" || (sender.kind === "explicit" && sameFieldAddress(sender.address, account))
+const sentBy = (sender: TransferSender, account: string): boolean => sender.kind !== "none" && sameFieldAddress(sender.address, account)
 
 /**
  * Per token contract, the calls the wallet reads as a direct transfer from `account` to another

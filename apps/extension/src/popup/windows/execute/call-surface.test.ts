@@ -515,7 +515,7 @@ describe("accountOutflows: the direct transfers this account sends to another ad
 			send(RECIPIENT, VAULT, units(2n, 18), { kind: "explicit", address: shouting }),
 			send(RECIPIENT, USDC_AT, units(10n, 6), fromAccount),
 			{ call: { to: VAULT }, surface: { kind: "decoded", fn: "swap", params: [] } as CallSurface },
-			send(MAIN, VAULT, units(7n, 18), { kind: "explicit", address: RECIPIENT }),
+			send(RECIPIENT, VAULT, units(7n, 18), { kind: "explicit", address: RECIPIENT }),
 			send(MAIN, USDC_AT, units(3n, 6), fromAccount),
 			{ call: { to: VAULT }, surface: { kind: "mint", fn: "mint_to_public", to: RECIPIENT, amount: units(9n, 18) } as CallSurface },
 			{ call: { to: USDC_AT }, surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface },
