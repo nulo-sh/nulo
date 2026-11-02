@@ -1,7 +1,7 @@
 ---
 plan: fu2-copy-1
 tier: light
-status: planned; arc 1 runs on approval, arc 2 waits on OA-2, arc 3 on OA-1
+status: arc 1 in review; arc 2 waits on OA-2, arc 3 on OA-1
 issues: "#1505, #1506, #1510 (arc 1); #1509 (arc 2); #1507, #1508 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -99,14 +99,14 @@ Simpler alternatives rejected: string edits at each site (the brief asks for one
 
 **Gate:** `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run src --retry=0)`. Pass: all exit 0; T1-T4 red before, green after.
 
-## Phase 2 (arc 1): store, captures, gates
+## Phase 2 (arc 1): store, captures, gates ✓
 
 1. Make D5. Inspect the frame; require `git status --short apps/extension/store` to list only `listing.md` and screenshot 4. Commit.
 2. Run the capture spec on the armed build again (`after`), copy the pictures to `screenshots/<surface>-{before,after}.png`, and delete the spec.
 
 **Gate:** 1. `bun run audit:vue`; `bun run test:all`; `(cd apps/extension && bun --bun vitest run scripts/store-listing.test.ts --retry=0)`. 2. `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`. 3. The full smoke suite (CLAUDE.md § Quality gates): `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`, then with `NULO_E2E_BROWSER=firefox`; record each wall-clock. 4. `bun run check:plans` after staging. Pass: every run green at retry 0 (a red reruns once on base first, per lessons); `git status` lists nothing untracked under `apps/extension/tests/`.
 
-**Arc 1 as built** (`fu2-copy-1-a1`):
+**Arc 1 as built** (`fu2-copy-1-a1`). Gate passed at the final code commit: `audit:vue`, `test:all`, `store-listing.test.ts`, both armed builds, `check:plans`; the full smoke suite at retry 0 as four parallel shards, each on its own copy of the build (setup sweeps every Chrome loading one path): Chrome 62 files green in 10.4 min, Firefox 66 in 15.75 min, on a host at load ~150.
 - D5: screenshot 4's popup capture still showed strict mode's earlier line, so one run of the opt-in `store-captures` spec re-captured it and only `store/captures/security.png` is kept. Its sandbox address differs from screenshots 1-3 and 5; the PR says so (Codex: proportionate). `git status --short apps/extension/store` lists `listing.md`, screenshot 4 and that capture. The caption fits its column.
 - T5's execute-window singular sits in `call-surface.test.ts` (`rawToggleLabel` is a pure export), not `OperationCard.fallback.test.ts`.
 - Strict mode's row gains "secure" and "unlock" as search synonyms: the signed line names neither, and both searches found the row at the base. Synonyms are never shown.

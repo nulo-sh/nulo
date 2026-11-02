@@ -23,3 +23,7 @@
 - **Round 1, Opus 5.5** (general-purpose): conditional approve. Settings search reads a row's description, so the signed strict line dropped "secure" and "unlock" (both now synonyms, pinned); New sender's verdict had no test (added, red on the old literal); the constant's comment overclaimed (reworded); the store address mismatch is disclosed.
 - `audit:vue` caught what the Phase 1 gate could not: `scripts/e2e/profile-chaos-model.test.ts` cites source lines by number, and an added import moved one. Phase 1's `vitest run src` does not reach `scripts/`.
 - **Round 2, Codex** (resumed): approve; one wording nit on the comment, taken.
+
+## Smoke on a loaded host
+
+- At load ~150 the serial smoke suite ran one file a minute (73 files). Four `--shard=i/4` runs in parallel, each with `EXTENSION_PATH` on its own copy of the armed build, finished Chrome in 10.4 min and Firefox in 15.75 min: the smoke setup and teardown kill every Chrome loading their extension path, so shards on one path would kill each other.
