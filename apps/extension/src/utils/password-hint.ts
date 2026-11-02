@@ -1,6 +1,5 @@
-import { Options, type TranslationKeys, ZxcvbnFactory } from "@zxcvbn-ts/core"
-import { adjacencyGraphs, dictionary as commonDictionary } from "@zxcvbn-ts/language-common"
-import { dictionary as englishDictionary } from "@zxcvbn-ts/language-en"
+import { type TranslationKeys, ZxcvbnFactory } from "@zxcvbn-ts/core"
+import { adjacencyGraphs, dictionary } from "@zxcvbn-ts/language-common"
 import { characterCount, MIN_NEW_PASSWORD_LENGTH } from "./password"
 
 export const NEW_PASSWORD_HINTS = {
@@ -31,18 +30,10 @@ const REASON_BY_WARNING: Readonly<Record<string, WeakReason | undefined>> = {
 } satisfies Partial<Record<keyof TranslationKeys["warnings"], WeakReason>>
 
 /**
- * Bands raised to 10^10 and 10^12 guesses for an offline guesser with a stolen profile or file.
- * They are set here, not read off `guessesLog10`, since zxcvbn warns only up to score 2.
- * Only the English common words are passed: the name and Wikipedia lists cost ~100 ms a factory.
+ * zxcvbn's own bands, which its warnings follow: it warns only in the weak band, scores 0 to 2.
+ * No language word list: a single long English word reads strong until one ships.
  */
-const ESTIMATOR_OPTIONS = {
-	dictionary: { ...commonDictionary, "commonWords-en": englishDictionary["commonWords-en"] },
-	graphs: adjacencyGraphs,
-	timeEstimationValues: {
-		scoring: { 0: 1e3, 1: 1e6, 2: 1e10, 3: 1e12 },
-		attackTime: new Options().timeEstimationValues.attackTime,
-	},
-}
+const ESTIMATOR_OPTIONS = { dictionary, graphs: adjacencyGraphs }
 
 function strengthHint(password: string): string {
 	// Core keeps the last password it scored, so a shared factory would hold it for the page's life.

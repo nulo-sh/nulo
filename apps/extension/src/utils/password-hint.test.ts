@@ -27,34 +27,34 @@ describe("new-password hint", () => {
 
 	// Each glyph below is one character to a person but two or more UTF-16 units or code points.
 	test.each([
-		["emoji", "😀"],
-		["accented letters", "e\u0301"],
-		["ZWJ families", "👨‍👩‍👧"],
-	])("seven %s are short; eight are long enough and read as a repeat", (_name, glyph) => {
+		["emoji", "😀", H.repeat],
+		["accented letters", "e\u0301", H.repeat],
+		// Eight families estimate 10^8.9 guesses, inside zxcvbn's good band, which carries no warning.
+		["ZWJ families", "👨‍👩‍👧", H.good],
+	])("seven %s are short; eight are long enough", (_name, glyph, eight) => {
 		expect(newPasswordHint(glyph.repeat(7), glyph.repeat(7))).toBe(H.short)
-		expect(newPasswordHint(glyph.repeat(8), glyph.repeat(8))).toBe(H.repeat)
+		expect(newPasswordHint(glyph.repeat(8), glyph.repeat(8))).toBe(eight)
 	})
 
 	test.each([
 		["aaaaaaaa", H.repeat],
 		["abcabcabc", H.repeat],
 		["😀".repeat(12), H.repeat],
-		// The library's own bands would score this 3 and drop its warning.
-		["xK9#mQ2vxK9#mQ2v", H.repeat],
 		["abcdefghij", H.sequence],
 		["98765432", H.sequence],
 		["zxcvbnm,./", H.keyboard],
 		["12345678", H.common],
 		["qwertyuiop", H.common],
 		["Password1!", H.common],
-		["TestPassword123!", H.common],
 		["longenough", H.guessable],
-		// Scores 10^15 without the English word list.
-		["congratulations", H.guessable],
-		["kettle-violet", H.guessable],
-		["blue7Kettle!", H.good],
-		["Nulo-wallet-7", H.good],
+		["q8Rt!vP3", H.guessable],
+		// A common password's variant past 10^8 guesses leaves the weak band.
+		["TestPassword123!", H.good],
+		["kettle-violet", H.good],
+		["blue7Kettle!", H.strong],
 		["silver-otter-lamp", H.strong],
+		// With no English word list, one long English word scores 10^15.
+		["congratulations", H.strong],
 		["😀😃😄😁😆😅🤣😂🙂🙃😉😊", H.strong],
 	])("a matching %j reads %j", (password, line) => {
 		expect(newPasswordHint(password, password)).toBe(line)

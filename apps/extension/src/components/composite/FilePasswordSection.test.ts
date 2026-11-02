@@ -57,7 +57,7 @@ describe("FilePasswordSection", () => {
 		["1234567", "1234567", NEW_PASSWORD_HINTS.short],
 		["12345678", "12345679", NEW_PASSWORD_HINTS.mismatch],
 		["12345678", "12345678", NEW_PASSWORD_HINTS.common],
-		["blue7Kettle!", "blue7Kettle!", NEW_PASSWORD_HINTS.good],
+		["kettle-violet", "kettle-violet", NEW_PASSWORD_HINTS.good],
 		["silver-otter-lamp", "silver-otter-lamp", NEW_PASSWORD_HINTS.strong],
 	])("the hint for %j / %j reads %j", async (a, b, text) => {
 		const { w } = mountOwned()
