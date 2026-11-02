@@ -291,13 +291,9 @@ async function settleLaunchedExtension(
 
 	await closeFirstRunSurface(browser, blankPage, extensionId, freshProfile)
 
-	// Default: bypass the new onboarding tab flow for all e2e tests. Existing
-	// tests (registration, import-paths, passkey-paths, etc.) drive the
-	// popup-based create/import flows directly via openPopup. Setting
-	// onboardingCompleted=true makes popup/pages/register.vue + import.vue
-	// skip their redirect-to-tab logic. Tests that specifically exercise the
-	// onboarding tab flow (tests/e2e/onboarding-tab.test.ts) reset this flag
-	// in their own setup before driving the tab.
+	// Default: onboarding completed, so specs drive the popup's own create and import pages; with it
+	// unset, a wallet with no profile shows only the page that points to the setup tab. Specs of the
+	// onboarding tab reset the flag themselves.
 	await blankPage.evaluate(async () => {
 		await chrome.storage.local.set({ "nulo:onboarding:completed": true })
 	})
