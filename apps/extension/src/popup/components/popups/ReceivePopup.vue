@@ -72,6 +72,8 @@ watch(
 
 								<Icon name="copy" size="12" color="tertiary" />
 							</Flex>
+
+							<Text variant="caption" color="secondary" :class="$style.network" data-testid="receive-network">Your address on {{ appStore.network.name }}</Text>
 						</Flex>
 					</Flex>
 				</Flex>
@@ -93,6 +95,11 @@ watch(
 
 .name_size {
 	font-size: 14px;
+}
+
+.network {
+	text-align: center;
+	overflow-wrap: anywhere;
 }
 
 .qrcode {

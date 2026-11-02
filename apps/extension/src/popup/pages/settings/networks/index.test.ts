@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { nextTick } from "vue"
@@ -9,6 +10,7 @@ import { useAppStore } from "@/stores/app.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import SettingItem from "@/components/ui/Settings/SettingItem.vue"
+import { SWITCH_SETTLED_KEY } from "@/popup/network-switch"
 import NetworksIndex from "./index.vue"
 
 const configState = vi.hoisted(() => ({ developerMode: false, listeners: [] as Array<(s: { key: string; value: unknown }) => void> }))
@@ -50,7 +52,7 @@ const NETS = [
 	{ id: "tn", name: "Testnet", chainId: CHAIN_IDS.TESTNET, kind: "testnet", endpoints: [], primaryEndpointId: "" },
 ]
 
-async function mountList(activeId: string) {
+async function mountList(activeId: string, shell: { settled?: () => Promise<boolean> } = {}) {
 	const router = createRouter({
 		history: createMemoryHistory(),
 		routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
@@ -60,6 +62,7 @@ async function mountList(activeId: string) {
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn }), router],
+			provide: { [SWITCH_SETTLED_KEY as symbol]: shell.settled ?? (async () => true) },
 			components: { SettingsPageShell, SettingItem },
 			stubs: {
 				Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
@@ -169,7 +172,8 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 	})
 
 	test("only an activated switch toasts 'Active network updated'; a refused, unconfirmed or stale one leaves the toast to the composable", async () => {
-		await mountList("alpha")
+		const { appStore } = await mountList("alpha")
+		appStore.isLogined = true
 		for (const result of ["blocked", "unconfirmed", "stale"]) {
 			activate.mockResolvedValueOnce(result)
 			switchOf("Testnet")?.click()
@@ -178,11 +182,35 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		expect(activate).toHaveBeenCalledTimes(3)
 		expect(openToast).not.toHaveBeenCalled()
 
-		activate.mockResolvedValueOnce("activated")
+		activate.mockImplementationOnce(async (target) => {
+			appStore.network = target as never
+			return "activated"
+		})
 		switchOf("Testnet")?.click()
 		await flushPromises()
 		expect(openToast).toHaveBeenCalledTimes(1)
 		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Active network updated" })
+	})
+
+	test("an activated switch whose account lands with another address names it, once the shell's switch run settles", async () => {
+		const run = deferred<boolean>()
+		const { appStore } = await mountList("alpha", { settled: () => run.promise })
+		appStore.isLogined = true
+		appStore.profile = { id: "p1" } as never
+		appStore.account = { profileId: "p1", chainId: CHAIN_IDS.MAINNET, name: "Account 1", address: "0xa1" } as never
+		activate.mockImplementationOnce(async (target) => {
+			appStore.network = target as never
+			return "activated"
+		})
+		switchOf("Testnet")?.click()
+		await flushPromises()
+		expect(openToast).not.toHaveBeenCalled()
+		appStore.account = { profileId: "p1", chainId: CHAIN_IDS.TESTNET, name: "Account 1", address: "0xb2" } as never
+		run.resolve(true)
+		await flushPromises()
+		expect(openToast.mock.calls).toEqual([
+			[{ kind: "success", label: "Active network updated", sub: "Account 1 has a different address on Testnet." }],
+		])
 	})
 
 	test("a Switch that holds focus as its row becomes active hands focus to that row's link; a Switch on another row keeps it", async () => {
