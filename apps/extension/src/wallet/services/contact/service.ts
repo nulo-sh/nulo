@@ -8,7 +8,8 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { RunFence } from "@/wallet/services/profile/spec"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import { nextRandomId, preferOrReallocId } from "@/wallet/services/id-allocators"
@@ -126,19 +127,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 				abbr: this._getAbbreviation(stored),
 			}
 
-			// Sealed before the checks, committed with no await after them.
 			const write = await this.storage.prepare(contact.id, contact)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			this.assertStillLive(runFence)
-			await write.commit()
-			// The set awaits — compensate the just-written row if the deletion
-			// landed during it, before the row becomes observable via the emit.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(contact.id)
-				throw profileDeletedError(fence.profileId)
-			}
-
-			this.emit("onContactAdded", contact)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(contact.id), {
+				admit: () => this.assertStillLive(runFence),
+				landed: () => this.emit("onContactAdded", contact),
+			})
 
 			return contact
 		})

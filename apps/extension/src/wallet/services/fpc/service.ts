@@ -5,7 +5,8 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { ProfileService } from "@/wallet/services/profile/service"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -40,7 +41,7 @@ type StoredFpc = Omit<FpcInfo, "isProtocol">
  *  since the liveness mark `since`, and for a write no user action asked for, the session. */
 type WriteScope = {
 	fence: ExecutionFence
-	deletion: ReturnType<ProfileService["getDeletionState"]>
+	deletion: ProfileDeletionState
 	networkId: string
 	since: number
 	background: boolean
@@ -176,7 +177,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		hasSponsoredFpc: boolean,
 		hasPrivateFpc: boolean,
 		fence: ExecutionFence,
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		const network = await resolveNetworkByChainId(this.networkService, chainId)
 		const since = await this.networkService.captureLiveness(network.id)
@@ -249,22 +250,16 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 	 *  and a background write's session a lock or a switch, which leave the row keys in the worker. */
 	private async writeFencedRow(fpc: StoredFpc, scope: WriteScope): Promise<void> {
 		const { fence, deletion } = scope
-		const assertLive = () => {
-			deletion.assertCurrent(fence.profileId, fence.epoch)
+		const assertSession = () => {
 			if (scope.background && !this.profileService.isFenceLive(fence)) throw new SessionEndedError()
 		}
-		assertLive()
+		deletion.assertCurrent(fence.profileId, fence.epoch)
+		assertSession()
 		const write = await this.storage.prepare(fpc.id, fpc)
 		if (!(await this.networkService.isNetworkLive(scope.networkId, scope.since))) {
 			throw new Error("network deleted")
 		}
-		assertLive()
-		await write.commit()
-		// The set awaits — compensate before the row becomes observable.
-		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.storage.delete(fpc.id)
-			throw profileDeletedError(fence.profileId)
-		}
+		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(fpc.id), { admit: assertSession })
 	}
 
 	private async rowsOn(profileId: string, chainId: number): Promise<StoredFpc[]> {

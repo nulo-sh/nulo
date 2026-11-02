@@ -5,7 +5,8 @@ import { CapabilityNotGrantedError, SessionEndedError, ValidationError } from "@
 import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
@@ -245,16 +246,10 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				confirmationLevel: confirmationLevel,
 				expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
 			}
-			// Signed and sealed before the check, committed with no await after it.
 			const write = await this.storage.prepare(session.id, session)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await write.commit()
-			// The set awaits — compensate before the grant becomes observable.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(session.id)
-				throw profileDeletedError(fence.profileId)
-			}
-			this.emit("onDappSessionAdded", session)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(session.id), {
+				landed: () => this.emit("onDappSessionAdded", session),
+			})
 
 			return session
 		})

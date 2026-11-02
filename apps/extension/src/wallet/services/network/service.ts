@@ -3,7 +3,8 @@ import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { assertRestoreEpoch, captureRestoreEpochs } from "@/wallet/services/restore-fence"
-import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate, type DeletionFence } from "@/wallet/services/create-fence"
+import { type ProfileDeletionState, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
@@ -302,8 +303,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private async offerDefaultsLocked(
 		profileId: string,
 		rows: Network[],
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<DefaultsOffer> {
 		const record = await readSeedOffers(this.browserApi.storage.local, profileId)
 		const offer = seedsToOffer(DEFAULT_SEEDS, record, rows)
@@ -340,8 +341,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		profileId: string,
 		record: RawRowState<SeedOffers>,
 		next: SeedOffers,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		if (record.kind === "valid" && sameSeedOffers(record.value, next)) return
 		await writeSeedOffers(this.browserApi.storage.local, profileId, next)
@@ -388,8 +389,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	private async seedOneNetworkLocked(
 		profileId: string,
 		seed: (typeof DEFAULT_SEEDS)[number],
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<Network> {
 		const network = await this._buildNetwork(
 			profileId,
@@ -401,12 +402,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			seed.endpointLabel,
 		)
 		const write = await this.storage.prepare(network.id, network)
-		deletion.assertCurrent(fence.profileId, fence.epoch)
-		await write.commit()
-		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-			await this.storage.delete(network.id)
-			throw profileDeletedError(fence.profileId)
-		}
+		await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id))
 		return network
 	}
 
@@ -416,8 +412,8 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		profileId: string,
 		seeded: Network[],
 		primaryActiveId: string | undefined,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
+		fence: DeletionFence,
+		deletion: ProfileDeletionState,
 	): Promise<void> {
 		const activeId = primaryActiveId ?? (seeded.length ? seeded[0]!.id : undefined)
 		if (!activeId) return
@@ -583,14 +579,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			const network = await this._buildNetwork(fence.profileId, name, rpcUrl, chainId, l1ChainId, "custom")
 			const write = await this.storage.prepare(network.id, network)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await write.commit()
-			// The set awaits — compensate before the row becomes observable.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(network.id)
-				throw profileDeletedError(fence.profileId)
-			}
-			this.emit("onNetworkAdded", network)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(network.id), {
+				landed: () => this.emit("onNetworkAdded", network),
+			})
 			return network
 		})
 	}
@@ -747,11 +738,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** Drops the network's kind from the announced ones, fenced and compensated as the pass writes
 	 *  the record. Caller holds the network lock. */
-	private async answerArrivalLocked(
-		network: Network,
-		fence: { profileId: string; epoch: number },
-		deletion: ReturnType<ProfileService["getDeletionState"]>,
-	): Promise<void> {
+	private async answerArrivalLocked(network: Network, fence: DeletionFence, deletion: ProfileDeletionState): Promise<void> {
 		const record = await readSeedOffers(this.browserApi.storage.local, network.profileId)
 		if (record.kind !== "valid" || network.kind === undefined || !record.value.announce?.includes(network.kind)) return
 		const announce = record.value.announce.filter((kind) => kind !== network.kind)
