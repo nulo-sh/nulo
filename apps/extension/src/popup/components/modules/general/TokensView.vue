@@ -15,13 +15,13 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
 import { managers } from "@/utils/core"
-import { useBalanceTasks } from "@/composables/useBalanceTasks"
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { orderTokenRows } from "@/utils/token-order"
 import { capHomeSlots, defaultKey, homeSlots, isDefaultPending } from "./home-slots"
 
 /** Composables */
+import { useBalanceTasks } from "@/composables/useBalanceTasks"
 import { usePinnedTokens, pinScopeOf } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { useJournalMirror } from "@/composables/useJournalMirror"
@@ -218,8 +218,12 @@ function retryDefault(entry) {
 taskService.onConnected.add(onTaskReconnected)
 async function onTaskReconnected() {
 	const scopeAtStart = scopeGen
-	await balanceTasks.snapshot()
-	if (scopeGen !== scopeAtStart) return
+	// A read refused by the page leaving or the worker dropping again leaves the flags to the next connect.
+	const read = await balanceTasks.snapshot().then(
+		() => true,
+		() => false,
+	)
+	if (!read || scopeGen !== scopeAtStart) return
 	for (const tb of tokenBalances.value) tb.isUpdating = balanceTasks.isUpdating(tb.id)
 }
 

@@ -190,6 +190,18 @@ describe("holdings page", () => {
 		expect(marks()).toEqual(["holdings-refreshing"])
 	})
 
+	test("a reconnect reads the tasks again, so a finish missed while the worker was gone puts the dot out", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
+		seedTasks = [{ id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xacct" } }]
+		const w = await mountPage()
+		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(true)
+		seedTasks = []
+		taskEvents.connected.invoke()
+		await flushPromises()
+		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(false)
+	})
+
 	test("a live add for another chain is ignored; one for this chain lands", async () => {
 		installChromeStorage()
 		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET)]
