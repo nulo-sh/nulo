@@ -1,7 +1,7 @@
 ---
 plan: fu2-onboarding-1
 tier: light
-status: approved (final Codex pass); arc 1 next
+status: arc 1 phase 1 green; review loop next
 issues: "#1512, #1515 (arc 1); #1511 (arc 2); #1513, #1514, #1516 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -91,7 +91,7 @@ Sign-off: decision page 93, signed 2026-11-02. P93-17 B "Welcome keeps its lines
 - **Trust boundaries:** none new. No message, stored shape, permission, dependency or CSP change; `phraseSaved` is an existing flag. Back's refusal is in-document only. A fast double Back can leave the URL on Create's entry while Ready shows, and a reload there still resumes at Ready.
 - **Known limits:** #1536 (a tracked tab id the person navigated elsewhere).
 
-## Phase 1 (arc 1): Ready's line and Back
+## Phase 1 (arc 1): Ready's line and Back ✓
 
 1. On base, add D11's Back step to `onboarding-tab.test.ts`; run it on Chrome and require the Create page (the reproduction). Record it in lessons. Time the unchanged `onboarding-tab.test.ts` once per browser.
 2. Add D10's arc 1 tests; require each red on base. Commit. Make D1 and D2. Require all green. Commit.
