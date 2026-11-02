@@ -735,9 +735,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 
 /** Is this row OURS to export? The fetch is by address, which two same-seed profiles
  *  share, so a row naming another profile is not ours. A row marked unattributable is
- *  nobody's — restore would hand it to whichever profile imported the backup. */
+ *  nobody's — restore would hand it to whichever profile imported the backup. A Pending
+ *  row is one restore refuses, so the backup would fail its own import. */
 function exportableTx(tx: Tx, profileId: string, chainId: number): boolean {
-	if (tx.ambiguous) return false
+	if (tx.ambiguous || tx.status === TxStatus.Pending) return false
 	if (tx.profileId !== undefined && tx.profileId !== profileId) return false
 	return tx.chainId === chainId
 }
