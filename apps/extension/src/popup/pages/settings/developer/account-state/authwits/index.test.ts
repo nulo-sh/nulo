@@ -1,4 +1,4 @@
-import { Flex, RowAction } from "@nulo/design"
+import { Flex, Input, RowAction } from "@nulo/design"
 import { createTestingPinia } from "@pinia/testing"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
@@ -57,7 +57,13 @@ function emit(event: string, payload: Authwit): void {
 	handler.invoke(payload)
 }
 
-async function mountPage() {
+const INPUT_STUB = {
+	props: ["modelValue"],
+	emits: ["update:modelValue"],
+	template: `<input data-testid="search" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
+}
+
+async function mountPage({ realInput = false } = {}) {
 	const pinia = createTestingPinia({ createSpy: vi.fn })
 	const appStore = useAppStore(pinia)
 	appStore.isLogined = true
@@ -68,7 +74,7 @@ async function mountPage() {
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			components: { Flex, RowAction },
+			components: { Flex, Input, RowAction },
 			stubs: {
 				SubPageHeader: { template: "<div><slot name='trailing' /></div>" },
 				Dropdown: { template: "<div />" },
@@ -77,11 +83,7 @@ async function mountPage() {
 				Tooltip: { template: "<span><slot /></span>" },
 				Icon: true,
 				Text: { template: "<span><slot /></span>" },
-				Input: {
-					props: ["modelValue"],
-					emits: ["update:modelValue"],
-					template: `<input data-testid="search" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
-				},
+				...(realInput ? {} : { Input: INPUT_STUB }),
 			},
 		},
 	})
@@ -113,4 +115,14 @@ test("a grant added while the page is open reads its kind, and a search that mis
 	await w.find('[data-testid="search"]').setValue("transfer_in_public")
 	expect(chips(w)).toHaveLength(1)
 	expect(w.text()).not.toContain("Intent")
+})
+
+test.each([
+	{ pasted: "transfer_in\u200B_public", shown: 1 },
+	{ pasted: "transfer_in_publik", shown: 0 },
+])("a search for $pasted shows $shown grant", async ({ pasted, shown }) => {
+	const w = await mountPage({ realInput: true })
+	expect(chips(w)).toHaveLength(1)
+	await w.get("input").setValue(pasted)
+	expect(chips(w)).toHaveLength(shown)
 })
