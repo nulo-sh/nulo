@@ -122,14 +122,10 @@ describe("TakeoverLayout", () => {
 	test("the chip shows its label, a square only when flagged, and reports a press", async () => {
 		const plain = mountLayout(base())
 		expect(byId(plain, "x-chip").text()).toBe("TESTNET")
-		expect(byId(plain, "x-chip").find("span").exists()).toBe(false)
+		expect(byId(plain, "x-chip").findAll("span")).toHaveLength(1)
 		await byId(plain, "x-chip").trigger("click")
 		expect(plain.emitted("chip")).toHaveLength(1)
-		expect(
-			byId(mountLayout(base(), { flagged: true }), "x-chip")
-				.find("span")
-				.exists(),
-		).toBe(true)
+		expect(byId(mountLayout(base(), { flagged: true }), "x-chip").findAll("span")).toHaveLength(2)
 	})
 
 	test("the lock chip is the padlock alone, named for what it does, and reports a press", async () => {
@@ -181,7 +177,11 @@ describe("TakeoverLayout", () => {
 			expect(
 				elements((node) => ["$style.primary", "$style.secondary"].includes(boundAttr(node, "class") ?? "")).map((node) => node.tag),
 			).toEqual(["button", "button"])
-			expect(declarationsOf(layout, ".primary, .secondary")).toMatchObject({ "min-height": "48px", "overflow-wrap": "anywhere" })
+			expect(declarationsOf(layout, ".primary, .secondary")).toMatchObject({
+				"min-height": "48px",
+				"padding-block": "5px",
+				"overflow-wrap": "anywhere",
+			})
 			for (const button of [".primary", ".secondary"]) expect(declarationsOf(layout, button)).not.toHaveProperty("height")
 		})
 
