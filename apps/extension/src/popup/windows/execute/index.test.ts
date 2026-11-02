@@ -220,7 +220,7 @@ const STUBS = {
 	},
 	SectionLabel: { template: "<div />" },
 	OperationCard: {
-		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed"],
+		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed", "previewFailed"],
 		template: '<div><slot name="fee" /></div>',
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
@@ -1803,6 +1803,42 @@ describe("execute window — a failed fee estimate's retry", () => {
 		expect(confirm().attributes("disabled")).toBeDefined()
 		await vm.approve()
 		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("an app-paid row's Try again asks the estimate the window asked at load, with the app's own payment", async () => {
+		const { fees, cards, fail, confirm } = await opened([ownCap])
+		const atLoad = fees.api.estimate.mock.calls
+		expect(atLoad).toEqual([[0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }]])
+		const asked = atLoad[0]
+		await fail(0)
+		expect(cards()[0]!.props("estimateFailed")).toBe(true)
+
+		fees.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryEstimate", 0)
+		await flushPromises()
+		expect(fees.api.estimate.mock.calls).toEqual([asked])
+		expect(fees.api.cancel).not.toHaveBeenCalled()
+		expect(cards()[0]!.props("estimateFailed")).toBe(false)
+		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
+	test("a failed authorization preview reaches the card, whose Try again asks the preview once more; the snack stays", async () => {
+		const { cards } = await opened([{ ...send, executionMode: "default_entrypoint" }])
+		const previews = feeMapInstances[1]!
+		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
+		previews.api.failed.value[0] = true
+		previews.opts.onError?.(0, new Error("node down"))
+		await flushPromises()
+		expect(cards()[0]!.props("previewFailed")).toBe(true)
+		const snack = { kind: "error", label: "Couldn't preview authorizations. Try again." }
+		expect(toast.value).toMatchObject(snack)
+
+		previews.api.estimate.mockClear()
+		cards()[0]!.vm.$emit("retryPreview", 0)
+		await flushPromises()
+		expect(previews.api.estimate.mock.calls).toEqual([[0, { index: 0 }]])
+		expect(cards()[0]!.props("previewFailed")).toBe(false)
+		expect(toast.value).toMatchObject(snack)
 	})
 
 	test("settings the card withdraws end the failure: the estimate is cancelled and the snack closes", async () => {

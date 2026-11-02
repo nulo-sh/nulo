@@ -273,6 +273,7 @@ const payerShort = computed(() =>
 const {
 	results: authwitPreviews,
 	estimating: previewingOps,
+	failed: failedAuthwitPreviews,
 	estimate: scheduleAuthwitPreview,
 	handoffAll: handoffAuthwitPreviews,
 	rearm: rearmAuthwitPreviews,
@@ -293,6 +294,8 @@ const {
 		openToast({ kind: "error", label: "Couldn't preview authorizations. Try again." })
 	},
 })
+
+const retryAuthwitPreview = (index: number) => scheduleAuthwitPreview(index, { index })
 
 const awaitsEstimates = computed(() =>
 	operations.value.some((op, i) =>
@@ -682,6 +685,7 @@ onUnmounted(() => {
 						:estimateFailed="!!failedFeeEstimates[i]"
 						:authwitPreview="authwitPreviews[i] ?? undefined"
 						:isPreviewing="!!previewingOps[i]"
+						:previewFailed="!!failedAuthwitPreviews[i]"
 						:isQueued="!!queuedOps[i]"
 						:decodedCalls="decodedCalls.get(i)"
 						:decodedAuthwits="decodedAuthwits"
@@ -695,6 +699,7 @@ onUnmounted(() => {
 						:refused="refusal !== undefined"
 						@updateFeeSettings="handleFeeUpdate"
 						@retryEstimate="retryFeeEstimate"
+						@retryPreview="retryAuthwitPreview"
 						@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 						@acknowledgeTokenFlag="acknowledgeTokenFlag"
 					>

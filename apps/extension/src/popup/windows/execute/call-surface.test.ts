@@ -4,8 +4,11 @@ import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
 import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
+import { MAIN, RECIPIENT, USDC as USDC_AT, VAULT } from "./execute.fixture"
 import {
 	type CallSurface,
+	type TransferSender,
+	accountOutflows,
 	amountLabel,
 	authwitLine,
 	authwitTitle,
@@ -491,5 +494,43 @@ describe("rawToggleLabel", () => {
 		expect(rawToggleLabel(1, false)).toBe("Show 1 raw value")
 		expect(rawToggleLabel(4, false)).toBe("Show 4 raw values")
 		expect(rawToggleLabel(1, true)).toBe("Hide raw values")
+	})
+})
+
+// `sameFieldAddress` refuses the `0xaa…` constants above (beyond the field), so these use valid ones.
+describe("accountOutflows: the direct transfers this account sends to another address, per token", () => {
+	const TST = { id: 2, chainId: 1, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 } as TokenInfo
+	const USDC_TOKEN = { ...USDC, contract: USDC_AT }
+	const units = (n: bigint, decimals: number) => (n * 10n ** BigInt(decimals)).toString()
+	const fromAccount = { kind: "account", address: MAIN } as const
+	const send = (to: string, contract: string, amount: string, sender: TransferSender) => ({
+		call: { to: contract },
+		surface: { kind: "transfer", fn: "transfer_in_public", to, amount, sender } as CallSurface,
+	})
+	const shouting = `0x${MAIN.slice(2).toUpperCase()}`
+
+	test("sums each token's sends; another sender, a send to the account, a mint and a call it cannot read add nothing", () => {
+		const rows = [
+			send(RECIPIENT, VAULT, units(4n, 18), fromAccount),
+			send(RECIPIENT, VAULT, units(2n, 18), { kind: "explicit", address: shouting }),
+			send(RECIPIENT, USDC_AT, units(10n, 6), fromAccount),
+			{ call: { to: VAULT }, surface: { kind: "decoded", fn: "swap", params: [] } as CallSurface },
+			send(RECIPIENT, VAULT, units(7n, 18), { kind: "explicit", address: RECIPIENT }),
+			send(MAIN, USDC_AT, units(3n, 6), fromAccount),
+			{ call: { to: VAULT }, surface: { kind: "mint", fn: "mint_to_public", to: RECIPIENT, amount: units(9n, 18) } as CallSurface },
+			{ call: { to: USDC_AT }, surface: { kind: "raw", reason: "unknown-function", rows: [], hidden: 0 } as CallSurface },
+		]
+		expect(accountOutflows(rows, MAIN, [TST, USDC_TOKEN], 1)).toEqual([
+			{ contract: VAULT, count: 2, amount: { text: "6 TST", baseUnits: false } },
+			{ contract: USDC_AT, count: 1, amount: { text: "10 USDC", baseUnits: false } },
+		])
+	})
+
+	test("a default-entrypoint send names no sender and adds nothing; a token with no usable symbol keeps base units", () => {
+		expect(accountOutflows([send(RECIPIENT, VAULT, units(1n, 18), { kind: "none" })], MAIN, [TST], 1)).toEqual([])
+		const blank = { ...TST, symbol: BEL }
+		expect(accountOutflows([send(RECIPIENT, VAULT, "5000000", fromAccount)], MAIN, [blank], 1)).toEqual([
+			{ contract: VAULT, count: 1, amount: { text: "5000000", baseUnits: true } },
+		])
 	})
 })
