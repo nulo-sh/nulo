@@ -37,8 +37,9 @@ describe("general/GetStartedCard", () => {
 		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
 		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
 		const glyphs = (item: GetStartedItem) =>
-			row(w, item)
+			w
 				.findAllComponents(Icon)
+				.filter((icon) => row(w, item).element.contains(icon.element))
 				.map((icon) => icon.props("name"))
 		expect(ALL.map(glyphs)).toEqual([["chevron"], ["open"], ["chevron"], ["chevron"]])
 	})
