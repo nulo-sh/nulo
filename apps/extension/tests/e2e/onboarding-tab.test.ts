@@ -11,12 +11,27 @@ import {
 	reloadExtensionPage,
 	setViewport,
 	viewportOf,
-	waitForTarget,
 } from "./fixtures/browser"
-import { waitForOpenPanel } from "./fixtures/browser/firefox-action-popup"
-import { clickByTestId, expectNoNameField, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
+import {
+	actionPopupShows,
+	clickInActionPopup,
+	evaluateInActionPopup,
+	openActionPopup,
+	waitForOpenPanel,
+} from "./fixtures/browser/firefox-action-popup"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	expectNoNameField,
+	openOnboarding,
+	openPopup,
+	replaceInputValue,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
 import { passPhraseCheck, readProfileNames, readRecoveryWords, revealSeedPhrase, selectedAccount } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
+import { pollUntil } from "./fixtures/poll"
 import { waitForPopupClosed } from "./fixtures/popups"
 import { shotSend } from "./fixtures/send-page"
 import { focusRing, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
@@ -53,6 +68,43 @@ async function readyPhraseLine(page: Page): Promise<{ unsaved: string; line: str
 
 const onboardingCompleted = (control: Page) =>
 	control.evaluate(async () => (await chrome.storage.local.get("nulo:onboarding:completed"))["nulo:onboarding:completed"])
+
+/** The popup over a wallet whose setup waits in its tab, its sentence and button shown: a tab on
+ *  Chrome, the toolbar panel on Firefox. */
+async function openSetupPopup(extension: ExtensionContext) {
+	const button = "register-setup-tab-btn"
+	if (isFirefox) {
+		await openActionPopup(extension.browser)
+		await pollUntil(
+			() =>
+				evaluateInActionPopup<boolean>(extension.browser, `return !!content.document.querySelector('[data-testid="${button}"]');`),
+			(shown) => shown,
+			{ label: "the panel's Go to the tab", timeoutMs: 15_000, intervalMs: 200 },
+		)
+		return {
+			isOpen: () => actionPopupShows(extension.browser),
+			press: () => clickInActionPopup(extension.browser, button),
+			closed: () =>
+				pollUntil(
+					() => actionPopupShows(extension.browser),
+					(open) => !open,
+					{
+						label: "the panel closed",
+						timeoutMs: 10_000,
+						intervalMs: 100,
+					},
+				),
+		}
+	}
+	const page = await newPage(extension.browser)
+	await gotoExtensionPage(page, extensionUrl(extension.extensionId, "/src/popup/index.html"))
+	await page.waitForSelector(`[data-testid="${button}"]`, { visible: true, timeout: 15_000 })
+	return {
+		isOpen: async () => !page.isClosed(),
+		press: () => clickByTestId(page, button),
+		closed: () => waitForPopupClosed(page, 10_000),
+	}
+}
 
 describe("onboarding tab", () => {
 	test("welcome screen renders both CTAs", async ({ freshExtensionPerTest: extension }) => {
@@ -303,30 +355,37 @@ describe("onboarding tab", () => {
 		await page.close()
 	})
 
-	test("popup with onboardingCompleted=false redirects to tab", async ({ freshExtensionPerTest: extension }) => {
-		// Reset the flag so the redirect predicate fires.
-		const setupPage = await newPage(extension.browser)
-		await gotoExtensionPage(setupPage, extensionUrl(extension.extensionId, "/src/popup/index.html"))
-		await setupPage.evaluate(async () => {
-			await chrome.storage.local.set({ "nulo:onboarding:completed": false })
-		})
-		await setupPage.close()
-		// Open the popup explicitly — should trigger redirect to onboarding tab.
-		const popup = await newPage(extension.browser)
-		const tabPromise = waitForTarget(
-			extension.browser,
-			(target) => target.type() === "page" && target.url().includes("src/onboarding/index.html"),
-			10_000,
-		)
-		await gotoExtensionPage(popup, extensionUrl(extension.extensionId, "/src/popup/index.html"))
+	// Only a real browser closes a popup and moves tab focus: the component layer stubs both. The first
+	// press finds no setup tab and opens one; the second brings that same tab forward. Chrome keeps the
+	// popup document in a tab; Firefox drives the toolbar panel itself.
+	test("before setup is finished the popup stays open on the setup tab's button, which brings that tab forward", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		const control = await openScratchPage(extension.browser, extension.extensionId)
+		await control.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
+		const onboardingTabs = () =>
+			extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html"))
+		const trackedTab = () =>
+			control.evaluate(async () => {
+				const id = (await chrome.storage.session.get("nulo:onboarding:tab-id"))["nulo:onboarding:tab-id"]
+				return typeof id === "number" ? { id, active: (await chrome.tabs.get(id)).active } : null
+			})
 
-		// The redirect in register.vue's onBeforeMount opens the onboarding tab, then closes this popup;
-		// both browsers honour that close.
-		const tabTarget = await tabPromise
-		expect(tabTarget).toBeDefined()
-
-		const tabPage = await tabTarget.page()
-		await tabPage?.close()
-		if (!popup.isClosed()) await popup.close()
+		for (const press of ["opens the tab", "brings it forward"]) {
+			const before = await trackedTab()
+			const popup = await openSetupPopup(extension)
+			// A popup that vanished as it rendered read as a crash.
+			await new Promise((resolve) => setTimeout(resolve, 1_000))
+			expect(await popup.isOpen(), `the popup closed by itself before the press that ${press}`).toBe(true)
+			await popup.press()
+			await popup.closed()
+			const after = await pollUntil(trackedTab, (tab) => tab?.active === true, {
+				label: `the setup tab the press ${press}, active`,
+				timeoutMs: 10_000,
+				intervalMs: 100,
+			})
+			if (before) expect(after?.id).toBe(before.id)
+			expect(onboardingTabs()).toHaveLength(1)
+		}
 	})
 })

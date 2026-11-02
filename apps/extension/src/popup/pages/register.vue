@@ -13,13 +13,27 @@ import { vSnackFooter } from "@/composables/snackInset"
 /** Utils */
 import { openLegalDocument } from "@/utils/legal-links"
 import { postAuthRoute } from "@/utils/own-window"
-import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
+import { openOrFocusOnboardingTab, setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
 const router = useRouter()
+
+// Before setup is finished in its tab, the popup says where it goes on instead of offering a profile:
+// the popup is too small for the welcome, create and import steps. Nothing shows until the read
+// settles; a failed read shows the profile actions, as the page always could.
+const setup = ref("reading")
+
+async function goToSetupTab() {
+	try {
+		await openOrFocusOnboardingTab()
+		window.close()
+	} catch (error) {
+		console.debug("onboarding tab focus failed", { error })
+	}
+}
 
 // A session another window opens is this window's too, so it leaves for where an unlock goes, as the
 // lock screen does. Only once this window's activation has finished: until then Home has no account.
@@ -31,55 +45,78 @@ watch(
 	{ immediate: true },
 )
 
-// First-time install: redirect to the onboarding tab. The popup is too small
-// for the welcome / create / import flow. Delegates to the shared predicate
-// helper so register/import/profile-new stay in lockstep.
-onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
+onBeforeMount(async () => {
+	try {
+		setup.value = (await setupWaitsInTab(appStore)) ? "waits" : "free"
+	} catch (error) {
+		console.debug("onboarding setup read failed", { error })
+		setup.value = "free"
+	}
+})
 </script>
 
 <template>
 	<Flex direction="column" :class="$style.wrapper">
-		<!-- Brand signature: lock icon + NULO wordmark -->
-		<Flex align="center" justify="center" gap="8" :class="$style.brand">
-			<Icon name="lock" :size="18" color="primary" />
-			<span :class="$style.wordmark">NULO</span>
-		</Flex>
-
-		<!-- Hero + actions -->
-		<Flex direction="column" align="center" justify="center" gap="40" :class="$style.main">
-			<Flex direction="column" align="center" gap="16">
-				<h1 :class="$style.headline">Access the internet-native coordination layer.</h1>
-				<p :class="$style.subcopy">Private by default. Sovereign by design.</p>
+		<template v-if="setup !== 'reading'">
+			<!-- Brand signature: lock icon + NULO wordmark -->
+			<Flex align="center" justify="center" gap="8" :class="$style.brand">
+				<Icon name="lock" :size="18" color="primary" />
+				<span :class="$style.wordmark">NULO</span>
 			</Flex>
 
-			<Flex wide direction="column" gap="8" :class="$style.actions">
-				<Button
-					@click="router.push('/popup/profile/new')"
-					wide
-					variant="primary"
-					size="large"
-					data-testid="register-create-btn"
-				>
-					Create profile
-				</Button>
-				<Button
-					@click="router.push('/popup/import')"
-					wide
-					variant="primary_outline"
-					size="large"
-					data-testid="register-import-btn"
-				>
-					Import profile
-				</Button>
+			<Flex
+				v-if="setup === 'waits'"
+				direction="column"
+				align="center"
+				justify="center"
+				gap="40"
+				:class="$style.main"
+				data-testid="register-setup-waits"
+			>
+				<h1 :class="$style.headline">Finish setting up Nulo in its tab</h1>
+				<Flex wide direction="column" gap="8" :class="$style.actions">
+					<Button wide variant="primary" size="large" data-testid="register-setup-tab-btn" @click="goToSetupTab">
+						Go to the tab
+					</Button>
+				</Flex>
 			</Flex>
-		</Flex>
 
-		<!-- Terms footer -->
-		<p v-snack-footer :class="$style.terms">
-			<span @click="openLegalDocument('terms')" :class="$style.link" data-testid="legal-register-terms">Terms of Use</span>
-			·
-			<span @click="openLegalDocument('privacy')" :class="$style.link" data-testid="legal-register-privacy">Privacy Policy</span>
-		</p>
+			<!-- Hero + actions -->
+			<Flex v-else direction="column" align="center" justify="center" gap="40" :class="$style.main">
+				<Flex direction="column" align="center" gap="16">
+					<h1 :class="$style.headline">Access the internet-native coordination layer.</h1>
+					<p :class="$style.subcopy">Private by default. Sovereign by design.</p>
+				</Flex>
+
+				<Flex wide direction="column" gap="8" :class="$style.actions">
+					<Button
+						@click="router.push('/popup/profile/new')"
+						wide
+						variant="primary"
+						size="large"
+						data-testid="register-create-btn"
+					>
+						Create profile
+					</Button>
+					<Button
+						@click="router.push('/popup/import')"
+						wide
+						variant="primary_outline"
+						size="large"
+						data-testid="register-import-btn"
+					>
+						Import profile
+					</Button>
+				</Flex>
+			</Flex>
+
+			<!-- Terms footer -->
+			<p v-snack-footer :class="$style.terms">
+				<span @click="openLegalDocument('terms')" :class="$style.link" data-testid="legal-register-terms">Terms of Use</span>
+				·
+				<span @click="openLegalDocument('privacy')" :class="$style.link" data-testid="legal-register-privacy">Privacy Policy</span>
+			</p>
+		</template>
 
 	</Flex>
 </template>

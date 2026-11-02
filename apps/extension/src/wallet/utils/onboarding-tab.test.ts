@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
-import { clearOnboardingTabTracking, openOrFocusOnboardingTab, redirectToOnboardingTabIfNeeded } from "./onboarding-tab"
+import { clearOnboardingTabTracking, openOrFocusOnboardingTab, setupWaitsInTab } from "./onboarding-tab"
 
 const TAB_ID_KEY = "nulo:onboarding:tab-id"
 
@@ -123,68 +123,61 @@ describe("openOrFocusOnboardingTab", () => {
 	})
 })
 
-describe("redirectToOnboardingTabIfNeeded", () => {
+describe("setupWaitsInTab", () => {
 	function makeStore(overrides: { completed?: boolean; profilesLength?: number } = {}) {
-		const store = {
+		return {
 			onboardingCompleted: overrides.completed ?? false,
 			profiles: Array.from({ length: overrides.profilesLength ?? 0 }, () => ({})) as readonly unknown[],
 			loadOnboardingCompleted: vi.fn(async () => undefined),
 		}
-		return store
 	}
 
-	test("no-op when onboarding is completed", async () => {
+	function stubWindow() {
+		const close = vi.fn()
+		vi.stubGlobal("window", { close })
+		return close
+	}
+
+	test("holds with no profile and onboarding not completed, and opens, focuses and closes nothing", async () => {
 		stubChrome({})
-		vi.stubGlobal("window", { close: vi.fn() })
-		const store = makeStore({ completed: true })
-		const redirected = await redirectToOnboardingTabIfNeeded(store)
-		expect(redirected).toBe(false)
+		const close = stubWindow()
+		const store = makeStore()
+		expect(await setupWaitsInTab(store)).toBe(true)
 		expect(store.loadOnboardingCompleted).toHaveBeenCalledTimes(1)
+		expect(chrome.storage.session.get).not.toHaveBeenCalled()
+		expect(chrome.tabs.get).not.toHaveBeenCalled()
+		expect(chrome.tabs.update).not.toHaveBeenCalled()
 		expect(chrome.tabs.create).not.toHaveBeenCalled()
-		expect(window.close as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
+		expect(chrome.windows.update).not.toHaveBeenCalled()
+		expect(close).not.toHaveBeenCalled()
 	})
 
-	test("no-op when profiles already exist", async () => {
+	test.each([
+		{ state: "onboarding completed", completed: true, profilesLength: 0 },
+		{ state: "a profile already there", completed: false, profilesLength: 1 },
+	])("does not hold with $state", async ({ completed, profilesLength }) => {
 		stubChrome({})
-		vi.stubGlobal("window", { close: vi.fn() })
-		const store = makeStore({ completed: false, profilesLength: 1 })
-		const redirected = await redirectToOnboardingTabIfNeeded(store)
-		expect(redirected).toBe(false)
-		expect(chrome.tabs.create).not.toHaveBeenCalled()
+		stubWindow()
+		expect(await setupWaitsInTab(makeStore({ completed, profilesLength }))).toBe(false)
 	})
 
-	test("opens tab + closes window when no profile and not onboarded", async () => {
-		stubChrome({ sessionGet: async () => ({}), tabsCreate: async () => ({ id: 42 }) })
-		const closeMock = vi.fn()
-		vi.stubGlobal("window", { close: closeMock })
-		const store = makeStore({ completed: false, profilesLength: 0 })
-		const redirected = await redirectToOnboardingTabIfNeeded(store)
-		expect(redirected).toBe(true)
-		expect(chrome.tabs.create).toHaveBeenCalled()
-		expect(closeMock).toHaveBeenCalled()
-	})
-
-	test("loadOnboardingCompleted is awaited before predicate check", async () => {
-		let resolveLoad: () => void = () => {}
-		const loadPromise = new Promise<void>((res) => {
-			resolveLoad = res
-		})
+	test("reads the completed flag before it decides", async () => {
 		stubChrome({})
-		vi.stubGlobal("window", { close: vi.fn() })
-		// Simulate a store that flips to completed AFTER load resolves.
+		stubWindow()
 		const store = {
 			onboardingCompleted: false,
 			profiles: [] as readonly unknown[],
-			loadOnboardingCompleted: vi.fn(() => {
-				return loadPromise.then(() => {
-					store.onboardingCompleted = true
-				})
+			loadOnboardingCompleted: vi.fn(async () => {
+				store.onboardingCompleted = true
 			}),
 		}
-		const pending = redirectToOnboardingTabIfNeeded(store)
-		resolveLoad()
-		const result = await pending
-		expect(result).toBe(false)
-		expect(chrome.tabs.create).not.toHaveBeenCalled()
+		expect(await setupWaitsInTab(store)).toBe(false)
+	})
+
+	test("a failed read rejects, so the caller decides what a failure shows", async () => {
+		stubChrome({})
+		stubWindow()
+		const store = { ...makeStore(), loadOnboardingCompleted: vi.fn(async () => Promise.reject(new Error("storage"))) }
+		await expect(setupWaitsInTab(store)).rejects.toThrow("storage")
 	})
 })

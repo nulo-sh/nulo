@@ -4,12 +4,10 @@
  * `chrome.storage.session` are available everywhere.
  *
  * Concurrency: a module-level promise lock collapses concurrent calls into a
- * single in-flight open. Necessary because `onInstalled` (background) and
- * `register.vue` mount (popup) can race on a fresh install — both contexts
- * are different module graphs but each individually only sees one call at a
- * time. The lock keeps each context internally single-flight; the cross-
- * context race resolves naturally because the popup almost always loses
- * (chrome opens the popup AFTER firing onInstalled).
+ * single in-flight open. `onInstalled` (background) and the popup's Go to the
+ * tab are different module graphs, so the lock keeps each context
+ * single-flight only; the cross-context race resolves because the popup's
+ * press comes after onInstalled has tracked its tab.
  *
  * Session-storage tab-id tracking is best-effort. chrome.storage.session is
  * cleared on reload/update/disable/browser-restart, so a stored id can
@@ -82,32 +80,19 @@ export async function clearOnboardingTabTracking(): Promise<void> {
 	await chrome.storage.session.remove(TAB_ID_KEY)
 }
 
-/**
- * Minimal structural shape of the app store needed by the redirect
- * predicate. Keeps the helper decoupled from the full `appStore` type
- * (which churns independently).
- */
-export interface OnboardingRedirectSubject {
+/** The app store's part the setup predicate reads; structural, so the predicate ignores the rest. */
+export interface OnboardingSetupSubject {
 	onboardingCompleted: boolean
 	profiles: readonly unknown[]
 	loadOnboardingCompleted: () => Promise<void>
 }
 
 /**
- * Predicate + side effect shared by the three popup pages that can be
- * deep-linked on a fresh install (register, import, profile/new). When
- * onboarding hasn't completed AND no profile exists yet, opens or
- * refocuses the onboarding tab and closes the popup. Returns true when
- * the redirect fired, false on no-op.
- *
- * Callers keep the `onBeforeMount` hook visible at the call site —
- * extracting only the predicate, not the lifecycle binding.
+ * Whether setup waits in the onboarding tab: onboarding is not completed and no profile exists. The
+ * popup's register, import and new profile pages read it; it opens, focuses and closes nothing, so
+ * the popup stays open to say where setup goes on.
  */
-export async function redirectToOnboardingTabIfNeeded(store: OnboardingRedirectSubject): Promise<boolean> {
+export async function setupWaitsInTab(store: OnboardingSetupSubject): Promise<boolean> {
 	await store.loadOnboardingCompleted()
-	if (store.onboardingCompleted) return false
-	if (store.profiles.length > 0) return false
-	await openOrFocusOnboardingTab()
-	window.close()
-	return true
+	return !store.onboardingCompleted && store.profiles.length === 0
 }

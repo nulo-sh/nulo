@@ -46,8 +46,8 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 	// A real fresh install has no acceptance; specs that are about the gate ask for that. Left alone,
 	// the launch's `current` seed stands and a spec about a later step can still jump to it.
 	// Seeded BEFORE the flag flips: the popup reads the flag while it mounts, and on a profile with
-	// no wallet a `false` makes it open the onboarding tab and close itself — so the flip is the
-	// last thing evaluated in it, and it may already be gone when this closes it.
+	// no wallet a `false` turns it into the page that points to the setup tab, so the flip is the
+	// last thing evaluated in it.
 	if (opts.legal) await seedLegalAcceptance(setupPage, opts.legal)
 	await setupPage.evaluate(async () => {
 		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
