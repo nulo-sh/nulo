@@ -1,7 +1,7 @@
 ---
 plan: w3-import-1
 tier: light
-status: approved (Codex final approve); arc 1 next
+status: arc 1 built, gates green; PR next
 issues: "#1458, #1466, #1459 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -80,20 +80,24 @@ None. No screen's layout, copy, rows or formatting changes. Behaviour returns to
 - No permission, message, dependency, CSP or stored-shape change.
 - **Residual, pre-existing, filed as a known limit in Phase 2:** when `unwrite` cannot remove the row, the row (now with its key) was never announced (`onAccountAdded`), so listeners miss it until a reopen or restart, and a purge that snapshotted before the write leaves it on a deleted chain. Base keeps the same row without its key, so D1 is strictly better; fixing it needs a recovery policy for a row of unknown liveness, which is out of scope.
 
-## Phase 1 (arc 1): reproduce
+## Phase 1 (arc 1): reproduce ✓
 
 1. Add T1, T2 and T3 against the base sources. Commit `test: …` (signed).
 2. Run `(cd apps/extension && bun --bun vitest run src/wallet/services/account/service.test.ts src/onboarding/pages/import.test.ts src/wallet/services/transaction/service.finality.test.ts --retry=0)`.
 
 **Gate:** pass = exactly the new cases fail, each on its stated assertion (T1: key row gone; T2(a)(b): `bootstrapActiveProfile` or `router.push` called after the departure; T2(c): `hydrateKnownProfile` called after the departure; T3: the Pending row exported); every other case green. A case green on base first goes back to its trace: fix the test until it reaches the traced fault. Only a trace that itself fails is a claim that did not hold: say so on its issue with what was run and close it `known-limit`, per the lane brief.
 
-## Phase 2 (arc 1): fix and gates
+## Phase 2 (arc 1): fix and gates ✓
 
 1. Make D1, D2, D3, one commit each (`fix(account): …`, `fix(onboarding): …`, `fix(backup): …`).
 2. Rerun Phase 1's command: every case green.
 3. File the residual (Security section) as an issue labelled `known-limit`, closed as not planned, after `gh issue list --state all --search "imported account not announced"`; its reopening condition: a report of an imported account missing from a list or a scan after a failed import.
 
 **Gate:** 1. `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. 2. `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`. 3. `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/import-paths.test.ts tests/e2e/account-import-export.test.ts tests/e2e/backup-roundtrip.test.ts --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`; record each wall-clock. 4. `bun run check:plans` after staging. Pass: all exit 0 at retry 0; a red e2e reruns once on base first (lessons), real breakage gets a fix.
+
+**Arc 1 as built** (`worktree-w3-import-1`). Phase 1: the five new cases red on base, each on its stated assertion. Phase 2 gate green at the final code commit: lint, `typecheck:all`, `bun run test` (16 720 passed), `test:all` (17 workspaces), both armed builds, the three smoke files at retry 0 (Chrome 8 tests in 81.9 s, Firefox 8 in 114.8 s), `check:plans`. Known limit #1566 filed and closed.
+- Deviation: `tests/e2e/helpers/profile-chaos/model.ts` cites `account/service.ts` by line number; D1 moved four cited lines, so `scripts/e2e/profile-chaos-model.test.ts` failed until they were repointed (own commit).
+- Review round 1 added: T2(b) asserts the pointer write's `unless` (false mounted, true after leaving; a mutation dropping it now fails the test); the `lastActive` spy is reset per test (vitest 4's `clearAllMocks` keeps queued once-values); comments name both orphan-key sources and when the sweep runs.
 
 ## Delivery
 
@@ -115,6 +119,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the same D2 window and T1 arming; T2 resets `history.state`; the Outcome narrowed; D2's rejection cites the C1 `dispose()` lesson; Fact 3 and the `test.each` lines corrected; Fact 7 (no deadlock); the unannounced-row residual filed as a known limit | none |
 | final 1 | Codex, resumed (session 01a19e2c) | conditional approve | D2's rejected-alternative rationale narrowed to completion after the profile exists (the import's earlier steps stay unfenced, out of scope) | none |
 | final 2 | Codex, resumed | **approve** | the condition verified; no regression | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a19e3c) | conditional approve | T2(b) must prove the pointer write's `unless` | none |
+| arc 1 r1 | Opus 5.5 (general-purpose) | approve | the same `unless` gap; the spy reset; the sweep's doc names both orphan sources; the catch comment reworded; #1566 names both triggers | none |
+| arc 1 r2 | Codex, resumed | **approve** | fixes and the citation repoint verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 
