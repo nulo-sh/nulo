@@ -1,7 +1,7 @@
 ---
 plan: fu2-send-1
 tier: light
-status: plan approved (Codex final approve); arc 1 in progress; arc 2 waits on OA-1, arc 3 on OA-2, OA-3 and A4
+status: plan approved (Codex final approve); arc 1 in review (#1544); arc 2 waits on OA-1, arc 3 on OA-2, OA-3 and A4
 issues: "#1517, #1518, #1519, #1520, #1521, #1522"
 driver: claude-code
 claude_model: opus
