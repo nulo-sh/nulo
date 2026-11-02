@@ -16,6 +16,13 @@ export const trimAddress = (address: string, start = 8, end = 4, separator = "..
 	return `${address.substring(0, start)}${separator}${address.substring(address.length - end)}`
 }
 
+/** A whole address split where the header's short form, `trimAddress(address, 6, 4)`, cuts it, so a
+ *  screen showing all of it can mark the two ends a person compares. Too short to cut: all head. */
+export function addressEnds(address: string): { head: string; middle: string; tail: string } {
+	if (address.length <= 10) return { head: address, middle: "", tail: "" }
+	return { head: address.slice(0, 6), middle: address.slice(6, -4), tail: address.slice(-4) }
+}
+
 /**
  * Initials for an entity name: first letters of the first two words, or the
  * first 1–2 characters of a single word, uppercased. Empty/whitespace → "".
