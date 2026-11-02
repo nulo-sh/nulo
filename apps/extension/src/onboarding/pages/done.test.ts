@@ -54,10 +54,11 @@ afterEach(() => {
 
 const page = { template: "<div />" }
 
-/** Ready behind a real router, entered from Create; the other routes are blank pages. */
+/** Ready behind a real router, by default entered from Create; the other routes are blank pages. */
 async function mountRouted(
 	getUserSettings: () => Promise<{ isOnToolbar?: boolean }>,
 	history: RouterHistory,
+	visits = ["/onboarding/create", "/onboarding/done"],
 ): Promise<{ w: VueWrapper; router: Router }> {
 	vi.stubGlobal("chrome", { action: { getUserSettings }, storage })
 	const routes = [
@@ -67,8 +68,7 @@ async function mountRouted(
 	]
 	histories.push(history)
 	const router = createRouter({ history, routes })
-	await router.push("/onboarding/create")
-	await router.push("/onboarding/done")
+	for (const path of visits) await router.push(path)
 	const w = mount(
 		{ template: "<RouterView />" },
 		{
@@ -196,11 +196,11 @@ describe("onboarding done: Back", () => {
 		expect(w.find('[data-testid="onboarding-done-page"]').exists()).toBe(true)
 	})
 
-	test("control: Back from a page without the guard leaves it", async () => {
-		const { router } = await mountRouted(async () => ({ isOnToolbar: true }), createWebHashHistory())
-		await router.push("/onboarding/welcome")
+	test("control: the same Back between two other pages leaves", async () => {
+		const visits = ["/onboarding/create", "/onboarding/welcome"]
+		const { router } = await mountRouted(async () => ({ isOnToolbar: true }), createWebHashHistory(), visits)
 		expect(await back(router)).toBeUndefined()
-		expect(router.currentRoute.value.path).toBe("/onboarding/done")
-		await vi.waitFor(() => expect(window.location.hash).toBe("#/onboarding/done"))
+		expect(router.currentRoute.value.path).toBe("/onboarding/create")
+		expect(window.location.hash).toBe("#/onboarding/create")
 	})
 })
