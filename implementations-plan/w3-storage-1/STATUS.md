@@ -7,3 +7,4 @@
 - 2026-11-02: arc 1 phase 1: T1-T8 red on the base at their failure-mode assertions (controls green), green after D2-D8; gate green (lint, typecheck:all, the vitest list 895 tests, wallet-core 333, test:all 149 s).
 - 2026-11-02: arc 1 phase 2: network files green at retry 0, Chrome 195 s, Firefox 384 s.
 - 2026-11-02: arc 1 phase 2: smoke files green at retry 0 on the armed build, Chrome 188 s (5 files, 34 tests), Firefox 281 s (5 files, 29 passed, 5 Chrome-only skipped). Codex fix loop next.
+- 2026-11-02: arc 1 fix loop: round 1 Codex and Opus conditional approve, folded; round 2 Codex approve. Final gates green; PR next.

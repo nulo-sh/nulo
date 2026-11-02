@@ -130,6 +130,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | final 2 | Codex, resumed | **approve** | A and B verified resolved; the T5 case where storage holds the value and memory differs | none |
 | arc 1 round 1 | Codex, gpt-6.1-sol (session 01a19e82) | conditional approve | T6's recovery control (the tombstone test cannot show the next pass persisting); the config log literal restored, D9 moving only the error under `{ error }` | none |
 | arc 1 round 1 | Opus 5.5 (`general-purpose`) | conditional approve | the boot-order comment in `runtime.ts` made stale by D8; retention's wait swallows a failed import, as the entry point does, so a malformed saved run cannot veto the boot; the tombstone test proves its fault was consumed | a repeated `discarded` warn per refresh on `verify-unsupported` (at most daily, the outcome only) |
+| arc 1 round 2 | Codex, resumed | **approve** | all five folds verified; non-blocking: the `runtime.ts` comment still said a rejected load leaves defaults, false when the write-back fails after the stored values are assigned (`config/store.test.ts`), rewritten | none |
 
 ## Seeds (not run; orchestrator-owned)
 
