@@ -1,7 +1,7 @@
 ---
 plan: password-strength-1
 tier: light
-status: arc 1 in review (PR open); OA-1 to OA-3 answered 2026-11-02; merge is the orchestrator's call
+status: delivered (one PR against dev with this close-out, merge pending on the orchestrator's word)
 issues: "#1401 (arc 1 closes it)"
 driver: claude-code
 claude_model: opus
@@ -16,9 +16,21 @@ standard: implementations-plan/README.md § Post-implementation standard, read a
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered. One PR (#1503) against `dev`; its final commits are this close-out; it merges on the orchestrator's word.
+- **Owner sign-off:** P94-08, option C (2026-11-01), for the rule; OA-1 = A1 and OA-2 = A (2026-11-02) for the lines, the bands and the surfaces (UI impact); OA-3 = B decided by the orchestrator with Codex on the owner's delegation (D10).
+- **Shipped:** the hint under all seven new-password fields estimates guessability with `@zxcvbn-ts/core` 4.2.0 and `@zxcvbn-ts/language-common` 4.1.3 under zxcvbn's own bands, and names a weak password's reason (repeated characters, characters in order, a keyboard pattern, a common password, or make it longer); "Long enough. Don't forget it." retired. A UI-only module the worker never loads, a new estimator per check; what the form accepts is unchanged. Closes #1401.
+- **Dispositions:** the stricter bands (B1) declined by the owner (D3); the English word list left out (D10); a cached estimator declined, since it keeps the password (D9).
+- **Known limits:** #1562 (non-English words and non-Latin keyboard rows over-score).
+- **Open items:** #1561 (the English common-word list, once its data licence and attribution are settled).
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget, and this plan's gotchas are its own: zxcvbn warns only up to score 2 (D3); `bun remove` re-sorts a manifest's dependencies ([lessons/phase-3.md](lessons/phase-3.md)).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
+
 # password-strength-1: the new-password hint measures more than length
 
-One issue, one arc, one PR against `dev`. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
+One issue, one arc, one PR against `dev`. At 162 lines this plan runs over the light target: the Outcome and the owner's answers (Phase 3) were added to a plan written at it. Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md).
 
 ## Outcome & Quality Bar
 
