@@ -123,6 +123,8 @@ type SeederOverrides = {
 	getSeeds?: () => Promise<readonly DefaultTokenSeed[] | undefined>
 }
 
+export type TokenServiceOptions = { pxeClientFactory?: ShallowPxeClientFactory; seederOverrides?: SeederOverrides }
+
 export class TokenService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getTokens",
@@ -156,6 +158,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 *  watchdog released keeps running, so every admission waits for these before it reads. */
 	private readonly pendingWrites = new Set<Promise<unknown>>()
 	private readonly browserApi: BrowserApi
+	private readonly pxeClientFactory: ShallowPxeClientFactory
 	private readonly seederOverrides?: SeederOverrides
 	private seeder: TokenSeeder = null!
 
@@ -169,15 +172,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	/** Stateless; the execution service owns another. Depending on that service for it would be a cycle. */
 	private readonly contractResolver: ContractResolver
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		private readonly pxeClientFactory: ShallowPxeClientFactory = DEFAULT_SHALLOW_PXE_CLIENT_FACTORY,
-		seederOverrides?: SeederOverrides,
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenServiceOptions = {}) {
 		super(TOKEN_SERVICE_NAME, logger)
 		this.browserApi = browserApi
-		this.seederOverrides = seederOverrides
+		this.pxeClientFactory = options.pxeClientFactory ?? DEFAULT_SHALLOW_PXE_CLIENT_FACTORY
+		this.seederOverrides = options.seederOverrides
 		this.contractResolver = new ContractResolver(logger)
 		this.tokens = sealedEntityStorage("tokens", browserApi.storage.local, (profileId) => this.profiles?.rowKeys(profileId))
 	}

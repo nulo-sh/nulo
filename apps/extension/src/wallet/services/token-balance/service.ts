@@ -39,6 +39,8 @@ import {
 
 export * from "./spec"
 
+export type TokenBalanceServiceOptions = { ticker?: BackgroundTickerPort; projectionGate?: ProjectionGate }
+
 export class TokenBalanceService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()("getTokenBalance", "getTokenBalances", "refreshTokenBalance")
 	public static name = TOKEN_BALANCE_SERVICE_NAME
@@ -108,13 +110,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		if (id !== undefined) this.invalidatedBalanceIds.add(id)
 	}
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		private readonly ticker: BackgroundTickerPort = new ClockTickerAdapter(new SystemClock(), logger, TOKEN_BALANCE_SERVICE_NAME),
-		private readonly projectionGate?: ProjectionGate,
-	) {
+	private readonly ticker: BackgroundTickerPort
+	private readonly projectionGate?: ProjectionGate
+
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenBalanceServiceOptions = {}) {
 		super(TOKEN_BALANCE_SERVICE_NAME, logger)
+		this.ticker = options.ticker ?? new ClockTickerAdapter(new SystemClock(), logger, TOKEN_BALANCE_SERVICE_NAME)
+		this.projectionGate = options.projectionGate
 		this.repo = new BalanceRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
 	}
 

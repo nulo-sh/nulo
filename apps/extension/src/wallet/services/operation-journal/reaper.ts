@@ -84,6 +84,8 @@ const STAGE_GRACE_MS: Readonly<Record<ActiveStage, number>> = {
 
 const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 
+export type JournalReaperOptions = { now?: () => number; bootCutoff?: number }
+
 /**
  * Watches the operation journal for non-terminal records that have
  * exceeded their stage's grace window and transitions them to `failed`
@@ -101,7 +103,7 @@ export class JournalReaper {
 	// shapes genuinely differ, so the wrapper deliberately doesn't own them.
 	private readonly dispatcher: AlarmDispatcher
 	/** Per-instance now-source. Real `Date.now()` in production; injectable
-	 *  via the optional 4th ctor arg for unit tests using fake clocks. */
+	 *  through `options.now` for unit tests using fake clocks. */
 	private readonly now: () => number
 	/** The boot-sweep cutoff. When the composition root supplies it (captured
 	 *  BEFORE `services.start()`), it protects even ops created by a popup-RPC
@@ -112,12 +114,12 @@ export class JournalReaper {
 	/** The cutoff the boot sweep ran with, kept for the sweep of each profile unlocked later. */
 	private sweepCutoff: number | undefined
 
-	public constructor(journal: OperationJournalService, alarms: AlarmsPort, logger: ILogger, now?: () => number, bootCutoff?: number) {
+	public constructor(journal: OperationJournalService, alarms: AlarmsPort, logger: ILogger, options: JournalReaperOptions = {}) {
 		this.journal = journal
 		this.logger = logger
 		this.dispatcher = new AlarmDispatcher(JOURNAL_REAPER_ALARM_NAME, alarms)
-		this.now = now ?? (() => Date.now())
-		this.bootCutoff = bootCutoff
+		this.now = options.now ?? (() => Date.now())
+		this.bootCutoff = options.bootCutoff
 	}
 
 	/**

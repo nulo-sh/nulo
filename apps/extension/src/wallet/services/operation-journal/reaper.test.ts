@@ -53,7 +53,7 @@ describe("JournalReaper.reap", () => {
 
 	test("leaves pending records that are still within their grace window", async () => {
 		const rec = await service.createOperation(VALID_INPUT)
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 1_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 1_000 })
 
 		await reaper.reap()
 
@@ -64,7 +64,7 @@ describe("JournalReaper.reap", () => {
 	test("reaps a pending record past its grace window to failed:stale_on_resume", async () => {
 		const rec = await service.createOperation(VALID_INPUT)
 		// `pending` grace = 2 min; jump 3 min forward.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 3 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 3 * 60_000 })
 
 		await reaper.reap()
 
@@ -79,7 +79,7 @@ describe("JournalReaper.reap", () => {
 		await service.transitionOperation(rec.id, { stage: "simulating" })
 		const proving = await service.transitionOperation(rec.id, { stage: "proving", enteredProveAt: Date.now() })
 		// `proving` grace = 35 min; jump 40 min forward of the proving transition.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => proving.updatedAt + 40 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => proving.updatedAt + 40 * 60_000 })
 
 		await reaper.reap()
 
@@ -97,7 +97,7 @@ describe("JournalReaper.reap", () => {
 			initialStage: { stage: "queued" },
 		})
 		// `queued` grace = 10 min; jump 11 min forward.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 11 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 11 * 60_000 })
 		await reaper.reap()
 
 		const after = await service.getOperation(rec.id)
@@ -115,7 +115,7 @@ describe("JournalReaper.reap", () => {
 			initialStage: { stage: "queued" },
 		})
 		// Within grace — 5 min < 10 min.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 5 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 5 * 60_000 })
 		await reaper.reap()
 
 		const after = await service.getOperation(rec.id)
@@ -131,7 +131,7 @@ describe("JournalReaper.reap", () => {
 			initialStage: { stage: "queued" },
 		})
 		// Fresh: not past grace, but boot sweep is unconditional.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => Date.now())
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => Date.now() })
 		await reaper.reap({ unconditional: true })
 
 		const after = await service.getOperation(rec.id)
@@ -151,7 +151,7 @@ describe("JournalReaper.reap", () => {
 		// A record created "after boot began": make the reaper's clock (bootCutoff
 		// source) read BEFORE this record's createdAt.
 		const live = await service.createOperation(VALID_INPUT)
-		const reaper = new JournalReaper(service, api.alarms, logger, () => live.createdAt - 1_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => live.createdAt - 1_000 })
 
 		await reaper.start()
 
@@ -163,7 +163,7 @@ describe("JournalReaper.reap", () => {
 	test("boot sweep still reaps a genuinely prior-lifetime record (createdAt < bootCutoff)", async () => {
 		const stale = await service.createOperation(VALID_INPUT)
 		// Boot happened AFTER this record — it is from a prior SW lifetime.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => stale.createdAt + 5_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => stale.createdAt + 5_000 })
 
 		await reaper.start()
 
@@ -183,7 +183,7 @@ describe("JournalReaper.reap", () => {
 		await service.transitionOperation(recB.id, { stage: "cancelled" })
 
 		// Jump 60min forward — would reap anything non-terminal.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => Date.now() + 60 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => Date.now() + 60 * 60_000 })
 		await reaper.reap()
 
 		const afterA = await service.getOperation(recA.id)
@@ -207,7 +207,7 @@ describe("JournalReaper.reap", () => {
 			return service.transitionIfStage(...args)
 		})
 
-		const reaper = new JournalReaper(service, api.alarms, logger, () => recA.updatedAt + 3 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => recA.updatedAt + 3 * 60_000 })
 		await reaper.reap()
 		spy.mockRestore()
 
@@ -227,12 +227,12 @@ describe("JournalReaper.reap", () => {
 		const submitting = await service.transitionOperation(rec.id, { stage: "submitting" })
 
 		// 4min — should NOT reap.
-		const earlyReaper = new JournalReaper(service, api.alarms, logger, () => submitting.updatedAt + 4 * 60_000)
+		const earlyReaper = new JournalReaper(service, api.alarms, logger, { now: () => submitting.updatedAt + 4 * 60_000 })
 		await earlyReaper.reap()
 		expect((await service.getOperation(rec.id))?.progress.stage).toBe("submitting")
 
 		// 6min — should reap to failed:stale_on_resume.
-		const lateReaper = new JournalReaper(service, api.alarms, logger, () => submitting.updatedAt + 6 * 60_000)
+		const lateReaper = new JournalReaper(service, api.alarms, logger, { now: () => submitting.updatedAt + 6 * 60_000 })
 		await lateReaper.reap()
 		const after = await service.getOperation(rec.id)
 		expect(after?.progress.stage).toBe("failed")
@@ -261,7 +261,7 @@ describe("JournalReaper.reap", () => {
 			return originalTransitionIfStage(...args)
 		})
 
-		const reaper = new JournalReaper(service, api.alarms, logger, () => recA.updatedAt + 11 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => recA.updatedAt + 11 * 60_000 })
 		await reaper.reap()
 		spy.mockRestore()
 
@@ -297,7 +297,7 @@ describe("JournalReaper.reap", () => {
 			return originalTransitionIfStage(...args)
 		})
 
-		const reaper = new JournalReaper(service, api.alarms, logger, () => recA.updatedAt + 11 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => recA.updatedAt + 11 * 60_000 })
 		await reaper.reap()
 		spy.mockRestore()
 
@@ -309,7 +309,7 @@ describe("JournalReaper.reap", () => {
 	test("the unconditional boot sweep is age-blind: a freshly TOUCHED prior-lifetime record still reaps", async () => {
 		const rec = await service.createOperation(VALID_INPUT)
 		await service.touchOperation(rec.id) // fresh updatedAt — irrelevant to the boot sweep
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 1_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 1_000 })
 		await reaper.reap({ unconditional: true, bootCutoff: Date.now() + 60_000 }) // created before cutoff
 		expect((await service.getOperation(rec.id))?.progress.stage).toBe("failed") // crash detection intact
 	})
@@ -326,7 +326,7 @@ describe("JournalReaper.start", () => {
 
 	test("registers the periodic alarm and runs an immediate boot sweep", async () => {
 		const rec = await service.createOperation(VALID_INPUT)
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 3 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 3 * 60_000 })
 
 		await reaper.start()
 
@@ -351,7 +351,7 @@ describe("JournalReaper.start", () => {
 
 	test("alarm firing triggers a reap pass", async () => {
 		const rec = await service.createOperation(VALID_INPUT)
-		const reaper = new JournalReaper(service, api.alarms, logger, () => rec.updatedAt + 3 * 60_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => rec.updatedAt + 3 * 60_000 })
 		await reaper.start()
 		// Boot sweep already failed `rec`. Make a fresh record to observe
 		// the alarm-triggered reap fire on something other than rec.
@@ -385,7 +385,7 @@ describe("JournalReaper.start", () => {
 		// Reaper boots <1s after the record entered proving — well within the
 		// 35-min grace window. Pre-fix this stayed in `proving`; post-fix the
 		// boot sweep marks it failed immediately.
-		const reaper = new JournalReaper(service, api.alarms, logger, () => proving.updatedAt + 500)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => proving.updatedAt + 500 })
 		await reaper.start()
 
 		const after = await service.getOperation(rec.id)
@@ -403,7 +403,7 @@ describe("JournalReaper.start", () => {
 		await service.transitionOperation(rec.id, { stage: "proving", enteredProveAt: Date.now() })
 		const submitting = await service.transitionOperation(rec.id, { stage: "submitting" })
 
-		const reaper = new JournalReaper(service, api.alarms, logger, () => submitting.updatedAt + 100)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => submitting.updatedAt + 100 })
 		await reaper.start()
 
 		const after = await service.getOperation(rec.id)
@@ -420,7 +420,7 @@ describe("JournalReaper.start", () => {
 		await service.transitionOperation(rec.id, { stage: "simulating" })
 		const proving = await service.transitionOperation(rec.id, { stage: "proving", enteredProveAt: Date.now() })
 
-		const reaper = new JournalReaper(service, api.alarms, logger, () => proving.updatedAt + 30_000)
+		const reaper = new JournalReaper(service, api.alarms, logger, { now: () => proving.updatedAt + 30_000 })
 		// Call reap() directly (NOT through start()) so we get the
 		// non-unconditional periodic-tick behavior.
 		await reaper.reap()
