@@ -46,7 +46,6 @@ function fakeNode() {
 	return { node: { getNodeInfo } as never, getNodeInfo }
 }
 
-/** A request's tag and the account it names, as the fake decodes them. */
 const effect = (tag: string, onBehalfOf: unknown = SIGNER) => ({ contractAddress: { toString: () => "0xtoken" }, data: [tag, onBehalfOf] })
 const ctxOf = (node: never, network: never = NETWORK) => ({ node, network, signer: SIGNER })
 

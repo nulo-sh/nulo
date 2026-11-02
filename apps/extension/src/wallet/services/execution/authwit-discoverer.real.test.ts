@@ -37,7 +37,6 @@ const KAT = {
 }
 
 const CHAIN = { l1ChainId: 31337, rollupVersion: 1 }
-/** The sending account each discovery runs as. */
 const ACCOUNT = AztecAddress.fromFieldUnsafe(new Fr(0xacc0n))
 
 /** The preimage the Noir `CallAuthwit` macro emits: [selector, innerHash, onBehalfOf, msgSender,

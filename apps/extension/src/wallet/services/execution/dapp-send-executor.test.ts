@@ -58,9 +58,8 @@ vi.mock("@aztec-labs/stdlib/tx", async (importOriginal) => ({
 	collectOffchainEffects: collectOffchainEffectsMock,
 }))
 
-// Real authwit decoding + hashing run Barretenberg WASM (e2e-only); the seam decodes a request from
-// its first field, the account it names from its second (the harness's account when absent), and
-// hashes deterministically.
+// Real authwit decoding + hashing run Barretenberg WASM (e2e-only). The seam's request names the
+// harness's account unless the effect's second field names another.
 vi.mock("@aztec-labs/aztec.js/authorization", async (importOriginal) => ({
 	...(await importOriginal<object>()),
 	CallAuthorizationRequest: {

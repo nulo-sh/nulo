@@ -397,7 +397,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(read(await mountCard({ decodedCalls: entry.decodedCalls }, entry.op), "execute-op-call-line")).toEqual([
 			`5 USDC to ${trimAddress(RECIPIENT)}. Caller: none`,
 		])
-		// Another approved account's tokens, sent with its witness: the window lists no authorization for it.
+		// A delegated transfer keeps its explicit sender.
 		lookups.accounts.push({ name: "First", address: VAULT })
 		const theirs = tokenCall(
 			"transfer_private_to_private",

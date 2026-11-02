@@ -23,7 +23,6 @@ function fakeCrypto() {
 	return { crypto, seam: crypto as unknown as AuthwitDecodeCrypto }
 }
 
-/** A request's tag and the account it names, as the fake decodes them. */
 const effect = (tag: string, contractAddress: AztecAddress, onBehalfOf: AztecAddress = SENDER) => ({
 	data: [tag, onBehalfOf] as never,
 	contractAddress,

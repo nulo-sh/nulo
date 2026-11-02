@@ -1,13 +1,13 @@
 /**
  * The authwit decode loop all three discovery paths share (the standalone discoverer, the folded
- * probe, the NO_FROM send): each offchain effect that decodes as a `CallAuthorizationRequest` on
- * behalf of the signing account is hashed over the given chain and recorded, in effect order; any
- * effect that fails is skipped. The wallet signs only as the sending account: a request naming
- * another account is never hashed, since that account's witness, which the dApp carries, is the
- * one its check reads. An effect from the authorization registry refuses the whole set before
- * anything decodes: the registry asks only to change an account's public authorizations, which
- * only the wallet's own authorization action may do. Callers keep their own early return for "no
- * effects" above the live-chain fetch, and any dedupe.
+ * probe, the NO_FROM send): each offchain effect that decodes as a `CallAuthorizationRequest` is
+ * recorded in effect order; any effect that fails is skipped. Only a request naming `signer` is
+ * hashed and returned, as the wallet signs only as the sending account. `onBehalfOf` does not
+ * attest to the check the contract runs, so a validated simulation stays the boundary. An effect
+ * from the authorization registry refuses the whole set before anything decodes: the registry asks
+ * only to change an account's public authorizations, which only the wallet's own authorization
+ * action may do. Callers keep their own early return for "no effects" above the live-chain fetch,
+ * and any dedupe.
  */
 
 import { CallAuthorizationRequest, computeAuthWitMessageHash } from "@aztec-labs/aztec.js/authorization"

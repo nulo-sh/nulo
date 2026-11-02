@@ -52,8 +52,9 @@
  * - Two-pass P1 is FPC-payload-FREE, so stubbing it never stubs a
  *   payload-inclusive sim for a non-canonical row (the hard limit); Pass 2
  *   stays validated and verifies the freshly signed witnesses.
- * - Fast path (canonical Sponsored only): no effects ⇒ done in one stubbed
- *   sim; effects ⇒ validated rebuild + re-sim before any estimate leaves.
+ * - Fast path (canonical Sponsored only): no authorization request ⇒ done in
+ *   one stubbed sim; any request, signed or not ⇒ validated rebuild + re-sim
+ *   before any estimate leaves.
  * - Ops carrying pre-attached authwits never reach a probed run (guarded
  *   upstream): a stub would mask a broken supplied witness.
  *
@@ -165,11 +166,11 @@ export class FpcStrategy implements FeeStrategy {
 			}
 			suggestGasLimits(built.txRequest, ctx.op.fee)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
-			// Folded discovery: the probed sim doubles as the discovery pass. An op
-			// with no authorization request on a DEPLOYED account is done in ONE sim
-			// (stub gas == validated gas). A request OR an init-wrapped build forces a
-			// validated rebuild+re-sim: requests so the witnesses, signed or not, are
-			// VERIFIED; init-wrap because the stub's constructor gas is untrustworthy there.
+			// Folded discovery: the probed sim doubles as the discovery pass, and a run with no
+			// authorization request on a DEPLOYED account ends there (stub gas == validated gas).
+			// The stub answered every check of the signer's witness, so any request, even one
+			// dropped unsigned, needs a validated rebuild+re-sim; so does an init-wrapped build,
+			// whose stub constructor gas is untrustworthy.
 			let discovered: Action[] = []
 			if (ctx.probe) {
 				const extracted = await ctx.probe.extractEffects(simulatedTx, {

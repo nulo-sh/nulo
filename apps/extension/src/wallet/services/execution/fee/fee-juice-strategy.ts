@@ -6,9 +6,9 @@
  * No fee-payload injection, no pre-simulation gas fiddling.
  *
  * Under a probe (dApp estimate fold), the sim runs STUBBED and doubles as
- * authwit discovery: no effects ⇒ done in ONE sim (stub gas == validated gas,
- * as measured); discovered effects ⇒ VALIDATED rebuild + re-sim
- * so the freshly signed witnesses are verified before the estimate leaves.
+ * authwit discovery: no authorization request ⇒ done in ONE sim (stub gas ==
+ * validated gas, as measured); any request, signed or not ⇒ VALIDATED rebuild
+ * + re-sim, so the run's witness checks are verified before the estimate leaves.
  */
 
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
@@ -44,9 +44,9 @@ export class FeeJuiceStrategy implements FeeStrategy {
 					signer: built.account.address,
 				})
 				discovered = extracted.actions
-				// A requested authorization OR an init-wrapped build forces a validated
-				// rebuild+re-sim: requests so the witnesses, signed or not, are VERIFIED;
-				// init-wrap because the stub's constructor gas is untrustworthy.
+				// The stub answered every check of the signer's witness, so any request, even one
+				// dropped unsigned, needs a validated rebuild+re-sim; so does an init-wrapped build,
+				// whose stub constructor gas is untrustworthy.
 				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")

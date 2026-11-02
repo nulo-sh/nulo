@@ -11,8 +11,9 @@
  *   for every op the fold rules exclude.
  * - FOLDED (strategy's first sim runs stubbed with a `CollectingDiscoveryProbe`
  *   and doubles as discovery) — measured at 0.00% stub-vs-validated gas delta
- *   on live testnet; discovered effects force a validated rebuild so fresh
- *   witnesses are verified before any estimate leaves the pipeline.
+ *   on live testnet; any authorization request, signed or not, forces a
+ *   validated rebuild so the run's witness checks are verified before any
+ *   estimate leaves the pipeline.
  *
  * `DiscoveryProbe` is deliberately CHAIN-BOUND (this exact one-argument
  * "pure extractor" was proven impossible twice — message hashing needs live
