@@ -24,7 +24,7 @@ import { defaultConfig } from "@/wallet/config"
 import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
-import { createNetworkSwitchHandler } from "@/popup/network-switch"
+import { createNetworkSwitchHandler, SWITCH_SETTLED_KEY, settleLatestRun } from "@/popup/network-switch"
 import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
 import { createScopeEpochHandlers } from "@/popup/scope-epoch"
@@ -297,10 +297,11 @@ watch(
 	() => appStore.network,
 	() => {
 		switchRun = switchNetwork()
-		// Only a completed reset awaits a run, so its failure is reported here.
+		// Only a completed reset awaits a run's failure, so it is reported here.
 		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
+provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick))
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })

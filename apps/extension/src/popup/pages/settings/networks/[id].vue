@@ -8,7 +8,9 @@
 
 <script setup>
 /** Utils */
+import { SWITCH_SETTLED_KEY } from "@/popup/network-switch"
 import { managers, requireAccount } from "@/utils/core"
+import { switchAndAnnounce } from "./switch-toast"
 import { sentenceName } from "@/utils/string"
 import * as staleCopy from "@/components/stale-network/copy"
 import { AccountType, DEFAULT_IMPORTED_ACCOUNT_NAME } from "@/wallet/services/account/client"
@@ -24,6 +26,7 @@ const { activate: activateNetwork } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
 })
+const switchSettled = inject(SWITCH_SETTLED_KEY, async () => true)
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -117,11 +120,8 @@ const handleSetActive = async () => {
 	// `undefined`, leaving the popup with no active network until the next
 	// reactive trigger. See implementations-plan/archive/e2e-network-recovery/plan.md (Network watcher snapshot).
 	const target = network.value
-	// Refusals and the unconfirmed outcome toast inside the composable; "stale"
-	// means the profile changed while this waited and nobody is left to toast at.
-	const result = await activateNetwork(target)
-	if (result !== "activated") return
-	openToast({ kind: "success", label: "Active network updated" })
+	// Refusals and the unconfirmed outcome toast inside the composable.
+	await switchAndAnnounce(target, { store: appStore, activate: activateNetwork, settled: switchSettled, openToast })
 }
 
 const handleAddEndpoint = () => {

@@ -1,4 +1,4 @@
-import { Flex, Icon, Text } from "@nulo/design"
+import { Flex, Icon, SectionLabel, Text } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
@@ -107,7 +107,7 @@ describe("general/GetStartedCard", () => {
 
 	test("while pending the card keeps its place greyed: every row inert, the label and count dimmed, the list busy; Hide still works", async () => {
 		const w = mountCard(steps(ALL, ["aztec"]), true, true)
-		const dimmed = (el: ReturnType<typeof row>) => el.classes().some((name) => /disabled|pending/.test(name))
+		const dimmed = (el: { classes: () => string[] }) => el.classes().some((name) => /disabled|pending/.test(name))
 		for (const item of ALL) {
 			expect(row(w, item).find("button").exists(), item).toBe(false)
 			expect(dimmed(row(w, item)), item).toBe(true)
@@ -115,7 +115,7 @@ describe("general/GetStartedCard", () => {
 		}
 		expect(w.emitted("select")).toBeUndefined()
 		expect(w.get('[role="list"]').attributes("aria-busy")).toBe("true")
-		expect(dimmed(w.get('[data-testid="get-started-label"]'))).toBe(true)
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(true)
 		expect(dimmed(w.get('[data-testid="get-started-count"]'))).toBe(true)
 		const hide = w.get('[data-testid="get-started-hide"]')
 		expect(dimmed(hide)).toBe(false)
@@ -124,7 +124,7 @@ describe("general/GetStartedCard", () => {
 
 		await w.setProps({ pending: false })
 		expect(w.get('[role="list"]').attributes("aria-busy")).toBeUndefined()
-		expect(dimmed(w.get('[data-testid="get-started-label"]'))).toBe(false)
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(false)
 		await row(w, "phrase").get("button").trigger("click")
 		expect(w.emitted("select")).toEqual([["phrase"]])
 	})

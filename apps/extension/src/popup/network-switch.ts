@@ -127,6 +127,9 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwit
 export const SWITCH_SETTLED_KEY: InjectionKey<() => Promise<boolean>> = Symbol("switch-settled")
 
 /** Awaits, after `tick`, the run `current()` names, failed or not; true while `current()` still names it. */
-export async function settleLatestRun(_current: () => Promise<unknown>, _tick: () => Promise<unknown>): Promise<boolean> {
-	return true
+export async function settleLatestRun(current: () => Promise<unknown>, tick: () => Promise<unknown>): Promise<boolean> {
+	await tick()
+	const run = current()
+	await run.catch(() => undefined)
+	return run === current()
 }

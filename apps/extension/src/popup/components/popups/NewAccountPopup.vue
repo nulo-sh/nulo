@@ -79,6 +79,7 @@ const handleCreateAccount = async () => {
 			emit("onClose")
 			return
 		}
+		openToast({ kind: "success", label: `Now using ${appStore.account.name}` })
 
 		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 
