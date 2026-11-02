@@ -77,7 +77,7 @@ async function pickCheckByKeys(page: Page, words: readonly string[]): Promise<st
 		expect(await focusedChoice(page)).toMatchObject({ on: "onboarding-phrase-check-choice", position, checked: false })
 		const word = words[Number(position) - 1]
 		const steps = choices.indexOf(word)
-		if (steps === 0) await page.keyboard.press("Space")
+		if (steps === 0) await page.keyboard.press(" ")
 		for (let i = 0; i < steps; i++) await page.keyboard.press("ArrowRight")
 		expect(await focusedChoice(page)).toEqual({ on: "onboarding-phrase-check-choice", position, word, checked: true })
 	}

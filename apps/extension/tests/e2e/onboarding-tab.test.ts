@@ -356,9 +356,9 @@ describe("onboarding tab", () => {
 	})
 
 	// Only a real browser closes a popup and moves tab focus: the component layer stubs both. The first
-	// press finds no setup tab and opens one; the second, with the control page's tab active and the
-	// setup tab away from the closing popup's neighbour, brings that tab forward. Chrome keeps the popup
-	// document in a tab; Firefox drives the toolbar panel itself.
+	// press finds no setup tab and opens one; the second, with another tab active in the setup tab's
+	// window and the setup tab away from the closing popup's neighbour, brings that tab forward. Chrome
+	// keeps the popup document in a tab; Firefox drives the toolbar panel itself.
 	test("before setup is finished the popup stays open on the setup tab's button, which brings that tab forward", async ({
 		freshExtensionPerTest: extension,
 	}) => {
@@ -396,8 +396,9 @@ describe("onboarding tab", () => {
 
 		const activeBefore = await control.evaluate(async (id: number) => {
 			await chrome.tabs.move(id, { index: 0 })
-			const own = await chrome.tabs.getCurrent()
-			if (own?.id !== undefined) await chrome.tabs.update(own.id, { active: true })
+			// Firefox opens the setup tab in a window of its own, where the control page's tab is not.
+			const { windowId } = await chrome.tabs.get(id)
+			await chrome.tabs.create({ windowId, url: "about:blank", active: true })
 			return (await chrome.tabs.get(id)).active
 		}, opened?.id as number)
 		expect(activeBefore).toBe(false)
