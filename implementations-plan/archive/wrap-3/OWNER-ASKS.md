@@ -1,6 +1,6 @@
 # wrap-3: owner asks
 
-All three asks concern the stale-network takeover and the network arrival only, which arc 2 changes. Arc 1 (the dApp windows and Full Backup's notice) touches none of them. Measurements: [recon.md](recon.md) § Measured; the numbers are the same in Chrome and Firefox.
+All three asks concern the stale-network takeover and the network arrival only, which arc 2 changes. Arc 1 (the dApp windows and Full Backup's notice) touches none of them. **All three are answered: option A, decision page 95, signed 2026-11-02 at 17:02 UTC, no notes.** Measurements: [recon.md](recon.md) § Measured; the numbers are the same in Chrome and Firefox.
 
 ## OA-1 (arc 2): the takeover's and the arrival's full-width buttons with a long network name
 
@@ -11,7 +11,7 @@ All three asks concern the stale-network takeover and the network arrival only, 
   - **A (recommended)**: the name wraps and the button grows to fit it. Every button with a seed name stays 48 px. With 25 `W`s at 240 px a button is three or four lines tall, and the screen's text above it scrolls in less room. This follows #1232's pick: wrap, never shorten.
   - **B**: leave the buttons as they are. The window's edge cuts the name; the title above names the network in full.
   - **C**: name no network on these buttons, for example `RESET NETWORK`. That is a copy change.
-- **What ships now**: B. Arc 2 wraps the text above the buttons and leaves the buttons unchanged unless the answer arrives first.
+- **Answered**: P95-04 = A (decision page 95, 2026-11-02): "The name wraps and the button grows to fit it. Every button with a seed name stays 48 px; with a 25-character name at 240 px a button is three or four lines tall." Shipped in arc 2 with 5 px block padding, so every seed label keeps its 48 px and its lines (plan D7).
 
 ## OA-2 (arc 2): the network chip in the takeover's and the arrival's top bar
 
@@ -22,7 +22,7 @@ All three asks concern the stale-network takeover and the network arrival only, 
   - **A (recommended)**: the chip's text ends in an ellipsis inside the chip, as Home's network chip does. The title below names the network in full, and the bar stays one line. This shortens the name in the chip, so it overrides #1232's "never shorten" for this chip.
   - **B**: the chip's text wraps inside the chip, which grows taller. The Lock button has no words to break, but this lifts P94-14's bar for this row.
   - **C**: leave the chip as it is. The text runs under the Lock button.
-- **What ships now**: C, unchanged, unless the answer arrives before arc 2 runs.
+- **Answered**: P95-05 = A (decision page 95, 2026-11-02): "The chip's text ends in an ellipsis inside the chip, as Home's network chip does; the title below names the network in full and the bar stays one line. This shortens the name in the chip only." Shipped in arc 2 (plan D7b).
 
 ## OA-3 (arc 2): the reset confirm, a sixth place
 
@@ -32,7 +32,7 @@ All three asks concern the stale-network takeover and the network arrival only, 
 - **Options**
   - **A (recommended)**: the two texts wrap at their box's edge, as P94-14 does for the five places. The Cancel and Reset row stays as it is. Seed names render as today.
   - **B**: leave the confirm as it is.
-- **What ships now**: B, unless the answer arrives before arc 2 runs.
+- **Answered**: P95-06 = A (decision page 95, 2026-11-02): "The two texts wrap at their box's edge, as P94-14 does for the five places. The Cancel and Reset row stays as it is." Shipped in arc 2 (plan D6).
 
 ## Signed already (no answer needed)
 
