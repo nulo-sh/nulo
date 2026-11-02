@@ -76,7 +76,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 - **Hostile data**: balance strings and journal records come from storage. `parseSide` refuses a malformed side (Send reads private). Arc 3 parses `amountRaw` before `balanceFormatted`, which would throw on a non-integer string (Codex R1: demonstrated at the formatter; a journal row carrying one needs a writer the wallet does not have, as the journal is sealed and outside backups), and checks the recipient before it builds the toast.
 - **Scope**: the shell's list holds only the active scope; a lock or a switch closes the toast it owns before its state goes, so another profile's amount and recipient never stay on screen. **Logging**: no new log line. Crypto, permissions, supply chain: no change.
 
-## Phase 1: reproduce, then Send's opening side and the priority row (arc 1)
+## Phase 1: reproduce, then Send's opening side and the priority row (arc 1) ✓
 
 - Reproduce the arc's three items on armed base builds with the scratch spec (`lessons/phase-0.md` holds the results); its screenshots are the "before" captures.
 - Change `send-sides.ts`, `send.vue` and `FeePriorityRow.vue` as above.
@@ -85,7 +85,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
   - `bun run lint`, `bun run typecheck:all`: exit 0.
   - From `apps/extension`: `bun --bun vitest run src/popup/pages/send src/popup/components/modules/send --retry=0`: green; the two page cases red with the base's `send.vue` (`git show 1e6c5bc1f:<path>`).
 
-## Phase 2: the pasted address, and both browser checks (arc 1)
+## Phase 2: the pasted address, and both browser checks (arc 1) ✓
 
 - Change `AddressInput.vue` as above.
 - **Tests**: `AddressInput.test.ts`, focused: an `insertFromPaste` input resets `scrollLeft` to 0; an `insertText` input leaves it (control).
@@ -120,6 +120,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 - D5. Browser checks only where a browser is the only witness: the real paste and `:hover` (Codex R1 asked for the hover one). P93-01 and P93-57 are proven at the component layer; the captures are the visual evidence.
 - D6. Arc 3 reads one shell-owned list (Codex R1: a shared predicate over separate mirrors lets two views disagree while a snapshot lands). The toast covers popup sends, the copy the pick names. "Pending · <word>" is the stage line, the one place the card shows text beside its spinner, and History's pending row carries no action: the pick names none (Codex R1: close readings).
 - D7. Arc order: arc 1 needs no answer and ships now; arcs 2 and 3 wait on their asks and touch files arc 1 leaves alone.
+- D8. As built: the paste reset runs on the next animation frame. With `nextTick` the real paste still read `scrollLeft` 242 of 554 two frames later on Chrome and Firefox 158, since both reveal the caret after the `input` event; with `requestAnimationFrame` both read 0, and a typed character then scrolls to the caret (250). The hover check waits for `:hover` to apply: a wait on settled transitions alone read Chrome before the hover and passed at the base.
 
 ## Panel verdicts
 

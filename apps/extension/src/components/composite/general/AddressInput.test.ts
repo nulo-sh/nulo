@@ -48,6 +48,20 @@ describe("composite/AddressInput", () => {
 		expect(el.scrollLeft).toBe(99)
 	})
 
+	test.each([
+		["a paste shows the start", "insertFromPaste", 0],
+		["typing keeps the browser's scroll", "insertText", 99],
+	])("focused: %s", async (_, inputType, scrollLeft) => {
+		const w = mountInput()
+		const input = w.find("input")
+		const el = input.element as HTMLInputElement
+		await input.trigger("focus")
+		el.scrollLeft = 99
+		el.dispatchEvent(new InputEvent("input", { inputType }))
+		await new Promise((resolve) => requestAnimationFrame(resolve))
+		expect(el.scrollLeft).toBe(scrollLeft)
+	})
+
 	test("on blur, the input is pinned back to the start", async () => {
 		const w = mountInput()
 		const input = w.find("input")

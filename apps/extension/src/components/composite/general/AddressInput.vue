@@ -22,6 +22,7 @@ const emit = defineEmits(["blur", "focus"])
 const inputRef = ref<{ $el?: HTMLElement; focus?: () => void } | null>(null)
 let inputEl: HTMLInputElement | null = null
 let focused = false
+let pasteFrame = 0
 
 // Native listeners on the actual <input> (not the component's emit chain) so the
 // pinning is robust. `scrollLeft !== 0` guard bounds the scroll→reset→scroll loop.
@@ -35,6 +36,16 @@ const onNativeBlur = () => {
 	focused = false
 	pinStart()
 }
+// A pasted address is checked by its start, so a paste shows the start even while focused; typing
+// keeps the browser's caret-following scroll. Chrome and Firefox scroll to the caret after the
+// paste's `input` event, so the reset waits for the next frame.
+const onNativeInput = (event: Event) => {
+	if ((event as InputEvent).inputType !== "insertFromPaste") return
+	cancelAnimationFrame(pasteFrame)
+	pasteFrame = requestAnimationFrame(() => {
+		if (inputEl) inputEl.scrollLeft = 0
+	})
+}
 
 onMounted(() => {
 	inputEl = inputRef.value?.$el?.querySelector?.("input") ?? null
@@ -42,11 +53,14 @@ onMounted(() => {
 	inputEl.addEventListener("scroll", pinStart, { passive: true })
 	inputEl.addEventListener("focus", onNativeFocus)
 	inputEl.addEventListener("blur", onNativeBlur)
+	inputEl.addEventListener("input", onNativeInput)
 })
 onBeforeUnmount(() => {
 	inputEl?.removeEventListener("scroll", pinStart)
 	inputEl?.removeEventListener("focus", onNativeFocus)
 	inputEl?.removeEventListener("blur", onNativeBlur)
+	inputEl?.removeEventListener("input", onNativeInput)
+	cancelAnimationFrame(pasteFrame)
 })
 
 defineExpose({
