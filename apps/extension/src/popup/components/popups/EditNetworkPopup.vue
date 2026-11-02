@@ -4,6 +4,7 @@ import { FieldWarning } from "@nulo/design"
 
 /** Utils */
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -30,7 +31,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v.length) return null
 			const conflicting = appStore.networks.find((n) => sameStoredName(n.name, v) && n.id !== networkToEdit.value?.id)
-			if (conflicting) return "Already exists"
+			if (conflicting) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -39,7 +40,7 @@ const form = useFormState({
 const nameTerm = form.fields.name.value
 
 const isStartedEditingName = form.fields.name.isDirty
-const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists" && isStartedEditingName.value)
+const isNameAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS && isStartedEditingName.value)
 
 const isAvailableToUpdateNetwork = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -53,7 +54,7 @@ const isAvailableToUpdateNetwork = computed(() => {
 
 const handleFillFieldsWithDefaultValues = () => {
 	// rebase() loads values + sets the dirty-baseline so `field.isDirty` drives
-	// the "Already exists" warning gating (isStartedEditingName) above.
+	// the ALREADY_EXISTS warning gating (isStartedEditingName) above.
 	form.rebase({ name: networkToEdit.value?.name ?? "" })
 }
 
@@ -121,7 +122,7 @@ usePopupEntity(() => props.show, {
 			data-testid="network-name-input"
 		>
 			<template v-if="isNameAlreadyExist" #right>
-				<FieldWarning> Already exists </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 

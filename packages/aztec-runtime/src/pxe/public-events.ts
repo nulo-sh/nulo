@@ -35,6 +35,7 @@ import { type LogResult, LogCursor, Tag } from "@aztec-labs/stdlib/logs"
 // (protocol test) token, so the class gate + event metadata must come from aztec-standards.
 import { TokenContract, TokenContractArtifact } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import z from "zod"
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 export type PublicEventLogger = (level: "warn" | "debug", msg: string, ...rest: unknown[]) => void
 
@@ -389,8 +390,6 @@ function decodePublicTransfer(entry: LogResult, log?: PublicEventLogger): Public
 	}
 }
 
-const BLOCK_HASH = /^0x[0-9a-fA-F]{64}$/
-
 function tipNumber(id: L2BlockId, tier: string): number {
 	const number: unknown = id.number
 	if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0)
@@ -400,7 +399,7 @@ function tipNumber(id: L2BlockId, tier: string): number {
 
 function tipHash(id: L2BlockId, tier: string): string {
 	const hash: unknown = id.hash
-	if (typeof hash !== "string" || !BLOCK_HASH.test(hash)) throw new Error(`public-events: ${tier} tip hash refused`)
+	if (typeof hash !== "string" || !isHex32(hash)) throw new Error(`public-events: ${tier} tip hash refused`)
 	return hash
 }
 

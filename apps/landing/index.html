@@ -54,7 +54,7 @@
 				<a class="brand" href="/" aria-label="NULO home"><i aria-hidden="true"></i>NULO</a>
 				<nav aria-label="Main navigation">
 					<a href="#see">How it works</a>
-					<a class="btn" href="#email-hero">Notify me</a>
+					<a class="btn" data-install="nav" href="#get">Get Nulo</a>
 				</nav>
 			</div>
 		</header>
@@ -80,8 +80,12 @@
 						decide otherwise. Everything is recorded. What can be read is up to you.
 					</p>
 					<div class="cta">
+						<a class="btn" data-install="primary" href="https://chromewebstore.google.com/detail/jlmiaokmjoicmclelpiiocdhncddkdmc">Chrome Web Store</a>
+						<a class="btn" data-install="secondary" href="https://addons.mozilla.org/firefox/addon/3077967/">Firefox Add-ons</a>
+						<a class="btn ghost" href="#see">See what the chain sees</a>
+						<small>free<span data-install-detected hidden> · about 30 seconds · also on <a data-install-other href="https://addons.mozilla.org/firefox/addon/3077967/">Firefox</a></span><span data-install-fallback> · Nulo runs on desktop Chrome or Firefox</span></small>
 						<form class="signup" method="post" action="/api/subscribe" data-signup>
-							<label class="signup__label" for="email-hero">Get an email when Nulo is live</label>
+							<label class="signup__label" for="email-hero">Get updates by email</label>
 							<div class="signup__row">
 								<span class="signup__fieldwrap">
 									<input
@@ -93,19 +97,15 @@
 										maxlength="254"
 										required
 										placeholder="you@example.com"
-										aria-describedby="avail-hero"
 									/>
 								</span>
-								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Notify me</button>
+								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Subscribe</button>
 							</div>
 							<p class="signup__status" role="status" data-signup-status></p>
 							<div class="signup__trap" aria-hidden="true">
 								<label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" /></label>
 							</div>
-							<p class="signup__avail" id="avail-hero">Available early November · Chrome and Firefox stores</p>
 						</form>
-						<a class="btn ghost" href="#see">See what the chain sees</a>
-						<small>free · Nulo runs on desktop Chrome or Firefox</small>
 					</div>
 				</div>
 			</section>
@@ -233,7 +233,7 @@
 					<h2 id="final-title">Nothing to see.<br />Everything to own.</h2>
 					<div class="plate signup-plate">
 						<form class="signup" method="post" action="/api/subscribe" data-signup>
-							<label class="signup__label" for="email-get">Get an email when Nulo is live</label>
+							<label class="signup__label" for="email-get">Get updates by email</label>
 							<div class="signup__row">
 								<span class="signup__fieldwrap">
 									<input
@@ -245,24 +245,26 @@
 										maxlength="254"
 										required
 										placeholder="you@example.com"
-										aria-describedby="avail-get print-get"
+										aria-describedby="print-get"
 									/>
 								</span>
-								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Notify me</button>
+								<button class="btn" type="submit" data-label-ok="On the list" data-label-retry="Try again">Subscribe</button>
 							</div>
 							<p class="signup__status" role="status" data-signup-status></p>
 							<div class="signup__trap" aria-hidden="true">
 								<label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" /></label>
 							</div>
-							<p class="signup__avail" id="avail-get">Available early November · Chrome and Firefox stores</p>
 							<p class="signup__print" id="print-get">
-								One email at launch, then occasional updates. Unsubscribe in one click. Resend sends them for us; see the
+								Occasional updates. Unsubscribe in one click. Resend sends them for us; see the
 								<a href="/website-privacy">website privacy notice</a>.
 							</p>
 						</form>
 					</div>
 					<div class="cta">
+						<a class="btn" data-install="primary" href="https://chromewebstore.google.com/detail/jlmiaokmjoicmclelpiiocdhncddkdmc">Chrome Web Store</a>
+						<a class="btn" data-install="secondary" href="https://addons.mozilla.org/firefox/addon/3077967/">Firefox Add-ons</a>
 						<a class="btn ghost" href="https://github.com/nulo-sh/nulo">Source on GitHub</a>
+						<small>free<span data-install-detected hidden> · about 30 seconds · also on <a data-install-other href="https://addons.mozilla.org/firefox/addon/3077967/">Firefox</a></span><span data-install-fallback> · Nulo runs on desktop Chrome or Firefox</span></small>
 						<small>Building on Aztec V6? Write to <a href="mailto:hello@nulo.sh">hello@nulo.sh</a></small>
 					</div>
 				</div>

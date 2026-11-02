@@ -227,7 +227,7 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		await w.find('[data-testid="name-input"]').setValue(name)
 		await w.find('[data-testid="address-input"]').setValue("")
 		await flushPromises()
-		return w.text().includes("Already exist")
+		return w.text().includes("Already exists")
 	}
 
 	test("an update for a listed id replaces its first row in place", async () => {
@@ -324,7 +324,7 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 	test("the address check ignores hex case", async () => {
 		const w = await mountAndOpen([{ id: "c1", name: "Alice", address: addr("a") }])
 		await fill(w, "Bob", addr("A"))
-		expect(w.text()).toContain("Already exist")
+		expect(w.text()).toContain("Already exists")
 		await fill(w, "Bob", addr("b"))
 		expect(w.text()).not.toContain("Already exist")
 	})

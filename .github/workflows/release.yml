@@ -763,6 +763,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: Check the release assets' artifact id
         env:
           ARTIFACT_ID: ${{ needs.attach-assets.outputs.release_artifact_id }}
@@ -834,6 +835,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: Check the release assets' artifact id
         env:
           ARTIFACT_ID: ${{ needs.attach-assets.outputs.release_artifact_id }}

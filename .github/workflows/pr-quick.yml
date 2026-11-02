@@ -308,6 +308,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: Upsert the preview comment
         env:
           GH_TOKEN: ${{ github.token }}

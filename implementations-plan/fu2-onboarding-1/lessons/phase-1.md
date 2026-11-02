@@ -1,0 +1,12 @@
+# fu2-onboarding-1: phase 1 (arc 1, Ready's line and Back)
+
+- **Reproduction (#1515), Chrome, base `1e6c5bc1f`:** the password scenario's new Back step failed with `waitForHash: #/onboarding/done not reached in 10000 ms; the page is at "#/onboarding/create"`.
+- **Red on base:** `done.test.ts`'s line test (no line testid, old text) and its refused-Back test (`expected false to be true`: the pop was not aborted). The control (Back between two unguarded pages) passed on base and after.
+- **jsdom harness:** each test's hash history keeps its `popstate` listener on the window until `destroy()`, so a later test's Back was answered by an earlier router and landed on the wrong route. The test file destroys every history it made in `afterEach`.
+- **A guard on Ready also refuses a push off Ready**, so the first control (push Welcome from Ready, then Back) was red after the fix by design; the control now goes Back between Create and Welcome.
+- **Wall-clock**, `onboarding-tab.test.ts` alone at retry 0 (host load average about 155): Chrome 46.0 s before, 46.8 s after; Firefox 71.0 s, 76.1 s. The password scenario itself: Chrome 8.9 s, 9.6 s; Firefox 14.2 s, 14.3 s.
+- **Commit signing hung once** on the SSH agent; `env -u SSH_AUTH_SOCK git commit` signed at once.
+- **Codex, gpt-6.1-sol, high (session 01a19d70), arc 1 round 1: findings 2.** (1) A hash typed as `#/` on Ready meets the `/` redirect record; vue-router's pop handler sends a redirect record through `pushWithRedirect(...).catch(noop)` without the rollback its ordinary pop path does, so the guard keeps Ready on screen but the URL stays `#/`, and a reload there lands on Welcome. (2) Two test-helper comments: one restates the helper, one says "settled" where the URL rollback is still pending.
+- **Opus 5.5 (general-purpose), arc 1 round 1: findings 3.** (1) The same typed `#/` case, plus a fast double Back that can leave the URL on an unmarked Welcome or Terms entry (plausible; jsdom cannot order it): both are known limit #1539, and § Security's sentence was wrong for the second. (2) The guard's comment named only Create; Ready is also reached from Import. (3) The e2e comment's reason for `history.back()` over `goBack()` was untested; dropped.
+- **Round 1 dispositions:** Codex (1) and Opus (1) → known limit #1539 (closed): the only clean fix turns `/` into a guarded route, which would put a bare `index.html` behind the Terms gate. All comment findings applied.
+- **Codex, resumed, arc 1 round 2: clean.** The fixes verified; no regression.

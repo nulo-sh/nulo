@@ -52,7 +52,7 @@ describe("ContactFormFields", () => {
 
 	test("name duplicate warning follows nameExists", async () => {
 		const w = mountFields({ nameExists: true })
-		expect(w.text()).toContain("Already exist")
+		expect(w.text()).toContain("Already exists")
 		await w.setProps({ nameExists: false })
 		expect(w.text()).not.toContain("Already exist")
 	})
@@ -66,7 +66,7 @@ describe("ContactFormFields", () => {
 
 	test("address duplicate warning only when the address is valid", () => {
 		const w = mountFields({ address: "0xdup", addressValid: true, addressExists: true })
-		expect(w.text()).toContain("Already exist")
+		expect(w.text()).toContain("Already exists")
 		expect(w.text()).not.toContain("Invalid address")
 	})
 

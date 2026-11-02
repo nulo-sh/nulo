@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { BN254_FR_MODULUS } from "@nulo/wallet-core/utils"
 import { describe, expect, test } from "vitest"
 import { isValidAztecAddress } from "./aztec-address"
 
@@ -8,6 +9,10 @@ const OFF_CURVE = "0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14e
 const KAT_ACCOUNT = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
 const TEST_USDC = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
 const MODULUS = "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+
+test("the shared field modulus is upstream's", () => {
+	expect(BN254_FR_MODULUS).toBe(Fr.MODULUS)
+})
 
 describe("isValidAztecAddress", () => {
 	test("accepts real addresses and refuses an off-curve one", () => {

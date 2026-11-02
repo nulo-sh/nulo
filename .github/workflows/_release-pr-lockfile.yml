@@ -42,6 +42,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: Write the version into bun.lock
         env:
           PR_JSON: ${{ inputs.pr }}

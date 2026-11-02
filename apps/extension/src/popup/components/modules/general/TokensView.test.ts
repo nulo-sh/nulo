@@ -822,9 +822,12 @@ describe("TokensView — the balance snapshot's fences", () => {
 		const run1 = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(run1.promise)
 		const w = await mountView()
+		H.store.current.account = { address: "0xB" }
+		await flushPromises()
 		const run2 = deferred<unknown[]>()
 		H.getTokenBalances.mockReturnValueOnce(run2.promise)
-		reconnect()
+		H.store.current.account = { address: "0xacct" }
+		await flushPromises()
 		run2.resolve([namedRow(2, "NEW")])
 		await flushPromises()
 		run1.resolve([namedRow(1, "OLD")])

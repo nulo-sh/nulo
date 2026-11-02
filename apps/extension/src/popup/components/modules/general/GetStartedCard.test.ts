@@ -1,4 +1,4 @@
-import { Flex, Icon, Text } from "@nulo/design"
+import { Flex, Icon, SectionLabel, Text } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import ItemsContainer from "@/components/ui/Settings/ItemsContainer.vue"
@@ -14,8 +14,8 @@ const open = (...items: GetStartedItem[]): GetStartedStep[] => items.map((item) 
 const steps = (items: GetStartedItem[], done: GetStartedItem[] = []): GetStartedStep[] =>
 	items.map((item) => ({ item, done: done.includes(item) }))
 
-const mountCard = (list: GetStartedStep[] = open(...ALL), canHide = true) =>
-	mount(GetStartedCard, { props: { steps: list, canHide }, global: { components: COMPONENTS } })
+const mountCard = (list: GetStartedStep[] = open(...ALL), canHide = true, pending?: boolean) =>
+	mount(GetStartedCard, { props: { steps: list, canHide, pending }, global: { components: COMPONENTS } })
 const row = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => w.get(`[data-testid="get-started-${item}"]`)
 const mark = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[aria-hidden="true"]')
 const title = (w: ReturnType<typeof mountCard>, item: GetStartedItem) => row(w, item).get('[data-testid="setting-title"]').text()
@@ -103,6 +103,30 @@ describe("general/GetStartedCard", () => {
 		await hide.trigger("click")
 		expect(w.emitted("hide")).toEqual([[]])
 		expect(w.emitted("select")).toBeUndefined()
+	})
+
+	test("while pending the card keeps its place greyed: every row inert, the label and count dimmed, the list busy; Hide still works", async () => {
+		const w = mountCard(steps(ALL, ["aztec"]), true, true)
+		const dimmed = (el: { classes: () => string[] }) => el.classes().some((name) => /disabled|pending/.test(name))
+		for (const item of ALL) {
+			expect(row(w, item).find("button").exists(), item).toBe(false)
+			expect(dimmed(row(w, item)), item).toBe(true)
+			await row(w, item).trigger("click")
+		}
+		expect(w.emitted("select")).toBeUndefined()
+		expect(w.get('[role="list"]').attributes("aria-busy")).toBe("true")
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(true)
+		expect(dimmed(w.get('[data-testid="get-started-count"]'))).toBe(true)
+		const hide = w.get('[data-testid="get-started-hide"]')
+		expect(dimmed(hide)).toBe(false)
+		await hide.trigger("click")
+		expect(w.emitted("hide")).toEqual([[]])
+
+		await w.setProps({ pending: false })
+		expect(w.get('[role="list"]').attributes("aria-busy")).toBeUndefined()
+		expect(dimmed(w.findComponent(SectionLabel))).toBe(false)
+		await row(w, "phrase").get("button").trigger("click")
+		expect(w.emitted("select")).toEqual([["phrase"]])
 	})
 
 	test("no Hide without canHide", () => {

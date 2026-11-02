@@ -1664,11 +1664,14 @@ describe("Bun's install cache", () => {
 		(typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write")) ||
 		stepsOf(job).some((step) => step.uses?.startsWith("actions/create-github-app-token@"))
 
-	test("the composite restores it only when asked", () => {
+	test("the composite restores it, and Bun's own binary cache, only when asked", () => {
 		const action = parse(".github/actions/setup-bun/action.yml")
 		expect(action.inputs.cache.default).toBe("true")
-		const caches = (action.runs.steps as Step[]).filter((step) => step.uses?.startsWith("actions/cache@"))
+		const steps = action.runs.steps as Step[]
+		const caches = steps.filter((step) => step.uses?.startsWith("actions/cache@"))
 		expect(caches.map((step) => step.if)).toEqual(["inputs.cache == 'true'"])
+		const setups = steps.filter((step) => step.uses?.startsWith("oven-sh/setup-bun@"))
+		expect(setups.map((step) => step.with?.["no-cache"])).toEqual(["${{ inputs.cache != 'true' }}"])
 	})
 
 	test("the extension build takes it on pull requests only", () => {

@@ -50,6 +50,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: Authenticate to Google (OIDC → WIF)
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -86,6 +87,7 @@ jobs:
         with:
           bun-version-file: package.json
           token: ""
+          no-cache: true
       - name: List the key pair's add-ons
         env:
           MODE: check

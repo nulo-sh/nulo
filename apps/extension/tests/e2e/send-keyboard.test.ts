@@ -76,6 +76,40 @@ async function expectAccentRing(page: Page, testid: string): Promise<void> {
 	expect(color, testid).toBe(await tokenColor(page, "--nulo-accent"))
 }
 
+/** A real paste: the field's own text copied and pasted back by key events, so the browser runs its
+ *  paste with its own event order and caret scroll, which a scripted insertion does not. */
+async function pasteOwnText(page: Page, selector: string, text: string) {
+	await page.focus(selector)
+	await page.keyboard.type(text)
+	await page.keyboard.down("Control")
+	await page.keyboard.press("KeyA")
+	await page.keyboard.press("KeyC")
+	await page.keyboard.up("Control")
+	await page.keyboard.press("Backspace")
+	await page.keyboard.down("Control")
+	await page.keyboard.press("KeyV")
+	await page.keyboard.up("Control")
+}
+
+/** The field's scroll once two frames have passed, after any scroll the browser or the page owes it. */
+const settledScroll = (page: Page, selector: string) =>
+	page.$eval(
+		selector,
+		(el) =>
+			new Promise<{ length: number; overflows: boolean; scrollLeft: number }>((resolve) =>
+				requestAnimationFrame(() =>
+					requestAnimationFrame(() => {
+						const input = el as HTMLInputElement
+						resolve({
+							length: input.value.length,
+							overflows: input.scrollWidth > input.clientWidth,
+							scrollLeft: input.scrollLeft,
+						})
+					}),
+				),
+			),
+	)
+
 /** Contacts load with Send's other mount reads, after the field already suggests the account. */
 async function waitForSuggestionRows(page: Page, rows: number): Promise<void> {
 	await page.waitForFunction(
@@ -156,6 +190,20 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	const zeds = Array.from({ length: 51 }, (_, i) => `Zed ${i + 1}`)
 	const page = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C", ...zeds] })
 	const account = await getAccountAddress(page)
+
+	// A pasted address shows its start; a typed character then brings the caret back into view.
+	await pasteOwnText(page, DESTINATION_INPUT, `0x${"0c2b".repeat(16)}`)
+	expect(await settledScroll(page, DESTINATION_INPUT), "a pasted address shows its start").toEqual({
+		length: 66,
+		overflows: true,
+		scrollLeft: 0,
+	})
+	await page.keyboard.type("1")
+	expect((await settledScroll(page, DESTINATION_INPUT)).scrollLeft, "a typed character shows the caret").toBeGreaterThan(0)
+	await page.keyboard.down("Control")
+	await page.keyboard.press("KeyA")
+	await page.keyboard.up("Control")
+	await page.keyboard.press("Backspace")
 
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
@@ -316,6 +364,27 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await waitForFocus(page, "send-fee-method-trigger")
 	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual([...SEEDED_FPC_IDS].sort())
+
+	// Only the chosen priority carries the accent border; the level under the pointer does not.
+	await page.waitForSelector(sel("send-fee-priority-fast"), { visible: true, timeout: 10_000 })
+	await page.hover(sel("send-fee-priority-fast"))
+	// `getAnimations()` flushes style, so a hover's transition counts once the hover has applied.
+	await page.waitForFunction(
+		(s: string) => {
+			const fast = document.querySelector(s)
+			return Boolean(fast?.matches(":hover")) && fast?.getAnimations().length === 0
+		},
+		{ timeout: 5_000 },
+		sel("send-fee-priority-fast"),
+	)
+	const borders = await page.evaluate(() =>
+		["normal", "fast"].map(
+			(level) => getComputedStyle(document.querySelector(`[data-testid="send-fee-priority-${level}"]`) as Element).borderTopColor,
+		),
+	)
+	const accent = await tokenColor(page, "--nulo-accent")
+	expect(borders[0], "the chosen priority's border").toBe(accent)
+	expect(borders[1], "the hovered priority's border").not.toBe(accent)
 }
 
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {

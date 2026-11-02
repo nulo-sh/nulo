@@ -7,6 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 
 const accountStateServiceMock = {
@@ -53,7 +54,7 @@ const STUBS = {
 
 import NewSenderPopup from "./NewSenderPopup.vue"
 
-const VALID_HEX = `0x${"a".repeat(64)}`
+const VALID_HEX = `0x0${"a".repeat(63)}`
 
 function pressEnterOnInput() {
 	const el = document.createElement("input")
@@ -201,5 +202,33 @@ describe("NewSenderPopup — Enter-submit wiring (usePopupEntity)", () => {
 		await flushPromises()
 		expect((w.find('[data-testid="sender-input"]').element as HTMLInputElement).value).toBe("")
 		await dispose(w)
+	})
+})
+
+describe("NewSenderPopup — the field modulus", () => {
+	test.each([
+		["the last value below the modulus is added", BELOW_MODULUS, "", 1],
+		["the modulus reads as the contact form", MODULUS, "Invalid address", 0],
+		["a value above the modulus reads as the contact form", ABOVE_MODULUS, "Invalid address", 0],
+		["63 digits keep this form's words", DIGITS_63, "Invalid sender address", 0],
+	])("%s", async (_, address, warning, adds) => {
+		const w = await mountShown()
+		await typeAddress(w, address)
+		await flushPromises()
+		expect(w.find('[data-testid="sender-input"]').element.parentElement?.textContent?.trim()).toBe(warning)
+		expect(w.find("button").attributes("disabled") !== undefined).toBe(adds === 0)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(accountStateServiceMock.addSender).toHaveBeenCalledTimes(adds)
+	})
+})
+
+describe("NewSenderPopup — a saved sender", () => {
+	test('an address already saved reads "Already exists"', async () => {
+		accountStateServiceMock.getSenders.mockResolvedValue([VALID_HEX])
+		const w = await mountShown()
+		await typeAddress(w, VALID_HEX)
+		await flushPromises()
+		expect(w.find('[data-testid="sender-input"]').element.parentElement?.textContent?.trim()).toBe("Already exists")
 	})
 })

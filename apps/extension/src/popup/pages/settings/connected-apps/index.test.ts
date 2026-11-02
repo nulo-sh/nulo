@@ -14,9 +14,11 @@ type Session = {
 
 const mocks = vi.hoisted(() => ({
 	getDappSessions: vi.fn(),
+	requestConfirm: vi.fn(),
 	deleted: [] as Array<(session: unknown) => void>,
 }))
 
+vi.mock("@/composables/useConfirm", () => ({ useConfirm: () => ({ requestConfirm: mocks.requestConfirm }) }))
 vi.mock("vue-router", () => ({ useRoute: () => ({ params: {} }), useRouter: () => ({ push: vi.fn(), go: vi.fn() }) }))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
@@ -58,7 +60,8 @@ async function mountPage(sessions: Session[]) {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
 			stubs: {
 				SettingsPageShell: { template: "<div><slot name='trailing' /><slot /></div>" },
-				Dropdown: true,
+				DropdownRoot: { template: "<div><slot /><slot name='popup' /></div>" },
+				DropdownItem: { template: "<button data-testid='disconnect-all'><slot /></button>" },
 				Flex: { template: "<div><slot /></div>" },
 				SectionLabel: { props: ["label", "count"], template: "<h2>{{ count }}</h2>" },
 				ItemsContainer: { template: "<div><slot /></div>" },
@@ -111,5 +114,21 @@ describe("Settings › Connected apps — a row no connection reached", () => {
 		expect(rows[0].querySelector(NOT_CONNECTED)?.textContent?.trim()).toBe("Allowed. Not connected yet.")
 		expect(rows[1].querySelector(NOT_CONNECTED)).toBeNull()
 		expect(rows[1].textContent).toContain("Accounts")
+	})
+})
+
+describe("Settings › Connected apps — Disconnect all", () => {
+	const confirmText = async (sessions: Session[]) => {
+		const w = await mountPage(sessions)
+		await w.get("[data-testid='disconnect-all']").trigger("click")
+		return mocks.requestConfirm.mock.calls[0]?.[0]?.description
+	}
+
+	test("asks about one session in the singular", async () => {
+		expect(await confirmText([session("s1", "alpha", 1)])).toBe("Disconnect all 1 session?")
+	})
+
+	test("asks about two sessions in the plural (control)", async () => {
+		expect(await confirmText([session("s1", "alpha", 1), session("s2", "beta", 2)])).toBe("Disconnect all 2 sessions?")
 	})
 })

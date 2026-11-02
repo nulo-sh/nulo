@@ -290,7 +290,10 @@ test.skipIf(!hasConfig)(
 		await clearSendPicks(page)
 		await openSend(page)
 
-		// Private is the page's default origin. Both balances read as zero, so the walk ends on the sponsor.
+		// The token is held on the public side alone, so Send opens there. No gas is held, so each origin's
+		// walk ends on the sponsor.
+		await waitForFee(page, "public", "sponsored")
+		await setActiveSendType(page, "send-from-type", "private")
 		const privateOrigin = await waitForFee(page, "private", "sponsored")
 		expect(privateOrigin).toMatchObject({ tag: null, action: "send", strip: { you: "hidden", to: "hidden", amount: "hidden" } })
 		await shotSend(page, "strip-all-hidden")
@@ -451,6 +454,9 @@ test.skipIf(!hasConfig)(
 			await clearSendPicks(page)
 			await openSend(page)
 
+			// The token is held on the public side alone, so Send opens there.
+			await waitForFee(page, "public", "public")
+			await setActiveSendType(page, "send-from-type", "private")
 			const privateDefault = await waitForFee(page, "private", "private")
 			expect(privateDefault).toMatchObject({ tag: null, action: "send", strip: { you: "hidden" } })
 

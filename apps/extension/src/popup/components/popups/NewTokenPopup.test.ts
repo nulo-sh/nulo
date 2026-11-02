@@ -6,9 +6,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 import { ChainNotSupportedError, ContractNotFoundError, WalletError, walletErrorFromPayload } from "@nulo/extension-messaging/errors"
+import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ import NewTokenPopup from "./NewTokenPopup.vue"
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const validHex = `0x${"a".repeat(64)}`
+const validHex = `0x0${"a".repeat(63)}`
 
 function defaultTokenInfo(overrides: Record<string, unknown> = {}) {
 	return { id: 7, chainId: 1, contract: validHex, name: "Test", symbol: "TST", decimals: 18, ...overrides }
@@ -214,6 +215,9 @@ function submitBtn(w: ReturnType<typeof mount>) {
 
 // ── Lifecycle ────────────────────────────────────────────────────────
 
+// A mounted popup keeps its document Enter listener, so one left from an earlier test would submit too.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
 	balanceAddedHandlers.splice(0)
 	taskUpdatedHandlers.splice(0)
@@ -248,7 +252,7 @@ describe("NewTokenPopup", () => {
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
-	test("duplicate contract surfaces 'Already exist'", async () => {
+	test("duplicate contract surfaces 'Already exists'", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, {
 			props: { show: false },
@@ -257,16 +261,16 @@ describe("NewTokenPopup", () => {
 		await w.setProps({ show: true })
 		await flushPromises()
 		await typeAddress(w, validHex)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 	})
 
-	test("a listed contract typed in upper case is the same token: 'Already exist', button off", async () => {
+	test("a listed contract typed in upper case is the same token: 'Already exists', button off", async () => {
 		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
 		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
 		await w.setProps({ show: true })
 		await flushPromises()
-		await typeAddress(w, `0x${"A".repeat(64)}`)
-		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		await typeAddress(w, `0x0${"A".repeat(63)}`)
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exists")
 		expect(submitBtn(w).attributes("disabled")).toBeDefined()
 	})
 
@@ -527,7 +531,7 @@ describe("NewTokenPopup", () => {
 })
 
 describe("NewTokenPopup — a refusal belongs to the address it judged", () => {
-	const listedHex = `0x${"b".repeat(64)}`
+	const listedHex = `0x0${"b".repeat(63)}`
 	const check = (w: ReturnType<typeof mount>) => w.find('[data-icon="square-check"]').exists()
 	const refusalLine = (w: ReturnType<typeof mount>) => w.find('[data-testid="new-token-error"]')
 
@@ -552,13 +556,13 @@ describe("NewTokenPopup — a refusal belongs to the address it judged", () => {
 	test("a listed token's address then reads only its own verdict", async () => {
 		const w = await refusedAt(validHex)
 		await typeAddress(w, listedHex)
-		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(w.get('[data-testid="error-text"]').text()).toContain("Already exists")
 		expect(refusalLine(w).exists()).toBe(false)
 	})
 
 	test("another unlisted address clears the refusal and brings the check back", async () => {
 		const w = await refusedAt(validHex)
-		await typeAddress(w, `0x${"c".repeat(64)}`)
+		await typeAddress(w, `0x0${"c".repeat(63)}`)
 		expect(refusalLine(w).exists()).toBe(false)
 		expect(check(w)).toBe(true)
 	})
@@ -665,5 +669,31 @@ describe("NewTokenPopup — the opener's payload", () => {
 		await flushPromises()
 		expect(w.emitted("onClose")).toBeTruthy()
 		expect(onAdded).not.toHaveBeenCalled()
+	})
+})
+
+describe("NewTokenPopup — the field modulus", () => {
+	function pressEnterOnInput() {
+		const el = document.createElement("input")
+		document.body.appendChild(el)
+		el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+		el.remove()
+	}
+
+	test.each([
+		["the last value below the modulus goes to the wallet", BELOW_MODULUS, "", 1],
+		["the modulus reads as the contact form", MODULUS, "Invalid address", 0],
+		["a value above the modulus reads as the contact form", ABOVE_MODULUS, "Invalid address", 0],
+		["63 digits read as before", DIGITS_63, "Invalid address", 0],
+	])("%s", async (_, address, warning, reads) => {
+		tokenServiceMock.parseTokenInterface.mockResolvedValue({ isComplete: false })
+		const w = await mountAndOpen()
+		await typeAddress(w, address)
+		const errorText = w.find('[data-testid="error-text"]')
+		expect(errorText.exists() ? errorText.text() : "").toBe(warning)
+		expect(submitBtn(w).attributes("disabled") !== undefined).toBe(reads === 0)
+		pressEnterOnInput()
+		await flushPromises()
+		expect(tokenServiceMock.parseTokenInterface).toHaveBeenCalledTimes(reads)
 	})
 })

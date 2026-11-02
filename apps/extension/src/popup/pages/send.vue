@@ -38,6 +38,7 @@ import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/sen
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
+import { openingSendSide } from "@/popup/pages/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
@@ -187,8 +188,8 @@ const selectedSendType = ref("private")
 const selectedReceiverType = ref("private")
 const initSendType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
-		selectedSendType.value = cacheStore.preselectedBalanceType
+	if (!keepSide && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+		selectedSendType.value = openingSendSide(tokenBalance.value)
 	}
 
 	if (!activeToken.value.hasPrivateTransfers) {
@@ -715,11 +716,7 @@ async function refetchIdentityScopedState() {
 	tokensLoading.value = true
 	tokensChangedDuringLoad = false
 	try {
-		const [first, tb, c] = await Promise.all([
-			tokenService.getTokens(profileId, chainId),
-			tokenBalanceService.getTokenBalances(undefined, appStore.account.address),
-			contactService.getContacts(),
-		])
+		const [first, , c] = await Promise.all([tokenService.getTokens(profileId, chainId), readBalances(), contactService.getContacts()])
 		let t = first
 		while (tokensChangedDuringLoad && isCurrent()) {
 			tokensChangedDuringLoad = false
@@ -727,8 +724,6 @@ async function refetchIdentityScopedState() {
 		}
 		if (!isCurrent()) return
 		tokens.value = t
-		// A reconnect's read that began after this fetch and has landed is the newer one.
-		if (balancesState.value !== "loaded") tokenBalances.value = tb
 		contacts.value = c
 		// The tokens watch makes the first token added to an empty list the active one. A refused
 		// load must not arm it, or the Retry's list would lose the active or requested token.
@@ -746,6 +741,12 @@ async function refetchIdentityScopedState() {
 	} finally {
 		if (isCurrent()) tokensLoading.value = false
 	}
+}
+
+/** Through the snapshot, so an event that outlives the read is never overwritten by it. A refused
+ *  read fails the identity fetch at once, as a refused token or contact read does. */
+async function readBalances() {
+	if (!(await balances.fetchTokenBalances())) throw new Error("token balance read refused")
 }
 
 /** The token card's Retry: all three reads again, since the page cannot send without any of them. */
@@ -785,6 +786,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	console.debug(`[send:${sendInstanceId}] unmounting`)
 	cancelled = true
+	// A load still out ends here: its late reads must not write the shared token selection.
+	identityFetchSeq++
 	closeReview()
 
 	contactService.disconnect()

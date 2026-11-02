@@ -97,8 +97,9 @@ export async function encodeAuthwitCall(fn: FunctionAbi, args: unknown[]): Promi
 export class AuthwitDiscoverer {
 	public constructor(readonly _logger: ILogger) {}
 
-	/** One `message_hash` action per authorization request a stubbed simulation under the build's
-	 *  scopes emits; the validated simulation verifies the witnesses. */
+	/** One `message_hash` action per authorization request on behalf of the build's account that a
+	 *  stubbed simulation under the build's scopes emits; the validated simulation verifies the
+	 *  witnesses. */
 	public async discoverPrivateAuthwits(
 		op: Parameters<BuildTxRequestFn>[0],
 		buildTxRequest: BuildTxRequestFn,
@@ -137,13 +138,13 @@ export class AuthwitDiscoverer {
 
 		const nodeInfo = await node.getNodeInfo()
 		// Refuse to derive a hash from a drifted node.
-		const decoded = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo))
+		const { signable } = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo), account.address)
 		return {
-			actions: decoded.map(({ record }) => ({
+			actions: signable.map(({ record }) => ({
 				kind: "add_private_authwit",
 				content: { kind: "message_hash", messageHash: record.messageHash },
 			})),
-			discovered: decoded.map(({ record }) => record),
+			discovered: signable.map(({ record }) => record),
 		}
 	}
 

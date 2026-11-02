@@ -15,7 +15,7 @@ export function storedNameKey(name: string | undefined): string {
 }
 
 /** Whether two names collide for a duplicate check. A blank key never collides, so a blank input
- *  is never "Already exist" beside an unnamed FPC. */
+ *  is never "Already exists" beside an unnamed FPC. */
 export function sameStoredName(a: string | undefined, b: string | undefined): boolean {
 	const key = storedNameKey(a)
 	return key !== "" && key === storedNameKey(b)

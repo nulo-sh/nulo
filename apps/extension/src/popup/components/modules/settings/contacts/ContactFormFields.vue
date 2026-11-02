@@ -7,13 +7,14 @@
  * warnings from the flags it is handed.
  */
 import { CONTACT_NAME_MAX, typedContactName } from "@/utils/contact-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 defineProps({
-	/** Show "Already exist" on the name field. */
+	/** Show "Already exists" on the name field. */
 	nameExists: Boolean,
 	/** Address parses as hex; when false (and non-empty) shows "Invalid address". */
 	addressValid: Boolean,
-	/** Show "Already exist" on the address field. */
+	/** Show "Already exists" on the address field. */
 	addressExists: Boolean,
 })
 
@@ -34,7 +35,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		<template v-if="nameExists" #right>
 			<Flex align="center" gap="6" data-testid="contact-name-exists">
 				<Icon name="warning" size="12" color="primary" />
-				<Text variant="body" color="primary"> Already exist </Text>
+				<Text variant="body" color="primary"> {{ ALREADY_EXISTS }} </Text>
 			</Flex>
 		</template>
 	</Input>
@@ -54,7 +55,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 				</Flex>
 				<Flex v-else-if="addressExists && addressModel" align="center" gap="6">
 					<Icon name="warning" size="12" color="primary" />
-					<Text variant="body" color="primary"> Already exist </Text>
+					<Text variant="body" color="primary"> {{ ALREADY_EXISTS }} </Text>
 				</Flex>
 			</Transition>
 		</template>

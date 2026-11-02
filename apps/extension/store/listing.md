@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No account, no telemetry.
+• No account, no telemetry. Not audited. See the Privacy Policy for what leaves your device.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK
