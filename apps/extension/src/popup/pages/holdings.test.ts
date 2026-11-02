@@ -197,7 +197,7 @@ describe("holdings page", () => {
 		const w = await mountPage()
 		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(true)
 		seedTasks = []
-		taskEvents.connected.invoke()
+		taskEvents.connected.invoke(undefined)
 		await flushPromises()
 		expect(w.find('[data-testid="holdings-refreshing"]').exists()).toBe(false)
 	})
