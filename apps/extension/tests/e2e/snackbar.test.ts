@@ -265,6 +265,15 @@ async function snackAboveEnd(page: Page, testid: string): Promise<AboveEnd> {
 	return (await handle.jsonValue()) as AboveEnd
 }
 
+/** Scrolls the container that scrolls `testid` to its end. */
+async function scrollToEnd(page: Page, testid: string): Promise<void> {
+	await page.$eval(sel(testid), (control) => {
+		let scroller = control.parentElement
+		while (scroller && getComputedStyle(scroller).overflowY !== "auto") scroller = scroller.parentElement
+		scroller?.scrollTo(0, scroller.scrollHeight)
+	})
+}
+
 /** Scrolls `testid` into view and hit-tests its centre in the same task, as a pointer click does. */
 async function hitAfterScroll(page: Page, testid: string): Promise<{ hit: string; covered: boolean }> {
 	return page.evaluate(
@@ -390,10 +399,10 @@ test("a success that opens under a still pointer closes itself after 2 s, though
 	await recordSnackLife(page)
 	await countCardEvents(page)
 
-	// The snack opens above Close, over the network line under the address, so the pointer rests there.
-	const at = await page.$eval(sel("receive-network"), (el) => {
+	// The snack opens above where Close stops, over the address's last line, so the pointer rests there.
+	const at = await page.$eval(sel("receive-address-text"), (el) => {
 		const box = el.getBoundingClientRect()
-		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
+		return { x: Math.round(box.left + box.width / 2), y: Math.round(box.bottom - 6) }
 	})
 	await page.mouse.move(at.x, at.y, { steps: 5 })
 	await clickByTestId(page, "receive-address")
@@ -499,12 +508,14 @@ test("over the accounts sheet, which covers the nav, an error sits 12px up and g
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 60_000)
 
-test("in the Receive sheet a copy's snack sits 12px above the sheet's Close button", async ({ registeredExtension }) => {
+test("in the Receive sheet a copy's snack sits 12px above where the sheet's Close button stops", async ({ registeredExtension }) => {
 	const page = await openHome(registeredExtension)
 	await stubClipboard(page, "resolve")
 	await clickByTestId(page, "actions-receive")
 	await sheetAtRest(page, "receive-close")
 	await shotSend(page, "sheet-receive", "receive-close")
+	// At the popup's size the whole address and the network line make the sheet scroll a little.
+	await scrollToEnd(page, "receive-close")
 
 	await clickByTestId(page, "receive-address")
 	await waitForToast(page, "Address is copied", 5_000, { kind: "success" })

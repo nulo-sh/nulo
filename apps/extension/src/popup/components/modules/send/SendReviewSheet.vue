@@ -124,7 +124,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span aria-hidden="true" :class="$style.amount_ruler">
 							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
 						</span>
-						<span :class="$style.to" data-testid="send-review-recipient">to <template v-if="recipientName">{{ recipientName }} · </template><template v-if="recipientAddress"><span :class="$style.address_end">{{ recipientEnds.head }}</span>{{ recipientEnds.middle }}<span :class="$style.address_end">{{ recipientEnds.tail }}</span></template><template v-else>—</template></span>
+						<span :class="$style.to" data-testid="send-review-recipient">to <template v-if="recipientName">{{ recipientName }} · </template><span v-if="recipientAddress" class="type--meta" data-testid="send-review-recipient-address"><span :class="$style.address_end">{{ recipientEnds.head }}</span>{{ recipientEnds.middle }}<span :class="$style.address_end">{{ recipientEnds.tail }}</span></span><template v-else>—</template></span>
 					</div>
 
 					<div :class="$style.rows">
