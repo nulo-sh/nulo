@@ -3,6 +3,7 @@ import { expect } from "vitest"
 import { BROWSER, extensionUrl, gotoExtensionPage, newPage, setViewport } from "./fixtures/browser"
 import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
+import { switchToNetwork } from "./fixtures/networks"
 import { shotSend } from "./fixtures/send-page"
 
 test("cycle theme system → light → dark verifies html[theme=…] each step", async ({ registeredExtension }) => {
@@ -169,7 +170,33 @@ const networkChip = (page: Page) =>
 		}
 	})
 
-test("Show network name off hides the name in the header chip, keeps its dot and height; on brings it back", async ({
+/** The header row at the current width: the chip's name and whether it shows whole, the account's
+ *  name and address, and the gap from the address's copy glyph to the chip (negative: on it). */
+const headerRow = (page: Page) =>
+	page.evaluate(() => {
+		const el = (testid: string) => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`)
+		const shown = (node: HTMLElement | null) => (node && node.getClientRects().length > 0 ? node : null)
+		const whole = (node: HTMLElement) => {
+			const range = document.createRange()
+			range.selectNodeContents(node)
+			return range.getBoundingClientRect().width <= node.getBoundingClientRect().width + 0.5
+		}
+		const [name, chip, dot] = [el("network-name"), el("network-button"), el("network-status-dot")]
+		const [address, label, glyph] = [shown(el("account-address-text")), shown(el("account-selector")), el("account-copy-glyph")]
+		const [chipBox, dotBox] = [chip?.getBoundingClientRect(), dot?.getBoundingClientRect()]
+		return {
+			name: name?.textContent?.trim() ?? null,
+			nameWhole: !!name && whole(name),
+			sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+			dotInside: !!chipBox && !!dotBox && dotBox.left - chipBox.left >= 1 && chipBox.right - dotBox.right >= 1,
+			label: label ? "shown" : null,
+			address: address?.textContent?.trim() ?? null,
+			addressWhole: !!address && whole(address),
+			glyphClear: chipBox && glyph ? chipBox.left - glyph.getBoundingClientRect().right : null,
+		}
+	})
+
+test("Show network name off hides the name in the header chip, keeps its dot and height; on brings it back, whole at every width", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -191,37 +218,48 @@ test("Show network name off hides the name in the header chip, keeps its dot and
 	expect(await networkChip(page)).toEqual(shown)
 	await shotSend(page, `577-chip-on-${BROWSER}`, "network-button")
 
-	// At the popup's width the default network's name shows whole, and the lock chip stands as tall as
-	// the network chip beside it.
+	// At the popup's width the lock chip stands as tall as the network chip beside it.
 	await setViewport(page, { width: 360, height: 600 })
-	const row = await page.evaluate(() => {
-		const name = document.querySelector<HTMLElement>('[data-testid="network-name"]')
-		const range = document.createRange()
-		if (name) range.selectNodeContents(name)
-		return {
-			name: name?.textContent?.trim(),
-			text: name ? range.getBoundingClientRect().width : null,
-			box: name?.getBoundingClientRect().width,
-			chip: document.querySelector('[data-testid="network-button"]')?.getBoundingClientRect().height,
-			lock: document.querySelector('[data-testid="header-lock"]')?.getBoundingClientRect().height,
-		}
-	})
-	console.log(`[appearance] header row at 360px: ${JSON.stringify(row)}`)
-	expect(row.name).toBe("Alpha")
-	expect(row.text, `the network name is cut: ${JSON.stringify(row)}`).toBeLessThanOrEqual(row.box ?? 0)
-	expect(row.lock).toBe(row.chip)
+	const heights = await page.evaluate(() => ({
+		chip: document.querySelector('[data-testid="network-button"]')?.getBoundingClientRect().height,
+		lock: document.querySelector('[data-testid="header-lock"]')?.getBoundingClientRect().height,
+	}))
+	expect(heights.lock).toBe(heights.chip)
 
-	// At the narrowest width the row leaves the chip no room for the name: its dot stays inside the
-	// chip's 1px border.
-	await setViewport(page, { width: 240, height: 600 })
-	const narrow = await page.evaluate(() => {
-		const box = (testid: string) => document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect()
-		const [chip, dot] = [box("network-button"), box("network-status-dot")]
-		return chip && dot && { left: dot.left - chip.left, right: chip.right - dot.right }
-	})
-	console.log(`[appearance] network chip's dot at 240px: ${JSON.stringify(narrow)}`)
-	expect(narrow?.left).toBeGreaterThanOrEqual(1)
-	expect(narrow?.right).toBeGreaterThanOrEqual(1)
+	// From 240 px to the popup's width a seeded name shows whole; the account's address either shows
+	// whole with its copy glyph clear of the chip, or leaves with the account's name. At the popup's
+	// width both always show.
+	const sweep = async (network: string) => {
+		const widths = [...Array.from({ length: 30 }, (_, i) => 240 + 4 * i), 360]
+		const read: Record<number, boolean> = {}
+		for (const width of widths) {
+			await setViewport(page, { width, height: 600 })
+			const row = await headerRow(page)
+			const at = `${network} at ${width}px: ${JSON.stringify(row)}`
+			expect(row.name, at).toBe(network)
+			expect(row.nameWhole, at).toBe(true)
+			expect(row.sideways, at).toBe(false)
+			expect(row.dotInside, at).toBe(true)
+			expect(row.label, at).toBe(row.address === null ? null : "shown")
+			if (row.address !== null) {
+				expect(row.addressWhole, at).toBe(true)
+				expect(row.glyphClear, at).toBeGreaterThanOrEqual(0)
+			}
+			read[width] = row.address !== null
+		}
+		return read
+	}
+	const alpha = await sweep("Alpha")
+	expect([alpha[320], alpha[360]]).toEqual([true, true])
+	await switchToNetwork(page, "Local Network")
+	await page.waitForSelector('[data-testid="account-address-text"]', { visible: true, timeout: 30_000 })
+	const local = await sweep("Local Network")
+	expect([local[240], local[320], local[360]]).toEqual([false, false, true])
+	// The glyph a hover or a focus reveals stays off the chip whose whole name now sits beside it.
+	await page.hover('[data-testid="account-address-copy"]')
+	expect((await headerRow(page)).glyphClear).toBeGreaterThanOrEqual(0)
+	await shotSend(page, `header-360-local-network-hover-${BROWSER}`, "network-button")
+	await switchToNetwork(page, "Alpha")
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
