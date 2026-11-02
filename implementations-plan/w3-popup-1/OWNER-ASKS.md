@@ -16,4 +16,4 @@ Arc 1 (#1486, #1499, #1406) depends on none of these and ships now.
 
 **Recommendation**: A. The characters draw nothing, with one exception: the Ogham space mark (U+1680) draws a short dash, and A removes it at the edges too, as Holdings' search already does today. The address is unchanged, and nothing is reinterpreted: only characters at the edges go, and only when what is left is a valid address. B asks the person to fix something they cannot see.
 
-**Captures**: arc 1's smoke build (it does not touch this field) takes them, under `screenshots/`: today's hint for a paste with a trailing space (C), and a clean paste, which is what A shows. B is a copy change, described above.
+**Captures** (Chrome, light, taken on arc 1's smoke build, which does not touch this field): [today, a paste with a trailing space (C)](screenshots/oa1-c-today-trailing-space.png); [a clean paste, which is what A shows for such a paste](screenshots/oa1-a-as-a-clean-paste.png). B is a copy change, described above.

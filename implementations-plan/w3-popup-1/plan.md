@@ -1,7 +1,7 @@
 ---
 plan: w3-popup-1
 tier: light
-status: approved by the panel; arc 1 next; arc 2 waits on OA-1
+status: arc 1 built, its PR open; arc 2 waits on OA-1
 issues: "#1486, #1499, #1406 (arc 1); #1405 (arc 2, after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -54,7 +54,7 @@ Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) change
 ## Architecture & Implementation
 
 - **#1486 (arc 1)**: `fetchSession` reads into a local. The catch only drops the error, then `if (unmounted) return`, then the existing `router.push` when there is no session. One fence covers the refused read and the empty answer.
-- **#1499 (arc 1)**: the gate returns false on `isAlreadyExist`; the verdict watcher watches `[senderAddress, senders]`, so a list that lands after the address shows "Already exists"; `usePopupEntity` gets `{ submitWaitsForShow: true }` (F8), so Enter waits for the list. The button's `:disabled` stays.
+- **#1499 (arc 1)**: the gate returns false on `isAlreadyExist`; the verdict watcher watches `[senderAddress, senders]`, so a list that lands after the address shows "Already exists"; `usePopupEntity` gets `{ submitWaitsForShow: true }` (F8), so Enter waits for the list. The duplicate check compares with `sameFieldAddress`, as New FPC does, since `getSenders` answers lower case and the field takes either (Opus fix R1). The button's `:disabled` stays.
 - **#1406 (arc 1)**: `SearchField.vue` applies `stripBidiAndZeroWidth` on each `input` that is not composing, and once at `compositionend`. When the text changes, it writes the kept text to the element, puts the caret after what preceded it (as `AccountSelectRow.vue:52-62` does), and emits it. A composing input emits the raw text, as today. `TokenList` is unchanged: its matches and `addCandidate` keep reading one trimmed query (F6). The three developer searches pass `:normalize="stripBidiAndZeroWidth"`.
 - **#1405 (arc 2, the OA-1 recommendation)**: new `bareAztecAddress(text): string | undefined` in `utils/aztec-address.ts`. It drops `\p{White_Space}` and `\p{Default_Ignorable_Code_Point}` code points from each end, one character at a time with code-point indices and one final slice, so no `+$` regex reaches CodeQL's ReDoS rule (`lessons.md`) and the cost stays linear. It returns the rest when `isValidAztecAddress` accepts it, else undefined; a text that is no address after that is never rewritten. `RecipientField`'s `normalize` becomes `stripBidiAndZeroWidth`, then `bareAztecAddress(kept) ?? kept`. `TokenList` derives one term, `bareAztecAddress(query) ?? query`, for both `matching` and `addCandidate`, so a listed contract with a joiner at an edge shows its row and no add offer (Codex R1).
 - **Files, arc 1**: `popup/pages/settings/connected-apps/[id].vue`, `popup/components/popups/NewSenderPopup.vue`, `components/composite/SearchField.vue`, `popup/pages/settings/developer/account-state/{contracts,notes,authwits}/index.vue`, and their tests. **Arc 2**: `utils/aztec-address.ts`, `popup/components/modules/send/RecipientField.vue`, `popup/components/modules/holdings/TokenList.vue`, and their tests.
@@ -66,6 +66,7 @@ Two arcs. Arc 1 fixes three bugs whose rules already exist. Arc 2 (#1405) change
 - D3. #1405 goes to the owner (Codex R1): it changes which pasted text Send accepts and lets an edge joiner through, which the ratified rule keeps (F7). The recommendation strips at input time, in `normalize`, so the shown, judged and sent values stay one. Rejected: a rewrite at blur (an Enter or a Confirm before the blur still sees the old text); judging a trimmed copy while the model keeps the raw text. Inner joiners, spaces and fillers stay refused; inner bidi and zero-width characters are already removed by the ratified rule (Codex R1 corrected the plan here).
 - D4. #1406 puts the typed-text rule in `SearchField` itself, with no prop: it has one consumer, and the ratified rule binds every typed field. Rejected: stripping in `TokenList`'s computeds (the field would keep the character); a `normalize` prop (an option for one caller); swapping in `Input` (a different look); native `v-model` (it would stop the live search while an input method composes). The edge helper waits for OA-1 with #1405 (D3).
 - D5. No new e2e. Component tests witness each fix (the real `Input` and `SearchField` where a field's strip is the fix; New sender's stubbed `Input` suffices for its gate); the existing smoke specs reach the touched surfaces in a browser, not the composition order (I2).
+- D6. As built: the page tests register `Input` and `Flex` from `@nulo/design` (the test environment has no component resolver), and authwits' takes a `realInput` mount option so its other tests keep their stub.
 
 ## Security & Adversarial Considerations
 
@@ -83,17 +84,17 @@ No copy, layout, row or format changes in arc 1; each surface keeps its rule.
 3. Holdings' search, Send's token picker and the developer searches: they keep none of the characters the ratified rule removes, so a pasted address with a zero-width space finds its row or gets the add offer.
 4. Arc 2, only on OA-1: Send's recipient, as the owner picks.
 
-## Phase 1: the connected app's detail page (#1486, arc 1)
+## Phase 1: the connected app's detail page (#1486, arc 1) ✓
 
 - Commit the tests first, red at the base, in `[id].test.ts` (make `router.push` observable). (a) Hold `getDappSession`, unmount: no push. (b) The read answers with nothing, and the page unmounts before it resumes: no push. Controls: a read the service refuses while mounted pushes `/popup/settings/connected-apps`; a session that loads pushes nothing. Then the fix.
 - **Gate**: `bun run lint`, `bun run typecheck:all`: exit 0. From `apps/extension`: `bun --bun vitest run src/popup/pages/settings/connected-apps --retry=0`: green; (a) and (b) red at the test commit.
 
-## Phase 2: New sender's Enter (#1499, arc 1)
+## Phase 2: New sender's Enter (#1499, arc 1) ✓
 
 - Tests first, red at the base, in `NewSenderPopup.test.ts`. A listed address and Enter: `addSender` is not called and no toast opens (the unlisted control is the existing Enter test). The list held, a listed address typed: Enter adds nothing; then the list lands with it: "Already exists" shows and Enter still adds nothing. The test at `:143` becomes: Enter is inert while the list is held, and an unlisted valid address submits once it lands (control). Then the fix.
 - **Gate**: lint and typecheck as above; `bun --bun vitest run src/popup/components/popups/NewSenderPopup.test.ts --retry=0`: green; both cases red at the test commit.
 
-## Phase 3: the searches (#1406, arc 1)
+## Phase 3: the searches (#1406, arc 1) ✓
 
 - Tests first, red at the base.
   - `TokenList.test.ts`, with the real `SearchField`: an unlisted address with an inner zero-width space offers Add token with the address, and the field's value equals the emitted query, without the character; the same paste of a listed contract shows its row and no add offer; a visible wrong character offers none (control).
@@ -122,6 +123,9 @@ No copy, layout, row or format changes in arc 1; each surface keeps its rule.
 | Opus R1 (Plan) | conditional approve | one TokenList term (as Codex); emit raw text while composing and rewrite nothing; `SearchField.test.ts`; D1's wording and the empty-answer row; F2 and I2 restated; outside-BMP, combining-mark, empty and edges-only rows; arc 2's visible side effects listed in OA-1; U+1680 named | its finding 6, that #1405 needs no owner call: Codex R1's stronger argument (D3) |
 | Codex final (fresh) | conditional approve; arc 1 may proceed | U+1680 disclosed in OA-1; #1499 bounded, with `submitWaitsForShow` for Enter (F8) and the button's window a known limit; F7 tied to unicode-1 D5; D5 and I2 narrowed; SearchField tested through a bound model; code-point indices in arc 2 | none; it upheld rejecting owner asks for #1406 and D2 |
 | Codex final (resumed) | approve; arc 1 may proceed, arc 2 waits on OA-1 | none; `submitWaitsForShow` confirmed as the documented mechanism, not a reopened disposition | none |
+| Codex fix R1 (arc 1) | changes requested | `SearchField`'s header cut to its why; the sender test file's summary cut to its pointer | none |
+| Opus fix R1 (arc 1) | changes requested | the duplicate check by `sameFieldAddress` (an upper-case paste of a listed sender reached #1499's consequence; test red first); the hostile rows' titles named, with `\u200B` escapes | none |
+| Codex fix R2 (arc 1) | clean | none | none |
 
 ## Delivery
 
