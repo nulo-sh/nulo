@@ -426,3 +426,80 @@ describe("TokenSeeder — commit fencing", () => {
 		expect(deps.persist).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("TokenSeeder — a failed marker read never feeds a write", () => {
+	const OTHER = `0x${"1".repeat(64)}`
+
+	/** Each `arm()` makes the next read of the marker blob reject, as a storage fault would. */
+	function markerReadFault(area: ReturnType<typeof makeSeeder>["api"]["storage"]["local"]) {
+		const realGet = area.get.bind(area)
+		const fault = {
+			armed: false,
+			arm: () => {
+				fault.armed = true
+			},
+		}
+		vi.spyOn(area, "get").mockImplementation(async (...args: Parameters<typeof area.get>) => {
+			if (fault.armed && args[0] === MARKER_KEY) {
+				fault.armed = false
+				throw new Error("IO error")
+			}
+			return realGet(...args)
+		})
+		return fault
+	}
+
+	test("a deletion whose marker read fails is refused with every tombstone intact, and its retry lands", async () => {
+		const { seeder, api } = makeSeeder()
+		await seeder.markDeletedByUser("p1", CHAIN_ID, CONTRACT)
+		markerReadFault(api.storage.local).arm()
+
+		await expect(seeder.markDeletedByUser("p1", CHAIN_ID, OTHER)).rejects.toThrow("IO error")
+		expect(Object.keys(await readMarker())).toEqual([KEY])
+
+		await seeder.markDeletedByUser("p1", CHAIN_ID, OTHER)
+		const marker = await readMarker()
+		expect([marker[KEY].outcome, marker[`${CHAIN_ID}:${OTHER}`].outcome]).toEqual(["deleted", "deleted"])
+	})
+
+	test("a chain purge whose marker read fails rejects, so the purge is retried", async () => {
+		const { seeder, api } = makeSeeder()
+		await seeder.markDeletedByUser("p1", CHAIN_ID, CONTRACT)
+		markerReadFault(api.storage.local).arm()
+
+		await expect(seeder.onChainPurged("p1", CHAIN_ID)).rejects.toThrow("IO error")
+		await expect(seeder.onChainPurged("p1", CHAIN_ID)).resolves.toBeUndefined()
+		expect((await readMarker())[KEY].outcome).toBe("deleted")
+	})
+
+	test("a commit whose tombstone read fails persists no token", async () => {
+		let seederRef: TokenSeeder = null as never
+		let fault: ReturnType<typeof markerReadFault> = null as never
+		const preview = vi.fn(async (): Promise<SeedPreview> => {
+			await seederRef.markDeletedByUser("p1", CHAIN_ID, CONTRACT)
+			fault.arm()
+			return goodPreview()
+		})
+		const made = makeSeeder({ preview })
+		seederRef = made.seeder
+		fault = markerReadFault(made.api.storage.local)
+		await made.seeder.run()
+
+		expect(preview).toHaveBeenCalledTimes(1)
+		expect(made.deps.persist).not.toHaveBeenCalled()
+		expect((await readMarker())[KEY].outcome).toBe("deleted")
+	})
+
+	test("controls: the read-only answers keep today's fallback on a failed read", async () => {
+		const { seeder, api } = makeSeeder()
+		const unmarked = await seeder.getStatus()
+		await seeder.markDeletedByUser("p1", CHAIN_ID, CONTRACT)
+		const fault = markerReadFault(api.storage.local)
+
+		fault.arm()
+		expect(await seeder.getStatus()).toEqual(unmarked)
+		fault.arm()
+		expect(await seeder.verifiedSeeds("p1", CHAIN_ID)).toEqual([])
+		expect((await seeder.getStatus()).entries).toEqual([])
+	})
+})
