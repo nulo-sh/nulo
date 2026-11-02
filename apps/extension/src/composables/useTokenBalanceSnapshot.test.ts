@@ -83,7 +83,7 @@ describe("useTokenBalanceSnapshot", () => {
 		const p2 = s.snap.fetchTokenBalances()
 		current = false
 		bad.reject(new Error("port closed"))
-		await p2
+		expect(await p2).toBe(true)
 		expect(s.state.value).toBe("loading")
 		expect(vi.getTimerCount()).toBe(0)
 	})
@@ -142,6 +142,21 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).not.toHaveBeenCalled()
 		s.connect()
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+	})
+
+	test("a later connect while a read is out leaves that read to settle the run; once it has, a connect refetches", async () => {
+		const s = setup()
+		s.connect()
+		const out = deferred<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(out.promise).mockResolvedValue([row(2)])
+		const p = s.snap.fetchTokenBalances()
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+		out.reject(new Error("refused"))
+		expect(await p).toBe(false)
+		expect(s.state.value).toBe("unavailable")
+		s.connect()
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(2)
 	})
 
 	test("an update replaces its row by id, scoped or not, and marks a run stale only in scope", async () => {

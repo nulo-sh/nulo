@@ -373,8 +373,9 @@ describe("BalanceView — Home aggregate", () => {
 		expect(calls).toBe(1)
 		expect(wrapper.find('[data-testid="balance-amount"]').text()).toBe("")
 
-		// The client rejects the pending request and reconnects synchronously, before the rejection settles.
+		// The drop rejects the request in flight; the new port's Ready, and so the connect, come in a later task.
 		rejectFirst?.(new Error("port closed"))
+		await flushPromises()
 		connectedHandler?.()
 		await flushPromises()
 		expect(calls).toBe(2)

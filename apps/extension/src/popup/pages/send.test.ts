@@ -1495,7 +1495,7 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
-	test("an identity fetch's balance read lands when the reconnect's read that began after it is refused", async () => {
+	test("a refused re-read after an identity fetch keeps the rows that fetch's read landed", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const { w, appStore } = await mountSend()
 		balanceConnected().invoke()
@@ -1562,6 +1562,17 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
+	test("unmounted while the balance read is out: the load ends there, with no token read or selection after it", async () => {
+		const balanceReads = holdReads<unknown[]>(mocks.getTokenBalances)
+		const { w, cacheStore } = await mountSend()
+		tokenAdded().invoke(OTHER)
+		w.unmount()
+		balanceReads[0]?.resolve([BALANCE])
+		await flushPromises()
+		expect(mocks.getTokens).toHaveBeenCalledTimes(1)
+		expect(cacheStore.activeTokenIdx).toBeUndefined()
+	})
+
 	test.each([
 		["the first read", false],
 		["the refetch an update during the first read asks for", true],
@@ -1581,6 +1592,7 @@ describe("send page — the token card while the tokens load", () => {
 
 		tokenReads[0]?.resolve([TOKEN])
 		await vi.advanceTimersByTimeAsync(2_000)
+		expect(balanceReads).toHaveLength(refetch ? 3 : 2)
 		for (const read of balanceReads) read.resolve([BALANCE])
 		await flushPromises()
 		expect(card(w)).toEqual({ loading: "false", symbol: undefined })

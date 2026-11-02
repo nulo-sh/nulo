@@ -785,6 +785,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	console.debug(`[send:${sendInstanceId}] unmounting`)
 	cancelled = true
+	// A load still out ends here: its late reads must not write the shared token selection.
+	identityFetchSeq++
 	closeReview()
 
 	contactService.disconnect()
