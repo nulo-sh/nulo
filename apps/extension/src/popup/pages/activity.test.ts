@@ -97,6 +97,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
+import { SENDS_IN_PROGRESS_KEY } from "@/composables/useSendsInProgress"
+import TransactionAwaitingCard from "@/components/composite/activity/TransactionAwaitingCard.vue"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import TransactionsList from "../components/modules/activity/TransactionsList.vue"
 import Activity from "./activity.vue"
@@ -688,5 +690,129 @@ describe("pages/activity — opened from a token page", () => {
 		expect(w.text()).toContain("No transactions yet")
 		expect(arrivals.present).not.toHaveBeenCalledWith([eurcIn])
 		w.unmount()
+	})
+})
+
+describe("pages/activity — sends in progress", () => {
+	const USDC = { id: 1, chainId: 1, contract: "0xusdc", name: "USD Coin", symbol: "USDC", decimals: 6, hasDecimals: true }
+	const HASH = `0x${"a".repeat(64)}`
+	const OTHER_HASH = `0x${"b".repeat(64)}`
+	const inFlight = (id: string, over: Record<string, unknown> = {}) => ({
+		id,
+		kind: "transfer",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		tokenId: 1,
+		amountRaw: "10000000",
+		recipientAddress: `0x${"c".repeat(64)}`,
+		transferType: 0,
+		progress: { stage: "proving", enteredProveAt: 1 },
+		error: null,
+		terminalAt: null,
+		createdAt: 10,
+		updatedAt: 10,
+		...over,
+	})
+	const pendingTx = (hash: string) => ({
+		hash,
+		account: "0xacct",
+		chainId: 1,
+		profileId: "p1",
+		createdAt: 5,
+		status: 0,
+		calls: [{ contract: "0xusdc" }],
+	})
+	let records: ReturnType<typeof ref<unknown[]>>
+
+	beforeEach(() => {
+		H.getTokens.mockResolvedValue([USDC])
+		records = ref<unknown[]>([])
+	})
+
+	async function openHistory(path = "/popup/activity") {
+		router = await historyAt(path)
+		const w = mount(Activity, {
+			shallow: true,
+			global: {
+				plugins: [router],
+				stubs: { Flex: { template: "<div><slot /></div>" } },
+				provide: { [SENDS_IN_PROGRESS_KEY as symbol]: { records } },
+			},
+		})
+		await flushPromises()
+		return w
+	}
+	const pending = (w: Awaited<ReturnType<typeof openHistory>>) => w.findAllComponents(TransactionAwaitingCard)
+	const rowKeys = (w: Awaited<ReturnType<typeof openHistory>>) => {
+		const list = w.findComponent(TransactionsList)
+		return list.exists() ? list.props("rows").map((row: { key: string }) => row.key) : []
+	}
+
+	test("a send and a dApp operation in flight list first, Pending with their word, with no action and no empty state", async () => {
+		records.value = [
+			inFlight("send", { createdAt: 30 }),
+			inFlight("dapp", {
+				kind: "dapp_execute",
+				origin: "dapp",
+				tokenId: undefined,
+				amountRaw: undefined,
+				createdAt: 20,
+				progress: { stage: "simulating" },
+			}),
+			inFlight("browser", { createdAt: 15, progress: { stage: "proving", enteredProveAt: 1, backend: "browser" } }),
+			inFlight("queued", { createdAt: 12, progress: { stage: "queued" } }),
+		]
+		const w = await openHistory()
+		const cards = pending(w)
+		expect(cards.map((c) => c.props("subtitle"))).toEqual([
+			"Pending · Generating proof...",
+			"Pending · Simulating...",
+			"Pending · Proving in browser…",
+			"Pending · Waiting for your earlier send",
+		])
+		expect(cards[0]?.props()).toMatchObject({
+			title: "USDC",
+			amount: "10",
+			amountSymbol: "USDC",
+			cancellable: false,
+			jobId: null,
+			hasApprovalWindow: false,
+		})
+		expect(w.text()).not.toContain("No transactions yet")
+	})
+
+	test("a send that succeeds hands off to exactly one chain row, and one that fails to exactly one terminal row", async () => {
+		records.value = [inFlight("ok"), inFlight("bad", { createdAt: 11 })]
+		const w = await openHistory()
+		expect(pending(w)).toHaveLength(2)
+
+		records.value = [inFlight("bad", { createdAt: 11 })]
+		H.store.current.transactions = [{ ...pendingTx(HASH), status: 5 }] as never
+		await flushPromises()
+		expect([pending(w).length, rowKeys(w)]).toEqual([1, [`tx:${HASH}`]])
+
+		records.value = []
+		for (const handler of H.journal.updated.handlers)
+			handler(inFlight("bad", { createdAt: 11, progress: { stage: "failed" }, terminalAt: 50 }))
+		await flushPromises()
+		expect([pending(w).length, rowKeys(w)]).toEqual([0, ["journal:bad", `tx:${HASH}`]])
+	})
+
+	test("opened from another token's page, a send in flight is not listed", async () => {
+		H.getTokens.mockResolvedValue([USDC, { ...USDC, id: 2, contract: "0xeurc", symbol: "EURC" }])
+		records.value = [inFlight("send")]
+		const w = await openHistory("/popup/activity?token=2")
+		expect(pending(w)).toHaveLength(0)
+		const own = await openHistory("/popup/activity?token=1")
+		expect(pending(own)).toHaveLength(1)
+	})
+
+	test("a submitting record hides the pending chain row of its hash; an unrelated pending chain row stays", async () => {
+		H.store.current.transactions = [pendingTx(HASH), pendingTx(OTHER_HASH)] as never
+		records.value = [inFlight("send", { progress: { stage: "submitting", txHash: HASH } })]
+		const w = await openHistory()
+		expect([pending(w).length, rowKeys(w)]).toEqual([1, [`tx:${OTHER_HASH}`]])
 	})
 })

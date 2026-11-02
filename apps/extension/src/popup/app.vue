@@ -36,12 +36,14 @@ import { networkArrivalView } from "@/popup/network-arrival"
 import { readyToast } from "@/components/stale-network/copy"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
 import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
+import { SENDS_IN_PROGRESS_KEY, useSendsInProgress } from "@/composables/useSendsInProgress"
 import { runUnattended, STALE_NETWORK_KEY, useStaleNetwork } from "@/composables/useStaleNetwork"
 import { NETWORK_ARRIVAL_KEY, useNetworkArrival } from "@/composables/useNetworkArrival"
 
@@ -53,7 +55,7 @@ const appStore = useAppStore()
 const popupStore = usePopupStore()
 const notificationStore = useNotificationStore()
 const { bootstrapActiveProfile } = useProfileBootstrap()
-const { openToast, closeToast, toast } = useToast()
+const { openToast, updateToast, closeToast, toast } = useToast()
 const { onScopeChanged, onLocked } = createScopeEpochHandlers({
 	bumpEpoch: () => {
 		appStore.scopeEpoch++
@@ -111,6 +113,31 @@ const arrivals = useArrivals({
 })
 const { seeded: arrivalsSeeded } = arrivals
 provide(ARRIVALS_KEY, arrivals)
+
+const sendsJournal = new OperationJournalServiceClient()
+void sendsJournal.connect()
+const sends = useSendsInProgress({
+	journalService: sendsJournal,
+	// A dApp window's document reads nothing: its sends are the popup's to show.
+	scope: () =>
+		appStore.isLogined &&
+		appStore.profile?.id &&
+		appStore.network?.id &&
+		appStore.account?.address &&
+		route.name &&
+		!isDappWindow(route.name)
+			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
+			: undefined,
+	lookupToken: async (tokenId) => {
+		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(tokenId)
+		return { symbol, decimals, hasDecimals }
+	},
+	toast,
+	openToast,
+	updateToast,
+	closeToast,
+})
+provide(SENDS_IN_PROGRESS_KEY, sends)
 
 // Its own client: `managers.account` is replaced on every activation and network switch, and an
 // account another window adds or edits must reach this window's lists whichever is current.
@@ -622,9 +649,11 @@ onBeforeUnmount(() => {
 	arrivalsIncoming.disconnect()
 	arrivalsTokens.disconnect()
 	arrivalsPrices.disconnect()
+	sendsJournal.disconnect()
 	stopAccountRows()
 	accountRows.disconnect()
 	arrivals.dispose()
+	sends.dispose()
 	stale.dispose()
 	networkArrival.dispose()
 })
