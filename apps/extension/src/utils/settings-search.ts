@@ -215,7 +215,7 @@ export const SETTINGS_ROWS = {
 		section: "Lock",
 		title: "Strict security mode",
 		description: "Locks whenever Nulo restarts in the background, as well as after the timeout.",
-		synonyms: ["password", "passkey", "security"],
+		synonyms: ["password", "passkey", "security", "secure", "unlock"],
 		testid: "setting-strict-security-mode",
 	},
 	"lock-auto-lock": {
