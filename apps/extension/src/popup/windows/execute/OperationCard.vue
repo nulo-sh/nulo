@@ -440,7 +440,7 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
 				<Text variant="label-section" color="secondary">Leaves your account</Text>
 				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
-					<Text variant="body" color="secondary">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
+					<Text variant="body" color="secondary" :class="$style.leaves_count">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
 					<Text variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
 				</Flex>
 			</Flex>
@@ -761,6 +761,12 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 .leaves {
 	padding: 12px 12px 4px;
+}
+
+/* A long total wraps inside its own column; the count beside it keeps one line. */
+.leaves_count {
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 .leaves_rule {
