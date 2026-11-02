@@ -1,11 +1,4 @@
-/**
- * Component tests for NewSenderPopup — pins the popup's wiring onto the shared
- * `usePopupEntity` lifecycle: Enter submits ONLY from an input/textarea
- * (a global Enter must not), the client's connect/fetch lives in onShow and
- * disconnect/reset in onHide, Enter waits for the senders list, and Enter
- * refuses what the button refuses. Composable mechanics are covered in
- * `usePopupEntity.test.ts`.
- */
+/** The popup's wiring onto `usePopupEntity`; the composable's own mechanics are in `usePopupEntity.test.ts`. */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ABOVE_MODULUS, BELOW_MODULUS, DIGITS_63, MODULUS } from "../../../../tests/helpers/field-modulus"
@@ -244,6 +237,17 @@ describe("NewSenderPopup — a saved sender", () => {
 		await flushPromises()
 		expect(accountStateServiceMock.addSender).not.toHaveBeenCalled()
 		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test('the listed address typed in upper case reads "Already exists", and Enter adds nothing', async () => {
+		accountStateServiceMock.getSenders.mockResolvedValue([VALID_HEX])
+		const w = await mountShown()
+		await typeAddress(w, `0x${VALID_HEX.slice(2).toUpperCase()}`)
+		await flushPromises()
+		expect(warning(w)).toBe("Already exists")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(accountStateServiceMock.addSender).not.toHaveBeenCalled()
 	})
 
 	test('a list that lands after the address was typed reads "Already exists", and Enter adds nothing', async () => {
