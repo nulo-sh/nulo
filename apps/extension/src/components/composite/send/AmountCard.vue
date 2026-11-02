@@ -362,6 +362,8 @@ const toggleFiatMode = () => {
 		clearTimeout(convertTimer)
 	}
 	readHint.value = null
+	// The note names what was typed in the other unit; kept, it would hold the figure's slot all session.
+	wasClamped.value = false
 }
 
 /** A token swap mid-fiat-session would silently keep the OLD token's frozen
@@ -515,7 +517,7 @@ const handleFiatBalanceAction = (divisor) => {
 				</button>
 			</Flex>
 
-			<span v-if="fiatMode && derivedOwnRow" :class="$style.conversion">
+			<span v-if="fiatMode && derivedOwnRow && !refusal" :class="$style.conversion">
 				<Skeleton v-if="fiatGuard?.converting" :width="72" :height="10" data-testid="send-amount-converting" />
 				<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 					derivedTokenLabel

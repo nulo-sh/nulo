@@ -1284,18 +1284,37 @@ describe("composite/AmountCard — every refusal takes the balance row's left sl
 		expect(w.get("[data-testid='send-amount-input']").attributes("aria-describedby")).toBeUndefined()
 	})
 
-	test("in USD the derived amount gives way in the slot, and the refusal shows there too", async () => {
-		const w = mountPriced({
-			fiatMode: true,
-			fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false },
-			modelValue: "600",
-			exceedsBalance: true,
-		})
+	test.each(WIDTHS)(
+		"in USD at %s px the derived amount gives way while refused, on whichever line it is drawn",
+		async (width, widths) => {
+			rooms = { ...widths }
+			const w = mountPriced({
+				fiatMode: true,
+				fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false },
+				modelValue: "600",
+				exceedsBalance: true,
+			})
+			await nextTick()
+			expect(slotOf(w).get("[data-testid='send-amount-over-balance']").text()).toBe("More than your balance")
+			expect(w.find("[data-testid='send-amount-derived']").exists()).toBe(false)
+			expect(w.get("[data-testid='send-amount-fiat-input']").attributes("aria-describedby")).toBe(
+				w.get("[data-testid='send-amount-over-balance']").attributes("id"),
+			)
+			await w.setProps({ modelValue: "400", exceedsBalance: false })
+			await nextTick()
+			// The narrow row draws it on its own line under the amount; the wide one, in the slot.
+			expect(slotOf(w).element.contains(w.get("[data-testid='send-amount-derived']").element)).toBe(width === "360")
+		},
+	)
+
+	test("a decimals note does not follow the amount into USD, where the derived amount takes the slot", async () => {
+		const w = mountPriced()
+		await w.get("[data-testid='send-amount-input']").setValue("1.1234567")
+		expect(slotOf(w).find("[data-testid='send-amount-clamp-hint']").exists()).toBe(true)
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		await w.setProps({ fiatMode: true, fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false } })
 		await nextTick()
-		expect(slotOf(w).get("[data-testid='send-amount-over-balance']").text()).toBe("More than your balance")
-		expect(slotOf(w).find("[data-testid='send-amount-derived']").exists()).toBe(false)
-		expect(w.get("[data-testid='send-amount-fiat-input']").attributes("aria-describedby")).toBe(
-			w.get("[data-testid='send-amount-over-balance']").attributes("id"),
-		)
+		expect(w.find("[data-testid='send-amount-clamp-hint']").exists()).toBe(false)
+		expect(slotOf(w).find("[data-testid='send-amount-derived']").exists()).toBe(true)
 	})
 })
