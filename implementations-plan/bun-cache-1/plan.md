@@ -1,7 +1,7 @@
 ---
 plan: bun-cache-1
 tier: light
-status: arc 1 implemented, Codex loop converged (round 2 clean); PR next
+status: completed (PR #1502)
 issues: none (closes nothing)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at 4c6e0aea3
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-02. **Status:** completed; delivered by PR #1502 to `dev` (closes no issue).
+- **Shipped:** the `setup-bun` composite passes `no-cache: ${{ inputs.cache != 'true' }}`; the six inline setup steps of credentialed jobs pass `no-cache: true`; `release-integrity.test.ts`'s `sharedCacheFindings` (with `runs`, callers' permissions and nested composites) refuses a credentialed job whose Bun setup can take the shared cache, and its stored-secret matcher ignores case; `behavior-gating.test.ts` pins the composite's mapping; the composite description, `.github/WORKFLOWS.md`, `CI.md` and `SECURITY.md` say what `cache: "false"` skips. Deviations from the lane brief: `pr-quick.yml#preview-comment` included (D3); the matcher's case fix (fix loop R1).
+- **Left out:** `source-rebuild.yml`'s two rebuilds keep the binary cache (D4); no absence check for a binary already on the runner (D7); the composite's install-cache rationale stays as it was.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted: the tool behaviour lives in the composite's description and the tests pin it, and `lessons.md` is at its 8 KiB budget.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; do not run them.
 
 # bun-cache-1: credentialed jobs and release builds set up Bun without the shared cache
 
