@@ -80,8 +80,11 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 	let dirty = false
 	let retryTimer: ReturnType<typeof setTimeout> | undefined
 	// The first connect is the one the first request opened. A later one is a port drop: events
-	// may have been missed and the request in flight was rejected, so resnapshot.
+	// may have been missed, so resnapshot, unless a run's read is out: the drop rejected every read
+	// posted before it, so that read went out after Ready and is already the resnapshot.
 	let connectsSeen = 0
+	/** The current run while its read is out. */
+	let readOut: (() => boolean) | undefined
 
 	const markDirty = () => {
 		dirty = true
@@ -98,7 +101,9 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 		state.value = "loaded"
 	}
 
-	async function fetchTokenBalances(isTimedRetry = false): Promise<void> {
+	/** Resolves `false` when its read, or the refetch a dirty mark asked for, is refused while
+	 *  current; otherwise `true`, a superseded run included. A refused read never rejects. */
+	async function fetchTokenBalances(isTimedRetry = false): Promise<boolean> {
 		const inScope = scopeFence?.()
 		const isCurrent = fence.begin()
 		const superseded = () => (inScope && !inScope()) || !isCurrent()
@@ -109,23 +114,28 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 		if (!address) {
 			rows.value = []
 			state.value = "loaded"
-			return
+			return true
 		}
 		let fetched: TokenBalanceInfo[]
+		readOut = isCurrent
 		try {
 			fetched = await client.getTokenBalances(undefined, address)
 		} catch {
-			if (!superseded()) settleRejected(isTimedRetry)
-			return
+			if (superseded()) return true
+			settleRejected(isTimedRetry)
+			return false
+		} finally {
+			if (readOut === isCurrent) readOut = undefined
 		}
-		if (superseded()) return
+		if (superseded()) return true
 		if (dirty) return fetchTokenBalances()
 		land(fetched, chainId)
+		return true
 	}
 
 	function onReconnected() {
 		connectsSeen++
-		if (connectsSeen >= 2) void fetchTokenBalances()
+		if (connectsSeen >= 2 && !readOut?.()) void fetchTokenBalances()
 	}
 	client.onConnected.add(onReconnected)
 
