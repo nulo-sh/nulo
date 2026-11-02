@@ -73,13 +73,13 @@ Every surface below changes; the "ships now" column is the proposal the draft PR
 
 ## Phases
 
-### Phase 1: before-captures (tree at base) ✗
+### Phase 1: before-captures (tree at base) ✓
 1. Build at base: `bun run --cwd apps/landing build`. Serve `dist/` with `vite preview --port <p> --strictPort`, `<p>` claimed in `~/.agents/ports.md`, in its own process group.
 2. Capture the nav and hero, `#get` and `/subscribed`, at 1280 × 800 and 390 × 844, with reduced motion and the clock hidden, under the dark and light schemes. Compare the two schemes' hashes.
 3. Stop the server by its process group. Free the port.
 - **Validation gate**: every capture exists; dark and light hashes are equal (else capture both and say so). Layers: none (evidence only).
 
-### Phase 2: markup, copy, tests, docs ✗
+### Phase 2: markup, copy, tests, docs ✓
 1. Write the tests first and run them red on the base markup.
    - `install.test.ts`: every link to a store domain in each page is a `STORES` URL (success control: `index.html` serves both); both `STORES` URLs sit in Terms § 1.
    - `page.test.ts`, the install contract with exact counts and hrefs: per block (hero, `#get`), one `data-install="primary"` to Chrome, one `secondary` to Firefox, one `hidden` `data-install-detected` span holding one `data-install-other` link, one `data-install-fallback` span; per page, one nav `data-install="nav"` link `Get Nulo` to `#get` or `/#get`; nothing else carries `data-install`.
