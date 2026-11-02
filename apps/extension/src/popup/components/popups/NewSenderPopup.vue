@@ -43,6 +43,7 @@ const isAvailableToAddSender = computed(() => {
 	if (isLoading.value) return false
 	if (!senderAddress.value.length) return false
 	if (!isFieldAddress(senderAddress.value)) return false
+	if (isAlreadyExist.value) return false
 
 	return true
 })
@@ -83,22 +84,24 @@ const handleAddSender = async () => {
 	}
 }
 
-watch(
-	() => senderAddress.value,
-	() => validateSenderAddress(),
+// The list can land after the address was typed; the verdict must follow it.
+watch([senderAddress, senders], () => validateSenderAddress())
+usePopupEntity(
+	() => props.show,
+	{
+		submit: handleAddSender,
+		onShow: async () => {
+			accountStateClientService = new AccountStateServiceClient()
+			senders.value = await accountStateClientService.getSenders(appStore.network.id)
+		},
+		onHide: () => {
+			accountStateClientService.disconnect()
+			accountStateClientService = null
+			senderAddress.value = ""
+		},
+	},
+	{ submitWaitsForShow: true },
 )
-usePopupEntity(() => props.show, {
-	submit: handleAddSender,
-	onShow: async () => {
-		accountStateClientService = new AccountStateServiceClient()
-		senders.value = await accountStateClientService.getSenders(appStore.network.id)
-	},
-	onHide: () => {
-		accountStateClientService.disconnect()
-		accountStateClientService = null
-		senderAddress.value = ""
-	},
-})
 </script>
 
 <template>
