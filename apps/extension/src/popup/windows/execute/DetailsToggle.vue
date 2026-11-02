@@ -27,6 +27,12 @@ defineProps<{
 	font: inherit;
 }
 
+/* The base sheet strips every button's outline. */
+.toggle:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+
 .chevron {
 	transition: transform 120ms ease;
 }

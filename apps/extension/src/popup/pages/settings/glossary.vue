@@ -17,7 +17,7 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
 			v-for="section in GLOSSARY_SECTIONS"
 			:key="section.title"
 			:class="$style.section"
-			:data-testid="`glossary-section-${section.title.toLowerCase()}`"
+			:data-testid="`glossary-section-${section.title.toLowerCase().replaceAll(' ', '-')}`"
 		>
 			<span :class="$style.title">{{ section.title }}</span>
 			<div v-for="key in section.keys" :key="key" :class="$style.entry" :data-testid="`glossary-entry-${key}`">
