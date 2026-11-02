@@ -323,3 +323,18 @@ describe("TokenList — a picker host", () => {
 		expect(note.text()).toBe("It joins your list.")
 	})
 })
+
+describe("TokenList — refresh mark", () => {
+	test("a refreshing list shows one dot beside its label and none on its rows; by default there is none", async () => {
+		const rows = [row(1, "AAA"), row(2, "BBB")]
+		const w = mountList({ rows, refreshing: true })
+		const marks = () => w.findAll('[data-testid$="refreshing"]').map((el) => el.attributes("data-testid"))
+		expect(marks()).toEqual(["holdings-refreshing"])
+		expect(w.get('[data-testid="holdings-count"]').element.parentElement?.nextElementSibling).toBe(
+			w.get('[data-testid="holdings-refreshing"]').element,
+		)
+		await w.setProps({ refreshing: false })
+		expect(marks()).toEqual([])
+		expect(mountList({ rows }).find('[data-testid="holdings-refreshing"]').exists()).toBe(false)
+	})
+})

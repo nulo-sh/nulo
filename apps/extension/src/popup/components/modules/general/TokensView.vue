@@ -8,7 +8,6 @@ import TokenImportRow from "./TokenImportRow.vue"
 import TokenSeedRow from "./TokenSeedRow.vue"
 
 /** Services */
-import { ContentKind } from "@/wallet/services/task/spec"
 import { TaskServiceClient } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
@@ -16,6 +15,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import { useBalanceTasks } from "@/composables/useBalanceTasks"
 import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { orderTokenRows } from "@/utils/token-order"
@@ -47,8 +47,6 @@ const props = defineProps({
 const emit = defineEmits(["retry-seed"])
 
 const router = useRouter()
-
-const tasks = ref([])
 
 /** In-flight + recently-failed token-import journal records, rendered as TokenImportRow: above the
  *  TokenCard list, or in its default's slot (`home-slots.ts`). Succeeded records are filtered out —
@@ -136,65 +134,28 @@ const taskService = new TaskServiceClient()
 taskService.onTaskCreated.add(onTaskCreated)
 taskService.onTaskUpdated.add(onTaskUpdated)
 taskService.onTaskDeleted.add(onTaskDeleted)
+// `fetchTokenBalances` derives each row's `isUpdating` from this snapshot on every scope change, so it
+// must be read first and kept current, or the section dot strands on or goes missing.
+const balanceTasks = useBalanceTasks({
+	client: taskService,
+	account: () => appStore.account?.address,
+	scopeFence: () => {
+		const atStart = scopeGen
+		return () => scopeGen === atStart
+	},
+})
+const setRowUpdating = (tbId, updating) => {
+	const row = tokenBalances.value.find((tb) => tb.id === tbId)
+	if (row) row.isUpdating = updating
+}
 function onTaskCreated(task) {
-	let idx
-	switch (task.content.kind) {
-		case ContentKind.BalanceUpdate:
-			if (task.content.account !== appStore.account?.address) return
-
-			// Keep the snapshot current — `fetchTokenBalances` derives `isUpdating` from `tasks` on
-			// every scope change, so a missing/stale entry would strand or lose the section dot.
-			if (!tasks.value.some((t) => t.id === task.id)) tasks.value.push(task)
-
-			idx = tokenBalances.value.findIndex((tb) => tb.id === task.content.tbId)
-			if (idx !== -1) {
-				tokenBalances.value[idx].isUpdating = true
-			}
-
-			break
-
-		default:
-			break
-	}
+	if (balanceTasks.onTaskCreated(task)) setRowUpdating(task.content.tbId, true)
 }
 function onTaskUpdated(task) {
-	let idx
-	switch (task.content.kind) {
-		case ContentKind.BalanceUpdate:
-			if (!task.finishedAt) return
-
-			// Terminal → drop from the snapshot; a lingering unfinished-looking entry would resurrect
-			// `isUpdating: true` on the next scope-change refetch (stranded section dot).
-			idx = tasks.value.findIndex((t) => t.id === task.id)
-			if (idx !== -1) tasks.value.splice(idx, 1)
-
-			idx = tokenBalances.value.findIndex((tb) => tb.id === task.content.tbId)
-			if (idx !== -1) {
-				tokenBalances.value[idx].isUpdating = false
-			}
-
-			break
-		default:
-			break
-	}
+	if (balanceTasks.onTaskUpdated(task)) setRowUpdating(task.content.tbId, false)
 }
 function onTaskDeleted(task) {
-	let idx
-	switch (task.content.kind) {
-		case ContentKind.BalanceUpdate:
-			idx = tasks.value.findIndex((t) => t.id === task.id)
-			if (idx !== -1) tasks.value.splice(idx, 1)
-
-			idx = tokenBalances.value.findIndex((tb) => tb.id === task.content.tbId)
-			if (idx !== -1) {
-				tokenBalances.value[idx].isUpdating = false
-			}
-
-			break
-
-		default:
-			break
-	}
+	if (balanceTasks.onTaskDeleted(task)) setRowUpdating(task.content.tbId, false)
 }
 
 // `scopeGen` identifies the current (account, network) scope. The watcher bumps it SYNCHRONOUSLY (before
@@ -202,10 +163,7 @@ function onTaskDeleted(task) {
 // time it resolves. This closes the A→B→A cycle where an old scope's in-flight snapshot would otherwise
 // pass a bare equality check after the user switched back.
 let scopeGen = 0
-const withTaskFlags = (tb) => ({
-	...tb,
-	isUpdating: tasks.value.some((t) => t.content.tbId === tb.id && !t.finishedAt),
-})
+const withTaskFlags = (tb) => ({ ...tb, isUpdating: balanceTasks.isUpdating(tb.id) })
 
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
@@ -255,27 +213,14 @@ function retryDefault(entry) {
 	emit("retry-seed", entry)
 }
 
-/** Resnapshot the task list for the ACTIVE scope. Runs on mount, scope changes, and TaskService
- *  reconnects — the live events alone can't repair a snapshot that went stale while disconnected,
- *  and `fetchTokenBalances` derives `isUpdating` from this list on every refetch. Scope-guarded so
- *  a late resolve from a superseded scope can't clobber the fresh one. */
-async function fetchTasks() {
-	const scopeAtStart = scopeGen
-	const all = await taskService.getTasks()
-	if (scopeGen !== scopeAtStart) return
-	tasks.value = all.filter((t) => t.content.kind === ContentKind.BalanceUpdate && t.content.account === appStore.account?.address)
-}
-
-// A reconnect (SW restart) may have dropped terminal task events — resnapshot AND reapply the
-// per-row flags so a completion missed offline can't leave a row (and the section dot) stuck.
+// A reconnect (SW restart) may have dropped terminal task events: resnapshot AND reapply the per-row
+// flags, so a completion missed offline cannot leave a row, or the section dot, stuck.
 taskService.onConnected.add(onTaskReconnected)
 async function onTaskReconnected() {
 	const scopeAtStart = scopeGen
-	await fetchTasks()
+	await balanceTasks.snapshot()
 	if (scopeGen !== scopeAtStart) return
-	for (const tb of tokenBalances.value) {
-		tb.isUpdating = tasks.value.some((t) => t.content.kind === ContentKind.BalanceUpdate && t.content.tbId === tb.id && !t.finishedAt)
-	}
+	for (const tb of tokenBalances.value) tb.isUpdating = balanceTasks.isUpdating(tb.id)
 }
 
 watch(
@@ -307,7 +252,7 @@ watch(
 		void pins.refresh()
 		const gen = scopeGen
 		// Tasks first: fetchTokenBalances derives isUpdating from the snapshot.
-		await fetchTasks().catch(() => undefined)
+		await balanceTasks.snapshot().catch(() => undefined)
 		// A newer scope, or the unmount (which bumps the generation), owns the balances now.
 		if (scopeGen !== gen) return
 		await fetchTokenBalances()
@@ -316,7 +261,7 @@ watch(
 onMounted(async () => {
 	const gen = scopeGen
 	// A rejected task snapshot only costs the refresh dot; it must not strand the balances behind it.
-	await fetchTasks().catch(() => undefined)
+	await balanceTasks.snapshot().catch(() => undefined)
 	// An unmount during an await leaves disconnected clients: a request here would reconnect one
 	// (and a rejected balance fetch would leave a retry timer behind).
 	if (isUnmounted) return
@@ -331,6 +276,7 @@ onBeforeUnmount(() => {
 	isUnmounted = true
 	scopeGen++
 	clearTimeout(ghostTimer)
+	balanceTasks.dispose()
 	taskService.disconnect()
 	disposeBalances()
 	tokenBalanceService.disconnect()
@@ -440,29 +386,8 @@ onBeforeUnmount(() => {
 	padding-bottom: 0;
 }
 
-/* The gas card's activity-dot vocabulary, verbatim (4px grey, 1.2s ease pulse). */
 .refreshing_dot {
-	width: 4px;
-	height: 4px;
-	border-radius: 50%;
-	background: var(--nulo-secondary);
-	animation: refresh_pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes refresh_pulse {
-	0%,
-	100% {
-		opacity: 0.25;
-	}
-	50% {
-		opacity: 0.9;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.refreshing_dot {
-		animation: none;
-	}
+	composes: dot from "@/components/refreshing-dot.module.css";
 }
 
 .view_all {

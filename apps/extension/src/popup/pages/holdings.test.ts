@@ -50,6 +50,21 @@ vi.mock("@/wallet/services/price/client", () => ({
 		}
 	}),
 }))
+const taskEvents = { created: new EventHandler(), updated: new EventHandler(), deleted: new EventHandler(), connected: new EventHandler() }
+let seedTasks: unknown[] = []
+vi.mock("@/wallet/services/task/client", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/wallet/services/task/client")>()),
+	TaskServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			onTaskCreated: taskEvents.created,
+			onTaskUpdated: taskEvents.updated,
+			onTaskDeleted: taskEvents.deleted,
+			onConnected: taskEvents.connected,
+			getTasks: vi.fn(async () => seedTasks),
+		}
+	}),
+}))
 const configEvents = { update: new EventHandler(), connected: new EventHandler() }
 let configValues: Record<string, unknown> = { showFiatValues: true, incomingDustUsdThreshold: 0 }
 vi.mock("@/wallet/services/config/client", () => ({
@@ -73,6 +88,7 @@ vi.mock("@/utils/hero-ruler", () => ({
 }))
 
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { ContentKind } from "@/wallet/services/task/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -123,6 +139,7 @@ afterEach(() => {
 	seedRows = []
 	fetchError = undefined
 	readGate = undefined
+	seedTasks = []
 	mockQuotes = {}
 	answerQuotes = ANSWER
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
@@ -146,6 +163,31 @@ describe("holdings page", () => {
 		expect(summary).toContain("$1,250.00")
 		expect(summary).toContain("2 tokens")
 		expect(summary).toContain("priced assets only") // BBB is unpriced
+	})
+
+	test("one row being refreshed shows one grey dot beside All holdings and no mark on any row, until its task finishes", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+		const refresh = { id: "t1", content: { kind: ContentKind.BalanceUpdate, tbId: "b2", account: "0xacct" } }
+		seedTasks = [refresh]
+		const w = await mountPage()
+		const marks = () => w.findAll('[data-testid$="refreshing"]').map((el) => el.attributes("data-testid"))
+
+		expect(marks()).toEqual(["holdings-refreshing"])
+		expect(w.get('[data-testid="holdings-refreshing"]').attributes("aria-hidden")).toBe("true")
+		const label = w.get('[data-testid="holdings-count"]').element.parentElement
+		expect(label?.nextElementSibling).toBe(w.get('[data-testid="holdings-refreshing"]').element)
+		taskEvents.updated.invoke({ ...refresh, finishedAt: 2 })
+		await flushPromises()
+		expect(marks()).toEqual([])
+
+		// Success control: another account's refresh lights nothing.
+		taskEvents.created.invoke({ id: "t2", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xother" } })
+		await flushPromises()
+		expect(marks()).toEqual([])
+		taskEvents.created.invoke({ id: "t3", content: { kind: ContentKind.BalanceUpdate, tbId: "b1", account: "0xacct" } })
+		await flushPromises()
+		expect(marks()).toEqual(["holdings-refreshing"])
 	})
 
 	test("a live add for another chain is ignored; one for this chain lands", async () => {
