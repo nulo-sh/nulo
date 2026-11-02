@@ -1,7 +1,7 @@
 ---
 plan: w3-dapp-1
 tier: light
-status: approved by the panel (Codex final r3); arc 1 next; arc 2 waits on OA-1
+status: arc 1 in review; arc 2 waits on OA-1
 issues: "#1460, #1461 (arc 1); #1380 (arc 2, after OA-1)"
 driver: claude-code
 claude_model: opus
@@ -66,7 +66,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 
 ## Arc 1: the locked queue and the early close (#1460, #1461)
 
-### Phase 1
+### Phase 1 ✓
 
 - **Red first** (one commit): the tests marked Red fail on the base copies of the two source files.
 - Do D1, D2, D4 in `discovery-queue.ts`; drop the caller's reject and rewrite its comment (`discovery-flow.ts:113-122`) to the new rule. Do D3.
@@ -87,8 +87,9 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 - **Gate**:
   - `bun run lint`; `bun run lint:actions`; `bun run typecheck:all`; `bun run --cwd packages/wallet-bridge test --retry=0`; `bun run --cwd apps/extension test src/wallet/services/window-manager src/wallet/services/wallet-sdk src/wallet/services/passkey src/wallet/services/dapp-interaction --retry=0`; `bun run test:all`.
   - From the root: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/connect-locked-queue.test.ts tests/e2e/network/connect-locked-queue-sw-restart.test.ts tests/e2e/network/connect-deny.test.ts tests/e2e/network/window-placement.test.ts`, then with `NULO_E2E_BROWSER=firefox` added.
-  - Before the network runs (they rebuild `dist/`), build with CI's smoke flags: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`; from `apps/extension`, `env -u EXTENSION_PATH NULO_E2E_RETRY=0 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/toolbar-panel.test.ts`; then the same flags with `build:firefox`, and the run with `NULO_E2E_BROWSER=firefox` added.
+  - Before the network runs (they rebuild `dist/`), build with CI's smoke flags: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`; from `apps/extension`, `env -u EXTENSION_PATH NULO_E2E_RETRY=0 NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/passkey-paths.test.ts tests/e2e/toolbar-panel.test.ts` (the second runs on Firefox only); then the same flags with `build:firefox`, and the run with `NULO_E2E_BROWSER=firefox` added.
   - Pass: every command exits 0; the two red tests fail on the base copies. Record each browser's wall-clock. No e2e scenario is added: no browser can order a removal before `create`'s answer on demand, and the queue is pure.
+- **Result** (`1003743fb` red, `e660abf83` fix, review fixes `0dcec23fc`): lint, lint:actions, typecheck:all, test:all exit 0 on the head. Red evidence and the mutation check: `lessons/phase-1.md`. Smoke at retry 0: Chrome 3/3 (24 s), Firefox 9/9 (165 s). Network at retry 0: Chrome 5 passed, 1 Firefox-only skipped (221 s); Firefox 6/6 (270 s).
 
 ## Arc 2: a call string the card cannot print whole (#1380; after OA-1)
 
@@ -106,6 +107,7 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 | D1–D4 | as above | see Alternatives not taken |
 | Arcs | #1460 and #1461 ship together (dApp windows and the connect lifecycle, no UI question); #1380 waits on OA-1 | one PR for all three (holds two fixes behind an owner question) |
 | Badge | a correctness fix, no owner ask (Codex r1 agrees) | Opus r1: a one-line owner acknowledgement. Rejected: the owner already decided the behaviour by promoting #1460 with its Expected line; the count rule, copy and colour stay |
+| Smoke files | `passkey-paths.test.ts` on both browsers, plus `toolbar-panel.test.ts` on Firefox | `toolbar-panel.test.ts` alone (deviation: it is Firefox-only; on Chrome the passkey ceremony runs in a `WindowManager` window during `passkey-paths.test.ts`) |
 | Fields over 0xFF in a `str<N>` | no action: they print through `fromCharCode`, fail the contract's `u8` check, so the call fails; OA-1 option E would refuse them | a check in arc 1 (Opus r1 labels it plausible, the consequence is a failed call) |
 
 ## Audit verdicts
@@ -115,6 +117,9 @@ The claims held. Not in the issues: (a) a dApp that resends one `requestId` whil
 | Codex r1 | reject: row ownership, I1, the drain's re-queue | all 8: ownership in D2 (1), F3 (2), timestamps (3), re-queue via `admit` (4), detach-aware buffer (5), I2 (6), OA-1 corrected with option E, a UTF-8 fixture (7), `lint:actions` (8) | an ingress refusal of a reused id (out of scope, #127) |
 | Codex final r2 (resumed) | reject: origin is not ownership; the caller's reject can delete a successor | both: entries keep the SDK object, `rejectOwned` checks identity, the queue owns every reject, tests for same-id resends in the drain and a delayed first `enqueue` | none |
 | Codex final r3 (resumed) | approve: no new material finding | none | none |
+| Arc 1 Codex r1 | conditional approve: a same-id resend repeats the `info` push line; the detach test detached before the close; the queue's red run fails on the API | the log level, the test order (a mutation check proves it), the old-API probe as the red evidence | the long constructor comment (pre-existing, untouched) |
+| Arc 1 Opus | conditional approve: the detach test, the push line, the cap comment | all three | none |
+| Arc 1 Codex r2 (resumed) | approve | none | none |
 | Opus r1 | conditional approve | incoming liveness (1), resend dropped first (2), `debug` levels (3), re-queue (4), detach and the dead fence (5), extraction names (6), test wording and captured outcome (7), F2, F4 (8), OA-1 reach and A plus E (9), `audit:vue` in arc 2 | the badge acknowledgement (ledger); I1 "holds" (kept as disputed, D1 does not depend on it) |
 
 ## Delivery

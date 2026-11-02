@@ -6,3 +6,6 @@
 - 2026-11-02: Opus r1 conditional approve; plan revised (incoming liveness, resend dropped first, debug levels, extraction names, arc 2 audit:vue, OA-1 reach); final Codex pass next.
 - 2026-11-02: Codex final r2 reject (ownership by origin); revised to SDK object identity, the queue owns every reject; r3 next.
 - 2026-11-02: Codex final r3 approve. Plan committed; arc 1 starts (auto-continue).
+- 2026-11-02: arc 1 phase 1 code in (1003743fb red tests, e660abf83 fix); lint, lint:actions, typecheck:all, test:all green; Codex arc r1 conditional approve (log level, detach test order).
+- 2026-11-02: review loop converged (Codex arc r2 approve; Opus folded). Smoke e2e green at 0dcec23fc: Chrome passkey-paths 3/3 (24 s), Firefox passkey-paths + toolbar-panel 9/9 (165 s).
+- 2026-11-02: network e2e green at 0dcec23fc: Chrome 5 passed, 1 skipped (221 s); Firefox 6/6 (270 s). Final-head lint, lint:actions, typecheck:all, test:all green. Phase 1 ✓; PR next.
