@@ -308,6 +308,9 @@ then measured runtime, with each browser's suite wall-clock before and after in 
   teardown, so it is not vitest's test time. Report a cancelled, timed-out or rerun attempt apart,
   never folded in: a later attempt's envelope spans the gap between attempts.
 - **Scenario runtime** is the per-file duration vitest's reporter prints for the file.
+- **A local run reads each spec when its worker starts it, not at launch**, so an e2e file edited
+  while a timing run goes changes what that run measures: leave the e2e files alone until it ends,
+  and time a base on the base's own e2e files.
 - **What a launch costs** (one host, medians of five, 2026-10): a fresh launch + `registerProfile` +
   close is 5.0 s on Chrome (the worker's liveness 2.0 of it) and 9.2 s on Firefox (the driver 3.2).
   A stored onboarded profile per worker saves 0.7 s / 1.1 s per registered launch on smoke and
