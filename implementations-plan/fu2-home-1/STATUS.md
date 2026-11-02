@@ -10,3 +10,6 @@
 - 2026-11-02: arc 1 Codex loop: r1 reject, r2 reject, r3 approve; Opus diff review folded.
 - 2026-11-02: arc 1 final gates on the converged head: lint, typecheck:all, test:all, both armed builds, smoke e2e Chrome 274 s and Firefox 403 s, all green at retry 0.
 - 2026-11-02: arc 2 begun off dev (b21fcdac8). OA-1 B and OA-2 A recorded; P96-02 F, P96-03 D and P99-02 G added as D11-D13; filed #1563, #1564, #1565.
+- 2026-11-02: arc 2 red at the base (21 cases on their assertions), then green; lint, typecheck:all and the vitest list (167 files) green at retry 0. Base smoke e2e Chrome 437 s (11 files, green).
+- 2026-11-02: base smoke e2e Firefox 591 s (11 files, green; rerun with the base e2e files after the first read 665 s with two new scenarios in it).
+- 2026-11-02: arc 2 gate green at retry 0: lint, typecheck:all, test:all, both armed builds, smoke e2e Chrome 413 s (base 437 s) and Firefox 590 s in two batches (base 591 s), network type-role sweep 245 s. Captures in screenshots/ (a2-*). Codex loop next.
