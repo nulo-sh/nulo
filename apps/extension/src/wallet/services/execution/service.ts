@@ -26,7 +26,8 @@ import { ContactService } from "@/wallet/services/contact/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
-import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
+import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { TokenService } from "@/wallet/services/token/service"
 import { FpcService, FpcType } from "@/wallet/services/fpc/service"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
@@ -230,7 +231,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	private tokenService: TokenService = null!
 	private fpcService: FpcService = null!
 	private transactionService: TransactionService = null!
-	private authRegistryService: AuthRegistryService = null!
+	private authRegistryService: Pick<AuthRegistryService, "assertWithinCap" | "recordPendingAuthwits"> = null!
 	private taskService: TaskService = null!
 	private operationJournal: OperationJournalService = null!
 	private legal: LegalAcceptanceService = null!
@@ -324,7 +325,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		this.tokenService = services.get(TokenService.name)
 		this.fpcService = services.get(FpcService.name)
 		this.transactionService = services.get(TransactionService.name)
-		this.authRegistryService = services.get(AuthRegistryService.name)
+		this.authRegistryService = services.get<AuthRegistryService>(AUTH_REGISTRY_SERVICE_NAME)
 		this.taskService = services.get(TaskService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.legal = services.get(LegalAcceptanceService.name)
