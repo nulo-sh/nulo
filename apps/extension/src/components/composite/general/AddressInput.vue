@@ -36,12 +36,11 @@ const onNativeBlur = () => {
 	focused = false
 	pinStart()
 }
-// A pasted address is checked by its start, so a paste shows the start even while focused; typing
-// keeps the browser's caret-following scroll. Chrome and Firefox scroll to the caret after the
-// paste's `input` event, so the reset waits for the next frame.
+// A paste shows the address's start; any later input keeps the caret in view. Chrome and Firefox
+// reveal the caret after a paste's `input` event, so the reset waits for the next frame.
 const onNativeInput = (event: Event) => {
-	if ((event as InputEvent).inputType !== "insertFromPaste") return
 	cancelAnimationFrame(pasteFrame)
+	if ((event as InputEvent).inputType !== "insertFromPaste") return
 	pasteFrame = requestAnimationFrame(() => {
 		if (inputEl) inputEl.scrollLeft = 0
 	})

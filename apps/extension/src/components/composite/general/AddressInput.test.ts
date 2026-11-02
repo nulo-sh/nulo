@@ -62,6 +62,18 @@ describe("composite/AddressInput", () => {
 		expect(el.scrollLeft).toBe(scrollLeft)
 	})
 
+	test("focused: a key typed before the paste's frame keeps the caret's scroll", async () => {
+		const w = mountInput()
+		const input = w.find("input")
+		const el = input.element as HTMLInputElement
+		await input.trigger("focus")
+		el.dispatchEvent(new InputEvent("input", { inputType: "insertFromPaste" }))
+		el.scrollLeft = 99
+		el.dispatchEvent(new InputEvent("input", { inputType: "insertText" }))
+		await new Promise((resolve) => requestAnimationFrame(resolve))
+		expect(el.scrollLeft).toBe(99)
+	})
+
 	test("on blur, the input is pinned back to the start", async () => {
 		const w = mountInput()
 		const input = w.find("input")

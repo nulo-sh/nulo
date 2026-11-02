@@ -1,5 +1,3 @@
-/** Which side Send starts a token on. */
-
 import { parseSide } from "@/utils/token-amount"
 
 export type SendSide = "private" | "public"
