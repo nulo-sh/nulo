@@ -43,6 +43,19 @@ describe("FilePasswordSection", () => {
 		expect(nativeInput(w, CONFIRM).placeholder).toBe("Repeat password")
 	})
 
+	it("labels the second field Repeat password only when the page asks", () => {
+		const labels = (w: VueWrapper) => w.findAll(".export_section_label").map((label) => label.text())
+		expect(labels(mountOwned().w)).toEqual(["File password"])
+
+		const { w } = mountOwned({ labelRepeat: true })
+		expect(labels(w)).toEqual(["File password", "Repeat password"])
+		const repeat = w.findAll(".export_section_label")[1].element
+		const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+		expect(follows(nativeInput(w, FIELD), repeat) && follows(repeat, nativeInput(w, CONFIRM))).toBe(true)
+		expect(nativeInput(w, CONFIRM).getAttribute("aria-labelledby")).toBe(repeat.id)
+		expect(repeat.id).not.toBe("")
+	})
+
 	it("typing writes each model on its own", async () => {
 		const { w, password, repeated } = mountOwned()
 		typeNow(nativeInput(w, FIELD), "abc")

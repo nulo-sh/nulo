@@ -213,6 +213,7 @@ declare global {
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
   const formatTransferType: typeof import('../utils/tx-enrichment').formatTransferType
+  const fullBackupFileName: typeof import('../utils/full-backup-helpers').fullBackupFileName
   const gasHoldings: typeof import('../utils/get-started').gasHoldings
   const getAccount: typeof import('../utils/core').getAccount
   const getCurrentInstance: typeof import('vue').getCurrentInstance
@@ -1089,6 +1090,7 @@ declare module 'vue' {
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>
     readonly formatTransferType: UnwrapRef<typeof import('../utils/tx-enrichment')['formatTransferType']>
+    readonly fullBackupFileName: UnwrapRef<typeof import('../utils/full-backup-helpers')['fullBackupFileName']>
     readonly gasHoldings: UnwrapRef<typeof import('../utils/get-started')['gasHoldings']>
     readonly getAccount: UnwrapRef<typeof import('../utils/core')['getAccount']>
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>

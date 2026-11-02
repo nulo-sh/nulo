@@ -34,6 +34,13 @@ export const MAX_BACKUP_FILE_BYTES = 64 * 1024 * 1024
 
 export type BackupFileType = "plain" | "encrypted" | "unknown"
 
+/** A full backup's file name: the person's local date, and no profile name, since a downloads
+ *  listing is not private. The browser makes a second file of the same day unique. */
+export function fullBackupFileName(now: Date): string {
+	const pad = (n: number) => String(n).padStart(2, "0")
+	return `nulo-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.txt`
+}
+
 /**
  * A picked full backup. Its content stays untrusted (`unknown`) until `validateAndMigrateBackup`;
  * every kind carries `backup` and `profileType`, so a reader that checks `profileType` first needs no
