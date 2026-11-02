@@ -1,7 +1,7 @@
 ---
 plan: fu2-onboarding-1
 tier: light
-status: arc 1 merged (#1542); arcs 2 and 3 in one PR
+status: completed (arc 1 merged as #1542; arcs 2 and 3 and the close-out awaiting merge)
 issues: "#1512, #1515 (arc 1); #1511 (arc 2); #1513, #1514, #1516 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 1e6c5bc1f
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. Arc 1 (#1512, #1515) landed as #1542; arcs 2 and 3 (#1511, #1513, #1514, #1516) and this close-out in one PR.
+- **Shipped**: Ready's line in plain words, and Back that stays on Ready (arc 1). A three-word phrase check between the phrase step and Ready, each word picked by its position from words of the same phrase, with Do it later kept; only a pass marks the phrase saved (arc 2). Create's title and password submit read Create profile, Import's title Import profile; one passkey text on Create and the popup's new profile; the reuse link reads Use a Nulo passkey I already have on all four pages; before setup is finished the popup says so, and its button brings the setup tab forward or opens a new one (arc 3).
+- **Known limits**: #1536, #1539.
+- **Dispositions**: the shared passkey text joined `PASSKEY_COPY`, no new module (D15); the group label's case comes from the field-label role, asked on the PR (D14).
+- **Lessons**: "a toolbar popup dies when a tab it opens takes focus" joined the closing-window line of `lessons.md`, with wording trims to stay in budget.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+- **Size**: over the light target (three arcs, the owner's answers, the deviation ledger).
 
 # fu2-onboarding-1: the phrase check, the done line, Back on You're in, Create profile, the passkey text, the popup before setup
 
