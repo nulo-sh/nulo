@@ -38,6 +38,12 @@ const at = computed(() => cells.value.findIndex((cell) => cell.step === props.cu
 	grid-template-columns: repeat(4, 1fr);
 }
 
+@media (width < 359px) {
+	.four {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
 .cell {
 	display: flex;
 	flex-direction: column;

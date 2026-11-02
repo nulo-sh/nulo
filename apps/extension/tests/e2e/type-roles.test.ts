@@ -72,6 +72,7 @@ import {
 	type TypeReading,
 	withBlockedAccount,
 } from "./fixtures/type-roles"
+import { TEST_PASSWORD } from "./fixtures/constants"
 import { skipUnlessListPrices } from "./fixtures/token-list"
 import {
 	type ActivityScope,
@@ -1106,16 +1107,35 @@ test("a contact on Send and in Contacts, a contacts file, an unnamed FPC, New se
 	expect(ctx.pageErrors).toEqual([])
 }, 240_000)
 
-test("the large CTA on onboarding's create step holds its role and box", async ({ freshExtensionPerTest: ctx }) => {
+test("onboarding's every page fits the narrow width, and the large CTA on its create step holds its role and box", async ({
+	freshExtensionPerTest: ctx,
+}) => {
 	const page = await openOnboarding(ctx)
-	await clickByTestId(page, "onboarding-welcome-create")
-	await waitForHash(page, "#/onboarding/create")
-	await page.waitForSelector(sel("onboarding-submit-create"), VISIBLE)
-	// Onboarding is a tab with a floor of its own, never shown in a sidebar.
-	await expectPageClean(page, "onboarding create", [], { narrow: false })
+	const visit = async (hash: string, testid: string, label: string) => {
+		await page.evaluate((h) => {
+			location.hash = h
+		}, hash)
+		await waitForHash(page, hash)
+		await page.waitForSelector(sel(testid), VISIBLE)
+		await expectPageClean(page, label)
+	}
+	await expectPageClean(page, "onboarding welcome")
+	await visit("#/onboarding/terms", "legal-terms-page", "onboarding terms")
+	await visit("#/onboarding/import", "onboarding-import-page", "onboarding import")
+	await visit("#/onboarding/create", "onboarding-submit-create", "onboarding create")
 	await expectButtons(page, "onboarding-submit-create")
+	await clickByTestId(page, "onboarding-method-password")
+	await replaceInputValue(page, sel("onboarding-password-input"), TEST_PASSWORD)
+	await replaceInputValue(page, sel("onboarding-password-confirm"), TEST_PASSWORD)
+	await clickByTestId(page, "onboarding-submit-create")
+	await page.waitForSelector(sel("onboarding-phrase-saved"), { visible: true, timeout: 30_000 })
+	await expectPageClean(page, "onboarding phrase")
+	await clickByTestId(page, "onboarding-phrase-saved")
+	await waitForHash(page, "#/onboarding/done")
+	await page.waitForSelector(sel("onboarding-done-open"), VISIBLE)
+	await expectPageClean(page, "onboarding ready")
 	expect(ctx.pageErrors).toEqual([])
-}, 120_000)
+}, 180_000)
 
 test("the compact CTA in the passkey ceremony dialog holds its role and box", async ({ freshExtensionPerTest: ctx }) => {
 	const page = await openPopup(ctx)
