@@ -22,6 +22,7 @@
  * estimator.
  */
 import AppFeeLine from "@/popup/components/modules/send/AppFeeLine.vue"
+import FeeCostReadout from "@/popup/components/modules/send/FeeCostReadout.vue"
 import FlaggedTokenBanner from "@/popup/components/modules/general/FlaggedTokenBanner.vue"
 import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
 import { isSelfPay } from "@nulo/wallet-bridge"
@@ -43,12 +44,24 @@ import DetailsToggle from "./DetailsToggle.vue"
 import OperationActionRow from "./OperationActionRow.vue"
 import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
-import { type FeePayerPick, paysFromPrivateFeeJuice } from "./fee-figure"
+import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
-import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
+import {
+	type CallSurface,
+	type CallerContext,
+	type WireCall,
+	accountOutflows,
+	authwitTitle,
+	callSurface,
+	rowTitle,
+	tokenAt,
+	wire,
+} from "./call-surface"
+import { pluralize } from "@/utils/plural"
 import { trimAddress } from "@/utils/string"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
@@ -74,6 +87,7 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
+	previewFailed?: boolean
 	/** Its estimate or preview waits behind another send. */
 	isQueued?: boolean
 	/** The authorizations an earlier window listed for this operation, for a window that only reads it. */
@@ -111,6 +125,7 @@ const props = defineProps<{
 const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	retryEstimate: [index: number]
+	retryPreview: [index: number]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
 	acknowledgeTokenFlag: [index: number, on: boolean]
@@ -139,10 +154,23 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+const outflows = computed(() =>
+	props.op.kind === "aztec_sendTx"
+		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId)
+		: [],
+)
 const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
 const privateFeeJuice = computed(() => paysFromPrivateFeeJuice(props.op))
+const appFeeFailed = computed(() => props.estimateFailed && !props.feeEstimate && !props.isEstimating)
+const appFeeRow = ref<{ $el: HTMLElement } | null>(null)
+/** The retry's button leaves with the failure, so a keyboard press keeps its place on the row. Read
+ *  `currentTarget` here, inside the click's dispatch: it is null once the dispatch ends. */
+const onRetryAppEstimate = (event: MouseEvent) => {
+	emit("retryEstimate", props.index)
+	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) appFeeRow.value?.$el.focus()
+}
 
 /** Only a contract the wallet registered as a token gets the transfer/mint vocabulary. */
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
@@ -195,12 +223,18 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
  *  NO_FROM operation, the fee estimate for a standard one; `send_transaction` adds none
  *  at confirm, and an embedded-fee standard operation skips discovery there too. Nothing is
  *  rendered when there is nothing to list: an absent row must not read as a claim of absence. */
-type AuthwitSurface = { kind: "list"; authwits: readonly DiscoveredAuthwit[] } | { kind: "pending" } | { kind: "hidden" }
+type AuthwitSurface =
+	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
+	| { kind: "pending" }
+	| { kind: "failed" }
+	| { kind: "hidden" }
 const authwitSurface = (op: UIOperation): AuthwitSurface => {
 	if (op.kind !== "aztec_sendTx") return { kind: "hidden" }
 	if (isNoFrom(op as SendLikeUIOp)) {
 		if (props.authwitPreview) return { kind: "list", authwits: props.authwitPreview.discoveredAuthwits }
-		return props.isPreviewing ? { kind: "pending" } : { kind: "hidden" }
+		if (props.isPreviewing) return { kind: "pending" }
+		// A refusal also fails the preview, and asking a refused request again cannot list anything.
+		return props.previewFailed && !props.refused ? { kind: "failed" } : { kind: "hidden" }
 	}
 	if (isEmbeddedFeePayment(op)) return { kind: "hidden" }
 	const listed = props.feeEstimate?.discoveredAuthwits ?? props.approvedAuthwits
@@ -226,6 +260,13 @@ const summaryAuthwits = computed(() =>
 
 const detailsOpen = ref(false)
 const detailsId = useId()
+const detailsToggle = ref<{ $el: HTMLElement } | null>(null)
+/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it,
+ *  read inside the click's dispatch as above. */
+const onRetryPreview = (event: MouseEvent) => {
+	emit("retryPreview", props.index)
+	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) detailsToggle.value?.$el.focus()
+}
 
 /** Which discovered authorizations the person closed: once the rows are open, an authorization's
  *  values are open too, so a raw one stays within two presses of the card at rest. */
@@ -308,17 +349,21 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					:calls="sendTxRows"
 					:authwits="summaryAuthwits"
 					:checkingAuthwits="authwits.kind === 'pending'"
+					:previewFailed="authwits.kind === 'failed'"
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
 					:advice="adviceSite?.on === 'calls'"
+					@retryPreview="onRetryPreview"
 				/>
 				<Flex :class="$style.group">
 					<DetailsToggle
+						ref="detailsToggle"
 						data-testid="execute-op-details-toggle"
 						:open="detailsOpen"
 						:controls="detailsId"
 						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
 						@click="detailsOpen = !detailsOpen"
+						@keydown.enter="refuseRepeatEnter"
 					/>
 				</Flex>
 				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>
@@ -390,26 +435,50 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 		<div :class="$style.op_divider" />
 
+		<!-- Part of the card's own fee section: where a slot replaces that section, this goes too. -->
+		<template v-if="outflows.length && !$slots.fee">
+			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
+				<Text variant="label-section" color="secondary">Leaves your account</Text>
+				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
+					<Text variant="body" color="secondary" :class="$style.leaves_count">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
+					<Text variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
+				</Flex>
+			</Flex>
+			<div :class="$style.leaves_rule" />
+		</template>
+
 		<!-- A window that only reads the request draws its own fee block in place of the choice. -->
 		<slot v-if="$slots.fee" name="fee" />
 		<template v-else-if="isEmbeddedFeePayment(op)">
 			<Flex
+				ref="appFeeRow"
 				data-testid="execute-op-fee-set-badge"
-				align="start"
-				gap="8"
+				direction="column"
 				wide
+				tabindex="-1"
 				:aria-busy="isEstimating && !feeEstimate ? 'true' : undefined"
-				:class="$style.op_fee_set"
+				:class="$style.app_fee"
 			>
-				<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
-				<Flex direction="column" :class="$style.fee_lines">
-					<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
-						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
-					</AppFeeLine>
-					<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
-						Fee payment method set by
-						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
-					</Text>
+				<Flex v-if="appFeeFailed" direction="column" wide data-testid="execute-op-app-fee-failed" :class="$style.app_fee_failed">
+					<Flex direction="column" gap="4" :class="$style.app_fee_method">
+						<span :class="$style.fee_label">Fee</span>
+						<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-fee-method">
+							{{ privateFeeJuice ? `Private Fee Juice · set by ${appName}` : `Set by ${appName}` }}
+						</Text>
+					</Flex>
+					<FeeCostReadout failed :label="personPaysAppPayment(op) ? 'You pay' : `${appName} pays`" @retry="onRetryAppEstimate" />
+				</Flex>
+				<Flex v-else align="start" gap="8" wide :class="$style.op_fee_set">
+					<Icon v-if="!privateFeeJuice" name="square-check" size="14" color="green" />
+					<Flex direction="column" :class="$style.fee_lines">
+						<AppFeeLine v-if="feeEstimate || isEstimating" :feeEstimate="feeEstimate" :privateFeeJuice="privateFeeJuice">
+							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
+						</AppFeeLine>
+						<Text v-else variant="body" color="secondary" height="150" data-testid="execute-op-app-legend">
+							Fee payment method set by
+							<Text variant="name" color="primary" :class="$style.name_size" data-testid="execute-op-app-name">{{ appName }}</Text>
+						</Text>
+					</Flex>
 				</Flex>
 			</Flex>
 			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
@@ -426,7 +495,14 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					<Text variant="body" color="secondary">This app's fee contract may not cover this fee right now.</Text>
 				</Flex>
 			</div>
-			<Flex v-if="privateFeeJuice" align="start" gap="6" wide :class="$style.op_fee_set" data-testid="execute-op-private-fee-notice">
+			<Flex
+				v-if="privateFeeJuice"
+				align="start"
+				gap="6"
+				wide
+				:class="[$style.op_fee_set, appFeeFailed && $style.hairline]"
+				data-testid="execute-op-private-fee-notice"
+			>
 				<Icon name="info" size="14" color="secondary" aria-hidden="true" />
 				<Text variant="body" color="secondary">Your Private Fee Juice must cover this fee.</Text>
 			</Flex>
@@ -683,9 +759,51 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 	background: var(--nulo-border);
 }
 
+.leaves {
+	padding: 12px 12px 4px;
+}
+
+/* A long total wraps inside its own column; the count beside it keeps one line. */
+.leaves_count {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.leaves_rule {
+	height: 1px;
+	margin: 8px 12px 0;
+	background: var(--nulo-border);
+}
+
 .op_fee_set {
 	padding: 12px;
 	background: var(--nulo-surface-low);
+}
+
+/* Inset: the card's `overflow: hidden` would clip a ring drawn outside the row. */
+.app_fee:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: -2px;
+}
+
+/* An app's name may be 64 characters with no break in them, in the method and in the payer's label.
+ * The fee card's row pads 10 px below its words; this block pads 12, as its method line does. */
+.app_fee_failed {
+	padding-bottom: 2px;
+	background: var(--nulo-surface-low);
+	overflow-wrap: anywhere;
+}
+
+.app_fee_method {
+	padding: 12px;
+}
+
+.fee_label {
+	composes: fee_label from "@/popup/components/modules/send/fee-shared.module.css";
+}
+
+.hairline {
+	border-top: 1px solid var(--hairline-soft);
 }
 
 .flag_banner {

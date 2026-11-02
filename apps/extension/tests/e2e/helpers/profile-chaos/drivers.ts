@@ -9,7 +9,7 @@ import { openProfileChooser, waitForLockScreen } from "../../fixtures/auth"
 import { extensionUrl, gotoExtensionPage, stopBackground } from "../../fixtures/browser"
 import { clickByTestId, replaceInputValue } from "../../fixtures/dom"
 import { answerWithCredential, holdNextGet, withholdGetPrf } from "../../fixtures/passkey"
-import { confirmProfileReset, readRecoveryWords } from "../../fixtures/profiles"
+import { confirmProfileReset, passPhraseCheck, readRecoveryWords } from "../../fixtures/profiles"
 import { lockFromAnotherWindow } from "../../fixtures/session"
 import { settleClosedPopup } from "../../fixtures/popup-leave"
 import { waitForPopupClosed } from "../../fixtures/popups"
@@ -213,8 +213,10 @@ const onboardingCreate: Drivers["onboardingCreate"] = async (s, p, step, before)
 	)
 	if (shown.outcome !== "committed" || !shown.settle.reached) return shown
 	if (p.method === "passkey") await answeredCredentials(s, page, ceremoniesFor(before, credential))
-	learnWords(s, profileOf(nextOf(step), p.ref)?.phrase, await readRecoveryWords(page, "onboarding-phrase"))
+	const words = await readRecoveryWords(page, "onboarding-phrase")
+	learnWords(s, profileOf(nextOf(step), p.ref)?.phrase, words)
 	await clickByTestId(page, p.answer === "saved" ? "onboarding-phrase-saved" : "onboarding-phrase-later")
+	if (p.answer === "saved") await passPhraseCheck(page, words)
 	await waitForRoute(page, "#/onboarding/done", 10_000)
 	await page.waitForSelector('[data-testid="onboarding-done-open"]', { visible: true, timeout: 10_000 })
 	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))

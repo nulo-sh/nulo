@@ -22,7 +22,7 @@ import { awaitProfileActivation } from "@/composables/unlockWait"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor, releaseOwnWindow } from "@/utils/own-window"
 import { backCtaBlocked, restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorCtas } from "@/utils/full-backup-ctas"
-import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import { openingFlowLive } from "@/popup/opening-flow"
 import { resolveFullBackupEnterAction } from "./import-helpers"
 import { retryResultText, withNetworkNames } from "@/components/composite/import/restore-warning"
@@ -50,10 +50,10 @@ const router = useRouter()
 const type = computed(() => (route.query.type === "recovery" ? "recovery" : "import"))
 const backTo = computed(() => String(route.query.from || "/popup/register"))
 
-// First-time install / deep-link bypass: redirect to onboarding tab when
-// no profile exists AND onboarding hasn't been completed. Shared helper at
-// @/wallet/utils/onboarding-tab; same predicate as register + profile/new.
-onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
+// Before setup is finished in its tab, register is the popup's one page: it says where setup goes on.
+onBeforeMount(async () => {
+	if (await setupWaitsInTab(appStore)) router.replace("/popup/register")
+})
 
 // Popup activation is listener-based: the SW's activation fires `popup/app.vue`'s
 // `onActiveProfileChanged`, which bootstraps and flips `appStore.isLogined`. completeImport waits

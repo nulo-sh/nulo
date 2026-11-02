@@ -32,6 +32,7 @@ import {
 } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import { shownText } from "../../../../tests/helpers/shown-text"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
@@ -426,5 +427,137 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		const w = await mountCard({ isPreviewing: true, ...(await decodeFixture()) }, op)
 		expect(read(w, "execute-op-authwits-pending")).toEqual(["Checking authorizations…"])
 		expect(w.find('[data-testid="execute-op-details"]').exists()).toBe(false)
+	})
+})
+
+describe("OperationCard — a default-entrypoint send whose authorization preview failed", () => {
+	const noFrom = () => ({
+		...(fixtureOp() as object),
+		executionMode: "default_entrypoint",
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
+	const failedLine = (w: VueWrapper) => w.find('[data-testid="execute-op-authwits-preview-failed"]')
+	const retry = (w: VueWrapper) => w.get('[data-testid="execute-op-authwits-preview-retry"]')
+
+	test("the list collapses to one line that says so; Try again asks the preview again, which reads as checking, then lists", async () => {
+		const w = await mountCard({ previewFailed: true, ...(await decodeFixture()) }, noFrom())
+		expect(failedLine(w).get(".color--txt-danger").text()).toBe("Authorizations couldn't be previewed")
+		expect(retry(w).text()).toBe("Try again")
+		expect(w.find('[data-testid="execute-op-summary-authwits-section"]').exists()).toBe(false)
+
+		await retry(w).trigger("click")
+		expect(w.emitted("retryPreview")).toEqual([[0]])
+		await w.setProps({ previewFailed: false, isPreviewing: true })
+		expect([failedLine(w).exists(), read(w, "execute-op-authwits-pending")]).toEqual([false, ["Checking authorizations…"]])
+		await w.setProps({ isPreviewing: false, authwitPreview: { previewId: "pv", discoveredAuthwits: AUTHWITS } })
+		expect(failedLine(w).exists()).toBe(false)
+		expect(w.findAll('[data-testid="execute-op-summary-authwit"]')).toHaveLength(2)
+	})
+
+	test("a refused request, or one the wallet estimates instead, shows no line; the same failure unrefused does", async () => {
+		const decoded = await decodeFixture()
+		expect(failedLine(await mountCard({ previewFailed: true, refused: true, ...decoded }, noFrom())).exists()).toBe(false)
+		expect(failedLine(await mountCard({ previewFailed: true, ...decoded })).exists()).toBe(false)
+		expect(failedLine(await mountCard({ previewFailed: true, ...decoded }, noFrom())).exists()).toBe(true)
+	})
+
+	test("a keyboard press moves on to Show all details, which refuses a held Enter's repeat; a pointer press leaves focus", async () => {
+		const w = mount(OperationCard, {
+			props: { op: noFrom() as never, index: 0, tokens: [USDC_TOKEN], previewFailed: true, ...(await decodeFixture()) },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+			attachTo: document.body,
+		})
+		await flushPromises()
+		await retry(w).trigger("click")
+		expect(document.activeElement).not.toBe(toggle(w).element)
+
+		const destination = toggle(w).element
+		vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+		await retry(w).trigger("click")
+		expect(w.emitted("retryPreview")).toEqual([[0], [0]])
+		await w.setProps({ previewFailed: false, isPreviewing: true })
+		expect(failedLine(w).exists()).toBe(false)
+		expect([toggle(w).element, document.activeElement]).toEqual([destination, destination])
+		expect(sendEvent(destination, "keydown", { key: "Enter", repeat: true })?.defaultPrevented).toBe(true)
+		expect(sendEvent(destination, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
+		w.unmount()
+	})
+})
+
+describe("OperationCard — what leaves the account opens the fee section", () => {
+	const TST = { ...USDC_TOKEN, id: 2, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 }
+	const kinds: Record<string, string> = { from: "address", to: "address", amount: "integer", authwit_nonce: "field" }
+	/** `transfer_in_public(from, to, amount, nonce)` on `contract` as the wire carries it, with its Token decode. */
+	const transfer = (contract: string, from: string, amount: bigint) => {
+		const args = [from, RECIPIENT, field(amount), field(0n)]
+		const roles = ["from", "to", "amount", "authwit_nonce"]
+		const call = {
+			name: "transfer_in_public",
+			to: contract,
+			selector: vocabularySelector("transfer_in_public", 4),
+			type: "public",
+			isStatic: false,
+			args,
+		}
+		const decoded: DecodedCall = {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_in_public",
+			params: roles.map((role, i) => ({
+				name: role,
+				value: { kind: kinds[role], value: role === "amount" ? amount.toString() : args[i] } as never,
+			})),
+		}
+		return { call, decoded }
+	}
+	const exit = {
+		call: { name: "exit_to_l1", to: HUB, selector: "0x5a3e1b2c", type: "private", isStatic: false, args: [USDC, field(1n)] },
+		decoded: {
+			kind: "decoded",
+			contract: "Hub",
+			fn: "exit_to_l1",
+			params: [{ name: "token", value: { kind: "address", value: USDC } }],
+		} as DecodedCall,
+	}
+	const request = (parts: { call: unknown; decoded: DecodedCall }[]) => ({
+		op: { ...(fixtureOp() as object), exec: { calls: parts.map((p) => p.call) } },
+		decodedCalls: parts.map((p) => p.decoded),
+	})
+	const e18 = 10n ** 18n
+	const leaves = (w: VueWrapper) => w.find('[data-testid="execute-op-leaves-account"]')
+	const rows = (w: VueWrapper) => w.findAll('[data-testid="execute-op-leaves-row"]').map((r) => r.findAll("span").map((t) => t.text()))
+
+	test("three transfers and a hub call: per token, how many transfers and their sum, after the calls and before the fee; the hub call adds no row", async () => {
+		const { op, decodedCalls } = request([
+			transfer(VAULT, MAIN, 4n * e18),
+			exit,
+			transfer(VAULT, MAIN, 2n * e18),
+			transfer(USDC, MAIN, 10_000_000n),
+		])
+		const w = await mountCard({ tokens: [USDC_TOKEN, TST], decodedCalls }, op)
+		expect(leaves(w).find("span").text()).toBe("Leaves your account")
+		expect(rows(w)).toEqual([
+			["2 transfers", "6 TST"],
+			["1 transfer", "10 USDC"],
+		])
+		const summary = w.get('[data-testid="execute-op-summary"]').element
+		const fee = w.get("fee-settings-card-stub").element
+		expect(summary.compareDocumentPosition(leaves(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(leaves(w).element.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+
+	test("nothing this account sends, or a block that replaces the fee section: no rows; the same sends otherwise show them", async () => {
+		const others = request([transfer(VAULT, RECIPIENT, 4n * e18), exit])
+		expect(leaves(await mountCard({ tokens: [TST], decodedCalls: others.decodedCalls }, others.op)).exists()).toBe(false)
+
+		const own = request([transfer(VAULT, MAIN, 4n * e18)])
+		const replaced = mount(OperationCard, {
+			props: { op: own.op as never, index: 0, tokens: [TST], decodedCalls: own.decodedCalls },
+			slots: { fee: '<div data-testid="refusal" />' },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+		})
+		await flushPromises()
+		expect([leaves(replaced).exists(), replaced.find('[data-testid="refusal"]').exists()]).toEqual([false, true])
+		expect(rows(await mountCard({ tokens: [TST], decodedCalls: own.decodedCalls }, own.op))).toEqual([["1 transfer", "4 TST"]])
 	})
 })

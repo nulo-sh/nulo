@@ -1,6 +1,8 @@
 # fu2-onboarding-1: owner asks
 
-Four asks. None concerns Ready (`#/onboarding/done`), the one surface arc 1 changes: arc 1 ships P93-17 and P93-49 word for word. OA-2 concerns arc 2 (the check); OA-1, OA-3 and OA-4 concern arc 3. Each arc builds its "what ships now" form and opens its PR; it merges on your answer.
+Four asks, all answered. None concerns Ready (`#/onboarding/done`), the one surface arc 1 changes: arc 1 ships P93-17 and P93-49 word for word. OA-2 concerns arc 2 (the check); OA-1, OA-3 and OA-4 concern arc 3.
+
+**Answered 2026-11-02, about 19:10 UTC, in chat.** The owner read the four asks with their options and recommended answers and wrote: "All A". So OA-1 A, OA-2 A, OA-3 A and A, OA-4 A; each ask below carries its answer. That sign-off covers exactly these words.
 
 ## OA-1 (arc 3): the two "wallet" words left on Create and Import
 
@@ -10,7 +12,7 @@ Four asks. None concerns Ready (`#/onboarding/done`), the one surface arc 1 chan
   - **A (recommended)**: Create's password submit reads `CREATE PROFILE` (`CREATE WITH PASSKEY` stays), and Import's title reads `IMPORT PROFILE`. One word for the thing made, on every button and title.
   - **B**: Create's submit only; Import's title stays.
   - **C**: leave both as they are.
-- **What ships now**: C. Arc 3 changes Create's title only, as P93-30 B says.
+- **Answered (2026-11-02): A.** The owner: "All A". Create's password submit reads `Create profile` (drawn `CREATE PROFILE`), `Create with passkey` stays, and onboarding Import's title reads `IMPORT PROFILE`.
 
 ## OA-2 (arc 2): the words on the phrase check
 
@@ -20,7 +22,7 @@ Four asks. None concerns Ready (`#/onboarding/done`), the one surface arc 1 chan
   - **A (recommended)**: title `CHECK YOUR` / `PHRASE`; line `Pick 3 words by their position.` (your own words from the pick); group labels `Word 3`, `Word 11`, `Word 20` (numbers as the phrase grid shows them); button `Confirm`; refusal `Words don't match. Try again.` (as the password fields say `Passwords don't match`).
   - **B**: A, with the phrase step's title kept (`YOUR RECOVERY` / `PHRASE`), so the title does not change between the two screens.
   - **C**: your own wording for any of the five.
-- **What ships now**: A, on arc 2's branch. The PR carries its captures.
+- **Answered (2026-11-02): A.** The owner: "All A". Title `CHECK YOUR` / `PHRASE`; line `Pick 3 words by their position.`; group labels `Word 3`, `Word 11`, `Word 20`; button `Confirm`; refusal `Words don't match. Try again.`
 
 ## OA-3 (arc 3): the popup's button, and the case with no tab to bring forward
 
@@ -31,7 +33,7 @@ Four asks. None concerns Ready (`#/onboarding/done`), the one surface arc 1 chan
 - **Options for no tab found**
   - **A (recommended)**: the same sentence; the button opens a new setup tab, as the redirect does today. One screen for both cases.
   - **B**: when the saved tab is gone, the popup checks first and shows a second sentence, for example `Its tab is closed. Open it again to finish.`, with the same button opening a new tab.
-- **What ships now**: A and A.
+- **Answered (2026-11-02): A and A.** The owner: "All A". The button reads `Go to the tab`; when the saved tab is gone the same sentence and button show, and the button opens a new setup tab.
 
 ## OA-4 (arc 3): the passkey link on the two import pages
 
@@ -39,4 +41,4 @@ Four asks. None concerns Ready (`#/onboarding/done`), the one surface arc 1 chan
 - **Options**
   - **A (recommended)**: the link reads `USE A NULO PASSKEY I ALREADY HAVE` on all four pages. It does the same thing on each, and stays one text.
   - **B**: only on Create and the popup's new profile; the import pages keep today's text. The component then takes its text from each page.
-- **What ships now**: A.
+- **Answered (2026-11-02): A.** The owner: "All A". The link reads `USE A NULO PASSKEY I ALREADY HAVE` on all four pages, one text.

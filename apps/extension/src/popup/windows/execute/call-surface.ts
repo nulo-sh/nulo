@@ -6,6 +6,7 @@
  * default view.
  */
 
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { DecodedCall, DecodedGrant, DecodedParam, DecodedValue, UndecodedReason } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { formatBaseUnits } from "@/utils/amount"
@@ -190,6 +191,47 @@ export const amountLabel = (
 	const symbol = token ? safeWire(token.symbol, 16) : ""
 	if (!token || !symbol) return { text: amount }
 	return { text: formatBaseUnits(BigInt(amount), token.decimals), symbol }
+}
+
+/** An amount in the token's units with its symbol, or the raw integer, which the reader marks as
+ *  base units. */
+export const amountOf = (
+	tokens: readonly TokenInfo[] | undefined,
+	chainId: number | undefined,
+	contract: unknown,
+	amount: string,
+): { text: string; baseUnits: boolean } => {
+	const { text, symbol } = amountLabel(tokens, chainId, contract, amount)
+	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
+}
+
+export type AccountOutflow = { contract: string; count: number; amount: { text: string; baseUnits: boolean } }
+
+const sentBy = (sender: TransferSender, account: string): boolean => sender.kind !== "none" && sameFieldAddress(sender.address, account)
+
+/**
+ * Per token contract, the calls the wallet reads as a direct transfer from `account` to another
+ * address, counted and summed. A gross figure of what the calls say, not a balance change: a call it
+ * cannot read, and an authorization the transaction uses, add nothing.
+ */
+export const accountOutflows = (
+	rows: readonly { call: WireCall; surface: CallSurface }[],
+	account: string,
+	tokens: readonly TokenInfo[] | undefined,
+	chainId: number | undefined,
+): AccountOutflow[] => {
+	const sums = new Map<string, { contract: string; count: number; sum: bigint }>()
+	for (const { call, surface } of rows) {
+		if (surface.kind !== "transfer" || !sentBy(surface.sender, account) || sameFieldAddress(surface.to, account)) continue
+		const contract = wire(call.to, 80)
+		const prior = sums.get(contract.toLowerCase()) ?? { contract, count: 0, sum: 0n }
+		sums.set(contract.toLowerCase(), { contract, count: prior.count + 1, sum: prior.sum + BigInt(surface.amount) })
+	}
+	return [...sums.values()].map(({ contract, count, sum }) => ({
+		contract,
+		count,
+		amount: amountOf(tokens, chainId, contract, sum.toString()),
+	}))
 }
 
 /** A one-line reading of a decoded value. Trimmed and summarized for the row; `full` prints every

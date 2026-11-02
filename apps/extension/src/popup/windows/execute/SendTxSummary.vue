@@ -5,7 +5,7 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
 	type WireCall,
-	amountLabel,
+	amountOf,
 	authwitLine,
 	authwitTitle,
 	RAW_ADVICE,
@@ -26,14 +26,20 @@ const props = defineProps<{
 	tokens?: readonly TokenInfo[]
 	/** The window's closing advice follows the list of calls. */
 	advice?: boolean
+	previewFailed?: boolean
 }>()
+
+const emit = defineEmits<{ retryPreview: [event: MouseEvent] }>()
 
 const callRows = computed(() =>
 	props.calls.map(({ call, surface }) => ({
 		call,
 		surface,
 		title: rowTitle(call, surface),
-		amount: surface.kind === "transfer" || surface.kind === "mint" ? amountOf(call.to, surface.amount) : undefined,
+		amount:
+			surface.kind === "transfer" || surface.kind === "mint"
+				? amountOf(props.tokens, props.chainId, call.to, surface.amount)
+				: undefined,
 	})),
 )
 
@@ -46,16 +52,10 @@ const authwitRows = computed(() =>
 			authwit,
 			surface,
 			line,
-			amount: line.kind === "move" ? amountOf(authwit.consumer, line.amount) : undefined,
+			amount: line.kind === "move" ? amountOf(props.tokens, props.chainId, authwit.consumer, line.amount) : undefined,
 		}
 	}),
 )
-
-/** An amount in the token's units with its symbol, or the raw integer in base units. */
-const amountOf = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
-	const { text, symbol } = amountLabel(props.tokens, props.chainId, contract, amount)
-	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
-}
 </script>
 
 <template>
@@ -135,6 +135,12 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 	<Flex v-else-if="checkingAuthwits" :class="$style.section">
 		<Text variant="body" color="secondary" data-testid="execute-op-authwits-pending">Checking authorizations…</Text>
 	</Flex>
+	<Flex v-else-if="previewFailed" direction="column" gap="8" :class="$style.section" data-testid="execute-op-authwits-preview-failed">
+		<Flex justify="between" gap="12" wide :class="$style.collapsed">
+			<span :class="[$style.collapsed_text, 'color--txt-danger']">Authorizations couldn't be previewed</span>
+			<button type="button" :class="$style.retry" data-testid="execute-op-authwits-preview-retry" @click="emit('retryPreview', $event)">Try again</button>
+		</Flex>
+	</Flex>
 </template>
 
 <style module>
@@ -160,6 +166,23 @@ const amountOf = (contract: unknown, amount: string): { text: string; baseUnits:
 
 .marker {
 	flex: 0 0 10px;
+}
+
+.collapsed {
+	padding: 10px 12px;
+	border: 1px solid var(--nulo-border);
+	background: var(--nulo-surface-low);
+}
+
+.collapsed_text {
+	composes: type--body from global;
+	min-width: 0;
+}
+
+.retry {
+	composes: retry from "@/popup/components/modules/send/fee-shared.module.css";
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 /* A dApp names each call and supplies its addresses; a long unbroken one breaks inside the card. */

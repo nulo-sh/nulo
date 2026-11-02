@@ -17,7 +17,7 @@ function mountLink(props: Record<string, unknown> = {}) {
 
 describe("PasskeyReuseLink", () => {
 	it("reads exactly what it offers", () => {
-		expect(mountLink().text()).toBe("Use a passkey I already have")
+		expect(mountLink().text()).toBe("Use a Nulo passkey I already have")
 	})
 
 	it("is a native button that submits no form", () => {

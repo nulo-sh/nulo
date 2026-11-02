@@ -149,13 +149,12 @@ describe("onboarding import", () => {
 		expect(notices.clear).toHaveBeenCalledOnce()
 	})
 
-	test("a first-run import has no name field and reads Import / Wallet", async () => {
+	test("a first-run import has no name field and reads Import / Profile", async () => {
 		const w = await mountImport()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="onboarding-name-input"]').exists()).toBe(false)
-		expect(w.text()).toContain("Import")
-		expect(w.text()).toContain("Wallet")
-		expect(w.text()).not.toContain("Profile")
+		expect(w.getComponent(OnboardingStepHeader).props()).toMatchObject({ main: "Import", sub: "Profile" })
+		expect(w.text()).not.toContain("Wallet")
 		expect(w.text()).toContain("Restore from a recovery phrase or a full backup.")
 	})
 
@@ -364,7 +363,7 @@ const IMPORTING: OnboardingCta = ["Importing...", "onboarding-submit-import", tr
 const RETRY: OnboardingCta = ["Retry", "import-full-backup-retry-btn", false, "false", "cta_outline", "large"]
 const CONTINUE: OnboardingCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta", "large"]
 const VIEW_ERRORS: OnboardingCta = ["View errors", "import-full-backup-view-errors-btn", false, null, "cta_outline", "large"]
-const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a passkey I already have", testid, disabled, null, "", ""]
+const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a Nulo passkey I already have", testid, disabled, null, "", ""]
 const REUSE_BACKUP = REUSE("onboarding-import-backup-passkey-reuse")
 
 type Apis = { flow: NonNullable<typeof importFlow.api>; backup: NonNullable<typeof backupImport.api> }
