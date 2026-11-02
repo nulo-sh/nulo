@@ -873,6 +873,30 @@ describe("AccountService.importAccount — deletion fence", () => {
 		expect(h.dekWiped()).toBe(true)
 	})
 
+	test("a liveness read that fails, then a compensation whose row read fails: the account row stays and keeps its key", async () => {
+		let failNextRowRead = false
+		const h = await makeHarness({
+			chainLive: (call) => {
+				// Armed after the writes, so the duplicate check's read before them is untouched.
+				if (call === 2) failNextRowRead = true
+				return readFailsOnSecondCall(call)
+			},
+		})
+		const realGet = h.api.storage.local.get.bind(h.api.storage.local)
+		h.api.storage.local.get = (async (key: unknown) => {
+			if (failNextRowRead && key === accountKey) {
+				failNextRowRead = false
+				throw new Error("storage read failed")
+			}
+			return realGet(key as never)
+		}) as typeof h.api.storage.local.get
+
+		await expect(h.run()).rejects.toThrow(/^storage read failed$/)
+		expect((await h.keysLeft()).sort()).toEqual([accountKey, keyRowKey].sort())
+		expect(h.log).toEqual([`set:${keyRowKey}`, `set:${accountKey}`])
+		expect(added(h.emit)).toEqual([])
+	})
+
 	test("control: with no deletion both rows land and the account is announced", async () => {
 		const h = await makeHarness()
 		expect(await h.run()).toMatchObject({ profileId: "p1", chainId: 1, address: "0xI", type: 1, name: "I" })
