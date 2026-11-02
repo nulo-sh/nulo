@@ -6,3 +6,4 @@
 - 2026-11-02: panel round 1: Codex reject (D1 record order and stale toast, D4's residual, I2 false, keyboard copy, icon clearance, long names); all folded. Opus leg pending.
 - 2026-11-02: panel: Opus Plan leg conditional approve; five new findings folded; final Codex pass next
 - 2026-11-02: final fresh Codex pass: conditional approve, folded, approve on resume. Plan approved; arc 1 next.
+- 2026-11-02: arc 1 gate: lint, typecheck:all, vitest list, test:all, armed builds, smoke e2e Chrome (one red fixed: snackbar still-pointer premise) and Firefox, all green at retry 0.

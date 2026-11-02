@@ -1,7 +1,7 @@
 ---
 plan: fu2-home-1
 tier: light
-status: approved; arc 1 next
+status: arc 1 implemented; its Codex loop next
 issues: "#1523, #1524, #1527 (arc 1); #1525, #1526 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -97,6 +97,14 @@ Sign-off: page 93, signed 2026-11-02. P93-02 D, "Both B and C." (B: "The switch 
 3. Capture before (base build) and after, light, Chrome: the switch toast, Receive, the new-account toast, Home right after a switch. Use a scratch spec under `tests/e2e/`, delete it, and require `git status` clean under `apps/extension/tests/`. Copy the PNGs to `implementations-plan/fu2-home-1/screenshots/`.
 
 **Gate**, from the root: `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run src/popup/pages/settings/networks src/popup/components/popups src/popup/components/modules/general src/popup/pages/general.test.ts src/utils/get-started.test.ts src/popup/network-switch.test.ts src/utils/toast-call-sites.test.ts src/utils/copy-dash-ban.test.ts src/utils/type-role-ban.test.ts --retry=0)`; `bun run test:all`; the armed builds (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox`); `(cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/settings-crud.test.ts tests/e2e/accounts.test.ts tests/e2e/snackbar.test.ts tests/e2e/home-links.test.ts tests/e2e/security-backup.test.ts tests/e2e/stale-network.test.ts tests/e2e/type-roles.test.ts --retry=0)`, then with `NULO_E2E_BROWSER=firefox`; `bun run check:plans` after staging. Pass: every command exits 0 at retry 0; each new test red before, green after (a new export's test fails on its assertions, through a stub at the base); the e2e wall-clock before and after per browser recorded.
+
+**Status ✓ (2026-11-02).** Red at the base, green after; the gate passed at retry 0. Smoke e2e wall-clock for the gate's files, base → arc 1: Chrome 286 s → 290 s, Firefox 442 s → 483 s (S1b and S1c of `stale-network`, which touch no changed path, under a load average above 100). Captures: [screenshots/](screenshots/) (`a1-before-*`, `a1-after-*`).
+
+Deviations, the tree winning:
+- `general.test.ts`'s Fee Juice case "after one account held it…" also pinned the card leaving on a reset's new chain; it now reads the card held, greyed, until the read lands.
+- `snackbar.test.ts`'s still-pointer case pressed Receive's address where the snack used to open; the new line now sits there, so the pointer rests on it and the copy is pressed by testid. Same invariant: hover from a still pointer does not hold a success.
+- The card's label dims by class, with no testid: `[data-testid^="get-started-"]` lists the rows (the e2e `getStartedRows`).
+- A revisited network's funds are already read, so nothing holds there; the pending card shows on a first visit, where the captures are taken.
 
 ## Phase 2 (arc 2): the chip, Home and onboarding at 240 px
 
