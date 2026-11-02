@@ -10,10 +10,14 @@ vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrap = vi.hoisted(() => ({ bootstrapActiveProfile: vi.fn(), hydrateKnownProfile: vi.fn() }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => bootstrap }))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
-const lastActive = vi.hoisted(() => ({ set: vi.fn() }))
+const lastActive = vi.hoisted(() => ({
+	set: vi.fn(),
+	real: undefined as typeof import("@/utils/lastActiveProfile").setLastActiveProfileId | undefined,
+}))
 // The real pointer write, behind a spy a test can hold.
 vi.mock("@/utils/lastActiveProfile", async (importOriginal) => {
 	const mod = await importOriginal<typeof import("@/utils/lastActiveProfile")>()
+	lastActive.real = mod.setLastActiveProfileId
 	lastActive.set.mockImplementation(mod.setLastActiveProfileId)
 	return { ...mod, setLastActiveProfileId: lastActive.set }
 })
@@ -121,6 +125,8 @@ const page = (w: VueWrapper) => w.get('[data-testid="onboarding-import-page"]')
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	// `clearAllMocks` keeps queued once-values, which a test that failed early would hand on.
+	lastActive.set.mockReset().mockImplementation(lastActive.real!)
 	profileApi.getProfiles.mockResolvedValue([])
 	vi.stubGlobal("chrome", {
 		storage: {},
@@ -713,7 +719,10 @@ describe("onboarding import — a page the person left", () => {
 		lastActive.set.mockReturnValueOnce(written.promise)
 		const { w, imported } = await startPhraseImport()
 		await vi.waitFor(() => expect(lastActive.set).toHaveBeenCalledTimes(1))
+		const unless = (lastActive.set.mock.calls[0]?.[1] as { unless?: () => boolean } | undefined)?.unless
+		expect(unless?.()).toBe(false)
 		leave(w)
+		expect(unless?.()).toBe(true)
 		written.resolve()
 		await imported
 		expect(bootstrap.bootstrapActiveProfile).not.toHaveBeenCalled()

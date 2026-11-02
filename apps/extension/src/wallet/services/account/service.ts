@@ -236,8 +236,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		await this.importedKeys.sealLegacy(profileId, rowLock)
 	}
 
-	/** Deletes the profile's imported-key rows whose account is gone (a torn import that wrote the
-	 *  key but crashed before the account). */
+	/** Deletes the profile's imported-key rows whose account is gone: a torn import that wrote the
+	 *  key but crashed before the account, or a failed import whose rollback could not check its row. */
 	private async sweepOrphanImportedKeys(profileId: string): Promise<void> {
 		for (const row of await this.importedKeys.forProfile(profileId)) await this.deleteKeyIfOrphan(row)
 	}
@@ -821,9 +821,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * The duplicate check and both writes share one hold of the row's lock, the lock a create of the
 	 * same address takes, so neither can land between the other's check and write. Key row first:
-	 * a crash between the two writes leaves an orphan key (swept at the next unlock), never an account that
-	 * cannot sign. A failure after the key write removes the key once the account row is gone; the
-	 * duplicate refusal writes nothing.
+	 * a crash between the two writes leaves an orphan key (swept once a worker holds the profile's row
+	 * keys), never an account that cannot sign. A failure after the key write removes the key once the
+	 * account row is gone; the duplicate refusal writes nothing.
 	 */
 	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
 		const { profileId, chainId, address } = account
@@ -847,8 +847,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			await this.assertStillLive(account)
 			if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		} catch (rowErr) {
-			// A failed compensation can leave the account row standing, and it keeps its key; so does a
-			// failed check: an orphan key is swept later, an account without its key can never sign.
+			// A row a failed compensation left standing keeps its key, and so does any row the check cannot
+			// read: an orphan key is swept later, an account without its key can never sign.
 			if (keyWritten) await this.deleteKeyIfOrphan(account).catch(() => {})
 			throw rowErr
 		}
