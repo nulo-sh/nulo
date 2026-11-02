@@ -131,7 +131,7 @@ Single arc: branch `worktree-exec-window-1` → `dev`, `gh pr create`, ready, no
 
 ## Post-implementation
 
-Cites [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `c17dfc1bc`. Specific here: no step 1 (`code_review: off`). Step 2 runs once over the whole diff after phase 4: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, hard stop at three rounds, one Opus `general-purpose` review beside round 1. Step 4's close-out lands as the PR's final commits after `gh pr checks --watch`, `origin/dev` merged in first; the screenshots stay until the merge, since the PR body links them by SHA. Step 5: `agent-worktree done exec-window-1 --merged` once `implementations-plan/archive/exec-window-1/plan.md` is on `dev`.
+Cites [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `c17dfc1bc`. Specific here: no step 1 (`code_review: off`). Step 2 runs once over the whole diff after phase 4: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, hard stop at three rounds, one Opus `general-purpose` review beside round 1. Step 4's close-out lands as the PR's final commits after `gh pr checks --watch`, `origin/dev` merged in first; the screenshots stay until the merge, since the PR body links them by SHA. Step 5: `agent-worktree done exec-window-1 --merged` once `implementations-plan/archive/exec-window-1/plan.md` is on `dev`.
 
 ## Audit verdicts
 
