@@ -90,6 +90,7 @@ declare global {
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
+  const SENDS_IN_PROGRESS_KEY: typeof import('../composables/useSendsInProgress').SENDS_IN_PROGRESS_KEY
   const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
   const SETTING_UPDATE_FAILED: typeof import('../composables/useSettingUpdate').SETTING_UPDATE_FAILED
@@ -199,6 +200,7 @@ declare global {
   const feePicksKey: typeof import('../utils/profile-ui-keys').feePicksKey
   const feeText: typeof import('../utils/fee-estimation').feeText
   const fiatHeroCandidates: typeof import('../utils/hero-fit').fiatHeroCandidates
+  const filterPendingDoubleRender: typeof import('../utils/activity-rows').filterPendingDoubleRender
   const findMintSignature: typeof import('../utils/token-transfer-vocabulary').findMintSignature
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
   const finishRestoreOutcome: typeof import('../utils/restore-outcome').finishRestoreOutcome
@@ -270,6 +272,7 @@ declare global {
   const isFlaggedToken: typeof import('../utils/token-flag').isFlaggedToken
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
+  const isInFlightActivityOp: typeof import('../utils/journal-state').isInFlightActivityOp
   const isInFlightSend: typeof import('../utils/in-flight-send').isInFlightSend
   const isNewPasswordValid: typeof import('../utils/password').isNewPasswordValid
   const isPasskeyCancel: typeof import('../utils/passkey-copy').isPasskeyCancel
@@ -278,6 +281,7 @@ declare global {
   const isPrefersDarkScheme: typeof import('../utils/general').isPrefersDarkScheme
   const isPriceableHolding: typeof import('../utils/token-aggregate').isPriceableHolding
   const isProxy: typeof import('vue').isProxy
+  const isQueuedTransfer: typeof import('../utils/journal-state').isQueuedTransfer
   const isReactive: typeof import('vue').isReactive
   const isReadonly: typeof import('vue').isReadonly
   const isRef: typeof import('vue').isRef
@@ -294,11 +298,14 @@ declare global {
   const isWindowDocument: typeof import('../utils/window-document').isWindowDocument
   const journalAdded: typeof import('../utils/journal-mirror').journalAdded
   const journalCallTitle: typeof import('../utils/journal-state').journalCallTitle
+  const journalCardAmount: typeof import('../utils/journal-state').journalCardAmount
+  const journalCardAmountSymbol: typeof import('../utils/journal-state').journalCardAmountSymbol
   const journalCardIcon: typeof import('../utils/journal-state').journalCardIcon
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
   const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
   const journalDeleted: typeof import('../utils/journal-mirror').journalDeleted
+  const journalProgressWord: typeof import('../utils/journal-state').journalProgressWord
   const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
@@ -452,6 +459,9 @@ declare global {
   const selectedWithin: typeof import('../utils/selection').selectedWithin
   const sendFeePicksKey: typeof import('../utils/profile-ui-keys').sendFeePicksKey
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
+  const sendRecipient: typeof import('../utils/send-summary').sendRecipient
+  const sendSummary: typeof import('../utils/send-summary').sendSummary
+  const sendingLabel: typeof import('../composables/useSendsInProgress').sendingLabel
   const sentenceName: typeof import('../utils/string').sentenceName
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
   const settingItemProps: typeof import('../utils/settings-search').settingItemProps
@@ -571,6 +581,7 @@ declare global {
   const useSendFeeSelection: typeof import('../composables/useFeeSelection').useSendFeeSelection
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
+  const useSendsInProgress: typeof import('../composables/useSendsInProgress').useSendsInProgress
   const useSettingUpdate: typeof import('../composables/useSettingUpdate').useSettingUpdate
   const useSettingsRowHighlight: typeof import('../composables/useSettingsRowHighlight').useSettingsRowHighlight
   const useSlots: typeof import('vue').useSlots
@@ -733,6 +744,9 @@ declare global {
   export type { SendStageLineDeps, SendStageLine } from '../composables/useSendStageLine'
   import('../composables/useSendStageLine')
   // @ts-ignore
+  export type { SendsScope, SendToken, SendsJournalService, UseSendsInProgressOptions, SendsInProgress } from '../composables/useSendsInProgress'
+  import('../composables/useSendsInProgress')
+  // @ts-ignore
   export type { SponsorFundingVerdict, SponsorVerdicts, SponsorVerdictSources } from '../composables/useSponsorVerdicts'
   import('../composables/useSponsorVerdicts')
   // @ts-ignore
@@ -760,7 +774,7 @@ declare global {
   export type { AccountRowTarget } from '../utils/account-rows'
   import('../utils/account-rows')
   // @ts-ignore
-  export type { ActivityRowTx, ActivityRowJournal, ActivityRowIncoming, ActivityRow, BuildActivityRowsParams } from '../utils/activity-rows'
+  export type { ActivityRowTx, ActivityRowJournal, ActivityRowIncoming, ActivityRow, BuildActivityRowsParams, MinimalChainTx } from '../utils/activity-rows'
   import('../utils/activity-rows')
   // @ts-ignore
   export type { AmountRead, FormatBaseUnitsOpts } from '../utils/amount'
@@ -965,6 +979,7 @@ declare module 'vue' {
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
+    readonly SENDS_IN_PROGRESS_KEY: UnwrapRef<typeof import('../composables/useSendsInProgress')['SENDS_IN_PROGRESS_KEY']>
     readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
     readonly SETTING_UPDATE_FAILED: UnwrapRef<typeof import('../composables/useSettingUpdate')['SETTING_UPDATE_FAILED']>
@@ -1074,6 +1089,7 @@ declare module 'vue' {
     readonly feePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['feePicksKey']>
     readonly feeText: UnwrapRef<typeof import('../utils/fee-estimation')['feeText']>
     readonly fiatHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['fiatHeroCandidates']>
+    readonly filterPendingDoubleRender: UnwrapRef<typeof import('../utils/activity-rows')['filterPendingDoubleRender']>
     readonly findMintSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findMintSignature']>
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
     readonly finishRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['finishRestoreOutcome']>
@@ -1145,6 +1161,7 @@ declare module 'vue' {
     readonly isFlaggedToken: UnwrapRef<typeof import('../utils/token-flag')['isFlaggedToken']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
+    readonly isInFlightActivityOp: UnwrapRef<typeof import('../utils/journal-state')['isInFlightActivityOp']>
     readonly isInFlightSend: UnwrapRef<typeof import('../utils/in-flight-send')['isInFlightSend']>
     readonly isNewPasswordValid: UnwrapRef<typeof import('../utils/password')['isNewPasswordValid']>
     readonly isPasskeyCancel: UnwrapRef<typeof import('../utils/passkey-copy')['isPasskeyCancel']>
@@ -1153,6 +1170,7 @@ declare module 'vue' {
     readonly isPrefersDarkScheme: UnwrapRef<typeof import('../utils/general')['isPrefersDarkScheme']>
     readonly isPriceableHolding: UnwrapRef<typeof import('../utils/token-aggregate')['isPriceableHolding']>
     readonly isProxy: UnwrapRef<typeof import('vue')['isProxy']>
+    readonly isQueuedTransfer: UnwrapRef<typeof import('../utils/journal-state')['isQueuedTransfer']>
     readonly isReactive: UnwrapRef<typeof import('vue')['isReactive']>
     readonly isReadonly: UnwrapRef<typeof import('vue')['isReadonly']>
     readonly isRef: UnwrapRef<typeof import('vue')['isRef']>
@@ -1169,11 +1187,14 @@ declare module 'vue' {
     readonly isWindowDocument: UnwrapRef<typeof import('../utils/window-document')['isWindowDocument']>
     readonly journalAdded: UnwrapRef<typeof import('../utils/journal-mirror')['journalAdded']>
     readonly journalCallTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCallTitle']>
+    readonly journalCardAmount: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmount']>
+    readonly journalCardAmountSymbol: UnwrapRef<typeof import('../utils/journal-state')['journalCardAmountSymbol']>
     readonly journalCardIcon: UnwrapRef<typeof import('../utils/journal-state')['journalCardIcon']>
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
     readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
     readonly journalDeleted: UnwrapRef<typeof import('../utils/journal-mirror')['journalDeleted']>
+    readonly journalProgressWord: UnwrapRef<typeof import('../utils/journal-state')['journalProgressWord']>
     readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
@@ -1327,6 +1348,9 @@ declare module 'vue' {
     readonly selectedWithin: UnwrapRef<typeof import('../utils/selection')['selectedWithin']>
     readonly sendFeePicksKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['sendFeePicksKey']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
+    readonly sendRecipient: UnwrapRef<typeof import('../utils/send-summary')['sendRecipient']>
+    readonly sendSummary: UnwrapRef<typeof import('../utils/send-summary')['sendSummary']>
+    readonly sendingLabel: UnwrapRef<typeof import('../composables/useSendsInProgress')['sendingLabel']>
     readonly sentenceName: UnwrapRef<typeof import('../utils/string')['sentenceName']>
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>
     readonly settingItemProps: UnwrapRef<typeof import('../utils/settings-search')['settingItemProps']>
@@ -1446,6 +1470,7 @@ declare module 'vue' {
     readonly useSendFeeSelection: UnwrapRef<typeof import('../composables/useFeeSelection')['useSendFeeSelection']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
+    readonly useSendsInProgress: UnwrapRef<typeof import('../composables/useSendsInProgress')['useSendsInProgress']>
     readonly useSettingUpdate: UnwrapRef<typeof import('../composables/useSettingUpdate')['useSettingUpdate']>
     readonly useSettingsRowHighlight: UnwrapRef<typeof import('../composables/useSettingsRowHighlight')['useSettingsRowHighlight']>
     readonly useSlots: UnwrapRef<typeof import('vue')['useSlots']>
