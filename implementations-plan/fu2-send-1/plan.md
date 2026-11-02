@@ -134,8 +134,8 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 | Codex final (fresh) | conditional approve, arc 1 may proceed | OA-1's wording (no "adds up" promise; "at most" under B); the base-red proof with the testid alone; the pending seed for the arc 3 captures; the mirror's event replay as an arc 3 amendment needing approval (A4); `utils/in-flight-send.ts` named and set apart | none |
 | Codex final (resumed) | approve | none; arc 1 may proceed, arcs 2 and 3 wait on their asks; A4 not granted by the review | none |
 | Codex fix R1 (arc 1) | changes requested | cancel a pending paste reset on every input, so a key typed before the frame keeps the caret (test red with the old order); two comments trimmed | none |
-| Codex fix R2 (arc 1) | approve | D9's sweep sentence corrected | none |
 | Opus fix R1 (arc 1) | changes requested | the network fee walks pick Private after the public opening (D9), and `fee-methods.test.ts` joins the gate on both browsers; messages on the two new smoke assertions; Send's `flagged-send` capture in `token-list.test.ts` now shows Public, noted in the PR | none |
+| Codex fix R2 (arc 1) | approve | D9's sweep sentence corrected | none |
 
 ## Delivery
 
