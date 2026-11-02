@@ -76,12 +76,13 @@ const descriptionId = useId()
 const valueId = useId()
 
 /** An `external` row's anchor is named by all its text, so its click form is too: the words that
- *  say it leaves the wallet sit in its description or value, never its title. */
-const clickLabel = computed(() => {
+ *  say it leaves the wallet may sit in its description or value. Read at render, since slots are
+ *  not reactive. */
+const clickLabel = () => {
 	if (!props.external) return titleId
 	const description = (props.description || rowSlots.description) && descriptionId
 	return [titleId, description, props.value && valueId].filter(Boolean).join(" ")
-})
+}
 
 /** `disabled` decides first: a disabled row is inert whatever `to` or `@click` it carries. */
 const mode = computed(() => {
@@ -138,7 +139,7 @@ const Root = (_, { slots }) => {
 
 <template>
 	<Root>
-		<RowTarget v-if="mode === 'click'" :labelledby="clickLabel" />
+		<RowTarget v-if="mode === 'click'" :labelledby="clickLabel()" />
 		<RowTarget v-else-if="mode === 'stretched'" v-bind="linkAttrs" :to :labelledby="titleId" />
 
 		<Flex wide align="center" justify="between" gap="16" :class="$style.main">
