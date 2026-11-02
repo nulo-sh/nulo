@@ -486,8 +486,32 @@ describe("TokenSeeder — a failed marker read never feeds a write", () => {
 		await made.seeder.run()
 
 		expect(preview).toHaveBeenCalledTimes(1)
+		expect(fault.armed).toBe(false)
 		expect(made.deps.persist).not.toHaveBeenCalled()
 		expect((await readMarker())[KEY].outcome).toBe("deleted")
+	})
+
+	test("control: a commit whose marker read fails persists nothing, and the next pass persists once", async () => {
+		let fault: ReturnType<typeof markerReadFault> = null as never
+		let passes = 0
+		const preview = vi.fn(async (): Promise<SeedPreview> => {
+			if (++passes === 1) fault.arm()
+			return goodPreview()
+		})
+		vi.useFakeTimers({ toFake: ["Date"] })
+		const made = makeSeeder({ preview })
+		fault = markerReadFault(made.api.storage.local)
+		await made.seeder.markDeletedByUser("p1", CHAIN_ID, OTHER)
+
+		await made.seeder.run()
+		expect(made.deps.persist).not.toHaveBeenCalled()
+		skipBackoff()
+		await made.seeder.run()
+
+		expect(preview).toHaveBeenCalledTimes(2)
+		expect(made.deps.persist).toHaveBeenCalledTimes(1)
+		const marker = await readMarker()
+		expect([marker[KEY].outcome, marker[`${CHAIN_ID}:${OTHER}`].outcome]).toEqual(["seeded", "deleted"])
 	})
 
 	test("controls: the read-only answers keep today's fallback on a failed read", async () => {

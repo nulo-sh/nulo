@@ -25,7 +25,7 @@ export class ConfigStore implements IConfigStore {
 			// A failed or undecodable read must not veto the boot (this runs inside the runtime's
 			// `Promise.all`): memory stays on defaults and nothing is written, since `set()` builds each
 			// write on what storage holds.
-			console.error("ConfigStore.load: config unreadable, booting on defaults", { error })
+			console.error("ConfigStore.load: undecodable config, booting on defaults", { error })
 			return
 		}
 		if (storedConfig && typeof storedConfig === "object") {

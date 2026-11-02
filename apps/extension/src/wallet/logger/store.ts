@@ -165,7 +165,8 @@ export class LoggerStore implements ILoggerStore {
 	 * worker that wrote it. This worker's own lines stay.
 	 */
 	public async applyRetentionPolicy(): Promise<void> {
-		await this.rehydration
+		// A failed import is non-fatal to the boot, as at the entry point.
+		await this.rehydration?.catch(() => {})
 		this.persistEnabled = this.config.get("developerMode") === true
 		this.logs.resize(ringSize(this.logLevel))
 		if (this.persistEnabled) return
