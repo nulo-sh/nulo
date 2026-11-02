@@ -1,4 +1,4 @@
-/* History's empty state. A page whose body fails to load reads the same, its own colour on the title. */
+/* `.title` sets no colour: each page sets its own, which a shared one would contest by load order. */
 .banner {
 	max-width: 280px;
 	margin: 48px auto 0 auto;

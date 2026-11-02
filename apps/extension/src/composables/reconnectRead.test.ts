@@ -118,6 +118,20 @@ describe("createReconnectRead", () => {
 		expect(h.landed).toEqual(["new"])
 	})
 
+	test("a superseded read that fails marks nothing: the first open reads no more", async () => {
+		const client = { onConnected: new EventHandler<void>() }
+		const first = Promise.withResolvers<boolean>()
+		const run = vi.fn((_isCurrent: () => boolean) => (run.mock.calls.length === 1 ? first.promise : Promise.resolve(true)))
+		const reader = createReconnectRead(client, run)
+		void reader.read()
+		await reader.read()
+		first.resolve(false)
+		await flushPromises()
+		client.onConnected.invoke()
+		await flushPromises()
+		expect(run).toHaveBeenCalledTimes(2)
+	})
+
 	test("a run that throws rejects the read and marks nothing: the first open reads no more", async () => {
 		const client = { onConnected: new EventHandler<void>() }
 		const run = vi.fn(async () => {

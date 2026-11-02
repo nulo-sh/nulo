@@ -4,9 +4,8 @@
 
 <script setup>
 /**
- * Received-transfer detail page (`/popup/received/:id`, D5). The receiver-side mirror of the
- * transaction-detail page (`tx/[id].vue`) — same layout system, reversed: an amount hero, a
- * From/To pair, an explorer link at the top, and a Details box. It states the receiver-honest kind
+ * Received-transfer detail page (`/popup/received/:id`), the receiver-side mirror of `tx/[id].vue`.
+ * It states the receiver-honest kind
  * (real sender only for pub→pub; "From private" for priv→pub; redacted for note kinds — never the
  * MAGIC/zero sentinel raw) and, for PUBLIC receipts only, the network fee the sender paid.
  *
@@ -17,9 +16,9 @@
  * "Show fee". A mode not yet read, unreadable, or lost with the config port counts as on: nothing is
  * looked up without a tap until a read says the mode is off.
  *
- * The page reads what its route names: a push to another receipt's link reuses this instance, so the
- * shown receipt is cleared before the next one is read. A read that fails never reads as "not found":
- * a port the worker dropped reads again on its reconnect, and any other failure offers Retry.
+ * A push to another receipt's link reuses this instance, so the shown receipt is cleared before the
+ * next one is read. A failed receipt read never reads as "not found": one the worker's restart dropped
+ * reads again on the reconnect, and any other, with nothing yet on screen, offers Retry.
  */
 
 /** Components */
@@ -69,9 +68,10 @@ const route = useRoute()
 
 /** Reactive state */
 const received = ref(null)
-/** The newest receipt read resolved: with no receipt, "not found" holds. */
+/** A read of this route's receipt resolved: with no receipt shown, "not found" holds. */
 const loaded = ref(false)
-/** The newest receipt read failed while its port stayed up, so no reconnect reads again. */
+/** The newest receipt read failed with nothing on screen, on a port that stayed up: no reconnect
+ *  follows to read again. */
 const readFailed = ref(false)
 const tokens = ref([])
 /** The RECORD's own chainId (resolved from its networkId) — NOT the active network's. Token
@@ -203,6 +203,11 @@ function portDropped(error) {
 	return isClientDisconnectRejection(error) || error instanceof RpcDisconnectedError
 }
 
+/** The fee is cached per block, and a re-mine moves it. */
+function sameBlock(shown, next) {
+	return Boolean(shown && next && shown.id === next.id && shown.blockHash === next.blockHash)
+}
+
 /** One run of the receipt read: resolves `false` when a read failed, so the next connect reads again. */
 async function readReceipt(isCurrent) {
 	const events = { last: null }
@@ -215,13 +220,16 @@ async function readReceipt(isCurrent) {
 	if (eventsDuringRead === events) eventsDuringRead = null
 	if (!isCurrent()) return true
 	if ("error" in outcome) {
-		if (!received.value && !portDropped(outcome.error)) readFailed.value = true
+		if (!received.value && !loaded.value && !portDropped(outcome.error)) readFailed.value = true
 		return false
 	}
 	const last = events.last
 	const record = last?.deleted ? null : outcome.record && (last?.record ?? outcome.record)
-	const shown = received.value
-	const keepFee = feeState.value === "shown" && shown?.id === record?.id && shown?.blockHash === record?.blockHash
+	const keepFee = (feeState.value === "shown" || feeState.value === "tap") && sameBlock(received.value, record)
+	if (!keepFee) {
+		feeArmed = false
+		resetFee()
+	}
 	received.value = record
 	loaded.value = true
 	return record ? loadDetails(record, isCurrent, keepFee) : true
@@ -236,32 +244,24 @@ async function loadDetails(record, isCurrent, keepFee) {
 	)
 	if (!isCurrent()) return true
 	if (network) recordChainId.value = network.chainId
-	let succeeded = network !== null
-	const tasks = []
+	// Not awaited: the lookup may wait for the incoming port to reopen, and that reopening reads again
+	// only if this run has already reported its failure.
+	if (!keepFee) void modeSettled.then(() => armFee(isCurrent))
+	if (recordChainId.value === null) return network !== null
 	// The record's profile, which the service matched to the active one, not the mutable store's.
-	if (recordChainId.value !== null) {
-		tasks.push(
-			tokenService.getTokens(record.profileId, recordChainId.value).then(
-				(list) => {
-					if (isCurrent()) tokens.value = list
-				},
-				() => {
-					succeeded = false
-				},
-			),
-		)
-	}
-	if (!keepFee) {
-		tasks.push(
-			modeSettled.then(() => {
-				if (!isCurrent()) return
-				feeArmed = true
-				if (received.value) return loadFee(received.value, tapOnly.value)
-			}),
-		)
-	}
-	await Promise.allSettled(tasks)
-	return succeeded
+	const list = await tokenService.getTokens(record.profileId, recordChainId.value).then(
+		(t) => t,
+		() => null,
+	)
+	if (!isCurrent()) return true
+	if (list) tokens.value = list
+	return network !== null && list !== null
+}
+
+function armFee(isCurrent) {
+	if (!isCurrent()) return
+	feeArmed = true
+	if (received.value) void loadFee(received.value, tapOnly.value)
 }
 
 function retryReceipt() {
@@ -269,6 +269,8 @@ function retryReceipt() {
 }
 
 /** Watchers */
+// The default `pre` flush clears A before B renders, and leaving the route unmounts the page before
+// this could read another route's id.
 watch(
 	() => route.params.id,
 	() => {
