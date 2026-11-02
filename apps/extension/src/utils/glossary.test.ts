@@ -3,6 +3,56 @@ import { GLOSSARY, GLOSSARY_SECTIONS } from "./glossary"
 
 // Every entry the owner signed, word for word, in section order.
 const SPEC = [
+	[
+		"Your wallet",
+		"profile",
+		"Profile",
+		"Your wallet on this device: its accounts and keys, behind one password or passkey.",
+		"Lock screen · Settings",
+	],
+	["Your wallet", "account", "Account", "An address inside a profile, with its own balances and history.", "Home · Settings"],
+	[
+		"Your wallet",
+		"network",
+		"Network",
+		"The Aztec chain Nulo talks to; each network keeps its own balances and history.",
+		"Header · Settings",
+	],
+	[
+		"Your wallet",
+		"alpha",
+		"Alpha",
+		"Aztec's main network, also called Mainnet; Testnet and local networks are for trying things out.",
+		"Network menu",
+	],
+	[
+		"Your wallet",
+		"recovery-phrase",
+		"Recovery phrase",
+		"The 24 words that restore your accounts, except the ones you imported.",
+		"Get started · Backup",
+	],
+	[
+		"Your wallet",
+		"full-backup",
+		"Full backup",
+		"Your accounts, imported keys, tokens, contacts and history, in one password-protected file.",
+		"Backup",
+	],
+	[
+		"Your wallet",
+		"passkey",
+		"Passkey",
+		"It unlocks Nulo on this device. Your recovery phrase is what restores it.",
+		"Lock screen · Create profile",
+	],
+	[
+		"Your wallet",
+		"strict-mode",
+		"Strict security mode",
+		"Locks whenever Nulo restarts in the background, as well as after the timeout.",
+		"Lock settings",
+	],
 	["Balances", "private-balance", "Private balance", "Only you can see it. Marked with a shield.", "Home · tokens · send"],
 	[
 		"Balances",
@@ -23,6 +73,13 @@ const SPEC = [
 		"Approval window",
 	],
 	[
+		"Fees",
+		"fpc",
+		"FPC",
+		"A Fee Payment Contract: it settles the network fee, from a sponsor or from your Private Fee Juice.",
+		"Fee Payments",
+	],
+	[
 		"Apps",
 		"authorization",
 		"Authorization",
@@ -37,6 +94,7 @@ const SPEC = [
 		"A contract's interface names a call's arguments; without it Nulo shows the raw values.",
 		"Approval window",
 	],
+	["Transactions", "proof", "Proof", "What your device builds to show a transaction is valid without revealing what's in it.", "Proving"],
 	[
 		"Transactions",
 		"proving",
