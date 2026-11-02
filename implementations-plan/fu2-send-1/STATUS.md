@@ -8,3 +8,4 @@
 - 2026-11-02 phase 1 gate green: lint, typecheck:all, vitest send + modules/send (722 passed); 2 page cases red with base send.vue.
 - 2026-11-02 phase 2 gate green: AddressInput reset at the next frame (nextTick did not hold on either browser); smoke 5 files x 2 browsers 15/15; audit:vue and test:all exit 0.
 - 2026-11-02 arc 1 merged (#1544). Arcs 2 and 3 resume off `dev` in one PR: OA-1 to OA-3 answered (all A), A4 approved; P96-06 G and P99-01 J added to arc 2 (#1556, #1557 filed).
+- 2026-11-02 arcs 2-3 code committed; dev merged (#1551, #1559); smoke Chrome 12 files green at retry 0; Codex and Opus fix R1 folded.
