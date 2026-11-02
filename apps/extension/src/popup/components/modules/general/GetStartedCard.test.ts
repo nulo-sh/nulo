@@ -30,13 +30,31 @@ describe("general/GetStartedCard", () => {
 		)
 	})
 
-	test("each open step carries the drawn copy and a chevron", () => {
+	test("each open step carries the drawn copy and a chevron, but How Aztec works, which opens a website, carries the outside-link mark", () => {
 		const w = mountCard()
 		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
-		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min")
+		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min · website")
 		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
 		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
-		for (const item of ALL) expect(row(w, item).findAll("svg"), item).toHaveLength(1)
+		const glyphs = (item: GetStartedItem) =>
+			w
+				.findAllComponents(Icon)
+				.filter((icon) => row(w, item).element.contains(icon.element))
+				.map((icon) => icon.props("name"))
+		expect(ALL.map(glyphs)).toEqual([["chevron"], ["open"], ["chevron"], ["chevron"]])
+	})
+
+	test("How Aztec works says 1 min · website on its second line, as the first row's words are drawn, and its spoken name says website", () => {
+		const w = mountCard()
+		expect(row(w, "aztec").get('[data-testid="setting-description"]').text()).toBe("1 min · website")
+		expect(row(w, "aztec").find('[data-testid="setting-value"]').exists()).toBe(false)
+		const spoken = (item: GetStartedItem) =>
+			(row(w, item).get("[data-row-target]").attributes("aria-labelledby") ?? "")
+				.split(" ")
+				.map((id) => w.get(`#${id}`).text())
+				.join(" ")
+		expect(spoken("aztec")).toBe("How Aztec works 1 min · website")
+		expect(spoken("phrase")).toBe("Save your recovery phrase")
 	})
 
 	test("steps are numbered in the given order; the first open one is the next, filled", () => {
