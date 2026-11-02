@@ -6,3 +6,6 @@
 - Gates on the final code, retry 0: lint, typecheck:all; the Send, balance, Home and execution suites (`src/popup src/composables src/components src/wallet/services/token-balance src/wallet/services/execution`, 430 files, 7638 tests); `test:all` (17 workspaces) green.
 - Smoke, armed Chrome build: the nine files that open Send (`send-fee-privacy`, `send-keyboard`, `send-outcome-rows`, `send-picker-add`, `home-links`, `legal-acceptance`, `rows`, `token-list`, `type-roles`): 51 passed, 1 skipped (`type-roles`' Firefox-only block), 428 s.
 - Captures: running the scratch spec through `bun --bun vitest` failed at import (`z.object` undefined), the Bun interop the e2e layer avoids by running on Node; `./node_modules/.bin/vitest` (Node) ran it. Navigating to Send right after a popup reload raced the auth guard (`#/popup/auth`, then Home): wait for Home's Send action first.
+- Smoke, armed Firefox build, the same nine files: 52 passed, 742 s.
+- Network, Chrome, `NULO_E2E_RETRY=0`: `transfers.test.ts` passed (test 106 s, run 175 s with the build and sandbox).
+- Close-out: known limits filed closed as #1546 (D3), #1547 (D7), #1548 (I4). `lessons.md` sat at exactly 8192 bytes; the promotion fit by joining the stored-rows line and rewording six lines without dropping a claim or a link.

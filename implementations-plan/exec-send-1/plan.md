@@ -1,7 +1,7 @@
 ---
 plan: exec-send-1
 tier: light
-status: arc 1 (#1426) merged as #1481; arc 2 (#1432) phase 2 green, loop converged
+status: completed (arc 1 merged as #1481; arc 2 and the close-out awaiting merge)
 issues: "#1426, #1432"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 51ea220b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. Arc 1 (#1426) landed as #1481; arc 2 (#1432) and this close-out in one PR.
+- **Shipped**: a dApp send's claim never replaces a queued row it could not read: the send fails, or stays cancelled when its cancel landed first (arc 1). Send's first load reads balances through the snapshot hook, so an update or delete landing during it is what the corner and Max show; a refused read still shows the failure card at once; with no row, a refused re-read keeps the skeleton (P95-01 = A); a reconnect leaves a read already out, and Send's unmount ends its load (arc 2). No e2e scenario added.
+- **Known limits**: #1546 (D3), #1547 (D7), #1548 (I4).
+- **Dispositions**: no shared fail-closed read helper (D2); no page revision counter or hook option (D4); a superseded run awaiting the newer one rejected (D9).
+- **Lessons**: "a rejected read is no absent row" joined the stored-rows line of `lessons.md`, with wording trims to stay in budget.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+- **Size**: over the light target (two arcs, five review rounds).
 
 # exec-send-1: a cancelled send that restarts, and a Send screen that opens on a stale balance
 
