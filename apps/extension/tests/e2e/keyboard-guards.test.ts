@@ -3,13 +3,14 @@
  * held key makes one reveal; in onboarding's confirm field the browser's implicit submission
  * activates Create once, and the repeat that reaches the phrase step presses nothing there. The
  * page records each Enter keydown, click and submit, so a driver that sends no repeat, or a repeat
- * that lands anywhere but the control, fails on the record.
+ * that lands anywhere but the control, fails on the record. The phrase check is answered by keys
+ * alone, since only a browser moves focus through radio groups.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { clickByTestId, openOnboarding, openPopup, replaceInputValue, test, waitForHash } from "./fixtures/extension"
-import { navigateByHash, passPhraseCheck, readProfileNames, readRecoveryWords } from "./fixtures/helpers"
+import { navigateByHash, readProfileNames, readRecoveryWords } from "./fixtures/helpers"
 import { waitForFocus } from "./helpers/pointer-probes"
 
 type KeyRecord = { type: "keydown"; on: string | null; repeat: boolean } | { type: "click"; on: string | null } | { type: "submit" }
@@ -49,6 +50,39 @@ const phraseSavedFlags = (page: Page) =>
 			.filter(([key]) => key.startsWith("nulo:ui:getStartedPhraseSaved@"))
 			.map(([, value]) => value),
 	)
+
+/** The focused element: its testid, the position of the check's group it sits in, and a radio's word. */
+const focusedChoice = (page: Page) =>
+	page.evaluate(() => {
+		const el = document.activeElement as HTMLInputElement | null
+		return {
+			on: el?.getAttribute("data-testid") ?? null,
+			position: el?.closest("[data-position]")?.getAttribute("data-position") ?? null,
+			word: el?.type === "radio" ? el.value : null,
+			checked: el?.type === "radio" ? el.checked : null,
+		}
+	})
+
+/** Each group is one Tab stop entered unpicked; Space picks the first choice and an arrow moves the
+ *  pick, so each group ends on the word `words` holds at its position. Ends on the last group. */
+async function pickCheckByKeys(page: Page, words: readonly string[]): Promise<string[]> {
+	const groups = await page.$$eval(sel("onboarding-phrase-check-question"), (all) =>
+		all.map((q) => ({
+			position: q.getAttribute("data-position") ?? "",
+			choices: [...q.querySelectorAll<HTMLInputElement>('[data-testid="onboarding-phrase-check-choice"]')].map((c) => c.value),
+		})),
+	)
+	for (const { position, choices } of groups) {
+		await page.keyboard.press("Tab")
+		expect(await focusedChoice(page)).toMatchObject({ on: "onboarding-phrase-check-choice", position, checked: false })
+		const word = words[Number(position) - 1]
+		const steps = choices.indexOf(word)
+		if (steps === 0) await page.keyboard.press("Space")
+		for (let i = 0; i < steps; i++) await page.keyboard.press("ArrowRight")
+		expect(await focusedChoice(page)).toEqual({ on: "onboarding-phrase-check-choice", position, word, checked: true })
+	}
+	return groups.map((g) => g.position)
+}
 
 async function focusWhenEnabled(page: Page, testid: string): Promise<void> {
 	await page.waitForFunction(
@@ -146,8 +180,20 @@ test("Enter in the confirm field creates the wallet once, and its repeat cannot 
 	await focusWhenEnabled(page, "onboarding-phrase-saved")
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("onboarding-phrase-check-page"), { visible: true, timeout: 10_000 })
+	await waitForFocus(page, "onboarding-phrase-check-title")
+	const positions = await pickCheckByKeys(page, words)
+	// Enter on a pick submits nothing; Shift+Tab goes back onto the previous group's pick.
+	await page.keyboard.press("Enter")
+	await page.keyboard.down("Shift")
+	await page.keyboard.press("Tab")
+	await page.keyboard.up("Shift")
+	expect(await focusedChoice(page)).toMatchObject({ position: positions[1], checked: true })
+	expect(await page.$(sel("onboarding-phrase-check-page"))).not.toBeNull()
 	expect(await phraseSavedFlags(page)).toEqual([])
-	await passPhraseCheck(page, words)
+	await page.keyboard.press("Tab")
+	await page.keyboard.press("Tab")
+	await waitForFocus(page, "onboarding-phrase-check-confirm")
+	await page.keyboard.press("Enter")
 	await waitForHash(page, "#/onboarding/done", 10_000)
 	expect(await phraseSavedFlags(page)).toEqual([true])
 

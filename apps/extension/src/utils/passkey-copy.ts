@@ -12,7 +12,6 @@ import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey
 export type PasskeyTitle = readonly [string, string]
 
 export const PASSKEY_COPY = {
-	/** Beside the choice of a passkey, wherever a profile is made: onboarding's Create and the popup's new profile. */
 	choice: "Your passkey replaces a password. Touch ID, Windows Hello, or a hardware key, whichever your device supports. It unlocks Nulo on this device. Your recovery phrase is what restores it.",
 	notConfirmed: "Passkey not confirmed. Try again.",
 	noPrf: "This passkey can't unlock Nulo.",

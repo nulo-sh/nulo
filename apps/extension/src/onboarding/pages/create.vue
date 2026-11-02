@@ -166,7 +166,12 @@ function openCheck() {
 	stage.value = "check"
 }
 
+// Confirm stays pressable while the mark is written: a second press marks and routes nothing more.
+let isMarking = false
+
 async function onCheckPassed() {
+	if (isMarking) return
+	isMarking = true
 	await markGetStarted(createdId, "phraseSaved")
 	if (isMounted()) leavePhrase()
 }

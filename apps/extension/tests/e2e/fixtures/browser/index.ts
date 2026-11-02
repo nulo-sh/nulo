@@ -137,8 +137,8 @@ export interface BrowserDriver {
 	reloadExtensionPage(page: Page): Promise<void>
 	/**
 	 * An extension page with `chrome.*` for the launch fixture to settle the extension through, whose
-	 * lifetime no onboarding state decides: both browsers honour the `window.close()` that the popup
-	 * and the onboarding page call when they redirect. Both drivers load the setup page, static text
+	 * lifetime no onboarding state decides: both browsers honour the `window.close()` the popup and the
+	 * onboarding page call as they hand over to a tab. Both drivers load the setup page, static text
 	 * that no product code opens, so deleting it as dead code fails every launch.
 	 */
 	openScratchPage(browser: Browser, extensionId: string): Promise<Page>

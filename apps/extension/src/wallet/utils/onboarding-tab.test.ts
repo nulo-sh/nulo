@@ -53,8 +53,24 @@ describe("openOrFocusOnboardingTab", () => {
 
 		await openOrFocusOnboardingTab()
 
-		expect(chrome.tabs.create).toHaveBeenCalledWith({ url: "chrome-extension://abc/src/onboarding/index.html#/onboarding/welcome" })
+		expect(chrome.tabs.create).toHaveBeenCalledWith({
+			url: "chrome-extension://abc/src/onboarding/index.html#/onboarding/welcome",
+			active: false,
+		})
 		expect(sessionStore[TAB_ID_KEY]).toBe(99)
+	})
+
+	test("tracks a new tab before it brings it forward, as the focus may end the calling popup", async () => {
+		stubChrome({ sessionGet: async () => ({}), tabsCreate: async () => ({ id: 99, windowId: 3 }) })
+
+		await openOrFocusOnboardingTab()
+
+		expect(chrome.storage.session.set).toHaveBeenCalledWith({ [TAB_ID_KEY]: 99 })
+		expect(chrome.tabs.update).toHaveBeenCalledWith(99, { active: true })
+		expect(chrome.windows.update).toHaveBeenCalledWith(3, { focused: true })
+		const order = (fn: unknown) => (fn as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect(order(chrome.tabs.create)).toBeLessThan(order(chrome.storage.session.set))
+		expect(order(chrome.storage.session.set)).toBeLessThan(order(chrome.tabs.update))
 	})
 
 	test("focuses an existing live tab without creating a duplicate", async () => {

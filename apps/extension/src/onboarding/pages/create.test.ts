@@ -458,6 +458,20 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(checkPage(w).exists()).toBe(false)
 	})
 
+	test("a second Confirm while the mark is written marks and routes once", async () => {
+		const pending = defer<undefined>()
+		markGetStarted.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await answerCheck(w)
+		await w.get('[data-testid="onboarding-phrase-check-confirm"]').trigger("click")
+		pending.resolve(undefined)
+		await flushPromises()
+		expect(markGetStarted).toHaveBeenCalledOnce()
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+	})
+
 	test("a wrong word at one position marks nothing and stays on the check", async () => {
 		const w = await mountCreate()
 		await submitPassword(w)

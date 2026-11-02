@@ -356,36 +356,53 @@ describe("onboarding tab", () => {
 	})
 
 	// Only a real browser closes a popup and moves tab focus: the component layer stubs both. The first
-	// press finds no setup tab and opens one; the second brings that same tab forward. Chrome keeps the
-	// popup document in a tab; Firefox drives the toolbar panel itself.
+	// press finds no setup tab and opens one; the second, with the control page's tab active and the
+	// setup tab away from the closing popup's neighbour, brings that tab forward. Chrome keeps the popup
+	// document in a tab; Firefox drives the toolbar panel itself.
 	test("before setup is finished the popup stays open on the setup tab's button, which brings that tab forward", async ({
 		freshExtensionPerTest: extension,
 	}) => {
 		const control = await openScratchPage(extension.browser, extension.extensionId)
 		await control.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": false }))
-		const onboardingTabs = () =>
-			extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html"))
 		const trackedTab = () =>
 			control.evaluate(async () => {
 				const id = (await chrome.storage.session.get("nulo:onboarding:tab-id"))["nulo:onboarding:tab-id"]
 				return typeof id === "number" ? { id, active: (await chrome.tabs.get(id)).active } : null
 			})
-
-		for (const press of ["opens the tab", "brings it forward"]) {
-			const before = await trackedTab()
+		// Over BiDi a tab's URL arrives after the tab, so the count is polled.
+		const oneSetupTab = () =>
+			pollUntil(
+				async () =>
+					extension.browser.targets().filter((t) => t.type() === "page" && t.url().includes("src/onboarding/index.html")).length,
+				(count) => count === 1,
+				{ label: "one setup tab", timeoutMs: 10_000, intervalMs: 100 },
+			)
+		const press = async (what: string) => {
 			const popup = await openSetupPopup(extension)
-			// A popup that vanished as it rendered read as a crash.
+			// A popup that closes itself as it renders reads as a crash.
 			await new Promise((resolve) => setTimeout(resolve, 1_000))
-			expect(await popup.isOpen(), `the popup closed by itself before the press that ${press}`).toBe(true)
+			expect(await popup.isOpen(), `the popup closed by itself before the press that ${what}`).toBe(true)
 			await popup.press()
 			await popup.closed()
-			const after = await pollUntil(trackedTab, (tab) => tab?.active === true, {
-				label: `the setup tab the press ${press}, active`,
+			return pollUntil(trackedTab, (tab) => tab?.active === true, {
+				label: `the setup tab the press ${what}, active`,
 				timeoutMs: 10_000,
 				intervalMs: 100,
 			})
-			if (before) expect(after?.id).toBe(before.id)
-			expect(onboardingTabs()).toHaveLength(1)
 		}
+
+		const opened = await press("opens the tab")
+		await oneSetupTab()
+
+		const activeBefore = await control.evaluate(async (id: number) => {
+			await chrome.tabs.move(id, { index: 0 })
+			const own = await chrome.tabs.getCurrent()
+			if (own?.id !== undefined) await chrome.tabs.update(own.id, { active: true })
+			return (await chrome.tabs.get(id)).active
+		}, opened?.id as number)
+		expect(activeBefore).toBe(false)
+		const focused = await press("brings it forward")
+		expect(focused?.id).toBe(opened?.id)
+		await oneSetupTab()
 	})
 })

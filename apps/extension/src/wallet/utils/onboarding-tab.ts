@@ -44,6 +44,11 @@ export function onboardingDocumentUrl(): string {
 
 let inFlight: Promise<void> | null = null
 
+async function focusTab(tabId: number, windowId: number | undefined): Promise<void> {
+	await chrome.tabs.update(tabId, { active: true })
+	if (windowId !== undefined) await chrome.windows.update(windowId, { focused: true })
+}
+
 export function openOrFocusOnboardingTab(): Promise<void> {
 	if (inFlight) return inFlight
 	inFlight = (async () => {
@@ -53,20 +58,18 @@ export function openOrFocusOnboardingTab(): Promise<void> {
 			if (typeof existingId === "number") {
 				try {
 					const tab = await chrome.tabs.get(existingId)
-					await chrome.tabs.update(existingId, { active: true })
-					if (tab.windowId !== undefined) {
-						await chrome.windows.update(tab.windowId, { focused: true })
-					}
+					await focusTab(existingId, tab.windowId)
 					return
 				} catch {
 					// Tab was closed; fall through to fresh create.
 				}
 			}
-			const url = chrome.runtime.getURL(ONBOARDING_PATH)
-			const tab = await chrome.tabs.create({ url })
-			if (typeof tab.id === "number") {
-				await chrome.storage.session.set({ [TAB_ID_KEY]: tab.id })
-			}
+			// Opened in the background and tracked before it takes focus: focus closes a toolbar popup, and
+			// this context with it, so a write after the focus may never run.
+			const tab = await chrome.tabs.create({ url: chrome.runtime.getURL(ONBOARDING_PATH), active: false })
+			if (typeof tab.id !== "number") return
+			await chrome.storage.session.set({ [TAB_ID_KEY]: tab.id })
+			await focusTab(tab.id, tab.windowId)
 		} finally {
 			inFlight = null
 		}
@@ -80,18 +83,13 @@ export async function clearOnboardingTabTracking(): Promise<void> {
 	await chrome.storage.session.remove(TAB_ID_KEY)
 }
 
-/** The app store's part the setup predicate reads; structural, so the predicate ignores the rest. */
 export interface OnboardingSetupSubject {
 	onboardingCompleted: boolean
 	profiles: readonly unknown[]
 	loadOnboardingCompleted: () => Promise<void>
 }
 
-/**
- * Whether setup waits in the onboarding tab: onboarding is not completed and no profile exists. The
- * popup's register, import and new profile pages read it; it opens, focuses and closes nothing, so
- * the popup stays open to say where setup goes on.
- */
+/** Whether setup waits in the onboarding tab: onboarding is not completed and no profile exists. */
 export async function setupWaitsInTab(store: OnboardingSetupSubject): Promise<boolean> {
 	await store.loadOnboardingCompleted()
 	return !store.onboardingCompleted && store.profiles.length === 0
