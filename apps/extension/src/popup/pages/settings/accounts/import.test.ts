@@ -102,7 +102,7 @@ async function confirmStep() {
 async function nameAndEnter(w: VueWrapper, name: string) {
 	await w.get('[data-testid="import-account-name-input"] input').setValue(name)
 	const state = {
-		warns: w.find('[data-testid="name-warning"]').exists() && w.get('[data-testid="name-warning"]').text() === "Already exist",
+		warns: w.find('[data-testid="name-warning"]').exists() && w.get('[data-testid="name-warning"]').text() === "Already exists",
 		disabled: w.get('[data-testid="import-account-submit"]').attributes("disabled") !== undefined,
 	}
 	document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))

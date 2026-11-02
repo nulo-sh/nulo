@@ -5,6 +5,7 @@
  * listed and a name never comes from the request.
  */
 import { isObjectLike } from "@nulo/wallet-core/utils"
+import { pluralize } from "@/utils/plural"
 import { ANY_CONTRACT, contractKey, type KnownName } from "./permission-rows"
 
 export type DetailsRow = {
@@ -146,6 +147,6 @@ function rowFor(into: Collected, contract: unknown): DetailsRow {
 /** Contracts are counted; a table with no contract row counts its classes in their own words. */
 function tableLabel(listedCount: number, classCount: number, reachesAny: boolean): string {
 	if (reachesAny) return "any contract"
-	if (listedCount === 0 && classCount > 0) return `${classCount} ${classCount === 1 ? "contract class" : "contract classes"}`
-	return `${listedCount} ${listedCount === 1 ? "contract" : "contracts"}`
+	if (listedCount === 0 && classCount > 0) return `${classCount} ${pluralize(classCount, "contract class", "contract classes")}`
+	return `${listedCount} ${pluralize(listedCount, "contract", "contracts")}`
 }

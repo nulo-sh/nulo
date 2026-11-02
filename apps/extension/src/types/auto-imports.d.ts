@@ -11,6 +11,7 @@ declare global {
   const ACCOUNT_FILE_NOT_BACKUP: typeof import('../composables/useFullBackupImport').ACCOUNT_FILE_NOT_BACKUP
   const ACTIVITY_FEED_KINDS: typeof import('../utils/journal-state').ACTIVITY_FEED_KINDS
   const ADDED_COALESCE: typeof import('../utils/coalesce').ADDED_COALESCE
+  const ALREADY_EXISTS: typeof import('../utils/entity-rules').ALREADY_EXISTS
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
@@ -21,7 +22,6 @@ declare global {
   const BootstrapFailedError: typeof import('../composables/unlockWait').BootstrapFailedError
   const CHAIN_IDS: typeof import('../utils/chain-ids').CHAIN_IDS
   const CLEANUP_PENDING_MESSAGE: typeof import('../composables/full-backup-restore').CLEANUP_PENDING_MESSAGE
-  const CONTACT_EXISTS: typeof import('../utils/contact-rules').CONTACT_EXISTS
   const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
   const DAPP_LABEL: typeof import('../utils/tx-enrichment').DAPP_LABEL
   const DECRYPTION_FAILED: typeof import('../composables/useFullBackupImport').DECRYPTION_FAILED
@@ -371,6 +371,7 @@ declare global {
   const plainMethodName: typeof import('../utils/tx-enrichment').plainMethodName
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const planRestoreAgain: typeof import('../composables/full-backup-restore').planRestoreAgain
+  const pluralize: typeof import('../utils/plural').pluralize
   const pointToolbarAtSidebar: typeof import('../utils/browser-surface').pointToolbarAtSidebar
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
@@ -885,6 +886,7 @@ declare module 'vue' {
     readonly ACCOUNT_FILE_NOT_BACKUP: UnwrapRef<typeof import('../composables/useFullBackupImport')['ACCOUNT_FILE_NOT_BACKUP']>
     readonly ACTIVITY_FEED_KINDS: UnwrapRef<typeof import('../utils/journal-state')['ACTIVITY_FEED_KINDS']>
     readonly ADDED_COALESCE: UnwrapRef<typeof import('../utils/coalesce')['ADDED_COALESCE']>
+    readonly ALREADY_EXISTS: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_EXISTS']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
@@ -895,7 +897,6 @@ declare module 'vue' {
     readonly BootstrapFailedError: UnwrapRef<typeof import('../composables/unlockWait')['BootstrapFailedError']>
     readonly CHAIN_IDS: UnwrapRef<typeof import('../utils/chain-ids')['CHAIN_IDS']>
     readonly CLEANUP_PENDING_MESSAGE: UnwrapRef<typeof import('../composables/full-backup-restore')['CLEANUP_PENDING_MESSAGE']>
-    readonly CONTACT_EXISTS: UnwrapRef<typeof import('../utils/contact-rules')['CONTACT_EXISTS']>
     readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
     readonly DAPP_LABEL: UnwrapRef<typeof import('../utils/tx-enrichment')['DAPP_LABEL']>
     readonly DECRYPTION_FAILED: UnwrapRef<typeof import('../composables/useFullBackupImport')['DECRYPTION_FAILED']>
@@ -1245,6 +1246,7 @@ declare module 'vue' {
     readonly plainMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['plainMethodName']>
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly planRestoreAgain: UnwrapRef<typeof import('../composables/full-backup-restore')['planRestoreAgain']>
+    readonly pluralize: UnwrapRef<typeof import('../utils/plural')['pluralize']>
     readonly pointToolbarAtSidebar: UnwrapRef<typeof import('../utils/browser-surface')['pointToolbarAtSidebar']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>

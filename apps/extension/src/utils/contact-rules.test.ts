@@ -1,12 +1,6 @@
 import { describe, expect, test } from "vitest"
-import {
-	CONTACT_EXISTS,
-	canSubmitContact,
-	canonicalContactAddress,
-	contactAddressError,
-	contactNameError,
-	sameContactAddress,
-} from "./contact-rules"
+import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError, sameContactAddress } from "./contact-rules"
+import { ALREADY_EXISTS } from "./entity-rules"
 
 const A = `0x${"ab".repeat(32)}`
 
@@ -25,7 +19,7 @@ describe("contact rules", () => {
 	})
 
 	test("the verdict is the validators' sentinel", () => {
-		expect(CONTACT_EXISTS).toBe("Already exist")
+		expect(ALREADY_EXISTS).toBe("Already exists")
 	})
 })
 
@@ -39,7 +33,7 @@ describe("the contact form's admission", () => {
 	}
 
 	test("a saved name in another case and spacing is a duplicate", () => {
-		expect(contactNameError("  alice   SMITH ", saved)).toBe(CONTACT_EXISTS)
+		expect(contactNameError("  alice   SMITH ", saved)).toBe(ALREADY_EXISTS)
 	})
 
 	test("an address that is not an Aztec address is invalid", () => {
@@ -47,7 +41,7 @@ describe("the contact form's admission", () => {
 	})
 
 	test("a saved address in another hex case is a duplicate", () => {
-		expect(contactAddressError(VALID.toUpperCase().replace("0X", "0x"), saved)).toBe(CONTACT_EXISTS)
+		expect(contactAddressError(VALID.toUpperCase().replace("0X", "0x"), saved)).toBe(ALREADY_EXISTS)
 	})
 
 	test("the edited row's own name and address are not duplicates", () => {
@@ -64,8 +58,8 @@ describe("the contact form's admission", () => {
 		["a save is running", { loading: true }],
 		["the name stores as nothing", { name: "\u200b " }],
 		["the address is invalid", { validAddress: false }],
-		["the name is a duplicate", { nameError: CONTACT_EXISTS }],
-		["the address is a duplicate", { addressError: CONTACT_EXISTS }],
+		["the name is a duplicate", { nameError: ALREADY_EXISTS }],
+		["the address is a duplicate", { addressError: ALREADY_EXISTS }],
 	])("no save while %s", (_case, over) => {
 		expect(canSubmitContact(form(over))).toBe(false)
 	})

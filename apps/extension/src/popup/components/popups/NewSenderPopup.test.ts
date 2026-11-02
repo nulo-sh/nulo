@@ -222,3 +222,13 @@ describe("NewSenderPopup — the field modulus", () => {
 		expect(accountStateServiceMock.addSender).toHaveBeenCalledTimes(adds)
 	})
 })
+
+describe("NewSenderPopup — a saved sender", () => {
+	test('an address already saved reads "Already exists"', async () => {
+		accountStateServiceMock.getSenders.mockResolvedValue([VALID_HEX])
+		const w = await mountShown()
+		await typeAddress(w, VALID_HEX)
+		await flushPromises()
+		expect(w.find('[data-testid="sender-input"]').element.parentElement?.textContent?.trim()).toBe("Already exists")
+	})
+})
