@@ -34,7 +34,7 @@ describe("general/GetStartedCard", () => {
 		const w = mountCard()
 		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
 		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min")
-		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
+		expect(row(w, "feeJuice").text()).toBe("3Get Fee JuiceFee Juice pays network fees.website")
 		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
 		for (const item of ALL) expect(row(w, item).findAll("svg"), item).toHaveLength(1)
 	})
@@ -131,5 +131,20 @@ describe("general/GetStartedCard", () => {
 
 	test("no Hide without canHide", () => {
 		expect(mountCard(open("phrase"), false).find('[data-testid="get-started-hide"]').exists()).toBe(false)
+	})
+
+	test("Get Fee Juice says what Fee Juice is, on a line that wraps, and is marked as a website in the chevron's place", async () => {
+		const w = mountCard()
+		const fee = row(w, "feeJuice")
+		expect(fee.get('[data-testid="setting-description"]').text()).toBe("Fee Juice pays network fees.")
+		expect(fee.get('[data-testid="setting-value"]').text()).toBe("website")
+		const glyphs = w
+			.findAllComponents(Icon)
+			.filter((icon) => fee.element.contains(icon.element))
+			.map((icon) => icon.props("name"))
+		expect(glyphs).toEqual(["open"])
+		expect(w.classes().some((name) => name.includes("wraps"))).toBe(true)
+		await fee.get("button").trigger("click")
+		expect(w.emitted("select")).toEqual([["feeJuice"]])
 	})
 })
