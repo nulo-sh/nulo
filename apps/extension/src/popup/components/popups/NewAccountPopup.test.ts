@@ -170,6 +170,29 @@ describe("NewAccountPopup — the account list", () => {
 	})
 })
 
+describe("NewAccountPopup — announcing the new account", () => {
+	test("once selected, the toast names the account as listed; a refused selection shows its error alone", async () => {
+		createAccountMock.mockImplementationOnce(async () => {
+			const row = { profileId: "p1", chainId: 1, name: "Account 2", address: "0xacct" }
+			appStoreState.accounts.push({ ...row, name: "Savings" })
+			return row
+		})
+		const w = await mountShown()
+		pressEnterOnInput()
+		await flushPromises()
+		await dispose(w)
+		expect(openToastMock.mock.calls).toEqual([[{ kind: "success", label: "Now using Savings" }]])
+
+		openToastMock.mockClear()
+		commitScopeChangeMock.mockResolvedValueOnce(false)
+		const refused = await mountShown()
+		pressEnterOnInput()
+		await flushPromises()
+		await dispose(refused)
+		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Finish or cancel your pending transaction first" }]])
+	})
+})
+
 describe("NewAccountPopup — duplicate names", () => {
 	async function typeName(w: VueWrapper, name: string) {
 		await w.find('input[data-testid="account-name-input"]').setValue(name)

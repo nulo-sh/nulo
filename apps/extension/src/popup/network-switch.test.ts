@@ -7,7 +7,7 @@ import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
 import { deferred } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
-import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope } from "./network-switch"
+import { createNetworkSwitchHandler, type NetworkSwitchDeps, type NetworkSwitchScope, settleLatestRun } from "./network-switch"
 
 const ACCOUNT = { address: "0xa" }
 
@@ -334,5 +334,44 @@ describe("a lock that supersedes the run", () => {
 		const refusal = new Error("Profile locked")
 		h.syncStaleNetwork.mockRejectedValueOnce(refusal)
 		await expect(createNetworkSwitchHandler(h.deps)()).rejects.toBe(refusal)
+	})
+})
+
+describe("settleLatestRun: what a switch's announcement waits for", () => {
+	const flush = () => new Promise((r) => setTimeout(r, 0))
+
+	test("waits for the run the tick leaves in flight, and is true once that same run settles, failed or not", async () => {
+		for (const fail of [false, true]) {
+			const first = deferred()
+			const second = deferred()
+			let current = first.promise
+			const tick = async () => {
+				// The watcher that starts the target's run fires within the tick.
+				current = second.promise
+			}
+			let out: boolean | undefined
+			void settleLatestRun(() => current, tick).then((latest) => (out = latest))
+			first.resolve()
+			await flush()
+			expect(out).toBeUndefined()
+			if (fail) second.reject(new Error("run failed"))
+			else second.resolve()
+			await flush()
+			expect(out).toBe(true)
+		}
+	})
+
+	test("is false once a newer run replaced the awaited one: A → B → A, or an unlock's bootstrap", async () => {
+		const run = deferred()
+		const newer = deferred()
+		let current = run.promise
+		const out = settleLatestRun(
+			() => current,
+			async () => {},
+		)
+		await flush()
+		current = newer.promise
+		run.resolve()
+		await expect(out).resolves.toBe(false)
 	})
 })

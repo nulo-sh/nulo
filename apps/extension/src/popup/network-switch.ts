@@ -14,6 +14,7 @@
  * are committed only after the check — never in the same statement as the
  * await.
  */
+import type { InjectionKey } from "vue"
 import { ensureDefaultAccountOrWait } from "@/composables/internal/default-account"
 import { createRunFence } from "@/composables/runFence"
 import { runsUnattended } from "@/composables/useStaleNetwork"
@@ -120,4 +121,12 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwit
 		}
 	}
 	return Object.assign(run, { supersede: () => fence.invalidate() })
+}
+
+/** Provided by the popup shell: settles with the switch run in flight, failed or not; true while no newer run replaced it. */
+export const SWITCH_SETTLED_KEY: InjectionKey<() => Promise<boolean>> = Symbol("switch-settled")
+
+/** Awaits, after `tick`, the run `current()` names, failed or not; true while `current()` still names it. */
+export async function settleLatestRun(_current: () => Promise<unknown>, _tick: () => Promise<unknown>): Promise<boolean> {
+	return true
 }

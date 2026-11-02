@@ -1,3 +1,4 @@
+import { deferred } from "@nulo/wallet-core/utils"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -7,6 +8,7 @@ import { useCacheStore } from "@/stores/cache.store"
 import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
 import { type Account, AccountType } from "@/wallet/services/account/client"
 import type { PendingReset, StaleNetworkView } from "@/wallet/services/network-reset/client"
+import { SWITCH_SETTLED_KEY } from "@/popup/network-switch"
 import NetworkDetail from "./[id].vue"
 
 const setPrimaryEndpoint = vi.hoisted(() => vi.fn(async () => undefined))
@@ -24,7 +26,8 @@ vi.mock("@/utils/core", () => ({
 	},
 	requireAccount: () => accounts,
 }))
-vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate: vi.fn(async () => "activated") }) }))
+const activate = vi.hoisted(() => vi.fn(async (_target: unknown): Promise<string> => "activated"))
+vi.mock("@/composables/useNetworkActivation", () => ({ useNetworkActivation: () => ({ activate }) }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 const routing = vi.hoisted(() => ({ route: undefined as unknown as { params: { id: string } } }))
 vi.mock("vue-router", async () => {
@@ -44,6 +47,7 @@ beforeEach(() => {
 	routing.route.params.id = "mine"
 	setPrimaryEndpoint.mockClear()
 	openToast.mockClear()
+	activate.mockReset().mockResolvedValue("activated")
 	networkReset.getPendingReset.mockReset().mockResolvedValue(null)
 	networkReset.getStaleNetwork.mockReset().mockResolvedValue(null)
 	accounts.getAccounts.mockReset().mockResolvedValue([])
@@ -75,10 +79,11 @@ const MINE = {
 	primaryEndpointId: "m1",
 }
 
-function mountDetail() {
+function mountDetail(shell: { settled?: () => Promise<boolean> } = {}) {
 	const wrapper = mount(NetworkDetail, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
+			provide: shell.settled ? { [SWITCH_SETTLED_KEY as symbol]: shell.settled } : {},
 			components: { SettingsPageShell },
 			stubs: {
 				SettingItem: {
@@ -114,6 +119,31 @@ describe("Settings › Network detail — an existing custom row is fully manage
 		// Only the non-primary endpoint can be deleted while two exist.
 		expect(wrapper.findAll('[data-testid="endpoint-delete-btn"]')).toHaveLength(1)
 		expect(wrapper.find('[data-testid="network-delete-chain-btn"]').exists()).toBe(true)
+	})
+})
+
+describe("Settings › Network detail — Set as active network", () => {
+	test("announces the switch once the shell's switch run settles, naming the account whose address changed", async () => {
+		const run = deferred<boolean>()
+		const wrapper = mountDetail({ settled: () => run.promise })
+		const appStore = useAppStore()
+		appStore.profile = { id: "p1" } as never
+		appStore.account = { profileId: "p1", chainId: ALPHA.chainId, name: "Account 1", address: "0xa1" } as never
+		activate.mockImplementationOnce(async (target) => {
+			appStore.network = target as never
+			return "activated"
+		})
+		await flushPromises()
+		await wrapper.get('[data-testid="network-set-active"]').trigger("click")
+		await flushPromises()
+		expect(activate).toHaveBeenCalledWith(MINE)
+		expect(openToast).not.toHaveBeenCalled()
+		appStore.account = { profileId: "p1", chainId: MINE.chainId, name: "Account 1", address: "0xc3" } as never
+		run.resolve(true)
+		await flushPromises()
+		expect(openToast.mock.calls).toEqual([
+			[{ kind: "success", label: "Active network updated", sub: "Account 1 has a different address on My Chain." }],
+		])
 	})
 })
 
