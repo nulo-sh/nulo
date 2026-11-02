@@ -456,6 +456,7 @@
     "formatGasBalance": true,
     "formatSnackAmount": true,
     "formatTransferType": true,
+    "fullBackupFileName": true,
     "gasHoldings": true,
     "getAccount": true,
     "getCurrentInstance": true,

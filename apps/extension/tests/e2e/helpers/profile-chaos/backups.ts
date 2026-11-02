@@ -29,7 +29,7 @@ export function shortFilePassword(s: RunState, ref: SecretRef): string {
 
 export type FilePasswordForm = { field: "backup-encrypt-password" | "account-file-password"; button: string }
 
-const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "protect-password-btn" }
+const BACKUP_FILE_PASSWORD: FilePasswordForm = { field: "backup-encrypt-password", button: "download-backup-btn" }
 
 /** True once the file password is typed and the page still refuses to encrypt with it. */
 export async function refusesShortPassword(page: Page, short: string, form: FilePasswordForm = BACKUP_FILE_PASSWORD): Promise<boolean> {
