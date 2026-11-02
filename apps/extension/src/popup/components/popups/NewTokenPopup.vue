@@ -9,6 +9,7 @@ import { ContractNotFoundError } from "@nulo/extension-messaging/errors"
 
 /** Utils */
 import { isFieldAddress } from "@nulo/wallet-bridge"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -43,7 +44,7 @@ const form = useFormState({
 			if (!v?.length) return null
 			if (!isFieldAddress(v)) return "Invalid address"
 			// Hex is case-insensitive: another spelling of a listed contract is that token.
-			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
+			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -51,7 +52,7 @@ const form = useFormState({
 
 const contractTerm = form.fields.contract.value
 
-const isAlreadyExist = computed(() => form.fields.contract.error.value === "Already exist")
+const isAlreadyExist = computed(() => form.fields.contract.error.value === ALREADY_EXISTS)
 const isInvalidAddress = computed(() => form.fields.contract.error.value === "Invalid address")
 const isAvailableToCreateToken = computed(() => {
 	if (!contractTerm.value?.length) return false
@@ -337,7 +338,7 @@ usePopupEntity(
 				<Transition name="fade">
 					<Flex v-if="isAlreadyExist" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="warning" size="12" color="orange" />
-						<Text variant="body" color="primary"> Already exist </Text>
+						<Text variant="body" color="primary"> {{ ALREADY_EXISTS }} </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="square-cross" size="12" color="red" />

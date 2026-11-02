@@ -5,6 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 
 /** Utils */
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { normalizeProfileName } from "@/utils/profile-name"
 
 /** Composables */
@@ -156,7 +157,7 @@ usePopupEntity(() => props.show, {
 				>
 					<template v-if="isCollision || isUnchanged" #right>
 						<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
-						<FieldWarning v-else> Already exist </FieldWarning>
+						<FieldWarning v-else> {{ ALREADY_EXISTS }} </FieldWarning>
 					</template>
 				</Input>
 

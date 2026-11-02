@@ -214,8 +214,8 @@ export const SETTINGS_ROWS = {
 		page: "/popup/settings/lock",
 		section: "Lock",
 		title: "Strict security mode",
-		description: "More secure, asks you to unlock more often on this device. Recommended.",
-		synonyms: ["password", "passkey", "security"],
+		description: "Locks whenever Nulo restarts in the background, as well as after the timeout.",
+		synonyms: ["password", "passkey", "security", "secure", "unlock"],
 		testid: "setting-strict-security-mode",
 	},
 	"lock-auto-lock": {

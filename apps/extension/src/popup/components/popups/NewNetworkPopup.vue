@@ -3,6 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { sameStoredName, storedNameKey } from "@/utils/account-name"
+import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
 import { refusedRpcUrlLine } from "./endpoint-error-text"
@@ -36,7 +37,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			if (appStore.networks.some((n) => sameStoredName(n.name, v))) return "Already exists"
+			if (appStore.networks.some((n) => sameStoredName(n.name, v))) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -45,7 +46,7 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v.length) return null
 			const stripped = v.endsWith("/") ? v.slice(0, -1) : v
-			if (notAllowedNetworkUrls.value.includes(stripped)) return "Already exists"
+			if (notAllowedNetworkUrls.value.includes(stripped)) return ALREADY_EXISTS
 			return null
 		},
 	},
@@ -55,8 +56,8 @@ const nameTerm = form.fields.name.value
 const urlTerm = form.fields.url.value
 
 const urlFailureText = ref("")
-const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists")
-const isUrlAlreadyExist = computed(() => form.fields.url.error.value === "Already exists")
+const isNameAlreadyExist = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
+const isUrlAlreadyExist = computed(() => form.fields.url.error.value === ALREADY_EXISTS)
 
 const isAvailableToCreateNetwork = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
@@ -169,7 +170,7 @@ usePopupEntity(() => props.show, {
 			data-testid="network-name-input"
 		>
 			<template v-if="isNameAlreadyExist" #right>
-				<FieldWarning> Already exists </FieldWarning>
+				<FieldWarning> {{ ALREADY_EXISTS }} </FieldWarning>
 			</template>
 		</Input>
 
@@ -183,7 +184,7 @@ usePopupEntity(() => props.show, {
 			<template #right>
 				<Transition name="fade">
 					<FieldWarning v-if="urlFailureText">{{ urlFailureText }}</FieldWarning>
-					<FieldWarning v-else-if="isUrlAlreadyExist"> Already exists </FieldWarning>
+					<FieldWarning v-else-if="isUrlAlreadyExist"> {{ ALREADY_EXISTS }} </FieldWarning>
 				</Transition>
 			</template>
 		</Input>

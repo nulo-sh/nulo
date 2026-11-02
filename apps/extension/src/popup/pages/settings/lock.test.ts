@@ -94,7 +94,7 @@ describe("settings/lock", () => {
 		async (type) => {
 			const w = await mountLock(type)
 			const strict = w.get('[data-testid="setting-strict-security-mode"]')
-			expect(strict.text()).toContain("More secure, asks you to unlock more often on this device. Recommended.")
+			expect(strict.text()).toContain("Locks whenever Nulo restarts in the background, as well as after the timeout.")
 			expect(w.find('[data-testid="auto-lock-input"]').exists()).toBe(true)
 			;(w.getComponent('[data-testid="strict-security-toggle"]') as VueWrapper).vm.$emit("update:modelValue", false)
 			expect(useCacheStore().confirm).toMatchObject({
