@@ -1,7 +1,7 @@
 ---
 plan: wrap-3
 tier: light
-status: arc 1 merged (#1498); arc 2 implemented, review loop next
+status: delivered (arc 1 merged as #1498; arc 2 and this close-out in one PR, merge pending)
 issues: "#1397 (arc 1 part of it, arc 2 closes it)"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,21 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered. Arc 1 merged as #1498; arc 2 and this close-out are the final commits of one PR against `dev`, which merges on the orchestrator's word.
+- **Owner sign-off:** P94-14 = A (2026-11-01) for the wrapping rule (Fact 1); P95-04, P95-05 and P95-06 = A (2026-11-02) for the buttons, the chip and the reset confirm (Fact 7).
+- **Shipped:** `overflow-wrap: anywhere` on the dApp windows' identity line, the execute scope banner and Full Backup's reset notice (arc 1), and on the takeover's content column, its loading and progress screens and the reset confirm's name and sentence (arc 2); the takeover's and the arrival's full-width buttons grow to a wrapped name (`min-height: 48px`, `padding-block: 5px`); their chip ends a long name in an ellipsis; six source-scan cases; 240 px guards in `cap-chain-mismatch.test.ts` and `stale-network.test.ts` S1d; one shared `LONG_NETWORK_NAME`. Closes #1397.
+- **Dispositions:** the button padding follows the signed sentence over the decision frame (D7). `NARROW_ACCEPTED` takes no chip entry, since it would exempt the chip from S1d's check. The chain banner (#1365) and the name field's cap stay out of scope.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget; the decision frame's padding finding is in [lessons/phase-3.md](lessons/phase-3.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
+
 # wrap-3: a long network name wraps in the five places it can overflow
 
-Two arcs. Arc 1 (#1498) wraps the dApp windows' identity line, the execute window's scope banner and Full Backup's reset notice, and guards the capabilities window in a real layout. Arc 2 wraps the takeover's and the arrival's text, grows their full-width buttons, ends their chip in an ellipsis and wraps the reset confirm's two texts, on the owner's answers to OA-1 to OA-3, and guards the takeover in a real layout. Recon and measurements: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/` unless they name a package.
+Two arcs. Arc 1 (#1498) wraps the dApp windows' identity line, the execute window's scope banner and Full Backup's reset notice, and guards the capabilities window in a real layout. Arc 2 wraps the takeover's and the arrival's text, grows their full-width buttons, ends their chip in an ellipsis and wraps the reset confirm's two texts, on the owner's answers to OA-1 to OA-3, and guards the takeover in a real layout. Recon and measurements: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/` unless they name a package. At 170 lines this plan runs over the light target: the Outcome and arc 2's answered asks were added to a plan written at it.
 
 ## The issue, checked (#1397)
 
@@ -86,7 +98,7 @@ Simpler alternative: rules on each text instead of a box (rejected: the scope ba
 
 ## Security & Adversarial Considerations
 
-- **Trust boundary:** a dApp chooses which chain and request reach an approval window, not the name shown (Fact 4); Vue interpolates names as text. A long name today hides the end of `Stay on <name>`, so a person can act on a label they cannot read in full; after D2 they read all of it. The declarations add no injection or authorization path.
+- **Trust boundary:** a dApp chooses which chain and request reach an approval window, not the name shown (Fact 4); Vue interpolates names as text. A long name today hides the end of `Stay on <name>`, so a person can act on a label they cannot read in full; after D2 they read all of it. In arc 2 a person reads the whole name on the button that resets or switches; only the chip, which opens Networks and decides nothing, shortens it. The declarations add no injection or authorization path.
 - What we trust: the before numbers come from scratch specs outside the repository, so the PR carries the table and the pictures. T2 cannot see a later `Banner` change that stops passing the class to its root, and no e2e opens the scope banner with a long name; the captures are its layout evidence (wrap-2 D4 named the same blind spot).
 - Nothing changes a permission, a log line, storage, a message, a dependency or the CSP. Known limits: none.
 
@@ -116,7 +128,7 @@ Pass: every run green at retry 0; step 2's run with D1 reverted red; the capture
 
 ## Phase 3 (arc 2) ✓
 
-Make D4-D7b with T4-T6 (red on the base copies) and D9's guard (red on the base CSS). **Gate:** Phase 1's commands with `src/components/composite/TakeoverLayout.test.ts src/components/stale-network src/components/network-arrival` in the vitest list; Phase 2's gate steps 2-3 with `tests/e2e/stale-network.test.ts tests/e2e/network-arrival.test.ts tests/e2e/type-roles.test.ts`; the smoke capture after; `bun run check:plans`. Pass as Phase 2, for arc 2's places.
+Make D4-D7b with T4-T6 (red on the base copies) and D9's guard (red on the base CSS). Done: every gate green at retry 0 (lessons/phase-3.md). **Gate:** Phase 1's commands with `src/components/composite/TakeoverLayout.test.ts src/components/stale-network src/components/network-arrival` in the vitest list; Phase 2's gate steps 2-3 with `tests/e2e/stale-network.test.ts tests/e2e/network-arrival.test.ts tests/e2e/type-roles.test.ts`; the smoke capture after; `bun run check:plans`. Pass as Phase 2, for arc 2's places.
 
 ## Delivery
 
@@ -142,6 +154,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a19930) | findings: 1 | the scope banner's comment trimmed to its constraint; the e2e's paragraph cut | none |
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings: 3 | the e2e comment's switched-state reason was false (the strip's name is already ellipsized at the window's width, so the check would not flag it): sentence and D9 clause removed, `LONG_NAME` keeps the why of 25; T1 refuses an ellipsis (`text-overflow`, `white-space`), since a shortened line passes both the scan and the e2e; `.reset_notice` states it holds text only | none |
 | arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
+| arc 2 r1 | Codex, gpt-6.1-sol (session 01a19db1) | findings: 1 | the chip comment claimed the title names the network in full, false on the new-addresses and one-at-a-time screens and the arrival: cut to its constraint | none |
+| arc 2 r1 | Opus 5.5 (general-purpose) | findings: 4 | the chip comment, as Codex; T4's and T5's no-button checks also match `Button`, `RowAction` and `RowTarget`, T4 with a success control; the no-`height` check covers the grouped rule; one `LONG_NETWORK_NAME` for the three e2e files | a `NARROW_ACCEPTED` entry for the chips: it would exempt the chip from every check, dropping S1d's guard; no e2e meets the case it covers |
+| arc 2 r2 | Codex, resumed | **clean** | the four fixes verified; no regression | none |
+| net | Codex, gpt-6.1-sol, fresh (session 01a19db8) | **clean** | no cross-arc seam, duplication, drift or comment issue | none |
 
 ## Seeds (not run; orchestrator-owned)
 

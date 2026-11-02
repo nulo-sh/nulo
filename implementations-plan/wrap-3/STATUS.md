@@ -10,3 +10,4 @@
 - 2026-11-01: arc 1 review loop converged (Codex round 2 clean); final head gates green: lint, typecheck:all, test:all, cap-chain-mismatch on Chrome (17.7 s) and Firefox (27.7 s), armed smoke security-backup + stale-network on both browsers at retry 0. PR next.
 - 2026-11-02: OA-1 to OA-3 answered A (decision page 95). Arc 2 on `wrap-3-a2` off `dev` (arc 1 merged as #1498).
 - 2026-11-02: arc 2 phase 3: T4-T6 red on the base copies, green after; S1d's guard red on the base CSS, green on the fix; stale-network, network-arrival and type-roles smoke green on Chrome and Firefox at retry 0; capture after: every arc 2 place inside its box, both names, both widths, both browsers, seed rows unchanged.
+- 2026-11-02: arc 2 review loop converged (Codex round 2 clean, fresh net pass clean); final head gates green on both browsers. Close-out next.
