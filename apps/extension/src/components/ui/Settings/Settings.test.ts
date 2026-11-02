@@ -11,6 +11,7 @@ import { RowAction } from "@nulo/design"
 import ItemsContainer from "./ItemsContainer.vue"
 import SettingItem from "./SettingItem.vue"
 import SettingField from "./SettingField.vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
@@ -362,6 +363,18 @@ describe("ui/Settings — SettingItem", () => {
 		const { w } = await mountItem({ title: "Alice", description: "0x12...cdef", ...props })
 		expect(w.get('[data-testid="setting-description"]').attributes("variant")).toBe(role)
 		w.unmount()
+	})
+
+	test("wrapDescription lets the description wrap at every width; without it the line is cut", async () => {
+		const wraps = async (props: Record<string, unknown>) => {
+			const { w } = await mountItem({ title: "Full Backup", description: "Everything in this profile.", ...props })
+			const classes = w.get('[data-testid="setting-description"]').classes()
+			w.unmount()
+			return classes.some((name) => /description_wrap/.test(name))
+		}
+		expect([await wraps({}), await wraps({ wrapDescription: true })]).toEqual([false, true])
+		const parsed = parseSource("apps/extension/src/components/ui/Settings/SettingItem.vue")
+		expect(declarationsOf(parsed, ".description_wrap")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
 	})
 
 	test("the trailing value carries value", async () => {

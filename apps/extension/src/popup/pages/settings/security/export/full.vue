@@ -49,18 +49,15 @@ const {
 	backupStatus,
 	isBusy,
 	isDownloading,
-	showRecommendation,
 	isWrongPassword,
 	dekReplaced,
 	chainStateOmitted,
 	unopenedImportedKeys,
 	importsOnAddedNetworks,
 	isPasskeyProfile,
-	canDownload,
 	canEncrypt,
 	handleBackup,
-	handleEncrypt,
-	downloadBackup,
+	protectAndDownload,
 	reset,
 	followProfileUpdate,
 	dispose,
@@ -73,6 +70,22 @@ const addedNetworksText = computed(() => {
 	const count = accounts === 1 ? "1 imported account is" : `${accounts} imported accounts are`
 	const one = networks === 1
 	return `${count} on ${one ? "a network" : "networks"} you added. A restore re-creates only the default networks, so add ${one ? "that network" : "those networks"} again to restore ${accounts === 1 ? "it" : "them"}.`
+})
+
+const showsBackupBanner = computed(
+	() =>
+		dekReplaced.value ||
+		unopenedImportedKeys.value > 0 ||
+		importsOnAddedNetworks.value.accounts > 0 ||
+		chainStateOmitted.value ||
+		backupStatus.value === "encrypted" ||
+		backupStatus.value === "downloaded",
+)
+
+const downloadLabel = computed(() => {
+	if (backupStatus.value === "progress") return "Creating Backup…"
+	if (backupStatus.value === "encrypting") return "Encrypting…"
+	return "Download protected backup"
 })
 
 /** A reset in progress: its journal holds accounts a backup made now would miss. */
@@ -114,10 +127,8 @@ const onKeydown = (e) => {
 			handleBackup()
 			break
 		case "finished":
-			handleEncrypt()
-			break
 		case "encrypted":
-			downloadBackup()
+			protectAndDownload()
 			break
 		default:
 			// "progress" / "encrypting" hold a run in flight and "downloaded" has nothing left: Enter
@@ -187,13 +198,11 @@ onBeforeUnmount(() => {
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text variant="body" height="150" color="body">
-						Backup provides direct, unrestricted access to your entire profile.
+						This file restores everything in this profile, spending included.
 					</Text>
+					<Text variant="body" height="150" color="body">You protect it with a password next.</Text>
 					<Text variant="body" height="150" color="body">
-						Ensure that your backup is stored securely and never shared with anyone.
-					</Text>
-					<Text variant="body" height="150" color="body">
-						By continuing you agree to all risks and responsibilities.
+						Anyone with the file and its password can spend your funds.
 					</Text>
 				</Flex>
 			</div>
@@ -232,7 +241,7 @@ onBeforeUnmount(() => {
 				</div>
 
 				<div v-else class="export_section">
-					<span class="export_section_label type--label-section">Backup</span>
+					<span v-if="showsBackupBanner" class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>
 						<template #description>
@@ -279,19 +288,6 @@ onBeforeUnmount(() => {
 							</Text>
 						</template>
 					</Banner>
-					<Banner v-if="showRecommendation" variant="info" direction="vertical" data-testid="backup-ready-banner">
-						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
-						<template #description>
-							<Text v-if="isPasskeyProfile" height="140">
-								Choose a password for this file. You'll need it to restore the backup.
-							</Text>
-							<Text v-else height="140">
-								Encrypt the file with your profile password before you download it. Without a password, anyone
-								who opens the file controls this profile.
-							</Text>
-						</template>
-					</Banner>
-
 					<Banner
 						v-if="backupStatus === 'encrypted' || backupStatus === 'downloaded'"
 						variant="done"
@@ -318,6 +314,7 @@ onBeforeUnmount(() => {
 					v-model:repeatedPassword="repeatedPassword"
 					testid="backup-encrypt-password"
 					:maxLength="maxPasswordLength"
+					labelRepeat
 				/>
 			</template>
 		</template>
@@ -325,7 +322,7 @@ onBeforeUnmount(() => {
 		<!-- Bottom CTAs -->
 		<template #bottom>
 			<Button v-if="!isAgreed" @click="handleAgree" variant="cta" :disabled="!!pendingReset" data-testid="agree-continue-btn">
-				Agree &amp; Continue
+				Continue
 			</Button>
 
 			<Button
@@ -345,16 +342,6 @@ onBeforeUnmount(() => {
 				gap="8"
 			>
 				<Button
-					v-if="backupStatus === 'finished' || backupStatus === 'encrypting'"
-					@click="handleEncrypt()"
-					@keydown.enter="refuseRepeatEnter"
-					:disabled="backupStatus === 'encrypting' || isDownloading || !canEncrypt"
-					variant="cta"
-					data-testid="protect-password-btn"
-				>
-					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
-				</Button>
-				<Button
 					v-if="backupStatus === 'downloaded'"
 					ref="closeButton"
 					@click="handleClose"
@@ -366,13 +353,13 @@ onBeforeUnmount(() => {
 				</Button>
 				<Button
 					v-else
-					@click="downloadBackup()"
+					@click="protectAndDownload()"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="!canDownload || isDownloading"
-					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
+					:disabled="isBusy || isDownloading || !canEncrypt"
+					variant="cta"
 					data-testid="download-backup-btn"
 				>
-					{{ backupStatus === 'progress' ? 'Creating Backup…' : 'Download Backup' }}
+					{{ downloadLabel }}
 				</Button>
 			</Flex>
 		</template>

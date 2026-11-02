@@ -113,7 +113,7 @@ test("a later password profile's Home asks only for its own phrase", async ({ re
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 }, 60_000)
 
-test("a password profile's full backup downloads only once it is encrypted", async ({ registeredExtension }) => {
+test("a password profile's full backup leaves only encrypted, from one press", async ({ registeredExtension }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
@@ -128,18 +128,14 @@ test("a password profile's full backup downloads only once it is encrypted", asy
 	// in CI / cold extension boot this can take a while. Generous timeout.
 	await page.waitForFunction(
 		() => {
-			const protect = document.querySelector('[data-testid="protect-password-btn"]') as HTMLButtonElement | null
 			const download = document.querySelector('[data-testid="download-backup-btn"]') as HTMLButtonElement | null
-			return !!protect && !protect.disabled && !!download && !!document.querySelector('[data-testid="backup-ready-banner"]')
+			return !!download && !download.disabled
 		},
 		{ timeout: 30_000, polling: 250 },
 	)
-	// The plain file holds the recovery phrase and every key, so Download waits for encryption.
-	expect(await page.$eval('[data-testid="download-backup-btn"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
-	for (const id of ["backup-ready-banner", "protect-password-btn", "download-backup-btn"])
-		await page.waitForSelector(sel(id), { visible: true, timeout: 5_000 })
+	await page.waitForSelector(sel("download-backup-btn"), { visible: true, timeout: 5_000 })
 	await expectFitsNarrow(page, "a ready backup")
-	await shotSend(page, "export-full-ready", "backup-ready-banner")
+	await shotSend(page, "export-full-ready", "download-backup-btn")
 
 	const file = await downloadEncryptedBackup(page)
 	expect(file.trim().startsWith(`${FULL_BACKUP_V2_TAG}:`)).toBe(true)
