@@ -1,7 +1,7 @@
 ---
 plan: exec-window-1
 tier: light
-status: arc 1 built, gates green, PR open; close-out after the merge
+status: delivered (one PR, #1568, merge pending)
 issues: "#1494, #1495; P93-70 has no issue"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at c17dfc1bc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-02.
+- **Status:** delivered. One arc and this close-out in one PR against `dev`, #1568, which merges on the orchestrator's word.
+- **Owner sign-off:** P95-03 then P97-02 = D and P95-08 then P97-03 = C (2026-11-02 18:34 UTC, C "though I don't love"); P93-70 then P96-10 = F (2026-11-02 18:55 UTC).
+- **Shipped:** a failed estimate on an app-paid row shows the fee card's failed readout, with "<App> pays" or "You pay" over it, and TRY AGAIN asks the same estimate again (closes #1494); a failed authorization preview shows one line where the list would be, and TRY AGAIN asks the preview once more (closes #1495); an `aztec_sendTx` whose calls the wallet reads as transfers from this account to another address opens its fee section with "Leaves your account" rows per token (P93-70, no issue). After a keyboard TRY AGAIN focus stays on the row (D) or moves to "Show all details" (C), which now draws a focus ring.
+- **Dispositions:** C ships as framed; no cleaner shape turned up. The three-call capture is one frame a side, since the fee section and Confirm fit one 400 × 800 frame.
+- **Known limits:** none.
+- **Open items:** #1571, the six questions the PR asked (the preview snack after a retry, one transfer, the block where the fee section is replaced, counting authorizations, the "<App> pays" label, a preview retry that cannot succeed).
+- **Lessons:** none promoted. `lessons.md` is at its 8 KiB budget; the outline the base sheet strips from every button, and the capture method, are in [lessons/phase-4.md](lessons/phase-4.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 # exec-window-1: the execute window's failed fee row, failed preview, and what leaves the account
 
