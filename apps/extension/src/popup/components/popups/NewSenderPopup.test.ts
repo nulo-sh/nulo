@@ -2,8 +2,9 @@
  * Component tests for NewSenderPopup — pins the popup's wiring onto the shared
  * `usePopupEntity` lifecycle: Enter submits ONLY from an input/textarea
  * (a global Enter must not), the client's connect/fetch lives in onShow and
- * disconnect/reset in onHide, and the hex-validity guard still gates the Enter
- * path. Composable mechanics are covered in `usePopupEntity.test.ts`.
+ * disconnect/reset in onHide, Enter waits for the senders list, and Enter
+ * refuses what the button refuses. Composable mechanics are covered in
+ * `usePopupEntity.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -63,6 +64,14 @@ function pressEnterOnInput() {
 }
 function pressEnterOnBody() {
 	document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+}
+
+function deferred<T>() {
+	let resolve!: (value: T) => void
+	const promise = new Promise<T>((r) => {
+		resolve = r
+	})
+	return { promise, resolve }
 }
 
 const wrappers: VueWrapper[] = []
@@ -140,19 +149,17 @@ describe("NewSenderPopup — Enter-submit wiring (usePopupEntity)", () => {
 		await dispose(w)
 	})
 
-	test("Enter is LIVE during the unresolved initial getSenders — the hex-validity gate still holds", async () => {
-		// The composable installs the keydown listener BEFORE onShow's await
-		// (the hand-rolled watch installed it after). During that window the
-		// validity gate is the defense: invalid input never reaches addSender,
-		// a valid one submits (no deadlock).
+	test("Enter waits for the senders list: inert while it is out, then an unlisted address submits", async () => {
+		const list = deferred<string[]>()
 		accountStateServiceMock.getSenders.mockReset()
-		accountStateServiceMock.getSenders.mockImplementationOnce(() => new Promise(() => {}))
+		accountStateServiceMock.getSenders.mockImplementationOnce(() => list.promise)
 		const w = await mountShown()
-		await typeAddress(w, "not-hex")
+		await typeAddress(w, VALID_HEX)
 		pressEnterOnInput()
 		await flushPromises()
 		expect(accountStateServiceMock.addSender).not.toHaveBeenCalled()
-		await typeAddress(w, VALID_HEX)
+		list.resolve([])
+		await flushPromises()
 		pressEnterOnInput()
 		await flushPromises()
 		expect(accountStateServiceMock.addSender).toHaveBeenCalledWith("net-1", VALID_HEX)
@@ -224,11 +231,32 @@ describe("NewSenderPopup — the field modulus", () => {
 })
 
 describe("NewSenderPopup — a saved sender", () => {
-	test('an address already saved reads "Already exists"', async () => {
+	const warning = (w: VueWrapper) => w.find('[data-testid="sender-input"]').element.parentElement?.textContent?.trim()
+
+	test('an address already saved reads "Already exists"; Enter adds nothing, as the disabled button', async () => {
 		accountStateServiceMock.getSenders.mockResolvedValue([VALID_HEX])
 		const w = await mountShown()
 		await typeAddress(w, VALID_HEX)
 		await flushPromises()
-		expect(w.find('[data-testid="sender-input"]').element.parentElement?.textContent?.trim()).toBe("Already exists")
+		expect(warning(w)).toBe("Already exists")
+		expect(w.find("button").attributes("disabled")).toBeDefined()
+		pressEnterOnInput()
+		await flushPromises()
+		expect(accountStateServiceMock.addSender).not.toHaveBeenCalled()
+		expect(openToastMock).not.toHaveBeenCalled()
+	})
+
+	test('a list that lands after the address was typed reads "Already exists", and Enter adds nothing', async () => {
+		const list = deferred<string[]>()
+		accountStateServiceMock.getSenders.mockImplementationOnce(() => list.promise)
+		const w = await mountShown()
+		await typeAddress(w, VALID_HEX)
+		expect(warning(w)).toBe("")
+		list.resolve([VALID_HEX])
+		await flushPromises()
+		expect(warning(w)).toBe("Already exists")
+		pressEnterOnInput()
+		await flushPromises()
+		expect(accountStateServiceMock.addSender).not.toHaveBeenCalled()
 	})
 })
