@@ -14,6 +14,7 @@
  * are committed only after the check — never in the same statement as the
  * await.
  */
+import type { InjectionKey } from "vue"
 import { ensureDefaultAccountOrWait } from "@/composables/internal/default-account"
 import { createRunFence } from "@/composables/runFence"
 import { runsUnattended } from "@/composables/useStaleNetwork"
@@ -87,17 +88,40 @@ async function loadAccounts(deps: NetworkSwitchDeps, scope: NetworkSwitchScope, 
 export type NetworkSwitchHandler = (() => Promise<void>) & {
 	/** Ends the run in flight: it writes nothing past its next guard, and a failure it meets resolves at debug. */
 	supersede: () => void
+	/** Moves on each run begun with no scope or another profile or network than the run before, and on
+	 *  each supersede; a run of the same scope, as a reset's reload starts, leaves it. */
+	scopeChanges: () => number
+}
+
+/** Counts the handler's scope changes: a run of no scope or another profile or network, and a supersede. */
+function createScopeCounter() {
+	let changes = 0
+	let last: string | undefined
+	return {
+		begin: (scope: NetworkSwitchScope | undefined) => {
+			const key = scope && `${scope.profileId}\n${scope.networkId}`
+			if (key === undefined || key !== last) changes++
+			last = key
+		},
+		end: () => {
+			changes++
+			last = undefined
+		},
+		read: () => changes,
+	}
 }
 
 /** A live run's failure rejects; a superseded or drifted run's failure resolves, logged at debug. */
 export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwitchHandler {
 	const fence = createRunFence()
+	const scopes = createScopeCounter()
 	const run = async () => {
 		// begin() BEFORE the not-ready return: bootstrap's transitional
 		// `network = undefined` write must supersede an in-flight run even
 		// though this invocation itself does nothing.
 		const isCurrent = fence.begin()
 		const scope = deps.getScope()
+		scopes.begin(scope)
 		if (!scope) return
 		const guard = () => isCurrent() && deps.liveScopeMatches(scope)
 		try {
@@ -119,5 +143,35 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwit
 			console.debug("network switch superseded", { error })
 		}
 	}
-	return Object.assign(run, { supersede: () => fence.invalidate() })
+	return Object.assign(run, {
+		supersede: () => {
+			fence.invalidate()
+			scopes.end()
+		},
+		scopeChanges: scopes.read,
+	})
+}
+
+/** Provided by the popup shell: settles with the switch's runs; false once the scope changed meanwhile. */
+export const SWITCH_SETTLED_KEY: InjectionKey<() => Promise<boolean>> = Symbol("switch-settled")
+
+/**
+ * Awaits, after `tick`, the run `current()` names, failed or not, and any run that replaces it in the
+ * same scope: a reset or a reload re-assigns the same network and starts the run that loads its
+ * account. False once `scopeChanges()` moved: a newer switch or a lock owns what follows, even when a
+ * later switch returns to the same network before the superseded run settles.
+ */
+export async function settleLatestRun(
+	current: () => Promise<unknown>,
+	tick: () => Promise<unknown>,
+	scopeChanges: () => number,
+): Promise<boolean> {
+	await tick()
+	const mark = scopeChanges()
+	for (;;) {
+		const run = current()
+		await run.catch(() => undefined)
+		if (scopeChanges() !== mark) return false
+		if (run === current()) return true
+	}
 }

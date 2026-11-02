@@ -59,6 +59,8 @@ test("Home's steps are checked as they are done: How Aztec works opens its page,
 	await page.waitForSelector(sel("get-started-phrase"), { visible: true, timeout: 30_000 })
 	expect(await page.$(sel("get-started-aztec"))).not.toBeNull()
 	expect(await page.$(sel("backup-reminder-banner"))).toBeNull()
+	// The card stands, inert, while the funds load; a press lands once they have.
+	await waitForHomeReminders(page)
 
 	// The flag is written before the tab opens; the tab still opens after that wait.
 	const tab = await waitForNewTab(registeredExtension.browser, () => clickByTestId(page, "get-started-aztec"), 10_000)
