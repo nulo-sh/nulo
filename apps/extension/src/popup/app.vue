@@ -302,7 +302,7 @@ watch(
 		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
-provide(SWITCH_SETTLED_KEY, (live) => settleLatestRun(() => switchRun, nextTick, live))
+provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick, switchNetwork.scopeChanges))
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })

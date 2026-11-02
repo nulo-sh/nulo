@@ -83,7 +83,7 @@ function mountDetail(shell: { settled?: () => Promise<boolean> } = {}) {
 	const wrapper = mount(NetworkDetail, {
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn })],
-			provide: { [SWITCH_SETTLED_KEY as symbol]: shell.settled ?? (async (live: () => boolean) => live()) },
+			provide: { [SWITCH_SETTLED_KEY as symbol]: shell.settled ?? (async () => true) },
 			components: { SettingsPageShell },
 			stubs: {
 				SettingItem: {

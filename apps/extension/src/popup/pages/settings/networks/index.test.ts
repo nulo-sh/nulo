@@ -62,7 +62,7 @@ async function mountList(activeId: string, shell: { settled?: () => Promise<bool
 		attachTo: document.body,
 		global: {
 			plugins: [createTestingPinia({ createSpy: vi.fn }), router],
-			provide: { [SWITCH_SETTLED_KEY as symbol]: shell.settled ?? (async (live: () => boolean) => live()) },
+			provide: { [SWITCH_SETTLED_KEY as symbol]: shell.settled ?? (async () => true) },
 			components: { SettingsPageShell, SettingItem },
 			stubs: {
 				Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },

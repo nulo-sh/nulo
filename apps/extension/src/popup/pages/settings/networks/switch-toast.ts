@@ -13,8 +13,8 @@ export interface SwitchAnnounceStore {
 export interface SwitchAnnounceDeps<N extends { id: string }> {
 	store: SwitchAnnounceStore
 	activate: (target: N) => Promise<NetworkActivationResult>
-	/** Settles with the switch runs `live` covers; false once `live` ended. */
-	settled: (live: () => boolean) => Promise<boolean>
+	/** Settles with the switch's runs; false once the scope changed meanwhile. */
+	settled: () => Promise<boolean>
 	openToast: (options: ToastOptions) => void
 }
 
@@ -32,10 +32,9 @@ export async function switchAndAnnounce<N extends { id: string }>(target: N, dep
 	// Read before activating: the target's account can land while the network still persists.
 	const before = shownAccount(store)?.address
 	if ((await deps.activate(target)) !== "activated") return
-	const live = () => store.isLogined && store.profile?.id === profileId && store.network?.id === target.id
-	if (!(await deps.settled(live))) return
+	if (!(await deps.settled())) return
 	const network = store.network
-	if (!live() || !network) return
+	if (!store.isLogined || store.profile?.id !== profileId || network?.id !== target.id) return
 	const account = shownAccount(store)
 	const moved = before !== undefined && account !== undefined && account.address !== before
 	deps.openToast({
