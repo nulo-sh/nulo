@@ -132,7 +132,7 @@ The set D3 requires:
   - With D2, `[::1]:<port>` is unbound. A local process that binds it after boot could serve Chrome the playground's origin. That needs a hostile local process, which a dev or CI host does not support.
   - No permission changes.
 
-## Phase 1: #1493, the derived filter check
+## Phase 1: #1493, the derived filter check ✓
 
 1. Commit the test first: the helpers (D3-D5), and the describe "each e2e lane's filter names the CI files it runs". In the same commit, remove the test at `:723`.
    - **Live case:** `infrastructureFindings` returns `[]` on all four lanes.
