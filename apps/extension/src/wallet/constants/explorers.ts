@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { isHex32 } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 
 /** Canonical list of explorer ids — single source for both the `BlockExplorerType`
@@ -45,8 +46,6 @@ const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
 	},
 }
 
-const HEX_32_BYTES = /^0x[0-9a-fA-F]{64}$/
-
 /**
  * A transaction's explorer page. Returns null as `getBlockExplorerUrl` does, for anything but a
  * 32-byte hex hash: a stored hash, which a restored backup supplies, lands in a URL path.
@@ -56,7 +55,7 @@ export function getTransactionExplorerUrl(
 	explorerId: BlockExplorerType | null | undefined,
 	txHash: string,
 ): string | null {
-	const baseUrl = HEX_32_BYTES.test(txHash) ? explorerBaseUrl(chainId, explorerId) : null
+	const baseUrl = isHex32(txHash) ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/tx-effects/${txHash}` : null
 }
 
@@ -76,7 +75,7 @@ export function getBlockExplorerUrl(
 	explorerId: BlockExplorerType | null | undefined,
 	block: number | string,
 ): string | null {
-	const valid = typeof block === "number" ? Number.isSafeInteger(block) && block >= 0 : HEX_32_BYTES.test(block)
+	const valid = typeof block === "number" ? Number.isSafeInteger(block) && block >= 0 : isHex32(block)
 	const baseUrl = valid ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/blocks/${block}` : null
 }
@@ -87,7 +86,7 @@ export function getContractExplorerUrl(
 	explorerId: BlockExplorerType | null | undefined,
 	address: string,
 ): string | null {
-	const baseUrl = HEX_32_BYTES.test(address) ? explorerBaseUrl(chainId, explorerId) : null
+	const baseUrl = isHex32(address) ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/contracts/instances/${address}` : null
 }
 
@@ -97,6 +96,6 @@ export function getAccountExplorerUrl(
 	explorerId: BlockExplorerType | null | undefined,
 	address: string,
 ): string | null {
-	const baseUrl = HEX_32_BYTES.test(address) ? explorerBaseUrl(chainId, explorerId) : null
+	const baseUrl = isHex32(address) ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/address/${address}` : null
 }

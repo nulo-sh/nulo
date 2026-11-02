@@ -85,7 +85,7 @@ export interface FormState<TFields extends Record<string, FieldDef>> {
  *   },
  *   address: {
  *     initial: "",
- *     validate: (v) => isValidHex(v) ? null : "Invalid address",
+ *     validate: (v) => isHex32(v) ? null : "Invalid address",
  *   },
  * })
  *

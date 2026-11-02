@@ -1,7 +1,4 @@
-import { isValidHex } from "@/utils/string"
-
-/** BN254 scalar field modulus: the field an Aztec address lives in. */
-const FR_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+import { BN254_FR_MODULUS as FR_MODULUS, isHex32 } from "@nulo/wallet-core/utils"
 
 function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
 	let result = 1n
@@ -22,7 +19,7 @@ function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
  * popup. About half of all field elements fail, and a private transfer to one aborts in simulation.
  */
 export function isValidAztecAddress(hex: string): boolean {
-	if (!isValidHex(hex)) return false
+	if (!isHex32(hex)) return false
 	const x = BigInt(hex)
 	if (x >= FR_MODULUS) return false
 	const ySquared = (((x * x * x - 17n) % FR_MODULUS) + FR_MODULUS) % FR_MODULUS

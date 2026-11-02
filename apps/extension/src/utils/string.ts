@@ -28,11 +28,6 @@ export function getInitials(name: string): string {
 	return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-export function isValidHex(hex: string, length = 64): boolean {
-	const regex = new RegExp(`^0x[a-fA-F0-9]{${length}}$`)
-	return regex.test(hex)
-}
-
 export function sanitizeString(s: string, length = 0): string {
 	if (!s) return ""
 
