@@ -133,7 +133,7 @@ Build with the "what ships now" form of OA-1, OA-3 and OA-4 unless answered firs
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, and one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 3, one fresh Codex session over the net diff checks cross-arc issues. Prompts go under `~/.cache/nulo-backlog/fu2-onboarding-1/`. Hard stop at three rounds; log each round in `lessons/phase-N.md` and § Audit verdicts.
 - Approval boundary (a plan change; stop): a string outside § UI impact and the asks, a way back from the check to the words, a countdown on the check, a new route, a new permission, a log line with a word.
 - Close-out: the Outcome (`Known limits: #1536, #1539`); an ask still open filed as one `owner-decision` issue; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fu2-onboarding-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/fu2-onboarding-1/plan.md`.
