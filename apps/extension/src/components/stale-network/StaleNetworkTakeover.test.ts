@@ -7,6 +7,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
+import { boundAttr, declarationsOf, parseSource, type TemplateNode, walkElements } from "../../../scripts/type-roles/source-scan"
 
 const H = vi.hoisted(() => ({
 	push: vi.fn(),
@@ -447,5 +448,25 @@ describe("StaleNetworkTakeover — actions", () => {
 			expect(wrapper.findAll("input, textarea, [contenteditable], a").length).toBe(0)
 			expect(wrapper.text()).not.toMatch(/enter your recovery phrase(?! anywhere)/i)
 		}
+	})
+})
+
+describe("StaleNetworkTakeover — a long network name", () => {
+	test("wraps in the loading and progress screens, which hold no button", () => {
+		const parsed = parseSource("apps/extension/src/components/stale-network/StaleNetworkTakeover.vue")
+		const screens: TemplateNode[] = []
+		const buttons: TemplateNode[] = []
+		if (parsed.template) {
+			walkElements(parsed.template, (node, ancestors) => {
+				if (boundAttr(node, "class") === "$style.progress") screens.push(node)
+				if (node.tag === "button" && ancestors.some((up) => boundAttr(up, "class") === "$style.progress")) buttons.push(node)
+			})
+		}
+		expect(screens.map((node) => node.props?.find((prop) => prop.name === "data-screen")?.value?.content)).toEqual([
+			"loading",
+			"progress",
+		])
+		expect(buttons).toEqual([])
+		expect(declarationsOf(parsed, ".progress")).toMatchObject({ "overflow-wrap": "anywhere" })
 	})
 })
