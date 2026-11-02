@@ -182,7 +182,7 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(1)
-		expect(w.find('[data-testid="holdings-summary"]').text()).toContain("1 tokens")
+		expect(w.get('[data-testid="holdings-meta"]').text()).toMatch(/^1 token( · |$)/)
 	})
 
 	test("the add row opens the New token popup with the pasted address handed over", async () => {
