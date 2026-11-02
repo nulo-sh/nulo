@@ -19,6 +19,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
+import { PASSKEY_CHOICE_TEXT } from "@/utils/passkey-choice"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
@@ -156,7 +157,7 @@ const {
 
 const submitLabel = computed(() => {
 	if (isCreating.value) return "Creating..."
-	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
+	return authMethod.value === "passkey" ? "Create with passkey" : "Create profile"
 })
 
 function openCheck() {
@@ -195,7 +196,7 @@ onBeforeUnmount(() => {
 			:path="authMethod"
 			back="onboarding-create-back"
 			main="Create"
-			sub="Wallet"
+			sub="Profile"
 			:class="$style.hero"
 		/>
 
@@ -254,10 +255,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
-				<Text variant="body" color="secondary" height="150">
-					Your passkey replaces a password. Touch ID, Windows Hello, or
-					a hardware key, whichever your device supports.
-				</Text>
+				<Text variant="body" color="secondary" height="150" data-testid="onboarding-passkey-info">{{ PASSKEY_CHOICE_TEXT }}</Text>
 			</div>
 
 			<Button

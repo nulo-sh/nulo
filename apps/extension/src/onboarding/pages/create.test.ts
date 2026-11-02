@@ -131,9 +131,8 @@ describe("onboarding create", () => {
 		const w = await mountCreate()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="onboarding-name-input"]').exists()).toBe(false)
-		expect(w.text()).toContain("Create")
-		expect(w.text()).toContain("Wallet")
-		expect(w.text()).not.toContain("Profile")
+		expect(w.getComponent(OnboardingStepHeader).props()).toMatchObject({ main: "Create", sub: "Profile" })
+		expect(w.text()).not.toContain("Wallet")
 		expect(w.text()).toContain("How you'll unlock Nulo")
 		expect(w.get('[role="tablist"]').attributes("aria-label")).toBe("How you'll unlock Nulo")
 		expect(w.findAll('[role="tab"]').map((t) => t.attributes("data-testid"))).toEqual([
@@ -143,10 +142,14 @@ describe("onboarding create", () => {
 		expect(w.get('[data-testid="onboarding-method-passkey"]').attributes("aria-selected")).toBe("true")
 		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
 		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
+		expect(w.get('[data-testid="onboarding-passkey-info"]').text()).toBe(
+			"Your passkey replaces a password. Touch ID, Windows Hello, or a hardware key, whichever your device supports. It unlocks Nulo on this device. Your recovery phrase is what restores it.",
+		)
+		expect(w.get('[data-testid="onboarding-passkey-reuse"]').text()).toBe("Use a Nulo passkey I already have")
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "passkey" })
 
 		await choosePassword(w)
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create profile")
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "password" })
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
 	})
@@ -199,7 +202,7 @@ describe("onboarding create — the method tablist", () => {
 		expect(tab(w, "passkey").attributes()).toMatchObject({ "aria-selected": "false", tabindex: "-1" })
 		expect(document.activeElement).toBe(tab(w, "password").element)
 		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(true)
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create profile")
 
 		expect(press("ArrowLeft").defaultPrevented).toBe(true)
 		await flushPromises()

@@ -218,7 +218,7 @@ export async function fillRestore(s: RunState, file: ModelFile, p: ParamsMap["im
 }
 
 /** Restores `file` from the import page the caller opened, as `p` says: `reused`, the id of a
- *  passkey the browser's chooser picks through "Use a passkey I already have". */
+ *  passkey the browser's chooser picks through "Use a Nulo passkey I already have". */
 export async function restoreFile(s: RunState, file: ModelFile, p: ParamsMap["importBackup"], reused?: string): Promise<Driven> {
 	const t0 = Date.now()
 	if (!(await fillRestore(s, file, p))) {

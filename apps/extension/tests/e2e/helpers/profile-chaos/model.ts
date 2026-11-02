@@ -368,9 +368,9 @@ const RETIRED_RESEAL = cite(SERVICE, 1298, 'if (classifyProfileRow(profile).kind
 const RETIRED_FINALIZE = cite(SERVICE, 2602, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 151, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 170, "if (isMounted()) leavePhrase()")
-const ONBOARDING_LATER = cite(ONBOARDING, 190, '@later="leavePhrase"')
+const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 171, "if (isMounted()) leavePhrase()")
+const ONBOARDING_LATER = cite(ONBOARDING, 191, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
@@ -620,7 +620,7 @@ const createPassword: ActionSpec<"createPassword"> = {
 	},
 }
 
-/** `credential` minted already is "Use a passkey I already have": the browser's pick among every
+/** `credential` minted already is "Use a Nulo passkey I already have": the browser's pick among every
  *  passkey it holds answers at a fresh input, and the new row names the picked credential. */
 const createPasskey: ActionSpec<"createPasskey"> = {
 	name: "createPasskey",

@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<OnboardingPage :gap="24" data-testid="onboarding-import-page" :data-name-field="nameFieldState" :data-restore-stage="restoreStage">
-		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Wallet" :class="$style.hero">
+		<OnboardingStepHeader current="wallet" path="import" back="onboarding-import-back" main="Import" sub="Profile" :class="$style.hero">
 			<Text variant="body" color="secondary" height="150">Restore from a recovery phrase or a full backup.</Text>
 		</OnboardingStepHeader>
 
