@@ -1,8 +1,8 @@
 ---
 plan: incoming-2
 tier: light
-status: arc 1 in review; arc 2 waits on OA-1
-issues: "#1429 (arc 1); #1431 (arc 2, after OA-1)"
+status: completed
+issues: "#1429 (arc 1); #1431 (arc 2)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,18 @@ base: origin/dev at 51ea220b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. Two arcs: arc 1 as #1482 (closes #1429); arc 2 with this close-out as one PR (closes #1431).
+- **Shipped**: arc 1: a refused log page restages the reconciliation marker for the next tick, so a tick ends with one outcome, backs off, and a node that refuses every page reaches Home's stall line; Retry runs one tick; F-10 in part, the reconciliation entry points take `PublicTarget`. Arc 2: the received page reads the receipt its route names (a `pre` watch clears the shown one first); its read follows `createReconnectRead`, the rule extracted from `useConfigRead`, so a read the worker's restart dropped reads again on the reconnect; any other failed read with nothing on screen shows the owner's option E (History's empty-state layout, Retry, Open History), never "not found"; events during a read win over its snapshot; a same-block reconnect keeps an armed fee row.
+- **Known limits**: #1553 (empty log pages finish a reconciliation and remove receipts), #1554 (a node failing every other page keeps the scan restarting with no stall), #1555 (a stored amount `BigInt` refuses breaks its page).
+- **Dispositions**: OA-1's options A, B, C, D and F were not taken (E picked on decision page 97). F-10's other positional signatures stay (report-only; #750 owns the arm's shape). Rejected: a retry cap, `:key` on the RouterView, the fee row's id and block-hash tracker. Arc 2's network e2e ran on Chrome only, per the orchestrator's gate; arc 1 ran both browsers.
+- **Size**: about 170 lines against light's 150; two arcs' gates, captures and review rounds are kept as evidence.
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and the vitest note (`clearAllMocks` keeps `mockReturnValueOnce` queues) stays in [lessons/phase-2.md](lessons/phase-2.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # incoming-2: a scan that loops on a half-answering node, and a received page that shows the wrong receipt
 
@@ -39,7 +51,7 @@ The claims held. Not in the issues: the catch reads tips from the indexer, not `
 
 - **Facts**: F1 the cites above and in recon. F2 `onConnected` fires once per Ready, the first included, a task after the waiting requests post, unless the port dropped before that task (`extension-messaging/src/background/client.ts:181-192`); a drop after Ready rejects pending requests and reconnects (`:130-147`). F3 `received-fee-privacy.test.ts:60-75` counts fee lookups on the wire, so a second lookup at open fails or flakes it. F4 the three `beginReconciliation` callers return `failed` whatever its step did (`:2078`, `:2178`, `:2414`). F5 `retryIncomingScan` clears the gate and polls the active profile's targets on that network (`:1353-1362`). F6 #750 reopens on "a substantial public-arm change" once #540 has landed; #540 is closed, and this change is about twenty lines. F7 the stall line lives in `RecentActivityView` (`:836-845`), shown on Home (`general.vue:176`) only.
 - **Inferences**: I1 a staged marker is stepped by the next tick that passes the gate, the network read and the class gate (`:2047-2072`); a restarted batch therefore waits one backoff, 30 s or more. I2 a failed tick writes the marker at most twice (`:2078`, `:2178`: the stage, then the restart's), once from `:2072`.
-- **Asks**: OA-1, what the received page shows after a read that fails with no reconnect (arc 2).
+- **Asks**: OA-1, what the received page shows after a read that fails with no reconnect: answered, option E (decision ledger).
 
 ## Architecture & Implementation
 
@@ -50,7 +62,8 @@ The claims held. Not in the issues: the catch reads tips from the indexer, not `
 - **D5, the read and its reconnect rule**: move the rule `useConfigRead` carries (only the newest read lands; read again on every connect after the first, and on the first when the newest read failed) into `composables/reconnectRead.ts`. Its `createReconnectRead(client, run)` takes a `run(isCurrent)` that resolves `false` to mark a failed read; a throw passes out of `read()` unmarked, as a throwing `land` does today. `useConfigRead` keeps its `onUpdate` keys around the rule and catches only `fetch`, so its behaviour is unchanged; its generic test cases move with the rule. The page splits its read into `readReceipt(isCurrent)` (the record) and `loadDetails(record, isCurrent)` (network, tokens, fee); each request checks `isCurrent` first. A rejected record read changes nothing shown and marks the read failed. A rejected network or token read lands what the page has, then marks it failed, so the reconnect after a worker restart reads again, the first observed one included (F2). `modeRead.read()` stays in `onMounted`.
 - **D6, the fee across reads**: a read that lands the receipt and block already shown keeps a fee on screen; any other landing loads the fee as an open does, under the house rule that an unknown privacy mode counts as on. An `onIncomingTransferUpdated` still reloads it, as now.
 - **D7, events across reads**: events for the route's id apply to a shown record at once, as now. While a run's record read is in flight, they also land in that run's slot, and its snapshot yields to the last one: an update replaces a found record, a delete wins. The slot opens with the run and closes when its snapshot lands. It replaces the page-wide `heldUpdate` and `deletedIds`, so a read that starts after a delete is authoritative. Handlers registered in section 7 are function declarations. `onBeforeUnmount` removes the listeners, disconnects the clients, then disposes the reader and the fee row (CLAUDE.md § Cleanup order).
-- **Files**: arc 1: `wallet/services/incoming-transfer/service.ts`, `service.scenarios.test.ts`, `ARCHITECTURE.md:103`. Arc 2: `composables/reconnectRead.ts` (new) and its test, `useConfigRead.ts` and its test, `useReceiptFee.ts` and its test, `popup/pages/received/[id].vue`, `[id].test.ts`.
+- **D8, OA-1's state (option E)**: a record read that rejects with no receipt shown, and not because the port dropped (`isClientDisconnectRejection` or `RpcDisconnectedError`, after which the client reconnects and the rule reads again), shows History's empty-state layout: the History glyph, "Couldn't load this receipt" in `txt-danger`, "Try again, or open History to find it there.", Retry (reads again; the body is empty while it reads) and Open History. Its styles live once, in `popup/pages/empty-state.module.css`, which History's empty state composes too, unchanged.
+- **Files**: arc 1: `wallet/services/incoming-transfer/service.ts`, `service.scenarios.test.ts`, `ARCHITECTURE.md:103`. Arc 2: `composables/reconnectRead.ts` (new) and its test, `useConfigRead.ts` and its test, `useReceiptFee.ts` and its test, `popup/pages/received/[id].vue`, `[id].test.ts`, `popup/pages/empty-state.module.css` (new), `activity.vue` (composes it).
 - **Alternatives not taken**: a `restarted` flag on `beginReconciliation` (a boolean that steers control flow); no immediate step for any caller (slows the reorg path ARCHITECTURE.md calls immediate); keeping the marker when the fresh checkpoint equals `upperBoundHash` (a recovery-policy change the bound does not need); a retry cap (a retry policy); `:key="$route.fullPath"` in `app.vue` (remounts every page on every query change); reading again on every connect, the first included, as the journal does (a second fee lookup at open, F3); the reconnect rule copied inline into the page (Opus r1: three lines with another payload; rejected: a copy of a subtle rule that drifts from its twin); widening `useConfigRead`'s type to any client (its contract is config's `onUpdate` keys).
 
 ## UI impact
@@ -59,8 +72,9 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 
 - **Arc 1, Home's stall line**: it now appears for a node that refuses every log page, as it does for a node that is down. Copy unchanged. No other surface.
 - **Arc 2, received, a push from A to B**: before, A's amount, From/To, hashes, fee and links under B's URL; after, B's.
-- **Arc 2, received, a read that fails on a worker restart**: before, "RECEIPT NOT FOUND" until reopened; after, the header over an empty body until the reconnect's read lands, then the receipt. After a restart the amount comes back, and a fee on screen stays (D6). A read that fails with no reconnect: OA-1.
-- No new copy, layout or style. Arc 2's PR carries before/after captures of both received states and of OA-1's state.
+- **Arc 2, received, a read that fails on a worker restart**: before, "RECEIPT NOT FOUND" until reopened; after, the header over an empty body until the reconnect's read lands, then the receipt. After a restart the amount comes back, and a fee on screen stays (D6).
+- **Arc 2, received, a read that fails with no reconnect** (a 60 s timeout, a refused storage or profile read): before, "RECEIPT NOT FOUND"; after, D8. The owner's pick, decision page 97 (P97-01, signed 2026-11-02), option E: "The failure reads like the History page's own empty state, with both ways on as buttons." It replaces the page 95 lean (P95-02, B). The copy is the prototype's, word for word.
+- No other copy, layout or style. Arc 2's PR carries before/after captures of the three received states.
 
 ## Security & Adversarial Considerations
 
@@ -84,7 +98,7 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 
 ## Arc 2: the received page reads what its route names (#1431; after OA-1)
 
-### Phase 2
+### Phase 2 ✓
 
 - Do D4–D7, and OA-1's answer (its recommendation needs no code beyond D5).
 - **Tests**:
@@ -102,13 +116,20 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
   - Then arc 1's `e2e:agent` line for `incoming-arrival.test.ts` (it opens a receipt from the snack), on both browsers; it rebuilds `dist/`, so smoke runs and captures go first.
   - Pass: every command exits 0; the marked cases are red on the base copy of the page. Record each browser's wall-clock.
 - **Captures**: scratch smoke specs under `~/.cache/nulo-backlog/incoming-2/`, copied into `tests/e2e/` for one Chrome run on the base and one on the head, each on a fresh smoke build, then deleted. Wait on selectors and on B's own content, never on a sleep. (a) Seed two public receipts with different amounts; open A; `navigateByHash` to B; on the base wait for B's URL and A's content, on the head for B's content. (b) Hold the worker's storage read for the receipt through its CDP target, detach, then stop the worker with the fixtures' `stopBackground`; capture the base's "not found", and on the head the held state, then the receipt. (c) OA-1's state: make the worker refuse that read once while the port stays connected, wait for the worker's own count of the refusal, and capture the base's "not found" against the head's state. Commit the PNGs to `implementations-plan/incoming-2/screenshots/`.
+- **Result** (`3d1ffadaf`, review fixes `671dcd69f`, `bf59e8639`): exit 0 each. On the base copy of the page 8 cases red, the controls green; each review fix's case red on the head before it. Smoke at retry 0, 15 passed and 1 skipped on Chrome (129 s), 16 on Firefox (173 s). Network `incoming-arrival` at retry 0 on Chrome, 7 tests, 224 s; Firefox not run, per the orchestrator's gate for this arc. Deviations: (b) a stopped worker also locks a password profile in the harness, so about 1 s later the popup routes to the lock screen: the frames are the window before it (base "not found", head the empty body), and the reconnect read is proved by the component tests; (c) the refusal holds until disarmed, since a background read can take a one-shot one.
 
 ## Decision ledger
 
 | Id | Decision | Rejected |
 |---|---|---|
 | D1–D7 | as above | see Alternatives not taken |
-| Arcs | #1429 and #1431 ship as two stacked arcs: OA-1 concerns only the received page | one PR for both (it would hold #1429 behind an owner question it does not touch) |
+| Arcs | #1429 and #1431 ship as two arcs: OA-1 concerns only the received page | one PR for both (it would hold #1429 behind an owner question it does not touch) |
+| OA-1 | Option E, the owner on decision page 97 (P97-01, signed 2026-11-02): "The failure reads like the History page's own empty state, with both ways on as buttons." Built as D8 | A (the page 95 recommendation), B (the page 95 lean), C, D, F |
+| D8 | A dropped port keeps the empty body, since its reconnect reads again (the approved restart line); every other rejection shows E | E on every rejection (a flash of the failure on each worker restart, against the approved restart line) |
+| D8 styles | One `empty-state.module.css`, composed by History and the received page, each setting its title colour | a copy of History's three rules (the prototype's; a copy that drifts) |
+| D6 rule | An armed fee row for the same receipt and block keeps its fee, its tap or its lookup in flight; a failed lookup looks again; any other landing disarms and resets the row at once, and the run does not await the fee step (its lookup can wait on the reconnect that must read again) | tracking the row's last id and block hash (state for a duplicate privacy-off lookup) |
+| D8 scope | E only while nothing is on screen: a failed read after a resolved absence leaves "not found", as a failed read leaves a shown receipt (D5) | E replacing "not found" (Retry then fell back to "not found" while it read) |
+| Access | Under the owner's 2026-10-19 delegation: Retry is a native button, Open History a link (`Button`'s `link`, a RouterLink), both in the Tab order after the header | Open History as a button that pushes the route (a navigation without link semantics) |
 
 ## Audit verdicts
 
@@ -120,6 +141,10 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 | Arc 1 Codex r1 | approve (one comment nit) | the nit: `beginReconciliation`'s doc-comment states the why | none |
 | Arc 1 Opus | conditional approve (no bug) | a test comment naming the fix, ARCHITECTURE.md's "unchanged" wording, a control at the gate's edge | none |
 | Arc 1 Codex r2 | approve | none | none |
+| Arc 2 Codex r1 | conditional approve | Retry falling back to "not found" (fixed as D8 scope), a moved block keeping its fee, the run awaiting the fee, four comments | none |
+| Arc 2 Opus | conditional approve | the same Retry path; a tap lost to a same-block landing (D6 rule); a `RpcDisconnectedError` row, the kept-fee assertion, a superseded run, shared stubs; comments | the id and block-hash tracker (D6 rule) |
+| Arc 2 Codex r2 | conditional approve: a Show fee press cancelled by a same-block snapshot | armed rows keep a lookup in flight (`bf59e8639`) | none |
+| Arc 2 Codex r3 | approve, no new material finding | none | none |
 | Opus Plan r1 | conditional approve | A1 (known limit), A2 (D4), A3 (fence before each request; unmount test), F3, F6, F7, I1 cost, I2; OA-1; D4 `pre` flush; D5 reconnect recovery limited to a restart, `modeRead` outside the read; D7 apply at once and hold, slot per run; TDZ, unmount order, the read split; tests (second checkpoint hash, `anchored`, page reads only, a real first connect); smoke flags, `EXTENSION_PATH`, `dist/` order, `type-roles.test.ts` | D5 inline (see Alternatives); ask (b) settled by D6 |
 
 ## Delivery
@@ -127,7 +152,7 @@ The owner approved this lane on decision page 94 (P94-01, signed 2026-11-01). Th
 - **Arc 1**: branch `worktree-incoming-2`, one PR to `dev` with `gh pr create`, ready, no labels, after the Codex loop converges and the gates pass.
   - Title: `fix(incoming): a refused log page ends the scan tick, backs off and shows the stall` (83 characters).
   - Body: the owner's words, the gates with outcomes, each browser's e2e wall-clock, "F-10 in part: the reconciliation entry points take `PublicTarget`", `Closes #1429`.
-- **Arc 2**: after OA-1, stacked on arc 1 (`gh stack`), or off `dev` once arc 1 merges. Title: `fix(received): the receipt page follows its link, and a failed read is not "not found"` (86 characters). Body as arc 1's, with the captures and `Closes #1431`. The close-out lands as its final commits, with the known limits filed and listed.
+- **Arc 2**: branch `incoming-2-a2` off `dev` after arc 1's merge, one PR with `gh pr create`. Title: `fix(received): the receipt page follows its link, and a failed read is not "not found"` (86 characters). Body as arc 1's, with the captures and `Closes #1431`. The close-out lands as its final commits, with the known limits filed and listed.
 
 ## Post-implementation
 

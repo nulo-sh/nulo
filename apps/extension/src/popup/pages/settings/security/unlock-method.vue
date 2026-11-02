@@ -32,7 +32,8 @@ import { logCredentialFailure } from "@/utils/credential-refusal"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
-import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
+import { isNewPasswordValid } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"

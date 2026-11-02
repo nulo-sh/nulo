@@ -129,6 +129,24 @@ describe("useReceiptFee", () => {
 		expect([fee.state.value, fee.feeJuice.value]).toEqual(["tap", null])
 	})
 
+	test("reset drops a lookup in flight and a shown fee, returns to loading, and leaves no tap", async () => {
+		const service = makeService()
+		const fee = useReceiptFee(service)
+		await fee.load(publicRecord("shown"), false)
+		expect(fee.state.value).toBe("shown")
+		const lookup = deferred<Fee>()
+		service.getReceiptFee.mockReturnValueOnce(lookup.promise)
+		const loading = fee.load(publicRecord(), false)
+		fee.reset()
+		lookup.resolve({ feeJuice: "1" })
+		await loading
+		await fee.show()
+		expect([fee.state.value, fee.feeJuice.value]).toEqual(["loading", null])
+		expect(service.getReceiptFee).toHaveBeenCalledTimes(2)
+		await fee.load(publicRecord("next"), false)
+		expect([fee.state.value, fee.feeJuice.value]).toEqual(["shown", "100"])
+	})
+
 	test("dispose drops a lookup still in flight", async () => {
 		const service = makeService()
 		const lookup = deferred<Fee>()
