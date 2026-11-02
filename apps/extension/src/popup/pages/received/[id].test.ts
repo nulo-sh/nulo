@@ -1,5 +1,6 @@
-import { EventHandler } from "@nulo/wallet-core/utils"
-import { flushPromises, mount } from "@vue/test-utils"
+import { CLIENT_DISCONNECTED_MESSAGE, RpcDisconnectedError, RpcTimeoutError } from "@nulo/extension-messaging/errors"
+import { deferred, EventHandler } from "@nulo/wallet-core/utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { reactive } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { CHAIN_IDS } from "@/utils/chain-ids"
@@ -11,12 +12,12 @@ const mocks = vi.hoisted(() => ({
 	getTokens: vi.fn(),
 	getNetwork: vi.fn(),
 	copy: vi.fn(),
-	routeId: "r1",
 	incoming: undefined as unknown,
 	config: undefined as unknown,
 	feeJuiceUsd: undefined as number | undefined,
 }))
 const appStore = reactive({ defaultExplorer: "aztecscan" as string | null })
+const route = reactive({ params: { id: "r1" } })
 
 const TOKEN = `0x${"0a".repeat(32)}`
 const ACCOUNT = `0x${"0c".repeat(32)}`
@@ -33,7 +34,7 @@ const RECEIPT = {
 	discoveredAt: 1_000,
 }
 
-vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: mocks.routeId } }) }))
+vi.mock("vue-router", () => ({ useRoute: () => route }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStore }))
 vi.mock("./received-copy", () => ({ copyReceivedValue: mocks.copy }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
@@ -76,15 +77,31 @@ vi.mock("@/wallet/services/config/client", () => ({
 
 type Fee = { feeJuice: string } | null
 
-function makeIncoming(record: IncomingTransferRecord) {
-	return {
-		getIncomingTransferById: vi.fn(async (): Promise<IncomingTransferRecord | undefined> => record),
-		getReceiptFee: vi.fn(async (): Promise<Fee> => ({ feeJuice: "2500000000000000" })),
-		getCachedReceiptFee: vi.fn(async (): Promise<Fee> => null),
+type Read = () => Promise<IncomingTransferRecord | undefined>
+
+/** Each receipt read answers the next of `reads` in turn, else `record`. The port opens on the first
+ *  request, as the real client's does; without `announce` its drop beat that open's announcement. */
+function makeIncoming(record: IncomingTransferRecord, reads: Read[] = [], { announce = true } = {}) {
+	const incoming = {
+		getIncomingTransferById: vi.fn(async (_id: string): Promise<IncomingTransferRecord | undefined> => {
+			open()
+			const next = reads.shift()
+			return next ? next() : record
+		}),
+		getReceiptFee: vi.fn(async (_id: string): Promise<Fee> => ({ feeJuice: "2500000000000000" })),
+		getCachedReceiptFee: vi.fn(async (_id: string): Promise<Fee> => null),
 		onIncomingTransferUpdated: new EventHandler<IncomingTransferRecord>(),
 		onIncomingTransferDeleted: new EventHandler<IncomingTransferRecord>(),
+		onConnected: new EventHandler<void>(),
 		disconnect: vi.fn(),
 	}
+	let opened = false
+	function open() {
+		if (opened) return
+		opened = true
+		if (announce) incoming.onConnected.invoke()
+	}
+	return incoming
 }
 
 /** `privacyMode` answers each read in turn; the port opens on the first request, as the real client's does. */
@@ -109,32 +126,35 @@ function makeConfig(modeReads: Array<() => Promise<unknown>>) {
 }
 
 beforeEach(() => {
-	mocks.routeId = "r1"
+	route.params.id = "r1"
 	mocks.getNetwork.mockResolvedValue({ id: "n1", chainId: 1 })
 	mocks.incoming = makeIncoming(RECEIPT as unknown as IncomingTransferRecord)
 	mocks.config = makeConfig([])
 })
 
+enableAutoUnmount(afterEach)
+
 afterEach(() => {
 	vi.clearAllMocks()
+	mocks.getNetwork.mockReset()
+	mocks.getTokens.mockReset()
 	appStore.defaultExplorer = "aztecscan"
 	mocks.feeJuiceUsd = undefined
 })
 
+const STUBS = {
+	SubPageHeader: true,
+	SectionLabel: true,
+	AddressDisplay: true,
+	Icon: true,
+	Text: true,
+	Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
+	Button: { inheritAttrs: false, props: ["link"], template: "<button v-bind='$attrs' :data-link='link'><slot /></button>" },
+}
+
 async function mountPage(tokens: Promise<unknown[]>) {
 	mocks.getTokens.mockReturnValue(tokens)
-	const w = mount(ReceivedDetail, {
-		global: {
-			stubs: {
-				SubPageHeader: true,
-				SectionLabel: true,
-				AddressDisplay: true,
-				Icon: true,
-				Text: true,
-				Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
-			},
-		},
-	})
+	const w = mount(ReceivedDetail, { global: { stubs: STUBS } })
 	await flushPromises()
 	return w
 }
@@ -192,7 +212,7 @@ describe("the received page's network fee and updates", () => {
 	const testid = (w: Awaited<ReturnType<typeof mountPage>>, id: string) => w.find(`[data-testid="${id}"]`)
 
 	beforeEach(() => {
-		mocks.routeId = PUBLIC_RECEIPT.id
+		route.params.id = PUBLIC_RECEIPT.id
 	})
 
 	async function mountPublic(modeReads: Array<() => Promise<unknown>>) {
@@ -289,18 +309,7 @@ describe("the received page's network fee and updates", () => {
 		mocks.config = makeConfig([async () => false])
 		let releaseRead!: (record: IncomingTransferRecord) => void
 		incoming().getIncomingTransferById.mockReturnValueOnce(new Promise((r) => (releaseRead = r)))
-		const w = mount(ReceivedDetail, {
-			global: {
-				stubs: {
-					SubPageHeader: true,
-					SectionLabel: true,
-					AddressDisplay: true,
-					Icon: true,
-					Text: true,
-					Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
-				},
-			},
-		})
+		const w = mount(ReceivedDetail, { global: { stubs: STUBS } })
 		mocks.getTokens.mockReturnValue(Promise.resolve([]))
 		incoming().onIncomingTransferUpdated.invoke(remined(101))
 		releaseRead(PUBLIC_RECEIPT)
@@ -396,5 +405,232 @@ describe("the received page's explorer links", () => {
 		appStore.defaultExplorer = null
 		await flushPromises()
 		expect(w.find('[data-testid$="-link"]').exists()).toBe(false)
+	})
+})
+
+describe("the received page reads what its route names", () => {
+	const incoming = () => mocks.incoming as ReturnType<typeof makeIncoming>
+	const testid = (w: Awaited<ReturnType<typeof mountPage>>, id: string) => w.find(`[data-testid="${id}"]`)
+	const tst = token({ decimals: 18, hasDecimals: true })
+	/** A worker restart as the page's incoming client sees it: the port is open again. */
+	const reconnect = async () => {
+		incoming().onConnected.invoke()
+		await flushPromises()
+	}
+	const B = {
+		...PUBLIC_RECEIPT,
+		id: `pub:p1|n1|0x${"4e".repeat(32)}|0`,
+		txHash: `0x${"4e".repeat(32)}`,
+		blockHash: `0x${"5a".repeat(32)}`,
+		amountRaw: (2n * 10n ** 18n).toString(),
+		l2BlockNumber: 200,
+	} satisfies IncomingPublicEventRecord
+
+	beforeEach(() => {
+		route.params.id = PUBLIC_RECEIPT.id
+		mocks.config = makeConfig([async () => false])
+	})
+
+	test("a push to another receipt's link shows only that receipt, and the first one's late token list paints nothing", async () => {
+		mocks.config = makeConfig([async () => true])
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT)
+		incoming().getIncomingTransferById.mockImplementation(async (id) => (id === B.id ? B : PUBLIC_RECEIPT))
+		incoming().getCachedReceiptFee.mockImplementation(async (id) =>
+			id === PUBLIC_RECEIPT.id ? { feeJuice: "2500000000000000" } : null,
+		)
+		const lateTokens = deferred<unknown[]>()
+		const bNetwork = deferred<unknown>()
+		mocks.getNetwork.mockResolvedValueOnce({ id: "n1", chainId: 1 }).mockReturnValueOnce(bNetwork.promise)
+		mocks.getTokens.mockReturnValueOnce(lateTokens.promise).mockResolvedValueOnce([tst])
+		const w = mount(ReceivedDetail, { global: { stubs: STUBS } })
+		await flushPromises()
+		expect(w.text()).toContain("0x1d1d..1d1d")
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ")
+
+		route.params.id = B.id
+		await flushPromises()
+		expect(w.text()).toContain("0x4e4e..4e4e")
+		expect(w.text()).not.toContain("0x1d1d..1d1d")
+		expect(testid(w, "received-fee-value").exists()).toBe(false)
+		lateTokens.resolve([{ ...tst, symbol: "LATE" }])
+		await flushPromises()
+		expect(amountBlock(w).exists()).toBe(false)
+
+		bNetwork.resolve({ id: "n1", chainId: 1 })
+		await flushPromises()
+		expect(amountBlock(w).text()).toMatch(/^\+2\s+TST$/)
+		await testid(w, "received-fee-show").trigger("click")
+		await flushPromises()
+		expect(incoming().getReceiptFee).toHaveBeenCalledExactlyOnceWith(B.id)
+	})
+
+	test("the first connect reads once and looks the fee up once", async () => {
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT)
+		await mountPage(Promise.resolve([tst]))
+		expect(incoming().getIncomingTransferById).toHaveBeenCalledTimes(1)
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["its port's teardown", new Error(CLIENT_DISCONNECTED_MESSAGE)],
+		["a send on a closed port", new RpcDisconnectedError("Request 'getIncomingTransferById' could not be sent")],
+	])("a read the worker's restart dropped (%s) shows nothing in its place, and the reconnect reads it again", async (_name, error) => {
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => Promise.reject(error)])
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(w.text()).not.toContain("RECEIPT NOT FOUND")
+		expect(testid(w, "received-read-failed").exists()).toBe(false)
+		await reconnect()
+		expect(incoming().getIncomingTransferById).toHaveBeenCalledTimes(2)
+		expect(amountBlock(w).text()).toMatch(/^\+1\s+TST$/)
+	})
+
+	test("a network read the restart dropped hides the amount until the reconnect reads it again, and a fee shown stays", async () => {
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT)
+		mocks.getNetwork.mockRejectedValueOnce(new Error(CLIENT_DISCONNECTED_MESSAGE))
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(amountBlock(w).exists()).toBe(false)
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+		await reconnect()
+		expect(amountBlock(w).text()).toMatch(/^\+1\s+TST$/)
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+	})
+
+	test("a drop that beat the first announcement and a fee lookup held on the reopening port still read again", async () => {
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [], { announce: false })
+		incoming().getReceiptFee.mockReturnValueOnce(new Promise(() => {}))
+		mocks.getNetwork.mockRejectedValueOnce(new Error(CLIENT_DISCONNECTED_MESSAGE))
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(amountBlock(w).exists()).toBe(false)
+		await reconnect()
+		expect(incoming().getIncomingTransferById).toHaveBeenCalledTimes(2)
+		expect(amountBlock(w).text()).toMatch(/^\+1\s+TST$/)
+	})
+
+	test("a reconnect landing a moved block drops the old block's fee at once and looks the new one up after its network read", async () => {
+		const network = deferred<unknown>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => PUBLIC_RECEIPT, async () => remined(101)])
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+		mocks.getNetwork.mockReturnValueOnce(network.promise)
+		await reconnect()
+		expect(w.text()).toContain("#101")
+		expect(testid(w, "received-fee-value").exists()).toBe(false)
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+		network.resolve({ id: "n1", chainId: 1 })
+		await flushPromises()
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(2)
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+	})
+
+	test("a read that finds no receipt shows not found, and a later read that fails leaves it", async () => {
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => undefined, async () => Promise.reject(new Error("Profile is locked"))])
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(w.text()).toContain("RECEIPT NOT FOUND")
+		await reconnect()
+		expect(incoming().getIncomingTransferById).toHaveBeenCalledTimes(2)
+		expect(w.text()).toContain("RECEIPT NOT FOUND")
+		expect(testid(w, "received-read-failed").exists()).toBe(false)
+	})
+
+	test.each([
+		["a 60 s timeout", new RpcTimeoutError("Request 'getIncomingTransferById' timed out after 60000ms")],
+		["a refused storage or profile read", new Error("Profile is locked")],
+	])("%s with the port up shows the failure, never not found; Retry reads again", async (_name, error) => {
+		const retried = deferred<IncomingTransferRecord | undefined>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => Promise.reject(error), () => retried.promise])
+		const w = await mountPage(Promise.resolve([tst]))
+		expect(w.text()).not.toContain("RECEIPT NOT FOUND")
+		expect(testid(w, "received-read-failed").text()).toContain("Couldn't load this receipt")
+		expect(testid(w, "received-open-history").attributes("data-link")).toBe("/popup/activity")
+		await testid(w, "received-retry").trigger("click")
+		await flushPromises()
+		expect(incoming().getIncomingTransferById).toHaveBeenCalledTimes(2)
+		expect(testid(w, "received-read-failed").exists()).toBe(false)
+		expect(w.text()).not.toContain("RECEIPT NOT FOUND")
+		retried.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		expect(amountBlock(w).text()).toMatch(/^\+1\s+TST$/)
+	})
+
+	test("an Updated during a reconnect's read shows at once and wins over its snapshot; one after it shows too", async () => {
+		const held = deferred<IncomingTransferRecord | undefined>()
+		const network = deferred<unknown>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => PUBLIC_RECEIPT, () => held.promise])
+		const w = await mountPage(Promise.resolve([tst]))
+		await reconnect()
+		incoming().onIncomingTransferUpdated.invoke(remined(101))
+		await flushPromises()
+		expect(w.text()).toContain("#101")
+		mocks.getNetwork.mockReturnValueOnce(network.promise)
+		held.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		expect(w.text()).toContain("#101")
+		incoming().onIncomingTransferUpdated.invoke(remined(102))
+		await flushPromises()
+		expect(w.text()).toContain("#102")
+	})
+
+	test("a Deleted during a reconnect's read outlasts its stale snapshot, and a later read that finds the receipt shows it", async () => {
+		const held = deferred<IncomingTransferRecord | undefined>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => PUBLIC_RECEIPT, () => held.promise])
+		const w = await mountPage(Promise.resolve([tst]))
+		await reconnect()
+		incoming().onIncomingTransferDeleted.invoke(PUBLIC_RECEIPT)
+		held.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		expect(w.text()).toContain("RECEIPT NOT FOUND")
+		await reconnect()
+		expect(w.text()).not.toContain("RECEIPT NOT FOUND")
+		expect(w.text()).toContain("#100")
+	})
+
+	test("a reconnect landing the same block keeps Show fee and a tapped fee; one landing a moved block reads it again", async () => {
+		mocks.config = makeConfig([async () => true])
+		const reads: Read[] = [async () => PUBLIC_RECEIPT, async () => PUBLIC_RECEIPT, async () => PUBLIC_RECEIPT, async () => remined(101)]
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, reads)
+		const w = await mountPage(Promise.resolve([tst]))
+		await reconnect()
+		expect(testid(w, "received-fee-show").exists()).toBe(true)
+		expect(incoming().getCachedReceiptFee).toHaveBeenCalledTimes(1)
+		await testid(w, "received-fee-show").trigger("click")
+		await flushPromises()
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+		await reconnect()
+		expect(testid(w, "received-fee-value").exists()).toBe(true)
+		expect(incoming().getCachedReceiptFee).toHaveBeenCalledTimes(1)
+		await reconnect()
+		expect(incoming().getCachedReceiptFee).toHaveBeenCalledTimes(2)
+		expect(testid(w, "received-fee-show").exists()).toBe(true)
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+	})
+
+	test("a press of Show fee during a reconnect's read survives its same-block snapshot", async () => {
+		mocks.config = makeConfig([async () => true])
+		const held = deferred<IncomingTransferRecord | undefined>()
+		const lookup = deferred<Fee>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [async () => PUBLIC_RECEIPT, () => held.promise])
+		incoming().getReceiptFee.mockReturnValueOnce(lookup.promise)
+		const w = await mountPage(Promise.resolve([tst]))
+		await reconnect()
+		await testid(w, "received-fee-show").trigger("click")
+		held.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		lookup.resolve({ feeJuice: "2500000000000000" })
+		await flushPromises()
+		expect(testid(w, "received-fee-value").text()).toBe("~0.0025 FJ")
+		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(1)
+		expect(incoming().getCachedReceiptFee).toHaveBeenCalledTimes(1)
+	})
+
+	test("leaving during the receipt read sends no network or token read", async () => {
+		const held = deferred<IncomingTransferRecord | undefined>()
+		mocks.incoming = makeIncoming(PUBLIC_RECEIPT, [() => held.promise])
+		const w = await mountPage(Promise.resolve([tst]))
+		w.unmount()
+		held.resolve(PUBLIC_RECEIPT)
+		await flushPromises()
+		expect(mocks.getNetwork).not.toHaveBeenCalled()
+		expect(mocks.getTokens).not.toHaveBeenCalled()
 	})
 })
