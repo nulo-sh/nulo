@@ -97,8 +97,8 @@ onBeforeUnmount(() => {
 		</ItemsContainer>
 
 		<Text variant="body" color="support" height="150">
-			Proofs are always generated on your machine. Presto runs them natively; without it, Nulo proves inside the
-			browser, which is slower.
+			<DottedTerm term="proof" testid="settings-proving-proof-term">Proofs</DottedTerm> are always generated on your
+			machine. Presto runs them natively; without it, Nulo proves inside the browser, which is slower.
 		</Text>
 	</SettingsPageShell>
 </template>

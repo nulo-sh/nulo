@@ -304,6 +304,24 @@ describe("TransactionService — a mined row until its block is final", () => {
 		expect(exported?.find((tx) => tx.hash === chosen)?.feeChoice).toBe("app_protocol_sponsor")
 	})
 
+	test("a backup taken while a send is Pending carries only rows its own restore accepts", async () => {
+		const mined = `0x${"44".repeat(32)}`
+		await add()
+		await service.restore([storedRow({ hash: mined })], "p1")
+		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Pending)
+
+		const exported = (await service.backup()) ?? []
+		expect(exported.map((tx) => tx.hash)).toEqual([mined])
+
+		api = new FakeBrowserApi()
+		api.reset()
+		const fresh = await buildService()
+		const restored = await fresh.restore(exported, "p1")
+		expect(restored).toHaveLength(1)
+		expect(restored[0]).not.toHaveProperty("restoreError")
+		expect((await fresh.getTransaction(mined)).status).toBe(TxStatus.Proposed)
+	})
+
 	test("a purge ends the watch", async () => {
 		await minedAndMarked()
 		await service.purgeForAccounts([ACCOUNT], "p1")
