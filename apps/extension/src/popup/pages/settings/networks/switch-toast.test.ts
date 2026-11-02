@@ -22,7 +22,8 @@ const storeOn = (over: Partial<SwitchAnnounceStore> = {}): SwitchAnnounceStore =
 function harness(store: SwitchAnnounceStore, opts: { result?: NetworkActivationResult; land?: () => void; landEarly?: boolean } = {}) {
 	const run = deferred<boolean>()
 	const openToast = vi.fn()
-	const settled = vi.fn(() => run.promise)
+	// As the shell's wait: the latest run's settle, then the switch's own live check.
+	const settled = vi.fn((live: () => boolean) => run.promise.then((latest) => latest && live()))
 	const activate = vi.fn(async (target: typeof TESTNET) => {
 		if ((opts.result ?? "activated") !== "activated") return opts.result as NetworkActivationResult
 		store.network = target
@@ -113,6 +114,24 @@ describe("switchAndAnnounce", () => {
 		await h.settle()
 		await done
 		expect(h.openToast).toHaveBeenCalledTimes(1)
+	})
+
+	test("the live check it hands the shell covers the login, the profile and the target network", async () => {
+		const flips: Array<(s: SwitchAnnounceStore) => void> = [
+			(s) => (s.isLogined = false),
+			(s) => (s.profile = { id: "p2" }),
+			(s) => (s.network = ALPHA),
+		]
+		for (const flip of flips) {
+			const store = storeOn()
+			const h = harness(store)
+			void switchAndAnnounce(TESTNET, { store, ...h })
+			await vi.waitFor(() => expect(h.settled).toHaveBeenCalled())
+			const live = h.settled.mock.calls[0]?.[0] as () => boolean
+			expect(live()).toBe(true)
+			flip(store)
+			expect(live()).toBe(false)
+		}
 	})
 
 	test("a refused, unconfirmed or stale activation neither waits nor toasts: the composable owns that feedback", async () => {

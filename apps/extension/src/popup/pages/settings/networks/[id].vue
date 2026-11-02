@@ -26,7 +26,7 @@ const { activate: activateNetwork } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
 })
-const switchSettled = inject(SWITCH_SETTLED_KEY, async () => true)
+const switchSettled = inject(SWITCH_SETTLED_KEY)
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"

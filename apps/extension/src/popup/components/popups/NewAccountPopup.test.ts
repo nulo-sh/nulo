@@ -5,6 +5,7 @@
  * submits could both pass "Already exist" and create two same-named accounts.
  */
 
+import { deferred } from "@nulo/wallet-core/utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 
@@ -14,6 +15,7 @@ const setSelectedAccountMock = vi.fn()
 const openToastMock = vi.fn()
 
 const appStoreState: {
+	isLogined: boolean
 	profile: { id: string }
 	network: { chainId: number }
 	accounts: Array<{ name: string; address: string }>
@@ -21,6 +23,7 @@ const appStoreState: {
 	hasInFlightSend: boolean
 	commitScopeChange: (fn: () => void) => Promise<boolean>
 } = {
+	isLogined: true,
 	profile: { id: "p1" },
 	network: { chainId: 1 },
 	accounts: [],
@@ -96,6 +99,7 @@ async function dispose(w: VueWrapper) {
 }
 
 beforeEach(() => {
+	appStoreState.isLogined = true
 	appStoreState.accounts = []
 	appStoreState.hasInFlightSend = false
 	// The created row, scoped as the service writes it.
@@ -190,6 +194,19 @@ describe("NewAccountPopup — announcing the new account", () => {
 		await flushPromises()
 		await dispose(refused)
 		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Finish or cancel your pending transaction first" }]])
+	})
+
+	test("a lock while the create is out shows no name: the lock screen never carries the toast", async () => {
+		const created = deferred<{ profileId: string; chainId: number; name: string; address: string }>()
+		createAccountMock.mockImplementationOnce(() => created.promise)
+		const w = await mountShown()
+		pressEnterOnInput()
+		await flushPromises()
+		appStoreState.isLogined = false
+		created.resolve({ profileId: "p1", chainId: 1, name: "Savings", address: "0xacct" })
+		await flushPromises()
+		await dispose(w)
+		expect(openToastMock).not.toHaveBeenCalled()
 	})
 })
 

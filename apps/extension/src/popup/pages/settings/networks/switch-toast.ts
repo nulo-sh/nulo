@@ -13,8 +13,8 @@ export interface SwitchAnnounceStore {
 export interface SwitchAnnounceDeps<N extends { id: string }> {
 	store: SwitchAnnounceStore
 	activate: (target: N) => Promise<NetworkActivationResult>
-	/** Settles with the switch run the activation started; false once a newer run replaced it. */
-	settled: () => Promise<boolean>
+	/** Settles with the switch runs `live` covers; false once `live` ended. */
+	settled: (live: () => boolean) => Promise<boolean>
 	openToast: (options: ToastOptions) => void
 }
 
@@ -22,9 +22,9 @@ export interface SwitchAnnounceDeps<N extends { id: string }> {
 const shownAccount = (store: SwitchAnnounceStore) => (accountStateOf(store) === "shown" ? (store.account ?? undefined) : undefined)
 
 /**
- * Activates `target` and, once its switch run settles, confirms it; the line names the account
- * whose header address is not the one shown before the switch. A run that a newer switch, a lock
- * or another profile replaced announces nothing: the newer action owns the feedback.
+ * Activates `target` and, once its switch runs settle, confirms it; the line names the account
+ * whose header address is not the one shown before the switch. A newer switch, a lock or another
+ * profile meanwhile announces nothing: the newer action owns the feedback.
  */
 export async function switchAndAnnounce<N extends { id: string }>(target: N, deps: SwitchAnnounceDeps<N>): Promise<void> {
 	const { store } = deps
@@ -32,9 +32,10 @@ export async function switchAndAnnounce<N extends { id: string }>(target: N, dep
 	// Read before activating: the target's account can land while the network still persists.
 	const before = shownAccount(store)?.address
 	if ((await deps.activate(target)) !== "activated") return
-	const latest = await deps.settled()
+	const live = () => store.isLogined && store.profile?.id === profileId && store.network?.id === target.id
+	if (!(await deps.settled(live))) return
 	const network = store.network
-	if (!latest || !store.isLogined || store.profile?.id !== profileId || !network || network.id !== target.id) return
+	if (!live() || !network) return
 	const account = shownAccount(store)
 	const moved = before !== undefined && account !== undefined && account.address !== before
 	deps.openToast({

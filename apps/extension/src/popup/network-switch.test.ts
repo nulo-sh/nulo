@@ -350,7 +350,11 @@ describe("settleLatestRun: what a switch's announcement waits for", () => {
 				current = second.promise
 			}
 			let out: boolean | undefined
-			void settleLatestRun(() => current, tick).then((latest) => (out = latest))
+			void settleLatestRun(
+				() => current,
+				tick,
+				() => true,
+			).then((latest) => (out = latest))
 			first.resolve()
 			await flush()
 			expect(out).toBeUndefined()
@@ -361,17 +365,43 @@ describe("settleLatestRun: what a switch's announcement waits for", () => {
 		}
 	})
 
-	test("is false once a newer run replaced the awaited one: A → B → A, or an unlock's bootstrap", async () => {
+	test("follows a run that replaces it while the switch is live, as an unattended reset's reload does", async () => {
+		const run = deferred()
+		const reload = deferred()
+		let current = run.promise
+		let out: boolean | undefined
+		void settleLatestRun(
+			() => current,
+			async () => {},
+			() => true,
+		).then((latest) => (out = latest))
+		await flush()
+		current = reload.promise
+		run.resolve()
+		await flush()
+		expect(out).toBeUndefined()
+		reload.resolve()
+		await flush()
+		expect(out).toBe(true)
+	})
+
+	test("is false the first time a settled run finds the switch over, even if it is live again later: A → B → A, a lock", async () => {
 		const run = deferred()
 		const newer = deferred()
 		let current = run.promise
+		let live = true
 		const out = settleLatestRun(
 			() => current,
 			async () => {},
+			() => live,
 		)
 		await flush()
+		live = false
 		current = newer.promise
 		run.resolve()
+		await flush()
+		live = true
+		newer.resolve()
 		await expect(out).resolves.toBe(false)
 	})
 })

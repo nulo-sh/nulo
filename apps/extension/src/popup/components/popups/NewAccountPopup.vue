@@ -79,7 +79,9 @@ const handleCreateAccount = async () => {
 			emit("onClose")
 			return
 		}
-		openToast({ kind: "success", label: `Now using ${appStore.account.name}` })
+		// A lock or another profile during the create ends this view's scope; the name never reaches the lock screen.
+		if (appStore.isLogined && appStore.profile?.id === profileId)
+			openToast({ kind: "success", label: `Now using ${appStore.account.name}` })
 
 		await managers.uiPreference.setSelectedAccount(profileId, account.address)
 

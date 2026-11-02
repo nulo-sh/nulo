@@ -87,8 +87,8 @@ test("networks page lists the default networks; an inactive row's Switch activat
 	const start = await selectedAccount(page)
 	expect(start).toBeTruthy()
 	await pressSwitch(page, "Testnet")
-	// The toast follows the target's account, which the worker derives on a first visit.
-	await waitForToast(page, "Active network updated", 30_000, { kind: "success" })
+	// The toast follows the target's account, which the worker derives on a first visit, and names it.
+	await waitForToast(page, "has a different address on Testnet", 30_000, { kind: "success" })
 	const testnet = await page.evaluate(() => {
 		const row = document.querySelector('[data-testid="network-row"][data-network-name="Testnet"]')
 		return [!!row?.querySelector('[data-testid="network-active-dot"]'), !!row?.querySelector('[data-testid="network-active-badge"]')]

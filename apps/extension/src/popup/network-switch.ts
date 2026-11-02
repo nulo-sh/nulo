@@ -123,13 +123,24 @@ export function createNetworkSwitchHandler(deps: NetworkSwitchDeps): NetworkSwit
 	return Object.assign(run, { supersede: () => fence.invalidate() })
 }
 
-/** Provided by the popup shell: settles with the switch run in flight, failed or not; true while no newer run replaced it. */
-export const SWITCH_SETTLED_KEY: InjectionKey<() => Promise<boolean>> = Symbol("switch-settled")
+/** Provided by the popup shell: settles with the switch runs `live` covers; false once `live` ended. */
+export const SWITCH_SETTLED_KEY: InjectionKey<(live: () => boolean) => Promise<boolean>> = Symbol("switch-settled")
 
-/** Awaits, after `tick`, the run `current()` names, failed or not; true while `current()` still names it. */
-export async function settleLatestRun(current: () => Promise<unknown>, tick: () => Promise<unknown>): Promise<boolean> {
+/**
+ * Awaits, after `tick`, the run `current()` names, failed or not, and any run that replaces it while
+ * `live` holds: a reset or a reload re-assigns the same network and starts the run that loads its
+ * account. False the first time a settled run finds `live` ended, as a newer switch or a lock leaves it.
+ */
+export async function settleLatestRun(
+	current: () => Promise<unknown>,
+	tick: () => Promise<unknown>,
+	live: () => boolean,
+): Promise<boolean> {
 	await tick()
-	const run = current()
-	await run.catch(() => undefined)
-	return run === current()
+	for (;;) {
+		const run = current()
+		await run.catch(() => undefined)
+		if (!live()) return false
+		if (run === current()) return true
+	}
 }

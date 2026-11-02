@@ -175,7 +175,8 @@ watch(
 	},
 )
 
-// The switch handler's latest run, which a completed reset awaits before it routes and announces.
+// The switch handler's latest run, which a completed reset awaits before it routes and announces, as
+// a Settings switch does before its toast.
 let switchRun = Promise.resolve()
 const { reloadNetwork, completeReset } = createResetCompletion({
 	activeNetworkId: () => appStore.network?.id,
@@ -301,7 +302,7 @@ watch(
 		switchRun.catch((error) => logCallFailure("network switch failed", error))
 	},
 )
-provide(SWITCH_SETTLED_KEY, () => settleLatestRun(() => switchRun, nextTick))
+provide(SWITCH_SETTLED_KEY, (live) => settleLatestRun(() => switchRun, nextTick, live))
 
 // `flush: "sync"`: a send settling in the next microtask must already see the new epoch.
 watch([() => appStore.profile?.id, () => appStore.network?.id, () => appStore.account?.address], onScopeChanged, { flush: "sync" })

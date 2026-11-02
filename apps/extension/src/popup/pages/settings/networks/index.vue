@@ -34,7 +34,7 @@ const { activate } = useNetworkActivation({
 	persist: (id) => managers.network.setActiveNetwork(id),
 	read: () => managers.network.getActiveNetwork(),
 })
-const switchSettled = inject(SWITCH_SETTLED_KEY, async () => true)
+const switchSettled = inject(SWITCH_SETTLED_KEY)
 
 // Custom chains are a developer surface: "Add network" is offered only under Developer Mode.
 // Endpoints on the built-in networks, and rows that already exist, stay manageable for everyone.
