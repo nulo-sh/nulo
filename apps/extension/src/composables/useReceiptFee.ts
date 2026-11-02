@@ -17,6 +17,8 @@ export interface UseReceiptFeeResult {
 	load: (record: IncomingTransferRecord, tapOnly: boolean) => Promise<void>
 	/** The tap: looks the fee up, and only from `tap`; a failed lookup returns to `tap`. */
 	show: () => Promise<void>
+	/** Forgets the record: an answer in flight is dropped, and the row reads `loading` until a `load`. */
+	reset: () => void
 	/** Ends the hook: an answer in flight is dropped, and a later `load` or `show` calls nothing. */
 	dispose: () => void
 }
@@ -60,10 +62,17 @@ export function useReceiptFee(service: ReceiptFeeService): UseReceiptFeeResult {
 		await settle(isCurrent, service.getReceiptFee(record.id), "tap")
 	}
 
+	function reset(): void {
+		fence.invalidate()
+		record = null
+		feeJuice.value = null
+		state.value = "loading"
+	}
+
 	function dispose(): void {
 		disposed = true
 		fence.invalidate()
 	}
 
-	return { state, feeJuice, load, show, dispose }
+	return { state, feeJuice, load, show, reset, dispose }
 }

@@ -4,7 +4,7 @@
  * password with its eye and the new-password hint, then its repeat. `testid` prefixes every control.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
-import { newPasswordHint } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 
 defineProps({
 	testid: { type: String, required: true },
