@@ -27,10 +27,6 @@ const props = defineProps({
 		type: Object,
 		required: true,
 	},
-	requestId: {
-		type: [Number, String],
-		required: false,
-	},
 	fullscreen: {
 		type: Boolean,
 		default: false,
@@ -84,13 +80,6 @@ const handleCopy = () => {
 	}, 1_500)
 }
 
-const handleFullscreenView = () => {
-	const url = new URL(chrome.runtime.getURL("src/popup/index.html#/windows/json"))
-	url.searchParams.set("requestId", props.requestId)
-
-	chrome.windows.create({ type: "popup", url: url.toString(), height: 700, width: 900 })
-}
-
 onMounted(() => {
 	nextTick(() => {
 		initViewer()
@@ -100,15 +89,6 @@ onMounted(() => {
 
 <template>
 	<div :class="$style.wrapper">
-		<Icon
-			v-if="!fullscreen && requestId"
-			@click="handleFullscreenView"
-			name="expand"
-			size="16"
-			color="tertiary"
-			:class="$style.fullscreen_icon"
-		/>
-
 		<Icon
 			@click="handleCopy"
 			:name="isCopied ? 'square-check' : 'copy'"
@@ -137,25 +117,6 @@ onMounted(() => {
 .copy_icon {
 	position: absolute;
 	right: 30px;
-	transform: translateY(5px);
-	z-index: 1;
-
-	background: transparent;
-	box-sizing: content-box;
-	cursor: pointer;
-
-	padding: 4px;
-
-	transition: all 0.5s ease;
-
-	&:hover {
-		background: rgba(255, 255, 255, 0.1);
-	}
-}
-
-.fullscreen_icon {
-	position: absolute;
-	right: 54px;
 	transform: translateY(5px);
 	z-index: 1;
 

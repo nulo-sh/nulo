@@ -1,6 +1,6 @@
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { AlarmDispatcher, EventHandler, ResponseTooLargeError, readBodyCapped } from "@nulo/wallet-core/utils"
+import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import type { IService, ServiceCollection } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { LegalAcceptanceService, type LegalStatus } from "@/wallet/services/legal/service"
@@ -208,14 +208,7 @@ export class TokenListService implements IService {
 		const controller = new AbortController()
 		const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, {
-				credentials: "omit",
-				referrerPolicy: "no-referrer",
-				redirect: "error",
-				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
-				cache: "no-store",
-				signal: controller.signal,
-			})
+			const response = await this.fetchFn(url, privateFetchInit(controller.signal))
 			if (!response.ok) throw new DownloadError("http-status")
 			return await readBodyCapped(response, MAX_ENVELOPE_BYTES).catch((error: unknown) => {
 				throw error instanceof ResponseTooLargeError ? new DownloadError("oversize") : error

@@ -8,7 +8,7 @@ import { TokenListService } from "@/wallet/services/token-list/service"
 import type { ValueStorage } from "@/wallet/storage"
 import { valueStorage } from "@/wallet/storage/stores"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { AlarmDispatcher, EventHandler, createSerialQueue, readBodyCapped } from "@nulo/wallet-core/utils"
+import { AlarmDispatcher, EventHandler, createSerialQueue, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import { allCoingeckoIds, getSanityBand, pricedTokensOf } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
@@ -370,14 +370,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		this.abortController = controller
 		const timeout = setTimeout(() => controller.abort(), PRICE_FETCH_TIMEOUT_MS)
 		try {
-			const response = await this.fetchFn(url, {
-				signal: controller.signal,
-				headers,
-				// No request carries a cache validator: "no-cache" would revalidate with the stored one.
-				cache: "no-store",
-				credentials: "omit",
-				referrerPolicy: "no-referrer",
-			})
+			const response = await this.fetchFn(url, privateFetchInit(controller.signal, { headers }))
 			if (!response.ok) {
 				throw new Error(`price fetch failed: HTTP ${response.status}`)
 			}

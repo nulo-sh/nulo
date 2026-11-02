@@ -343,6 +343,7 @@ declare global {
   const onUpdated: typeof import('vue').onUpdated
   const onWatcherCleanup: typeof import('vue').onWatcherCleanup
   const openFullBackupText: typeof import('../utils/full-backup-helpers').openFullBackupText
+  const openJsonWindow: typeof import('../utils/json-window').openJsonWindow
   const openLegalDocument: typeof import('../utils/legal-links').openLegalDocument
   const openSelection: typeof import('../utils/full-backup-helpers').openSelection
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
@@ -1216,6 +1217,7 @@ declare module 'vue' {
     readonly onUpdated: UnwrapRef<typeof import('vue')['onUpdated']>
     readonly onWatcherCleanup: UnwrapRef<typeof import('vue')['onWatcherCleanup']>
     readonly openFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['openFullBackupText']>
+    readonly openJsonWindow: UnwrapRef<typeof import('../utils/json-window')['openJsonWindow']>
     readonly openLegalDocument: UnwrapRef<typeof import('../utils/legal-links')['openLegalDocument']>
     readonly openSelection: UnwrapRef<typeof import('../utils/full-backup-helpers')['openSelection']>
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>

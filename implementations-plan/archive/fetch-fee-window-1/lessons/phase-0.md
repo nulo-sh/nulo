@@ -1,0 +1,6 @@
+# Phase 0: planning consults
+
+- 2026-11-01, recon: one Explore agent (sonnet), a batched reuse sweep over ten capabilities; findings in [recon.md](../recon.md).
+- 2026-11-01, Codex R1 (gpt-6.1-sol, high, read-only): conditional approve. Seven findings, all accepted: F6 and I1 overstated (the end reason, not the refusal, is what reaches no record; reachability is a hypothesis); a line-and-string scan misses quoted names, variable values and split lines, so read property names from the parser; pin that the fee window builds no client for another profile; qualify the threat model (CORS) and the redirect test's claim; held quotes stay until stale; the capture is required and deterministic.
+- 2026-11-01, Opus R1 (Plan agent): conditional approve. Nine findings, all accepted or folded: the same fee client check; the price harness must pass `init` and the fee overlay stub must emit `dismiss`; read `headers` instead of spreading `extra`; check each fetch's init with `callsTo`; TS2775 for an arrow assertion; the grant helper's unit cases duplicate window tests; the wallet-core README lists utils modules; the capture shim narrowed.
+- 2026-11-01, Codex final (resumed session): approve, no remaining material finding.

@@ -4,6 +4,8 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
 import { priceFake } from "../../../../tests/helpers/price-client-fake"
 import { captureWindowDocument } from "@/utils/window-document"
+import { AccountServiceClient } from "@/wallet/services/account/client"
+import { NetworkServiceClient } from "@/wallet/services/network/client"
 
 // ── The request as the dApp's wire carried it: 32-byte hex fields, a CAIP account. ──
 
@@ -160,7 +162,11 @@ const STUBS = {
 		template: '<div data-testid="identity-block" />',
 		props: ["dapp", "actionLabel"],
 	},
-	DappCancelledOverlay: { props: ["message"], template: `<div data-testid="dapp-cancelled-overlay" :data-message="message" />` },
+	DappCancelledOverlay: {
+		props: ["message"],
+		emits: ["dismiss"],
+		template: `<div data-testid="dapp-cancelled-overlay" :data-message="message" @click="$emit('dismiss')" />`,
+	},
 }
 
 import FeeWindow from "./index.vue"
@@ -333,6 +339,37 @@ describe("the fee question window", () => {
 		expect(byId("dapp-cancelled-overlay").attributes("data-message")).toContain("different profile")
 		expect(getGasBalancesMock).not.toHaveBeenCalled()
 		expect(confirm().attributes("disabled")).toBeDefined()
+	})
+
+	test.each([
+		["another profile is active", "switch", { id: "p2" }],
+		["no profile is active", "lock", undefined],
+	])("%s: nothing is read for the question, and the notice's OK ends it as the %s, then closes", async (_case, end, active) => {
+		activeProfile = active
+		await opened()
+		expect(vi.mocked(AccountServiceClient)).not.toHaveBeenCalled()
+		expect(vi.mocked(NetworkServiceClient)).not.toHaveBeenCalled()
+		await byId("dapp-cancelled-overlay").trigger("click")
+		await flushPromises()
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("User rejected", end)
+		expect(windowsRemoveMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("the window's X ends another profile's question as the switch, and the person's own as their close", async () => {
+		activeProfile = { id: "p2" }
+		await opened()
+		window.dispatchEvent(new Event("beforeunload"))
+		await flushPromises()
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("User rejected", "switch")
+
+		w!.unmount()
+		rejectMock.mockClear()
+		activeProfile = { id: "p1" }
+		await opened()
+		expect(vi.mocked(AccountServiceClient)).toHaveBeenCalledTimes(1)
+		window.dispatchEvent(new Event("beforeunload"))
+		await flushPromises()
+		expect(rejectMock).toHaveBeenCalledExactlyOnceWith("User rejected", "close")
 	})
 })
 

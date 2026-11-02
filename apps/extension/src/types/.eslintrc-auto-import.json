@@ -587,6 +587,7 @@
     "onUpdated": true,
     "onWatcherCleanup": true,
     "openFullBackupText": true,
+    "openJsonWindow": true,
     "openLegalDocument": true,
     "openSelection": true,
     "openThirdPartyNotices": true,
