@@ -83,6 +83,8 @@ type HarnessOpts = {
 	fpcChainId?: number
 	twoPassRow?: TwoPassRow
 	effects?: Action[]
+	/** Whether the probe reports a request; defaults to whether it returns any action. */
+	requested?: boolean
 	probe?: boolean
 	abortOnFirstSim?: boolean
 	/** Aborts the estimate while the nth build runs. */
@@ -130,7 +132,9 @@ function harness(path: PathName, opts: HarnessOpts = {}) {
 		tasks,
 		logger: { log: () => {} },
 	} as unknown as FeeStrategyDeps
-	const probe = { extractEffects: vi.fn(async () => opts.effects ?? []) }
+	const probe = {
+		extractEffects: vi.fn(async () => ({ actions: opts.effects ?? [], requested: opts.requested ?? (opts.effects ?? []).length > 0 })),
+	}
 	const ctx = makeCtx(path, opts.probe ? probe : undefined, controller.signal)
 	return { deps, ctx, builds, buildStandard, simulateTxTask, tasks, created, log, fpc, probe, strategy: strategyFor(path, deps) }
 }
@@ -320,7 +324,8 @@ describe("validated simulation options", () => {
 
 type FoldRow = {
 	path: PathName
-	cell: "none" | "effects" | "init" | "both"
+	/** `dropped`: the run asked only another account, so the probe returns no action. */
+	cell: "none" | "effects" | "dropped" | "init" | "both"
 	methods: AccountFeePaymentMethodOptions[]
 	sims: Array<"stub" | "valid">
 	actions: Action[]
@@ -331,14 +336,17 @@ const E = EXTERNAL
 const FOLD_MATRIX: FoldRow[] = [
 	{ path: "fj", cell: "none", methods: [P], sims: ["stub"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "effects", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL, DISCOVERED] },
+	{ path: "fj", cell: "dropped", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "init", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL] },
 	{ path: "fj", cell: "both", methods: [P, P], sims: ["stub", "valid"], actions: [ORIGINAL, DISCOVERED] },
 	{ path: "fpc fast path", cell: "none", methods: [E], sims: ["stub"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "effects", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
+	{ path: "fpc fast path", cell: "dropped", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "init", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc fast path", cell: "both", methods: [E, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
 	{ path: "fpc two-pass", cell: "none", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc two-pass", cell: "effects", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL, DISCOVERED] },
+	{ path: "fpc two-pass", cell: "dropped", methods: [P, E], sims: ["stub", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{ path: "fpc two-pass", cell: "init", methods: [P, P, E], sims: ["stub", "valid", "valid"], actions: [PAYLOAD, ORIGINAL] },
 	{
 		path: "fpc two-pass",
@@ -352,6 +360,7 @@ const FOLD_MATRIX: FoldRow[] = [
 const foldOpts = (cell: FoldRow["cell"], extra: HarnessOpts = {}): HarnessOpts => ({
 	probe: true,
 	effects: cell === "effects" || cell === "both" ? [DISCOVERED] : [],
+	requested: cell !== "none" && cell !== "init",
 	build: { initWrapped: cell === "init" || cell === "both" },
 	...extra,
 })
@@ -365,10 +374,14 @@ describe("probe fold", () => {
 			expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual(methods)
 			expectSimOpts(h, sims)
 			expect(h.probe.extractEffects).toHaveBeenCalledTimes(1)
-			const [sim, chain] = h.probe.extractEffects.mock.calls[0] as unknown as [unknown, { node: unknown; network: unknown }]
+			const [sim, chain] = h.probe.extractEffects.mock.calls[0] as unknown as [
+				unknown,
+				{ node: unknown; network: unknown; signer: unknown },
+			]
 			expect(sim).toBe(await h.simulateTxTask.mock.results[0]?.value)
 			expect(chain.node).toBe(h.builds[0]?.node)
 			expect(chain.network).toBe(h.builds[0]?.network)
+			expect(chain.signer).toBe(h.builds[0]?.account.address)
 			expect(h.ctx.op.actions).toEqual(actions)
 		},
 	)

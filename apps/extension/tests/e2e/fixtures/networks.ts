@@ -11,6 +11,9 @@ if (!PRIMARY_SEED) throw new Error("this build marks no seed primary")
  *  active node intercepts it. */
 export const DEFAULT_NODE_ORIGIN = new URL(PRIMARY_SEED.rpcUrl).origin
 
+/** The longest one-word name the network name field takes. */
+export const LONG_NETWORK_NAME = "W".repeat(25)
+
 /** A network row as the wallet stores it, with the fields the specs edit. */
 export type StoredNetwork = {
 	id: string

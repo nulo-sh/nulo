@@ -83,7 +83,7 @@ const UNREAD = (reason: "unknown-contract" | "unknown-function"): DecodedCall =>
 const tokenCall = (name: string, args: string[], roles: string[], extra: Record<string, unknown> = {}) => {
 	const op = fixtureOp() as unknown as { exec: { calls: unknown[] } }
 	const call = { name, to: USDC, selector: vocabularySelector(name, args.length), type: "private", isStatic: false, args }
-	const kinds: Record<string, string> = { to: "address", from: "address", amount: "integer" }
+	const kinds: Record<string, string> = { to: "address", from: "address", amount: "integer", authwit_nonce: "field" }
 	const decoded: DecodedCall = {
 		kind: "decoded",
 		contract: "Token",
@@ -386,7 +386,7 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(unchecked(w)).toEqual([])
 	})
 
-	test("the sender reads as 'this account' when the account is the caller, and the entrypoint's call names none", async () => {
+	test("the sender reads as 'this account' when the account is the caller, as the account a transfer names, and the entrypoint's call names none", async () => {
 		const own = tokenCall("transfer", [RECIPIENT, field(5_000_000n)], ["to", "amount"])
 		expect(read(await mountCard({ decodedCalls: own.decodedCalls }, own.op), "execute-op-call-line")).toEqual([
 			`5 USDC from this account to ${trimAddress(RECIPIENT)}`,
@@ -397,6 +397,16 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		})
 		expect(read(await mountCard({ decodedCalls: entry.decodedCalls }, entry.op), "execute-op-call-line")).toEqual([
 			`5 USDC to ${trimAddress(RECIPIENT)}. Caller: none`,
+		])
+		// A delegated transfer keeps its explicit sender.
+		lookups.accounts.push({ name: "First", address: VAULT })
+		const theirs = tokenCall(
+			"transfer_private_to_private",
+			[VAULT, RECIPIENT, field(1_000_000n), field(1n)],
+			["from", "to", "amount", "authwit_nonce"],
+		)
+		expect(read(await mountCard({ decodedCalls: theirs.decodedCalls }, theirs.op), "execute-op-call-line")).toEqual([
+			`1 USDC from First to ${trimAddress(RECIPIENT)}`,
 		])
 	})
 

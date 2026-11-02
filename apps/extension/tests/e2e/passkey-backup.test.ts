@@ -142,39 +142,32 @@ test("passkey full-backup export: modal, status card, a file password of its own
 		// leaves a loaded hosted runner room without masking a deadlock.
 		await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: 180_000 })
 		expect(await progressSeen(page), "the export never showed its in-progress card with a disabled Creating Backup CTA").toBe(true)
-		await shotSend(page, "export-full-ready-passkey", "backup-ready-banner")
+		await shotSend(page, "export-full-ready-passkey", "download-backup-btn")
 
 		// The file holds the recovery phrase, so it is protected with a password of its own: Download
 		// waits for it, and a password shorter than 8 characters never reaches the encryption.
 		const enabled = (testid: string) =>
 			page.$eval(`[data-testid="${testid}"]`, (el) => !(el as HTMLButtonElement).disabled).catch(() => false)
-		expect(await enabled("download-backup-btn"), "a passkey backup downloads before it is encrypted").toBe(false)
+		expect(await enabled("download-backup-btn"), "a passkey backup downloads before it has a file password").toBe(false)
 		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', "short12")
 		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', "short12")
-		expect(await enabled("protect-password-btn"), "a 7-character file password reaches the encryption").toBe(false)
+		expect(await enabled("download-backup-btn"), "a 7-character file password reaches the encryption").toBe(false)
 		await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', FILE_PASSWORD)
 		await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', FILE_PASSWORD)
-		await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')?.disabled, {
+		await page.waitForFunction(() => !document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')?.disabled, {
 			timeout: 5_000,
 			polling: 100,
 		})
-		await shotSend(page, "export-full-file-password-passkey", "protect-password-btn")
-		// The Encrypting card mounts only for the PBKDF2 + AES-GCM run.
+		await shotSend(page, "export-full-file-password-passkey", "download-backup-btn")
+		// The Encrypting card mounts only for the PBKDF2 + AES-GCM run, which the one press runs before
+		// it saves the file.
 		await armProgressObserver(page, ENCRYPTING)
-		await clickByTestId(page, "protect-password-btn")
-		await page.waitForFunction(
-			() => {
-				const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-				return !!download && !download.disabled && (document.body.textContent ?? "").includes("Backup is successfully encrypted")
-			},
-			{ timeout: 60_000, polling: 250 },
-		)
-		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
-		await expectFitsNarrow(page, "an encrypted backup")
-		await armDownloadCapture(page, { gzip: true })
+		await armDownloadCapture(page, { gzip: true, withinMs: 90_000 })
 		await clickByTestId(page, "download-backup-btn")
 		const file = await readCapturedDownload(page)
+		expect(await progressSeen(page), "the encryption never showed its Encrypting card").toBe(true)
 		await page.waitForSelector('[data-testid="backup-close-btn"]', { visible: true, timeout: 5_000 })
+		await expectFitsNarrow(page, "a saved backup")
 		await shotSend(page, "export-full-saved-passkey", "backup-close-btn")
 
 		// Nothing that leaves the wallet opens with the passkey alone: the file is the password frame,

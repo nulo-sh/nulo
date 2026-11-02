@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, describe, expect, it } from "vitest"
 import { defineComponent, h, ref } from "vue"
 import { expectMaskToggle, expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../tests/helpers/credential-pins"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import FilePasswordSection from "./FilePasswordSection.vue"
 
 const wrappers: VueWrapper[] = []
@@ -43,6 +44,19 @@ describe("FilePasswordSection", () => {
 		expect(nativeInput(w, CONFIRM).placeholder).toBe("Repeat password")
 	})
 
+	it("labels the second field Repeat password only when the page asks", () => {
+		const labels = (w: VueWrapper) => w.findAll(".export_section_label").map((label) => label.text())
+		expect(labels(mountOwned().w)).toEqual(["File password"])
+
+		const { w } = mountOwned({ labelRepeat: true })
+		expect(labels(w)).toEqual(["File password", "Repeat password"])
+		const repeat = w.findAll(".export_section_label")[1].element
+		const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+		expect(follows(nativeInput(w, FIELD), repeat) && follows(repeat, nativeInput(w, CONFIRM))).toBe(true)
+		expect(nativeInput(w, CONFIRM).getAttribute("aria-labelledby")).toBe(repeat.id)
+		expect(repeat.id).not.toBe("")
+	})
+
 	it("typing writes each model on its own", async () => {
 		const { w, password, repeated } = mountOwned()
 		typeNow(nativeInput(w, FIELD), "abc")
@@ -52,10 +66,12 @@ describe("FilePasswordSection", () => {
 	})
 
 	it.each([
-		["", "", "At least 8 characters"],
-		["1234567", "1234567", "At least 8 characters"],
-		["12345678", "12345679", "Passwords don't match"],
-		["12345678", "12345678", "Strong password"],
+		["", "", NEW_PASSWORD_HINTS.short],
+		["1234567", "1234567", NEW_PASSWORD_HINTS.short],
+		["12345678", "12345679", NEW_PASSWORD_HINTS.mismatch],
+		["12345678", "12345678", NEW_PASSWORD_HINTS.common],
+		["kettle-violet", "kettle-violet", NEW_PASSWORD_HINTS.good],
+		["silver-otter-lamp", "silver-otter-lamp", NEW_PASSWORD_HINTS.strong],
 	])("the hint for %j / %j reads %j", async (a, b, text) => {
 		const { w } = mountOwned()
 		typeNow(nativeInput(w, FIELD), a)

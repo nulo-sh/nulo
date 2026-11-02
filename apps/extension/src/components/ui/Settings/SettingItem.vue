@@ -21,6 +21,11 @@ const props = defineProps({
 		validator: (value) => ["row-title", "name", "meta"].includes(value),
 	},
 	description: String,
+	/** Lets the description wrap at every width, for a line meant to be read whole. */
+	wrapDescription: {
+		type: Boolean,
+		default: false,
+	},
 	/** `meta` for an address or id. */
 	descriptionVariant: {
 		type: String,
@@ -158,7 +163,7 @@ const Root = (_, { slots }) => {
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="[$style.description, descriptionVariant === 'meta' && $style.description_meta]">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="[$style.description, descriptionVariant === 'meta' && $style.description_meta, wrapDescription && $style.description_wrap]">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
@@ -318,6 +323,11 @@ const Root = (_, { slots }) => {
 	text-overflow: ellipsis;
 	overflow: clip;
 	white-space: nowrap;
+}
+
+.description_wrap {
+	white-space: normal;
+	overflow-wrap: break-word;
 }
 
 /* Below the popup's width a title and its description wrap rather than being cut, a title's suffix
