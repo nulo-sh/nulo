@@ -1,6 +1,16 @@
 # password-strength-1 owner asks
 
-The rule is signed (#1401, page 94, P94-08, option C). The words are not. The arc builds the recommended form of each ask; its PR opens ready and the orchestrator holds the merge until the owner signs OA-1 and OA-2.
+The rule is signed (#1401, page 94, P94-08, option C). The arc built the recommended form of each ask and its PR opened ready, held for the owner.
+
+## Answers (2026-11-02, in chat, about 20:30 UTC)
+
+- **OA-1 = A1.** The owner: "Sounds like zxcvbn's are the best? is that a well-used package / standard? I'd go with something utterly tested already." The nine lines stay as drafted ("Long enough. Don't forget it." retired); the bands are zxcvbn's score: weak for 0 to 2, good for 3, strong for 4, with no stricter product thresholds.
+- **OA-2 = A.** The owner: "Yes, all seven."
+- **OA-3 = B.** The owner delegated it: "decide you + Codex please". The orchestrator, with a Codex consult, left `@zxcvbn-ts/language-en` out for now: its `NOTICE.md` names ODC-BY for the OpenSubtitles-derived word list but carries neither the licence text nor its URI, which ODC-BY 1.0 § 4.2(b) asks for; the exact upstream input's grant (OPUS's OpenSubtitles 2024 frequency list) is plausible but not verified; and the notices gate reads the package's MIT and cannot see a data licence, which a shipped record would have to name explicitly. One long English word reads strong until #1561 lands.
+
+**As shipped** (A1, no English list; guesses from the estimator): weak, repeats `aaaaaaaa`, `abcabcabc`, 12 of one emoji; a run `abcdefghij`, `98765432`; a keyboard row `zxcvbnm,./`; a common password `12345678`, `qwertyuiop`, `Password1!`; no single cause `longenough`, `q8Rt!vP3`. Good: `kettle-violet` (10^8.8), `TestPassword123!` (10^8.1). Strong: `silver-otter-lamp`, `blue7Kettle!` (10^10.7), 12 different emoji, and `congratulations` (10^15.0, #1561). Non-Latin input reads strong: `йцукенгшщзх`, `contraseña123` (known limit #1562).
+
+The asks below are kept as posed.
 
 ## OA-1: the hint set and its bands
 
