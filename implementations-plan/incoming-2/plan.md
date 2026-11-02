@@ -1,7 +1,7 @@
 ---
 plan: incoming-2
 tier: light
-status: arc 1 merged (#1482); arc 2 in review
+status: completed
 issues: "#1429 (arc 1); #1431 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 51ea220b1
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. Two arcs: arc 1 as #1482 (closes #1429); arc 2 with this close-out as one PR (closes #1431).
+- **Shipped**: arc 1: a refused log page restages the reconciliation marker for the next tick, so a tick ends with one outcome, backs off, and a node that refuses every page reaches Home's stall line; Retry runs one tick; F-10 in part, the reconciliation entry points take `PublicTarget`. Arc 2: the received page reads the receipt its route names (a `pre` watch clears the shown one first); its read follows `createReconnectRead`, the rule extracted from `useConfigRead`, so a read the worker's restart dropped reads again on the reconnect; any other failed read with nothing on screen shows the owner's option E (History's empty-state layout, Retry, Open History), never "not found"; events during a read win over its snapshot; a same-block reconnect keeps an armed fee row.
+- **Known limits**: #1553 (empty log pages finish a reconciliation and remove receipts), #1554 (a node failing every other page keeps the scan restarting with no stall), #1555 (a stored amount `BigInt` refuses breaks its page).
+- **Dispositions**: OA-1's options A, B, C, D and F were not taken (E picked on decision page 97). F-10's other positional signatures stay (report-only; #750 owns the arm's shape). Rejected: a retry cap, `:key` on the RouterView, the fee row's id and block-hash tracker. Arc 2's network e2e ran on Chrome only, per the orchestrator's gate; arc 1 ran both browsers.
+- **Size**: about 170 lines against light's 150; two arcs' gates, captures and review rounds are kept as evidence.
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and the vitest note (`clearAllMocks` keeps `mockReturnValueOnce` queues) stays in [lessons/phase-2.md](lessons/phase-2.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # incoming-2: a scan that loops on a half-answering node, and a received page that shows the wrong receipt
 
