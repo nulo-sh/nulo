@@ -8,3 +8,4 @@
 - 2026-11-02: final fresh Codex pass: conditional approve, folded, approve on resume. Plan approved; arc 1 next.
 - 2026-11-02: arc 1 gate: lint, typecheck:all, vitest list, test:all, armed builds, smoke e2e Chrome (one red fixed: snackbar still-pointer premise) and Firefox, all green at retry 0.
 - 2026-11-02: arc 1 Codex loop: r1 reject, r2 reject, r3 approve; Opus diff review folded.
+- 2026-11-02: arc 1 final gates on the converged head: lint, typecheck:all, test:all, both armed builds, smoke e2e Chrome 274 s and Firefox 403 s, all green at retry 0.
