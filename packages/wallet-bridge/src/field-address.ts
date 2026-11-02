@@ -1,15 +1,14 @@
 /**
  * A contract address as a grant lists it and a call names it, and the one comparison between the
- * two. Leaf module: its only import is the field modulus.
+ * two. Leaf module: it imports only the field modulus and the hex shape.
  */
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-
-const FIELD_ADDRESS = /^0x[0-9a-fA-F]{64}$/
+import { isHex32 } from "@nulo/wallet-core/utils"
 
 /** `0x` + 64 hex digits in either case, below the field modulus: the only listed-contract form
  *  projection admits. */
 export function isFieldAddress(value: unknown): value is string {
-	return typeof value === "string" && FIELD_ADDRESS.test(value) && BigInt(value) < Fr.MODULUS
+	return typeof value === "string" && isHex32(value) && BigInt(value) < Fr.MODULUS
 }
 
 /** The lower-case spelling `AztecAddress.toString()` writes, or `undefined` for any other string.
