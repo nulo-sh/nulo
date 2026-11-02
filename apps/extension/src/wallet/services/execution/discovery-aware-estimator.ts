@@ -21,6 +21,7 @@
  * derivation against a drifted RPC — it is pinned as preserved.
  */
 
+import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AuthwitDiscoverer, BuildTxRequestFn } from "./authwit-discoverer"
@@ -30,11 +31,17 @@ import { throwIfAborted } from "./rpc-cancel"
 import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation } from "./spec"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 
-/** Chain-bound extraction capability handed to folded strategies (unused by
- *  any strategy in the inert shape). `built` carries the live node + network
- *  the hashing must be asserted against. */
+/** Chain-bound extraction capability handed to folded strategies. The context
+ *  is the simulated build's: the live node and network the hashing is asserted
+ *  against, and the account it signs as. `requested` is true when the run
+ *  emitted any authorization request, signed or not: the stub answered every
+ *  check of the signer's witness, so only a validated simulation shows what
+ *  the run needs. */
 export interface DiscoveryProbe {
-	extractEffects(sim: unknown, ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"] }): Promise<AddPrivateAuthwitAction[]>
+	extractEffects(
+		sim: unknown,
+		ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"]; signer: AztecAddress },
+	): Promise<{ actions: AddPrivateAuthwitAction[]; requested: boolean }>
 }
 
 export interface DiscoveryAwareEstimatorDeps {

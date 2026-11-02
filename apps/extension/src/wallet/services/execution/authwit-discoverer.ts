@@ -137,13 +137,13 @@ export class AuthwitDiscoverer {
 
 		const nodeInfo = await node.getNodeInfo()
 		// Refuse to derive a hash from a drifted node.
-		const decoded = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo))
+		const { signable } = await decodeAuthwitEffects(effects, liveChainInfo(network, nodeInfo), account.address)
 		return {
-			actions: decoded.map(({ record }) => ({
+			actions: signable.map(({ record }) => ({
 				kind: "add_private_authwit",
 				content: { kind: "message_hash", messageHash: record.messageHash },
 			})),
-			discovered: decoded.map(({ record }) => record),
+			discovered: signable.map(({ record }) => record),
 		}
 	}
 

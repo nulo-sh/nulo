@@ -165,15 +165,20 @@ export class FpcStrategy implements FeeStrategy {
 			}
 			suggestGasLimits(built.txRequest, ctx.op.fee)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
-			// Folded discovery: the probed sim doubles as the discovery pass. A
-			// no-effects op on a DEPLOYED account is done in ONE sim (stub gas ==
-			// validated gas). Discovered effects OR an init-wrapped build force a
-			// validated rebuild+re-sim: effects so the fresh witnesses are VERIFIED;
-			// init-wrap because the stub's constructor gas is untrustworthy there.
+			// Folded discovery: the probed sim doubles as the discovery pass. An op
+			// with no authorization request on a DEPLOYED account is done in ONE sim
+			// (stub gas == validated gas). A request OR an init-wrapped build forces a
+			// validated rebuild+re-sim: requests so the witnesses, signed or not, are
+			// VERIFIED; init-wrap because the stub's constructor gas is untrustworthy there.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
-				if (discovered.length || isInitWrapped(built)) {
+				const extracted = await ctx.probe.extractEffects(simulatedTx, {
+					node: built.node,
+					network: built.network,
+					signer: built.account.address,
+				})
+				discovered = extracted.actions
+				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
@@ -231,7 +236,9 @@ export class FpcStrategy implements FeeStrategy {
 			// seed Pass-2's envelope, so re-derive it from a validated Pass-1.
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
+				discovered = (
+					await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network, signer: built.account.address })
+				).actions
 				if (discovered.length) {
 					ctx.op.actions.push(...discovered)
 				}

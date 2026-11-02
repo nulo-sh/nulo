@@ -38,11 +38,16 @@ export class FeeJuiceStrategy implements FeeStrategy {
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
-				// Discovered effects OR an init-wrapped build force a validated
-				// rebuild+re-sim: effects so the witnesses are VERIFIED; init-wrap
-				// because the stub's constructor gas is untrustworthy.
-				if (discovered.length || isInitWrapped(built)) {
+				const extracted = await ctx.probe.extractEffects(simulatedTx, {
+					node: built.node,
+					network: built.network,
+					signer: built.account.address,
+				})
+				discovered = extracted.actions
+				// A requested authorization OR an init-wrapped build forces a validated
+				// rebuild+re-sim: requests so the witnesses, signed or not, are VERIFIED;
+				// init-wrap because the stub's constructor gas is untrustworthy.
+				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)

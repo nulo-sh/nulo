@@ -1915,7 +1915,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			const preview = await executor.previewOperationAuthwits(op, CTX)
 			expect(preview.discoveredAuthwits).toEqual([record("ours")])
 			await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE, { ...CTX, previewId: preview.previewId })
-			expect(account.createAuthWit.mock.calls.map(([hash]) => String(hash))).toEqual(["mh:ih:ours"])
+			expect((account.createAuthWit.mock.calls as unknown[][]).map(([hash]) => String(hash))).toEqual(["mh:ih:ours"])
 			expect(proveAndSend).toHaveBeenCalledTimes(1)
 		})
 

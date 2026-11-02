@@ -1436,7 +1436,8 @@ export class DappSendExecutor {
 		this.deps.logDebug(`executeNoFromSendTx: offchain effects found: ${effects.length}`)
 		if (!effects.length) return []
 		const nodeInfo2 = await d.node.getNodeInfo()
-		return decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2))
+		const { signable } = await decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2), d.account.address)
+		return signable
 	}
 
 	/** Sign every discovered authorization into `txRequest.authWitnesses` — after
