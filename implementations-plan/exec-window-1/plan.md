@@ -95,9 +95,10 @@ Before building: write each pick under `## Decision` on #1494 and #1495 (`gh iss
 - Tests: `OperationCard.fee.test.ts`: Private Fee Juice (person pays), own cap and sponsored ops with `estimateFailed` show the failed block with the exact method and label text and no legend; TRY AGAIN emits `retryEstimate` with the index; a keyboard press focuses the wrapper, a pointer press does not (FeeSettingsCard.test.ts:1036-1077's spy). Rewrite the two tests named "after a failed estimate … the legend" (`:359`, `:448`). `index.test.ts`: an own-cap op's retry asks `[0, { index: 0, feeSettings: { paymentMethod: { kind: "embedded" } } }]`. `FeeCostReadout.test.ts`: `label` reaches the failed row.
 - **Status ✓ (2026-11-02).** Gate green (lint, typecheck:all, 936 tests in 40 files at retry 0). The five new or rewritten D tests and the `label` test fail against the base `OperationCard.vue` and `FeeCostReadout.vue`.
 
-### Phase 2 — #1495
+### Phase 2 — #1495 ✓
 - Change: `index.vue` (`failed`, `retryPreview`), `OperationCard.vue` (prop, emit, surface kind, focus, `refuseRepeatEnter` on the toggle), `SendTxSummary.vue` (line, emit).
 - Tests: `OperationCard.summary.test.ts`: a default-entrypoint op with `previewFailed` shows the line's exact text; TRY AGAIN emits `retryPreview` once; failed → previewing shows "Checking authorizations…", → a landed preview shows the list; with `refused` no line, unrefused control shows it; keyboard focus lands on the toggle, and a repeat Enter there is refused. `index.test.ts`: the preview map's `failed` reaches the card; `retryPreview` calls `feeMapInstances[1].api.estimate` once with `(i, { index: i })`; the snack is untouched.
+- **Status ✓ (2026-11-02).** Gate green (940 tests in 40 files at retry 0, lint, typecheck:all). The four new tests fail against the base copies. Deviation: the prototype's `align="baseline"` is not a `Flex` value (it rendered as no alignment, which is what the frame shows), so the line passes none; typecheck refused it.
 
 ### Phase 3 — P93-70
 - Change: `call-surface.ts` (`accountOutflows`, `amountOf`), `SendTxSummary.vue` (imports it), `OperationCard.vue` (block, rule).

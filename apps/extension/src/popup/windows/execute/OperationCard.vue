@@ -50,6 +50,7 @@ import { type CallSurface, type CallerContext, type WireCall, authwitTitle, call
 import { trimAddress } from "@/utils/string"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 import { grantContentsOf } from "./display-calls"
 
 // `DraftUIOperation` is the shared honest type. Send-like `feeSettings` is optional during user
@@ -75,6 +76,8 @@ const props = defineProps<{
 	 *  need at send, discovered without signing (no fee estimate exists for it). */
 	authwitPreview?: OperationAuthwitPreview
 	isPreviewing?: boolean
+	/** The preview failed: where the list would be, the card offers to ask again, as `retryPreview`. */
+	previewFailed?: boolean
 	/** Its estimate or preview waits behind another send. */
 	isQueued?: boolean
 	/** The authorizations an earlier window listed for this operation, for a window that only reads it. */
@@ -112,6 +115,7 @@ const props = defineProps<{
 const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	retryEstimate: [index: number]
+	retryPreview: [index: number]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
 	acknowledgeTokenFlag: [index: number, on: boolean]
@@ -204,12 +208,18 @@ const createAuthwitSurface = (m: unknown): CreateAuthwitSurface => {
  *  NO_FROM operation, the fee estimate for a standard one; `send_transaction` adds none
  *  at confirm, and an embedded-fee standard operation skips discovery there too. Nothing is
  *  rendered when there is nothing to list: an absent row must not read as a claim of absence. */
-type AuthwitSurface = { kind: "list"; authwits: readonly DiscoveredAuthwit[] } | { kind: "pending" } | { kind: "hidden" }
+type AuthwitSurface =
+	| { kind: "list"; authwits: readonly DiscoveredAuthwit[] }
+	| { kind: "pending" }
+	| { kind: "failed" }
+	| { kind: "hidden" }
 const authwitSurface = (op: UIOperation): AuthwitSurface => {
 	if (op.kind !== "aztec_sendTx") return { kind: "hidden" }
 	if (isNoFrom(op as SendLikeUIOp)) {
 		if (props.authwitPreview) return { kind: "list", authwits: props.authwitPreview.discoveredAuthwits }
-		return props.isPreviewing ? { kind: "pending" } : { kind: "hidden" }
+		if (props.isPreviewing) return { kind: "pending" }
+		// A refusal also fails the preview, and asking a refused request again cannot list anything.
+		return props.previewFailed && !props.refused ? { kind: "failed" } : { kind: "hidden" }
 	}
 	if (isEmbeddedFeePayment(op)) return { kind: "hidden" }
 	const listed = props.feeEstimate?.discoveredAuthwits ?? props.approvedAuthwits
@@ -235,6 +245,12 @@ const summaryAuthwits = computed(() =>
 
 const detailsOpen = ref(false)
 const detailsId = useId()
+const detailsToggle = ref<{ $el: HTMLElement } | null>(null)
+/** The retry's line leaves with the failure, so a keyboard press moves on to the control after it. */
+const onRetryPreview = (event: MouseEvent) => {
+	emit("retryPreview", props.index)
+	if ((event.currentTarget as HTMLElement).matches(":focus-visible")) detailsToggle.value?.$el.focus()
+}
 
 /** Which discovered authorizations the person closed: once the rows are open, an authorization's
  *  values are open too, so a raw one stays within two presses of the card at rest. */
@@ -317,17 +333,21 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 					:calls="sendTxRows"
 					:authwits="summaryAuthwits"
 					:checkingAuthwits="authwits.kind === 'pending'"
+					:previewFailed="authwits.kind === 'failed'"
 					:chainId="op.network?.chainId"
 					:tokens="tokens"
 					:advice="adviceSite?.on === 'calls'"
+					@retryPreview="onRetryPreview"
 				/>
 				<Flex :class="$style.group">
 					<DetailsToggle
+						ref="detailsToggle"
 						data-testid="execute-op-details-toggle"
 						:open="detailsOpen"
 						:controls="detailsId"
 						:label="detailsOpen ? 'Hide all details' : 'Show all details'"
 						@click="detailsOpen = !detailsOpen"
+						@keydown.enter="refuseRepeatEnter"
 					/>
 				</Flex>
 				<Flex v-if="detailsOpen" :id="detailsId" data-testid="execute-op-details" direction="column" wide>

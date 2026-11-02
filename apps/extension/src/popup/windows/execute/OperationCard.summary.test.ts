@@ -32,6 +32,7 @@ import {
 } from "./execute.fixture"
 import OperationCard from "./OperationCard.vue"
 import { shownText } from "../../../../tests/helpers/shown-text"
+import { sendEvent } from "../../../../tests/helpers/send-event"
 
 const lookups = vi.hoisted(() => ({ accounts: [] as { name: string; address: string }[] }))
 vi.mock("@/utils/core", () => ({ managers: { contact: { getContactByAddress: vi.fn(async () => null) } } }))
@@ -416,5 +417,56 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		const w = await mountCard({ isPreviewing: true, ...(await decodeFixture()) }, op)
 		expect(read(w, "execute-op-authwits-pending")).toEqual(["Checking authorizations…"])
 		expect(w.find('[data-testid="execute-op-details"]').exists()).toBe(false)
+	})
+})
+
+describe("OperationCard — a default-entrypoint send whose authorization preview failed", () => {
+	const noFrom = () => ({
+		...(fixtureOp() as object),
+		executionMode: "default_entrypoint",
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
+	const failedLine = (w: VueWrapper) => w.find('[data-testid="execute-op-authwits-preview-failed"]')
+	const retry = (w: VueWrapper) => w.get('[data-testid="execute-op-authwits-preview-retry"]')
+
+	test("the list collapses to one line that says so; Try again asks the preview again, which reads as checking, then lists", async () => {
+		const w = await mountCard({ previewFailed: true, ...(await decodeFixture()) }, noFrom())
+		expect(failedLine(w).get(".color--txt-danger").text()).toBe("Authorizations couldn't be previewed")
+		expect(retry(w).text()).toBe("Try again")
+		expect(w.find('[data-testid="execute-op-summary-authwits-section"]').exists()).toBe(false)
+
+		await retry(w).trigger("click")
+		expect(w.emitted("retryPreview")).toEqual([[0]])
+		await w.setProps({ previewFailed: false, isPreviewing: true })
+		expect([failedLine(w).exists(), read(w, "execute-op-authwits-pending")]).toEqual([false, ["Checking authorizations…"]])
+		await w.setProps({ isPreviewing: false, authwitPreview: { previewId: "pv", discoveredAuthwits: AUTHWITS } })
+		expect(failedLine(w).exists()).toBe(false)
+		expect(w.findAll('[data-testid="execute-op-summary-authwit"]')).toHaveLength(2)
+	})
+
+	test("a refused request, or one the wallet estimates instead, shows no line; the same failure unrefused does", async () => {
+		const decoded = await decodeFixture()
+		expect(failedLine(await mountCard({ previewFailed: true, refused: true, ...decoded }, noFrom())).exists()).toBe(false)
+		expect(failedLine(await mountCard({ previewFailed: true, ...decoded })).exists()).toBe(false)
+		expect(failedLine(await mountCard({ previewFailed: true, ...decoded }, noFrom())).exists()).toBe(true)
+	})
+
+	test("a keyboard press moves on to Show all details, which refuses a held Enter's repeat; a pointer press leaves focus", async () => {
+		const w = mount(OperationCard, {
+			props: { op: noFrom() as never, index: 0, tokens: [USDC_TOKEN], previewFailed: true, ...(await decodeFixture()) },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+			attachTo: document.body,
+		})
+		await flushPromises()
+		await retry(w).trigger("click")
+		expect(document.activeElement).not.toBe(toggle(w).element)
+
+		vi.spyOn(retry(w).element, "matches").mockImplementation((selector) => selector === ":focus-visible")
+		await retry(w).trigger("click")
+		expect(w.emitted("retryPreview")).toEqual([[0], [0]])
+		expect(document.activeElement).toBe(toggle(w).element)
+		expect(sendEvent(toggle(w).element, "keydown", { key: "Enter", repeat: true })?.defaultPrevented).toBe(true)
+		expect(sendEvent(toggle(w).element, "keydown", { key: "Enter" })?.defaultPrevented).toBe(false)
+		w.unmount()
 	})
 })
