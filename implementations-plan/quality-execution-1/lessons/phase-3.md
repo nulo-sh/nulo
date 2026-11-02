@@ -1,0 +1,3 @@
+# quality-execution-1 phase 3: registration executor
+
+- Pins before the move, through `executeOperations`. A dApp `register_token` under an authorized fence commits under that fence by identity (`register-counts.composition.test.ts`). A dApp's keyed `aztec_registerContract` is admitted under its app and fence before the account and the contract register, and a refused admission writes neither (`register-contract-account.real.test.ts`, Node environment). Red proof on the base: passing `undefined` for the token arm's fence fails the identity assertion; passing `undefined` for the contract arm's registrant fails both keyed cases. Both edits were reverted with `git checkout`.
