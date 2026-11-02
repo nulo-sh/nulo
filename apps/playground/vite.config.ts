@@ -31,7 +31,9 @@ export default defineConfig({
 	server: {
 		port,
 		strictPort: true,
-		host: "localhost",
+		// Bound to `localhost`, Vite takes the resolver's first answer (`::1` on most hosts), which
+		// Node's client skips on a host with no non-loopback IPv6 address; every client reaches this.
+		host: "127.0.0.1",
 		hmr: disableHmr ? false : undefined,
 		watch: disableHmr ? { ignored: ["**"] } : undefined,
 	},
