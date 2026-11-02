@@ -1,14 +1,17 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
+import { reactive } from "vue"
 
-const appStoreState = {
-	account: { name: "Account 1", address: `0x22ee${"0".repeat(56)}c204` },
+const ACCOUNT = { name: "Account 1", address: `0x22ee${"0".repeat(56)}c204` }
+const appStoreState = reactive({
+	account: ACCOUNT,
 	network: { id: "local", name: "Local Network" },
-}
+})
 
 const copyWithToast = vi.hoisted(() => vi.fn(async () => true))
 vi.mock("@/utils/clipboard", () => ({ copyWithToast }))
-vi.mock("lean-qr", () => ({ generate: () => ({ toCanvas: vi.fn() }) }))
+const generate = vi.hoisted(() => vi.fn((_address: string) => ({ toCanvas: vi.fn() })))
+vi.mock("lean-qr", () => ({ generate }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/composables/snackInset", () => ({ vSnackFooter: {} }))
 vi.mock("@/composables/usePopupStack", () => ({ usePopupStack: () => ({ order: 1, depth: 0 }) }))
@@ -34,6 +37,8 @@ const mountShown = async () => {
 
 afterEach(() => {
 	copyWithToast.mockClear()
+	generate.mockClear()
+	appStoreState.account = ACCOUNT
 	appStoreState.network = { id: "local", name: "Local Network" }
 })
 
@@ -72,6 +77,18 @@ describe("ReceivePopup", () => {
 		expect(copyWithToast).toHaveBeenCalledExactlyOnceWith(appStoreState.account.address, expect.any(Function), "Address is copied")
 		window.getSelection()?.removeAllRanges()
 		wrapper.element.remove()
+	})
+
+	test("draws the QR of the address it shows, again when the account changes while the sheet is open", async () => {
+		const wrapper = mount(ReceivePopup, { props: { show: false }, global: { stubs: STUBS } })
+		await wrapper.setProps({ show: true })
+		await flushPromises()
+		expect(generate).toHaveBeenLastCalledWith(ACCOUNT.address)
+		const next = `0x0abc${"1".repeat(56)}d00d`
+		appStoreState.account = { name: "Account 2", address: next }
+		await flushPromises()
+		expect(wrapper.get('[data-testid="receive-address-text"]').text()).toBe(next)
+		expect(generate).toHaveBeenLastCalledWith(next)
 	})
 
 	test("renders a typed network name whole and as text", async () => {

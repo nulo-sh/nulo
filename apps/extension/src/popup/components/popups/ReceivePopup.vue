@@ -34,8 +34,9 @@ const handleCopyAddress = (e) => {
 	void copyWithToast(appStore.account.address, openToast, "Address is copied")
 }
 
+// The QR follows the address the text under it shows, should the account change while the sheet is open.
 watch(
-	() => props.show,
+	() => [props.show, appStore.account?.address],
 	() => {
 		if (!props.show) return
 
