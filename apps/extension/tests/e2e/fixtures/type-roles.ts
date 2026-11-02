@@ -593,7 +593,15 @@ export async function expectInsideView(page: Page, label: string): Promise<void>
  * log's box in its root), and the capabilities Details table narrows its columns instead.
  */
 export const NARROW_ACCEPTED: readonly { testid: string; why: string }[] = [
-	{ testid: "network-name", why: "the network chip keeps the ellipsis it has, down to its status dot; the button names the network" },
+	{
+		testid: "network-name",
+		why: "a typed name wider than the room left ends in an ellipsis, as a seeded one never does; the button names the network",
+	},
+	{
+		testid: "account-selector",
+		why: "with Show network name on, the account's name leaves with its address once both no longer fit beside the network's name; the avatar still switches",
+	},
+	{ testid: "account-address-text", why: "leaves with the account's name, as above; Receive shows and copies the whole address" },
 	{
 		testid: "activity-title-sep",
 		why: "a row's chips wrapped under its title leave their separator left of the row's clip, as wrapTrailing rows do",

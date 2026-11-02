@@ -282,15 +282,6 @@ onBeforeUnmount(() => {
 	align-items: flex-start;
 }
 
-/* Under 117 px (15 of the address's 7.8 px characters) the shortened address and its copy glyph
- * no longer clear the chip, so the name and the address leave together. */
-@container account (width < 117px) {
-	.name_slot,
-	.account_address {
-		display: none;
-	}
-}
-
 .name_slot {
 	display: flex;
 	align-self: stretch;
@@ -480,6 +471,16 @@ onBeforeUnmount(() => {
 
 	.name_first .account_col {
 		container: account / inline-size;
+	}
+}
+
+/* Below 117 px of column, 15 of the address's 7.8 px characters, the shortened address and its copy
+ * glyph no longer clear the chip, so the name and the address leave together. Placed after their
+ * own rules, which set a display. */
+@container account (width < 117px) {
+	.name_slot,
+	.account_address {
+		display: none;
 	}
 }
 

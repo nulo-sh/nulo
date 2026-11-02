@@ -176,11 +176,14 @@ const headerRow = (page: Page) =>
 	page.evaluate(() => {
 		const el = (testid: string) => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`)
 		const shown = (node: HTMLElement | null) => (node && node.getClientRects().length > 0 ? node : null)
-		const whole = (node: HTMLElement) => {
+		const whole = (node: HTMLElement, contents: Node = node) => {
 			const range = document.createRange()
-			range.selectNodeContents(node)
+			range.selectNodeContents(contents)
 			return range.getBoundingClientRect().width <= node.getBoundingClientRect().width + 0.5
 		}
+		// The address's copy glyph is drawn past its box, so only its text is measured against the box.
+		const addressText = (node: HTMLElement) =>
+			[...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) ?? node
 		const [name, chip, dot] = [el("network-name"), el("network-button"), el("network-status-dot")]
 		const [address, label, glyph] = [shown(el("account-address-text")), shown(el("account-selector")), el("account-copy-glyph")]
 		const [chipBox, dotBox] = [chip?.getBoundingClientRect(), dot?.getBoundingClientRect()]
@@ -191,7 +194,7 @@ const headerRow = (page: Page) =>
 			dotInside: !!chipBox && !!dotBox && dotBox.left - chipBox.left >= 1 && chipBox.right - dotBox.right >= 1,
 			label: label ? "shown" : null,
 			address: address?.textContent?.trim() ?? null,
-			addressWhole: !!address && whole(address),
+			addressWhole: !!address && whole(address, addressText(address)),
 			glyphClear: chipBox && glyph ? chipBox.left - glyph.getBoundingClientRect().right : null,
 		}
 	})
