@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * A bordered mono search box: icon + native input. It keeps every visible character, since a symbol
- * may hold any punctuation, and none of the ones `stripBidiAndZeroWidth` removes.
- */
+/** No `sanitize`-style filter: a token symbol may hold any punctuation. */
 import { stripBidiAndZeroWidth } from "@/utils/string"
 
 defineProps({

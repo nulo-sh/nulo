@@ -118,9 +118,9 @@ test("a grant added while the page is open reads its kind, and a search that mis
 })
 
 test.each([
-	{ pasted: "transfer_in\u200B_public", shown: 1 },
-	{ pasted: "transfer_in_publik", shown: 0 },
-])("a search for $pasted shows $shown grant", async ({ pasted, shown }) => {
+	{ case: "with a zero-width space", pasted: "transfer_in\u200B_public", shown: 1 },
+	{ case: "with a visible wrong character", pasted: "transfer_in_publik", shown: 0 },
+])("a method name pasted $case shows $shown grant", async ({ pasted, shown }) => {
 	const w = await mountPage({ realInput: true })
 	expect(chips(w)).toHaveLength(1)
 	await w.get("input").setValue(pasted)

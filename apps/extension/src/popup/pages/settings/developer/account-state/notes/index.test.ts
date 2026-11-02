@@ -53,9 +53,9 @@ async function mountPage() {
 }
 
 test.each([
-	{ pasted: "Uint​Note", shown: 1, status: undefined },
-	{ pasted: "UintNotg", shown: 0, status: "no-results" },
-])("a search for $pasted shows $shown note", async ({ pasted, shown, status }) => {
+	{ case: "with a zero-width space", pasted: "Uint\u200BNote", shown: 1, status: undefined },
+	{ case: "with a visible wrong character", pasted: "UintNotg", shown: 0, status: "no-results" },
+])("a note type pasted $case shows $shown note", async ({ pasted, shown, status }) => {
 	const w = await mountPage()
 	expect(w.findAll('[data-testid="note-contract"]')).toHaveLength(2)
 	await w.get("input").setValue(pasted)

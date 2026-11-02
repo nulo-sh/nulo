@@ -52,9 +52,9 @@ async function mountPage() {
 }
 
 test.each([
-	{ pasted: `${A.slice(0, 20)}​${A.slice(20)}`, shown: [A], status: undefined },
-	{ pasted: `${A.slice(0, -1)}g`, shown: [], status: "no-results" },
-])("a search for $pasted shows $shown", async ({ pasted, shown, status }) => {
+	{ case: "with a zero-width space", pasted: `${A.slice(0, 20)}\u200B${A.slice(20)}`, shown: [A], status: undefined },
+	{ case: "with a visible wrong character", pasted: `${A.slice(0, -1)}g`, shown: [], status: "no-results" },
+])("a contract address pasted $case shows $shown", async ({ pasted, shown, status }) => {
 	const w = await mountPage()
 	await w.get("input").setValue(pasted)
 	expect(w.findAll('[data-testid="contract"]').map((c) => c.attributes("data-address"))).toEqual(shown)
