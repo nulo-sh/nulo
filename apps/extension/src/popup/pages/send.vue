@@ -1038,7 +1038,7 @@ onBeforeUnmount(() => {
 	bottom: 0;
 	z-index: 5;
 
-	padding: 20px 24px;
+	padding: 12px 24px;
 	background: var(--app-bg);
 	border-top: 1px solid var(--nulo-border);
 }
