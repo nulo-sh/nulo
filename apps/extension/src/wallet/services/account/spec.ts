@@ -60,6 +60,31 @@ export function accountScopeKey(chainId: number, address: string): string {
 	return `${chainId}:${address}`
 }
 
+/** A row scoped to one account on one chain, as the stores an account deletion purges hold it. */
+export type AccountScopedRow = { profileId: string; chainId: number; account: string }
+
+/**
+ * Which of `profileId`'s rows an account deletion of `scopes` removes, matched on the full
+ * (profileId, chainId, account) tuple: a bare-address match would erase a sibling profile's rows
+ * (shared addresses are a supported state), and an address-and-profile match this profile's rows
+ * on another chain. `raw` reads a stored value's fields only when they have their types, so an
+ * old-shape row, which carries no scope, is left to its root's legacy sweep.
+ */
+export function accountScopeMatcher(
+	profileId: string,
+	scopes: ReadonlyArray<AccountScope>,
+): { row: (row: AccountScopedRow) => boolean; raw: (raw: Record<string, unknown>) => boolean } {
+	const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
+	return {
+		row: (row) => row.profileId === profileId && keys.has(accountScopeKey(row.chainId, row.account)),
+		raw: (raw) =>
+			raw.profileId === profileId &&
+			typeof raw.chainId === "number" &&
+			typeof raw.account === "string" &&
+			keys.has(accountScopeKey(raw.chainId, raw.account)),
+	}
+}
+
 /**
  * Inverse of `accountRowId`: the scope tuple a canonical row key encodes, or
  * undefined for a non-canonical key (legacy/foreign shapes).

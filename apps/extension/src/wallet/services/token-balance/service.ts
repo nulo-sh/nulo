@@ -9,7 +9,7 @@ import { EventHandler, Lock } from "@nulo/wallet-core/utils"
 import { reconcilePlan } from "./reconcile-pairs"
 import { isLegacyBalanceRow, rowMatchesItsToken, rowMatchesToken } from "./balance-identity"
 import { AccountService, type Account } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeKey } from "@/wallet/services/account/spec"
+import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -598,28 +598,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited balance purge for account scopes within ONE profile — registered with
-	 *  AccountService and invoked BEFORE the Account rows are deleted. Scope is the
-	 *  full (profileId, chainId, address) tuple: a bare-address match would destroy a
-	 *  sibling profile's rows (shared addresses are a supported state), and an
-	 *  address+profile match would destroy this profile's rows on ANOTHER chain.
-	 *  Idempotent. */
+	 *  AccountService and invoked BEFORE the Account rows are deleted. Idempotent. */
 	public async purgeForAccounts(scopes: ReadonlyArray<AccountScope>, profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		if (scopes.length === 0) return
-		const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
+		const match = accountScopeMatcher(profileId, scopes)
 		// One hold with the creators, fence before every delete — mirrors purgeForTokens.
-		await this.lock.withLock(() =>
-			this.purgeScopeHoldingLock(
-				(row) => row.profileId === profileId && keys.has(accountScopeKey(row.chainId, row.account)),
-				// Old-shape rows carry no profileId/chainId (unattributable) and are
-				// DELIBERATELY left to the init legacy sweep.
-				(raw) =>
-					raw.profileId === profileId &&
-					typeof raw.chainId === "number" &&
-					typeof raw.account === "string" &&
-					keys.has(accountScopeKey(raw.chainId, raw.account)),
-			),
-		)
+		await this.lock.withLock(() => this.purgeScopeHoldingLock(match.row, match.raw))
 	}
 
 	private readonly onTransactionUpdated = async (tx: Tx) => {

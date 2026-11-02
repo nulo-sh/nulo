@@ -17,7 +17,7 @@ import { requireActiveProfile } from "@/wallet/services/profile/require-active-p
 import { NetworkService } from "@/wallet/services/network/service"
 import { type Network, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import { AccountService } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeKey } from "@/wallet/services/account/spec"
+import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
 import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
@@ -656,26 +656,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited authwit + status purge for a SET of `(chainId, address)` scopes within ONE profile —
-	 *  registered with AccountService and invoked BEFORE the Account rows are deleted.
-	 *  Scope is the full tuple: a bare-address match would destroy a sibling profile's rows (shared
-	 *  addresses are a supported state), and an address+profile match would destroy this profile's
-	 *  rows on ANOTHER chain. Idempotent. */
+	 *  registered with AccountService and invoked BEFORE the Account rows are deleted. Idempotent. */
 	public async purgeForAccounts(scopes: ReadonlyArray<AccountScope>, profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		if (scopes.length === 0) return
-		const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
+		const match = accountScopeMatcher(profileId, scopes)
 		// A plain arrow, never async: an async wrapper delays the lock release by a tick.
-		await this.lock.withLock(() =>
-			this.purgeMatchingLocked({
-				row: (a) => a.profileId === profileId && keys.has(accountScopeKey(a.chainId, a.account)),
-				raw: (raw) =>
-					raw.profileId === profileId &&
-					typeof raw.chainId === "number" &&
-					typeof raw.account === "string" &&
-					keys.has(accountScopeKey(raw.chainId, raw.account)),
-				status: (s) => s.profileId === profileId && keys.has(accountScopeKey(s.chainId, s.account)),
-			}),
-		)
+		await this.lock.withLock(() => this.purgeMatchingLocked({ row: match.row, raw: match.raw, status: match.row }))
 	}
 
 	/** Awaited authwit + status purge for one whole profile (profile-delete cascade). */
