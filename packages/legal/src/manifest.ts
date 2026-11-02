@@ -32,7 +32,7 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 		},
 		{
 			version: "1.2.1",
-			effective: null,
+			effective: "3 November 2026",
 			material: false,
 			changes: ["The summary box names the default network as Nulo shows it, Alpha."],
 		},
