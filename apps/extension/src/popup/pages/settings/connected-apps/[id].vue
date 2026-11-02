@@ -47,7 +47,7 @@ const router = useRouter()
 
 const session = ref()
 const accounts = ref([])
-// A read that settled before the unmount resumes after it: its next request would open a port.
+// A read that settles around the unmount resumes after it: it must neither navigate nor open a port.
 let unmounted = false
 
 const sessionParams = computed(() => parseSessionParams(session.value?.permissions))
@@ -91,19 +91,19 @@ const authorizationsLine = computed(() => {
 })
 
 const fetchSession = async () => {
+	let read
 	try {
-		session.value = await dappSessionService.getDappSession(route.params.id)
+		read = await dappSessionService.getDappSession(route.params.id)
 	} catch {
-		// Session missing / expired — the service throws instead of returning null
+		// Missing or expired: the service throws rather than answer empty.
+	}
+	if (unmounted) return
+	if (!read) {
 		router.push("/popup/settings/connected-apps")
 		return
 	}
 
-	if (!session.value) {
-		router.push("/popup/settings/connected-apps")
-		return
-	}
-
+	session.value = read
 	if (session.value.dappMetadata.logo) {
 		session.value.dappMetadata.logoBlobUrl = session.value.dappMetadata.logo
 	}
