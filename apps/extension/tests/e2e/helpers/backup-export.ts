@@ -14,13 +14,14 @@ const enabled = (testid: string) => {
 	return !!el && !el.disabled
 }
 
-/** A password profile's ready backup, encrypted with the profile password and downloaded: its file
- *  never leaves the page unencrypted. Returns the file's text. */
+/** One press seals the file and saves it, so the capture's window covers the seal too. */
+const SEAL_AND_SAVE_MS = 90_000
+
+/** A password profile's ready backup, encrypted with the profile password and downloaded by its one
+ *  button: its file never leaves the page unencrypted. Returns the file's text. */
 export async function downloadEncryptedBackup(page: Page, press: Press = clickByTestId, readyMs = 120_000): Promise<string> {
-	await page.waitForFunction(enabled, { timeout: readyMs, polling: 250 }, "protect-password-btn")
-	await press(page, "protect-password-btn")
-	await page.waitForFunction(enabled, { timeout: 60_000, polling: 250 }, "download-backup-btn")
-	await armDownloadCapture(page, { gzip: true })
+	await page.waitForFunction(enabled, { timeout: readyMs, polling: 250 }, "download-backup-btn")
+	await armDownloadCapture(page, { gzip: true, withinMs: SEAL_AND_SAVE_MS })
 	await press(page, "download-backup-btn")
 	return await readCapturedDownload(page)
 }
@@ -40,10 +41,8 @@ export async function downloadPasskeyBackup(
 	await page.waitForSelector('[data-testid="backup-encrypt-password-input"]', { visible: true, timeout: readyMs })
 	await replaceInputValue(page, '[data-testid="backup-encrypt-password-input"]', filePassword)
 	await replaceInputValue(page, '[data-testid="backup-encrypt-password-confirm-input"]', filePassword)
-	await page.waitForFunction(enabled, { timeout: 10_000, polling: 250 }, "protect-password-btn")
-	await press(page, "protect-password-btn")
-	await page.waitForFunction(enabled, { timeout: 60_000, polling: 250 }, "download-backup-btn")
-	await armDownloadCapture(page, { gzip: true })
+	await page.waitForFunction(enabled, { timeout: 10_000, polling: 250 }, "download-backup-btn")
+	await armDownloadCapture(page, { gzip: true, withinMs: SEAL_AND_SAVE_MS })
 	await press(page, "download-backup-btn")
 	return await readCapturedDownload(page)
 }
