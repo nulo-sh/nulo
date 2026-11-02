@@ -23,7 +23,7 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 </script>
 
 <template>
-	<Flex direction="column" gap="12" :class="$style.wraps" data-testid="get-started">
+	<Flex direction="column" gap="12" data-testid="get-started">
 		<Flex align="end" justify="between" :class="$style.header">
 			<SectionLabel label="Get started" :class="pending && $style.pending" />
 			<Flex align="end" gap="16">
@@ -40,6 +40,7 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 				:aria-current="step === next ? 'step' : undefined"
 				:title="ROWS[step.item].title"
 				:description="step.done ? undefined : ROWS[step.item].description"
+				wrapDescription
 				:value="step.done ? undefined : ROWS[step.item].value"
 				:chevron="!step.done"
 				:external="ROWS[step.item].external"
@@ -122,11 +123,6 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 .checked {
 	border-color: var(--nulo-border);
 	color: var(--nulo-accent);
-}
-
-/* A step's description is a sentence, never cut. */
-.wraps :global(.type--caption) {
-	white-space: normal;
 }
 
 .done :global(.type--row-title) {

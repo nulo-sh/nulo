@@ -161,7 +161,7 @@ describe("general/GetStartedCard", () => {
 			.filter((icon) => fee.element.contains(icon.element))
 			.map((icon) => icon.props("name"))
 		expect(glyphs).toEqual(["open"])
-		expect(w.classes().some((name) => name.includes("wraps"))).toBe(true)
+		expect(w.findAllComponents(SettingItem).map((item) => item.props("wrapDescription"))).toEqual([true, true, true, true])
 		await fee.get("button").trigger("click")
 		expect(w.emitted("select")).toEqual([["feeJuice"]])
 	})
