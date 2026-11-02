@@ -28,3 +28,21 @@
 	white-space: nowrap;
 	border: 0;
 }
+
+/* "Try again" beside a fee line: an accent action in the label role, on the line's baseline. */
+.retry {
+	composes: type--label-section from global;
+	line-height: inherit;
+	background: none;
+	color: var(--nulo-accent);
+	cursor: pointer;
+
+	&:hover {
+		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
+}

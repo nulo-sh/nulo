@@ -46,8 +46,12 @@ const props = defineProps<{
 	queuedSponsored?: boolean
 	/** Set for a queued send whose fee came out above the cap the person accepted. */
 	reask?: { now: string; cap: string }
+	/** The page's estimate is running: a button that cannot send yet says so. */
+	estimating?: boolean
+	/** The running estimate has run long: the fee line offers to ask again, as `retry`. */
+	slow?: boolean
 }>()
-const emit = defineEmits<{ close: []; send: [] }>()
+const emit = defineEmits<{ close: []; send: []; retry: [] }>()
 
 const ROWS: { cell: FactCell; id: string; name: string }[] = [
 	{ cell: "you", id: "you", name: "Your address" },
@@ -65,7 +69,8 @@ const sendable = computed(() => props.show && props.canSend && props.ready && !p
 const submitLabel = computed(() => {
 	// The re-asked figure stays on the fee line above: in the label it clips at 360 px.
 	if (props.reask) return "Send"
-	return props.queuedCapText || props.queuedSponsored ? "Queue send" : "Send now"
+	if (props.queuedCapText || props.queuedSponsored) return "Queue send"
+	return props.estimating ? "Estimating fee" : "Send now"
 })
 
 const rows = computed(() =>
@@ -166,6 +171,10 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.cap }} you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else-if="queuedSponsored" data-testid="send-review-fee-queued">Fee · {{ QUEUED_SPONSORED_COPY }}</span>
+						<span v-else-if="estimating && slow && !feeText" :class="$style.fee_slow" data-testid="send-review-fee-slow">
+							Fee · Taking longer than usual.
+							<button type="button" :class="$style.retry" data-testid="send-review-fee-retry" @click="emit('retry')">Try again</button>
+						</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
 						<b v-if="paid" class="type--meta">{{ paid }}</b>
 					</div>
@@ -339,6 +348,17 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 .visually_hidden {
 	composes: visually_hidden from "./fee-shared.module.css";
+}
+
+.fee_slow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.retry {
+	composes: retry from "./fee-shared.module.css";
 }
 
 .fee b {

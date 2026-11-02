@@ -21,6 +21,8 @@ const props = defineProps({
 	amountTyped: { type: Boolean, default: false },
 	/** The current input's estimate failed: the row offers to ask again, as `retry`. */
 	failed: { type: Boolean, default: false },
+	/** The running estimate has passed the page's patience: the bar gives way to an offer to ask again. */
+	slow: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["retry"])
@@ -65,6 +67,13 @@ const sponsoredSentence = computed(() => {
 	<Flex v-else-if="estimating && isQueued" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.queued">{{ QUEUED_FEE_COPY }}</span>
+	</Flex>
+	<Flex v-else-if="estimating && slow" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-slow">
+		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.failed">
+			<span class="color--secondary">Taking longer than usual.</span>
+			<button type="button" :class="$style.retry" data-testid="fee-estimate-retry" @click="emit('retry', $event)">Try again</button>
+		</span>
 	</Flex>
 	<Flex v-else-if="estimating || (pending && amountTyped)" direction="column" gap="4" :class="$style.detail_row">
 		<span :class="$style.fee_label">You pay</span>
@@ -139,20 +148,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .retry {
-	composes: type--label-section from global;
-	line-height: inherit;
-	background: none;
-	color: var(--nulo-accent);
-	cursor: pointer;
-
-	&:hover {
-		text-decoration: underline;
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
+	composes: retry from "./fee-shared.module.css";
 }
 
 </style>
