@@ -100,9 +100,10 @@ Before building: write each pick under `## Decision` on #1494 and #1495 (`gh iss
 - Tests: `OperationCard.summary.test.ts`: a default-entrypoint op with `previewFailed` shows the line's exact text; TRY AGAIN emits `retryPreview` once; failed → previewing shows "Checking authorizations…", → a landed preview shows the list; with `refused` no line, unrefused control shows it; keyboard focus lands on the toggle, and a repeat Enter there is refused. `index.test.ts`: the preview map's `failed` reaches the card; `retryPreview` calls `feeMapInstances[1].api.estimate` once with `(i, { index: i })`; the snack is untouched.
 - **Status ✓ (2026-11-02).** Gate green (940 tests in 40 files at retry 0, lint, typecheck:all). The four new tests fail against the base copies. Deviation: the prototype's `align="baseline"` is not a `Flex` value (it rendered as no alignment, which is what the frame shows), so the line passes none; typecheck refused it.
 
-### Phase 3 — P93-70
+### Phase 3 — P93-70 ✓
 - Change: `call-surface.ts` (`accountOutflows`, `amountOf`), `SendTxSummary.vue` (imports it), `OperationCard.vue` (block, rule).
 - Tests: `call-surface.test.ts`: transfers of 4 TST and 2 TST (the second with `from` = the account in upper case) and 10 USDC, plus a decoded non-transfer, a transfer from another address and one to the account, give rows `[2, 6 TST]`, `[1, 10 USDC]` exactly; an unknown symbol keeps base units. `OperationCard.summary.test.ts`: a request with those calls (real Token decodes) renders exactly "2 transfers" / "6 TST" and "1 transfer" / "10 USDC"; no block with zero counted transfers or with a `#fee` slot (controls).
+- **Status ✓ (2026-11-02).** Gate green (944 tests in 40 files at retry 0, lint, typecheck:all); the four new tests fail against the base copies. The shared fixture's USDC transfer now draws a block in the existing summary tests, which still pass.
 
 ### Phase 4 — whole-window gates and captures
 - `bun run audit:vue && bun run test:all` (retry 0).

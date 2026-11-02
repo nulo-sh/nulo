@@ -6,3 +6,4 @@
 - 2026-11-02: final Codex pass approves; plan committed; auto-continue into arc 1.
 - 2026-11-02: phase 1 (#1494) gate green; red on the base copy.
 - 2026-11-02: phase 2 (#1495) gate green; red on the base copy; the prototype's invalid Flex align dropped (the frame rendered without it).
+- 2026-11-02: phase 3 (P93-70) gate green; red on the base copy.

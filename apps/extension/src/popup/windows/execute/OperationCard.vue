@@ -46,7 +46,18 @@ import SendTxSummary from "./SendTxSummary.vue"
 import { humanizeOperationKind, safeWire, safeWireOrDash } from "./humanize"
 import { type FeePayerPick, paysFromPrivateFeeJuice, personPaysAppPayment } from "./fee-figure"
 import type { DraftAztecSendTxOperation, DraftSendTransactionOperation, DraftUIOperation } from "./types"
-import { type CallSurface, type CallerContext, type WireCall, authwitTitle, callSurface, rowTitle, tokenAt, wire } from "./call-surface"
+import {
+	type CallSurface,
+	type CallerContext,
+	type WireCall,
+	accountOutflows,
+	authwitTitle,
+	callSurface,
+	rowTitle,
+	tokenAt,
+	wire,
+} from "./call-surface"
+import { pluralize } from "@/utils/plural"
 import { trimAddress } from "@/utils/string"
 import { callTitle } from "@/utils/tx-enrichment"
 import { isEmbeddedFeePayment } from "./operation-validation"
@@ -144,6 +155,11 @@ const sendTxCalls = (op: DraftAztecSendTxOperation): { call: WireCall; surface: 
 	return (op.exec.calls as WireCall[]).map((call, j) => ({ call, surface: callSurface(ctx, call, decodedAt(j), isToken(call.to)) }))
 }
 const sendTxRows = computed(() => (props.op.kind === "aztec_sendTx" ? sendTxCalls(props.op) : []))
+const outflows = computed(() =>
+	props.op.kind === "aztec_sendTx"
+		? accountOutflows(sendTxRows.value, props.op.accountAddress, props.tokens, props.op.network?.chainId)
+		: [],
+)
 const appName = computed(() => safeWire(props.dapp?.name, 64) || "the app")
 /** The app picked the method but the person pays, so the card claims nothing for the app and never
  *  reads the fee contract's own pool as the person's. */
@@ -418,6 +434,18 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 		</Flex>
 
 		<div :class="$style.op_divider" />
+
+		<!-- What leaves opens the card's own fee section; a block that replaces it draws neither. -->
+		<template v-if="outflows.length && !$slots.fee">
+			<Flex data-testid="execute-op-leaves-account" direction="column" gap="8" wide :class="$style.leaves">
+				<Text variant="label-section" color="secondary">Leaves your account</Text>
+				<Flex v-for="row in outflows" :key="row.contract" data-testid="execute-op-leaves-row" :data-contract="row.contract" justify="between" align="center" :class="$style.row">
+					<Text variant="body" color="secondary">{{ row.count }} {{ pluralize(row.count, "transfer", "transfers") }}</Text>
+					<Text variant="amount-row" color="primary">{{ row.amount.text }}<template v-if="row.amount.baseUnits"> base units</template></Text>
+				</Flex>
+			</Flex>
+			<div :class="$style.leaves_rule" />
+		</template>
 
 		<!-- A window that only reads the request draws its own fee block in place of the choice. -->
 		<slot v-if="$slots.fee" name="fee" />
@@ -728,6 +756,16 @@ const adviceOnAuthwit = (index: number): boolean => adviceSite.value?.on === "au
 
 .op_divider {
 	height: 1px;
+	background: var(--nulo-border);
+}
+
+.leaves {
+	padding: 12px 12px 4px;
+}
+
+.leaves_rule {
+	height: 1px;
+	margin: 8px 12px 0;
 	background: var(--nulo-border);
 }
 

@@ -5,7 +5,7 @@ import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
 	type WireCall,
-	amountLabel,
+	amountOf,
 	authwitLine,
 	authwitTitle,
 	RAW_ADVICE,
@@ -37,7 +37,10 @@ const callRows = computed(() =>
 		call,
 		surface,
 		title: rowTitle(call, surface),
-		amount: surface.kind === "transfer" || surface.kind === "mint" ? amountOf(call.to, surface.amount) : undefined,
+		amount:
+			surface.kind === "transfer" || surface.kind === "mint"
+				? amountOf(props.tokens, props.chainId, call.to, surface.amount)
+				: undefined,
 	})),
 )
 
@@ -50,16 +53,10 @@ const authwitRows = computed(() =>
 			authwit,
 			surface,
 			line,
-			amount: line.kind === "move" ? amountOf(authwit.consumer, line.amount) : undefined,
+			amount: line.kind === "move" ? amountOf(props.tokens, props.chainId, authwit.consumer, line.amount) : undefined,
 		}
 	}),
 )
-
-/** An amount in the token's units with its symbol, or the raw integer in base units. */
-const amountOf = (contract: unknown, amount: string): { text: string; baseUnits: boolean } => {
-	const { text, symbol } = amountLabel(props.tokens, props.chainId, contract, amount)
-	return symbol ? { text: `${text} ${symbol}`, baseUnits: false } : { text, baseUnits: true }
-}
 </script>
 
 <template>

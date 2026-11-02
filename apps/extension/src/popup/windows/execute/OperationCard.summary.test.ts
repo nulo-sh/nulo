@@ -470,3 +470,81 @@ describe("OperationCard — a default-entrypoint send whose authorization previe
 		w.unmount()
 	})
 })
+
+describe("OperationCard — what leaves the account opens the fee section", () => {
+	const TST = { ...USDC_TOKEN, id: 2, contract: VAULT, name: "Test", symbol: "TST", decimals: 18 }
+	const kinds: Record<string, string> = { from: "address", to: "address", amount: "integer", authwit_nonce: "field" }
+	/** `transfer_in_public(from, to, amount, nonce)` on `contract` as the wire carries it, with its Token decode. */
+	const transfer = (contract: string, from: string, amount: bigint) => {
+		const args = [from, RECIPIENT, field(amount), field(0n)]
+		const roles = ["from", "to", "amount", "authwit_nonce"]
+		const call = {
+			name: "transfer_in_public",
+			to: contract,
+			selector: vocabularySelector("transfer_in_public", 4),
+			type: "public",
+			isStatic: false,
+			args,
+		}
+		const decoded: DecodedCall = {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_in_public",
+			params: roles.map((role, i) => ({
+				name: role,
+				value: { kind: kinds[role], value: role === "amount" ? amount.toString() : args[i] } as never,
+			})),
+		}
+		return { call, decoded }
+	}
+	const exit = {
+		call: { name: "exit_to_l1", to: HUB, selector: "0x5a3e1b2c", type: "private", isStatic: false, args: [USDC, field(1n)] },
+		decoded: {
+			kind: "decoded",
+			contract: "Hub",
+			fn: "exit_to_l1",
+			params: [{ name: "token", value: { kind: "address", value: USDC } }],
+		} as DecodedCall,
+	}
+	const request = (parts: { call: unknown; decoded: DecodedCall }[]) => ({
+		op: { ...(fixtureOp() as object), exec: { calls: parts.map((p) => p.call) } },
+		decodedCalls: parts.map((p) => p.decoded),
+	})
+	const e18 = 10n ** 18n
+	const leaves = (w: VueWrapper) => w.find('[data-testid="execute-op-leaves-account"]')
+	const rows = (w: VueWrapper) => w.findAll('[data-testid="execute-op-leaves-row"]').map((r) => r.findAll("span").map((t) => t.text()))
+
+	test("a three-call request: per token, how many transfers and their sum, after the calls and before the fee; a call that is not a transfer adds no row", async () => {
+		const { op, decodedCalls } = request([
+			transfer(VAULT, MAIN, 4n * e18),
+			exit,
+			transfer(VAULT, MAIN, 2n * e18),
+			transfer(USDC, MAIN, 10_000_000n),
+		])
+		const w = await mountCard({ tokens: [USDC_TOKEN, TST], decodedCalls }, op)
+		expect(leaves(w).find("span").text()).toBe("Leaves your account")
+		expect(rows(w)).toEqual([
+			["2 transfers", "6 TST"],
+			["1 transfer", "10 USDC"],
+		])
+		const summary = w.get('[data-testid="execute-op-summary"]').element
+		const fee = w.get("fee-settings-card-stub").element
+		expect(summary.compareDocumentPosition(leaves(w).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		expect(leaves(w).element.compareDocumentPosition(fee) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+	})
+
+	test("nothing this account sends, or a block that replaces the fee section: no rows; the same sends otherwise show them", async () => {
+		const others = request([transfer(VAULT, RECIPIENT, 4n * e18), exit])
+		expect(leaves(await mountCard({ tokens: [TST], decodedCalls: others.decodedCalls }, others.op)).exists()).toBe(false)
+
+		const own = request([transfer(VAULT, MAIN, 4n * e18)])
+		const replaced = mount(OperationCard, {
+			props: { op: own.op as never, index: 0, tokens: [TST], decodedCalls: own.decodedCalls },
+			slots: { fee: '<div data-testid="refusal" />' },
+			global: { stubs, components: { AddressDisplay, SectionLabel } },
+		})
+		await flushPromises()
+		expect([leaves(replaced).exists(), replaced.find('[data-testid="refusal"]').exists()]).toEqual([false, true])
+		expect(rows(await mountCard({ tokens: [TST], decodedCalls: own.decodedCalls }, own.op))).toEqual([["1 transfer", "4 TST"]])
+	})
+})
