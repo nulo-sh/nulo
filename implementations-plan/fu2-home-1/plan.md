@@ -1,7 +1,7 @@
 ---
 plan: fu2-home-1
 tier: light
-status: arc 1 implemented; its Codex loop next
+status: arc 1 converged; PR next
 issues: "#1523, #1524, #1527 (arc 1); #1525, #1526 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -135,6 +135,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | Plan 1 | Opus 5.5, Plan | conditional approve | Before-address only when shown; the toast's derivation delay in the outcome, its e2e wait under the account's bound, arc 1's e2e wall-clock recorded; a 4 px sweep that proves I1; the scroll shadow hidden below 359 px and a wrapper testid; the line kept to the two switch toasts, stated | none (its lock and `15ch` findings were already folded) |
 | Plan 2 | Codex `gpt-6.1-sol`, high, fresh | conditional approve | Run identity across A → B → A and lock → unlock (`settleLatestRun`, tested); reset's wait left rejecting, the catch local to the toast; Fact 1 says either may finish first | none |
 | Plan 2, resumed | Codex `gpt-6.1-sol`, high | approve | the fold checked against the code | none |
+| Arc 1, round 1 | Codex `gpt-6.1-sol`, high | reject | The new-account toast opens only while its profile is unlocked (a lock mid-create showed the name); the wait no longer binds to one run: an unattended reset's reload replaces it, which dropped the toast | none |
+| Arc 1, round 1 | Opus 5.5, diff review | no high finding | The same reload case; the e2e waits for the line itself and the pages inject with no silent default; `app.vue`'s comment names both waiters | A pending card that the funds complete draws once, greyed, then leaves: the signed pick holds the card until the state loads, then shows what it says. The copy snack covers Receive's line for 2 s: the snack's existing place. Receive's line without a chain check: entry is gated on the shown account, as its address is. The line naming an account other than the one shown before: it names the header's account, whose address differs by derivation. The network lane: CI runs it; the smoke files that switch passed locally |
+| Arc 1, round 2 | Codex, resumed | reject | B → A → B while B's first read is out let the first wait follow back to B: the handler now counts scope changes (`scopeChanges`), and the wait ends once that count moves | none |
+| Arc 1, round 3 | Codex, resumed | approve | the counter checked against the handler, watcher and serialized activation | none |
 
 ## Seeds (not run; orchestrator-owned)
 
