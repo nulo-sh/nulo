@@ -123,7 +123,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 - D7. Arc order: arc 1 needs no answer and ships now; arcs 2 and 3 wait on their asks and touch files arc 1 leaves alone.
 - D8. As built: the paste reset runs on the next animation frame. With `nextTick` the real paste still read `scrollLeft` 242 of 554 two frames later on Chrome and Firefox 158, since both reveal the caret after the `input` event; with `requestAnimationFrame` both read 0, and a typed character then scrolls to the caret (250). The hover check waits for `:hover` to apply: a wait on settled transitions alone read Chrome before the hover and passed at the base.
 
-- D9. P93-01 moves the opening side of two network fee walks (`fee-methods.test.ts`, "no gas at all" and "both gases held"), whose fixtures mint public only: both timed out at the base of this fix waiting for a Private origin (Opus fix R1). Each now asserts Send opens on Public, a network witness for P93-01, then picks Private. No other e2e spec reads the side it opens on.
+- D9. P93-01 moves the opening side of two network fee walks (`fee-methods.test.ts`, "no gas at all" and "both gases held"), whose fixtures mint public only: both timed out at the base of this fix waiting for a Private origin (Opus fix R1). Each now asserts Send opens on Public, a network witness for P93-01, then picks Private. No other e2e opening-side assertion needs changing (`send-fee-privacy` asserts Private on an unfunded fixture).
 
 ## Panel verdicts
 
@@ -134,6 +134,7 @@ Every pick: decision page 93, signed 2026-11-02. Each PR body quotes the picks i
 | Codex final (fresh) | conditional approve, arc 1 may proceed | OA-1's wording (no "adds up" promise; "at most" under B); the base-red proof with the testid alone; the pending seed for the arc 3 captures; the mirror's event replay as an arc 3 amendment needing approval (A4); `utils/in-flight-send.ts` named and set apart | none |
 | Codex final (resumed) | approve | none; arc 1 may proceed, arcs 2 and 3 wait on their asks; A4 not granted by the review | none |
 | Codex fix R1 (arc 1) | changes requested | cancel a pending paste reset on every input, so a key typed before the frame keeps the caret (test red with the old order); two comments trimmed | none |
+| Codex fix R2 (arc 1) | approve | D9's sweep sentence corrected | none |
 | Opus fix R1 (arc 1) | changes requested | the network fee walks pick Private after the public opening (D9), and `fee-methods.test.ts` joins the gate on both browsers; messages on the two new smoke assertions; Send's `flagged-send` capture in `token-list.test.ts` now shows Public, noted in the PR | none |
 
 ## Delivery
