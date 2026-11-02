@@ -27,6 +27,7 @@ import { managers } from "@/utils/core"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { createPasskeyProfileInPage } from "@/wallet/utils/create-passkey-profile"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
+import { NEW_PASSWORD_HINTS } from "@/utils/password-hint"
 import { useProfileCreateFlow, type UseProfileCreateFlowOptions } from "./useProfileCreateFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -356,7 +357,23 @@ describe("useProfileCreateFlow", () => {
 		flow.repeatedPassword.value = "nope"
 		expect(flow.strengthHint.value).toBe("Passwords don't match")
 		flow.repeatedPassword.value = "password123"
-		expect(flow.strengthHint.value).toBe("Strong password")
+		expect(flow.strengthHint.value).toBe(NEW_PASSWORD_HINTS.common)
+	})
+
+	test.each([
+		["aaaaaaaa", NEW_PASSWORD_HINTS.repeat],
+		["12345678", NEW_PASSWORD_HINTS.common],
+		["qwertyuiop", NEW_PASSWORD_HINTS.common],
+		["😀".repeat(12), NEW_PASSWORD_HINTS.repeat],
+		["😀😃😄😁😆😅🤣😂🙂🙃😉😊", NEW_PASSWORD_HINTS.strong],
+		["silver-otter-lamp", NEW_PASSWORD_HINTS.strong],
+	])("a matching %j reads %j, and create stays allowed", (password, line) => {
+		const { flow } = makeFlow()
+		flow.authMethod.value = "password"
+		flow.password.value = password
+		flow.repeatedPassword.value = password
+		expect(flow.strengthHint.value).toBe(line)
+		expect(flow.isAllowedToContinue.value).toBe(true)
 	})
 
 	describe("passkey retry after a created-but-unconfirmed credential", () => {
