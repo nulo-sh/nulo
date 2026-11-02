@@ -11,6 +11,7 @@ import { RowAction } from "@nulo/design"
 import ItemsContainer from "./ItemsContainer.vue"
 import SettingItem from "./SettingItem.vue"
 import SettingField from "./SettingField.vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
@@ -165,6 +166,27 @@ describe("ui/Settings — SettingItem", () => {
 		await target.trigger("click")
 		expect(onClick).toHaveBeenCalledTimes(1)
 		w.unmount()
+	})
+
+	test("click mode names its target by the title alone, unless the row is external: then by its title, description and value, as an outside link's text names it", async () => {
+		const spoken = (w: Awaited<ReturnType<typeof mountItem>>["w"]) =>
+			(w.get("[data-row-target]").attributes("aria-labelledby") ?? "")
+				.split(" ")
+				.map((id) => w.get(`#${id}`).text())
+				.join(" ")
+		const inner = await mountItem({ title: "Manage", description: "Three keys", value: "On" }, { onClick: vi.fn() })
+		expect(spoken(inner.w)).toBe("Manage")
+		inner.w.unmount()
+		const outside = await mountItem(
+			{ title: "How it works", description: "A short read", value: "1 min", external: true, chevron: true },
+			{ onClick: vi.fn() },
+		)
+		expect(spoken(outside.w)).toBe("How it works A short read 1 min")
+		expect(outside.w.get('[data-testid="stub-icon"]').attributes("data-name")).toBe("open")
+		outside.w.unmount()
+		const bare = await mountItem({ title: "Docs", external: true }, { onClick: vi.fn() })
+		expect(spoken(bare.w)).toBe("Docs")
+		bare.w.unmount()
 	})
 
 	test("click mode with a nested RowAction: the action fires and the row handler does not", async () => {
@@ -341,6 +363,18 @@ describe("ui/Settings — SettingItem", () => {
 		const { w } = await mountItem({ title: "Alice", description: "0x12...cdef", ...props })
 		expect(w.get('[data-testid="setting-description"]').attributes("variant")).toBe(role)
 		w.unmount()
+	})
+
+	test("wrapDescription lets the description wrap at every width; without it the line is cut", async () => {
+		const wraps = async (props: Record<string, unknown>) => {
+			const { w } = await mountItem({ title: "Full Backup", description: "Everything in this profile.", ...props })
+			const classes = w.get('[data-testid="setting-description"]').classes()
+			w.unmount()
+			return classes.some((name) => /description_wrap/.test(name))
+		}
+		expect([await wraps({}), await wraps({ wrapDescription: true })]).toEqual([false, true])
+		const parsed = parseSource("apps/extension/src/components/ui/Settings/SettingItem.vue")
+		expect(declarationsOf(parsed, ".description_wrap")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
 	})
 
 	test("the trailing value carries value", async () => {

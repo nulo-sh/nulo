@@ -13,7 +13,7 @@ const emit = defineEmits(["select", "hide"])
 
 const ROWS = {
 	phrase: { title: "Save your recovery phrase", description: "The 24 words that restore this wallet" },
-	aztec: { title: "How Aztec works", value: "1 min" },
+	aztec: { title: "How Aztec works", description: "1 min · website", external: true },
 	feeJuice: { title: "Get Fee Juice", description: "Fee Juice pays network fees.", value: "website", external: true },
 	presto: { title: "Make proofs faster", value: "Optional" },
 }

@@ -4,17 +4,19 @@
  * password with its eye and the new-password hint, then its repeat. `testid` prefixes every control.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
-import { newPasswordHint } from "@/utils/password"
+import { newPasswordHint } from "@/utils/password-hint"
 
 defineProps({
 	testid: { type: String, required: true },
 	maxLength: { type: Number, default: 128 },
+	labelRepeat: { type: Boolean, default: false },
 })
 
 const password = defineModel("password", { default: "" })
 const repeatedPassword = defineModel("repeatedPassword", { default: "" })
 
 const isHidden = ref(true)
+const repeatLabelId = useId()
 const hint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 </script>
 
@@ -45,8 +47,10 @@ const hint = computed(() => newPasswordHint(password.value ?? "", repeatedPasswo
 					</Flex>
 				</template>
 			</Input>
+			<span v-if="labelRepeat" :id="repeatLabelId" class="export_section_label type--label-section">Repeat password</span>
 			<Input
 				v-model="repeatedPassword"
+				:ariaLabelledby="labelRepeat ? repeatLabelId : undefined"
 				:type="isHidden ? 'password' : 'text'"
 				:maxLength="maxLength"
 				placeholder="Repeat password"

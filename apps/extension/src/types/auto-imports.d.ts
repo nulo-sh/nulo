@@ -73,7 +73,9 @@ declare global {
   const MAX_CONTACT_IMPORT_ROWS: typeof import('../utils/contacts-export-format').MAX_CONTACT_IMPORT_ROWS
   const MAX_DECIMALS: typeof import('../utils/token-amount').MAX_DECIMALS
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
+  const MIN_NEW_PASSWORD_LENGTH: typeof import('../utils/password').MIN_NEW_PASSWORD_LENGTH
   const NETWORK_ARRIVAL_KEY: typeof import('../composables/useNetworkArrival').NETWORK_ARRIVAL_KEY
+  const NEW_PASSWORD_HINTS: typeof import('../utils/password-hint').NEW_PASSWORD_HINTS
   const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
@@ -148,6 +150,7 @@ declare global {
   const captureWindowDocument: typeof import('../utils/window-document').captureWindowDocument
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const changedGetStarted: typeof import('../utils/get-started').changedGetStarted
+  const characterCount: typeof import('../utils/password').characterCount
   const clampDecimals: typeof import('../utils/amount').clampDecimals
   const classifyImportRow: typeof import('../utils/contact-import-rows').classifyImportRow
   const classifyPasskeyFailure: typeof import('../utils/passkey-copy').classifyPasskeyFailure
@@ -175,6 +178,7 @@ declare global {
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
+  const createReconnectRead: typeof import('../composables/reconnectRead').createReconnectRead
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const dashIfBlank: typeof import('../utils/string').dashIfBlank
@@ -213,6 +217,7 @@ declare global {
   const formatGasBalance: typeof import('../utils/fee-estimation').formatGasBalance
   const formatSnackAmount: typeof import('../utils/snack-amount').formatSnackAmount
   const formatTransferType: typeof import('../utils/tx-enrichment').formatTransferType
+  const fullBackupFileName: typeof import('../utils/full-backup-helpers').fullBackupFileName
   const gasHoldings: typeof import('../utils/get-started').gasHoldings
   const getAccount: typeof import('../utils/core').getAccount
   const getCurrentInstance: typeof import('vue').getCurrentInstance
@@ -321,7 +326,7 @@ declare global {
   const networkStatusTone: typeof import('../utils/network-status').networkStatusTone
   const networkStatusWord: typeof import('../utils/network-status').networkStatusWord
   const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
-  const newPasswordHint: typeof import('../utils/password').newPasswordHint
+  const newPasswordHint: typeof import('../utils/password-hint').newPasswordHint
   const nextAccountName: typeof import('../utils/account-name').nextAccountName
   const nextTick: typeof import('vue').nextTick
   const normalizeAllIds: typeof import('../utils/full-backup-helpers').normalizeAllIds
@@ -955,7 +960,9 @@ declare module 'vue' {
     readonly MAX_CONTACT_IMPORT_ROWS: UnwrapRef<typeof import('../utils/contacts-export-format')['MAX_CONTACT_IMPORT_ROWS']>
     readonly MAX_DECIMALS: UnwrapRef<typeof import('../utils/token-amount')['MAX_DECIMALS']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
+    readonly MIN_NEW_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MIN_NEW_PASSWORD_LENGTH']>
     readonly NETWORK_ARRIVAL_KEY: UnwrapRef<typeof import('../composables/useNetworkArrival')['NETWORK_ARRIVAL_KEY']>
+    readonly NEW_PASSWORD_HINTS: UnwrapRef<typeof import('../utils/password-hint')['NEW_PASSWORD_HINTS']>
     readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
@@ -1030,6 +1037,7 @@ declare module 'vue' {
     readonly captureWindowDocument: UnwrapRef<typeof import('../utils/window-document')['captureWindowDocument']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly changedGetStarted: UnwrapRef<typeof import('../utils/get-started')['changedGetStarted']>
+    readonly characterCount: UnwrapRef<typeof import('../utils/password')['characterCount']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
     readonly classifyImportRow: UnwrapRef<typeof import('../utils/contact-import-rows')['classifyImportRow']>
     readonly classifyPasskeyFailure: UnwrapRef<typeof import('../utils/passkey-copy')['classifyPasskeyFailure']>
@@ -1057,6 +1065,7 @@ declare module 'vue' {
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
+    readonly createReconnectRead: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectRead']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly dashIfBlank: UnwrapRef<typeof import('../utils/string')['dashIfBlank']>
@@ -1095,6 +1104,7 @@ declare module 'vue' {
     readonly formatGasBalance: UnwrapRef<typeof import('../utils/fee-estimation')['formatGasBalance']>
     readonly formatSnackAmount: UnwrapRef<typeof import('../utils/snack-amount')['formatSnackAmount']>
     readonly formatTransferType: UnwrapRef<typeof import('../utils/tx-enrichment')['formatTransferType']>
+    readonly fullBackupFileName: UnwrapRef<typeof import('../utils/full-backup-helpers')['fullBackupFileName']>
     readonly gasHoldings: UnwrapRef<typeof import('../utils/get-started')['gasHoldings']>
     readonly getAccount: UnwrapRef<typeof import('../utils/core')['getAccount']>
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>
@@ -1203,7 +1213,7 @@ declare module 'vue' {
     readonly networkStatusTone: UnwrapRef<typeof import('../utils/network-status')['networkStatusTone']>
     readonly networkStatusWord: UnwrapRef<typeof import('../utils/network-status')['networkStatusWord']>
     readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
-    readonly newPasswordHint: UnwrapRef<typeof import('../utils/password')['newPasswordHint']>
+    readonly newPasswordHint: UnwrapRef<typeof import('../utils/password-hint')['newPasswordHint']>
     readonly nextAccountName: UnwrapRef<typeof import('../utils/account-name')['nextAccountName']>
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>
     readonly normalizeAllIds: UnwrapRef<typeof import('../utils/full-backup-helpers')['normalizeAllIds']>

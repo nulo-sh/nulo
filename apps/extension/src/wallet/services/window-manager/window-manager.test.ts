@@ -376,6 +376,125 @@ describe("WindowManager", () => {
 		handles.delete(handleId)
 	})
 
+	describe("a removal that reaches the worker before create() resolves", () => {
+		const OPTS = { url: "popup.html", width: 400, height: 600, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
+
+		/** `create` opens the window at once and holds its answer until `release()`, so a removal can
+		 *  reach the worker first, as the browser may deliver it. */
+		function holdCreateAnswer(): () => void {
+			const realCreate = browser.windows.create.bind(browser.windows)
+			let release!: () => void
+			const answered = new Promise<void>((resolve) => {
+				release = resolve
+			})
+			browser.windows.create = (async (opts: unknown) => {
+				const created = await realCreate(opts as never)
+				await answered
+				return created
+			}) as typeof browser.windows.create
+			return release
+		}
+
+		function outcomeOf(promise: Promise<unknown>): { state: string; value?: unknown } {
+			const seen: { state: string; value?: unknown } = { state: "pending" }
+			promise.then(
+				(value) => Object.assign(seen, { state: "resolved", value }),
+				(value) => Object.assign(seen, { state: "rejected", value }),
+			)
+			return seen
+		}
+
+		function countListeners(): () => number {
+			const real = browser.windows.onRemoved.bind(browser.windows)
+			let live = 0
+			browser.windows.onRemoved = ((listener: (windowId: number) => void) => {
+				live++
+				const unsub = real(listener)
+				let released = false
+				return () => {
+					if (released) return
+					released = true
+					live--
+					unsub()
+				}
+			}) as typeof browser.windows.onRemoved
+			return () => live
+		}
+
+		it("settles the handle as a person's close at once, without removing the window", async () => {
+			const removeSpy = vi.spyOn(browser.windows, "remove")
+			const release = holdCreateAnswer()
+			const outcome = outcomeOf(manager.openAndAwait<string>(OPTS).promise)
+			await flushCreate()
+			fakeWindows.closeByUser(FIRST_WINDOW_ID)
+			release()
+			await flushCreate()
+
+			expect(outcome).toEqual({ state: "rejected", value: WINDOW_CLOSED_BY_USER })
+			expect(removeSpy).not.toHaveBeenCalled()
+			expect(clock.pendingCount).toBe(0)
+		})
+
+		it("another window's removal leaves the handle live, and its own window's close still settles it", async () => {
+			const other = await browser.windows.create({ type: "popup", url: "other.html" })
+			const otherId = other.id as number
+			const release = holdCreateAnswer()
+			const outcome = outcomeOf(manager.openAndAwait<string>(OPTS).promise)
+			await flushCreate()
+			fakeWindows.closeByUser(otherId)
+			release()
+			await flushCreate()
+			expect(outcome).toEqual({ state: "pending" })
+
+			fakeWindows.closeByUser(otherId + 1)
+			await flushCreate()
+			expect(outcome).toEqual({ state: "rejected", value: WINDOW_CLOSED_BY_USER })
+		})
+
+		it("a removal buffered before its handle was detached is left to the owner, whose settle wins", async () => {
+			const release = holdCreateAnswer()
+			const { handleId, promise } = manager.openAndAwait<string>(OPTS)
+			const outcome = outcomeOf(promise)
+			await flushCreate()
+			fakeWindows.closeByUser(FIRST_WINDOW_ID)
+			manager.detach(handleId)
+			release()
+			await flushCreate()
+			expect(outcome).toEqual({ state: "pending" })
+
+			manager.settle(handleId, "exec result")
+			await expect(promise).resolves.toBe("exec result")
+		})
+
+		const ENDINGS: [string, (handleId: string, windowId: number) => void][] = [
+			["settle", (handleId) => manager.settle(handleId, "ok")],
+			["cancel", (handleId) => manager.cancel(handleId, "no")],
+			["a timeout", () => clock.advance(TIMEOUT_MS)],
+			["a person's close", (_, windowId) => fakeWindows.closeByUser(windowId)],
+			["handOver", (handleId) => manager.handOver(handleId, () => "handed")],
+			["detach", (handleId) => manager.detach(handleId)],
+		]
+
+		it.each(ENDINGS)("%s releases the removal listener, before or after the window arrives", async (_, end) => {
+			const live = countListeners()
+			const adopted = manager.openAndAwait<string>(OPTS)
+			adopted.promise.catch(() => undefined)
+			await flushCreate()
+			end(adopted.handleId, FIRST_WINDOW_ID)
+			await flushCreate()
+			expect(live()).toBe(0)
+
+			const release = holdCreateAnswer()
+			const inFlight = manager.openAndAwait<string>(OPTS)
+			inFlight.promise.catch(() => undefined)
+			await flushCreate()
+			end(inFlight.handleId, FIRST_WINDOW_ID + 1)
+			release()
+			await flushCreate()
+			expect(live()).toBe(0)
+		})
+	})
+
 	describe("handOver", () => {
 		const OPTS = { url: "popup.html", width: 400, height: 800, timeoutMs: TIMEOUT_MS, kind: "test", placement: "top-right" as const }
 

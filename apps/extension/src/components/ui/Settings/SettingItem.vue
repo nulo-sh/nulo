@@ -21,6 +21,11 @@ const props = defineProps({
 		validator: (value) => ["row-title", "name", "meta"].includes(value),
 	},
 	description: String,
+	/** Lets the description wrap at every width, for a line meant to be read whole. */
+	wrapDescription: {
+		type: Boolean,
+		default: false,
+	},
 	/** `meta` for an address or id. */
 	descriptionVariant: {
 		type: String,
@@ -70,7 +75,18 @@ const props = defineProps({
 })
 
 const attrs = useAttrs()
+const rowSlots = useSlots()
 const titleId = useId()
+const descriptionId = useId()
+const valueId = useId()
+
+/** An `external` click row is named by all its text, as its anchor form is, so the words saying it
+ *  leaves the wallet are spoken. Read at render: slots are not reactive. */
+const clickLabel = () => {
+	if (!props.external) return titleId
+	const description = (props.description || rowSlots.description) && descriptionId
+	return [titleId, description, props.value && valueId].filter(Boolean).join(" ")
+}
 
 /** `disabled` decides first: a disabled row is inert whatever `to` or `@click` it carries. */
 const mode = computed(() => {
@@ -127,7 +143,7 @@ const Root = (_, { slots }) => {
 
 <template>
 	<Root>
-		<RowTarget v-if="mode === 'click'" :labelledby="titleId" />
+		<RowTarget v-if="mode === 'click'" :labelledby="clickLabel()" />
 		<RowTarget v-else-if="mode === 'stretched'" v-bind="linkAttrs" :to :labelledby="titleId" />
 
 		<Flex wide align="center" justify="between" gap="16" :class="$style.main">
@@ -158,14 +174,14 @@ const Root = (_, { slots }) => {
 						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="[$style.description, descriptionVariant === 'meta' && $style.description_meta]">
+					<Text v-if="description || $slots.description" :id="descriptionId" data-testid="setting-description" :variant="descriptionVariant === 'meta' ? 'meta' : 'caption'" color="tertiary" :class="[$style.description, descriptionVariant === 'meta' && $style.description_meta, wrapDescription && $style.description_wrap]">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
 			</Flex>
 
 			<Flex align="center" gap="12" :class="$style.right">
-				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
+				<Text v-if="value" :id="valueId" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<Icon
 						v-if="to || chevron || trailingIcon"
@@ -318,6 +334,11 @@ const Root = (_, { slots }) => {
 	text-overflow: ellipsis;
 	overflow: clip;
 	white-space: nowrap;
+}
+
+.description_wrap {
+	white-space: normal;
+	overflow-wrap: break-word;
 }
 
 /* Below the popup's width a title and its description wrap rather than being cut, a title's suffix

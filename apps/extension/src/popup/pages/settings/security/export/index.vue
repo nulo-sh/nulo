@@ -20,14 +20,30 @@ const appStore = useAppStore()
 		</ItemsContainer>
 
 		<ItemsContainer title="Choose backup mode">
-			<SettingItem title="Full Backup" to="/popup/settings/security/export/full" data-testid="full-backup-link-btn" />
-			<SettingItem title="Recovery Phrase" to="/popup/settings/security/export/seed" data-testid="seed-phrase-link-btn" />
-			<SettingItem title="Account" to="/popup/settings/security/export/account" data-testid="account-backup-link-btn" />
+			<SettingItem
+				title="Full Backup"
+				description="Everything in this profile, in one password-protected file."
+				wrapDescription
+				to="/popup/settings/security/export/full"
+				data-testid="full-backup-link-btn"
+			/>
+			<SettingItem
+				title="Recovery Phrase"
+				description="The 24 words that restore your accounts."
+				wrapDescription
+				to="/popup/settings/security/export/seed"
+				data-testid="seed-phrase-link-btn"
+			/>
+			<SettingItem
+				title="Account"
+				description="One account in a file you can import elsewhere."
+				wrapDescription
+				to="/popup/settings/security/export/account"
+				data-testid="account-backup-link-btn"
+			/>
 		</ItemsContainer>
 
-		<ItemsContainer
-			description="Explore credentials management capabilities and options for resolving potential issues"
-		>
+		<ItemsContainer description="Questions about backups">
 			<SettingItem
 				title="Frequently Asked Questions"
 				to="/popup/settings/security/export/faq"
