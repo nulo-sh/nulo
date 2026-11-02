@@ -92,6 +92,7 @@ export class WindowManager {
 		}
 
 		this.handles.set(handleId, handle as Handle<unknown>)
+		const removedBeforeAdoption = this.watchRemovals(handleId, handle as Handle<unknown>, opts.kind)
 
 		const timeoutHandle = this.clock.setTimeout(() => {
 			this.logger.log("wallet", LogLevel.Warn, `[${opts.kind}/${handleId}] timed out`)
@@ -108,38 +109,7 @@ export class WindowManager {
 				return this.createWindow(opts, anchor, () => this.handles.get(handleId) === handle)
 			})
 			.then((created) => {
-				if (created === undefined) return
-				// Identity, not membership: a settled handle's 8-hex id is re-mintable,
-				// so `has(handleId)` could match a NEWER handle and adopt this stale
-				// create. And a handle lost mid-create (timeout settled first) leaves
-				// a window nothing owns — close it, or a stray popup lingers.
-				if (this.handles.get(handleId) !== handle) {
-					if (created.id !== undefined) this.windows.remove(created.id).catch(() => undefined)
-					return
-				}
-
-				if (created.id === undefined) {
-					this._settle(handleId, undefined, "Failed to open window.")
-					return
-				}
-
-				handle.windowId = created.id
-
-				const unsub = this.windows.onRemoved((closedId) => {
-					if (closedId !== handle.windowId) return
-					this.logger.log("wallet", LogLevel.Info, `[${opts.kind}/${handleId}] closed by user`)
-					handle.unsubOnRemoved?.()
-					handle.unsubOnRemoved = null
-					this._settleUserClose(handleId)
-				})
-
-				if (this.handles.get(handleId) !== handle) {
-					unsub()
-					this.windows.remove(created.id).catch(() => undefined)
-					return
-				}
-
-				handle.unsubOnRemoved = unsub
+				if (created !== undefined) this.adopt(handleId, handle as Handle<unknown>, created, removedBeforeAdoption, opts.kind)
 			})
 			.catch(() => {
 				// The browser's error is dropped: it can carry the window URL, which holds request ids.
@@ -202,6 +172,50 @@ export class WindowManager {
 		return true
 	}
 
+	/** Subscribed before the window is created: the browser can deliver a person's close before
+	 *  `create()` resolves, so removals are kept until the handle learns its window id. */
+	private watchRemovals(handleId: string, handle: Handle<unknown>, kind: string): Set<number> {
+		const removedBeforeAdoption = new Set<number>()
+		handle.unsubOnRemoved = this.windows.onRemoved((closedId) => {
+			if (handle.windowId === undefined) removedBeforeAdoption.add(closedId)
+			else if (closedId === handle.windowId) this.closedByUser(handleId, kind)
+		})
+		return removedBeforeAdoption
+	}
+
+	private adopt(
+		handleId: string,
+		handle: Handle<unknown>,
+		created: CreatedWindow,
+		removedBeforeAdoption: Set<number>,
+		kind: string,
+	): void {
+		// Identity, not membership: a settled handle's 8-hex id is re-mintable,
+		// so `has(handleId)` could match a NEWER handle and adopt this stale
+		// create. And a handle lost mid-create (timeout settled first) leaves
+		// a window nothing owns — close it, or a stray popup lingers.
+		if (this.handles.get(handleId) !== handle) {
+			if (created.id !== undefined) this.windows.remove(created.id).catch(() => undefined)
+			return
+		}
+		if (created.id === undefined) {
+			this._settle(handleId, undefined, "Failed to open window.")
+			return
+		}
+		// A detached handle's owner settles it, so a removal buffered before the detach is not its to act on.
+		if (handle.unsubOnRemoved !== null && removedBeforeAdoption.has(created.id)) {
+			this.closedByUser(handleId, kind)
+			return
+		}
+		handle.windowId = created.id
+		removedBeforeAdoption.clear()
+	}
+
+	private closedByUser(handleId: string, kind: string): void {
+		this.logger.log("wallet", LogLevel.Info, "Window closed by the person", { kind, handle: handleId })
+		this._settleUserClose(handleId)
+	}
+
 	private createWindow(opts: OpenAndAwaitOpts, anchor: WindowBounds | undefined, stillWanted: () => boolean): Promise<CreatedWindow> {
 		const options = { type: "popup" as const, url: opts.url, width: opts.width, height: opts.height }
 		if (opts.placement === "center") return this.windows.create({ ...options, ...centerOn(anchor, opts.width, opts.height) })
@@ -225,10 +239,7 @@ export class WindowManager {
 		if (!handle || handle.settled) return
 		handle.settled = true
 		this.handles.delete(handleId)
-		if (handle.timeoutHandle !== null) {
-			this.clock.clearTimeout(handle.timeoutHandle)
-			handle.timeoutHandle = null
-		}
+		this.stopWatching(handle)
 		// Window is already gone — do NOT call windows.remove.
 		handle.reject(WINDOW_CLOSED_BY_USER)
 	}

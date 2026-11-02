@@ -20,7 +20,9 @@ afterEach(() => {
 	vi.useRealTimers()
 })
 
-const at = (ms: number): void => vi.setSystemTime(T0 + ms)
+const at = (ms: number): void => {
+	vi.setSystemTime(T0 + ms)
+}
 
 /** The SDK's pending-discovery map as `BackgroundConnectionHandler` keeps it: keyed by the page's
  *  id, a fresh row object per receipt, and a reject that only drops a pending row. */
@@ -31,7 +33,7 @@ function fakeSdk() {
 		getPendingDiscovery: (id: string) => rows.get(id),
 		rejectDiscovery: (id: string) => {
 			const row = rows.get(id)
-			if (!row || row.status !== "pending") return false
+			if (row?.status !== "pending") return false
 			rows.delete(id)
 			rejected.push(id)
 			return true
