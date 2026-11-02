@@ -9,7 +9,7 @@ import {
 } from "../fixtures/aztec"
 import { assertPgOk, setPgInputs, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { runApprovedPgCall } from "../fixtures/send"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { approveExecute, waitForExecuteApprovable, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -63,6 +63,14 @@ test.skipIf(!hasConfig)(
 		await approveExecute(sign)
 		const send = await sendP
 		await waitForExecuteContent(send, 60_000)
+		// The owner's witness rides along: the sender's window lists, and so signs, no authorization.
+		await waitForExecuteApprovable(send, 180_000)
+		const shown = await send.evaluate(() => ({
+			calls: document.querySelectorAll('[data-testid="execute-op-summary-call"]').length,
+			authwitLines: document.querySelectorAll('[data-testid="execute-discovered-authwit-line"]').length,
+			authwitSection: document.querySelector('[data-testid="execute-op-summary-authwits-section"]') !== null,
+		}))
+		expect(shown).toEqual({ calls: 1, authwitLines: 0, authwitSection: false })
 		await approveExecute(send, { approvableTimeoutMs: 180_000 })
 		const sent = await waitForPgResult(page, "sendTx", seq, 300_000)
 		await assertPgOk(page, sent, "fields:additionalScope")

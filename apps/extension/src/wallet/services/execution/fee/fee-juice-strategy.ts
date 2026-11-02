@@ -6,9 +6,9 @@
  * No fee-payload injection, no pre-simulation gas fiddling.
  *
  * Under a probe (dApp estimate fold), the sim runs STUBBED and doubles as
- * authwit discovery: no effects ⇒ done in ONE sim (stub gas == validated gas,
- * as measured); discovered effects ⇒ VALIDATED rebuild + re-sim
- * so the freshly signed witnesses are verified before the estimate leaves.
+ * authwit discovery: no authorization request ⇒ done in ONE sim (stub gas ==
+ * validated gas, as measured); any request, signed or not ⇒ VALIDATED rebuild
+ * + re-sim, so the run's witness checks are verified before the estimate leaves.
  */
 
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
@@ -38,11 +38,16 @@ export class FeeJuiceStrategy implements FeeStrategy {
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			let discovered: Action[] = []
 			if (ctx.probe) {
-				discovered = await ctx.probe.extractEffects(simulatedTx, { node: built.node, network: built.network })
-				// Discovered effects OR an init-wrapped build force a validated
-				// rebuild+re-sim: effects so the witnesses are VERIFIED; init-wrap
-				// because the stub's constructor gas is untrustworthy.
-				if (discovered.length || isInitWrapped(built)) {
+				const extracted = await ctx.probe.extractEffects(simulatedTx, {
+					node: built.node,
+					network: built.network,
+					signer: built.account.address,
+				})
+				discovered = extracted.actions
+				// The stub answered every check of the signer's witness, so any request, even one
+				// dropped unsigned, needs a validated rebuild+re-sim; so does an init-wrapped build,
+				// whose stub constructor gas is untrustworthy.
+				if (extracted.requested || isInitWrapped(built)) {
 					if (discovered.length) ctx.op.actions.push(...discovered)
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
