@@ -9,3 +9,4 @@
 - 2026-11-02: arc 1 gate: lint, typecheck:all, vitest list, test:all, armed builds, smoke e2e Chrome (one red fixed: snackbar still-pointer premise) and Firefox, all green at retry 0.
 - 2026-11-02: arc 1 Codex loop: r1 reject, r2 reject, r3 approve; Opus diff review folded.
 - 2026-11-02: arc 1 final gates on the converged head: lint, typecheck:all, test:all, both armed builds, smoke e2e Chrome 274 s and Firefox 403 s, all green at retry 0.
+- 2026-11-02: arc 2 begun off dev (b21fcdac8). OA-1 B and OA-2 A recorded; P96-02 F, P96-03 D and P99-02 G added as D11-D13; filed #1563, #1564, #1565.
