@@ -13,7 +13,7 @@ const emit = defineEmits(["select", "hide"])
 
 const ROWS = {
 	phrase: { title: "Save your recovery phrase", description: "The 24 words that restore this wallet" },
-	aztec: { title: "How Aztec works", value: "1 min" },
+	aztec: { title: "How Aztec works", description: "1 min · website", external: true },
 	feeJuice: { title: "Get Fee Juice" },
 	presto: { title: "Make proofs faster", value: "Optional" },
 }
@@ -42,6 +42,7 @@ const doneCount = computed(() => props.steps.filter((step) => step.done).length)
 				:description="step.done ? undefined : ROWS[step.item].description"
 				:value="step.done ? undefined : ROWS[step.item].value"
 				:chevron="!step.done"
+				:external="ROWS[step.item].external"
 				:class="step.done && $style.done"
 				:disabled="pending"
 				:data-testid="`get-started-${step.item}`"
