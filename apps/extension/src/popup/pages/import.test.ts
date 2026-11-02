@@ -26,9 +26,12 @@ vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () =>
 const toast = vi.hoisted(() => ({ open: vi.fn() }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: toast.open }) }))
 vi.mock("@/utils/lastActiveProfile", () => ({ setLastActiveProfileId: vi.fn(async () => undefined) }))
-vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
-const nav = vi.hoisted(() => ({ query: {} as Record<string, string>, push: vi.fn(), back: vi.fn() }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ query: nav.query }), useRouter: () => ({ push: nav.push, back: nav.back }) }))
+vi.mock("@/wallet/utils/onboarding-tab", () => ({ setupWaitsInTab: vi.fn(async () => false) }))
+const nav = vi.hoisted(() => ({ query: {} as Record<string, string>, push: vi.fn(), back: vi.fn(), replace: vi.fn() }))
+vi.mock("vue-router", () => ({
+	useRoute: () => ({ query: nav.query }),
+	useRouter: () => ({ push: nav.push, back: nav.back, replace: nav.replace }),
+}))
 const surface = vi.hoisted(() => ({
 	needsOwnWindow: vi.fn(() => false),
 	move: vi.fn(async (_route: string) => true),
@@ -56,6 +59,7 @@ import { completeImportWithRecovery } from "@/composables/completeImportWithReco
 import { endOpeningFlows } from "@/popup/opening-flow"
 import { useAppStore } from "@/stores/app.store"
 import { deferred } from "@nulo/wallet-core/utils"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import ImportPage from "./import.vue"
 
 /** The flow's surface with a decrypted password-profile backup chosen, its name in the field, and a
@@ -626,7 +630,7 @@ const IMPORT_MAIN_OFF: PopupCta = ["Import Main", "import-full-backup-submit-btn
 const IMPORTING: PopupCta = ["Importing…", "import-full-backup-submit-btn", true, null, "cta"]
 const CONTINUE: PopupCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta"]
 const VIEW_ERRORS: PopupCta = ["View Errors", "import-full-backup-view-errors-btn", false, null, "cta_outline"]
-const REUSE = (testid: string, disabled = false): PopupCta => ["Use a passkey I already have", testid, disabled, null, null]
+const REUSE = (testid: string, disabled = false): PopupCta => ["Use a Nulo passkey I already have", testid, disabled, null, null]
 
 type Flow = ReturnType<typeof makeFlow>
 type FlowPatch = (f: Flow) => void
@@ -964,5 +968,19 @@ describe("popup import — the CTA predicates read only what each branch reaches
 		const log = logCtaReads(holder.flow)
 		await mountImport()
 		expect(log).toEqual(expected)
+	})
+})
+
+describe("popup import before setup is finished", () => {
+	test("goes to register, which says where setup goes on", async () => {
+		vi.mocked(setupWaitsInTab).mockResolvedValueOnce(true)
+		await mountImport()
+		expect(nav.replace).toHaveBeenCalledExactlyOnceWith("/popup/register")
+	})
+
+	test("stays once setup is done", async () => {
+		await mountImport()
+		expect(setupWaitsInTab).toHaveBeenCalledOnce()
+		expect(nav.replace).not.toHaveBeenCalled()
 	})
 })

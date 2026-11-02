@@ -1,7 +1,7 @@
 ---
 plan: fu2-onboarding-1
 tier: light
-status: arc 1 loop converged; PR next
+status: completed (arc 1 merged as #1542; arcs 2 and 3 and the close-out awaiting merge)
 issues: "#1512, #1515 (arc 1); #1511 (arc 2); #1513, #1514, #1516 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -15,9 +15,21 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. Arc 1 (#1512, #1515) landed as #1542; arcs 2 and 3 (#1511, #1513, #1514, #1516) and this close-out in one PR.
+- **Shipped**: Ready's line in plain words, and Back that stays on Ready (arc 1). A three-word phrase check between the phrase step and Ready, each word picked by its position from words of the same phrase, with Do it later kept; only a pass marks the phrase saved (arc 2). Create's title and password submit read Create profile, Import's title Import profile; one passkey text on Create and the popup's new profile; the reuse link reads Use a Nulo passkey I already have on all four pages; before setup is finished the popup says so, and its button brings the setup tab forward or opens a new one (arc 3).
+- **Known limits**: #1536, #1539.
+- **Dispositions**: the shared passkey text joined `PASSKEY_COPY`, no new module (D15); the group label's case comes from the field-label role, asked on the PR (D14).
+- **Lessons**: "a toolbar popup dies when a tab it opens takes focus" joined the closing-window line of `lessons.md`, with wording trims to stay in budget.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
+- **Size**: over the light target (three arcs, the owner's answers, the deviation ledger).
+
 # fu2-onboarding-1: the phrase check, the done line, Back on You're in, Create profile, the passkey text, the popup before setup
 
-Six signed picks of decision page 93 (First users lab 1, signed 2026-11-02), in three arcs. Arc 1 ships what the owner wrote word for word: Ready's new line and Back that stays on Ready. Arc 2 is the three-word phrase check, whose strings wait on OA-2. Arc 3 is what the create choice says and the popup before setup, with OA-1, OA-3 and OA-4. Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/`.
+Six signed picks of decision page 93 (First users lab 1, signed 2026-11-02), in three arcs. Arc 1 ships what the owner wrote word for word: Ready's new line and Back that stays on Ready. Arc 2 is the three-word phrase check (OA-2). Arc 3 is what the create choice says and the popup before setup (OA-1, OA-3, OA-4). The owner answered all four asks on 2026-11-02 (D12). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/`.
 
 ## The issues, checked
 
@@ -47,7 +59,7 @@ No issue existed for any item; the planner filed one each (ux), titled as the la
 
 **Inferences.** I1: a phrase has at least four distinct words in every realistic case; the builder is bounded and total with fewer. I2: jsdom with a real hash router runs Back (`steps.test.ts:54-83`, `resume.test.ts:137-152`); that it also runs the pop undo is unproven until D10's arc 1 test, and D11's browser step is the witness. I3: register's predicate waits on any migration (`utils/storage.ts:68-70`), behind the migration barrier, and can reject.
 
-**Asks.** OA-1 (arc 3), OA-2 (arc 2), OA-3 (arc 3), OA-4 (arc 3). Arc 1 depends on none.
+**Asks.** OA-1 (arc 3), OA-2 (arc 2), OA-3 (arc 3), OA-4 (arc 3): all answered A (D12).
 
 ## Decisions
 
@@ -62,6 +74,10 @@ No issue existed for any item; the planner filed one each (ux), titled as the la
 - **D9 (arc 3).** `redirectToOnboardingTabIfNeeded` becomes the predicate `setupWaitsInTab(store)`, with no side effect. `register.vue` renders nothing until it settles; a rejected read renders the normal page, as a failed redirect leaves it today. When it holds, the hero and its two buttons give way to the owner's sentence and one button; the brand and the Terms footer stay. The button runs `openOrFocusOnboardingTab()`, then `window.close()`. A failure logs `{ error }` at debug and leaves the popup open. `import.vue` and `profile/new.vue` replace to `/popup/register` when it holds. The no-tab case follows OA-3. A tracked id the person navigated elsewhere is known limit #1536.
 - **D10 (tests; each red on base, then green).** Arc 1: `done.test.ts` pins the whole line; a real hash router shows Back stays on Ready and `location.hash` returns, with a control route that leaves. Arc 2: `phrase-check.test.ts` covers positions, choices, decoy source, a phrase of few distinct words, and each refused pick class. `OnboardingPhraseCheck.test.ts` covers at most 12 words and no whole phrase, Confirm's gating, the refusal, the pass, Do it later, title focus and a repeat Enter. `create.test.ts` covers the check opening unmarked with `words` cleared, the pass marking and routing, Do it later, and a lost session. Arc 3: `create.test.ts`, `new.test.ts` and `PasskeyReuseLink.test.ts` pin the texts. `onboarding-tab.test.ts` (unit) pins a predicate with no `tabs` or `close` call. `register.test.ts` covers the block, the button's order, a rejected read and the normal page; `import.test.ts` and `new.test.ts` cover the replace.
 - **D11 (e2e; no new scenario).** Arc 1: `onboarding-tab.test.ts`'s password scenario calls `history.back()` from an evaluate that resolves on the first `popstate`. It then waits for Ready's hash and asserts no Create page and one profile. A real browser's history is the only witness, estimated +0.5 s per browser. Arc 2: `passPhraseCheck(page, words)` in `tests/e2e/fixtures/profiles.ts` reads the questions by testid and `data-position`. It serves `onboarding-tab.test.ts` (password and passkey), `keyboard-guards.test.ts` (Enter on I saved it opens the check; the pass records the flag) and the chaos driver, estimated +1.5 s per browser. Arc 3: the popup scenario asserts the block and a popup still open once it renders. The button then brings the tab and closes the popup; only a real popup shows `window.close()` and tab focus, ±0 s. On Firefox it drives the toolbar panel through the existing panel helpers and reads the closure and the tab's focus from a control page; on Chrome it keeps the popup document in a tab and says so.
+- **D12 (the owner's answers).** 2026-11-02, about 19:10 UTC, in chat, having read the four asks with their options and recommendations: "All A". OA-1 A: Create's password submit `Create profile`, `Create with passkey` stays, Import's title `IMPORT PROFILE`. OA-2 A: title `CHECK YOUR` / `PHRASE`, line `Pick 3 words by their position.`, groups `Word 3` (each position as the grid numbers it), button `Confirm`, refusal `Words don't match. Try again.` OA-3 A and A: the button `Go to the tab`; with the saved tab gone, the same screen, and the button opens a new setup tab. OA-4 A: the link `Use a Nulo passkey I already have` on all four pages. These words, no others.
+- **D13 (delivery, the orchestrator's brief).** Arc 1 merged as #1542, so arcs 2 and 3 ship as one PR from `fu2-onboarding-1-a2` off `dev`: arc 2's commits, then arc 3's, then the close-out as its last commits; no stack, no `-a3` or `-close-out` branch. One Codex loop over the PR's diff, with the Opus leg beside round 1.
+- **D14 (rendering the group label).** A group label is drawn in the page's field-label role (`label-section`, upper case), as `Password` and `Keep in mind` are, so `Word 3` reads `WORD 3` on screen. The source text is the owner's; the PR asks whether sentence case is wanted.
+- **D15 (deviations; the tree won).** D8: `PASSKEY_COPY` in `src/utils/passkey-copy.ts` already holds every passkey line under the owner's sign-off, so the shared text is `PASSKEY_COPY.choice`, no new module (recon missed it). D9: a new setup tab is created inactive, tracked, then focused, since focus closes a real toolbar popup before a later write runs. D3: a second Confirm while the mark is written does nothing. D11: `keyboard-guards.test.ts` answers the check by keys alone (Tab, Space or ArrowRight, Enter on a pick, Shift+Tab, Enter on Confirm) instead of `passPhraseCheck`; the popup scenario presses twice, first with no setup tab, then with another tab active in the setup tab's window.
 
 ## Architecture & Implementation
 
@@ -71,7 +87,7 @@ No issue existed for any item; the planner filed one each (ux), titled as the la
 | 2 | `src/onboarding/phrase-check.ts`, `components/OnboardingPhraseCheck.vue`, `pages/create.vue` (+ tests) | D3-D5 |
 | 2 | `src/wallet/logger/utils.ts` | D6 |
 | 2 | `tests/e2e/fixtures/profiles.ts`, `onboarding-tab.test.ts`, `keyboard-guards.test.ts`, `helpers/profile-chaos/{drivers,model}.ts` | D3, D11 |
-| 3 | `src/onboarding/pages/create.vue`, `src/onboarding/pages/import.vue` (OA-1), `src/popup/pages/profile/new.vue`, `src/utils/passkey-choice.ts`, `src/components/composite/PasskeyReuseLink.vue` (+ tests), `helpers/profile-chaos/model.ts` | D7, D8 |
+| 3 | `src/onboarding/pages/create.vue`, `src/onboarding/pages/import.vue` (OA-1), `src/popup/pages/profile/new.vue`, `src/utils/passkey-copy.ts`, `src/components/composite/PasskeyReuseLink.vue` (+ tests), `helpers/profile-chaos/model.ts` | D7, D8, D15 |
 | 3 | `src/wallet/utils/onboarding-tab.ts`, `src/popup/pages/{register,import}.vue` (+ tests), `tests/e2e/onboarding-tab.test.ts` | D9, D11 |
 
 Alternatives not taken: the check as a route (a reload or a typed URL could reach it, and the words live only in Create's ref); BIP39 decoys (recognition passes without the order, and wallet-core would export its list); the check keeping `words` (it never needs them after the questions); the redirect in `popup/route-guard.ts` (its cold boot would gain a storage read); finding the tab with `runtime.getContexts` (absent on Firefox here).
@@ -80,8 +96,9 @@ Alternatives not taken: the check as a route (a reload or a typed URL could reac
 
 Sign-off: decision page 93, signed 2026-11-02. P93-17 B "Welcome keeps its lines; the done screen's line becomes “Your wallet is ready. Open it to get your address and your first token.”"; P93-49 B "Onboarding's history ends at “You're in”: Back stays there, and its one way on is “Open wallet”."; P93-16 B "A short check: pick 3 words by their position from shuffled choices before “You're in”, with “Do it later” kept."; P93-30 B "The Create page's title becomes “Create profile”, so button and page agree, and “Account” stays for an address inside a profile."; P93-31 B "One text in both places: the onboarding sentence plus “It unlocks Nulo on this device. Your recovery phrase is what restores it.”, and the link reads “Use a Nulo passkey I already have”."; P93-64 B "The popup shows “Finish setting up Nulo in its tab” with a button that brings that tab forward."
 - **Arc 1:** Ready's line reads the owner's sentence; Back on Ready stays there. Nothing else.
-- **Arc 2:** the check, with OA-2's strings (what ships now: its option A). Ready is reached as today; the phrase step's look is unchanged.
-- **Arc 3:** Create's title `CREATE PROFILE`. The passkey text on Create and on the popup's new profile reads the onboarding sentence plus the owner's two sentences. The link reads the owner's text on the pages OA-4 settles. The popup before setup shows `Finish setting up Nulo in its tab` (no full stop, as written) and the button OA-3 settles.
+- Owner's answers (D12): "All A", 2026-11-02, for OA-1 A, OA-2 A, OA-3 A and A, OA-4 A.
+- **Arc 2:** I saved it opens the check: `CHECK YOUR` / `PHRASE`, `Pick 3 words by their position.`, three groups `Word N` of four word chips, `Confirm`, `Do it later`; a wrong set shows `Words don't match. Try again.` Ready is reached as today; the phrase step's look is unchanged.
+- **Arc 3:** Create's title `CREATE PROFILE` and its password submit `CREATE PROFILE`; onboarding Import's title `IMPORT PROFILE`. The passkey text on Create and on the popup's new profile reads the onboarding sentence plus the owner's two sentences. The link reads `USE A NULO PASSKEY I ALREADY HAVE` on all four pages. The popup before setup shows `Finish setting up Nulo in its tab` (no full stop, as written) and `Go to the tab`, the same with the tab closed.
 - Captures (light, Chrome) before and after of each surface go in `screenshots/` and the PR bodies.
 
 ## Security & Adversarial Considerations
@@ -99,26 +116,24 @@ Sign-off: decision page 93, signed 2026-11-02. P93-17 B "Welcome keeps its lines
 
 **Gate**, from the root: `bun run lint`; `bun run typecheck:all`; `(cd apps/extension && bun --bun vitest run src/onboarding --retry=0)`; `bun run test:all`. Build armed: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `build:firefox` the same way. `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/onboarding-tab.test.ts tests/e2e/keyboard-guards.test.ts tests/e2e/legal-acceptance.test.ts --retry=0`, then with `NULO_E2E_BROWSER=firefox`. `bun run check:plans` after staging. Pass: every command exits 0 at retry 0; step 1 red on base.
 
-## Phase 2 (arc 2): the phrase check
+## Phase 2 (arc 2): the phrase check ✓
 
 Build with OA-2's option A unless the owner answered first. Add D10's arc 2 tests (red on base), make D3-D6 and D11's arc 2 changes, and capture the check. **Gate:** Phase 1's commands with `src/wallet/logger` added to the vitest list and `tests/e2e/passkey-retry.test.ts` added to the smoke files. On each browser, also run one `NULO_E2E_CHAOS=1` replay of `tests/e2e/profile-chaos.test.ts` whose `NULO_E2E_CHAOS_ACTIONS` lists one `onboardingCreate` with `answer: "saved"`, refs shaped as a recorded plan's. Pass as Phase 1.
 
-## Phase 3 (arc 3): Create profile, the passkey text, the popup before setup
+## Phase 3 (arc 3): Create profile, the passkey text, the popup before setup ✓
 
 Build with the "what ships now" form of OA-1, OA-3 and OA-4 unless answered first. Add D10's arc 3 tests (red on base), make D7-D9, re-cite the chaos model, and capture Create (passkey tab), the popup's new profile, an import page's link and the popup before setup. **Gate:** Phase 1's commands with `src/popup/pages src/wallet/utils src/utils src/components/composite` in the vitest list, and smoke `onboarding-tab`, `auth-flows`, `passkey-paths`, `registration`, `security-reset` and `legal-acceptance` on both browsers. Pass as Phase 1.
 
 ## Delivery
 
 - Arc 1: `fu2-onboarding-1-a1`, off this plan's commit. PR `fix(onboarding): ready's line in plain words, and back stays on ready` (69 characters), `Closes #1512`, `Closes #1515`.
-- Arc 2: `fu2-onboarding-1-a2`, stacked on arc 1 (off `dev` if arc 1 has merged). PR `feat(onboarding): a three-word recovery phrase check before ready` (65), `Closes #1511`.
-- Arc 3: `fu2-onboarding-1-a3`, stacked the same way. PR `feat(ui): create profile, one passkey text, a popup that points to the setup tab` (80), `Closes #1513`, `Closes #1514`, `Closes #1516`.
-- Close-out: the docs-only top layer `fu2-onboarding-1-close-out`. Stack with `gh stack`; PRs ready, base `dev`, no label at creation. An arc whose asks are open is still opened; its body names them, and its merge waits for the orchestrator.
+- Arcs 2 and 3 with the close-out (D13): `fu2-onboarding-1-a2` off `dev`, one PR `feat(onboarding): a phrase check before ready, create profile, a popup pointing to the tab` (90), `Closes #1511`, `#1513`, `#1514`, `#1516`. Ready, base `dev`, no label at creation.
 - Each body: what changed and why; the claims that did not hold; the sign-off quotes and each ask's state; the captures (`?raw=true` at the head SHA); the touched e2e files' local times and each browser's smoke suite wall-clock from CI, before (the latest green run of the same workflow on another PR) and after; runs and outcomes; the accessibility calls under the owner's 2026-10-19 delegation; ending `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Commits: conventional, lower case, signed, ending `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The arcs share `create.vue` and `onboarding-tab.test.ts`, so no lanes.
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, and one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 3, one fresh Codex session over the net diff checks cross-arc issues. Prompts go under `~/.cache/nulo-backlog/fu2-onboarding-1/`. Hard stop at three rounds; log each round in `lessons/phase-N.md` and § Audit verdicts.
 - Approval boundary (a plan change; stop): a string outside § UI impact and the asks, a way back from the check to the words, a countdown on the check, a new route, a new permission, a log line with a word.
 - Close-out: the Outcome (`Known limits: #1536, #1539`); an ask still open filed as one `owner-decision` issue; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fu2-onboarding-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/fu2-onboarding-1/plan.md`.
@@ -133,6 +148,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a19d70) | findings: 2 | the test helpers' comments | a typed `#/` escaping the URL restore: known limit #1539 (the clean fix would put a bare `index.html` behind the Terms gate) |
 | arc 1 r1 | Opus 5.5 (general-purpose) | findings: 3 | the guard's comment names Import; the e2e comment's untested `goBack()` reason dropped; § Security corrected | the fast double Back: folded into #1539 |
 | arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
+| arcs 2+3 r1 | Codex, gpt-6.1-sol (session 01a19df7) | findings: 3 | the second press needs the setup tab inactive first; the check answered by keys in a browser; three comments cut | none |
+| arcs 2+3 r1 | Opus 5.5 (general-purpose) | findings: 6 | a chaos citation the passkey-copy move shifted (red `quality-status`); the same second-press witness; a new tab tracked before focus; the tab count polled; a second Confirm a no-op; stale fixture comments | none |
+| arcs 2+3 r2 | Codex, resumed | **clean** | the seven fixes verified | none |
+| arcs 2+3 r3 | Codex, resumed | **clean** | two Firefox-only test fixes verified: `" "` for Space, the witness tab in the setup tab's own window | none |
 
 ## Seeds (not run; orchestrator-owned)
 

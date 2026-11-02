@@ -131,9 +131,8 @@ describe("onboarding create", () => {
 		const w = await mountCreate()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="onboarding-name-input"]').exists()).toBe(false)
-		expect(w.text()).toContain("Create")
-		expect(w.text()).toContain("Wallet")
-		expect(w.text()).not.toContain("Profile")
+		expect(w.getComponent(OnboardingStepHeader).props()).toMatchObject({ main: "Create", sub: "Profile" })
+		expect(w.text()).not.toContain("Wallet")
 		expect(w.text()).toContain("How you'll unlock Nulo")
 		expect(w.get('[role="tablist"]').attributes("aria-label")).toBe("How you'll unlock Nulo")
 		expect(w.findAll('[role="tab"]').map((t) => t.attributes("data-testid"))).toEqual([
@@ -143,10 +142,14 @@ describe("onboarding create", () => {
 		expect(w.get('[data-testid="onboarding-method-passkey"]').attributes("aria-selected")).toBe("true")
 		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(false)
 		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create with passkey")
+		expect(w.get('[data-testid="onboarding-passkey-info"]').text()).toBe(
+			"Your passkey replaces a password. Touch ID, Windows Hello, or a hardware key, whichever your device supports. It unlocks Nulo on this device. Your recovery phrase is what restores it.",
+		)
+		expect(w.get('[data-testid="onboarding-passkey-reuse"]').text()).toBe("Use a Nulo passkey I already have")
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "passkey" })
 
 		await choosePassword(w)
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create profile")
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "wallet", path: "password" })
 		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-password-input"] input').element)
 	})
@@ -199,7 +202,7 @@ describe("onboarding create — the method tablist", () => {
 		expect(tab(w, "passkey").attributes()).toMatchObject({ "aria-selected": "false", tabindex: "-1" })
 		expect(document.activeElement).toBe(tab(w, "password").element)
 		expect(w.find('[data-testid="onboarding-password-input"]').exists()).toBe(true)
-		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create wallet")
+		expect(w.get('[data-testid="onboarding-submit-create"]').text()).toBe("Create profile")
 
 		expect(press("ArrowLeft").defaultPrevented).toBe(true)
 		await flushPromises()
@@ -406,18 +409,105 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
 	})
 
-	test("I saved it marks the new profile, and only then routes to Ready", async () => {
+	const checkPage = (w: VueWrapper) => w.find('[data-testid="onboarding-phrase-check-page"]')
+	const openCheck = (w: VueWrapper) => w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
+
+	/** Picks, at each question, the word the phrase holds at its position, or `wrong`'s word there. */
+	async function answerCheck(w: VueWrapper, wrong?: number) {
+		for (const [i, question] of w.findAll('[data-testid="onboarding-phrase-check-question"]').entries()) {
+			const word = WORDS[Number(question.attributes("data-position")) - 1]
+			const choices = question.findAll('[data-testid="onboarding-phrase-check-choice"]')
+			const pick = choices.find((c) => ((c.element as HTMLInputElement).value === word) !== (i === wrong))
+			if (!pick) throw new Error(`no choice for question ${i}`)
+			await pick.setValue(true)
+		}
+		await w.get('[data-testid="onboarding-phrase-check-confirm"]').trigger("click")
+	}
+
+	test("I saved it opens the check with the words off the page, and marks nothing yet", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await flushPromises()
+		expect(checkPage(w).exists()).toBe(true)
+		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(w.findAll('[data-testid="onboarding-phrase-word"]')).toHaveLength(0)
+		const offered = new Set(
+			w.findAll('[data-testid="onboarding-phrase-check-choice"]').map((c) => (c.element as HTMLInputElement).value),
+		)
+		expect(offered.size).toBeLessThanOrEqual(12)
+		for (const word of offered) expect(WORDS).toContain(word)
+		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "phrase", path: "password" })
+		expect(markGetStarted).not.toHaveBeenCalled()
+		expect(routerPush).not.toHaveBeenCalled()
+		expect(document.activeElement).toBe(w.get('[data-testid="onboarding-phrase-check-title"]').element)
+	})
+
+	test("a passed check marks the new profile, and only then routes to Ready", async () => {
 		const pending = defer<undefined>()
 		markGetStarted.mockReturnValueOnce(pending.promise)
 		const w = await mountCreate()
 		await submitPassword(w)
-		await w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
-		expect(markGetStarted).toHaveBeenCalledWith("p1", "phraseSaved")
+		await openCheck(w)
+		await answerCheck(w)
+		expect(markGetStarted).toHaveBeenCalledExactlyOnceWith("p1", "phraseSaved")
 		expect(routerPush).not.toHaveBeenCalled()
 		pending.resolve(undefined)
 		await flushPromises()
-		expect(routerPush).toHaveBeenCalledWith(doneRoute("password"))
-		expect(w.find('[data-testid="onboarding-phrase-page"]').exists()).toBe(false)
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+		expect(checkPage(w).exists()).toBe(false)
+	})
+
+	test("a second Confirm while the mark is written marks and routes once", async () => {
+		const pending = defer<undefined>()
+		markGetStarted.mockReturnValueOnce(pending.promise)
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await answerCheck(w)
+		await w.get('[data-testid="onboarding-phrase-check-confirm"]').trigger("click")
+		pending.resolve(undefined)
+		await flushPromises()
+		expect(markGetStarted).toHaveBeenCalledOnce()
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+	})
+
+	test("a wrong word at one position marks nothing and stays on the check", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await answerCheck(w, 1)
+		await flushPromises()
+		expect(w.get('[data-testid="onboarding-phrase-check-error"]').text()).toBe("Words don't match. Try again.")
+		expect(markGetStarted).not.toHaveBeenCalled()
+		expect(routerPush).not.toHaveBeenCalled()
+		expect(checkPage(w).exists()).toBe(true)
+	})
+
+	test("the check's Do it later routes to Ready and marks nothing", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await w.get('[data-testid="onboarding-phrase-check-later"]').trigger("click")
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+		expect(markGetStarted).not.toHaveBeenCalled()
+		expect(checkPage(w).exists()).toBe(false)
+		expect(w.find('[data-testid="onboarding-create-page"]').exists()).toBe(false)
+	})
+
+	test("a lock while the check shows takes it off the page and routes to Ready unmarked", async () => {
+		const w = await mountCreate()
+		await submitPassword(w)
+		await openCheck(w)
+		await flushPromises()
+		expect(checkPage(w).exists()).toBe(true)
+		worker.active = undefined
+		profileApi.onActiveProfileChanged.invoke(undefined)
+		await flushPromises()
+		expect(checkPage(w).exists()).toBe(false)
+		expect(w.find('[data-testid="onboarding-create-page"]').exists()).toBe(false)
+		expect(routerPush).toHaveBeenCalledExactlyOnceWith(doneRoute("password"))
+		expect(markGetStarted).not.toHaveBeenCalled()
 	})
 
 	test("Do it later takes the words down, routes to Ready and marks nothing", async () => {
@@ -504,8 +594,10 @@ describe("onboarding create — the recovery phrase step", () => {
 		expect(w.findAll('[data-testid="onboarding-phrase-word"]').map((word) => word.text())).toEqual(WORDS)
 		expect(w.get("step-indicator-stub").attributes()).toMatchObject({ current: "phrase", path: "passkey" })
 		expect(routerPush).not.toHaveBeenCalled()
-		await w.get('[data-testid="onboarding-phrase-saved"]').trigger("click")
+		await openCheck(w)
+		await answerCheck(w)
 		await flushPromises()
+		expect(markGetStarted).toHaveBeenCalledExactlyOnceWith("k1", "phraseSaved")
 		expect(routerPush).toHaveBeenCalledWith(doneRoute("passkey"))
 	})
 
