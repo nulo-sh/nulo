@@ -21,6 +21,7 @@
  * discovery sim's return value in the folded flow.
  */
 
+import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { collectOffchainEffects } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
@@ -45,10 +46,10 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 
 	public async extractEffects(
 		sim: unknown,
-		ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"] },
-	): Promise<AddPrivateAuthwitAction[]> {
+		ctx: { node: FeeEstimate["node"]; network: FeeEstimate["network"]; signer: AztecAddress },
+	): Promise<{ actions: AddPrivateAuthwitAction[]; requested: boolean }> {
 		if (this.used) {
-			return []
+			return { actions: [], requested: false }
 		}
 		this.used = true
 
@@ -56,14 +57,15 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 			(sim as { privateExecutionResult: Parameters<typeof collectOffchainEffects>[0] }).privateExecutionResult,
 		)
 		if (!effects.length) {
-			return []
+			return { actions: [], requested: false }
 		}
 
 		const nodeInfo = await ctx.node.getNodeInfo()
 		const chainInfo = liveChainInfo(ctx.network, nodeInfo)
 
 		const seen = new Set(this.existingMessageHashes)
-		for (const { record } of await decodeAuthwitEffects(effects, chainInfo, this.crypto)) {
+		const { signable, requested } = await decodeAuthwitEffects(effects, chainInfo, ctx.signer, this.crypto)
+		for (const { record } of signable) {
 			if (seen.has(record.messageHash)) {
 				continue
 			}
@@ -71,6 +73,6 @@ export class CollectingDiscoveryProbe implements DiscoveryProbe {
 			this.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash: record.messageHash } })
 			this.discovered.push(record)
 		}
-		return [...this.collected]
+		return { actions: [...this.collected], requested }
 	}
 }

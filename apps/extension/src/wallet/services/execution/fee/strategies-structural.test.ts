@@ -439,7 +439,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => []), collected: [] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })), collected: [] }
 		const original = { kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action
 		const ctx = fjFoldedCtx(probe, [original])
 
@@ -471,7 +471,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => [DISCOVERED_FJ]), collected: [DISCOVERED_FJ] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [DISCOVERED_FJ], requested: true })), collected: [DISCOVERED_FJ] }
 		const original = { kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action
 		const ctx = fjFoldedCtx(probe, [original])
 
@@ -509,7 +509,7 @@ describe("FeeJuiceStrategy folded (probed) runs", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => []), collected: [] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [], requested: false })), collected: [] }
 		const ctx = fjFoldedCtx(probe, [])
 
 		await new FeeJuiceStrategy(deps).buildAndEstimate(ctx)
@@ -547,7 +547,7 @@ describe("FpcStrategy folded (probed) runs — discovery collapses into the firs
 	const DISCOVERED = { kind: "add_private_authwit", content: { kind: "message_hash", messageHash: "0xm" } } as unknown as Action
 
 	function makeProbe(discovered: Action[] = []) {
-		return { extractEffects: vi.fn(async () => discovered), collected: discovered }
+		return { extractEffects: vi.fn(async () => ({ actions: discovered, requested: discovered.length > 0 })), collected: discovered }
 	}
 
 	function stubbedOpts(address: unknown) {
@@ -833,7 +833,7 @@ describe("FeeJuiceStrategy folded + INIT-WRAPPED with discovery", () => {
 			tasks: { startNewTask: () => fakeTask },
 			logger: { log: () => {} },
 		} as unknown as FeeStrategyDeps
-		const probe = { extractEffects: vi.fn(async () => [DISCOVERED_IW]), collected: [DISCOVERED_IW] }
+		const probe = { extractEffects: vi.fn(async () => ({ actions: [DISCOVERED_IW], requested: true })), collected: [DISCOVERED_IW] }
 		const ctx = makeCtx({ actions: [{ kind: "call", contract: "0xtoken", method: "transfer", args: [] } as unknown as Action] })
 		;(ctx as { probe?: unknown }).probe = probe
 

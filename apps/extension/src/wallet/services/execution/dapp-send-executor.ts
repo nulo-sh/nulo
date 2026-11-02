@@ -1417,7 +1417,7 @@ export class DappSendExecutor {
 	 * Kernelless auth witness discovery for the NO_FROM path: stub the user's account so
 	 * verify_private_authwit doesn't fail on missing witnesses (the stub accepts any
 	 * authwit during simulation) and decode each CallAuthorizationRequest the run
-	 * emitted. The discovery result is ONLY used to read offchain effects — never for
+	 * emitted on behalf of that account. The discovery result is ONLY used to read offchain effects — never for
 	 * proving or gas estimation. `chainInfo` derives from the LIVE
 	 * node, rebound to the selected network, before constructing the authwit message hash.
 	 */
@@ -1436,7 +1436,8 @@ export class DappSendExecutor {
 		this.deps.logDebug(`executeNoFromSendTx: offchain effects found: ${effects.length}`)
 		if (!effects.length) return []
 		const nodeInfo2 = await d.node.getNodeInfo()
-		return decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2))
+		const { signable } = await decodeAuthwitEffects(effects, liveChainInfo(d.network, nodeInfo2), d.account.address)
+		return signable
 	}
 
 	/** Sign every discovered authorization into `txRequest.authWitnesses` — after
