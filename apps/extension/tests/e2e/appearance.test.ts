@@ -185,7 +185,7 @@ const headerRow = (page: Page) =>
 		// drawn past its box, so the text alone is measured.
 		const insideColumn = (node: HTMLElement) => {
 			const text = [...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())
-			const column = node.closest("button")?.parentElement
+			const column = el("account-column")
 			if (!text || !column) return false
 			const range = document.createRange()
 			range.selectNodeContents(text)

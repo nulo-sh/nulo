@@ -38,7 +38,7 @@ describe("useBalanceTasks", () => {
 		expect(tasks.isUpdating(1)).toBe(true)
 	})
 
-	test("the account's new refresh is kept once", () => {
+	test("a repeated create of the account's refresh keeps it updating until it finishes", () => {
 		const { tasks } = setup()
 		expect(tasks.onTaskCreated(task("a", 1))).toBe(true)
 		expect(tasks.onTaskCreated(task("a", 1))).toBe(true)

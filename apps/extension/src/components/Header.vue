@@ -186,7 +186,7 @@ onBeforeUnmount(() => {
 			>
 				<AccountAvatar :name="appStore.account?.name || 'Primary Account'" :address="appStore.account?.address" :size="32" />
 			</button>
-			<Flex direction="column" gap="2" :class="$style.account_col">
+			<Flex direction="column" gap="2" :class="$style.account_col" data-testid="account-column">
 				<div :class="$style.name_slot">
 					<button
 						type="button"
