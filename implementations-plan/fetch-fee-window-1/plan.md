@@ -1,7 +1,7 @@
 ---
 plan: fetch-fee-window-1
 tier: light
-status: plan approved (Codex final approve); arc 1 implementing
+status: completed (PR #1501, awaiting merge)
 issues: "#1475, #1477 (part of #1472)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 3af5f7840
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-02
+- **Status**: completed. One arc, delivered with this close-out as #1501.
+- **Shipped**: `privateFetchInit` in `@nulo/wallet-core` is the one `RequestInit` of the token-list and price fetches (no cookies, referrer, HTTP cache or redirect), so a price endpoint that redirects is refused as the token list's is; an AST scan pins both services to it. The fee window starts, decodes and ends a request through the execute window's helpers (`assertRequestProfile`, `resolveForProfile`, `requestEnd`, the two decode fallbacks, `openJsonWindow`), so it ends another profile's request as the switch or the lock; `JsonViewer`'s unreachable opener is gone. No e2e scenario added.
+- **Known limits**: none.
+- **Dispositions**: a shared bounded-body reader rejected (D2); one error mapping for both services rejected (D3); a tree-wide scan narrowed to the two services (D4); a service-worker read of the fee question's end rejected (D11).
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and its line on a check that accepts a wrong state already covers a source scan that misses a spelling; the detail stays in [lessons/phase-2.md](lessons/phase-2.md).
+- **Open items**: #1472 (execute's single `confirmBlocked` computed and the per-window `grantsPending` / `grantRefusal` computeds; commented on the issue).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # fetch-fee-window-1: one private-fetch recipe, and the fee window shares the execute window's prelude
 
