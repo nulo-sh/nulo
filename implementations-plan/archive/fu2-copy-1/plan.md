@@ -144,7 +144,7 @@ Each makes its decision (D7, D8) with its tests, red on the base copy. **Gate:**
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `1e6c5bc1f`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. After the last arc, one fresh Codex session over the net diff. Prompts under `~/.cache/nulo-backlog/fu2-copy-1/`. Hard stop at three rounds; each round in `lessons/phase-N.md` and the table below.
 - Approval boundary (a plan change; stop): any word, row or layout beyond the quoted picks, R1-R4 and the owner's answers; D5's caption rule firing; a new e2e scenario.
 - Close-out: the Outcome; an unanswered OA filed as an `owner-decision` issue; a comment on #1449 that the verdict part shipped; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done fu2-copy-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/fu2-copy-1/plan.md`.
