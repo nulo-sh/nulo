@@ -252,7 +252,6 @@ onBeforeUnmount(() => {
 	margin: 0;
 	font-size: 24px;
 	color: var(--txt-primary);
-	overflow-wrap: anywhere;
 }
 
 .body {
@@ -274,6 +273,8 @@ onBeforeUnmount(() => {
 	gap: 22px;
 	padding: 0 28px;
 	background: var(--app-bg);
+	/* Text only: a button added here would inherit mid-word breaks. */
+	overflow-wrap: anywhere;
 }
 
 .opening_spinner {

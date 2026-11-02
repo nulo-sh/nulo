@@ -38,6 +38,7 @@ import { FEE_JUICE_BRIDGE_URL, feePayerOf } from "@/popup/components/modules/sen
 import { feeText } from "@/utils/fee-estimation"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
+import { openingSendSide } from "@/popup/pages/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/components/composite/send/publish-facts"
@@ -187,8 +188,8 @@ const selectedSendType = ref("private")
 const selectedReceiverType = ref("private")
 const initSendType = (keepSide = false) => {
 	if (!activeToken.value) return
-	if (!keepSide && cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
-		selectedSendType.value = cacheStore.preselectedBalanceType
+	if (!keepSide && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+		selectedSendType.value = openingSendSide(tokenBalance.value)
 	}
 
 	if (!activeToken.value.hasPrivateTransfers) {

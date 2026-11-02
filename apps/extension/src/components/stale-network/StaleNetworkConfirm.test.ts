@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } 
 import { nextTick, ref } from "vue"
 import type { StaleNetworkView } from "@/wallet/services/network-reset/client"
 import { sendEvent } from "../../../tests/helpers/send-event"
+import { boundAttr, declarationsOf, parseSource, type TemplateNode, walkElements } from "../../../scripts/type-roles/source-scan"
 
 type Options = Record<string, unknown>
 const traps: Array<{ options: Options }> = []
@@ -175,5 +176,19 @@ describe("StaleNetworkConfirm", () => {
 		await flushPromises()
 		sendEvent(q("stale-confirm-submit")!, "click")
 		expect(wrapper.emitted("confirm")).toHaveLength(2)
+	})
+
+	test("a long network name wraps in the name above the title and the sentence, and the button row keeps its rule", () => {
+		const parsed = parseSource("apps/extension/src/components/stale-network/StaleNetworkConfirm.vue")
+		const texts: TemplateNode[] = []
+		if (parsed.template) {
+			walkElements(parsed.template, (node) => {
+				if (["$style.pre_title", "$style.body"].includes(boundAttr(node, "class") ?? "")) texts.push(node)
+			})
+		}
+		expect(texts.map((node) => node.tag)).toEqual(["span", "p"])
+		for (const text of [".pre_title", ".body"]) expect(declarationsOf(parsed, text)).toMatchObject({ "overflow-wrap": "anywhere" })
+		for (const box of [".card", ".buttons", ".cancel", ".submit"])
+			expect(declarationsOf(parsed, box)).not.toHaveProperty("overflow-wrap")
 	})
 })

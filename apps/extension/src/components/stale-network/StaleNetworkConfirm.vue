@@ -96,6 +96,7 @@ watch(
 .pre_title {
 	composes: type--meta from global;
 	color: var(--txt-secondary);
+	overflow-wrap: anywhere;
 }
 
 .title {
@@ -111,6 +112,7 @@ watch(
 	margin: 0;
 	line-height: 1.55;
 	color: var(--txt-body);
+	overflow-wrap: anywhere;
 }
 
 .accounts {
