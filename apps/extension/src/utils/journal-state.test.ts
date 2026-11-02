@@ -19,6 +19,7 @@ import {
 	categoricalLabel,
 	humanizeErrorKind,
 	journalCallTitle,
+	journalCardAmount,
 	journalCardOriginLabel,
 	journalCardTitle,
 	type JournalTerminalDisplay,
@@ -917,5 +918,27 @@ describe("KNOWN_JOB_ERROR_KINDS taxonomy coverage", () => {
 			expect(() => categoricalLabel(failedWith(kind))).not.toThrow()
 			expect(categoricalLabel(failedWith(kind)).label.length).toBeGreaterThan(0)
 		}
+	})
+})
+
+describe("journalCardAmount — an in-flight send's amount, from a sealed row it does not trust", () => {
+	const TST = { symbol: "TST", decimals: 6, hasDecimals: true }
+	const send = (amountRaw: string | undefined) =>
+		recordWith({
+			kind: "transfer",
+			origin: "popup",
+			tokenId: 1,
+			amountRaw,
+			terminalAt: null,
+			progress: { stage: "proving", enteredProveAt: 1 },
+			error: null,
+		})
+	test.each([
+		["a raw amount", "10000000", TST, "10"],
+		["an amount that is not an integer literal, which the formatter would throw on", "1e5", TST, null],
+		["an empty amount, which would read as a fake 0", "", TST, null],
+		["a token whose decimals are unknown", "10000000", { ...TST, hasDecimals: false }, null],
+	])("%s", (_, amountRaw, token, shown) => {
+		expect(journalCardAmount(send(amountRaw), () => token)).toBe(shown)
 	})
 })
