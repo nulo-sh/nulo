@@ -1,7 +1,7 @@
 ---
 plan: exec-window-1
 tier: light
-status: approved by the final Codex pass; arc 1 next
+status: arc 1 built, gates green, PR open; close-out after the merge
 issues: "#1494, #1495; P93-70 has no issue"
 driver: claude-code
 claude_model: opus
@@ -105,12 +105,13 @@ Before building: write each pick under `## Decision` on #1494 and #1495 (`gh iss
 - Tests: `call-surface.test.ts`: transfers of 4 TST and 2 TST (the second with `from` = the account in upper case) and 10 USDC, plus a decoded non-transfer, a transfer from another address and one to the account, give rows `[2, 6 TST]`, `[1, 10 USDC]` exactly; an unknown symbol keeps base units. `OperationCard.summary.test.ts`: a request with those calls (real Token decodes) renders exactly "2 transfers" / "6 TST" and "1 transfer" / "10 USDC"; no block with zero counted transfers or with a `#fee` slot (controls).
 - **Status ✓ (2026-11-02).** Gate green (944 tests in 40 files at retry 0, lint, typecheck:all); the four new tests fail against the base copies. The shared fixture's USDC transfer now draws a block in the existing summary tests, which still pass.
 
-### Phase 4 — whole-window gates and captures
+### Phase 4 — whole-window gates and captures ✓
 - `bun run audit:vue && bun run test:all` (retry 0).
 - Smoke, Chrome then Firefox (`NULO_E2E_BROWSER=firefox`): `cd apps/extension && NULO_E2E_RETRY=0 bun run test:e2e -- tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts tests/e2e/type-roles.test.ts`.
 - Network, Chrome, one at a time: `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<f>.test.ts` for `tx-sendTx-feePayer`, `fee-sponsor-funding`, `authwit-lifecycle`, `tx-sendTx-noFrom`, `tx-sendTx-default`, `tx-sendTx-multicall`, `snack-placement`, `type-roles-windows`; then Firefox for `tx-sendTx-feePayer` and `type-roles-windows`. Record each wall-clock.
 - Captures, light, Chrome, 400 × 800, base and head: both app-paid failures, the failed preview, a three-call approval at the fee section and at Confirm; and, on the head only, the keyboard focus after each TRY AGAIN and a long total. Build them on a throwaway local branch that adds only a failure seam and the prototypes' capture specs (`worktree-shots-p95c`, `worktree-shots-p93f`); never push it. Copy the PNGs to `implementations-plan/exec-window-1/screenshots/`.
 - **Validation gate:** every command exits 0 at retry 0; the ten before/after PNGs exist.
+- **Status ✓ (2026-11-02).** At `f91b174cc`, retry 0: `audit:vue` 0 (170 s); `test:all` 0 (166 s); smoke Chrome 3 files, 20 passed and 1 skipped (162 s), Firefox 3 files, 21 passed (235 s); network Chrome 8 files, 22 tests (833 s), Firefox 2 files, 6 tests (298 s). Twelve frames under `screenshots/`. Deviations: the three-call approval holds its fee section and Confirm in one 400 × 800 frame, so it is one frame a side, not two; the captures found two defects the component tests could not (no focus ring on the details toggle, a wrapped transfer count), fixed in `f91b174cc` (§ Audit verdicts, round 3).
 
 ## Delivery
 
@@ -127,6 +128,14 @@ Cites [`implementations-plan/README.md` § Post-implementation standard](../READ
 **Round 1, Opus 5.5 Plan: conditional approve.** O1 (authorization moves uncounted): adopted as Q4 and the Outcome's wording; the pick says "calls", so it does not wait. O2 (a long total clips): adopted, `.row`. O3 (D inside the badge's padding misses the frame): adopted, the wrapper. O4 (focus untested): adopted. O5 (two stale test names): adopted. O6 (refusal hides F): adopted, D9 and Q3. O7 (D5 is visible): moot after C7. O8 (gates): adopted. O9 (`fee-shared.module.css` exists): adopted, D7. O10 ("<App> pays"): Q5. Positions differing from Codex: O on D2 (agree with narrowing) and D5 (agree with closing); Codex's reading won on both, being the closer to the signed artifact.
 
 **Round 2, Codex (resumed): approve.** No new material finding. Notes for the build: the extra 2 px applies to the failed branch only; `aria-busy` stays on the outer badge (`OperationCard.fee.test.ts:337-354` reads it there); an upper-case address fixture keeps a lower-case `0x`; the retry's native event is forwarded and read synchronously, as `FeeSettingsCard`'s handler does. It checked that the smoke command forwards its three files and that `NULO_E2E_RETRY=0` overrides both e2e configs.
+
+**Diff review round 1, Codex gpt-6.1-sol high: findings (R1–R3), all low, all adopted** (`2544d0477`). R1: the other-sender fixture also sent to the account, so the recipient check alone excluded it. R2: the focus tests asserted before the retry's button left. R3: five comments narrated their line; the focus handlers' comments now state why `currentTarget` is read inside the dispatch; the template comment over the outflows block is kept, restated as the invariant behind `!$slots.fee`.
+
+**Diff review round 1, Opus 5.5 `general-purpose`: G1–G6, adopted** in the same commit: the Fee label's colour (`--nulo-secondary`, as the readout's label), `sentBy` compares the address for kind `account` too, a comment cited a frame, a test title miscounted.
+
+**Diff review round 2, Codex (resumed): clean.**
+
+**Diff review round 3, Codex (resumed): clean.** Over `f91b174cc`, two defects the live captures found: the details toggle drew no focus ring (the base sheet strips every button's outline), and a long total wrapped the transfer count.
 
 ## Seeds (drafts; the orchestrator runs the arc)
 

@@ -7,3 +7,4 @@
 - 2026-11-02: phase 1 (#1494) gate green; red on the base copy.
 - 2026-11-02: phase 2 (#1495) gate green; red on the base copy; the prototype's invalid Flex align dropped (the frame rendered without it).
 - 2026-11-02: phase 3 (P93-70) gate green; red on the base copy.
+- 2026-11-02: phase 4 gates green at the final head; Codex diff review converged (round 2 clean, round 3 clean over the capture fixes); captures committed; PR next.
