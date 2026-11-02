@@ -9,3 +9,4 @@
 - 2026-11-02: OA-1 (A) and OA-2 (B) answered on page 98; arcs 2 and 3 start on `fu2-copy-1-a2` off `dev` at `6509f2ff1`.
 - 2026-11-02: arc 2 (D7) built: tests red (`f66a497d6`), green (`af24cd686`); `lint`, `typecheck:all`, `vitest run src` (906 files) green at retry 0.
 - 2026-11-02: arc 3 (D8) built: tests red (`245abc5af`), green (`1897681e3`); `lint`, `typecheck:all` green. Codex r1 approve, Opus r1 approve (two nits, taken in `3bf5830c5`), Codex r2 approve. `audit:vue` and `test:all` green on the final code head; full smoke next.
+- 2026-11-02: full smoke at retry 0 on `3bf5830c5` (`9c538396a` is comment-only; rebuilt bundles byte-identical): Chrome 62 files in 7.7 min, Firefox 66 in 13.9 min, four shards each. Close-out next.
