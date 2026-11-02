@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "../testing/fake-browser-api"
-import { ValueStorage } from "./value-storage"
+import { ValueDecodeError, ValueStorage } from "./value-storage"
 
 /**
  * Contract tests for `ValueStorage`.
@@ -86,6 +86,7 @@ describe("ValueStorage", () => {
 			const vs = new ValueStorage<number>("count", api.storage.local)
 			await api.storage.local.set({ count: "{not json" })
 			await expect(vs.get()).rejects.toMatchObject({ name: "ValueDecodeError", message: "count: stored value does not decode" })
+			await expect(vs.get()).rejects.toBeInstanceOf(ValueDecodeError)
 			// The bad value is NOT deleted — still present for a repair path.
 			expect(await api.storage.local.get("count")).toEqual({ count: "{not json" })
 		})
