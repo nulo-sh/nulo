@@ -8,7 +8,7 @@
  *      profile's own PRF input. Unblocked by path A: the modal runs in the popup's existing
  *      FrameTreeNode, so the credential created at register persists across the lock/unlock
  *      cycle on the SAME virtual authenticator.
- *   3. A second profile on the passkey already held: "Use a passkey I already have" asks a
+ *   3. A second profile on the passkey already held: "Use a Nulo passkey I already have" asks a
  *      discovery get naming no credential, at an input of the new profile's own, and that profile
  *      then unlocks with it.
  *

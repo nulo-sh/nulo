@@ -1,6 +1,6 @@
 <script setup>
 /**
- * "Use a passkey I already have", under the button that creates a new passkey wherever one is set
+ * "Use a Nulo passkey I already have", under the button that creates a new passkey wherever one is set
  * up: it asks the device for a Nulo passkey the person already has. A link-styled button, so the
  * primary button stays the one that creates.
  */
@@ -21,7 +21,7 @@ const emit = defineEmits(["click"])
 		:data-testid="testid"
 		@click="emit('click')"
 	>
-		Use a passkey I already have
+		Use a Nulo passkey I already have
 	</button>
 </template>
 

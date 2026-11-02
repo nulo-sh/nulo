@@ -393,7 +393,7 @@ export async function answer(run: InProcessRun, ref: CredentialRef | undefined, 
 }
 
 /** A new passkey's answer at a fresh input: the authenticator mints `ref`, or picks it when it already
- *  holds it ("Use a passkey I already have"). */
+ *  holds it ("Use a Nulo passkey I already have"). */
 export async function newPasskey(run: InProcessRun, before: World, ref: CredentialRef | undefined): Promise<PasskeyCredentialData> {
 	if (!ref) throw new Error("a passkey choice names its credential")
 	if (!isMinted(before, ref)) {

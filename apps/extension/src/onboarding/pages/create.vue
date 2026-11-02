@@ -19,8 +19,10 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
+import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
 import { clearFlowPath, doneRoute, markFlowPath } from "../steps"
 
 /** Stores */
@@ -31,6 +33,7 @@ import { useNotificationStore } from "@/stores/notification.store"
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
+import OnboardingPhraseCheck from "../components/OnboardingPhraseCheck.vue"
 import OnboardingPhraseStep from "../components/OnboardingPhraseStep.vue"
 
 const router = useRouter()
@@ -40,10 +43,12 @@ const { bootstrapActiveProfile } = useProfileBootstrap()
 
 const maxPasswordLength = 128
 
-// The words live only in this ref, for this page's life. `closed` renders nothing while the route
-// to Ready settles, so neither the words nor a second Create stand meanwhile.
-const stage = ref<"form" | "phrase" | "closed">("form")
+// The words live only in this ref, for this page's life, and the check holds only its questions.
+// `closed` renders nothing while the route to Ready settles, so neither the words nor a second
+// Create stand meanwhile.
+const stage = ref<"form" | "phrase" | "check" | "closed">("form")
 const words = ref<string[]>([])
+const questions = shallowRef<PhraseQuestion[]>([])
 let createdId = ""
 // One generation for the page's life: a Create that settles after the person left publishes
 // nothing, since bootstrap writes shared stores and the tab may already show another page.
@@ -60,11 +65,12 @@ let stopSessionWatch: (() => void) | undefined
 function loseSession() {
 	if (sessionLost || !isMounted()) return
 	sessionLost = true
-	if (stage.value === "phrase") leavePhrase()
+	if (stage.value === "phrase" || stage.value === "check") leavePhrase()
 }
 
 function leavePhrase() {
 	words.value = []
+	questions.value = []
 	stage.value = "closed"
 	router.push(doneRoute(path.value))
 }
@@ -151,10 +157,21 @@ const {
 
 const submitLabel = computed(() => {
 	if (isCreating.value) return "Creating..."
-	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
+	return authMethod.value === "passkey" ? "Create with passkey" : "Create profile"
 })
 
-async function onPhraseSaved() {
+function openCheck() {
+	questions.value = buildPhraseCheck(words.value)
+	words.value = []
+	stage.value = "check"
+}
+
+// Confirm stays pressable while the mark is written: a second press marks and routes nothing more.
+let isMarking = false
+
+async function onCheckPassed() {
+	if (isMarking) return
+	isMarking = true
 	await markGetStarted(createdId, "phraseSaved")
 	if (isMounted()) leavePhrase()
 }
@@ -171,18 +188,20 @@ onBeforeUnmount(() => {
 	password.value = ""
 	confirm.value = ""
 	words.value = []
+	questions.value = []
 })
 </script>
 
 <template>
-	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="onPhraseSaved" @later="leavePhrase" />
+	<OnboardingPhraseStep v-if="stage === 'phrase'" :words="words" :path="path" @saved="openCheck" @later="leavePhrase" />
+	<OnboardingPhraseCheck v-else-if="stage === 'check'" :questions="questions" :path="path" @passed="onCheckPassed" @later="leavePhrase" />
 	<OnboardingPage v-else-if="stage === 'form'" data-testid="onboarding-create-page" :data-name-field="nameFieldState">
 		<OnboardingStepHeader
 			current="wallet"
 			:path="authMethod"
 			back="onboarding-create-back"
 			main="Create"
-			sub="Wallet"
+			sub="Profile"
 			:class="$style.hero"
 		/>
 
@@ -241,10 +260,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
-				<Text variant="body" color="secondary" height="150">
-					Your passkey replaces a password. Touch ID, Windows Hello, or
-					a hardware key, whichever your device supports.
-				</Text>
+				<Text variant="body" color="secondary" height="150" data-testid="onboarding-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 			</div>
 
 			<Button
