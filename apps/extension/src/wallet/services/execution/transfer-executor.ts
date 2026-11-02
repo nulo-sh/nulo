@@ -23,11 +23,10 @@ import type { ProfileInfo } from "@/wallet/services/profile/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { type TaskService, type WrappedTask, TransferContent } from "@/wallet/services/task/service"
-import { OriginType, type LocalTxOrigin, type TransactionService, type Tx } from "@/wallet/services/transaction/service"
+import { OriginType, type LocalTxOrigin, type Tx } from "@/wallet/services/transaction/service"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType, type FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
@@ -38,6 +37,8 @@ import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { type QueuedFeeAnswers, queuedFeePayer, speedOf } from "./queued-fee-cap"
 import { maybeRethrowAsRpcCancel, throwIfAborted } from "./rpc-cancel"
 import type { ChainTipGate } from "./chain-tip-gate"
+import type { ExecutionLane } from "./execution-lane"
+import type { SharedSendDeps } from "./shared-send-deps"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import type { Action, FeeOptions, FeeSettings, TransferFeeEstimate, TransferFeeQueued } from "./spec"
 import { probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
@@ -73,25 +74,6 @@ type BuildSnapshot = {
 	builtAt: number
 }
 
-/** Controller-registry and slot subset of the execution lane. */
-export interface TransferExecutorLane {
-	registerInFlight(journalId: string, serial: number, controller: AbortController): { live: boolean }
-	deleteController(journalId: string): void
-	/** Heartbeats the row so the reaper does not fail it while it waits its turn. */
-	beginQueuedWait(journalId: string): void
-	endQueuedWait(journalId: string): void
-	isSlotBusy(profileId: string, chainId: number): boolean
-	/** The slot behind the estimates ahead in line; `undefined` while a send holds or waits for it. */
-	takeEstimateSlot(profileId: string, chainId: number, signal?: AbortSignal): Promise<ExecutionMutexRelease> | undefined
-	acquireTransferSlot(
-		networkId: string,
-		journalId: string,
-		fence: ExecutionFence,
-		signal: AbortSignal,
-		onWait?: () => void,
-	): Promise<ExecutionMutexRelease>
-}
-
 /** Where a transfer stands in its account's line, and what it holds there; `feeSpender` is the fee
  *  contract its `fpc:` key names, and `sponsored` whether Nulo's own sponsor pays. */
 export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string; sponsored: boolean }
@@ -119,31 +101,28 @@ type TransferRun = {
 /** A build above its figure, as the question needs it: the build itself is only in the stash. */
 type OverCap = { stashId: string | undefined; fee: string; figure: SendFeeFigure; payer: QueuedFeePayer }
 
-export interface TransferExecutorDeps {
+export interface TransferExecutorDeps extends SharedSendDeps {
 	tasks: TaskService
 	planner: OperationPlanner
 	estimateReuse: TransferEstimateReuse
 	coordinator: ExecutionCoordinator
-	lane: TransferExecutorLane
+	lane: Pick<
+		ExecutionLane,
+		| "registerInFlight"
+		| "deleteController"
+		| "beginQueuedWait"
+		| "endQueuedWait"
+		| "isSlotBusy"
+		| "takeEstimateSlot"
+		| "acquireTransferSlot"
+	>
 	sequencer: SendSequencer
 	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
 	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
 	getFpcImpl(fpcId: string): Promise<Fpc>
 	transactionsOf(account: string, profileId: string): Promise<Tx[]>
+	/** The whole profile, as `requireActiveProfile` takes it. */
 	getActiveProfile(): Promise<ProfileInfo | undefined>
-	captureExecutionFence(): Promise<ExecutionFence>
-	assertFence(fence: ExecutionFence): Promise<void>
-	isFenceLive(fence: ExecutionFence): boolean
-	getNetwork(networkId: string): Promise<Network>
-	getNode(chainId: number): Promise<AztecNode>
-	/** The sponsor probe's read: bounded and silent, unlike the build's retrying `node`. */
-	readPublicStorageOnce: PublicStorageReader
-	getPXE(network: Network): IPXE
-	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<IAccountContract>
-	getPendingForAccount(account: string): Tx[]
-	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
-	 *  seam in sync with the source signature. */
-	addTransaction: TransactionService["addTransaction"]
 	buildAndEstimate(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
 		feeSettings: FeeSettings,

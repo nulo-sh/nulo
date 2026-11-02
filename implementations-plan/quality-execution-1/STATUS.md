@@ -4,3 +4,5 @@
 - 2026-11-02 draft: plan.md written, two arcs (arc 1: #1442, #1438, #1440; arc 2: #1455, #1472); audit next.
 - 2026-11-02 audit: Codex R1 conditional approve (C1-C3 accepted); Opus conditional approve (O1-O5, O7, O8 accepted; O6 rejected). Final fresh Codex pass next.
 - 2026-11-02 final: fresh Codex pass conditional approve (F1, F2 accepted); resumed pass approve. Arc 1 next under auto-continue.
+- 2026-11-02 phase 1 green: cycle lint clean over both dirs, typecheck:all, lint, 86 test files pass
+- 2026-11-02 phase 2 green: lint, typecheck:all, src/wallet/services/execution 76 files pass (composition included)

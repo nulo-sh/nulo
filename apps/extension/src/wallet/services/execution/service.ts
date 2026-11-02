@@ -106,11 +106,12 @@ import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, type EstimateReuseDeps, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
-import { TransferExecutor, type TransferSequence } from "./transfer-executor"
+import { TransferExecutor, type TransferExecutorDeps, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
 import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
 import { ExecutionLane } from "./execution-lane"
+import type { SharedSendDeps } from "./shared-send-deps"
 import { GasBalanceReader } from "./gas-balance-reader"
 import { AUTHWIT_CALL_BINDING, ContractResolver, assertSelectorBinding, findFunctionBySelector } from "./contract-resolver"
 import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from "./call-decoder"
@@ -422,42 +423,11 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
+	/** The lane and the builder come first: the executors and the fee strategies capture both eagerly. */
 	private wireExecutors(): void {
-		this.wireLaneAndTransferExecutor()
-		this.wireDappSendAndViewExecutors()
-	}
-
-	private wireLaneAndTransferExecutor(): void {
-		this.lane = new ExecutionLane({
-			operationJournal: this.operationJournal,
-			getActiveProfile: () => this.profileService.getActiveProfile(),
-			captureProfileEpoch: (profileId) => this.profileService.getDeletionState().capture(profileId),
-			assertFence: (fence) => this.profileService.assertFence(fence),
-			peekLiveSerial: () => this.profileService.peekLiveSerial(),
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
-			logInfo: (msg, ...rest) => this.logInfo(msg, ...rest),
-			logError: (msg, ...rest) => this.logError(msg, ...rest),
-		})
-		this.transferExecutor = new TransferExecutor({
-			tasks: this.taskService,
-			planner: this.planner,
-			estimateReuse: this.estimateReuse,
-			coordinator: this.coordinator,
-			lane: {
-				registerInFlight: (journalId, serial, controller) => this.lane.registerInFlight(journalId, serial, controller),
-				deleteController: (journalId) => this.lane.deleteController(journalId),
-				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
-				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
-				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
-				takeEstimateSlot: (profileId, chainId, signal) => this.lane.takeEstimateSlot(profileId, chainId, signal),
-				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
-					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
-			},
-			sequencer: this.sendSequencer,
-			chainTip: this.chainTipGate,
-			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
-			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
+		this.wireLaneAndBuilder()
+		// `satisfies`, not an annotation, so each read keeps the width the transfer executor narrows to.
+		const shared = {
 			getActiveProfile: () => this.profileService.getActiveProfile(),
 			captureExecutionFence: () => this.captureFence(),
 			assertFence: (fence) => this.profileService.assertFence(fence),
@@ -470,12 +440,21 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
-			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
-			createJournalOperation: (input) => this.operationJournal.createOperation(input),
-			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
-			answers: this.queuedFeeAnswers,
+		} satisfies SharedSendDeps
+		this.wireTransferExecutor(shared)
+		this.wireDappSendAndViewExecutors(shared)
+	}
+
+	private wireLaneAndBuilder(): void {
+		this.lane = new ExecutionLane({
+			operationJournal: this.operationJournal,
+			getActiveProfile: () => this.profileService.getActiveProfile(),
+			captureProfileEpoch: (profileId) => this.profileService.getDeletionState().capture(profileId),
+			assertFence: (fence) => this.profileService.assertFence(fence),
+			peekLiveSerial: () => this.profileService.peekLiveSerial(),
+			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+			logInfo: (msg, ...rest) => this.logInfo(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
 		this.txBuilder = new TxRequestBuilder(
@@ -491,7 +470,29 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		)
 	}
 
-	private wireDappSendAndViewExecutors(): void {
+	private wireTransferExecutor(shared: SharedSendDeps & Pick<TransferExecutorDeps, "getActiveProfile">): void {
+		this.transferExecutor = new TransferExecutor({
+			...shared,
+			tasks: this.taskService,
+			planner: this.planner,
+			estimateReuse: this.estimateReuse,
+			coordinator: this.coordinator,
+			lane: this.lane,
+			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
+			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
+			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
+			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
+			createJournalOperation: (input) => this.operationJournal.createOperation(input),
+			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
+			answers: this.queuedFeeAnswers,
+			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
+			logError: (msg, ...rest) => this.logError(msg, ...rest),
+		})
+	}
+
+	private wireDappSendAndViewExecutors(shared: SharedSendDeps): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
@@ -513,49 +514,19 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			},
 		})
 		this.dappSendExecutor = new DappSendExecutor({
+			...shared,
 			planner: this.planner,
 			txBuilder: this.txBuilder,
 			coordinator: this.coordinator,
 			estimateWithDiscovery,
 			operationEstimateReuse: this.operationEstimateReuse,
 			previewSnapshots: this.previewSnapshots,
-			getActiveProfile: () => this.profileService.getActiveProfile(),
-			captureExecutionFence: () => this.captureFence(),
-			assertFence: (fence) => this.profileService.assertFence(fence),
-			isFenceLive: (fence) => this.profileService.isFenceLive(fence),
-			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
-			getNode: (chainId) => this.networkService.getNode(chainId),
-			readPublicStorageOnce: (network, contract, slot, timeoutMs) =>
-				this.networkService.readPublicStorageOnce(network, contract, slot, timeoutMs),
-			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
-			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
-			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
-			lane: {
-				deleteController: (journalId) => this.lane.deleteController(journalId),
-				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>
-					this.lane.acquireSlot(networkId, queuedJournalId, fence, onEnqueued, originKey),
-				claimOrCreateJournal: (networkId, accountAddress, origin, calls, hooks, reuseController, fence) =>
-					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
-				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
-					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				recordBuiltCall: (journalId, txCalls) => this.lane.recordBuiltCall(journalId, txCalls),
-				markJournal: (journalId, progress, error, retitle) => this.lane.markJournal(journalId, progress, error, retitle),
-				commitJournal: (journalId, progress, publicAuthwits) => this.lane.commitJournal(journalId, progress, publicAuthwits),
-				clearJournalAuthwits: (journalId, txHash) => this.lane.clearJournalAuthwits(journalId, txHash),
-				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
-					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
-				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
-				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
-				reclaimParked: (journalId) => this.lane.reclaimParked(journalId),
-				beginQueuedWait: (journalId) => this.lane.beginQueuedWait(journalId),
-				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
-			},
+			lane: this.lane,
 			sequencer: this.sendSequencer,
 			chainTip: this.chainTipGate,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
-			addTransaction: (...args) => this.transactionService.addTransaction(...args),
 			protocolSponsorAddress: async (chainId) => (await this.fpcService.getOrComputeProtocolAddresses(chainId)).sponsored,
 			recordPendingAuthwits: (...args) => this.authRegistryService.recordPendingAuthwits(...args),
 			noteSent: (chainId, account, txHash, calls) =>
