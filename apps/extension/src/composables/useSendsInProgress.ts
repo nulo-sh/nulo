@@ -8,6 +8,7 @@ import { isInFlightActivityOp } from "@/utils/journal-state"
 import { sendRecipient, sendSummary } from "@/utils/send-summary"
 import { knownDecimals, parseSide } from "@/utils/token-amount"
 import type { OperationFilter, OperationRecord } from "@/wallet/services/operation-journal/spec"
+import type { TokenDeleted } from "@/wallet/services/token/spec"
 
 export type SendsScope = { profileId: string; networkId: string; account: string }
 export type SendToken = { symbol: string; decimals: number; hasDecimals: boolean }
@@ -28,13 +29,15 @@ export interface UseSendsInProgressOptions {
 	scope: () => SendsScope | undefined
 	/** Rejects or answers undefined for a token the scope no longer holds. */
 	lookupToken: (tokenId: number) => Promise<SendToken | undefined>
+	/** A removal drops every label read so far, so a send whose token went names its recipient alone. */
+	tokenEvents: { onTokenDeleted: EventHandler<TokenDeleted> }
 	toast: Readonly<Ref<ToastState | null | undefined>>
 	openToast: (options: ToastOptions) => number
 	updateToast: (id: number, label: string) => void
 	closeToast: () => void
 }
 
-/** What History injects: the one list the Sending toast reads too, so the two never disagree. */
+/** The shell's one read of the operations in flight, for every view that lists them. */
 export interface SendsInProgress {
 	/** The active scope's sends and dApp operations still in flight, newest first. */
 	records: Readonly<Ref<readonly OperationRecord[]>>
@@ -140,7 +143,11 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 	function reconcile() {
 		if (!live) return
 		const want = wanted()
-		if (want === PENDING) return
+		if (want === PENDING) {
+			// Waiting on a label never keeps naming a send that has ended.
+			if (own && !records.value.some((op) => op.id === own?.record)) closeOwn()
+			return
+		}
 		if (want) show(want)
 		else closeOwn()
 	}
@@ -164,17 +171,22 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
 		for (const op of records.value) if (isPopupSend(op)) dismissed.add(op.id)
 	}
 
+	/** Every label is read again, and a lookup already out lands nothing. */
+	function forgetLabels() {
+		generation++
+		asked.clear()
+		labels.value = new Map()
+	}
+
 	/** A lock, a scope change or a teardown: its own toast closes before its state goes. */
 	function reset(active: boolean) {
 		closeOwn()
-		generation++
+		forgetLabels()
 		dismissed = new Set()
-		asked.clear()
-		labels.value = new Map()
 		live = active
 	}
 
-	return { labels, reconcile, onToastChange, reset }
+	return { labels, reconcile, onToastChange, forgetLabels, reset }
 }
 
 /**
@@ -182,7 +194,7 @@ function sendingToast(records: Readonly<Ref<readonly OperationRecord[]>>, deps: 
  * (`sendingToast`). The parent provides the result, and calls `dispose()` in its teardown.
  */
 export function useSendsInProgress(options: UseSendsInProgressOptions) {
-	const { journalService, scope } = options
+	const { journalService, scope, tokenEvents } = options
 	let current: SendsScope | undefined
 
 	const mirror = useJournalMirror({
@@ -204,6 +216,8 @@ export function useSendsInProgress(options: UseSendsInProgressOptions) {
 
 	const records = computed(() => mirror.rows.value.filter(isInFlightActivityOp).sort(newestFirst))
 	const sending = sendingToast(records, options)
+	const onTokenDeleted = () => sending.forgetLabels()
+	tokenEvents.onTokenDeleted.add(onTokenDeleted)
 
 	watch([records, sending.labels], sending.reconcile)
 	watch(options.toast, sending.onToastChange, { flush: "sync" })
@@ -226,6 +240,7 @@ export function useSendsInProgress(options: UseSendsInProgressOptions) {
 		journalService.onOperationUpdated.remove(mirror.onOperationUpdated)
 		journalService.onOperationDeleted.remove(mirror.onOperationDeleted)
 		journalService.onConnected.remove(resnapshot)
+		tokenEvents.onTokenDeleted.remove(onTokenDeleted)
 		mirror.dispose()
 	}
 

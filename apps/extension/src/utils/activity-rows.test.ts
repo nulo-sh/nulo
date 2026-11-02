@@ -409,12 +409,7 @@ describe("a token's rows", () => {
 	})
 })
 
-// Disappearing-card regression: T1 transitions to `succeeded` while T2 is
-// still in-flight; T1's pending chain tx must remain visible so the user
-// keeps seeing the row until the chain tx confirms. v2 Layer A made this
-// live coverage — the runtime now populates `submitting.txHash` at all four
-// execution-service call sites, and Home's feed and History both filter
-// their chain txs through this helper (no blanket fallback).
+// T1 succeeds while T2 is still in flight: T1's pending chain tx stays until it confirms.
 describe("filterPendingDoubleRender", () => {
 	const op = (overrides: Partial<OperationRecord>) => journal({ tokenId: 42, ...overrides })
 	const t1Hash = "0xtxhash1"

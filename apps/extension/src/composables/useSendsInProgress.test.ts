@@ -3,6 +3,7 @@ import { effectScope, nextTick, ref } from "vue"
 import { deferred, EventHandler } from "@nulo/wallet-core/utils"
 import { useToast } from "@/composables/toast.js"
 import type { OperationFilter, OperationRecord } from "@/wallet/services/operation-journal/spec"
+import type { TokenDeleted } from "@/wallet/services/token/spec"
 import { type SendsScope, type SendToken, sendingLabel, useSendsInProgress } from "./useSendsInProgress"
 
 const TO = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
@@ -48,6 +49,7 @@ function harness(opts: { stored?: OperationRecord[]; lookup?: (id: number) => Pr
 		onConnected: new EventHandler<void>(),
 	}
 	const lookupToken = vi.fn(opts.lookup ?? (async () => TST))
+	const tokenEvents = { onTokenDeleted: new EventHandler<TokenDeleted>() }
 	const toasts = useToast()
 	const effect = effectScope()
 	const sends = effect.run(() =>
@@ -55,6 +57,7 @@ function harness(opts: { stored?: OperationRecord[]; lookup?: (id: number) => Pr
 			journalService: svc,
 			scope: () => scope.value,
 			lookupToken,
+			tokenEvents,
 			toast: toasts.toast,
 			openToast: toasts.openToast,
 			updateToast: toasts.updateToast,
@@ -67,7 +70,7 @@ function harness(opts: { stored?: OperationRecord[]; lookup?: (id: number) => Pr
 		sends.dispose()
 		effect.stop()
 	}
-	return { svc, scope, sends, lookupToken, toasts, label, stop }
+	return { svc, scope, sends, lookupToken, tokenEvents, toasts, label, stop }
 }
 
 /** Lets reads, lookups and the watchers that follow them settle. */
@@ -160,16 +163,49 @@ describe("useSendsInProgress — the toast follows the sends", () => {
 		expect(h.label()).toBe("Sending 3 TST to 0x04d7…457a")
 	})
 
-	test("a lock closes it first and drops the rest; after the unlock a send still running shows again", async () => {
+	test("the × dismisses every send running then: the newest ending does not bring an older one back", async () => {
+		const older = send({ amountRaw: "3000000" })
+		const newer = send()
+		const h = track(harness({ stored: [older, newer] }))
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		h.toasts.closeToast()
+		await settle()
+		h.svc.onOperationUpdated.invoke(ended(newer))
+		await settle()
+		expect(h.toasts.toast.value).toBeNull()
+	})
+
+	test("the send it names ends while an older send's token is read: it closes, then names the older", async () => {
+		const older = send({ amountRaw: "3000000" })
+		const newer = send()
+		const slow = deferred<SendToken | undefined>()
+		const h = track(harness({ stored: [older, newer] }))
+		h.lookupToken.mockImplementationOnce(async () => TST).mockImplementationOnce(() => slow.promise)
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		h.svc.onOperationUpdated.invoke(ended(newer))
+		await settle()
+		expect(h.toasts.toast.value).toBeNull()
+		slow.resolve(TST)
+		await settle()
+		expect(h.label()).toBe("Sending 3 TST to 0x04d7…457a")
+	})
+
+	test("a lock closes it at once and drops the ×'s dismissal; after the unlock a send still running shows again", async () => {
 		const op = send()
 		const h = track(harness({ stored: [op] }))
 		await settle()
-		h.toasts.closeToast()
-		await settle()
-		expect(h.toasts.toast.value).toBeNull()
 		h.scope.value = undefined
+		expect(h.toasts.toast.value).toBeNull()
 		await settle()
 		expect(h.sends.records.value).toEqual([])
+		h.scope.value = A
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		h.toasts.closeToast()
+		h.scope.value = undefined
+		await settle()
 		h.scope.value = A
 		await settle()
 		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
@@ -209,6 +245,16 @@ describe("useSendsInProgress — what it names", () => {
 		expect(h.label()).toBe("Sending to 0x04d7…457a")
 	})
 
+	test("a token removed after its label showed: the toast names the recipient alone", async () => {
+		const h = track(harness({ stored: [send()] }))
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
+		h.lookupToken.mockImplementation(async () => Promise.reject(new Error("token not found")))
+		h.tokenEvents.onTokenDeleted.invoke({ id: 1, profileId: A.profileId } as TokenDeleted)
+		await settle()
+		expect(h.label()).toBe("Sending to 0x04d7…457a")
+	})
+
 	test("a dApp operation and another scope's send are never named; History lists the dApp operation, not the other scope's", async () => {
 		const dapp = send({ kind: "dapp_execute", origin: "dapp", tokenId: undefined, amountRaw: undefined, recipientAddress: undefined })
 		const h = track(harness({ stored: [dapp] }))
@@ -239,12 +285,16 @@ describe("useSendsInProgress — what it names", () => {
 
 		const late = deferred<SendToken | undefined>()
 		h.lookupToken.mockImplementationOnce(() => late.promise)
-		h.svc.onOperationAdded.invoke(send())
+		const next = send()
+		h.svc.getOperations.mockImplementation(async () => [next])
+		h.svc.onOperationAdded.invoke(next)
 		await settle()
 		h.scope.value = B
-		late.resolve(TST)
+		h.scope.value = A
 		await settle()
-		expect(h.toasts.toast.value).toBeNull()
+		late.resolve({ ...TST, symbol: "OLD" })
+		await settle()
+		expect(h.label()).toBe("Sending 10 TST to 0x04d7…457a")
 	})
 
 	test("a snapshot read before the send ended, landing after, does not bring it back", async () => {

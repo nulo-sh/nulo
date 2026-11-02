@@ -463,8 +463,7 @@ function cardSubtitleFor(op) {
 			}
 		}
 	}
-	// The record's own word, shared with History; the executingTask subtask decoration above
-	// stays inline because it consumes Vue reactive state.
+	// The executingTask subtask decoration above stays inline because it consumes Vue reactive state.
 	return journalProgressWord(op)
 }
 

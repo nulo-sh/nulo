@@ -132,6 +132,7 @@ const sends = useSendsInProgress({
 		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(tokenId)
 		return { symbol, decimals, hasDecimals }
 	},
+	tokenEvents: arrivalsTokens,
 	toast,
 	openToast,
 	updateToast,

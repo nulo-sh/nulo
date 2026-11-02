@@ -34,8 +34,7 @@ import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent
  */
 export const ACTIVITY_FEED_KINDS: ReadonlySet<OperationKind> = new Set(["transfer", "dapp_execute"])
 
-/** Work in progress the activity surfaces list: Home's in-flight cards, History's pending rows and the
- *  Sending toast read this one rule, so a record shows in all of them or in none. */
+/** In flight and of a kind the activity feed lists. */
 export function isInFlightActivityOp(op: Pick<OperationRecord, "terminalAt" | "kind">): boolean {
 	return op.terminalAt === null && ACTIVITY_FEED_KINDS.has(op.kind)
 }

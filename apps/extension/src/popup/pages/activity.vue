@@ -111,7 +111,7 @@ journalService.onOperationUpdated.add(terminalOpEvents.onOperationUpdated)
 journalService.onOperationDeleted.add(terminalOpEvents.onOperationDeleted)
 journalService.onConnected.add(loadTerminalJournalOps)
 
-/** The shell's sends in progress, the list the Sending toast reads: a send shows in both or in neither. */
+/** Provided by the shell; without it the page lists no pending rows. */
 const sends = inject(SENDS_IN_PROGRESS_KEY, undefined)
 const inFlightOps = computed(() => sends?.records.value ?? [])
 

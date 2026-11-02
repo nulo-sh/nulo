@@ -168,27 +168,9 @@ export interface MinimalChainTx {
 }
 
 /**
- * Suppress pending chain txs that are already represented by an in-flight
- * journal awaiting card — but ONLY for the records that match by txHash.
- *
- * Bug pinned: a previous blanket filter hid T1's pending chain tx as soon
- * as T1's journal record transitioned to `succeeded`, while T2 was still
- * in-flight. T1 vanished from the feed (succeeded → returns null from
- * the terminal-card resolver, AND its chain tx was suppressed because
- * T2 was in-flight). Came back only after T1's chain tx left `pending`.
- *
- * Per-hash scoping: suppress chain txs whose hash matches an in-flight
- * journal record currently in `submitting` stage (the one in-flight
- * stage whose schema permits a `txHash`, populated at all four
- * `execution/service.ts:markJournal({ stage: "submitting", txHash })`
- * call sites). Records in queued / pending / simulating / proving stages
- * don't have a chain tx yet, so they pull nothing through this filter
- * and T1's pending chain tx stays visible while T2 is anywhere in the
- * pre-submit lifecycle.
- *
- * Drift safety: the FSM invariant in `operation-journal/service.ts:_transitionLocked`
- * enforces `submitting.txHash === succeeded.txHash` so a future hash-fn
- * change can't silently no-op the filter — the FSM throws first.
+ * Drops each pending chain tx an in-flight `submitting` record names by hash, which renders as that
+ * record's card. No other in-flight stage carries a hash, so an earlier send's pending tx stays while a
+ * later one runs; the journal's FSM keeps `submitting.txHash === succeeded.txHash`.
  */
 export function filterPendingDoubleRender<T extends MinimalChainTx>(
 	txs: ReadonlyArray<T>,
