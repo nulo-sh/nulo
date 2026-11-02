@@ -224,6 +224,30 @@ test("a drag selects the text around a control and none of the control's own but
 	await waitForToast(page, "Address is copied")
 	expect(await copies()).toEqual([await getAccountAddress(page)])
 
+	// Receive's whole address is a native button too, wrapped over lines: a drag selects all of it and
+	// copies nothing.
+	await waitForToastGone(page, "Address is copied")
+	await clickByTestId(page, "actions-receive")
+	await page.waitForSelector('[data-testid="receive-address-text"]', { visible: true, timeout: 10_000 })
+	await page.waitForFunction(
+		() =>
+			!document
+				.getAnimations()
+				.some((a) => a.playState === "running" && Number.isFinite(Number(a.effect?.getComputedTiming().endTime))),
+		{ timeout: 5_000 },
+	)
+	const inReceive = await dragSelect(
+		page,
+		await textEdge(page, "receive-address-text", "first"),
+		await textEdge(page, "receive-address-text", "last"),
+	)
+	console.log(`[select] inside Receive's address: ${JSON.stringify(inReceive)}`)
+	expect(inReceive.replace(/\s/g, "")).toBe(await getAccountAddress(page))
+	expect(await copies()).toHaveLength(1)
+	await page.evaluate(() => window.getSelection()?.removeAllRanges())
+	await clickByTestId(page, "receive-close")
+	await page.waitForSelector('[data-testid="receive-address-text"]', { hidden: true, timeout: 10_000 })
+
 	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="explorer-trigger"]', { visible: true, timeout: 10_000 })
 	const fiatShown = await page.$eval('[data-testid="fiat-values-toggle"]', (el) => el.getAttribute("aria-checked"))

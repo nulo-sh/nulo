@@ -176,14 +176,21 @@ const headerRow = (page: Page) =>
 	page.evaluate(() => {
 		const el = (testid: string) => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`)
 		const shown = (node: HTMLElement | null) => (node && node.getClientRects().length > 0 ? node : null)
-		const whole = (node: HTMLElement, contents: Node = node) => {
+		const whole = (node: HTMLElement) => {
 			const range = document.createRange()
-			range.selectNodeContents(contents)
+			range.selectNodeContents(node)
 			return range.getBoundingClientRect().width <= node.getBoundingClientRect().width + 0.5
 		}
-		// The address's copy glyph is drawn past its box, so only its text is measured against the box.
-		const addressText = (node: HTMLElement) =>
-			[...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) ?? node
+		// Nothing clips the address: past its column it would run under the chip. Its copy glyph is
+		// drawn past its box, so the text alone is measured.
+		const insideColumn = (node: HTMLElement) => {
+			const text = [...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())
+			const column = node.closest("button")?.parentElement
+			if (!text || !column) return false
+			const range = document.createRange()
+			range.selectNodeContents(text)
+			return range.getBoundingClientRect().right <= column.getBoundingClientRect().right + 0.5
+		}
 		const [name, chip, dot] = [el("network-name"), el("network-button"), el("network-status-dot")]
 		const [address, label, glyph] = [shown(el("account-address-text")), shown(el("account-selector")), el("account-copy-glyph")]
 		const [chipBox, dotBox] = [chip?.getBoundingClientRect(), dot?.getBoundingClientRect()]
@@ -194,7 +201,7 @@ const headerRow = (page: Page) =>
 			dotInside: !!chipBox && !!dotBox && dotBox.left - chipBox.left >= 1 && chipBox.right - dotBox.right >= 1,
 			label: label ? "shown" : null,
 			address: address?.textContent?.trim() ?? null,
-			addressWhole: !!address && whole(address, addressText(address)),
+			addressWhole: !!address && insideColumn(address),
 			glyphClear: chipBox && glyph ? chipBox.left - glyph.getBoundingClientRect().right : null,
 		}
 	})
