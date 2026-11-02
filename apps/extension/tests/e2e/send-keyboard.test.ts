@@ -193,9 +193,13 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 
 	// A pasted address shows its start; a typed character then brings the caret back into view.
 	await pasteOwnText(page, DESTINATION_INPUT, `0x${"0c2b".repeat(16)}`)
-	expect(await settledScroll(page, DESTINATION_INPUT)).toEqual({ length: 66, overflows: true, scrollLeft: 0 })
+	expect(await settledScroll(page, DESTINATION_INPUT), "a pasted address shows its start").toEqual({
+		length: 66,
+		overflows: true,
+		scrollLeft: 0,
+	})
 	await page.keyboard.type("1")
-	expect((await settledScroll(page, DESTINATION_INPUT)).scrollLeft).toBeGreaterThan(0)
+	expect((await settledScroll(page, DESTINATION_INPUT)).scrollLeft, "a typed character shows the caret").toBeGreaterThan(0)
 	await page.keyboard.down("Control")
 	await page.keyboard.press("KeyA")
 	await page.keyboard.up("Control")
@@ -379,8 +383,8 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 		),
 	)
 	const accent = await tokenColor(page, "--nulo-accent")
-	expect(borders[0]).toBe(accent)
-	expect(borders[1]).not.toBe(accent)
+	expect(borders[0], "the chosen priority's border").toBe(accent)
+	expect(borders[1], "the hovered priority's border").not.toBe(accent)
 }
 
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
