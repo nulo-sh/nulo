@@ -1,7 +1,11 @@
 import { createTestingPinia } from "@pinia/testing"
 import { mount } from "@vue/test-utils"
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
+import { installChromeStorage } from "../../../../../../tests/helpers/chrome-storage-mock"
 import BackupPage from "./index.vue"
+
+// The app store's synced refs read chrome.storage.local.
+beforeEach(() => installChromeStorage({}, { persist: false }))
 
 function mountPage() {
 	return mount(BackupPage, {
@@ -14,7 +18,7 @@ function mountPage() {
 					template: "<section :data-description='description'><slot /></section>",
 				},
 				SettingItem: {
-					props: ["title", "description", "wrapDescription"],
+					props: { title: String, description: String, wrapDescription: Boolean },
 					template: "<div :data-title='title' :data-description='description' :data-wrap='String(wrapDescription)' />",
 				},
 			},

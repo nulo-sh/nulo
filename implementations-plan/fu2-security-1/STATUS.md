@@ -7,3 +7,4 @@
 - 2026-11-02: panel round 1: Codex and Opus conditional approve; folded (fence, pins, gates, readings R1-R4, OA-4 and OA-5); final fresh Codex pass next.
 - 2026-11-02: final fresh Codex pass: conditional approve (arm profile chaos; full local smoke on both browsers), folded; resumed: approve. Plan approved; no owner ask on arc 1's surfaces; arc 1 next.
 - 2026-11-02: arc 1 base timings of the touched smoke files (armed build): Chrome 315 s (7 files passed, 1 skipped; 29 tests passed, 6 skipped), Firefox 669 s (8 files, 35 tests).
+- 2026-11-02: arc 1 phase 1: T1-T5 and the pins test's ports red on the base code (105), green after D2-D7; gate green (`audit:vue` 168 s, the vitest list, `test:all` 201 s). The chaos model's three line citations into the composable moved with it.
