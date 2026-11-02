@@ -7,3 +7,4 @@
 - 2026-11-02: final fresh Codex pass approve (after one resume). Plan approved under auto-continue.
 - 2026-11-02: Phase 2 gate green: landing tests 146 passed (11 new or changed cases red at base first), landing typecheck, lint, typecheck:all, test:all, store-copy-run.test.ts all exit 0.
 - 2026-11-02: Phase 3 green: Chrome 155 and Firefox 158 checks ALL ASSERTIONS PASSED; og.png recaptured (1200x630, IHDR/IDAT/IEND); one CSS rule added (D8).
+- 2026-11-02: fix loop converged in two rounds (Codex no material findings both; Opus review no material findings); Phase 3 rerun green on the final head; final lint, typecheck:all, test:all green.
