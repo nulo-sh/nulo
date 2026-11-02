@@ -1,7 +1,7 @@
 ---
 plan: fu2-onboarding-1
 tier: light
-status: arc 1 phase 1 green; review loop next
+status: arc 1 loop converged; PR next
 issues: "#1512, #1515 (arc 1); #1511 (arc 2); #1513, #1514, #1516 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -130,6 +130,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | plan 1 | Codex, gpt-6.1-sol (session 01a19d3f) | conditional approve | the check's strings and the no-tab case go to the owner (OA-2, OA-3); a rejected predicate read renders the normal page; the D5 accessibility call recorded; a bounded decoy builder with a few-words test; `translate="no"`; the suite wall-clock from CI; the tracked id a known limit (#1536) | a full local smoke before each PR: the lane brief's gate names the touched files, and CI's required smoke lanes run the whole suite on every PR |
 | plan 1 | Opus 5.5 (Plan) | conditional approve | the same two asks plus OA-4 (the link on the import pages); the chaos model's citations and one chaos replay per browser; the redaction keys; questions built in `create.vue` and `words` cleared; the Back step through `history.back()` on `popstate`; no `<form>`, testids and `data-position`; the known limit | none |
 | final 1 | Codex, gpt-6.1-sol, fresh (session 01a19d52) | **approve** | I2 narrowed (the cited tests run Back, not the undo); arc 3's popup step drives Firefox's toolbar panel | none |
+| arc 1 r1 | Codex, gpt-6.1-sol (session 01a19d70) | findings: 2 | the test helpers' comments | a typed `#/` escaping the URL restore: known limit #1539 (the clean fix would put a bare `index.html` behind the Terms gate) |
+| arc 1 r1 | Opus 5.5 (general-purpose) | findings: 3 | the guard's comment names Import; the e2e comment's untested `goBack()` reason dropped; § Security corrected | the fast double Back: folded into #1539 |
+| arc 1 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
 
 ## Seeds (not run; orchestrator-owned)
 
