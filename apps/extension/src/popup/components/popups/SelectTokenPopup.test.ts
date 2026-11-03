@@ -593,6 +593,16 @@ describe("SelectTokenPopup — paste to add", () => {
 		expect(wrapper.emitted("onClose")).toHaveLength(1)
 	})
 
+	test("an address pasted with a joiner and a space at its end offers the add, which hands New token the bare address", async () => {
+		const wrapper = await mountOpen([row(1, "ALPHA")])
+		await search(wrapper, `${UNLISTED}\u200D `)
+		expect((wrapper.get('[data-testid="select-token-search"]').element as HTMLInputElement).value).toBe(UNLISTED)
+		expect(wrapper.get('[data-testid="select-token-add-token-address"]').text()).toBe("0x04…7a")
+		await addRow(wrapper).trigger("click")
+		const [target, payload] = H.popupOpen.mock.calls[0] as [string, { address: string }]
+		expect([target, payload.address]).toEqual(["new_token", UNLISTED])
+	})
+
 	test("the report keeps the opener of the show it was offered in, not the payload a later show carries", async () => {
 		const first = vi.fn()
 		H.payload.current = { onAdded: first }

@@ -390,6 +390,7 @@
     "awaitingFirstPriceAnswer": true,
     "backCtaBlocked": true,
     "balanceFormatted": true,
+    "bareAztecAddress": true,
     "boundedString": true,
     "browser": true,
     "buildActivityRows": true,
