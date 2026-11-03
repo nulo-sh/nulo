@@ -13,6 +13,7 @@ import { sameFieldAddress } from "@nulo/wallet-bridge"
 
 /** Utils */
 import { managers } from "@/utils/core"
+import { offersSponsoredFpc } from "@/wallet/services/fpc/sponsored-fpc-chains"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -155,6 +156,7 @@ const menuMethods = computed(() => {
 		setAsideSponsorIds,
 		balancesPending: snapshotPending.value,
 		fpcsPending: snapshotPending.value && !early,
+		offersSponsor: props.network?.chainId !== undefined && offersSponsoredFpc(props.network.chainId),
 	})
 })
 
@@ -166,6 +168,7 @@ const selectionInput = {
 	snapshot,
 	verdicts,
 	knownFpcs,
+	readFpcs: earlyFpcs,
 	methods,
 	getFeePicks: (profileId) => managers.uiPreference.getFeePicks(profileId),
 	saveFeePick: (profileId, update) => managers.uiPreference.saveFeePick(profileId, update),

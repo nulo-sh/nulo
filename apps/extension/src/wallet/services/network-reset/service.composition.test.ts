@@ -39,6 +39,7 @@ import { AccountService } from "@/wallet/services/account/service"
 import { accountRowId } from "@/wallet/services/account/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { svc } from "@/wallet/services/composition-harness"
+import { UI_PREFERENCE_SERVICE_NAME } from "@/wallet/services/ui-preference/spec"
 import { ConfigService } from "@/wallet/services/config/service"
 import { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { AccessLevel } from "@/wallet/services/dapp-session/spec"
@@ -150,6 +151,7 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	services.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
 	services.add(new TokenService(logger(), api, { pxeClientFactory: () => shallow.client, seederOverrides: { getSeeds: async () => [] } }))
 	services.add(new FpcService(logger(), api))
+	services.add(svc(UI_PREFERENCE_SERVICE_NAME, { saveFeePick: async () => true }))
 	services.add(new AuthRegistryService(logger(), api))
 	const journal = new OperationJournalService(logger(), api)
 	services.add(journal)
