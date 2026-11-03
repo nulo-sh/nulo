@@ -1,7 +1,7 @@
 ---
 plan: quality-profile-1
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 in review, arc 2 next
+status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 merged (#1589); arc 2 and the close-out in one PR
 issues: "#1439 (arc 2, Closes); #1446 (closed before building as a known limit: the class declined; arc 2 ships its log router)"
 driver: claude-code
 claude_model: opus
@@ -148,6 +148,9 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 | D11 | Tests change only where a seam moved, in the moving commit; a seam that could pass vacuously is made to throw | — |
 | D12 | The PXE router rides in arc 2 as its own commit | A third PR: a full CI run for a three-line change |
 | D13 | Commit subjects and PR titles put identifiers in backticks (found at arc 1's first commit: `subject-case` is `lower-case`) | — |
+| D14 | Arc 2 and the close-out ship as one PR on `quality-profile-1-a2` off `dev` (the orchestrator's call once arc 1 had squash-merged) | The planned stack: nothing left to stack on |
+| D15 | Two module-level refusal factories, `invalidPassword` and `invalidOldPassword`, passed to the frame | Inline arrows: the formatter will not hug a trailing callback after an arrow argument, so each site splits into four argument lines; and the two "Invalid profile old password" literals the code kept "in lockstep" become one |
+| D16 | A passkey-only key passes `invalidPassword` too: the frame maps any passkey key to `PasskeyNotOpenedError` | A `PasskeyNotOpenedError` factory at that one site: a refusal the frame never calls |
 
 ## Audit verdicts
 
@@ -162,7 +165,8 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 ## Delivery
 
 - **Before building:** a `## Decision` comment on #1439; on #1446 a `## Decision` comment with the reopening condition (an incarnation state that has to touch the op paths, the provision and the erase together), the `known-limit` label, and closed as not planned. The Outcome lists it as `Known limits: #1446`; arc 2's body cites it under "Not done, and why" and says its log router is the part that holds.
-- **Stack** via `gh stack init --adopt worktree-quality-profile-1 --base dev`: arc 1 on `worktree-quality-profile-1` (Phases 1-3), arc 2 `gh stack add quality-profile-1-frame` (Phases 4-6), close-out `gh stack add quality-profile-1-close-out` (docs only). Each arc boundary runs the review loop before the next arc opens; no pipelined boundary. `code_review: off`.
+- **Arc 2, as built (D14):** one PR, arc 2's commits then the close-out's, on `quality-profile-1-a2` off `dev`; `Closes #1439` in its body. Arc 1's squash body closed #1439 early, through the prose "closes #1439"; reopened with a comment.
+- **Stack** (arc 1 only) via `gh stack init --adopt worktree-quality-profile-1 --base dev`: arc 1 on `worktree-quality-profile-1` (Phases 1-3), arc 2 `gh stack add quality-profile-1-frame` (Phases 4-6), close-out `gh stack add quality-profile-1-close-out` (docs only). Each arc boundary runs the review loop before the next arc opens; no pipelined boundary. `code_review: off`.
 - **PR titles** (≤ 92 characters): arc 1 ``refactor(profile): move the slot codec out of `ProfileService` `` (62); arc 2 ``refactor: one reveal frame and credential check in `ProfileService`, one pxe log router`` (87; `Closes #1439`). Commitlint's `subject-case` is lower-case, so identifiers sit in backticks (D13); close-out `docs(plans): close quality-profile-1` (36).
 - **Each PR body:** what changed and why, each seam edit, the gates with outcomes, `audit:dup` and the touched files' line counts before and after, "Not done, and why" (D7, D9's class), and each browser's smoke wall-clock (no e2e scenario added or changed).
 - **Parallelism:** arcs share `service.ts` and stay serial; no lanes.

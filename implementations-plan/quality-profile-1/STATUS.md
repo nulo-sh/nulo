@@ -9,3 +9,5 @@
 - 2026-11-03 arc 1 phase 2 green: lint, typecheck:all, profile tests (622 pass, 1 pre-existing skip); four moved blocks byte-identical.
 - 2026-11-03 arc 1 phase 3 green: lint, typecheck:all, profile tests, test:all (after re-citing the chaos model), audit:vue; Codex r1 and Opus: no material findings. Smoke set running.
 - 2026-11-03 arc 1 gate green on the merged head (origin/dev 6c7ba2867): audit:vue, test:all, smoke Chrome 22/22 (159 s) and Firefox 22/22 (227 s); audit:dup production unchanged (arc 2 removes the clones). PR next.
+- 2026-11-03 arc 2 phase 4 green: lint, typecheck:all, profile tests (623 pass, 1 pre-existing skip); every existing pin unedited; the codec test red under an un-awaited body.
+- 2026-11-03 arc 2 phase 5 green: lint, typecheck:all, profile tests (623 pass, 1 pre-existing skip, client.test.ts included); the literal search prints one line, the constant in spec.ts.
