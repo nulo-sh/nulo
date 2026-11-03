@@ -1,9 +1,10 @@
 /**
  * What a picked or opened full backup shows before Restore: the selection the page publishes and
- * the refusal beside it. Both import pages read and open a selection here and keep their own
- * admission, pick counter and resets.
+ * the refusal beside it. Both import pages read a pick and open a sealed backup here; each keeps its
+ * own pick admission, pick counter and resets.
  */
 
+import type { Ref } from "vue"
 import {
 	AccountFileNotBackupError,
 	type BackupSelection,
@@ -62,30 +63,44 @@ export async function readPickedBackup(file: File): Promise<PickedBackup> {
 	return { selection }
 }
 
-export type OpenedBackup =
-	| { kind: "stale" }
-	| { kind: "opened"; selection: Extract<BackupSelection, { kind: "opened" }> }
-	/** `selection` replaces the target when the file is refused for what it is; a wrong password
-	 *  keeps the target. */
-	| { kind: "refused"; refusal: SelectionRefusal; selection?: BackupSelection }
+/** The page's error banner. */
+export interface SelectionBanner {
+	fillError: (type: string, title: string, tooltip?: string) => void
+	clearError: () => void
+}
 
 /**
- * Opens `target` under `password`. `stale` once `isStale` holds after any await here; the caller
- * checks again when it resumes, since this result reaches it a microtask after the last check.
+ * Opens `selected`'s backup under `password` and publishes the result: the opened selection, then
+ * `onOpened`, or the refusal with the selection that replaces a file refused for what it is. No
+ * await separates its last stale check from its writes, so a selection replaced while it runs is
+ * never overwritten.
  */
-export async function openPickedBackup(target: BackupSelection, password: string, isStale: () => boolean): Promise<OpenedBackup> {
+export async function decryptSelection(
+	selected: Ref<BackupSelection | null>,
+	password: string,
+	banner: SelectionBanner,
+	onOpened?: (selection: Extract<BackupSelection, { kind: "opened" }>) => void,
+): Promise<void> {
+	const target = selected.value
+	if (!password || !target) return
+	const stale = () => selected.value !== target
 	try {
-		const opened = await openSelection(target, password, isStale)
-		if (opened.kind === "stale") return opened
+		const opened = await openSelection(target, password, stale)
+		if (opened.kind === "stale") return
 		const refused = await refusedAsEarlierPasskey(opened.selection.backup)
-		if (isStale()) return { kind: "stale" }
-		if (refused) return { kind: "refused", refusal: EARLIER_PASSKEY_BACKUP, selection: unreadableSelection(target.name) }
-		return opened
+		if (stale()) return
+		if (refused) return refuse(selected, banner, EARLIER_PASSKEY_BACKUP, target.name)
+		selected.value = opened.selection
+		onOpened?.(opened.selection)
+		banner.clearError()
 	} catch (error) {
-		if (isStale()) return { kind: "stale" }
-		if (error instanceof AccountFileNotBackupError) {
-			return { kind: "refused", refusal: ACCOUNT_FILE_NOT_BACKUP, selection: unreadableSelection(target.name) }
-		}
-		return { kind: "refused", refusal: DECRYPTION_FAILED }
+		if (stale()) return
+		if (error instanceof AccountFileNotBackupError) return refuse(selected, banner, ACCOUNT_FILE_NOT_BACKUP, target.name)
+		banner.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
+}
+
+function refuse(selected: Ref<BackupSelection | null>, banner: SelectionBanner, refusal: SelectionRefusal, name: string) {
+	selected.value = unreadableSelection(name)
+	banner.fillError("full_backup", refusal.title, refusal.message)
 }

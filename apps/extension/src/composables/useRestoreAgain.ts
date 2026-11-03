@@ -26,7 +26,7 @@ import {
 	retryNetworkIds,
 	runFenceLive,
 } from "./full-backup-restore"
-import { BACKUP_READ_FAILED, openPickedBackup, readPickedBackup } from "./full-backup-selection"
+import { BACKUP_READ_FAILED, decryptSelection, readPickedBackup } from "./full-backup-selection"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 import { errorLogWriters, hasRowsBeyondRetry } from "./restore-error-log"
 import { type FullBackupEnvelope, validateAndMigrateBackup } from "@/wallet/services/backup/trust-gate"
@@ -165,21 +165,6 @@ async function runPick(state: AgainRefs, opts: UseRestoreAgainOptions) {
 		opts.fillError("full_backup", BACKUP_READ_FAILED)
 		console.warn("[restore-again] the backup file could not be read", { error })
 	}
-}
-
-async function runDecrypt(state: AgainRefs, opts: UseRestoreAgainOptions) {
-	const target = state.selectedBackup.value
-	if (!state.decryptionPassword.value || !target) return
-	const stale = () => state.selectedBackup.value !== target
-	const opened = await openPickedBackup(target, state.decryptionPassword.value, stale)
-	// The result lands a microtask after the helper's last check: a re-pick in that gap wins.
-	if (opened.kind === "stale" || stale()) return
-	if (opened.kind === "refused") {
-		if (opened.selection) state.selectedBackup.value = opened.selection
-		return opts.fillError("full_backup", opened.refusal.title, opened.refusal.message)
-	}
-	state.selectedBackup.value = opened.selection
-	opts.clearError()
 }
 
 /** Renews the reminder's lease for this page's run and returns the named networks it still holds;
@@ -368,7 +353,7 @@ export function useRestoreAgain(opts: UseRestoreAgainOptions): UseRestoreAgainRe
 		...outcomeText(state),
 		start: () => runStart(state, opts),
 		pickBackupFile: () => runPick(state, opts),
-		decryptBackup: () => runDecrypt(state, opts),
+		decryptBackup: () => decryptSelection(state.selectedBackup, state.decryptionPassword.value, opts),
 		restoreBackup: () => runRestore(state, opts, writers),
 		retryRestore: () => runRetry(state, opts, writers),
 		continueHome: () => end(state, opts),

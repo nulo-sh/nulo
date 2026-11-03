@@ -78,17 +78,11 @@ vi.mock("@/wallet/services/transaction/spec", async (importOriginal) =>
 	(await import("../../tests/helpers/backup-import-harness")).transactionSpecModule(importOriginal),
 )
 vi.mock("@/wallet/storage/migrations", async () => (await import("../../tests/helpers/backup-import-harness")).migrationsModule())
-vi.mock("./full-backup-selection", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("./full-backup-selection")>()
-	return { ...actual, openPickedBackup: vi.fn(actual.openPickedBackup) }
-})
 
 // Imported AFTER mocks are registered.
-import { openPickedBackup } from "./full-backup-selection"
 import { useFullBackupImport } from "./useFullBackupImport"
 import { readLiveness } from "@/utils/background-liveness"
 import { FilePickCanceledError } from "@/utils/files"
-import { sealFullBackupText } from "@/utils/full-backup-helpers"
 
 // ── Setup ───────────────────────────────────────────────────────────────────
 
@@ -614,8 +608,8 @@ describe("decrypt publication race — the last await seam", () => {
 		c.selectedBackup.value = original
 		c.decryptionPassword.value = "pw12345678"
 
-		// The re-pick is queued from the parse of the decrypted body, after the open's last stale
-		// check: only the check after the earlier-passkey read can keep the replacement.
+		// The re-pick is queued from the parse of the decrypted body, after the open's own stale
+		// check: only the check after the earlier-passkey read, the last before any write, keeps it.
 		const realParse = JSON.parse
 		const parse = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
 			if (text === innerJson) {
@@ -633,34 +627,6 @@ describe("decrypt publication race — the last await seam", () => {
 		// proxy of the assigned object); the decrypted publication must not land.
 		expect(c.selectedBackup.value).toStrictEqual(replacement)
 		expect(c.parsedBackupName.value).not.toBe("RaceName")
-	})
-
-	it("a re-pick landing after the opened backup's last check, before the caller resumes, is NOT overwritten", async () => {
-		const { openPickedBackup: realOpen } = await vi.importActual<typeof import("./full-backup-selection")>("./full-backup-selection")
-		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
-		const opts = makeOpts()
-		const c = useFullBackupImport(opts)
-		const replacement = { name: "new.json", backup: {}, kind: "plain" as const, profileType: "password" }
-		c.selectedBackup.value = {
-			name: "e.txt",
-			backup: await sealFullBackupText(innerJson, "pw12345678"),
-			kind: "sealed",
-			profileType: null,
-		}
-		c.decryptionPassword.value = "pw12345678"
-		let result: Awaited<ReturnType<typeof realOpen>> | undefined
-		vi.mocked(openPickedBackup).mockImplementationOnce(async (...args) => {
-			result = await realOpen(...args)
-			c.selectedBackup.value = replacement
-			return result
-		})
-
-		await c.decryptBackup()
-
-		expect(result?.kind).toBe("opened")
-		expect(c.selectedBackup.value).toStrictEqual(replacement)
-		expect(c.parsedBackupName.value).not.toBe("RaceName")
-		expect(opts.clearError).not.toHaveBeenCalled()
 	})
 })
 

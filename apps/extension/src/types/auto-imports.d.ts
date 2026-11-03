@@ -185,6 +185,7 @@ declare global {
   const decodeHandback: typeof import('../utils/panel-handback').decodeHandback
   const decodeRestoreOutcome: typeof import('../utils/restore-outcome').decodeRestoreOutcome
   const decompressData: typeof import('../utils/files').decompressData
+  const decryptSelection: typeof import('../composables/full-backup-selection').decryptSelection
   const defaultProfileName: typeof import('../utils/profile-name').defaultProfileName
   const defineAsyncComponent: typeof import('vue').defineAsyncComponent
   const defineComponent: typeof import('vue').defineComponent
@@ -356,7 +357,6 @@ declare global {
   const openFullBackupText: typeof import('../utils/full-backup-helpers').openFullBackupText
   const openJsonWindow: typeof import('../utils/json-window').openJsonWindow
   const openLegalDocument: typeof import('../utils/legal-links').openLegalDocument
-  const openPickedBackup: typeof import('../composables/full-backup-selection').openPickedBackup
   const openSelection: typeof import('../utils/full-backup-helpers').openSelection
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
@@ -629,7 +629,7 @@ declare global {
   export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, RunFenceClient, NetworkRestoreClient, AccountRestoreClient, TailNetwork, RestoredNetwork, HeldScope, RestoredAccounts, SliceRestoreClient, AccountStateTail, RestoreRun, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
-  export type { SelectionRefusal, PickedBackup, OpenedBackup } from '../composables/full-backup-selection'
+  export type { SelectionRefusal, PickedBackup, SelectionBanner } from '../composables/full-backup-selection'
   import('../composables/full-backup-selection')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -1082,6 +1082,7 @@ declare module 'vue' {
     readonly decodeHandback: UnwrapRef<typeof import('../utils/panel-handback')['decodeHandback']>
     readonly decodeRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['decodeRestoreOutcome']>
     readonly decompressData: UnwrapRef<typeof import('../utils/files')['decompressData']>
+    readonly decryptSelection: UnwrapRef<typeof import('../composables/full-backup-selection')['decryptSelection']>
     readonly defaultProfileName: UnwrapRef<typeof import('../utils/profile-name')['defaultProfileName']>
     readonly defineAsyncComponent: UnwrapRef<typeof import('vue')['defineAsyncComponent']>
     readonly defineComponent: UnwrapRef<typeof import('vue')['defineComponent']>
@@ -1253,7 +1254,6 @@ declare module 'vue' {
     readonly openFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['openFullBackupText']>
     readonly openJsonWindow: UnwrapRef<typeof import('../utils/json-window')['openJsonWindow']>
     readonly openLegalDocument: UnwrapRef<typeof import('../utils/legal-links')['openLegalDocument']>
-    readonly openPickedBackup: UnwrapRef<typeof import('../composables/full-backup-selection')['openPickedBackup']>
     readonly openSelection: UnwrapRef<typeof import('../utils/full-backup-helpers')['openSelection']>
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>

@@ -22,7 +22,7 @@ import {
 	type ValidatedBackup,
 	validateAndMigrateBackup,
 } from "@/wallet/services/backup/trust-gate"
-import { BACKUP_READ_FAILED, openPickedBackup, readPickedBackup } from "./full-backup-selection"
+import { BACKUP_READ_FAILED, decryptSelection, readPickedBackup } from "./full-backup-selection"
 import { errorLogWriters, hasRowsBeyondRetry } from "./restore-error-log"
 import { armRestoreOutcome } from "@/utils/restore-outcome"
 import {
@@ -441,24 +441,11 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 	}
 }
 
-async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
-	if (!state.decryptionPassword.value) return
-	const target = state.selectedBackup.value
-	if (!target) return
-	const stale = () => state.selectedBackup.value !== target
-	const opened = await openPickedBackup(target, state.decryptionPassword.value, stale)
-	// The result lands a microtask after the helper's last check: a re-pick in that gap wins.
-	if (opened.kind === "stale" || stale()) return
-	if (opened.kind === "refused") {
-		if (opened.selection) state.selectedBackup.value = opened.selection
-		opts.fillError("full_backup", opened.refusal.title, opened.refusal.message)
-		return
-	}
-	state.selectedBackup.value = opened.selection
-	// Encrypted backups only expose the embedded name AFTER decrypt succeeds. Surface it
-	// for the parent's prefill watcher (same sanitization rationale as pickBackupFile).
-	state.parsedBackupName.value = embeddedBackupName(opened.selection.backup)
-	opts.clearError()
+function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOptions) {
+	// An encrypted backup shows its embedded name only once opened, for the parent's prefill.
+	return decryptSelection(state.selectedBackup, state.decryptionPassword.value, opts, (opened) => {
+		state.parsedBackupName.value = embeddedBackupName(opened.backup)
+	})
 }
 
 async function runRestoreBackup(
