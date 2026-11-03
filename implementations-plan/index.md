@@ -3,4 +3,4 @@
 Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 
 - [fu2-security-1](fu2-security-1/plan.md) — arc 1 in review, arc 2 next (OA-1, OA-2, OA-4, OA-5 open) — the lock screen's recovery link, Delete profile's checks, the password toast and the backup screens (#1528-#1534)
-- [egress-guard-1](egress-guard-1/plan.md) — arc 2 in progress — the egress guard declares each pinned release's Testnet host, from its traits, for the update scenarios (#1636)
+- [egress-guard-1](egress-guard-1/plan.md) — completed — the egress guard declares each pinned release's Testnet host, from its traits, for the update scenarios (#1636)

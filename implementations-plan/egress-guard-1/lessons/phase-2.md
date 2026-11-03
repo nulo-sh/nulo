@@ -21,3 +21,14 @@ Both candidates were built at `C` = `77e2f5795` (manifest `1.1.0.1`, 12 s each).
 - Against the red runs at `55b2ad17b` (archived release-replay-1, lessons/phase-1.md): live Chrome test 119.4 s → 125.8 s, live Firefox 181.0 s → 181.0 s; replays 66.5 s → 63.1 s (Chrome) and 94.4 s → 78.2 s (Firefox). No scenario was added or changed.
 - Both live logs carry `[aztec-node] Error: Address already in use` at sandbox boot, which the setup's preceding line names as expected (the aztec CLI's own anvil).
 - The recording's dApp session still expires 7 days after 2026-11-03 18:06-18:09 UTC; the replay refuses it from 2026-11-10 17:56 UTC at the earliest.
+
+## The runs at the merged head
+
+`origin/dev` then moved to `3174dd450` (#1646, the execute window's call string), a build input, so the branch merged it at `c1e4211ea` and Phase 3 step 1 reran all four there. Lint, `typecheck:all`, `test:all` and the three fixture unit files passed at that head first. Both candidates were rebuilt at `c1e4211ea` (9 s each); same browsers, same recording, `git status --porcelain` empty throughout, retry 0, no rerun. These runs replace the ones at `77e2f5795` as the evidence for the PR.
+
+| # | Run (UTC) | Outcome | Wall-clock |
+|---|---|---|---|
+| 5 | Live, Chrome, 20:58:56-21:01:43 | **passed** | test 100.1 s, vitest 154.8 s |
+| 6 | Live, Firefox, 21:01:49-21:06:00 | **passed** | test 183.5 s, vitest 239.0 s |
+| 7 | Replay, Chrome, 21:06:06-21:07:03 | 4 passed: 21.8 s, 12.4 s, 8.1 s, 10.6 s | vitest 56.1 s |
+| 8 | Replay, Firefox, 21:07:03-21:08:18 | 4 passed: 29.4 s, 17.6 s, 11.2 s, 13.2 s | vitest 74.2 s |

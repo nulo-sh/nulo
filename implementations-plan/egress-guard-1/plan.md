@@ -1,7 +1,7 @@
 ---
 plan: egress-guard-1
 tier: light
-status: approved; arc 2 in progress
+status: completed
 issues: "#1636"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 6bef2ce57
 trunk: dev
 ---
+
+## Outcome
+
+- Date: 2026-11-03.
+- Status: completed.
+- Shipped: the PR `test(e2e): the egress guard declares each release's Testnet host for the update scenarios` against `dev`, closing #1636: a required `testnetHost` per release in `RELEASE_TRAITS`, the guard's refusals derived from it, `releaseBuild` refusing a tag with no traits before it downloads, three unit tests and the README. Both live update runs and both replays from v1.1.0 pass at retry 0 on both browsers, at `77e2f5795` and again at the merged head `c1e4211ea` ([lessons/phase-2.md](lessons/phase-2.md)).
+- Rejected: #1636's optional item, the close's error keeping the body's as its `cause` (D2).
+- Lessons: none promoted. `lessons.md` is at its budget, and the cause is fixed in code with a test.
+- Known limits: none.
+- Open items: none.
+- Seeds retired: the `/goal` and `/loop` seeds below. Do not run them.
 
 # egress-guard-1: the egress guard declares each release's Testnet host for the update scenarios
 
@@ -65,7 +76,7 @@ The live update scenario from v1.1.0 is red on both browsers at the egress guard
 - **On red:** a guard red naming a release host means F2 is wrong: stop, report. Any other red is reported, never patched: its cause goes to `OWNER-ASKS.md` and holds the promote. One rerun only to show a flake, both logs kept.
 - **Gate:** both live runs pass; on both browsers the replay's four cases pass (a skip is no pass). Layers: e2e-live-network, e2e.
 
-### Phase 3: close-out and delivery
+### Phase 3: close-out and delivery ✓ (`origin/dev` moved; all four reran green at `c1e4211ea`: [lessons/phase-2.md](lessons/phase-2.md))
 1. Commit `lessons/phase-2.md`. Merge `origin/dev` again if it moved; when `git diff --stat C HEAD -- . ':(exclude)implementations-plan'` is not empty (a build input, or the harness under test), rebuild and rerun all four runs at that head, which then replaces `C`. The PR head `H` differs from `C` by plan files only, which the body shows.
 2. Close-out commits (§ Post-implementation), then push and open the PR (§ Delivery).
 
