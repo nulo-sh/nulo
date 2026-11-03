@@ -1,8 +1,8 @@
 ---
 plan: rpc-proxy-1
 tier: mid
-status: arc 1 phases 1 and 2 ✓, its review loop converged; arc 1 PR open, arc 2 next
-issues: "#1607 #1609 (arc 1)"
+status: completed
+issues: "#1607 #1609 (arc 1, closed)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,16 @@ base: origin/dev at ff395c3d0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-03.
+- **Status:** completed. Arc 1 merged as #1622; arc 2 and this close-out land as one PR (D21).
+- **Shipped:** arc 1, the keyless dRPC defaults on both networks with a batch cap of 3 keyed by provider origin (`maxBatchSizeFor`, D2), every node factory required (D17), and the at-unlock move of a stored Testnet endpoint off the retired keyed default, matched by digest (D4, D5); closes #1607 and #1609. Arc 2, `infra/rpc-proxy`: the Worker `nulo-rpc-proxy` for `rpc.nulo.sh` and `testnet.rpc.nulo.sh`, the handler contract of § Arc 2 with an IPv6 caller counted by its /64, its tests (a real node client through the handler among them), README with the owner checklist, and the proxy in the ruleset, `CI.md`, `SECURITY.md` and the Aztec pin sweep. No wallet build references it.
+- **Known limits:** #1630 (an endpoint the unlock leaves on the retired URL), #1631 (records keep the retired URL), #1632 (the shared quota), #1633 (a repeated `method` key).
+- **Open items:** #1634 (OA-1, `owner-decision`), #1635 (OS-1 to OS-10, `blocked:external`).
+- **Dispositions:** the persisted cap with a stamp and golden, rejected (D2); the host-and-prefix match, rejected (D4); the `node_*` allowlist, did not hold (D8); a per-package workflow, rejected (D13); the stack, superseded (D21). The import-time throw of D20 went into `CLAUDE.md`'s warm-cache rule, which it instances; `lessons.md` gained nothing, its budget full.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are not to be run.
 
 # rpc-proxy-1: keyless dRPC defaults with a batch cap, and a Nulo-run keyed reverse proxy
 
@@ -121,7 +131,7 @@ Every local refusal is `{"jsonrpc":"2.0","id":null,"error":{"code":<n>,"message"
 
 **Gate:** Phase 1's commands; `grep -c 'drpc.live' apps/extension/src/wallet/constants/network-endpoints.ts` prints `0` (its exit status is 1 at a zero count); `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/endpoint-refused-recovery.test.ts tests/e2e/network/tx-sendTx-default.test.ts --retry=0` (a dApp send through the offscreen PXE's node and the pinned-URL tracker); then, per browser `<b>` in `chrome`, `firefox`: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<b>` and `(cd apps/extension && NULO_E2E_BROWSER=<b> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/egress-guard.test.ts --retry=0)`; `bun run check:seeds` from `apps/extension` (live, both free endpoints); `bun run test:ci-gating`; `bun run audit:vue`. Pass: all exit 0 but the `grep`; no stored-shape test asks for a stamp; the e2e files' wall-clock is recorded (no scenario added). The full smoke and network suites, on both browsers, are the PR's required CI lanes; locally the gate runs the files that exercise the touched code, as the lane's validation answer sets.
 
-## Phase 3 (arc 2): the Worker
+## Phase 3 (arc 2): the Worker ✓
 
 1. Write `test/fakes.ts` (config reader, limiter fake, a fake upstream recording each request), then `test/worker.test.ts`, one case per rule: each host to its secret, an unknown host and path 404, a caller's header or query never picks the upstream; bytes forwarded unchanged and the outbound headers exactly `content-type`; one upstream call on an upstream 500 and on `aztec_sendTx`; the body at the cap forwarded, one byte over 413 (and a lying `Content-Length`); a bad method in a batch, a non-object entry, an empty array, 101 entries, non-JSON and a body that is not valid UTF-8 each 400 with no upstream call; `GET` 405; `OPTIONS` 204 with the preflight headers; a `chrome-extension://` and a `moz-extension://` origin echoed on a success, an upstream 500, a 413, a 429 and the kill switch; `https://evil.example`, `Origin: null` and a malformed extension origin 403 without CORS headers; no Origin served without them; the kill switch calls nothing and counts nothing; an unset secret 503; a thrown fetch and a 3xx 502; the upstream's `content-type` and `x-aztec-*` kept, its `set-cookie` dropped, `Cache-Control: no-store` on every answer. `test/deploy.test.ts`: subscribe's checks for this config (no routes, vars exactly `PROXY_OFF`, no `drpc` in the raw config, the limit on a namespace other than `1001` and `1002`, the self-contained bundle). `test/methods.test.ts`: the prefix a real `createAztecNodeClient` puts on a captured call, joined to every `AztecNodeApiSchema` key, is a subset of `NODE_METHODS`; the workspace's stdlib pin equals `apps/extension`'s.
 2. Write the source until every test is green. Add the proxy to `scripts/ci-cd/edge-headers.test.ts` as the sixth surface with no exception. Write `infra/rpc-proxy/README.md` (threat model, the handler contract table, the owner checklist OS-1 to OS-10, operations: kill switch and rotation). Update `CLAUDE.md` (the Workers Builds Bun line, the `bun test` workspace lines, the deploy sentence under Branching), `CI.md:33`, `SECURITY.md` (a section beside the passkey host's, the audit-ack row), `scripts/ci-cd/audit-acks.json:84`'s reason, and the `aztec-update` skill (its pin sweep gains `infra/*/package.json`; the allowlist's drift test reds on a schema change). Run `bun install` and commit `bun.lock`.
@@ -138,7 +148,7 @@ Every local refusal is `{"jsonrpc":"2.0","id":null,"error":{"code":<n>,"message"
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `ff395c3d0`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `ff395c3d0`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 2, one fresh Codex session over the net diff for cross-arc issues. Prompts under `~/.cache/nulo-backlog/rpc-proxy-1/`. Hard stop at three rounds; each round in `lessons/phase-N.md` and the table below.
 - **Approval boundary (a plan change; stop):** a persisted field on a network row; a rewrite of any row but an endpoint whose URL digest is listed; a retry, timeout, cache or fallback in the proxy; a wallet reference to `rpc.nulo.sh`; any edit under `legal/`; a new workflow or required check; a new e2e scenario.
 - Close-out: the Outcome; OA-1, if still open, filed as one `owner-decision` issue; the owner steps not yet done filed as one `blocked:external` issue; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done rpc-proxy-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/rpc-proxy-1/plan.md`.
@@ -162,6 +172,10 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | D17 | The four factory parameters become required | keeping the uncapped `??` defaults; a source-scan test | the type checker then refuses any construction without a factory; a scan pins text, not wiring |
 | D16 | Body cap 1 MiB + 1 KiB; 100 entries | exactly 1 MiB | Fact 1's maximum is 100 bytes over 1 MiB |
 | D18 | In the tree: the Testnet constant's edit lands in Phase 1, and `retireEndpoints` digests each URL itself | the edit in Phase 2; a `digest` parameter | the cap test pins both seeds' origins; the parameter had one value |
+| D19 | A body that is not UTF-8 JSON answers code -32700 | -32600 for it too | JSON-RPC 2.0's parse error; the client reads only the message, so nothing else moves |
+| D20 | The stdlib checks run in a plain `bun` child (`test/node-client.ts`), with a real client through the handler: one request on a local 4xx | importing stdlib in a `bun test` file | under `bun test` foundation's field module meets the runner's global `expect` and throws at import; a warm transpiler cache hid it, a fresh one reds |
+| D21 | Arc 2 is one PR off `dev` with the close-out as its last commits | the stack of § Delivery | arc 1 squash-merged first, so nothing is left to stack on (the orchestrator's call) |
+| D22 | The SECURITY.md section sits under "RPC endpoint as user input"; an unexpected throw answers 503, unlogged | beside the passkey host (a bullet, not a section); the runtime's HTML 500 | the RPC trust story stays in one place; the HTML 500 has no CORS headers and the client retries it as unparseable anyway |
 
 ## Audit verdicts
 
@@ -174,6 +188,11 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a1a242) | findings (3 low) | the preflight client's cap and its `[3, 3, 2]` test; the seal-then-move order pinned; two comments reworded | none |
 | arc 1 r1 | Opus 5.5 (diff review) | findings (4 low) | README:99's host; the adapter's lookup required and the dead re-export removed; the other-profile row in the unlock test; the lesson corrected | none (the request-rate limit noted under I4) |
 | arc 1 r2 | Codex, resumed | **clean** | the seven fixes verified; no regression | none |
+| arc 2 r1 | Codex, gpt-6.1-sol (session 01a1a28e) | findings (4 low) | both ceilings pinned as literals; `readCapped`'s and `cors.ts`' comments corrected; three narrating comments cut | none |
+| arc 2 r1 | Opus 5.5 (diff review) | findings (1 medium, 5 low) | an IPv6 caller counted by its /64; step 6 reads dRPC's own refusals; `CI.md:33`'s count; the duplicate-`method` parser differential as a known limit | none |
+| arc 2 r2 | Codex, resumed | **clean** | the fixes verified; `limiterKey` over 2,305 forms | none |
+| net 1 | Codex, fresh, both arcs (session 01a1a29d) | findings (3 low) | the rotation step names the endpoints the unlock leaves; OS-6's dRPC-refusal check | cutting the kill-switch comment: it states the ordering invariant |
+| net 2 | Codex, resumed | **clean** | both fixes verified | none |
 
 ## Seeds (not run; orchestrator-owned)
 
