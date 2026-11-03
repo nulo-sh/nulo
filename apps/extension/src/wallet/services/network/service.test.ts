@@ -2877,9 +2877,10 @@ describe("NetworkService — an endpoint on a retired default", () => {
 	const retire = async (service: NetworkService) =>
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 		(service as any).retireDefaultEndpoints("p1", await synthetic())
-	const retiredTestnet = (local: FakeStorageArea, id: string) =>
+	const retiredTestnet = (local: FakeStorageArea, id: string, profileId = "p1") =>
 		storeRow(local, {
 			id,
+			profileId,
 			chainId: CHAIN_IDS.TESTNET,
 			l1ChainId: TESTNET_L1_CHAIN_ID,
 			kind: "testnet",
@@ -2887,23 +2888,30 @@ describe("NetworkService — an endpoint on a retired default", () => {
 			endpoints: [{ id: "seed1", rpcUrl: RETIRED_URL, label: "dRPC" }],
 		})
 
-	test("the unlock seals the row and moves it to the replacement, announced once, and the chain's node is rebuilt on it", async () => {
+	test("the unlock seals the profile's row and moves it to the replacement, announced once, and the chain's node is rebuilt on it", async () => {
 		const { service, factory, local } = setupServiceWithStorage({})
 		retiredTestnet(local, "tn")
+		retiredTestnet(local, "other", "p2")
 		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 		const internals = service as any
+		const inTheClear = () => JSON.stringify(local.store.get("nulo:core:networks@tn")).includes("aztec-testnet")
 		const profiles = Object.assign(internals.profileService, { onRowKeysReady: new EventHandler<string>() })
 		await internals.init({ get: () => profiles })
 		const real = internals.retireDefaultEndpoints.bind(service)
-		vi.spyOn(internals, "retireDefaultEndpoints").mockImplementation(async (profileId) => real(profileId, await synthetic()))
+		const sealedFirst: boolean[] = []
+		vi.spyOn(internals, "retireDefaultEndpoints").mockImplementation(async (profileId) => {
+			sealedFirst.push(!inTheClear())
+			return real(profileId, await synthetic())
+		})
 		await service.getNode(CHAIN_IDS.TESTNET)
 		const updated: Network[] = []
 		service.onNetworkUpdated.add((network) => updated.push(network))
 		profiles.onRowKeysReady.invoke("p1")
 		await vi.waitFor(() => expect(updated.map((network) => network.id)).toEqual(["tn"]))
-		// Sealed: no stored value holds either URL in the clear.
-		expect([...local.store.values()].some((value) => JSON.stringify(value).includes("aztec-testnet"))).toBe(false)
+		expect(sealedFirst).toEqual([true])
+		expect(inTheClear()).toBe(false)
 		expect((await stored(local, "tn")).endpoints).toEqual([{ id: "seed1", rpcUrl: REPLACEMENT, label: "dRPC" }])
+		expect((await stored(local, "other")).endpoints[0]?.rpcUrl).toBe(RETIRED_URL)
 		await service.getNode(CHAIN_IDS.TESTNET)
 		expect(factory.created.map((c) => c.rpcUrl)).toEqual([RETIRED_URL, REPLACEMENT])
 	})

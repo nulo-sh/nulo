@@ -4,18 +4,20 @@ import { SILENT_RPC_LOG } from "@nulo/aztec-runtime/adapters"
 import { DEFAULT_REQUEST_TIMEOUT_MS, makeSingleAttemptFetch } from "@nulo/aztec-runtime/utils"
 import packageJson from "../package.json"
 import { TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "../src/utils/chain-ids"
+import { maxBatchSizeFor } from "../src/wallet/services/network/seeds"
 
 /** The Aztec line the wallet is built against; a node on any other version is a hold, never a pass. */
 const AZTEC_VERSION = packageJson.dependencies["@aztec-labs/pxe"]
 
-/** The wallet's silent single read, as a whole client: upstream's fetch, retry and client loggers
- *  print endpoint URLs and reply bodies, and the Testnet endpoint carries its API key in the path.
- *  Callers still scrub the errors they print. */
+/** The wallet's silent single read, as a whole client at the wallet's batch cap: upstream's fetch,
+ *  retry and client loggers print endpoint URLs and reply bodies, and a node URL may carry a
+ *  provider key in its path. Callers still scrub the errors they print. */
 export function createPreflightNodeClient(url: string): AztecNode {
 	return createSafeJsonRpcClient<AztecNode>(url, AztecNodeApiSchema, {
 		namespaceMethods: "aztec",
 		fetch: makeSingleAttemptFetch(DEFAULT_REQUEST_TIMEOUT_MS),
 		log: SILENT_RPC_LOG,
+		maxBatchSize: maxBatchSizeFor(url),
 	})
 }
 

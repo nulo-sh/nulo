@@ -67,8 +67,9 @@ export function isAllowedRpcUrl(rpcUrl: string): { ok: true } | { ok: false; rea
 
 export class AztecNodeFactoryAdapter implements NodeFactory {
 	/** @param maxBatchSizeFor The largest JSON-RPC batch the endpoint at a URL accepts, applied to
-	 *  every client built here; `undefined` keeps the client's default of 100. */
-	public constructor(private readonly maxBatchSizeFor: (rpcUrl: string) => number | undefined = () => undefined) {}
+	 *  every client built here; `undefined` keeps the client's default of 100. Required: a construction
+	 *  that forgot it would build uncapped clients without a type error. */
+	public constructor(private readonly maxBatchSizeFor: (rpcUrl: string) => number | undefined) {}
 
 	public createNode(rpcUrl: string, options?: RetryOptions): AztecNode {
 		const check = isAllowedRpcUrl(rpcUrl)

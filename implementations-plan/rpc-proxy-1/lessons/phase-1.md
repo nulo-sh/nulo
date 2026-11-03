@@ -13,3 +13,19 @@
 - `jsdom`'s `URL` is not Node's: `readFileSync(new URL(path, import.meta.url))` throws "URL must be a non-empty file: path" in an extension unit test; `join(dirname(fileURLToPath(import.meta.url)), path)` works.
 - The update replay (`tests/e2e/fixtures/update/loopback-endpoints.ts`) moves every outside endpoint to a loopback stand-in on the old release before the new build runs, so the rewrite never sees the recorded URL there.
 - The `aztec-update` skill's Phase 0 probe sent `node_getNodeInfo`; the node namespaces its methods `aztec_`. It now probes the keyless endpoint directly with `aztec_getNodeInfo` (checked live: rollupVersion matches `TESTNET_ROLLUP_VERSION`).
+
+## Arc 1 review round 1, Codex (gpt-6.1-sol, high), session 01a1a242
+
+Verdict: findings, all low. Accepted:
+1. `check:seeds`' preflight client kept the SDK's batch of 100 (a mocked trace of eight reads to the Mainnet seed sent one request of 8): it now passes `maxBatchSizeFor(url)`, and a test asserts `[3, 3, 2]`.
+2. The unlock test did not pin seal-then-move, since `storage.set` seals the row it writes: the spy now records that the row is no longer in the clear when the move starts; with the two steps swapped it reds.
+3. `RETIRED_DEFAULT_ENDPOINTS`' comment claimed every stored endpoint moves (the journal and replacement skips say otherwise), and the preflight comment still said the Testnet endpoint carries a key: both reworded.
+
+## Arc 1 review round 1, Opus 5.5 (diff review, general-purpose)
+
+Verdict: findings, all low. Accepted:
+1. `tests/e2e/README.md:99`'s third column still named the old host: fixed.
+2. The adapter's lookup defaulted to uncapped, and `core/adapters` re-exported the adapter to no importer: the re-export went, and the lookup is required (the adapter tests pass an explicit `uncapped`), so a construction that forgets it fails the typecheck. This completes D17 at the adapter.
+3. The profile filter had no test: the unlock test now holds a second profile's row on the retired URL, which stays; without the filter it reds.
+4. The lesson's "proves the seal-then-move order" was false at the time: Codex finding 2's assertion makes it true.
+Noted, not a change: the cap turns a large tick into many parallel requests, and a 429 is not retried; Assumption I4 and `rpc-fallback-1` own a provider's request-rate limit.

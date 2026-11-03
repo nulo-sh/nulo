@@ -75,8 +75,9 @@ export function isSeedChain(chainId: number): boolean {
 	return DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)
 }
 
-/** Defaults an earlier build seeded and this one moves every stored endpoint off at unlock. Entries
- *  stay for good: a profile last unlocked on an older build may unlock on this one at any time. */
+/** Defaults an earlier build seeded, by the digest of the exact URL it stored, each with the URL the
+ *  unlock moves such an endpoint to. Entries stay for good: a profile last unlocked on an older
+ *  build may unlock on this one at any time. */
 export const RETIRED_DEFAULT_ENDPOINTS: readonly RetiredEndpoint[] = [
 	// The keyed Testnet endpoint earlier builds seeded.
 	{ sha256: "8c97d123e13121add8218c0240ca5f9af70cd57e2e50b9cfd1f9d5ef882f4ec5", replacement: TESTNET_RPC_URL },

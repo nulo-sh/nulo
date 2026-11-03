@@ -59,4 +59,17 @@ describe("checkSeed's batch at the seed's cap", () => {
 		expect(result.ok).toBe(false)
 		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([3])
 	})
+
+	test("the preflight client sends the Mainnet seed no request of more than 3 entries", async () => {
+		const mainnet = seedForKind("mainnet")
+		if (!mainnet) throw new Error("this build seeds no Mainnet network")
+		const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+			const calls = JSON.parse(String(init.body)) as { id: number }[]
+			return new Response(JSON.stringify(calls.map((c) => ({ jsonrpc: "2.0", id: c.id, result: 7 }))))
+		})
+		vi.stubGlobal("fetch", fetch)
+		const node = createPreflightNodeClient(mainnet.rpcUrl)
+		await Promise.all(Array.from({ length: 8 }, () => node.getBlockNumber()))
+		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([3, 3, 2])
+	})
 })

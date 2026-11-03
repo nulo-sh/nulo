@@ -15,6 +15,7 @@ const URL = "https://rpc.example/key-in-path"
 const CONTRACT = AztecAddress.fromNumberUnsafe(5)
 const SLOT = new Fr(9n)
 const SENTINEL = "sentinel-7f3a"
+const uncapped = () => undefined
 
 const realFetch = globalThis.fetch
 const CONSOLE_METHODS = ["log", "info", "warn", "error", "debug"] as const
@@ -56,7 +57,7 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 		const fetchSpy = answering(() => new Fr(1234n).toString())
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
-		const value = await new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)
+		const value = await new AztecNodeFactoryAdapter(uncapped).readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)
 
 		expect(value.toBigInt()).toBe(1234n)
 		expect(fetchSpy).toHaveBeenCalledTimes(1)
@@ -70,14 +71,14 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 	test("a null result rejects instead of resolving to no field", async () => {
 		globalThis.fetch = answering(() => null as unknown as string) as unknown as typeof fetch
 
-		await expect(new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
+		await expect(new AztecNodeFactoryAdapter(uncapped).readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
 	})
 
 	test("a 500 rejects after exactly one attempt", async () => {
 		const fetchSpy = vi.fn(async () => reply({ error: { message: "boom" } }, 500))
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
-		await expect(new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
+		await expect(new AztecNodeFactoryAdapter(uncapped).readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
 		expect(fetchSpy).toHaveBeenCalledTimes(1)
 		expect(consoleText(consoleSpies)).not.toContain(URL)
 	})
@@ -86,7 +87,7 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 		const fetchSpy = vi.fn(async () => reply({ message: SENTINEL, detail: SENTINEL }))
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
-		await expect(new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
+		await expect(new AztecNodeFactoryAdapter(uncapped).readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000)).rejects.toThrow()
 		expect(fetchSpy).toHaveBeenCalledTimes(1)
 		expect(SILENT_RPC_LOG.warn).toHaveBeenCalledWith(expect.stringContaining("Invalid response"), expect.anything())
 		const printed = consoleText(consoleSpies)
@@ -107,7 +108,7 @@ describe("AztecNodeFactoryAdapter.readPublicStorageOnce", () => {
 		globalThis.fetch = fetchSpy as unknown as typeof fetch
 
 		let settled = false
-		const read = new AztecNodeFactoryAdapter().readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000).finally(() => {
+		const read = new AztecNodeFactoryAdapter(uncapped).readPublicStorageOnce(URL, CONTRACT, SLOT, 5_000).finally(() => {
 			settled = true
 		})
 		const outcome = read.catch((e: unknown) => e)
@@ -133,13 +134,13 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 			throw new TypeError("Failed to fetch")
 		})
 		vi.stubGlobal("fetch", fetch)
-		const node = new AztecNodeFactoryAdapter().createSingleAttemptNode("http://localhost:1", 1_000)
+		const node = new AztecNodeFactoryAdapter(uncapped).createSingleAttemptNode("http://localhost:1", 1_000)
 		await expect(node.getTxReceipt(TxHash.random())).rejects.toThrow()
 		expect(fetch).toHaveBeenCalledTimes(1)
 	})
 
 	test("refuses a URL outside the allowlist, as createNode does", () => {
-		expect(() => new AztecNodeFactoryAdapter().createSingleAttemptNode("http://example.com", 1_000)).toThrow(/refused/)
+		expect(() => new AztecNodeFactoryAdapter(uncapped).createSingleAttemptNode("http://example.com", 1_000)).toThrow(/refused/)
 	})
 
 	test.each([
@@ -147,7 +148,7 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 		["a body that is not a batch reply", async () => reply({ message: SENTINEL })],
 	])("%s logs nothing that names the endpoint: the SDK's warning goes to the silent logger", async (_label, answer) => {
 		globalThis.fetch = vi.fn(answer) as unknown as typeof fetch
-		const node = new AztecNodeFactoryAdapter().createSingleAttemptNode(URL, 1_000)
+		const node = new AztecNodeFactoryAdapter(uncapped).createSingleAttemptNode(URL, 1_000)
 		await expect(node.getBlockData("finalized")).rejects.toThrow()
 		expect(SILENT_RPC_LOG.warn).toHaveBeenCalled()
 		const printed = consoleText(consoleSpies)
