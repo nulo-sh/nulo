@@ -1,0 +1,3 @@
+- 2026-11-03 phase 0: adopted worktree list-refresh-1 at dev ff395c3d0; recon started (2 Explore agents, sonnet).
+- 2026-11-03 audit r1: Codex and Opus both conditional approve; all findings folded (plan ledger D1-D10).
+- 2026-11-03 final Codex pass: conditional approve (local full smoke suites), condition adopted in D10; resumed: approve.
