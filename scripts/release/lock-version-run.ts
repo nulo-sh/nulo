@@ -57,9 +57,7 @@ function fail(io: LockIO, reason: string): 1 {
 	return 1
 }
 
-if (import.meta.main) {
-	const repo = process.env.GITHUB_REPOSITORY ?? ""
-	const token = process.env.GH_TOKEN ?? ""
+export function realLockIO(repo: string, token: string): LockIO {
 	const call = async (path: string, accept: string, init: RequestInit = {}): Promise<Response> => {
 		const res = await fetch(`https://api.github.com/${path}`, {
 			...init,
@@ -75,7 +73,7 @@ if (import.meta.main) {
 		return res
 	}
 	const json = "application/vnd.github+json"
-	const io: LockIO = {
+	return {
 		async head(branch) {
 			const ref = (await (await call(`repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, json)).json()) as {
 				object: { sha: string }
@@ -104,6 +102,10 @@ if (import.meta.main) {
 		},
 		log: (message) => console.log(message),
 	}
+}
+
+if (import.meta.main) {
+	const io = realLockIO(process.env.GITHUB_REPOSITORY ?? "", process.env.GH_TOKEN ?? "")
 	try {
 		process.exit(await runLockVersion(process.env.PR_JSON ?? "", io))
 	} catch (e) {
