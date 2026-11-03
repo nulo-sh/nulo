@@ -37,7 +37,10 @@ describe("signList", () => {
 		const result = await signList({ sourceText: SOURCE_TEXT, seedHex, keyId: "nulo-ci-1", nowMs: NOW, keys: [pinned] })
 		const list = await readTokenList(result.envelopeText, [pinned])
 		expect(list).toMatchObject({ keyId: "nulo-ci-1", sequence: SIGNED, issuedAt: new Date(SIGNED * 1000).toISOString() })
-		expect(list.entries).toEqual(SOURCE.tokens)
+		const { priceId, ...unpriced } = SOURCE.tokens[0]
+		expect(priceId).toBe("usd-coin")
+		expect(list.entries).toEqual([unpriced])
+		expect(list.priceFeeds).toEqual({})
 		expect(list.flagged).toEqual([])
 		expect(result.tokensSha256).toBe(await listSha256({ tokens: SOURCE.tokens, flagged: [] }))
 		expect(publishedSequence(result.envelopeText)).toBe(SIGNED)
@@ -75,6 +78,37 @@ describe("signList", () => {
 		const shown = await listSha256({ tokens: SOURCE.tokens, flagged })
 		const result = await signList({ ...base, expectTokensSha256: shown })
 		expect((await readTokenList(result.envelopeText, [pinned])).flagged).toEqual(flagged)
+	})
+})
+
+describe("signList and price feeds", () => {
+	const FEEDS = { "usd-coin": { min: 0.2, max: 5, ticker: "USDC" } }
+
+	test("a source with no feeds hashes to the digest it had before feeds existed", async () => {
+		expect(await listSha256({ tokens: SOURCE.tokens, flagged: [] })).toBe(
+			"e6cca5674a60d19e508a67a88f5ba88cd1b0815cd8fe26e5ac9e01a1b76a7577",
+		)
+	})
+
+	test("signs the feeds into the list, and refuses a feed set the approver was not shown", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		const base = {
+			sourceText: JSON.stringify({ ...SOURCE, priceFeeds: FEEDS }),
+			seedHex,
+			keyId: "nulo-ci-1",
+			nowMs: NOW,
+			keys: [pinned],
+		}
+		const shown = await listSha256({ tokens: SOURCE.tokens, flagged: [], priceFeeds: FEEDS })
+		const rebanded = await listSha256({
+			tokens: SOURCE.tokens,
+			flagged: [],
+			priceFeeds: { "usd-coin": { ...FEEDS["usd-coin"], max: 6 } },
+		})
+		expect(shown).not.toBe(await listSha256({ tokens: SOURCE.tokens, flagged: [] }))
+		await expect(signList({ ...base, expectTokensSha256: rebanded })).rejects.toThrow("approver was shown")
+		const result = await signList({ ...base, expectTokensSha256: shown })
+		expect((await readTokenList(result.envelopeText, [pinned])).priceFeeds).toEqual(FEEDS)
 	})
 })
 

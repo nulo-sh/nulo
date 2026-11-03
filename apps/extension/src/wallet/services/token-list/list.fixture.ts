@@ -2,9 +2,9 @@
  * The four Testnet rc.1 tokens as the signed list carries them (`infra/token-list/list.source.json`).
  * A test fixture: the wallet itself never reads it, its defaults come from the fetched list.
  */
-import { BUNDLED_TOKEN_CLASS_IDS, type TokenListEntry, type TokenListPair } from "@nulo/token-list"
+import { BUNDLED_TOKEN_CLASS_IDS, type PriceFeeds, type TokenListEntry, type TokenListPair } from "@nulo/token-list"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { type PricedTokens, pricedTokensOf } from "@/wallet/services/price/price-map"
+import { type PricedTokens, priceTableOf, pricedTokensOf } from "@/wallet/services/price/price-map"
 
 export const TEST_TOKENS = {
 	USDC: "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf",
@@ -30,7 +30,14 @@ export const TEST_LIST_ENTRIES: readonly TokenListEntry[] = [
 	entry("GBPC"),
 ]
 
-export const TEST_PRICED_TOKENS: PricedTokens = pricedTokensOf(TEST_LIST_ENTRIES)
+/** The feeds the first list with feeds carries for today's three priced Testnet tokens. */
+export const TEST_PRICE_FEEDS: PriceFeeds = {
+	"usd-coin": { min: 0.2, max: 5, ticker: "USDC" },
+	tether: { min: 0.2, max: 5, ticker: "USDT" },
+	"euro-coin": { min: 0.2, max: 5, ticker: "EURC" },
+}
+
+export const TEST_PRICED_TOKENS: PricedTokens = pricedTokensOf(TEST_LIST_ENTRIES, priceTableOf(TEST_PRICE_FEEDS))
 
 /** A Testnet pair the list flags as a scam: never an entry, so never seeded or priced. */
 export const TEST_FLAGGED: TokenListPair = {

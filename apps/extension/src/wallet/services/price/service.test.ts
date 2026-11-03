@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { fakeBrowser } from "@webext-core/fake-browser"
+import { tokenKey } from "@nulo/token-list"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
@@ -18,12 +19,14 @@ import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { flaggedKeysOf } from "@/utils/token-flag"
-import { TEST_FLAGGED, TEST_LIST_ENTRIES, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
+import { TEST_FLAGGED, TEST_LIST_ENTRIES, TEST_PRICE_FEEDS, TEST_PRICED_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import {
+	freshQuotes,
 	PRICE_REFRESH_ALARM_NAME,
 	PRICE_REFRESH_PERIOD_MINUTES,
 	PriceService,
+	priceRequestUrl,
 	QUOTE_TTL_MS,
 	type PriceSnapshot,
 	type PriceState,
@@ -52,7 +55,9 @@ async function harness(opts?: { enabled?: boolean; profile?: ProfileInfo | undef
 		body: opts?.body ?? goodBody(1_000_000),
 		fetchCalls: [] as string[],
 		fetchImpl: undefined as undefined | ((init: RequestInit) => Promise<Response>),
-		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED] } as TokenListSnapshot | undefined,
+		list: { sequence: 1, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES, flagged: [TEST_FLAGGED], priceFeeds: TEST_PRICE_FEEDS } as
+			| TokenListSnapshot
+			| undefined,
 	}
 
 	const fakeConfig = {
@@ -108,6 +113,109 @@ beforeEach(() => {
 	vi.restoreAllMocks()
 })
 
+describe("PriceService — feeds from the signed list", () => {
+	const WETH_KEY = tokenKey(TEST_LIST_ENTRIES[3].chainId, TEST_LIST_ENTRIES[3].address)
+	const withWeth = (weth = { min: 100, max: 100_000, ticker: "WETH" }): TokenListSnapshot => ({
+		sequence: 2,
+		keyId: "nulo-ci-1",
+		entries: TEST_LIST_ENTRIES.map((e) => (e.symbol === "GBPC" ? { ...e, priceId: "weth" } : e)),
+		flagged: [],
+		priceFeeds: { ...TEST_PRICE_FEEDS, weth },
+	})
+
+	test("a token the list prices with an id no build knew gets its quote, its band and its ticker", async () => {
+		const { service, state } = await harness()
+		state.list = withWeth()
+		state.body = { ...(goodBody(1_000_000) as object), weth: { usd: 3012.5, last_updated_at: 1_000_000 } }
+		const snapshot = await service.refreshIfStale()
+		expect(state.fetchCalls[0]).toContain("ids=aztec,euro-coin,tether,usd-coin,weth&")
+		expect(snapshot.quotes.weth?.usd).toBe(3012.5)
+		expect(snapshot.pricedTokens[WETH_KEY]).toEqual({ coingeckoId: "weth", min: 100, max: 100_000, ticker: "WETH" })
+	})
+
+	test("a quote outside the list's band is refused at write, and dropped at read once a list narrows it", async () => {
+		const { service, state } = await harness()
+		state.list = withWeth()
+		state.body = { ...(goodBody(1_000_000) as object), weth: { usd: 50, last_updated_at: 1_000_000 } }
+		const written = await service.refreshIfStale()
+		expect(written.quotes.weth).toBeUndefined()
+		expect(written.quotes["usd-coin"]?.usd).toBe(0.9998)
+
+		state.list = { ...withWeth(), priceFeeds: { ...withWeth().priceFeeds, "usd-coin": { min: 1, max: 5, ticker: "USDC" } } }
+		const narrowed = await service.getQuotes()
+		expect(narrowed.quotes["usd-coin"]).toBeUndefined()
+		expect(narrowed.quotes.aztec?.usd).toBe(0.0147)
+	})
+
+	test("a narrowing list that lands while an answer awaits the cache keeps the quote out of that answer", async () => {
+		const { service, state, fakeTokenList } = await harness()
+		await service.refreshIfStale()
+		const wide = state.list
+		const narrow = {
+			...(wide as TokenListSnapshot),
+			sequence: 2,
+			priceFeeds: { ...TEST_PRICE_FEEDS, "usd-coin": { min: 1, max: 5, ticker: "USDC" } },
+		}
+		let reads = 0
+		fakeTokenList.getSnapshot = () => (++reads === 1 ? wide : narrow)
+		const answer = await service.getQuotes()
+		expect(reads).toBeGreaterThan(1)
+		expect(answer.quotes["usd-coin"]).toBeUndefined()
+		expect(answer.pricedTokens[tokenKey(TEST_LIST_ENTRIES[0].chainId, TEST_LIST_ENTRIES[0].address)]?.min).toBe(1)
+		expect(answer.quotes.aztec?.usd).toBe(0.0147)
+	})
+
+	test("a list record under Fee Juice's id leaves Fee Juice on its compiled band", async () => {
+		const { service, state } = await harness()
+		state.list = {
+			...(state.list as TokenListSnapshot),
+			priceFeeds: { ...TEST_PRICE_FEEDS, aztec: { min: 0.0001, max: 1000, ticker: "AZTEC" } },
+		}
+		state.body = { aztec: { usd: 500, last_updated_at: 1_000_000 }, "usd-coin": { usd: 0.9998, last_updated_at: 1_000_000 } }
+		const { quotes } = await service.refreshIfStale()
+		expect(quotes.aztec).toBeUndefined()
+		expect(quotes["usd-coin"]?.usd).toBe(0.9998)
+	})
+
+	test("each id is escaped on its own, and today's ids give today's request", () => {
+		expect(priceRequestUrl(["aztec", "euro-coin", "tether", "usd-coin"])).toBe(
+			"https://api.coingecko.com/api/v3/simple/price?ids=aztec,euro-coin,tether,usd-coin&vs_currencies=usd&include_last_updated_at=true",
+		)
+		const crafted = new URL(priceRequestUrl(["a&vs_currencies=eur", "b,c", "usd-coin"]))
+		expect(crafted.searchParams.get("ids")).toBe("a&vs_currencies=eur,b,c,usd-coin")
+		expect(crafted.searchParams.getAll("vs_currencies")).toEqual(["usd"])
+	})
+
+	test("a stored row under an inherited name reads as absent", () => {
+		const quote = (id: string) => ({ coingeckoId: id, usd: 1, fetchedAt: 1_000, providerUpdatedAt: null })
+		const stored = JSON.parse(
+			JSON.stringify({ constructor: quote("constructor"), "usd-coin": quote("usd-coin") }).replace(
+				"{",
+				`{"__proto__": ${JSON.stringify(quote("__proto__"))},`,
+			),
+		)
+		const fresh = freshQuotes(stored, 2_000)
+		expect(Object.keys(fresh)).toEqual(["usd-coin"])
+		expect(Object.getPrototypeOf(fresh)).toBe(Object.prototype)
+	})
+
+	test("a reply for 32 list feeds and Fee Juice, at 64-character ids, parses under the byte cap", async () => {
+		const { service, state } = await harness()
+		const ids = Array.from({ length: 32 }, (_, i) => `${String(i).padStart(2, "0")}${"a".repeat(62)}`)
+		state.list = {
+			...(state.list as TokenListSnapshot),
+			entries: [],
+			priceFeeds: Object.fromEntries(ids.map((id) => [id, { min: 1, max: 1000, ticker: "X" }])),
+		}
+		state.body = Object.fromEntries(
+			[...ids, "aztec"].map((id) => [id, { usd: id === "aztec" ? 0.014712345678 : 123.45678901, last_updated_at: 1_000_000 }]),
+		)
+		expect(JSON.stringify(state.body).length).toBeLessThan(16 * 1024)
+		const { quotes } = await service.refreshIfStale()
+		expect(Object.keys(quotes)).toHaveLength(33)
+	})
+})
+
 describe("PriceService — refresh pipeline", () => {
 	test("fetches the full mapped id set in one batched, stable request", async () => {
 		const { service, state } = await harness()
@@ -153,11 +261,21 @@ describe("PriceService — refresh pipeline", () => {
 		const seen: PriceSnapshot[] = []
 		service.onQuotesUpdated.add((s) => seen.push(s))
 
-		state.list = { sequence: 2, keyId: "nulo-ci-1", entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC"), flagged: [] }
+		state.list = {
+			sequence: 2,
+			keyId: "nulo-ci-1",
+			entries: TEST_LIST_ENTRIES.filter((e) => e.symbol !== "USDC"),
+			flagged: [],
+			priceFeeds: TEST_PRICE_FEEDS,
+		}
 		fakeTokenList.onListChanged.invoke(state.list)
 		await vi.waitFor(() => expect(seen).toHaveLength(1))
 
-		expect(Object.values(seen[0].pricedTokens).sort()).toEqual(["euro-coin", "tether"])
+		expect(
+			Object.values(seen[0].pricedTokens)
+				.map((e) => e.coingeckoId)
+				.sort(),
+		).toEqual(["euro-coin", "tether"])
 		expect(seen[0].flaggedTokens).toEqual([])
 		expect(Object.keys(seen[0].quotes).sort()).toEqual(["aztec", "usd-coin"])
 		expect(state.fetchCalls).toHaveLength(1)
