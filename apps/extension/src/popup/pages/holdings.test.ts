@@ -244,7 +244,6 @@ describe("holdings page", () => {
 	})
 
 	describe("a change during the mount's reads wins over their older answers", () => {
-		/** Each key's read parked until the case answers it. */
 		function parkReads() {
 			const reads: Record<string, PromiseWithResolvers<unknown>> = {}
 			answerConfig = (key) => {

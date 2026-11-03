@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
 				/>
 			</Flex>
 
-			<!-- The fields are emptied before the profile boots, and the hint judges what was typed: it hides while the create runs. -->
+			<!-- The create empties both fields before the profile boots; hiding the hint keeps it from judging the emptied pair. -->
 			<Flex v-if="authMethod === 'password'" direction="column" gap="8">
 				<Text variant="label-section" color="secondary">Password</Text>
 				<NewPasswordPair

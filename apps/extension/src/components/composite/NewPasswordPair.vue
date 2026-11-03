@@ -4,8 +4,8 @@
  * `confirmInput`, exactly as the host's selectors know them. A host whose visibility state outlives
  * the pair binds `v-model:hidden`, so a pair mounted again keeps what the person revealed.
  *
- * `#repeatLabel` takes a host's heading for the repeat field, 8 px above it as an `Input` label sits,
- * and its `id` labels the field; `labelRepeat`'s heading keeps the export page's 12 px.
+ * `#repeatLabel` holds a host's heading for the repeat field: give it the slot's `id`, which labels the
+ * field. `labelRepeat`'s built-in heading stays a sibling at the pair's 12 px.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"

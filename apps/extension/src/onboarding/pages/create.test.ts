@@ -166,6 +166,7 @@ describe("onboarding create", () => {
 		expect(confirm.contains(native[1])).toBe(true)
 		expect(field.parentElement?.previousElementSibling?.textContent).toBe("Password")
 		expect(field.textContent).toContain("At least 8 characters")
+		expect(w.text().match(/At least 8 characters/g)).toHaveLength(1)
 		const heading = confirm.previousElementSibling as HTMLElement
 		expect(heading.textContent).toBe("Confirm password")
 		expect(native[1].getAttribute("aria-labelledby")).toBe(heading.id)
