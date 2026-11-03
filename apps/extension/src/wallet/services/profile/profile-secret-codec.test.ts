@@ -1,8 +1,3 @@
-/**
- * The reveal frame wipes the slots it opened only once the caller's body settles, on every path:
- * a body never reads wiped buffers, and a rejecting body leaves none in memory.
- */
-import { InvalidPasswordError } from "@nulo/extension-messaging/errors"
 import { deferred, getMnemonic } from "@nulo/wallet-core/utils"
 import {
 	computeWalletFingerprint,
@@ -41,20 +36,17 @@ test("the slots stay intact while the body runs and are zero once it settles, a 
 		return passhash
 	})
 	const key = { password: PASSWORD }
+	const wrongKey = new Error("wrong key")
+	const refusal = () => wrongKey
 
 	const entered = deferred<OpenedSlots>()
 	const release = deferred()
 	const refused = new Error("body refused")
-	const run = codec.withOpenedSlots(
-		row,
-		key,
-		() => new InvalidPasswordError(),
-		async (opened) => {
-			entered.resolve(opened)
-			await release.promise
-			throw refused
-		},
-	)
+	const run = codec.withOpenedSlots(row, key, refusal, async (opened) => {
+		entered.resolve(opened)
+		await release.promise
+		throw refused
+	})
 	const opened = await entered.promise
 	const held = [opened.secret, opened.entropy, passhashes[0]]
 	expect(held.map(allZero)).toStrictEqual([false, false, false])
@@ -62,24 +54,16 @@ test("the slots stay intact while the body runs and are zero once it settles, a 
 	await expect(run).rejects.toBe(refused)
 	expect(held.map(allZero)).toStrictEqual([true, true, true])
 
-	// Success control: the body's value returns, and the slots are zero after.
+	// Success control.
 	let kept: Uint8Array[] = []
-	const words = await codec.withOpenedSlots(
-		row,
-		key,
-		() => new InvalidPasswordError(),
-		async (o) => {
-			kept = [o.secret, o.entropy]
-			return getMnemonic(o.entropy)
-		},
-	)
+	const words = await codec.withOpenedSlots(row, key, refusal, async (o) => {
+		kept = [o.secret, o.entropy]
+		return getMnemonic(o.entropy)
+	})
 	expect(words).toStrictEqual(await getMnemonic(entropy))
 	expect([...kept, passhashes[1]].map(allZero)).toStrictEqual([true, true, true])
 
-	// A key that does not open the row gets the path's refusal and never runs the body.
 	const body = vi.fn(async () => "never")
-	await expect(codec.withOpenedSlots(row, { password: "wrong-pass1" }, () => new InvalidPasswordError(), body)).rejects.toBeInstanceOf(
-		InvalidPasswordError,
-	)
+	await expect(codec.withOpenedSlots(row, { password: "wrong-pass1" }, refusal, body)).rejects.toBe(wrongKey)
 	expect(body).not.toHaveBeenCalled()
 }, 60_000)

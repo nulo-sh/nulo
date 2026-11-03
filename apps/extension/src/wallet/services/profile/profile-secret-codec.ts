@@ -91,9 +91,10 @@ export class ProfileSecretCodec {
 
 	/**
 	 * Runs `body` over `row`'s slots opened under `key`, and wipes them once `body` settles, a
-	 * rejection included; nothing else `body` allocates is wiped here. When the slots do not open,
-	 * throws the path's refusal ({@link notOpened}) and never runs `body`. Takes no lock: the caller
-	 * places it, and runs its fence and checks inside `body` in its own order.
+	 * rejection included; nothing else `body` allocates is wiped here. The slots are lent: `body`
+	 * finishes with them before it settles and returns nothing that aliases them. When the slots do
+	 * not open, throws the path's refusal ({@link notOpened}) and never runs `body`. Takes no lock:
+	 * the caller places it, and runs its fence and checks inside `body` in its own order.
 	 */
 	public async withOpenedSlots<T>(
 		row: Profile,

@@ -97,7 +97,6 @@ type RestoreCommit = Readonly<{
 const DEK_UNRECOVERABLE_MESSAGE =
 	"Imported-keys key unrecoverable. Imported keys and local chain state are lost. Export a full backup (or the recovery phrase) and restore it to repair."
 
-/** A path's refusal of a password that does not open the row. */
 const invalidPassword = (): Error => new InvalidPasswordError()
 /** The legacy refusal of a wrong password at a password change and a phrase export, identity-stable
  *  and pinned by the integration suite: the change-password UI matches its exact text. */
