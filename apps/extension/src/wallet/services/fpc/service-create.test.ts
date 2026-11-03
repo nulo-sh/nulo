@@ -36,13 +36,20 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	getContractInstanceFromInstantiationParams: async (artifact: { functions: Array<{ name: string }> }) => ({
 		address: {
-			toString: () => (artifact.functions.some((f) => f.name === "sponsor_unconditionally") ? "0xsponsored" : "0xprivate"),
+			toString: () =>
+				artifact.functions.some((f) => f.name === "sponsor_unconditionally")
+					? "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"
+					: "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
 		},
 	}),
 }))
 
 import { FpcService, FpcType } from "./service"
 import { FPC_STORAGE_ROOT } from "./spec"
+
+/** The canonical addresses the mocked derivation answers. */
+const SPONSORED = "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"
+const PRIVATE = "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"
 
 /** One key for every profile, as the profile fakes hold it. */
 const ROW_KEY_FAKE = await rowKeysForEveryProfile()
@@ -122,8 +129,8 @@ async function makeHarness(chainId: number = CHAIN) {
 	await services.start()
 	// Pre-seed the protocol-address cache so no real Poseidon derivation runs.
 	;(service as unknown as { protocolAddresses: Map<number, unknown> }).protocolAddresses.set(chainId, {
-		sponsored: "0xsponsored",
-		private: "0xprivate",
+		sponsored: "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+		private: "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
 	})
 	const lock = () => {
 		session.serial = undefined
@@ -210,11 +217,14 @@ describe("FPC creation fences", () => {
 		setPxe(h, { registerContract: async ({ instance }: Registration) => void registered.push(instance.address.toString()) })
 
 		const fpcs = await h.service.getFpcs(CHAIN)
-		expect(registered).toEqual(["0xsponsored", "0xprivate"])
+		expect(registered).toEqual([
+			"0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+			"0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+		])
 		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual(
 			expect.arrayContaining([
-				[FpcType.DefaultSponsoredFpc, "0xsponsored", true],
-				[FpcType.PrivateFpc, "0xprivate", true],
+				[FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a", true],
+				[FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b", true],
 			]),
 		)
 		expect(await fpcRowCount(h.api)).toBe(2)
@@ -271,7 +281,7 @@ describe("FPC creation fences", () => {
 		const gate = deferred<void>()
 		setPxe(h, {
 			registerContract: async ({ instance }: Registration) => {
-				if (instance.address.toString() !== "0xprivate") return
+				if (instance.address.toString() !== "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b") return
 				reached.resolve()
 				await gate.promise
 			},
@@ -317,7 +327,7 @@ describe("FPC creation fences", () => {
 		}
 
 		expect(await run).toEqual([])
-		expect(registered).toEqual(["0xsponsored"])
+		expect(registered).toEqual(["0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"])
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
@@ -343,7 +353,7 @@ describe("FPC creation fences", () => {
 		await run
 		writes.restore()
 		expect(writes.log).toEqual([])
-		expect(registered).toEqual(["0xsponsored"])
+		expect(registered).toEqual(["0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"])
 		expect(await fpcRowCount(h.api)).toBe(0)
 	})
 
@@ -381,7 +391,7 @@ describe("FPC creation fences", () => {
 		const logged = spyLogs(h)
 
 		await h.service.getFpcs(CHAIN)
-		expect(registered).toEqual(["0xsponsored"])
+		expect(registered).toEqual(["0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"])
 		expect(logged.warn).toEqual([])
 		expect(logged.error).toEqual([])
 		expect(logged.debug).toContain("Protocol FPC discovery stopped: its session ended")
@@ -427,7 +437,7 @@ describe("FPC creation fences", () => {
 		const logged = spyLogs(h)
 
 		await h.service.getFpcs(CHAIN)
-		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
+		expect(logged.error).toEqual([`Failed to discover FPC ${SPONSORED}`, `Failed to discover FPC ${PRIVATE}`])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its session ended")
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 		expect(await fpcRowCount(h.api)).toBe(0)
@@ -452,7 +462,7 @@ describe("FPC creation fences", () => {
 		const logged = spyLogs(h)
 
 		await h.service.getFpcs(CHAIN)
-		expect(logged.error).toEqual(["Failed to discover FPC 0xsponsored", "Failed to discover FPC 0xprivate"])
+		expect(logged.error).toEqual([`Failed to discover FPC ${SPONSORED}`, `Failed to discover FPC ${PRIVATE}`])
 		expect(logged.debug).not.toContain("Protocol FPC discovery stopped: its network was reset or removed")
 	})
 
@@ -468,7 +478,10 @@ describe("FPC creation fences", () => {
 
 		h.reservations.release()
 		expect(await h.service.getFpcs(CHAIN)).toHaveLength(2)
-		expect(registered).toEqual(["0xsponsored", "0xprivate"])
+		expect(registered).toEqual([
+			"0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+			"0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+		])
 	})
 
 	test("getFpcs discovery: a deletion landing DURING a protocol row write compensates it and ends the discovery at debug", async () => {
@@ -559,14 +572,14 @@ describe("FpcService.getFpcImpl — only the protocol PrivateFPC can pay", () =>
 
 	test("genuine PrivateFPC resolves on a COLD protocol-address cache (no prior getFpcs)", async () => {
 		const h = await makeHarness()
-		await plant(h, row("f-ok", FpcType.PrivateFpc, "0xprivate"))
+		await plant(h, row("f-ok", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"))
 		const fpc = await h.service.getFpcImpl("f-ok")
 		expect(fpc.infoData.isProtocol).toBe(true)
 	})
 
 	test("the genuine sponsor resolves as protocol on a COLD cache, so a send through it names no spender", async () => {
 		const h = await makeHarness()
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"))
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"))
 		const fpc = await h.service.getFpcImpl("f-sp")
 		expect(fpc.infoData.isProtocol).toBe(true)
 	})
@@ -670,14 +683,16 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		const { h, registered } = await mainnet()
 
 		const fpcs = await h.service.getFpcs(MAINNET)
-		expect(registered).toEqual(["0xprivate"])
-		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual([[FpcType.PrivateFpc, "0xprivate", true]])
+		expect(registered).toEqual(["0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"])
+		expect(fpcs.map((f) => [f.type, f.address, f.isProtocol])).toEqual([
+			[FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b", true],
+		])
 		expect(await fpcRowCount(h.api)).toBe(1)
 	})
 
 	test("holding the Private row, a read starts no discovery", async () => {
 		const { h, registered } = await mainnet()
-		await plant(h, row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(h, row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"))
 		const capture = vi.spyOn(h.reservations, "captureLiveness")
 
 		expect((await h.service.getFpcs(MAINNET)).map((f) => f.id)).toEqual(["f-pr"])
@@ -689,8 +704,8 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		const { h, deleted } = await mainnet()
 		await plant(
 			h,
-			row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"),
-			row("f-pr", FpcType.PrivateFpc, "0xprivate"),
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"),
+			row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"),
 			row("f-hand", FpcType.DefaultSponsoredFpc, HAND_ADDRESS),
 		)
 
@@ -702,9 +717,22 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		expect(await fpcRowCount(h.api)).toBe(2)
 	})
 
+	test("a canonical row stored in another letter case is removed too", async () => {
+		const { h, deleted } = await mainnet()
+		const upper = SPONSORED.toUpperCase().replace("0X", "0x")
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, upper), row("f-pr", FpcType.PrivateFpc, PRIVATE))
+
+		expect((await h.service.getFpcs(MAINNET)).map((f) => f.id)).toEqual(["f-pr"])
+		expect(deleted).toEqual(["f-sp"])
+	})
+
 	test("two concurrent reads remove the row once and forget its picks once", async () => {
 		const { h, deleted } = await mainnet()
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(
+			h,
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"),
+			row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"),
+		)
 
 		const reads = await Promise.all([h.service.getFpcs(MAINNET), h.service.getFpcs(MAINNET)])
 		for (const fpcs of reads) expect(fpcs.map((f) => f.id)).toEqual(["f-pr"])
@@ -712,11 +740,13 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		expect(h.preference.forgets).toHaveLength(1)
 	})
 
-	test("adding the canonical sponsor's address is refused, where another sponsor is added", async () => {
+	test("adding the canonical sponsor's address, in any case, is refused, where another sponsor is added", async () => {
 		const { h } = await mainnet()
-		await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, "0xsponsored", "Mine")).rejects.toThrow(
-			/^Contract instance not found$/,
-		)
+		for (const address of [SPONSORED, SPONSORED.toUpperCase().replace("0X", "0x")]) {
+			await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, address, "Mine")).rejects.toThrow(
+				/^Contract instance not found$/,
+			)
+		}
 		expect(await fpcRowCount(h.api)).toBe(0)
 
 		await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, HAND_ADDRESS, "Mine")).resolves.toMatchObject({
@@ -731,7 +761,11 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 	])("a $case forget leaves the removal and the read's answer intact", async ({ answer }) => {
 		const { h, deleted } = await mainnet()
 		h.preference.answer = answer
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(
+			h,
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"),
+			row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"),
+		)
 
 		expect((await h.service.getFpcs(MAINNET)).map((f) => f.id)).toEqual(["f-pr"])
 		expect(deleted).toEqual(["f-sp"])
@@ -740,7 +774,11 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 
 	test("an address edit landing before the removal takes the lock keeps the row", async () => {
 		const { h, deleted } = await mainnet()
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(
+			h,
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"),
+			row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"),
+		)
 		const lock = serviceLock(h)
 		const gate = deferred<void>()
 		const held = lock.withLock(() => gate.promise)
@@ -759,9 +797,9 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		expect(await fpcRowCount(h.api)).toBe(2)
 	})
 
-	test("a removal whose lock the watchdog handed on commits nothing", async () => {
+	test("a removal whose lock the watchdog handed on commits nothing, and the discovery after it offers no sponsor", async () => {
 		const { h, deleted } = await mainnet()
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, SPONSORED))
 		const storage = (h.service as unknown as { storage: { get(id: string): Promise<unknown> } }).storage
 		const get = storage.get.bind(storage)
 		const reached = deferred<void>()
@@ -778,7 +816,7 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 			await reached.promise
 			vi.advanceTimersByTime(5 * 60_000)
 			gate.resolve()
-			expect((await read).map((f) => f.id)).toEqual(["f-pr"])
+			expect((await read).map((f) => [f.type, f.address])).toEqual([[FpcType.PrivateFpc, PRIVATE]])
 		} finally {
 			vi.useRealTimers()
 		}
@@ -790,7 +828,11 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 
 	test("a session that ends before the removal commits keeps the row", async () => {
 		const { h, deleted } = await mainnet()
-		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		await plant(
+			h,
+			row("f-sp", FpcType.DefaultSponsoredFpc, "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"),
+			row("f-pr", FpcType.PrivateFpc, "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"),
+		)
 		const lock = serviceLock(h)
 		const gate = deferred<void>()
 		const held = lock.withLock(() => gate.promise)

@@ -51,7 +51,6 @@ async function seedContacts(page: Page, names: string[]): Promise<void> {
 	)
 }
 
-/** The Send page, and the FPC row ids it seeded (`sponsors`). */
 async function openSendPage(
 	ctx: ExtensionContext,
 	{ priced = false, sponsors = false, contacts = [] as string[] } = {},
