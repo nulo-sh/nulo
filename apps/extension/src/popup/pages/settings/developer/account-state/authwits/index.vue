@@ -21,6 +21,7 @@ import { useEntityCrud } from "@/composables/useEntityCrud"
 
 /** Helpers */
 import { authwitMatchesSearch, decorateAuthwit, sortAuthwits } from "@/popup/components/modules/settings/authwits/authwit-helpers"
+import { stripBidiAndZeroWidth } from "@/utils/string"
 
 const { openToast } = useToast()
 
@@ -169,6 +170,7 @@ onBeforeUnmount(() => {
 			<Input
 				v-if="authwits.length"
 				v-model="searchTerm"
+				:normalize="stripBidiAndZeroWidth"
 				icon="search"
 				placeholder="Search by kind, address or function"
 				clearable

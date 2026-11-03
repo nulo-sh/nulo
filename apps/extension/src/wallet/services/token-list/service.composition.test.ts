@@ -298,3 +298,71 @@ describe("TokenListService timing", () => {
 		expect(h.calls).toHaveLength(1)
 	})
 })
+
+describe("TokenListService — a failed state read never feeds a write", () => {
+	const KEY = "nulo:core:token-list"
+
+	/** Counts reads of the stored state; each `arm()` makes the next one reject. */
+	function stateReads(api: FakeBrowserApi) {
+		const area = api.storage.local
+		const realGet = area.get.bind(area)
+		const reads = {
+			count: 0,
+			armed: false,
+			arm: () => {
+				reads.armed = true
+			},
+		}
+		vi.spyOn(area, "get").mockImplementation(async (...args: Parameters<typeof area.get>) => {
+			if (args[0] === KEY) {
+				reads.count++
+				if (reads.armed) {
+					reads.armed = false
+					throw new Error("IO error")
+				}
+			}
+			return realGet(...args)
+		})
+		return reads
+	}
+
+	test("a refresh whose read fails fetches and writes nothing, and the next one runs", async () => {
+		const { pinned, sign } = await signer()
+		const h = await makeHarness({
+			keys: [pinned],
+			accepted: true,
+			answers: [{ body: await sign(aboveFloor(10)) }, { body: await sign(aboveFloor(10)) }],
+		})
+		const kept = (await h.stored()).envelope
+		const reads = stateReads(h.api)
+
+		reads.arm()
+		await h.service.refresh()
+		expect(h.calls).toHaveLength(1)
+		expect((await h.stored()).envelope).toBe(kept)
+
+		await h.service.refresh()
+		expect(h.calls).toHaveLength(2)
+		expect(h.outcomes).toEqual(["accepted", "unchanged"])
+		expect((await h.stored()).envelope).toBe(kept)
+	})
+
+	test("after a failed boot read, a refresh adopts the stored list from one read and refuses an older one", async () => {
+		const { pinned, sign } = await signer()
+		const first = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(aboveFloor(10)) }] })
+		const kept = (await first.stored()).envelope
+		const reads = stateReads(first.api)
+		reads.arm()
+
+		const h = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(aboveFloor(9), "OLD") }] })
+		expect(h.service.getSnapshot()).toBeUndefined()
+		const before = reads.count
+		await h.service.refresh()
+
+		expect(reads.count - before).toBe(1)
+		expect(h.outcomes).toEqual(["older-sequence"])
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: aboveFloor(10), entries: [expect.objectContaining({ symbol: "USDC" })] })
+		expect(h.changes.map((c) => c.sequence)).toEqual([aboveFloor(10)])
+		expect((await h.stored()).envelope).toBe(kept)
+	})
+})

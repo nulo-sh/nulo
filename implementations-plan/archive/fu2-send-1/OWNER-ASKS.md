@@ -1,6 +1,6 @@
 # fu2-send-1 owner asks
 
-Arc 1 (P93-01, P93-55, P93-26) depends on none of these and ships now. Each ask below names the arc that waits for it.
+Arc 1 (P93-01, P93-55, P93-26) depended on none of these. All three are answered, and A4 (the plan's arc 3 amendment) is approved. The owner, in chat on 2026-11-02 at about 19:55 UTC: "The fu2-send-1 asks all A. approve A4."
 
 ## OA-1. Holdings: how many decimals the split lines show (P93-57, arc 2)
 
@@ -15,7 +15,7 @@ Under both, each line is cut, never rounded up, so the shown sides need not add 
 
 Recommendation: A. It hides fewer digits, matches the token page, and B's deeper cut is what made the lab's line read less than the total.
 
-What ships now: nothing on Holdings; arc 2 builds the answer.
+**Answered 2026-11-02: A** ("The fu2-send-1 asks all A."): each side formatted as the total is, the same 10-character cut the token page uses; the change reaches Home's token list and Send's picker through the shared row component. Arc 2 builds it.
 
 ## OA-2. The Sending toast when something else happens (P93-08, arc 3)
 
@@ -27,7 +27,7 @@ Surface: the toast at the foot of any screen while a send from Send runs. The si
 
 Recommendation: 1A, 2A, 3A: the toast follows "stays until the send is done" without reopening after the person dismissed it.
 
-What ships now: nothing; arc 3 waits for this and OA-3.
+**Answered 2026-11-02: 1A, 2A, 3A** ("The fu2-send-1 asks all A."). Arc 3 builds it.
 
 ## OA-3. Which sends History marks Pending, and a send whose amount cannot be read (P93-08, P93-09, arc 3)
 
@@ -38,4 +38,4 @@ Surface: History's new pending rows, and the Sending toast. The signed picks nam
 
 Recommendation: 1A (History matches Home, so nothing is in one list and missing from the other), 2A.
 
-What ships now: nothing; arc 3 waits for this and OA-2.
+**Answered 2026-11-02: 1A, 2A** ("The fu2-send-1 asks all A."). Arc 3 builds it.

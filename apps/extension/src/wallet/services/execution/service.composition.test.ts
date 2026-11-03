@@ -1428,7 +1428,7 @@ describe("ExecutionService composition — a dApp send's public authwits are ind
 		services.add(next)
 		await services.start()
 		// Started as the runtime starts them, with no await between: the check may scan before the sweep.
-		const reaper = new JournalReaper(next, h.api.alarms, new LoggerStore(new ConfigStore()), undefined, Date.now() + 1)
+		const reaper = new JournalReaper(next, h.api.alarms, new LoggerStore(new ConfigStore()), { bootCutoff: Date.now() + 1 })
 		const sweeping = reaper.start()
 		const { check, clock } = await startCheck(h, { getTxReceipt: async () => minedAt(HASH, BLOCK_HASH) }, next)
 		await sweeping

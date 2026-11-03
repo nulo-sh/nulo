@@ -1,14 +1,31 @@
 <script setup lang="ts">
-/**
- * A bordered mono search box: icon + native input. No sanitizer by design — the value never
- * leaves the surface that owns it and a symbol may contain any punctuation.
- */
+/** No `sanitize`-style filter: a token symbol may hold any punctuation. */
+import { stripBidiAndZeroWidth } from "@/utils/string"
+
 defineProps({
 	modelValue: { type: String, required: true },
 	placeholder: { type: String, default: "Search" },
 	testid: { type: String, default: undefined },
 })
-defineEmits<{ "update:modelValue": [value: string] }>()
+const emit = defineEmits<{ "update:modelValue": [value: string] }>()
+
+// A composing keystroke is emitted as typed, never rewritten under the input method; the text it
+// commits is judged at `compositionend`, which no further `input` may follow.
+const onInput = (e: Event) => {
+	const el = e.target as HTMLInputElement
+	if ((e as InputEvent).isComposing) {
+		emit("update:modelValue", el.value)
+		return
+	}
+	const kept = stripBidiAndZeroWidth(el.value)
+	if (kept !== el.value) {
+		// Rewriting the value puts the caret at the end; it goes back after what preceded it.
+		const caret = stripBidiAndZeroWidth(el.value.slice(0, el.selectionStart ?? undefined)).length
+		el.value = kept
+		el.setSelectionRange(caret, caret)
+	}
+	emit("update:modelValue", kept)
+}
 </script>
 
 <template>
@@ -16,7 +33,8 @@ defineEmits<{ "update:modelValue": [value: string] }>()
 		<Icon name="search" :size="16" color="secondary" />
 		<input
 			:value="modelValue"
-			@input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+			@input="onInput"
+			@compositionend="onInput"
 			type="text"
 			:placeholder="placeholder"
 			maxlength="80"

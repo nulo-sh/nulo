@@ -33,7 +33,7 @@ import { makeShallowPxeFake, type ShallowPxeFakeConfig } from "@/wallet/services
 import { svc } from "@/wallet/services/composition-harness"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { fakeBrowser } from "@webext-core/fake-browser"
-import { TokenService } from "./service"
+import { TokenService, type TokenServiceOptions } from "./service"
 import { PinMismatchError, TokenSeeder, type TokenSeederDeps } from "./seeder"
 import { TOKEN_LIST_SERVICE_NAME, type TokenListSnapshot } from "@/wallet/services/token-list/spec"
 import type { Token, TokenInterface } from "./spec"
@@ -121,7 +121,7 @@ async function makeHarness(fakeConfig?: ShallowPxeFakeConfig) {
 	collection.add(svc(TaskService.name, { startNewTask }))
 	collection.add(svc(OperationJournalService.name, {}))
 	collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
-	const tokenService = new TokenService(logger, api, () => fake.client)
+	const tokenService = new TokenService(logger, api, { pxeClientFactory: () => fake.client })
 	collection.add(tokenService)
 	await collection.start()
 	return { tokenService, fake, api, fakeTask, startNewTask }
@@ -237,7 +237,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 	/** Chains the harness's network service reports quarantined. */
 	const quarantined = new Set<number>()
 
-	async function seedHarness(seederOverrides?: ConstructorParameters<typeof TokenService>[3]) {
+	async function seedHarness(seederOverrides?: TokenServiceOptions["seederOverrides"]) {
 		const fake = makeShallowPxeFake({
 			instances: new Map([[AztecAddress.fromStringUnsafe(CONTRACT).toString(), fakeTokenInstance()]]),
 			artifacts: new Map([[CLASS_ID, TokenContractArtifact]]),
@@ -286,7 +286,7 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		collection.add(svc(TaskService.name, { startNewTask: () => fakeTask }))
 		collection.add(svc(OperationJournalService.name, journal))
 		collection.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => FIXTURE_LIST, onListChanged }))
-		const tokenService = new TokenService(logger, api, () => fake.client, seederOverrides)
+		const tokenService = new TokenService(logger, api, { pxeClientFactory: () => fake.client, seederOverrides })
 		collection.add(tokenService)
 		await collection.start()
 		return { tokenService, fake, api, journal, onActiveProfileChanged, onActiveNetworkChanged, onAccountAdded, onListChanged }

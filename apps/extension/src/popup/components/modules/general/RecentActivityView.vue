@@ -29,11 +29,15 @@ import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
-import { stageSubtitle } from "@/utils/card-subtitle"
-import { activityRowRoute, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
+import { activityRowRoute, filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
 	buildJournalTerminalCardProps,
+	isInFlightActivityOp,
+	isQueuedTransfer,
+	journalCardAmount,
+	journalCardAmountSymbol,
+	journalProgressWord,
 	journalCardIcon,
 	journalCardOriginLabel,
 	journalCardTitle,
@@ -43,13 +47,7 @@ import {
 } from "@/utils/journal-state"
 import { callTitle } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
-import {
-	buildCancelHandler,
-	buildFocusHandler,
-	filterPendingDoubleRender,
-	isMatchingTask,
-	isOwnTerminalRecord,
-} from "./recent-activity-handlers"
+import { buildCancelHandler, buildFocusHandler, isMatchingTask, isOwnTerminalRecord } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 import { reaskReview } from "./reask-review"
 
@@ -324,16 +322,8 @@ function journalRecordOnThisView(op) {
 }
 
 const inFlightJournalOps = computed(() =>
-	journalOps.value.filter((op) => {
-		// Drop terminal records — they surface via the parallel
-		// `recentlyTerminalJournalOps` computed below.
-		if (op.terminalAt !== null) return false
-		// Only kinds classified as activity-feed render here. Centralized in
-		// `utils/journal-state.ts` so future kinds opt in (or stay routed to
-		// their own home surface) by one set update, not scattered if-chains.
-		if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-		return journalRecordOnThisView(op)
-	}),
+	// Terminal records surface through `recentlyTerminalJournalOps` below.
+	journalOps.value.filter((op) => isInFlightActivityOp(op) && journalRecordOnThisView(op)),
 )
 
 /** Terminal journal records (cancelled / failed) in scope, sorted newest-first.
@@ -378,27 +368,11 @@ const showJournalAwaiting = computed(() => inFlightJournalOps.value.length > 0)
  *  is independent. */
 const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a, b) => b.createdAt - a.createdAt))
 
-/** The awaiting card's amount, gated as the terminal card's is: null for an empty `amountRaw`, while
- *  the token or its decimals are unknown, and for dApp ops. */
-function cardAmountFor(op) {
-	if (op?.kind !== "transfer") return null
-	if (!op.amountRaw || op.tokenId === undefined) return null
-	const decimals = knownDecimals(tokenById(op.tokenId))
-	if (decimals === null) return null
-	return balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
-}
-
-/** The awaiting card's symbol: set whenever the token is known, amount or not. */
-function cardAmountSymbolFor(op) {
-	if (op?.kind !== "transfer") return null
-	if (op.tokenId === undefined) return null
-	return tokenById(op.tokenId)?.symbol || null
-}
-
-const isQueuedTransfer = (op) => op?.kind === "transfer" && op.progress?.stage === "queued"
+const cardAmountFor = (op) => journalCardAmount(op, tokenById)
+const cardAmountSymbolFor = (op) => journalCardAmountSymbol(op, tokenById)
 
 function awaitingSubtitleFor(op) {
-	return isQueuedTransfer(op) ? "Waiting for your earlier send" : cardSubtitleFor(op)
+	return isQueuedTransfer(op) ? journalProgressWord(op) : cardSubtitleFor(op)
 }
 
 const reaskLineFor = (op) => (isQueuedTransfer(op) && op.progress.reask ? "Fee went up. Review" : null)
@@ -478,7 +452,7 @@ function cardSubtitleFor(op) {
 	if (!op) return "Processing..."
 	// Backend evidence outranks the task label: the label only says a proof is
 	// being generated, the journal says where.
-	if (op.progress?.stage === "proving" && op.progress.backend) return stageSubtitle("proving", op.progress.backend)
+	if (op.progress?.stage === "proving" && op.progress.backend) return journalProgressWord(op)
 	if (executingTask.value) {
 		const account = appStore.account?.address
 		if (isMatchingTask(executingTask.value, op, account)) {
@@ -489,10 +463,8 @@ function cardSubtitleFor(op) {
 			}
 		}
 	}
-	// Stage-level default — pure helper in `@/utils/card-subtitle` so the
-	// switch is unit-testable. The executingTask subtask decoration above
-	// stays inline because it consumes Vue reactive state.
-	return stageSubtitle(op.progress?.stage)
+	// The executingTask subtask decoration above stays inline because it consumes Vue reactive state.
+	return journalProgressWord(op)
 }
 
 /** True when an executingTask is present but no in-flight journal record

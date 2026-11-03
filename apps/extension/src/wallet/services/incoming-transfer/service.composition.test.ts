@@ -155,7 +155,7 @@ async function startService(api: FakeBrowserApi, notes: Record<string, unknown> 
 	collection.add(svc(TaskService.name, { getTaskSync: () => ({ status: 0 }) }))
 	collection.add(svc(PriceService.name, { getQuotes: async () => ({ quotes: {}, pricedTokens: {} }) }))
 	const logger = debugLogger()
-	const service = new IncomingTransferService(logger, api, 1_000_000, scope.reader ?? reader)
+	const service = new IncomingTransferService(logger, api, { pollIntervalMs: 1_000_000, publicReader: scope.reader ?? reader })
 	collection.add(service)
 	await collection.start()
 	return { service, logger, visibility }

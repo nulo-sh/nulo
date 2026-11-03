@@ -1,23 +1,25 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { maybeRethrowAsRpcCancel } from "@/wallet/services/execution/rpc-cancel"
-import {
+import type {
 	ExecutionService,
-	type FeeSettings,
-	type AuthwitContent,
-	type SendTransactionOperation,
-	type TransferFeeEstimate,
+	FeeSettings,
+	AuthwitContent,
+	SendTransactionOperation,
+	TransferFeeEstimate,
 } from "@/wallet/services/execution/service"
+import { EXECUTION_SERVICE_NAME } from "@/wallet/services/execution/spec"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { NetworkService } from "@/wallet/services/network/service"
 import { type Network, primaryEndpointUrl } from "@/wallet/services/network/spec"
 import { AccountService } from "@/wallet/services/account/service"
-import { type AccountScope, accountScopeKey } from "@/wallet/services/account/spec"
+import { type AccountScope, accountScopeMatcher } from "@/wallet/services/account/spec"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import type { WrappedTask } from "@/wallet/services/task/wrapped-task"
 import { TaskService, RevokeAuthwitsContent, StepContent } from "@/wallet/services/task/service"
@@ -134,7 +136,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.profileService = services.get(ProfileService.name)
 		this.networkService = services.get(NetworkService.name)
 		this.accountService = services.get(AccountService.name)
-		this.executionService = services.get(ExecutionService.name)
+		this.executionService = services.get(EXECUTION_SERVICE_NAME)
 		this.transactionService = services.get(TransactionService.name)
 		this.taskService = services.get(TaskService.name)
 
@@ -150,17 +152,18 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		// reverts, so the revocation index never claims a grant that never landed. Best-effort and
 		// idempotent: a failed pass is retried on the next tx update, or by sync.
 		this.transactionService.onTransactionUpdated.add((tx) => this.reconcileFromTx(tx).catch(() => {}))
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext authorizations failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext authwits and flags under the lock every writer of both holds. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext authorizations failed; the next worker retries", { error })
-		}
+		await this.authwits.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		await this.statuses.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
 	}
 
 	/** Map a tx's settled on-chain outcome to a pending-authwit reconcile, scoped to the tx's own
@@ -656,26 +659,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Awaited authwit + status purge for a SET of `(chainId, address)` scopes within ONE profile —
-	 *  registered with AccountService and invoked BEFORE the Account rows are deleted.
-	 *  Scope is the full tuple: a bare-address match would destroy a sibling profile's rows (shared
-	 *  addresses are a supported state), and an address+profile match would destroy this profile's
-	 *  rows on ANOTHER chain. Idempotent. */
+	 *  registered with AccountService and invoked BEFORE the Account rows are deleted. Idempotent. */
 	public async purgeForAccounts(scopes: ReadonlyArray<AccountScope>, profileId: string): Promise<void> {
 		await this.ensureInitialized()
 		if (scopes.length === 0) return
-		const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
+		const match = accountScopeMatcher(profileId, scopes)
 		// A plain arrow, never async: an async wrapper delays the lock release by a tick.
-		await this.lock.withLock(() =>
-			this.purgeMatchingLocked({
-				row: (a) => a.profileId === profileId && keys.has(accountScopeKey(a.chainId, a.account)),
-				raw: (raw) =>
-					raw.profileId === profileId &&
-					typeof raw.chainId === "number" &&
-					typeof raw.account === "string" &&
-					keys.has(accountScopeKey(raw.chainId, raw.account)),
-				status: (s) => s.profileId === profileId && keys.has(accountScopeKey(s.chainId, s.account)),
-			}),
-		)
+		await this.lock.withLock(() => this.purgeMatchingLocked({ row: match.row, raw: match.raw, status: match.row }))
 	}
 
 	/** Awaited authwit + status purge for one whole profile (profile-delete cascade). */

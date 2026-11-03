@@ -1,8 +1,15 @@
 import { describe, expect, test } from "vitest"
 import type { IncomingNoteRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
-import type { Tx } from "@/wallet/services/transaction/spec"
-import { buildActivityRows, journalRecordInScope, rowOnToken, txOnToken } from "./activity-rows"
+import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
+import {
+	buildActivityRows,
+	filterPendingDoubleRender,
+	journalRecordInScope,
+	type MinimalChainTx,
+	rowOnToken,
+	txOnToken,
+} from "./activity-rows"
 
 function tx(createdAt: number, hash: string): Tx {
 	return { hash, createdAt, account: "0xa", calls: [] } as unknown as Tx
@@ -399,5 +406,93 @@ describe("a token's rows", () => {
 	test("a tx with no calls belongs to no token", () => {
 		expect(txOnToken({ calls: undefined } as unknown as Tx, "0xusdc")).toBe(false)
 		expect(txOnToken(onContract("0x3", "0xusdc"), "0xusdc")).toBe(true)
+	})
+})
+
+// T1 succeeds while T2 is still in flight: T1's pending chain tx stays until it confirms.
+describe("filterPendingDoubleRender", () => {
+	const op = (overrides: Partial<OperationRecord>) => journal({ tokenId: 42, ...overrides })
+	const t1Hash = "0xtxhash1"
+	const t2Hash = "0xtxhash2"
+
+	function tx(hash: string, status: TxStatus): MinimalChainTx {
+		return { hash, status }
+	}
+
+	test("pending chain tx with no in-flight journal matches → stays visible", () => {
+		const txs = [tx(t1Hash, TxStatus.Pending)]
+		expect(filterPendingDoubleRender(txs, []).map((t) => t.hash)).toEqual([t1Hash])
+	})
+
+	test("pending chain tx that matches a `submitting` journal op → suppressed", () => {
+		const txs = [tx(t1Hash, TxStatus.Pending)]
+		const inFlight = [op({ id: "j1", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t1Hash } })]
+		expect(filterPendingDoubleRender(txs, inFlight)).toEqual([])
+	})
+
+	test("pending T1 chain tx stays visible when T2 is queued (T2 has no txHash) — the lost-card pin", () => {
+		const txs = [tx(t1Hash, TxStatus.Pending)]
+		const inFlight = [
+			op({
+				id: "j2",
+				kind: "dapp_execute",
+				terminalAt: null,
+				progress: { stage: "queued" },
+				sessionId: "s1",
+			}),
+		]
+		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t1Hash])
+	})
+
+	test("pending T1 chain tx stays visible when T2 is proving (no txHash yet) — covers the user-reported gap", () => {
+		// Mirrors the QA-reported sequence: T1 succeeded, T2 still proving.
+		// T1's pending chain tx must keep T1 on screen until it confirms.
+		const txs = [tx(t1Hash, TxStatus.Pending)]
+		const inFlight = [op({ id: "j2", kind: "dapp_execute", terminalAt: null, progress: { stage: "proving", enteredProveAt: 0 } })]
+		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t1Hash])
+	})
+
+	test("submitting-stage journal records WITHOUT txHash don't suppress anything", () => {
+		// `submitting.txHash` is optional in the schema. A record between FSM
+		// entry and txHash population should NOT swallow unrelated pending txs.
+		const txs = [tx(t1Hash, TxStatus.Pending)]
+		const inFlight = [op({ id: "j1", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting" } })]
+		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t1Hash])
+	})
+
+	test("non-pending chain txs are always visible regardless of in-flight set", () => {
+		// Use any non-Pending status (Proposed, Proven, Finalized). The
+		// filter only acts on Pending.
+		const txs = [tx(t1Hash, TxStatus.Proven), tx(t2Hash, TxStatus.Finalized)]
+		const inFlight = [op({ id: "j1", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t1Hash } })]
+		// t1Hash matches but its chain tx is Proven, not Pending, so it stays.
+		expect(
+			filterPendingDoubleRender(txs, inFlight)
+				.map((t) => t.hash)
+				.sort(),
+		).toEqual([t1Hash, t2Hash].sort())
+	})
+
+	test("multi-record in-flight set suppresses only the matching pending tx", () => {
+		const txs = [tx(t1Hash, TxStatus.Pending), tx(t2Hash, TxStatus.Pending)]
+		const inFlight = [
+			op({ id: "j1", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t1Hash } }),
+			op({ id: "j2", kind: "dapp_execute", terminalAt: null, progress: { stage: "queued" }, sessionId: "s1" }),
+		]
+		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t2Hash])
+	})
+
+	test("two concurrent journal records both at `submitting` → both matching pending chain txs suppressed", () => {
+		// v2 Layer A: covers the multi-pending case the pre-v2 blanket-suppress
+		// was masking. Two concurrent sendTx ops each reach `submitting` (each
+		// carrying its own canonical txHash). Both matching pending chain txs
+		// must be suppressed; non-matching chain txs stay visible.
+		const t3Hash = "0xtxhash3"
+		const txs = [tx(t1Hash, TxStatus.Pending), tx(t2Hash, TxStatus.Pending), tx(t3Hash, TxStatus.Pending)]
+		const inFlight = [
+			op({ id: "j1", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t1Hash } }),
+			op({ id: "j2", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t2Hash } }),
+		]
+		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t3Hash])
 	})
 })

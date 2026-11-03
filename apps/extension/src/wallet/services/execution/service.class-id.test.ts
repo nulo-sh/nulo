@@ -5,8 +5,6 @@
  * `toString`-only fake, which also pins that the artifact comparison is by string.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import { ConfigStore } from "@/wallet/config"
-import { LoggerStore } from "@/wallet/logger"
 
 const stdlib = vi.hoisted(() => ({
 	recompute: vi.fn(async (_artifact: unknown): Promise<unknown> => ({ id: { toString: () => "0xclass" } })),
@@ -35,7 +33,7 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => {
 	}
 })
 
-import { ExecutionService } from "./service"
+import { RegistrationExecutor } from "./registration-executor"
 
 const ADDRESS = `0x${"0".repeat(60)}1234`
 const NETWORK = { id: "net1", profileId: "p1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
@@ -63,18 +61,18 @@ function makeService() {
 		getContractArtifact: vi.fn(async () => ARTIFACT),
 		getContractInstance: vi.fn(async () => instance()),
 	}
-	const service = new ExecutionService(new LoggerStore(new ConfigStore()))
-	const internals = service as unknown as {
-		networkService: unknown
-		pxeService: unknown
-		executeRegisterContract(op: unknown): Promise<unknown>
-		dappSessionService: unknown
-		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
-	}
-	internals.networkService = { getNetwork: async () => NETWORK }
-	internals.pxeService = pxe
-	internals.dappSessionService = { admitDappRegistration: async () => {} }
-	return { internals, pxe }
+	const executor = new RegistrationExecutor({
+		networkService: { getNetwork: async () => NETWORK },
+		pxeService: pxe,
+		dappSessionService: { admitDappRegistration: async () => {} },
+	} as never)
+	return { executor: executor as unknown as LooseRegistration, pxe }
+}
+
+/** The fakes stand in for stdlib values, so the calls take them untyped. */
+type LooseRegistration = {
+	executeRegisterContract(op: unknown): Promise<unknown>
+	executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<unknown>
 }
 
 // The smallest artifact the real `ContractArtifactSchema` accepts.
@@ -91,7 +89,7 @@ const SITES = [
 	{
 		site: "registerContract (C1)",
 		accountsRegistered: 0,
-		run: (s: ReturnType<typeof makeService>["internals"], artifact?: unknown) =>
+		run: (s: LooseRegistration, artifact?: unknown) =>
 			s.executeRegisterContract({
 				kind: "register_contract",
 				networkId: NETWORK.id,
@@ -103,7 +101,7 @@ const SITES = [
 	{
 		site: "aztec_registerContract (C2)",
 		accountsRegistered: 1,
-		run: (s: ReturnType<typeof makeService>["internals"], artifact?: unknown) =>
+		run: (s: LooseRegistration, artifact?: unknown) =>
 			s.executeAztecRegisterContract(
 				{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(), artifact, secretKey: "0x05" },
 				DAPP,
@@ -129,8 +127,8 @@ beforeEach(() => {
 
 describe.each(SITES)("$site: the artifact must hash to the instance's class id", ({ run, accountsRegistered }) => {
 	test("a distinct id object with the same string matches: the looked-up artifact is recomputed, then registered once", async () => {
-		const { internals, pxe } = makeService()
-		await run(internals)
+		const { executor, pxe } = makeService()
+		await run(executor)
 		expect(stdlib.recompute).toHaveBeenCalledWith(ARTIFACT)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 		expect(pxe.registerAccount).toHaveBeenCalledTimes(accountsRegistered)
@@ -138,8 +136,8 @@ describe.each(SITES)("$site: the artifact must hash to the instance's class id",
 
 	test("a mismatch is refused with the plain Error and its exact text, before anything is registered", async () => {
 		stdlib.recompute.mockImplementation(async () => ({ id: { toString: () => "0xother" } }))
-		const { internals, pxe } = makeService()
-		const refused = (await rejectionOf(run(internals))) as Error
+		const { executor, pxe } = makeService()
+		const refused = (await rejectionOf(run(executor))) as Error
 		expect(refused.constructor).toBe(Error)
 		expect(refused.message).toBe(MISMATCH)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
@@ -149,8 +147,8 @@ describe.each(SITES)("$site: the artifact must hash to the instance's class id",
 
 	test("a supplied artifact that mismatches is refused without a lookup, before anything is registered", async () => {
 		stdlib.recompute.mockImplementation(async () => ({ id: { toString: () => "0xother" } }))
-		const { internals, pxe } = makeService()
-		const refused = (await rejectionOf(run(internals, SUPPLIED))) as Error
+		const { executor, pxe } = makeService()
+		const refused = (await rejectionOf(run(executor, SUPPLIED))) as Error
 		expect(refused.message).toBe(MISMATCH)
 		expect(stdlib.recompute).toHaveBeenCalledWith(expect.objectContaining({ name: "Fixture" }))
 		expect(pxe.getContractArtifact).not.toHaveBeenCalled()
@@ -163,23 +161,23 @@ describe.each(SITES)("$site: the artifact must hash to the instance's class id",
 		stdlib.recompute.mockImplementation(async () => {
 			throw failure
 		})
-		const { internals, pxe } = makeService()
-		expect(await rejectionOf(run(internals))).toBe(failure)
+		const { executor, pxe } = makeService()
+		expect(await rejectionOf(run(executor))).toBe(failure)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
 		expect(pxe.registerAccount).not.toHaveBeenCalled()
 	})
 })
 
 describe("aztec_registerContract binds the artifact to the original class", () => {
-	const register = (s: ReturnType<typeof makeService>["internals"], current = classId("0xclass")) =>
+	const register = (s: LooseRegistration, current = classId("0xclass")) =>
 		s.executeAztecRegisterContract(
 			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance: instance(current), secretKey: "0x05" },
 			DAPP,
 		)
 
 	test("the artifact is looked up by the original class id", async () => {
-		const { internals, pxe } = makeService()
-		await register(internals)
+		const { executor, pxe } = makeService()
+		await register(executor)
 		expect(pxe.getContractArtifact).toHaveBeenCalledWith(expect.anything(), ORIGINAL)
 		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
 	})
@@ -187,8 +185,8 @@ describe("aztec_registerContract binds the artifact to the original class", () =
 	test("a current class id other than the original is refused with the plain Error, before anything is registered", async () => {
 		// The artifact hashes to the current class id, so only the original-class binding refuses it.
 		stdlib.recompute.mockImplementation(async () => ({ id: { toString: () => "0xother" } }))
-		const { internals, pxe } = makeService()
-		const refused = (await rejectionOf(register(internals, classId("0xother")))) as Error
+		const { executor, pxe } = makeService()
+		const refused = (await rejectionOf(register(executor, classId("0xother")))) as Error
 		expect(refused.constructor).toBe(Error)
 		expect(refused.message).toBe(MISMATCH)
 		expect(pxe.registerContract).not.toHaveBeenCalled()
@@ -196,8 +194,8 @@ describe("aztec_registerContract binds the artifact to the original class", () =
 	})
 
 	test("an artifact of the original class does not admit a different current class id, so no account is registered", async () => {
-		const { internals, pxe } = makeService()
-		const refused = (await rejectionOf(register(internals, classId("0xother")))) as Error
+		const { executor, pxe } = makeService()
+		const refused = (await rejectionOf(register(executor, classId("0xother")))) as Error
 		expect(refused.message).toBe(MISMATCH)
 		expect(pxe.registerAccount).not.toHaveBeenCalled()
 		expect(pxe.registerContract).not.toHaveBeenCalled()

@@ -14,7 +14,7 @@
 
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
-import type { Tx } from "@/wallet/services/transaction/spec"
+import { type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import { ACTIVITY_FEED_KINDS } from "./journal-state"
 
 export type ActivityRowTx = { type: "tx"; key: string; sortKey: number; tx: Tx }
@@ -159,4 +159,27 @@ export function activityRowRoute(row: ActivityRow): string {
 		case "journal":
 			return `/popup/journal/${row.op.id}`
 	}
+}
+
+/** Minimal chain-tx shape the pending-suppression filter needs. */
+export interface MinimalChainTx {
+	hash: string
+	status: TxStatus
+}
+
+/**
+ * Drops each pending chain tx an in-flight `submitting` record names by hash, which renders as that
+ * record's card. No other in-flight stage carries a hash, so an earlier send's pending tx stays while a
+ * later one runs; the journal's FSM keeps `submitting.txHash === succeeded.txHash`.
+ */
+export function filterPendingDoubleRender<T extends MinimalChainTx>(
+	txs: ReadonlyArray<T>,
+	inFlightJournalOps: ReadonlyArray<OperationRecord>,
+): T[] {
+	const inFlightHashes = new Set<string>()
+	for (const op of inFlightJournalOps) {
+		const stage = op.progress
+		if (stage.stage === "submitting" && stage.txHash) inFlightHashes.add(stage.txHash)
+	}
+	return txs.filter((t) => t.status !== TxStatus.Pending || !inFlightHashes.has(t.hash))
 }

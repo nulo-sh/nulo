@@ -1,3 +1,4 @@
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { ValidationError } from "@nulo/extension-messaging/errors"
 import { validateParams } from "@nulo/extension-messaging/zod"
@@ -172,17 +173,18 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		} catch {
 			this.profileService = null
 		}
-		this.profileService?.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext journal failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext records under the transition lock, which every journal writer
 	 *  holds, so no transition lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.storage.sealLegacy(profileId, (fn) => this.transitionLock.withLock(fn))
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext journal failed; the next worker retries", { error })
-		}
+		await this.storage.sealLegacy(profileId, (fn) => this.transitionLock.withLock(fn))
 	}
 
 	/**

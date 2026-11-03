@@ -88,6 +88,8 @@ jobs:
               - '.github/workflows/pr-extension-network-e2e-firefox.yml'
               - 'scripts/ci-cd/e2e-decide.sh'
               - 'scripts/ci-cd/e2e-aggregate.sh'
+              - 'scripts/ci-cd/live-labels.sh'
+              - 'scripts/ci-cd/assert-canary-results.ts'
               - '.github/actions/setup-aztec/**'
               - '.github/actions/setup-presto-server/**'
               - '.github/actions/setup-bun/**'
