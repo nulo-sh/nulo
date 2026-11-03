@@ -228,6 +228,34 @@ describe("TokenList — add a pasted address", () => {
 		expect(symbols(w)).toEqual(["USDC"])
 	})
 
+	describe("pasted with a character the typed-text rule removes", () => {
+		const zwsp = String.fromCodePoint(0x200b)
+		const rlo = String.fromCodePoint(0x202e)
+		const field = (w: ReturnType<typeof mountList>) => w.find('[data-testid="holdings-search"]').element as HTMLInputElement
+
+		test("an unlisted address offers to add the address, and the field holds the address", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `${UNLISTED.slice(0, 30)}${zwsp}${UNLISTED.slice(30)}`)
+			expect(field(w).value).toBe(UNLISTED)
+			await w.get('[data-testid="holdings-add-token"]').trigger("click")
+			expect(w.emitted("addToken")).toEqual([[UNLISTED]])
+		})
+
+		test("a listed address shows its row and no add row", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `${rlo}${LISTED}${zwsp}`)
+			expect(symbols(w)).toEqual(["USDC"])
+			expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		})
+
+		test("an address with a visible wrong character offers nothing", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `${UNLISTED.slice(0, -1)}g${zwsp}`)
+			expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+			expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(true)
+		})
+	})
+
 	test("an address an empty row behind the fold holds gets no add row", async () => {
 		const w = mountList({ rows: [row(1, "HELD", { privateBalance: ONE }), row(2, "E", { contract: LISTED })] })
 		await setQuery(w, LISTED)

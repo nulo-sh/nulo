@@ -60,15 +60,46 @@ describe("useJournalMirror — snapshots", () => {
 		m.dispose()
 	})
 
-	test("an event during a read is overwritten when the read lands", async () => {
-		const { m, read } = mirror()
+	test("an event during a read is replayed over the snapshot when the read lands", async () => {
+		const { m, read, onRecord } = mirror()
 		const pending = deferred<OperationRecord[]>()
 		read.mockReturnValueOnce(pending.promise)
 		const run = m.resnapshot()
 		m.onOperationAdded(op("live"))
 		pending.resolve([op("a")])
 		await run
-		expect(ids(m.rows.value)).toEqual(["a"])
+		expect(ids(m.rows.value)).toEqual(["live", "a"])
+		expect(onRecord).toHaveBeenCalledTimes(1)
+	})
+
+	test("a snapshot read before an update or a delete never undoes it: both replay, in order", async () => {
+		const { m, read } = mirror()
+		const pending = deferred<OperationRecord[]>()
+		read.mockReturnValueOnce(pending.promise)
+		const run = m.resnapshot()
+		m.onOperationUpdated(op("a", { terminalAt: 2 }))
+		m.onOperationDeleted(op("b"))
+		m.onOperationUpdated(op("x", { kind: "token_import" }))
+		pending.resolve([op("a", { terminalAt: null }), op("b")])
+		await run
+		expect(m.rows.value).toEqual([op("a", { terminalAt: 2 })])
+	})
+
+	test("a superseded read replays nothing; the current one replays only what reached it while it was out", async () => {
+		const { m, read } = mirror()
+		const older = deferred<OperationRecord[]>()
+		const newer = deferred<OperationRecord[]>()
+		read.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise)
+		const first = m.resnapshot()
+		m.onOperationAdded(op("before"))
+		const second = m.resnapshot()
+		m.onOperationAdded(op("during"))
+		newer.resolve([op("s")])
+		await second
+		expect(ids(m.rows.value)).toEqual(["during", "s"])
+		older.resolve([op("old")])
+		await first
+		expect(ids(m.rows.value)).toEqual(["during", "s"])
 	})
 })
 
@@ -178,6 +209,19 @@ describe("useJournalMirror — a refused read", () => {
 		await vi.advanceTimersByTimeAsync(10_000)
 		expect(read).toHaveBeenCalledTimes(2)
 		expect(ids(m.rows.value)).toEqual(["new"])
+	})
+
+	test("a refused read drops what it recorded; its retry replays only what reached it while the retry was out", async () => {
+		const { m, read } = mirror()
+		const retry = deferred<OperationRecord[]>()
+		read.mockRejectedValueOnce(new Error("port closed")).mockReturnValueOnce(retry.promise)
+		await expect(m.resnapshot()).rejects.toThrow("port closed")
+		m.onOperationAdded(op("between"))
+		await vi.advanceTimersByTimeAsync(2_000)
+		m.onOperationAdded(op("during"))
+		retry.resolve([op("s")])
+		await vi.advanceTimersByTimeAsync(0)
+		expect(ids(m.rows.value)).toEqual(["during", "s"])
 	})
 
 	test("a superseded run's late refusal still rejects, arms nothing, and leaves the current run's retry armed", async () => {

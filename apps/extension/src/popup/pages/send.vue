@@ -572,6 +572,26 @@ watch(isEstimating, (estimating) => {
 	if (!estimating) clearQueued()
 })
 
+/** How long one question may run before the fee card and the review say so and offer to ask again. */
+const ESTIMATE_SLOW_MS = 20_000
+const estimateSlow = ref(false)
+let estimateSlowTimer
+/** Every new question restarts it: a reschedule leaves `isEstimating` true, so the watch alone misses it. */
+function restartSlowClock() {
+	clearTimeout(estimateSlowTimer)
+	estimateSlow.value = false
+	if (isEstimating.value) estimateSlowTimer = setTimeout(() => (estimateSlow.value = true), ESTIMATE_SLOW_MS)
+}
+watch(isEstimating, restartSlowClock)
+
+/** A send that can go out while its estimate runs keeps its word; otherwise the disabled button says why. */
+const submitLabel = computed(() => {
+	if (isSending.value) return "CONFIRMING"
+	if (isEstimating.value && !queueMode.value) return "Estimating fee"
+	if (facts.value.requiresReview) return "Review send"
+	return queueMode.value ? "Queue send" : "Confirm Transaction"
+})
+
 /** An imported token's id: the token watch's next run keeps the amount and each side the token
  *  supports. */
 let keepFormFor
@@ -648,6 +668,7 @@ function requestEstimate() {
 		amount: amountValidation.value.integerized,
 		settings: feeSettings.value,
 	})
+	restartSlowClock()
 }
 
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
@@ -802,6 +823,7 @@ onBeforeUnmount(() => {
 	if (!submitInFlight) disconnectExecution()
 
 	cancelFeeEstimate()
+	clearTimeout(estimateSlowTimer)
 
 	amountTerm.value = null
 
@@ -884,6 +906,12 @@ onBeforeUnmount(() => {
 					</Flex>
 				</div>
 
+				<!-- In the page, not the pinned footer, so it never covers the amount's balance, its refusal or the fee. -->
+				<Flex v-if="!isBlockedTransfer" direction="column" gap="10" :class="$style.publish">
+					<PublishStrip :facts="facts" @open="openReview" />
+					<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
+				</Flex>
+
 				<!-- Section: Fee Summary -->
 				<div :class="$style.section_last">
 					<FeeSettingsCard
@@ -896,6 +924,7 @@ onBeforeUnmount(() => {
 						:queuedCap="queueCap"
 						:amountTyped="Boolean(amountTerm)"
 						:estimateFailed="estimateFailed"
+						:estimateSlow="estimateSlow"
 						:originPrivacy="selectedSendType"
 						:payerNoticeShape="facts.noticeShape"
 						:txShape="feeTxShape"
@@ -911,8 +940,6 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
-				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
-				<Text v-if="showsTokenCaveat" variant="body" color="secondary" data-testid="send-token-caveat">{{ TOKEN_CAVEAT }}</Text>
 				<Button
 					v-if="needsFeeJuice"
 					@click="openFeeJuiceBridge"
@@ -932,7 +959,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueMode ? "Queue send" : "Confirm Transaction" }}
+					{{ submitLabel }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -954,7 +981,10 @@ onBeforeUnmount(() => {
 			:ready="reviewReady"
 			:queuedCapText="queueCap ? queuedCapText : undefined"
 			:queuedSponsored="queuedSponsored"
+			:estimating="isEstimating"
+			:slow="estimateSlow"
 			@close="closeReview"
+			@retry="requestEstimate"
 			@send="submit('review')"
 		/>
 	</Flex>
@@ -999,12 +1029,16 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
+.publish {
+	padding-top: 14px;
+}
+
 .bottom {
 	position: sticky;
 	bottom: 0;
 	z-index: 5;
 
-	padding: 20px 24px;
+	padding: 12px 24px;
 	background: var(--app-bg);
 	border-top: 1px solid var(--nulo-border);
 }

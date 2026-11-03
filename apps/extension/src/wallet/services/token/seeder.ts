@@ -351,7 +351,7 @@ export class TokenSeeder {
 		const epoch = this.epoch
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
 		if (seeds.length === 0) return []
-		const state = await this.readMarkerState(profileId)
+		const state = await this.readMarkerStateOrEmpty(profileId)
 		if (this.epoch !== epoch) return []
 		return seeds.filter((seed) => state[tokenKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
 	}
@@ -679,7 +679,7 @@ export class TokenSeeder {
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
 		const version = this.getVersion()
 		if (seeds.length === 0) return []
-		const state = await this.readMarkerState(profileId)
+		const state = await this.readMarkerStateOrEmpty(profileId)
 		const entries: SeedStatusEntry[] = []
 		for (const seed of seeds) {
 			const key = tokenKey(chainId, seed.contract)
@@ -767,16 +767,16 @@ export class TokenSeeder {
 	 * silently DROPPED by JSON.stringify) or a corrupt entry must neither
 	 * throw (that would block token deletion from writing its tombstone) nor
 	 * eat a tombstone write. Corrupt state resets to empty; corrupt entries
-	 * are dropped.
+	 * are dropped. A failed read rejects: every marker write is built on this
+	 * read, and an empty stand-in would erase the profile's tombstones.
 	 */
 	private async readMarkerState(profileId: string): Promise<SeedMarkerState> {
-		let stored: unknown
-		try {
-			stored = await this.markers.get(profileId)
-		} catch {
-			return {}
-		}
-		return decodeSeedMarkers(stored, Date.now())
+		return decodeSeedMarkers(await this.markers.get(profileId), Date.now())
+	}
+
+	/** For an answer that writes nothing: a failed read answers as if no marker were stored. */
+	private readMarkerStateOrEmpty(profileId: string): Promise<SeedMarkerState> {
+		return this.readMarkerState(profileId).catch(() => ({}))
 	}
 
 	private log(level: LogLevel, ...args: unknown[]): void {

@@ -631,15 +631,15 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			this.deletingNetworks.add(id)
 			this.reservations.set(id, (this.reservations.get(id) ?? 0) + 1)
 			try {
-				// The way out of a reset that cannot finish: its journal and verdict go with the row.
+				await this.purgeChain(profile.id, network.chainId, network.id)
+				// The way out of a reset that cannot finish: its journal and verdict go with the row, and
+				// only after the purge, so a failed purge leaves the chain quarantined for the retry.
 				await this.staleNetworks.withLock(profile.id, async () => {
 					if ((await this.staleNetworks.getJournal(profile.id))?.networkId === id) {
 						await this.staleNetworks.deleteJournalLocked(profile.id)
 					}
 					await this.staleNetworks.removeEntryLocked(profile.id, id)
 				})
-				// Purge chain-scoped state via the awaited coordinator
-				await this.purgeChain(profile.id, network.chainId, network.id)
 				await this.storage.delete(id)
 			} finally {
 				this.deletingNetworks.delete(id)

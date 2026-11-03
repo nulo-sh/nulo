@@ -11,6 +11,7 @@
 
 <script setup>
 /** Components */
+import TransactionAwaitingCard from "@/components/composite/activity/TransactionAwaitingCard.vue"
 import TransactionsList from "../components/modules/activity/TransactionsList.vue"
 
 /** Services */
@@ -22,7 +23,16 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
-import { buildActivityRows, rowOnToken } from "@/utils/activity-rows"
+import { buildActivityRows, filterPendingDoubleRender, rowOnToken } from "@/utils/activity-rows"
+import {
+	journalCardAmount,
+	journalCardAmountSymbol,
+	journalCardIcon,
+	journalCardOriginLabel,
+	journalCardTitle,
+	journalCardTransferTypeLabel,
+	journalProgressWord,
+} from "@/utils/journal-state"
 import { dashIfBlank } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
@@ -32,6 +42,7 @@ import { useHeroVisible } from "@/composables/useHeroVisible"
 import { useIncomingTransfers } from "@/composables/useIncomingTransfers"
 import { useJournalMirror } from "@/composables/useJournalMirror"
 import { useScopedTokens } from "@/composables/useScopedTokens"
+import { SENDS_IN_PROGRESS_KEY } from "@/composables/useSendsInProgress"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -100,6 +111,10 @@ journalService.onOperationUpdated.add(terminalOpEvents.onOperationUpdated)
 journalService.onOperationDeleted.add(terminalOpEvents.onOperationDeleted)
 journalService.onConnected.add(loadTerminalJournalOps)
 
+/** Provided by the shell; without it the page lists no pending rows. */
+const sends = inject(SENDS_IN_PROGRESS_KEY, undefined)
+const inFlightOps = computed(() => sends?.records.value ?? [])
+
 /** Discriminated row model — see TransactionsList for shape. Three sources
  *  merge into one date-sorted feed: chain txs, terminal journal records
  *  (cancelled / interrupted / failed-pre-broadcast), and incoming-receive
@@ -107,7 +122,8 @@ journalService.onConnected.add(loadTerminalJournalOps)
  *  and the home Recent Activity widget agree on filter + sort semantics. */
 const activityRows = computed(() =>
 	buildActivityRows({
-		transactions: appStore.transactions,
+		// A pending tx a submitting record names shows once, as that record's pending row.
+		transactions: filterPendingDoubleRender(appStore.transactions, inFlightOps.value),
 		terminalJournalOps: terminalJournalOps.value,
 		incomingTransfers: incomingTransfers.value,
 		accountAddress: appStore.account?.address,
@@ -134,6 +150,13 @@ const visibleRows = computed(() => {
 	const token = filterToken.value
 	return token ? activityRows.value.filter((row) => rowOnToken(row, token)) : activityRows.value
 })
+/** Listed above every dated row, newest first, filtered by token as journal rows are. */
+const pendingOps = computed(() => {
+	if (filterPending.value) return []
+	const token = filterToken.value
+	return token ? inFlightOps.value.filter((op) => op.tokenId === token.id) : inFlightOps.value
+})
+const pendingLine = (op) => `Pending · ${journalProgressWord(op)}`
 
 const titleRef = useTemplateRef("titleRef")
 
@@ -216,12 +239,31 @@ onBeforeUnmount(() => {
 		</div>
 
 		<Flex direction="column" gap="24" :class="$style.content">
+			<!-- Sends in progress: a card with no action, which becomes a dated row once it ends. -->
+			<Flex v-if="pendingOps.length" direction="column" gap="10" data-testid="activity-pending">
+				<TransactionAwaitingCard
+					v-for="op in pendingOps"
+					:key="`pending:${op.id}`"
+					:title="journalCardTitle(op, { tokenById, tokens })"
+					:subtitle="pendingLine(op)"
+					:icon="journalCardIcon(op)"
+					:originLabel="journalCardOriginLabel(op)"
+					:amount="journalCardAmount(op, tokenById)"
+					:amountSymbol="journalCardAmountSymbol(op, tokenById)"
+					:transferTypeLabel="journalCardTransferTypeLabel(op)"
+					:stage="op.progress?.stage ?? null"
+					:backend="op.progress?.backend ?? null"
+					:hasApprovalWindow="false"
+					:oneLineTitle="op.kind === 'dapp_execute'"
+				/>
+			</Flex>
+
 			<!-- Mixed activity list (chain tx + journal terminal records) -->
 			<TransactionsList v-if="visibleRows.length" :rows="visibleRows" :tokens="tokens" :isArriving="arrivals?.isArriving" />
 
 			<!-- Empty state -->
 			<Flex
-				v-else-if="!filterPending"
+				v-else-if="!filterPending && !pendingOps.length"
 				direction="column"
 				align="center"
 				gap="12"

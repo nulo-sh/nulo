@@ -13,7 +13,7 @@ import RowTarget from "@/components/ui/RowTarget.vue"
 
 /** Utils */
 import { NoteServiceClient } from "@/wallet/services/note/client"
-import { stringCompare, trimAddress } from "@/utils/string"
+import { stringCompare, stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 
 /** Brutalist grayscale palette for the per-contract left-border accent.
  *  Replaces the colored 10-shade palette (`getColorFromAddress`) so the
@@ -207,6 +207,7 @@ onBeforeUnmount(() => {
 		<Input
 			v-if="notes.length"
 			v-model="searchTerm"
+			:normalize="stripBidiAndZeroWidth"
 			icon="search"
 			placeholder="Search by type, contract, name or location"
 			clearable

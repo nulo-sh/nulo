@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, test } from "vitest"
+import { beforeEach, describe, expect, test, vi } from "vitest"
 import { FakeBrowserApi } from "../testing/fake-browser-api"
-import { ValueStorage } from "./value-storage"
+import { ValueDecodeError, ValueStorage } from "./value-storage"
 
 /**
  * Contract tests for `ValueStorage`.
@@ -85,9 +85,20 @@ describe("ValueStorage", () => {
 		test("get THROWS on malformed JSON (no default, no delete)", async () => {
 			const vs = new ValueStorage<number>("count", api.storage.local)
 			await api.storage.local.set({ count: "{not json" })
-			await expect(vs.get()).rejects.toThrow()
+			await expect(vs.get()).rejects.toMatchObject({ name: "ValueDecodeError", message: "count: stored value does not decode" })
+			await expect(vs.get()).rejects.toBeInstanceOf(ValueDecodeError)
 			// The bad value is NOT deleted — still present for a repair path.
 			expect(await api.storage.local.get("count")).toEqual({ count: "{not json" })
+		})
+
+		test("a rejected storage read comes out as itself, never as a decode failure", async () => {
+			const vs = new ValueStorage<number>("count", api.storage.local)
+			const fault = new Error("IO error")
+			const get = vi.spyOn(api.storage.local, "get").mockRejectedValueOnce(fault)
+			await expect(vs.get()).rejects.toBe(fault)
+			expect(get).toHaveBeenCalledTimes(1)
+			await vs.set(3)
+			expect(await vs.get()).toBe(3)
 		})
 
 		test("injected codec: get THROWS on validation failure (no delete)", async () => {
@@ -97,7 +108,11 @@ describe("ValueStorage", () => {
 			}
 			const vs = new ValueStorage<number>("count", api.storage.local, isPositive)
 			await api.storage.local.set({ count: JSON.stringify(-5) }) // valid JSON, fails validation
-			await expect(vs.get()).rejects.toThrow("expected a positive number")
+			await expect(vs.get()).rejects.toMatchObject({
+				name: "ValueDecodeError",
+				message: "count: stored value does not decode",
+				cause: new Error("expected a positive number"),
+			})
 			expect(await api.storage.local.get("count")).toEqual({ count: "-5" })
 		})
 

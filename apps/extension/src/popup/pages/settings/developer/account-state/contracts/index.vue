@@ -11,6 +11,7 @@
 /** Components */
 
 /** Utils */
+import { stripBidiAndZeroWidth } from "@/utils/string"
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 
 /** Composables */
@@ -66,6 +67,7 @@ onBeforeUnmount(() => {
 		<Flex v-else-if="contracts.length" direction="column" gap="8">
 			<Input
 				v-model="searchTerm"
+				:normalize="stripBidiAndZeroWidth"
 				icon="search"
 				placeholder="Search through contracts"
 				clearable
