@@ -7,15 +7,17 @@ const profileApi = vi.hoisted(() => ({
 	createProfile: vi.fn(async () => ({ id: "p2", name: "Profile 2", type: "password" })),
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
-vi.mock("@/wallet/utils/onboarding-tab", () => ({ redirectToOnboardingTabIfNeeded: vi.fn() }))
+vi.mock("@/wallet/utils/onboarding-tab", () => ({ setupWaitsInTab: vi.fn(async () => false) }))
 vi.mock("./new-profile-helpers", () => ({ activateCreatedProfile: vi.fn(async () => undefined), makeCreateKeydownHandler: () => () => {} }))
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({ request: { value: null }, runCeremony: vi.fn(), onResolve: vi.fn(), onReject: vi.fn() }),
 }))
-vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {}, meta: {} }) }))
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
+vi.mock("vue-router", () => ({ useRouter: () => ({ push: nav.push, replace: nav.replace }), useRoute: () => ({ query: {}, meta: {} }) }))
 
 import { Flex, Input, Text } from "@nulo/design"
 import { expectNativeAttrs, nativeInput, pasteInto, typeNow } from "../../../../tests/helpers/credential-pins"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import New from "./new.vue"
 import { useNotificationStore } from "@/stores/notification.store"
 import { installChromeStorage } from "../../../../tests/helpers/chrome-storage-mock"
@@ -83,6 +85,25 @@ describe("popup new profile", () => {
 	test("the method starts on Passkey, as onboarding's does", async () => {
 		const w = await mountNew()
 		expect(w.findComponent({ name: "NewProfileMethodTabs" }).props("type")).toBe("passkey")
+	})
+
+	test("the passkey choice says what onboarding's Create says, word for word", async () => {
+		const w = await mountNew()
+		expect(w.get('[data-testid="register-passkey-info"]').text()).toBe(
+			"Your passkey replaces a password. Touch ID, Windows Hello, or a hardware key, whichever your device supports. It unlocks Nulo on this device. Your recovery phrase is what restores it.",
+		)
+	})
+
+	test("before setup is finished it goes to register, which says where setup goes on", async () => {
+		vi.mocked(setupWaitsInTab).mockResolvedValueOnce(true)
+		await mountNew()
+		expect(nav.replace).toHaveBeenCalledExactlyOnceWith("/popup/register")
+	})
+
+	test("once setup is done it stays", async () => {
+		await mountNew()
+		expect(setupWaitsInTab).toHaveBeenCalledOnce()
+		expect(nav.replace).not.toHaveBeenCalled()
 	})
 })
 

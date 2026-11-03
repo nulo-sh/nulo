@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	updated: [] as Array<(session: unknown) => void>,
 	deleted: [] as Array<(session: unknown) => void>,
 	routerGo: vi.fn(),
+	routerPush: vi.fn(),
 }))
 
 /** Each client the page builds, as the real one behaves: `disconnect()` rejects its unsettled calls
@@ -59,7 +60,10 @@ const clients = await vi.hoisted(async () => {
 })
 
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast: mocks.openToast }) }))
-vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "s1" } }), useRouter: () => ({ push: vi.fn(), go: mocks.routerGo }) }))
+vi.mock("vue-router", () => ({
+	useRoute: () => ({ params: { id: "s1" } }),
+	useRouter: () => ({ push: mocks.routerPush, go: mocks.routerGo }),
+}))
 vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: () => "" }))
 vi.mock("@/wallet/services/account/client", () => ({
 	AccountServiceClient: vi.fn(function () {
@@ -228,6 +232,35 @@ describe("Settings › Connected app › its row deleted elsewhere", () => {
 		expect(mocks.routerGo).not.toHaveBeenCalled()
 		for (const fn of mocks.deleted) fn({ id: "s1" })
 		expect(mocks.routerGo).toHaveBeenCalledWith(-1)
+	})
+})
+
+describe("Settings › Connected app › its first read", () => {
+	test.each([
+		{ order: "while it is out", answeredFirst: false },
+		{ order: "after it answered empty, before the page resumes", answeredFirst: true },
+	])("leaving $order opens no page of its own", async ({ answeredFirst }) => {
+		mocks.getDappSession.mockImplementationOnce(() => clients.HOLD)
+		const w = await mountPage(session([]))
+		expect(clients.held).toHaveLength(1)
+
+		if (answeredFirst) clients.held[0].resolve(undefined)
+		w.unmount()
+		await flushPromises()
+
+		expect(mocks.routerPush).not.toHaveBeenCalled()
+	})
+
+	test("a read refused while the page is open opens Connected apps", async () => {
+		mocks.getDappSession.mockRejectedValueOnce(new Error("Invalid id"))
+		await mountPage(session([]))
+		expect(mocks.routerPush).toHaveBeenCalledExactlyOnceWith("/popup/settings/connected-apps")
+	})
+
+	test("a session that loads stays on its page", async () => {
+		const w = await mountPage(session([]))
+		expect(w.find('[data-testid="connected-app-not-connected"]').exists()).toBe(true)
+		expect(mocks.routerPush).not.toHaveBeenCalled()
 	})
 })
 

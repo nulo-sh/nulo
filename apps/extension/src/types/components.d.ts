@@ -67,6 +67,7 @@ declare module 'vue' {
     NotificationManager: typeof import('./../components/NotificationManager.vue')['default']
     OnboardingBackLink: typeof import('./../onboarding/components/OnboardingBackLink.vue')['default']
     OnboardingPage: typeof import('./../onboarding/components/OnboardingPage.vue')['default']
+    OnboardingPhraseCheck: typeof import('./../onboarding/components/OnboardingPhraseCheck.vue')['default']
     OnboardingPhraseStep: typeof import('./../onboarding/components/OnboardingPhraseStep.vue')['default']
     OnboardingProfileNameField: typeof import('./../onboarding/components/OnboardingProfileNameField.vue')['default']
     OnboardingSkipLink: typeof import('./../onboarding/components/OnboardingSkipLink.vue')['default']

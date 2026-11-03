@@ -10,6 +10,17 @@ vi.mock("@/utils/core", () => ({ managers: { profile: profileApi } }))
 const bootstrap = vi.hoisted(() => ({ bootstrapActiveProfile: vi.fn(), hydrateKnownProfile: vi.fn() }))
 vi.mock("@/composables/useProfileBootstrap", () => ({ useProfileBootstrap: () => bootstrap }))
 const router = vi.hoisted(() => ({ push: vi.fn() }))
+const lastActive = vi.hoisted(() => ({
+	set: vi.fn(),
+	real: undefined as typeof import("@/utils/lastActiveProfile").setLastActiveProfileId | undefined,
+}))
+// The real pointer write, behind a spy a test can hold.
+vi.mock("@/utils/lastActiveProfile", async (importOriginal) => {
+	const mod = await importOriginal<typeof import("@/utils/lastActiveProfile")>()
+	lastActive.real = mod.setLastActiveProfileId
+	lastActive.set.mockImplementation(mod.setLastActiveProfileId)
+	return { ...mod, setLastActiveProfileId: lastActive.set }
+})
 vi.mock("vue-router", () => ({ useRouter: () => router, useRoute: () => ({ meta: {} }) }))
 const importFlow = vi.hoisted(() => ({
 	api: undefined as ReturnType<typeof import("@/composables/useProfileImportFlow").useProfileImportFlow> | undefined,
@@ -79,6 +90,7 @@ vi.mock("@/composables/useProfileImportFlow", async (importOriginal) => {
 
 import { BrutalistTitle, Flex, Input, Text } from "@nulo/design"
 import { EncryptionKey } from "@nulo/wallet-crypto"
+import { deferred } from "@nulo/wallet-core/utils"
 import { useToast } from "@/composables/toast"
 import { enterOn, nativeInput } from "../../../tests/helpers/credential-pins"
 import type { BackupSelection } from "@/utils/full-backup-helpers"
@@ -113,6 +125,8 @@ const page = (w: VueWrapper) => w.get('[data-testid="onboarding-import-page"]')
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	// `clearAllMocks` keeps queued once-values, which a test that failed early would hand on.
+	lastActive.set.mockReset().mockImplementation(lastActive.real!)
 	profileApi.getProfiles.mockResolvedValue([])
 	vi.stubGlobal("chrome", {
 		storage: {},
@@ -135,13 +149,12 @@ describe("onboarding import", () => {
 		expect(notices.clear).toHaveBeenCalledOnce()
 	})
 
-	test("a first-run import has no name field and reads Import / Wallet", async () => {
+	test("a first-run import has no name field and reads Import / Profile", async () => {
 		const w = await mountImport()
 		expect(page(w).attributes("data-name-field")).toBe("hidden")
 		expect(w.find('[data-testid="onboarding-name-input"]').exists()).toBe(false)
-		expect(w.text()).toContain("Import")
-		expect(w.text()).toContain("Wallet")
-		expect(w.text()).not.toContain("Profile")
+		expect(w.getComponent(OnboardingStepHeader).props()).toMatchObject({ main: "Import", sub: "Profile" })
+		expect(w.text()).not.toContain("Wallet")
 		expect(w.text()).toContain("Restore from a recovery phrase or a full backup.")
 	})
 
@@ -350,7 +363,7 @@ const IMPORTING: OnboardingCta = ["Importing...", "onboarding-submit-import", tr
 const RETRY: OnboardingCta = ["Retry", "import-full-backup-retry-btn", false, "false", "cta_outline", "large"]
 const CONTINUE: OnboardingCta = ["Continue", "import-full-backup-continue-btn", false, null, "cta", "large"]
 const VIEW_ERRORS: OnboardingCta = ["View errors", "import-full-backup-view-errors-btn", false, null, "cta_outline", "large"]
-const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a passkey I already have", testid, disabled, null, "", ""]
+const REUSE = (testid: string, disabled = false): OnboardingCta => ["Use a Nulo passkey I already have", testid, disabled, null, "", ""]
 const REUSE_BACKUP = REUSE("onboarding-import-backup-passkey-reuse")
 
 type Apis = { flow: NonNullable<typeof importFlow.api>; backup: NonNullable<typeof backupImport.api> }
@@ -663,5 +676,68 @@ describe("onboarding import — the reload mark", () => {
 		window.history.replaceState({ position: 3, onboardingPath: "import" }, "")
 		await mountImport()
 		expect(window.history.state).toEqual({ position: 3 })
+	})
+})
+
+describe("onboarding import — a page the person left", () => {
+	beforeEach(() => window.history.replaceState(null, ""))
+	afterEach(() => window.history.replaceState(null, ""))
+
+	async function startPhraseImport() {
+		const w = await mountImport()
+		const flow = importFlow.api!
+		flow.unlockMethod.value = "password"
+		flow.seedPhrase.value = `${"abandon ".repeat(23)}art`
+		flow.password.value = "password123"
+		flow.repeatedPassword.value = "password123"
+		await vi.waitFor(() => expect(flow.isAllowedToImportBySeedPhrase.value).toBe(true))
+		return { w, imported: flow.handleImportSeed() }
+	}
+
+	function leave(w: VueWrapper) {
+		w.unmount()
+		wrappers.splice(wrappers.indexOf(w), 1)
+	}
+
+	test("an import that resolves after the page left marks nothing, writes no pointer, bootstraps nothing, routes nowhere", async () => {
+		const created = deferred<{ id: string; name: string; type: "password" }>()
+		profileApi.importMnemonic.mockReturnValueOnce(created.promise)
+		const { w, imported } = await startPhraseImport()
+		await vi.waitFor(() => expect(profileApi.importMnemonic).toHaveBeenCalledTimes(1))
+		leave(w)
+		created.resolve({ id: "p1", name: "Main", type: "password" })
+		await imported
+		expect(donePath(window.history.state)).toBeUndefined()
+		expect(lastActive.set).not.toHaveBeenCalled()
+		expect(bootstrap.bootstrapActiveProfile).not.toHaveBeenCalled()
+		expect(router.push).not.toHaveBeenCalled()
+	})
+
+	test("a pointer write that lands after the page left starts no bootstrap and routes nowhere", async () => {
+		const written = deferred()
+		lastActive.set.mockReturnValueOnce(written.promise)
+		const { w, imported } = await startPhraseImport()
+		await vi.waitFor(() => expect(lastActive.set).toHaveBeenCalledTimes(1))
+		const unless = (lastActive.set.mock.calls[0]?.[1] as { unless?: () => boolean } | undefined)?.unless
+		expect(unless?.()).toBe(false)
+		leave(w)
+		expect(unless?.()).toBe(true)
+		written.resolve()
+		await imported
+		expect(bootstrap.bootstrapActiveProfile).not.toHaveBeenCalled()
+		expect(router.push).not.toHaveBeenCalled()
+	})
+
+	test("a bootstrap that fails after the page left starts no recovery and routes nowhere", async () => {
+		const booted = deferred<boolean>()
+		bootstrap.bootstrapActiveProfile.mockReturnValueOnce(booted.promise)
+		bootstrap.hydrateKnownProfile.mockResolvedValue(undefined)
+		const { w, imported } = await startPhraseImport()
+		await vi.waitFor(() => expect(bootstrap.bootstrapActiveProfile).toHaveBeenCalledTimes(1))
+		leave(w)
+		booted.resolve(false)
+		await imported
+		expect(bootstrap.hydrateKnownProfile).not.toHaveBeenCalled()
+		expect(router.push).not.toHaveBeenCalled()
 	})
 })

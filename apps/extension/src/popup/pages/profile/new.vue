@@ -17,7 +17,8 @@ import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
 /** Utils */
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { capitalize } from "@/utils/string"
-import { redirectToOnboardingTabIfNeeded } from "@/wallet/utils/onboarding-tab"
+import { PASSKEY_COPY } from "@/utils/passkey-copy"
+import { setupWaitsInTab } from "@/wallet/utils/onboarding-tab"
 import { activateCreatedProfile, makeCreateKeydownHandler } from "./new-profile-helpers"
 import { openingFlowLive } from "@/popup/opening-flow"
 
@@ -41,9 +42,10 @@ const { openToast } = useToast()
 const route = useRoute()
 const router = useRouter()
 
-// Deep-link bypass: redirect to onboarding tab when no profile exists AND
-// onboarding hasn't been completed. Same predicate as register + import.
-onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
+// Before setup is finished in its tab, register is the popup's one page: it says where setup goes on.
+onBeforeMount(async () => {
+	if (await setupWaitsInTab(appStore)) router.replace("/popup/register")
+})
 
 const backTo = computed(() => String(route.query.from || "/popup/register"))
 const selectedOnEntry = appStore.profile?.id
@@ -122,9 +124,7 @@ onBeforeUnmount(() => {
 		<!-- Passkey info -->
 		<div v-else :class="$style.section_last">
 			<span :class="$style.section_label">Passkey</span>
-			<Text variant="body" height="150" color="body">
-				No password required. Your new profile will be linked to your passkey, so you can sign in securely and effortlessly. No memorizing, no typing, just one tap.
-			</Text>
+			<Text variant="body" height="150" color="body" data-testid="register-passkey-info">{{ PASSKEY_COPY.choice }}</Text>
 		</div>
 
 		<template #bottom>

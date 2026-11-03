@@ -327,15 +327,15 @@ const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 248, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
 const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
-const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 85, 'inner.name === "NotAllowedError") return "not-confirmed"')
-const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 299, "public async createAccount(")
+const PROMPT_DISMISSED = cite("src/utils/passkey-copy.ts", 86, 'inner.name === "NotAllowedError") return "not-confirmed"')
+const ADD_ACCOUNT = cite("src/wallet/services/account/service.ts", 302, "public async createAccount(")
 const EXPORT = "src/composables/useFullBackupExport.ts"
 const FULL_EXPORT = cite(EXPORT, 389, "sealFullBackupText(plaintext as string, state.password.value as string)")
 const FILE_PASSWORD_RULE = cite(EXPORT, 562, "!isPasskeyProfile.value || isNewPasswordValid(")
 const FILE_PASSWORD_BLOCKED = cite(EXPORT, 380, "if (filePasswordBlocked(ctx)) return")
-const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 677, "public async exportAccount(")
-const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 761, "public async importAccount(")
-const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 832, "This account is already in your wallet")
+const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 680, "public async exportAccount(")
+const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 764, "public async importAccount(")
+const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 836, "This account is already in your wallet")
 const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 310, 'data-testid="import-account-held"')
 const BACKUP_UNREADABLE = cite(IMPORT, 656, "DECRYPTION_FAILED.title")
 const BACKUP_INTEGRITY = cite(IMPORT, 173, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
@@ -368,9 +368,9 @@ const RETIRED_RESEAL = cite(SERVICE, 1298, 'if (classifyProfileRow(profile).kind
 const RETIRED_FINALIZE = cite(SERVICE, 2602, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
-const ONBOARDING_PHRASE = cite(ONBOARDING, 146, 'stage.value = "phrase"')
-const ONBOARDING_SAVED = cite(ONBOARDING, 159, "if (isMounted()) leavePhrase()")
-const ONBOARDING_LATER = cite(ONBOARDING, 178, '@later="leavePhrase"')
+const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
+const ONBOARDING_SAVED = cite(ONBOARDING, 176, "if (isMounted()) leavePhrase()")
+const ONBOARDING_LATER = cite(ONBOARDING, 196, '@later="leavePhrase"')
 const EARLIER_AT_PICK = cite(IMPORT, 596, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_AT_DECRYPT = cite(IMPORT, 641, "EARLIER_PASSKEY_BACKUP.title, EARLIER_PASSKEY_BACKUP.message")
 const EARLIER_SHAPE = cite(IMPORT, 134, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
@@ -620,7 +620,7 @@ const createPassword: ActionSpec<"createPassword"> = {
 	},
 }
 
-/** `credential` minted already is "Use a passkey I already have": the browser's pick among every
+/** `credential` minted already is "Use a Nulo passkey I already have": the browser's pick among every
  *  passkey it holds answers at a fresh input, and the new row names the picked credential. */
 const createPasskey: ActionSpec<"createPasskey"> = {
 	name: "createPasskey",
