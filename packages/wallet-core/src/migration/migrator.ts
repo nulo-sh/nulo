@@ -81,7 +81,6 @@ const interruptedReason = (version: number): string => `${interruptedMidWrite(ve
 /** The watchdog's error: reported as `interruptedReason` only after its restore succeeds. */
 class UpTimeoutError extends Error {}
 
-/** Awaits `up()`, or revokes `staging` and throws once `ms` pass first. */
 async function runWithWatchdog(up: () => Promise<void>, staging: StagingArea, ms: number, version: number): Promise<void> {
 	await raceTimeout(up(), ms, () => {
 		staging.revoke()

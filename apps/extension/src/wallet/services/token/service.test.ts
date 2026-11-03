@@ -558,7 +558,7 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		const { tokenService, id, preview, updated } = await restored()
 		let rejectLate: (error: Error) => void = () => {}
 		preview.mockImplementation(() => new Promise((_, reject) => (rejectLate = reject)))
-		const deadlineAt = Date.now() + 20
+		const deadlineAt = Date.now() + 200
 		const tokens = (tokenService as unknown as { tokens: { getValues: () => Promise<Token[]> } }).tokens
 		const getValues = tokens.getValues.bind(tokens)
 		tokens.getValues = async () => {

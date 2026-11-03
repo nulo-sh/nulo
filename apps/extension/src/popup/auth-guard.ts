@@ -80,7 +80,6 @@ export async function lookupActiveProfileWithBackoff<P>(
 	return { kind: "unreachable" }
 }
 
-/** Races a request against the remaining budget; a request the deadline abandons stays observed. */
 function withinDeadline<T>(request: Promise<T>, ms: number): Promise<T> {
 	return raceTimeout(request, ms, () => {
 		throw new Error("lookup deadline exhausted")

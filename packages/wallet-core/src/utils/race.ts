@@ -1,7 +1,7 @@
 /**
  * Settles as `work` does, or with `onTimeout()`'s value or throw once `ms` pass first. The timer is
  * cleared on either outcome. `work` is not cancelled, and its later rejection stays observed.
- * Returns the bare race, so a caller resumes on the same microtask turn as with a hand-built one.
+ * Returns the bare race: cleanup chained onto it would delay every caller by extra microtask turns.
  */
 export function raceTimeout<T, U>(work: Promise<T>, ms: number, onTimeout: () => U): Promise<T | U> {
 	let timer: ReturnType<typeof setTimeout> | undefined
