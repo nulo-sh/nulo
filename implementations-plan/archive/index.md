@@ -265,6 +265,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [port-client-connect](port-client-connect/plan.md) — completed — a synchronous port-open failure rejects at once with a typed error, and nothing retries
 - [prerelease-rollout](prerelease-rollout/plan.md) — completed — release-candidate tags cut from dev beside the stable release flow
 - [presto-migration](presto-migration/plan.md) — completed — Presto replaces the Aztec Accelerator, and the wallet reports where a proof ran
+- [price-feed-1](price-feed-1/plan.md) — completed — the signed token list carries each token's price feed; the wallet stops compiling an allowlist (#1605)
 - [primitive-adoption-closure](primitive-adoption-closure/plan.md) — completed — the alarm dispatcher and shared row helpers adopted where code was already identical
 - [private-fuel-fee-fix](private-fuel-fee-fix/plan.md) — completed — the private fuel claim's budget-check revert fixed in the wallet and the bridge's numbers
 - [private-transfer-row](private-transfer-row/plan.md) — completed — one list of authwit nonce names for the approval card and the wallet's transfer matching
@@ -519,3 +520,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [quality-sdk-1](quality-sdk-1/plan.md) — completed — `background.ts` split into wiring, content admission and the request pipeline; one deadline and one abort race helper in place of seventeen copies; a test that the five edge surfaces' security headers agree (closes #1444, #1451, #1474)
 - [quality-popup-1](quality-popup-1/plan.md) — completed — the backup trust gate in the wallet layer, one pick and decrypt classifier, one new-password pair, one current-password field and one length cap; onboarding import refuses a repeat Enter (closes #1443, #1478, #1453; #1471 not done)
 - [quality-popup-2](quality-popup-2/plan.md) — completed in part — one activity row card, named amount widths, the journal amount gate and the Home feed's task and re-ask hooks; one stored-passkey ask and `leavePanelFor` on the four passkey pages; the two config reads wait on OA-1 (closes #1445, #1468, #1469, #1476)
+- [w3-popup-1](w3-popup-1/plan.md) — completed — a connected app's page left during its first read stays left, New sender's Enter refuses a listed address, searches keep no invisible character, and a pasted address padded at its ends reads as the address (closes #1486, #1499, #1406, #1405; known limits #1615, #1616)

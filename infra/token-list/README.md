@@ -14,8 +14,9 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 | `wrangler.jsonc` | Static assets only, `workers_dev` and preview URLs off, observability off. |
 | `keys.env.example` | Keyed-run template for the key ceremony. |
 | `scripts/check.ts` | The tree invariants (`bun run check`); `test/tree.test.ts` asserts them. |
-| `scripts/summary.ts` | The `prepare` job's review summary and tokens digest. |
+| `scripts/summary.ts` | The `prepare` job's review summary and its tokens, flags and price feeds digest. |
 | `scripts/live-check.ts` | The `prepare` job's advisory live check: each entry's instance, class, symbol and decimals as a public node holds them. |
+| `scripts/price-check.ts` | The `prepare` job's advisory price feed check: whether CoinGecko's quote for each feed sits inside its band. |
 | `scripts/open-publish-pr.ts` | The `publish-pr` job: branch, commit, PR, close older publish PRs. |
 | `scripts/floor.ts` | When a list raises the compiled floor (`packages/token-list/src/floor.json`), and that file's canonical form. |
 
@@ -41,13 +42,17 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
 
 1. Edit `list.source.json` in a PR (keys in payload order, tab indent; `bun run check` says so) and
    merge it into `dev`.
-2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token and
-   flag diffs, the digest of both, the signing-relevant changes it lists since the last publish, and
-   the live check, one row per entry: `matches`, the difference (the chain's value beside the list's), or
+2. The push runs `.github/workflows/publish-token-list.yml`. Read the `prepare` summary: the token,
+   flag and price feed diffs, the digest of all three, the signing-relevant changes it lists since the
+   last publish, and the live check, one row per entry: `matches`, the difference (the chain's value beside the list's), or
    `not checked` with its reason. It is advisory: no failure of it blocks `sign`, which it delays by
    at most its 5 min timeout, and `matches` means only that the public node agrees, since the wallet
    checks every entry again on its own node.
    `bun infra/token-list/scripts/live-check.ts <nodeUrl>...` runs it locally against keyless nodes.
+   The price feed check follows, one row per feed: `inside`, `outside the band` with the quote,
+   `unknown to CoinGecko`, or `not checked` with its reason. It is advisory too, bounded at 2 min, and
+   `inside` means only that today's quote falls in the band: whether the id names the token is the
+   approver's call. Its request is keyless from a shared runner, so `not checked` is common.
    That list of changes is produced by the revision under approval and is informational only;
    GitHub's compare view of the range is the authoritative review.
 3. Approve `sign` in the `token-list` environment.

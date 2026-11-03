@@ -1,8 +1,10 @@
 # w3-popup-1: owner asks
 
-Arc 1 (#1486, #1499, #1406) depends on none of these and ships now.
+Arc 1 (#1486, #1499, #1406) depended on none of these and shipped in #1580. OA-1 is answered.
 
 ## OA-1. #1405: an address pasted with invisible characters at its ends
+
+**Answered: A**, by the owner on decision page 102 (P102-01, signed 2026-11-03, no note): "When the pasted text is an address once the invisible characters at its two ends are removed, the field keeps only the address. It looks exactly as a clean paste does today." Built in arc 2.
 
 **Surface**: Send › Recipient Address, and the same rule in Holdings' search and Send's token picker (their Add token offer).
 

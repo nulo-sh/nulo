@@ -25,7 +25,6 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { proxyTickerFor } from "@/wallet/services/price/price-map"
 import { TransferType } from "@/wallet/services/transaction/client"
 
 /** Utils */
@@ -284,7 +283,9 @@ const legalBannerAction = {
 	callback: () => chrome.storage.session.remove(LEGAL_DISMISSED_KEY),
 }
 const liveQuote = computed(() => prices.quoteFor(activeToken.value?.chainId, activeToken.value?.contract) ?? null)
-const proxyTicker = computed(() => (liveQuote.value ? (proxyTickerFor(liveQuote.value.coingeckoId) ?? null) : null))
+const proxyTicker = computed(() =>
+	liveQuote.value ? (prices.priceEntryFor(activeToken.value?.chainId, activeToken.value?.contract)?.ticker ?? null) : null,
+)
 
 const fiatMode = ref(false)
 const fiatGuard = ref(null)

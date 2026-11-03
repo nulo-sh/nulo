@@ -3,11 +3,12 @@ run-name: "publish-token-list ← ${{ github.event_name }} at ${{ github.sha }}"
 
 # Signs infra/token-list/list.source.json into the envelope tokens.nulo.sh serves, and opens the PR
 # that commits it; Workers Builds deploys it once the owner merges.
-# - `prepare` holds no secret: it runs the tree invariants and writes the review summary (token diff,
-#   the tokens digest `sign` will hold to, and every signing-relevant change since the last publish).
-#   The `token-list` environment approves a run, not its code: read the summary before approving.
-#   Its advisory live check reads each entry from a keyless public node; no failure of it blocks
-#   `sign`, which it delays by at most its 5 min timeout.
+# - `prepare` holds no secret: it runs the tree invariants and writes the review summary (token, flag
+#   and price feed diffs, the digest `sign` will hold to, and every signing-relevant change since the
+#   last publish). The `token-list` environment approves a run, not its code: read the summary before
+#   approving. Its advisory live check reads each entry from a keyless public node, and its advisory
+#   price feed check asks CoinGecko, keyless, whether each feed's quote sits in its band; no failure
+#   of either blocks `sign`, which they delay by at most their 5 and 2 min timeouts.
 # - `sign` runs in the `token-list` environment (owner reviewer, branch `dev`), reads its secret in
 #   one step, installs nothing and runs the signer with `bun --no-install`; the signer's import
 #   closure is pinned to `node:` and its own package. It refuses any token set but the summary's,
@@ -59,6 +60,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: bun infra/token-list/scripts/live-check.ts https://aztec-testnet.drpc.org >> "$GITHUB_STEP_SUMMARY"
+      - name: Price feed check (advisory)
+        continue-on-error: true
+        timeout-minutes: 2
+        run: bun infra/token-list/scripts/price-check.ts >> "$GITHUB_STEP_SUMMARY"
 
   sign:
     name: sign (owner approval)

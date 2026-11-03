@@ -26,3 +26,19 @@ export function isValidAztecAddress(hex: string): boolean {
 	// Euler's criterion: 0 has the root 0; any other value is a square iff this power is 1.
 	return ySquared === 0n || modPow(ySquared, (FR_MODULUS - 1n) / 2n, FR_MODULUS) === 1n
 }
+
+const EDGE = /^[\p{White_Space}\p{Default_Ignorable_Code_Point}]$/u
+
+/** `text` less the white space and default-ignorable code points at its two ends, when that is a valid
+ *  address, case kept; else undefined. The result is always an unaltered slice of `text`. */
+export function bareAztecAddress(text: string): string | undefined {
+	// By code point, so an edge character outside the BMP goes whole; a `[…]+$` regex would backtrack
+	// quadratically on a long run of padding.
+	const chars = Array.from(text)
+	let start = 0
+	let end = chars.length
+	while (start < end && EDGE.test(chars[start])) start++
+	while (end > start && EDGE.test(chars[end - 1])) end--
+	const bare = chars.slice(start, end).join("")
+	return isValidAztecAddress(bare) ? bare : undefined
+}

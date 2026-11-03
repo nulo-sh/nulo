@@ -7,7 +7,7 @@ export const TOKEN_PRICES_STORAGE_KEY = "nulo:core:token-prices"
 /** A validated USD quote for one CoinGecko id. */
 export type PriceQuote = {
 	coingeckoId: string
-	/** USD price as returned by the provider (validated: finite, > 0, inside the id's sanity band). */
+	/** USD price as returned by the provider: finite and > 0; the band is the held list's, applied where the quote is used. */
 	usd: number
 	/** Local wall-clock ms when this quote was fetched. */
 	fetchedAt: number

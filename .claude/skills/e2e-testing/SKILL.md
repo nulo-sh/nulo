@@ -810,8 +810,10 @@ the pattern.
   `patchPagePolling` swaps it for a `waitForFunction` poll (`fixtures/dom.ts`),
   so a probe that reads a box from its result reads nothing: take the element with `page.$`
   after the wait.
-- **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec`
-  (`allCoingeckoIds`), so wherever CoinGecko answers, `refreshIfStale` or the 3-minute alarm
+- **The e2e price seed covers `usd-coin` only**, while the wallet also asks for `aztec` and every
+  other feed the held list names (`priceIdsOf`; the e2e signers name `tether` beside `usd-coin`,
+  from `E2E_PRICE_FEEDS` in `fixtures/token-list.ts`, and only for the tokens a list carries), so
+  wherever CoinGecko answers, `refreshIfStale` or the 3-minute alarm
   replaces the $1 seed mid-test and every fiat figure moves. Wait for a priced figure, never
   for an exact one carried across a remount
   (`implementations-plan/archive/hygiene/plan.md#price-settle`).

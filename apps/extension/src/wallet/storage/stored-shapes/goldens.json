@@ -1461,6 +1461,26 @@
 			}
 		},
 		{
+			"id": "tokenPrices.feeds",
+			"stamp": 3,
+			"shape": "tokenPrices",
+			"key": "nulo:core:token-prices",
+			"value": {
+				"usd-coin": {
+					"coingeckoId": "usd-coin",
+					"usd": 10,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": null
+				},
+				"weth": {
+					"coingeckoId": "weth",
+					"usd": 3012.5,
+					"fetchedAt": 1790812620000,
+					"providerUpdatedAt": 1790812560000
+				}
+			}
+		},
+		{
 			"id": "tokenList.minimal",
 			"stamp": 0,
 			"shape": "tokenList",
