@@ -128,6 +128,7 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 | Arc 2 Codex r1 | approve: no runtime defect; I2's range, `race.ts`'s turn sentence, the lessons' size claim, two TSDocs restating the helper | all 4: I2 reads 11-14 plus site 15; the sentence states the constraint; the size claim is measured (production net −60); both TSDocs go | none |
 | Arc 2 Opus | approve: every site's outcome, teardown, clock and turn probed; the site 8 pin's 20 ms margin can flake under load; the wallet-core README misses the new files; the same two comment nits | all: the pin's margin is 200 ms; README rows for `race.ts` and the two probes; the comments as above | none |
 | Arc 2 Codex r2 (resumed) | approve: the fixes hold; the new README row repeats the overbroad turn claim (P3) | the row now says no cleanup adds turns | none |
+| Net-diff Codex (fresh, arcs 1 and 2) | approve: no cross-arc defect, all 95 chaos citations resolve; "arcs share no file" is inexact; arc 1's module and type TSDocs and the `disagreements` TSDoc (P3) | the Parallelism line; the `disagreements` TSDoc, which claimed one line per surface where an agreement break lists every surface on one line | the module and type TSDocs: they state the gate order and the per-message projection, which the code does not show at a glance (settled in arc 1's rounds) |
 
 ## Delivery
 
@@ -135,7 +136,7 @@ No runtime behaviour changes in this arc: code moves, and a test is added.
 - **Arc 1**: branch `worktree-quality-sdk-1`, one PR to `dev`, ready, no labels at creation, after the Codex loop and the gates. Title: `refactor: background.ts in three modules, and a test that the edge headers agree` (80 characters). Body: the moves and the D2 renames, each pin edit, the header exceptions as recorded, the gates with outcomes, `audit:dup` and line counts before and after, each browser's wall-clock, `Closes #1444`, `Closes #1474`.
 - **Arc 2**: branch `quality-sdk-1-a2` from `origin/dev` once arc 1 merged (no stack), `gh pr create`. Title: `refactor: one helper for deadline and abort races, in place of seventeen copies` (79 characters). Body as arc 1's, with the three stated latent changes and site 18's reason, `Closes #1451`. The close-out lands as its final commits.
 - **Neighbours**: quality-services-1 arc 1 edits `token/service.ts`'s constructor (site 8 is at `:1120`); quality-profile-1 (#1439) and quality-popup-1 (#1443) start later and plan on whichever lands first. Arc 2 merges `origin/dev` before its PR and reruns its gate.
-- **Parallelism**: arcs share no file but run in sequence in one worktree; lanes would save little.
+- **Parallelism**: arcs share no production file (the chaos model's citations and this plan's files overlap) but run in sequence in one worktree; lanes would save little.
 
 ## Post-implementation
 

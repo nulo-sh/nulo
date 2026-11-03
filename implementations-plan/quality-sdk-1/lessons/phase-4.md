@@ -12,3 +12,4 @@
 - Codex r1 (gpt-6.1-sol, high, read-only): approve, four documentation and comment findings, all accepted. It probed the timing on Node and Bun and found no ordering dependency at the sites whose turn moved.
 - Opus (general-purpose): approve, its probes match the plan's turn table (bare race 2 → 2; site 6 V8 5 → 2, Bun 3 → 2; site 15 3 → 2; site 16b 1 → 1; site 17 1 → 2). Accepted: the site 8 pin's deadline margin (20 ms could expire before the service's own entry check on a loaded runner), the README rows, the two comment nits.
 - Codex r2 (resumed): approve; one P3 (the README row restated the overbroad turn claim), fixed.
+- Net-diff Codex (fresh session over both arcs, round 3): approve, no cross-arc defect; two P3s accepted (the plan's Parallelism line, an inexact TSDoc on `disagreements`), arc 1's module and type TSDocs kept. Loop stops here: no material finding open.
