@@ -256,6 +256,32 @@ describe("TokenList — add a pasted address", () => {
 		})
 	})
 
+	describe("pasted with white space or a joiner at its ends", () => {
+		const zwj = "\u200D"
+
+		test("an unlisted address offers to add the bare address", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `\u00A0${UNLISTED}${zwj}`)
+			expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(false)
+			await w.get('[data-testid="holdings-add-token"]').trigger("click")
+			expect(w.emitted("addToken")).toEqual([[UNLISTED]])
+		})
+
+		test("a listed address shows its row and no add row", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `${LISTED}${zwj}`)
+			expect(symbols(w)).toEqual(["USDC"])
+			expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		})
+
+		test("an address with a joiner inside offers nothing", async () => {
+			const w = mountList({ rows: listed() })
+			await setQuery(w, `${UNLISTED.slice(0, 30)}${zwj}${UNLISTED.slice(30)}`)
+			expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+			expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(true)
+		})
+	})
+
 	test("an address an empty row behind the fold holds gets no add row", async () => {
 		const w = mountList({ rows: [row(1, "HELD", { privateBalance: ONE }), row(2, "E", { contract: LISTED })] })
 		await setQuery(w, LISTED)
