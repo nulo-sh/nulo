@@ -374,12 +374,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return { password }
 	}
 
-	/** What a path throws when `key` did not open the row: its own wrong-password refusal, or the
-	 *  passkey's, which no screen may read as a wrong password. */
-	private notOpened(key: SlotKey, passwordRefusal: () => Error): Error {
-		return "passkey" in key ? new PasskeyNotOpenedError() : passwordRefusal()
-	}
-
 	/** Caller MUST already hold the facade lock (`Lock` is non-reentrant). Checks row
 	 *  PRESENCE only — deliberately blind to a deletion reservation; the mutation
 	 *  paths built on it accept a tombstoned-but-present row (pinned bug, see the
@@ -1216,36 +1210,27 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	public async verifyUnlockCredential(id: string, credential: UnlockCredential): Promise<void> {
-		await this.ensureInitialized()
-		const { profile, capturedEpoch } = await this.captureRowFence(id)
-		const key = await this.unlockCredentialKey(credential)
-		const opened = await this.codec.openSlots(profile, key)
-		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
-		try {
-			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
-			await this.runExclusive(async () => {
-				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
-				zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
-			})
-		} finally {
-			opened.wipe()
-		}
+		return this.verifyCredential(id, credential, true)
 	}
 
 	public async verifyExportCredential(id: string, credential: UnlockCredential): Promise<void> {
+		return this.verifyCredential(id, credential, false)
+	}
+
+	/** `credential` opens the row as captured, its words still derive its master, and under the lock
+	 *  the row is unchanged; with `requireTrustedDek` its DEK must also pass the re-key's trust gate,
+	 *  as a change of unlock will. Opens no session and writes nothing. */
+	private async verifyCredential(id: string, credential: UnlockCredential, requireTrustedDek: boolean): Promise<void> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		const key = await this.unlockCredentialKey(credential)
-		const opened = await this.codec.openSlots(profile, key)
-		if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())
-		try {
+		await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			await this.runExclusive(async () => {
 				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
+				if (requireTrustedDek) zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
 			})
-		} finally {
-			opened.wipe()
-		}
+		})
 	}
 
 	/**
