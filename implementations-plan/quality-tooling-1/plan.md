@@ -1,7 +1,7 @@
 ---
 plan: quality-tooling-1
 tier: light
-status: approved; arc 1 in review
+status: arc 1 merged (#1586); arc 2 in review
 issues: "#1454 (arc 1); #1448, its tsconfig half (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -34,7 +34,7 @@ Both issues are structural duplication, demonstrated by trace (recon reuse map).
 
 - **Facts**: F1 every cite in recon.md, re-read on the base. F2 the token-list signing closure test (`publish.test.ts:429-464`) refuses an import of `scripts/release/` from `open-publish-pr.ts` unless `SIGNING_PATHS` grows. F3 every job that runs one of the eight runners installs nothing (`release-integrity.test.ts` `NO_INSTALL`), so a module they load may import only relative files, `node:*` and `bun`; today all do. F4 the store runners read this run's own artifact, checksum-verified before the step (`release.yml`, publish jobs). F5 a tracked root file enters the Mozilla source archive (`git archive HEAD`). F6 `behavior-gating.test.ts` refuses a filter pattern that not all five lanes hold; only its explicit root list (`:729`) requires a root input to be present. F7 base `test:release`: 334 pass, 7 fail, all `zip-read`/`zip-reproducible` (this host has no `zip` binary; green in CI). F8 Bun applies a workspace tsconfig's `paths`, through `extends`, to bare imports at run time (scratch probe).
 - **Inferences**: I1 Vite reads its class-field transform options through `extends` (`target` does not pick its output); the bytes gate shows whether anything Vite emits changed, whatever it reads. I2 `tsc` emits identical declarations once the resolved options are unchanged; the resolved-config and staged-package gates check both halves.
-- **Asks**: OA-1 only (OWNER-ASKS.md). D7 and D11 are named convergences, not asks: neither changes a screen, a job's outcome or emitted bytes.
+- **Asks**: OA-1 only (OWNER-ASKS.md), answered B by the orchestrator on 2026-11-03, owner to confirm (D12). D7 and D11 are named convergences, not asks: neither changes a screen, a job's outcome or emitted bytes.
 
 ## Architecture & Implementation
 
@@ -45,7 +45,7 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 - **`store-http.ts`**: holds the store runners' logging contract ("never a request, a header, the token or a raw exception"), which justifies sharing lines this small: `ApiResponse`; `readApiResponse(res)` (`await res.text()`, then JSON or `null`; a failing body rejects); `requestFailure(what, e, timeoutMs)` (class name or "timed out after N s"); `unreadableAnswer(what, res): string | null` (a reason only, never a status, so a non-JSON 400 keeps Firefox's RECOVERY text). Status policy, `apiError` and JWT minting stay per runner. The two runner tests import `ApiResponse` from it.
 - **`attach-assets-run.ts`** exports `checkShasums(io, version, dir, hashed)`, typed on `readText` and `sha256` only: the name set must equal the version's two zips, then each zip in `hashed` must match.
 - **`tsconfig.base.json`**: `target` ESNext, `module` ESNext, `moduleResolution` Bundler, `strict`, `noEmit`, `isolatedModules`, `skipLibCheck`, and one comment: compiler checks only, since Bun reads this chain at run time in jobs that hold secrets (F8). Eighteen configs `extends` it and drop those keys; `paths`, `lib`, `types`, `include` stay local; the two Workers keep `target` ES2022. `infra/token-list`, `packages/token-list` and `apps/extension/tsconfig.node.json` stay as they are.
-- **Changed files, arc 1**: the three modules, `github-rest.test.ts`, `store-http.test.ts`, a test-only `fake-gh.ts` (a `gh` script in a temp dir put first on `PATH`), a closure test; the eight runners; the tests of all eight. **Arc 2**: `tsconfig.base.json`, 18 tsconfigs, the five PR filters, `behavior-gating.test.ts:729`, `_lint-and-typecheck.yml:44`, `CI.md:236`.
+- **Changed files, arc 1**: the three modules, `github-rest.test.ts`, `store-http.test.ts`, a test-only `fake-gh.ts` (a `gh` script in a temp dir put first on `PATH`), a closure test; the eight runners; the tests of all eight. **Arc 2**: `tsconfig.base.json`, 18 tsconfigs, the five PR filters, `behavior-gating.test.ts:729`, `_lint-and-typecheck.yml:44`, `CI.md:236`; and D12's call site in `open-sync-pr-run.ts`, its test and the `release` skill.
 - **Not taken**: `githubFetch(url, init, { accept, redirect, timeoutMs })` (restates `RequestInit` as options, Opus r1); `scripts/lib/` (no consumer outside `scripts/release` after D3).
 
 ## Security & Adversarial Considerations
@@ -77,9 +77,9 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 - Export `checkShasums`; `store-copy-run.ts` calls it with `[zip]`. New case in `attach-assets-run.test.ts`: a two-line SHASUMS naming a wrong zip reads "does not list exactly the two zips" (D7).
 - **Gate**: Phase 1's, plus `bun run test:ci-gating`, `bun run audit:vue`, `bun run check:plans`, `bun run audit:dup` (no rise from 1548 clones, 21216 lines). No e2e: arc 1 touches no extension code. The PR states the eight runners' line counts before (1990) and after.
 
-## Arc 2 (#1448, tsconfig half) — branch `quality-tooling-1-a2`, `gh stack` on arc 1
+## Arc 2 (#1448, tsconfig half) — branch `quality-tooling-1-a2` off `origin/dev` (Dev4)
 
-### Phase 4 — root tsconfig base
+### Phase 4 — root tsconfig base ✓
 - Before the edit, at one HEAD, twice, with one environment (`LOG_LEVEL` unset): `tsc --showConfig -p <cfg>` for each of the 27 tracked tsconfigs; `bun run --cwd apps/extension build:full`; `bun run --cwd apps/landing build`; `bun run --cwd apps/playground build`; `bun scripts/publish/stage.ts --all --version 0.0.0 --out ~/.cache/nulo-backlog/quality-tooling-1/stage-<n>`. Record each output as sorted lines of relative path and SHA-256. An output that differs between the two runs stops the phase.
 - Add the base; edit the 18 configs; add `tsconfig.base.json` beside `tsconfig.json` in `pr-quick.yml`'s `root-config` and the four e2e lanes' root inputs, in `behavior-gating.test.ts:729`'s list, the `_lint-and-typecheck.yml:44` cache key and `CI.md:236`.
 - **Gate**: `bun run lint && bun run typecheck:all && bun run test:all && bun run test:ci-gating && bun run lint:actions && bun run audit:vue && bun run check:plans`, then the configs, builds and staging again. Pass: every command exits 0; every build and staged tree equals its before; each of the 27 resolved configs, parsed and compared as JSON (key order ignored, arrays as they are), equals its before, except `isolatedModules: true` and the `preserveConstEnums: true` it implies on landing, playground and its test config (D11); the new base is read on its own. The resolved configs cover what no build here emits (Workers, `scripts/`, the type-only packages). No e2e: no emitted byte changes.
@@ -101,6 +101,8 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 | Dev1 | the `realFetch` pins stay in the two runner tests: `realFetch` stays per runner and is what they exercise, so no `store-http.test.ts` | moving them (plan text) |
 | Dev2 | Phase 2's verbatim extraction lands with the `gh-pulls.ts` routing in one commit: once a method, Biome scores `resolveReleasePrMergeSha` at 16; the pins ran green on the extraction first (lessons/phase-2.md) | a suppression |
 | Dev3 | `checkShasums`'s `hashed` defaults to both zips, so the three attach callers stay unchanged | a zips list at each caller |
+| Dev4 | arc 1 squash-merged as #1586 before arc 2 began, so arc 2 branches from `origin/dev` and opens one PR with `gh pr create` | `gh stack add` on a merged arc |
+| D12 | OA-1 B, the orchestrator's answer pending the owner's: open-sync's call site no longer catches the lookup's rejection, so the job fails with the `gh` error as auto-unstick's does; the lookup pin expects that error, and the `release` skill's troubleshooting row says to re-run it. An A restores the catch, the pin's `null` and that sentence | keeping A until the owner returns |
 | D11 | `isolatedModules` joins the base, a named convergence for landing and playground: both transpile per file (Vite's transformer, `bun test`), for which Vite recommends the flag; it only adds diagnostics (some refused code transpiles safely today, Codex r2), changes no emitted byte, and both pass it today | keeping it local in 16 configs (Codex r1); `false` overrides that restate the drift |
 
 ## Audit verdicts

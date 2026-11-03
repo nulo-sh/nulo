@@ -1,0 +1,8 @@
+# Phase 4 — root tsconfig base
+
+- 2026-11-03: arc 1 squash-merged as #1586 (`c7413cfa7`), so arc 2 branched from `origin/dev` there instead of stacking; one PR, `gh pr create`.
+- 2026-11-03: before-snapshot, two runs at `c7413cfa7`, `LOG_LEVEL` unset: `tsc --showConfig` exit 0 on all 27 tracked configs (`tsconfig.node.json` included; only its `tsc -p` fails); `build:full`, landing, playground and `stage.ts --all` exit 0; the two runs equal byte for byte (Chrome 647 files, Firefox 647, landing 44, playground 18, staged 26).
+- 2026-11-03: the 18 edits are mechanical: each config drops the seven base keys (the Workers keep `target`) and gains `extends`; no other line moves.
+- 2026-11-03: after-snapshot at `1f437eb4b`: the 27 resolved configs equal their before as parsed JSON, except landing, playground and its test config, which gain exactly `isolatedModules` and `preserveConstEnums` (D11); the base resolves on its own; both extension builds, landing, playground and the staged packages equal their before byte for byte.
+- 2026-11-03: gates at retry 0 on `1f437eb4b`: lint 0, typecheck:all 0 (17 workspaces and `scripts/`), lint:actions 0, test:ci-gating 741 pass, test:release 350 pass / 7 fail (F7's `zip-read` and `zip-reproducible`, this host has no `zip`), test:all 0, audit:vue 0, check:plans 0; audit:dup 1547 clones / 21270 lines at both `c7413cfa7` and `1f437eb4b` (jscpd does not read JSON).
+- 2026-11-03: OA-1 answered B by the orchestrator, owner to confirm: open-sync's lookup no longer catches; its pin expects the `gh` error. Mutation: restoring the catch reds that pin (9 pass, 1 fail).

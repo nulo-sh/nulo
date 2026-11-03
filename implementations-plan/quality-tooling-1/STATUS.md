@@ -10,3 +10,5 @@
 - 2026-11-03: arc 1 phase 3 green: lint 0, typecheck:all 0, test:release 350 pass / 7 host reds, test:ci-gating 741 pass, audit:vue 0, check:plans 0; audit:dup 1548 clones / 21288 lines against 1548 / 21291 at `a0458e21a`; the eight runners 1990 → 1938 lines, plus 74 in three modules.
 - 2026-11-03: arc 1 review: Codex r1 conditional approve (3 findings, all taken), Opus r1 approve (3 items, all taken), Codex r2 approve.
 - 2026-11-03: arc 1 final gates at the reviewed head: lint 0, typecheck:all 0, check:plans 0, test:ci-gating 741 pass, test:release 350 pass / 7 host reds, test:all 0, audit:vue 0; audit:dup 1548 / 21288 (base 1548 / 21291); runners 1990 → 1935 lines, plus 74 in three modules.
+- 2026-11-03: arc 1 merged as #1586. Arc 2 branched from `origin/dev` at `c7413cfa7`; OA-1 answered B by the orchestrator, owner to confirm.
+- 2026-11-03: arc 2 phase 4 green at `1f437eb4b`: 27 resolved configs equal (D11's two keys allowed), builds and staged packages byte-identical; lint 0, typecheck:all 0, lint:actions 0, test:ci-gating 741 pass, test:release 350 pass / 7 host reds, test:all 0, audit:vue 0, check:plans 0; audit:dup 1547 / 21270 at base and head.
