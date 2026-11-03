@@ -1,7 +1,7 @@
 ---
 plan: authwit-window-1
 tier: mid
-status: approved by the final Codex pass; arc 1 in progress
+status: completed (delivered in #1649)
 issues: "#1639"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at ea282b7bc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, one arc: #1649, which closes #1639. Merge condition: the owner's OA-1, OA-2 and OA-6 picks (`OWNER-ASKS.md`). Option A of each is built; OA-1 B or C changes only `SendTxSummary.vue`'s template, OA-2 B only `refusal.ts`'s text, OA-6 B adds a decoder option the app-paid route passes.
+- **Shipped**: the decoder reads each authorization request against the send's signer, its scope accounts and the witnesses it carries (D1); one carried for another scope account is listed with `onBehalfOf` and never signed (D3), one not carried is refused with `UnattachedAuthorizationRefusalError` (D7). Every route reads it: classic and `default_entrypoint` stub the scope accounts after registering their contracts (D2, L9), a send reading another account routes off the fold (L4), the app-paid route reads its validated run through an `observer` apart from the fold's probe (D6, L10). Listed keys are account and hash (D4). The window's line and details groups (D8) and the `unattached` reason. E2E: `tx-sendTx-fields` gains the refusal and the line; `type-roles-windows` sweeps the new window. Deviations: L10, L11 (OA-6).
+- **Known limits**: #1647 (I3, the inner-hash helper emits no request), #1648 (I4, an app-paid send without the witness shows the fee failure).
+- **Dispositions**: OA-3 (when and for which app A signed) not built, a new stored record being the owner's call; OA-4 (the sender's own attached authorization on an app-paid send) unnamed, as before; OA-5 (History row and the app's error) kept as the scope refusal's. Rejected: L1 to L11's alternatives.
+- **Lessons**: none promoted to `lessons.md`, its budget full; the network sweep rule went into the `e2e-testing` skill.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # authwit-window-1: the execute window names every authorization a send consumes on behalf of another approved account
 
@@ -114,7 +125,7 @@ The owner's words are the scope's sign-off (#1639 § Decision); the rendering an
 - **Logging**: no new log line; the refusal's message is constant and names no account (CLAUDE.md § Logging policy).
 - **Keyboard**: no new control; the refusal block is the existing one (no document-level Enter on a signing popup).
 
-## Phase 1: decoder, routes, refusal and window
+## Phase 1: decoder, routes, refusal and window ✓
 
 1. Run the unchanged `tx-sendTx-fields.test.ts` once per browser and record its time. Add the playground send. Write D11's e2e assertions. Run the file on Chrome on base sources; require red (no on-behalf line; case 2 shows the fee failure, not the refusal). Capture the window before.
 2. Write D10's tests. Require each red on base where marked. Commit.
