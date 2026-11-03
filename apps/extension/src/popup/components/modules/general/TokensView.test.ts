@@ -171,8 +171,8 @@ describe("TokensView — section refresh dot", () => {
 		finishedAt,
 	})
 	const sectionDot = (wrapper: ReturnType<typeof mount>) => wrapper.find('[data-testid="tokens-refreshing"]').exists()
-	const cardUpdating = (wrapper: ReturnType<typeof mount>) =>
-		(wrapper.findComponent(TokenCard).props("tokenBalance") as { isUpdating?: boolean }).isUpdating
+	const cardRow = (wrapper: ReturnType<typeof mount>) =>
+		wrapper.findComponent(TokenCard).props("tokenBalance") as { isUpdating?: boolean; publicBalance: string }
 
 	test("a BalanceUpdate task in flight shows the SECTION refresh dot; completion clears it", async () => {
 		// The one activity signal for routine refreshes (per-row indication is silent by design).
@@ -240,7 +240,7 @@ describe("TokensView — section refresh dot", () => {
 		H.taskDeleted.emit(balanceTask("old", 1, 100))
 		await nextTick()
 		expect(sectionDot(wrapper)).toBe(true)
-		expect(cardUpdating(wrapper)).toBe(true)
+		expect(cardRow(wrapper).isUpdating).toBe(true)
 
 		H.taskUpdated.emit(balanceTask("new", 1, 200))
 		await nextTick()
@@ -271,7 +271,7 @@ describe("TokensView — section refresh dot", () => {
 		H.balanceUpdated.emit({ ...balanceRow(), publicBalance: "2" })
 		await nextTick()
 		expect(sectionDot(wrapper)).toBe(true)
-		expect(cardUpdating(wrapper)).toBe(true)
+		expect(cardRow(wrapper)).toMatchObject({ publicBalance: "2", isUpdating: true })
 
 		H.taskUpdated.emit(balanceTask("t1", 1, 100))
 		await nextTick()
