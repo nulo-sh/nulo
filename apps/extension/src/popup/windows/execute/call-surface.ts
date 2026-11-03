@@ -57,7 +57,6 @@ export const wire = (v: unknown, max: number): string => safeWire(v === undefine
 export const MAX_ARG_ROWS = 32
 /** Array items shown inline; the full list stays available as the row's title. */
 const MAX_INLINE_ITEMS = 8
-/** The most code points a whole value prints before it is cut. */
 const FULL_TEXT_MAX = 4096
 
 const rawRow = (arg: unknown): RawRow => {
@@ -135,7 +134,8 @@ const claimsVocabulary = (decoded: Extract<DecodedCall, { kind: "decoded" }>, se
 
 /** `decoded` is `undefined` while the wallet is still decoding. The vocabulary applies only on a
  *  registered token (`tokenKnown`) whose call corroborates the signature; every other call reads
- *  as the contract's own parameters, or as raw fields (`maxRows` of them) with the reason. */
+ *  as the contract's own parameters, or as raw fields (`maxRows` of them) with the reason, which is
+ *  `arguments` for a decode holding a string the card cannot print whole. */
 export const callSurface = (
 	ctx: CallerContext | undefined,
 	call: WireCall,
@@ -144,13 +144,14 @@ export const callSurface = (
 	maxRows = MAX_ARG_ROWS,
 ): CallSurface => {
 	if (decoded === undefined) return { kind: "pending" }
-	if (decoded.kind === "decoded") {
+	const params = decoded.kind === "decoded" ? readNamed(decoded.params) : undefined
+	if (decoded.kind === "decoded" && params) {
 		const corroborated = tokenKnown && corroborates(decoded, call.selector)
 		const known = corroborated ? vocabularySurface(ctx, decoded.fn, call) : undefined
 		const unchecked = tokenKnown && !corroborated && claimsVocabulary(decoded, call.selector)
-		return known ?? { kind: "decoded", fn: decoded.fn, params: decoded.params, ...(unchecked ? { labels: "unchecked" } : {}) }
+		return known ?? { kind: "decoded", fn: decoded.fn, params, ...(unchecked ? { labels: "unchecked" } : {}) }
 	}
-	return { kind: "raw", reason: decoded.reason, ...rawRows(call.args, maxRows) }
+	return { kind: "raw", reason: decoded.kind === "decoded" ? "arguments" : decoded.reason, ...rawRows(call.args, maxRows) }
 }
 
 const surfaceName = (call: WireCall, surface: CallSurface): string =>
@@ -319,13 +320,61 @@ const RAW_NOTICE: Readonly<Record<UndecodedReason, string>> = {
 	unavailable: "Nulo couldn't read the arguments right now.",
 }
 
-/** Whether `valueText(v, true)` prints every character `v` carries: a string loses what the print
- *  strips (control and direction characters), cuts, or cannot draw (a lone surrogate). */
-const printsWhole = (v: DecodedValue): boolean => {
-	if (v.kind === "string") return v.value.isWellFormed() && safeWire(v.value, FULL_TEXT_MAX) === v.value
-	if (v.kind === "array") return v.items.every(printsWhole)
-	if (v.kind === "struct") return v.fields.every((f) => printsWhole(f.value))
-	return true
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
+const PAST_LATIN1 = /[\u0100-\u{10FFFF}]/u
+/** Draws nothing, yet `safeWire` keeps it: U+034F, the Hangul fillers. */
+const DEFAULT_IGNORABLE = /\p{Default_Ignorable_Code_Point}/u
+
+/** UTF-8 text holding a character past U+00FF. Latin-1-only text stays one character per byte,
+ *  because the SDK's encoder writes it one field per character and the two would print alike. */
+const utf8Text = (body: string): string | undefined => {
+	try {
+		const text = UTF8.decode(Uint8Array.from(body, (c) => c.charCodeAt(0)))
+		return PAST_LATIN1.test(text) ? text : undefined
+	} catch {
+		return undefined
+	}
+}
+
+/**
+ * A decoded `str<N>`, one character per field, as the card prints it, or `undefined` when it cannot
+ * print it whole. The contract reads each field as a byte (`as u8`), so a field past 0xFF is never
+ * what it reads; trailing zeros are the padding of a shorter string.
+ */
+const readWireString = (decoded: string): string | undefined => {
+	let end = decoded.length
+	while (end > 0 && decoded.charCodeAt(end - 1) === 0) end--
+	const body = decoded.slice(0, end)
+	if (PAST_LATIN1.test(body)) return undefined
+	const text = utf8Text(body) ?? body
+	return !DEFAULT_IGNORABLE.test(text) && safeWire(text, FULL_TEXT_MAX) === text ? text : undefined
+}
+
+const isShown = (v: DecodedValue | undefined): v is DecodedValue => v !== undefined
+
+/** `v` with every string as `readWireString` prints it, or `undefined` when one cannot print whole. */
+const readValue = (v: DecodedValue): DecodedValue | undefined => {
+	switch (v.kind) {
+		case "string": {
+			const value = readWireString(v.value)
+			return value === undefined ? undefined : { kind: "string", value }
+		}
+		case "array": {
+			const items = v.items.map(readValue)
+			return items.every(isShown) ? { kind: "array", items } : undefined
+		}
+		case "struct": {
+			const fields = readNamed(v.fields)
+			return fields && { kind: "struct", fields }
+		}
+		default:
+			return v
+	}
+}
+
+const readNamed = (entries: readonly DecodedParam[]): DecodedParam[] | undefined => {
+	const values = entries.map((e) => readValue(e.value))
+	return values.every(isShown) ? entries.map((e, i) => ({ name: e.name, value: values[i] })) : undefined
 }
 
 /** Each of an operation's `count` grants as the card can read it: missing from the batch is
@@ -333,7 +382,7 @@ const printsWhole = (v: DecodedValue): boolean => {
 export const readableGrants = (decoded: readonly DecodedGrant[], count: number): DecodedGrant[] =>
 	Array.from({ length: count }, (_, k): DecodedGrant => {
 		const grant = decoded[k] ?? { kind: "undecoded", reason: "unavailable" }
-		return grant.kind === "decoded" && !grant.decoded.params.every((p) => printsWhole(p.value))
+		return grant.kind === "decoded" && readNamed(grant.decoded.params) === undefined
 			? { kind: "undecoded", reason: "arguments" }
 			: grant
 	})
