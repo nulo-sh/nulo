@@ -34,3 +34,9 @@
 - Smoke set, armed builds: Chrome 22/22 (160 s), Firefox 22/22 (239 s); arc 1's were 159 s and 227 s. No e2e scenario added or changed.
 - `incoming-public-transfers` on Chrome: 2/2, none skipped (186 s).
 - `audit:dup` from `git archive` exports: production 175 / 8,751 at `origin/dev` → 173 / 8,725; `profile/service.ts` internal 4 / 46 → 2 / 20.
+
+## After the PR opened
+
+- `dev` moved three times while the PR waited (#1595, #1596, #1598), and each move conflicted with the branch, so GitHub ran no PR workflow until a merge. The conflicts were the chaos model's citations (both sides re-cite lines in one block) and the plan index. Each merge took this branch's citations moved through `dev`'s `service.ts` change, and the whole gate reran green after each.
+- After #1598, the citation test was red on `dev` itself: `RESTORE_ROLLS_BACK` cited line 951 of `full-backup-restore.ts`, which #1598 had turned into a comment line; the fragment sits at 946. Re-cited here, a one-line local fix, since the PR's own run includes that test.
+- On the last merged head: lint, typecheck:all, check:plans, test:all (156 s), audit:vue (163 s), smoke Chrome 22/22 (178 s) and Firefox 22/22 (251 s), `incoming-public-transfers` 2/2 (180 s). `audit:dup` against `dev` at cca0a7fbf: production 174 / 8,744 → 172 / 8,718; `profile/service.ts` internal 4 / 46 → 2 / 20, 2,434 → 2,359 lines.
