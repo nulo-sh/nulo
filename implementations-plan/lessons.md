@@ -9,19 +9,18 @@
 - Root `test` (so `audit:vue`) runs only `apps/extension`'s vitest config, in jsdom, without the packages' node-only tests; CI adds `test:all`, `test:release`, `test:ci-gating`. [Evidence](archive/harden-security-prerelease/plan.md#root-test)
 - `vue-tsc` skips an SFC whose script lacks `lang="ts"` (most of the extension's), so a bad prop there passes `typecheck:all` (3.3.10, 2026-10). [Evidence](archive/storage-migration-backup/plan.md#vue-tsc)
 - Vue unit tests (3.5.42, VTU 2.4.11, 2026-10): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; a 2nd `mount` strips the 1st's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
-- A check that accepts a wrong state passes broken code: pair a never-happens test with a success control; match a captured identity exactly (whole `textContent`: `innerText` follows `text-transform`); stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
+- A check that accepts a wrong state passes broken code: pair a never-happens test with a success control; match a captured identity exactly (whole `textContent`: `innerText` follows `text-transform`, VTU `.text()` trims); stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, tests' too: never put a free-form group beside `\s*`; split on the delimiter (2026-10). [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
 
 ## Git & GitHub
 
-- A PR lane builds `head.sha` with the merge ref's workflows, so a later `dev` fix is absent until you merge `dev`; one that conflicts with `dev` gets no run. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/connect-split-1/lessons/phase-3.md)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 
 ## Extension runtime
 
 - A popup RPC fails 60 s after it began, Ready wait included, unless its client sets `requestTimeoutMs` (a proof outlasts it: a landed send reads as failed); a dropped port replays nothing: read config via `useConfigRead`. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s), [more](archive/account-session-life/lessons/phase-4.md), [more](archive/wallet-followups/lessons/phase-4.md)
 - `PopupManager` keeps hidden popups mounted: gate setup on `show` or `v-if`. A profile switch or unlock elsewhere reboots open pages in place, unsetting `appStore.network` first: reset held secrets. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/passkey-unlock-1/lessons/phase-A4.md), [more](archive/chaos-5/lessons/phase-1.md)
-- A `<script setup>` local shadows a same-name prop in the template, `:label` shorthand included (Vue 3.5.42, 2026-10). [Evidence](archive/send-picker-1/lessons/phase-1.md)
+- Vue 3.5.42 (2026-10): a `<script setup>` local shadows a same-name prop in the template, `:label` included; a bound `defineModel` reads the host's value a render late: two toggles in one task both negate it. [Evidence](archive/send-picker-1/lessons/phase-1.md), [more](archive/quality-popup-1/lessons/phase-5.md)
 - A closing extension window runs no Vue teardown: await what it owes, bounded, as `endAndClose` does; a person's close leaves only a best-effort `beforeunload`. A toolbar popup dies when a tab it opens takes focus: open it inactive, write, then focus. [Evidence](archive/fee-estimate-cancel-1/plan.md), [more](archive/fu2-onboarding-1/lessons/phase-3.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` flattens the rest to `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
