@@ -11,9 +11,8 @@
  */
 
 import { shallowReactive } from "vue"
-import { managers, initTransactionService } from "@/utils/core"
-import { AccountServiceClient } from "@/wallet/services/account/client"
-import { NetworkServiceClient } from "@/wallet/services/network/client"
+import { managers, initTransactionService, replaceAccountClient, replaceNetworkClient } from "@/utils/core"
+import type { NetworkServiceClient } from "@/wallet/services/network/client"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { useAppStore } from "@/stores/app.store"
 import { createRunFence } from "@/composables/runFence"
@@ -146,15 +145,13 @@ export function useProfileBootstrap() {
 	/** Replaces the inline `initNetworks` in popup/app.vue. `isCurrent` is
 	 *  checked after every await and before every shared-state mutation so a
 	 *  superseded bootstrap stops instead of replacing the winner's `managers.network`
-	 *  (read dynamically here) or writing stale networks. Standalone callers omit it. */
+	 *  or writing stale networks. Standalone callers omit it. */
 	const initNetworks = async (isCurrent: () => boolean = () => true) => {
 		if (!isCurrent()) return
 		appStore.networks = []
 		appStore.network = undefined
 
-		managers.network?.disconnect()
-		const network = new NetworkServiceClient()
-		managers.network = network
+		const network = replaceNetworkClient()
 
 		const nets = await network.getOrInitNetworks()
 		if (!isCurrent()) return // a newer activation took over — don't write stale networks
@@ -195,9 +192,7 @@ export function useProfileBootstrap() {
 		if (!isCurrent() || !appStore.profile || !appStore.network) return
 		const profileId = appStore.profile.id
 		const { id: networkId, chainId } = appStore.network
-		managers.account?.disconnect()
-		const account = new AccountServiceClient()
-		managers.account = account
+		const account = replaceAccountClient()
 		if (appStore.staleNetwork?.networkId === networkId) return clearQuarantinedAccounts(appStore)
 		await ensureDefaultAccountOrWait(account, profileId, chainId, () => isCurrent() && appStore.markNetworkInactive(networkId))
 		if (!isCurrent()) return

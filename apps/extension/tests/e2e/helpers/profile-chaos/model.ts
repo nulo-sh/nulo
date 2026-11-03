@@ -367,7 +367,7 @@ const RETIRED_EXPORTS = cite(SERVICE, 401, 'if (classifyProfileRow(profile).kind
 const RETIRED_LISTED = cite(SERVICE, 2197, 'classifyProfileRow(profile).kind === "retired")')
 const RETIRED_RESEAL = cite(SERVICE, 1168, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
 const RETIRED_FINALIZE = cite(SERVICE, 2379, 'if (classifyProfileRow(profile).kind === "retired") throw new RetiredProfileError()')
-const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 387, 'data-testid="auth-delete-retired"')
+const RETIRED_DELETE = cite("src/popup/pages/auth.vue", 384, 'data-testid="auth-delete-retired"')
 const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 176, "if (isMounted()) leavePhrase()")
@@ -407,7 +407,7 @@ const ACCOUNT_FILE_PASSWORD = cite("src/wallet/services/account/service.ts", 111
 const ACCOUNT_FILE_TYPE_RESETS = cite(ACCOUNT_PAGE, 162, "() => appStore.profile?.type,")
 const ACCOUNT_FILE_NETWORK_RESETS = cite(ACCOUNT_PAGE, 181, "() => appStore.network?.chainId,")
 /** A session opened in place re-runs the window's bootstrap, which clears the network first. */
-const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 153, "appStore.network = undefined")
+const BOOTSTRAP_CLEARS_NETWORK = cite("src/composables/useProfileBootstrap.ts", 152, "appStore.network = undefined")
 const EXPORT_CHECK_REFUSES = cite(SERVICE, 1243, "if (!opened) throw this.notOpened(key, () => new InvalidPasswordError())")
 /** The import page's title for an earlier passkey body, cited so a copy change fails the citation. */
 export const EARLIER_TITLE = "Backup from an earlier version"

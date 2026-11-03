@@ -2,7 +2,9 @@ import { createPinia, setActivePinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { installChromeStorage } from "../../tests/helpers/chrome-storage-mock"
 
-vi.mock("@/utils/core", () => {
+vi.mock("@/utils/core", async () => {
+	const { AccountServiceClient } = await import("@/wallet/services/account/client")
+	const { NetworkServiceClient } = await import("@/wallet/services/network/client")
 	const profileMock = {
 		getProfiles: vi.fn(async () => []),
 		getActiveProfile: vi.fn(async () => null),
@@ -40,11 +42,18 @@ vi.mock("@/utils/core", () => {
 	}
 	return {
 		managers,
-		// app.store reads the lazy clients via require*()/get*(). initNetworks/
-		// initAccount REASSIGN `managers.network`/`.account` to the mocked
-		// `new NetworkServiceClient()`/`new AccountServiceClient()` (which carry
-		// getNodeStatus etc.), so these MUST read the CURRENT `managers.X` — close
-		// over `managers`, not the original *Mock consts (matching the real impl).
+		// The replace writers install fresh mocked clients (which carry getNodeStatus etc.), so the
+		// accessors read the current `managers.X`, never the original *Mock consts, as the real ones do.
+		replaceNetworkClient: () => {
+			managers.network.disconnect()
+			managers.network = new NetworkServiceClient() as never
+			return managers.network
+		},
+		replaceAccountClient: () => {
+			managers.account.disconnect()
+			managers.account = new AccountServiceClient() as never
+			return managers.account
+		},
 		requireNetwork: () => managers.network,
 		requireAccount: () => managers.account,
 		getNetwork: () => managers.network,
