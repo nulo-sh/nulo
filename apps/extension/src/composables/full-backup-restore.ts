@@ -861,7 +861,6 @@ export interface AccountStateRetryContext {
 	cut: string[]
 }
 
-/** The ids of the networks a Retry of `ctx` replays. */
 export function retryNetworkIds(ctx: AccountStateRetryContext): ReadonlySet<string> {
 	return new Set(ctx.retryable.map((item) => item.networkId))
 }

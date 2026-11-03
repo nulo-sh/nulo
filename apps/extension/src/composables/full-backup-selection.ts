@@ -1,7 +1,6 @@
 /**
  * What a picked or opened full backup shows before Restore: the selection the page publishes and
- * the refusal beside it. Both import pages read a pick and open a sealed backup here; each keeps its
- * own pick admission, pick counter and resets.
+ * the refusal beside it. The caller owns pick admission, the pick counter and resets.
  */
 
 import type { Ref } from "vue"
@@ -35,7 +34,6 @@ export const ACCOUNT_FILE_NOT_BACKUP = {
 /** A pick whose file could not be read: the banner's whole copy. */
 export const BACKUP_READ_FAILED = "Failed to read the backup file"
 
-/** The banner copy a refused selection shows. */
 export interface SelectionRefusal {
 	readonly title: string
 	readonly message: string
@@ -63,7 +61,6 @@ export async function readPickedBackup(file: File): Promise<PickedBackup> {
 	return { selection }
 }
 
-/** The page's error banner. */
 export interface SelectionBanner {
 	fillError: (type: string, title: string, tooltip?: string) => void
 	clearError: () => void

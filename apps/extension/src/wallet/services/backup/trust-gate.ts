@@ -84,16 +84,8 @@ function isBackupProfile(profile: unknown): profile is BackupProfile {
 	return (type === "password" || type === "passkey") && typeof name === "string"
 }
 
-/**
- * Stage 1 of the full-backup restore — integrity + compatibility gate,
- * then migrate the verified slices forward, all BEFORE any live state is
- * touched. Deliberately closure-state-free (a pure function of the envelope +
- * the module-level codec/migrator): a `rejected` result carries the exact
- * user-facing title/message the caller surfaces via `fillError`; an `ok` result
- * carries the migrated `data` + the checksum-stripped `backup`. The re-entrancy
- * / permission guard and the `restoreStatus`/`fillError` side effects stay with
- * the caller.
- */
+/** Validates and migrates the backup entirely in memory, before any live storage write; a `rejected`
+ *  result carries the banner copy the caller shows. */
 export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): Promise<ValidateAndMigrateResult> {
 	const { checksum, [EARLIER_PASSKEY_CHECK_FIELD]: _earlierCheck, ...backup } = fullBackup
 
@@ -158,9 +150,9 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 	return { kind: "ok", data: data as ValidatedBackup["data"], backup, checksum: comparisonChecksum }
 }
 
-/** Whether a picked or opened body is one {@link EARLIER_PASSKEY_BACKUP} refuses. Restore and
- *  Restore again ask before they publish the selection, so the refusal shows before any other
- *  control does; the run validates again before it writes. */
+/** Whether a picked or opened body is one {@link EARLIER_PASSKEY_BACKUP} refuses. Asked before a
+ *  selection is published, so the refusal shows before any other control; the restore validates
+ *  again before it writes. */
 export async function refusedAsEarlierPasskey(backup: unknown): Promise<boolean> {
 	if (typeof backup !== "object" || backup === null || Array.isArray(backup)) return false
 	try {

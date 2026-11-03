@@ -17,8 +17,8 @@ function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
 	return errors
 }
 
-/** The error log's writers: a stage's append, its collected rows, and a Retry's swap of the rows it
- *  replaces. */
+/** The error log's writers: a stage's raw append, its collected restore errors, and a Retry's swap
+ *  of the rows it replaces. */
 export function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
 	/** Appends even an empty list: the key alone counts as an error. */
 	function appendErrors(serviceName: string, records: unknown[]): void {

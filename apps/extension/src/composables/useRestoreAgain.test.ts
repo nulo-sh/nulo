@@ -427,7 +427,7 @@ describe("useRestoreAgain: refusals change nothing", () => {
 	test("a pick whose read fails shows the read-failure copy and logs restore again's own line", async () => {
 		const { page, opts } = await open()
 		const error = new Error("io")
-		opts.pickFile.mockRejectedValue(error)
+		opts.pickFile.mockResolvedValue(Object.assign(new File(["{}"], "b.json"), { text: () => Promise.reject(error) }) as never)
 		const logged = vi.spyOn(console, "warn").mockImplementation(() => {})
 		try {
 			await page.pickBackupFile()

@@ -476,6 +476,7 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		const opts = makeOpts()
 		opts.pickFile.mockResolvedValue(new File([text], name))
 		const c = useFullBackupImport(opts)
+		c.parsedBackupName.value = "Previous"
 		await c.pickBackupFile()
 		expect(c.selectedBackup.value).toStrictEqual(selection)
 		expect(c.parsedBackupName.value).toBeNull()
@@ -596,37 +597,52 @@ describe("a passkey profile's body meets the password body's gates", () => {
 })
 
 describe("decrypt publication race — the last await seam", () => {
-	it("a re-pick queued while the opened body is checked for an earlier passkey backup is NOT overwritten", async () => {
-		const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
+	const innerJson = JSON.stringify({ data: { profile: { type: "password", name: "RaceName" } } })
+
+	// The parse runs after the open's own stale check; the hash runs inside the earlier-passkey read,
+	// the last await before any write. Each re-pick must survive the decrypt it overtakes.
+	const hooks: Array<[string, (repick: () => void) => { mockRestore(): void }]> = [
+		[
+			"queued from the opened body's parse",
+			(repick) => {
+				const realParse = JSON.parse
+				return vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
+					if (text === innerJson) queueMicrotask(repick)
+					return realParse(text, reviver)
+				})
+			},
+		],
+		[
+			"queued from inside the earlier-passkey read",
+			(repick) => {
+				const realHash = EncryptionKey.getHashHex
+				return vi.spyOn(EncryptionKey, "getHashHex").mockImplementationOnce(async (input) => {
+					queueMicrotask(repick)
+					return realHash(input)
+				})
+			},
+		],
+	]
+
+	it.each(hooks)("a re-pick %s is NOT overwritten", async (_label, hook) => {
 		const key = await EncryptionKey.fromPassword("pw12345678")
 		const sealed = Buffer.from(await key.encrypt(new TextEncoder().encode(innerJson))).toString("base64")
-
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		const original = { name: "e.txt", backup: sealed, kind: "sealed" as const, profileType: null }
 		const replacement = { name: "new.json", backup: {}, kind: "plain" as const, profileType: "password" }
-		c.selectedBackup.value = original
+		c.selectedBackup.value = { name: "e.txt", backup: sealed, kind: "sealed", profileType: null }
 		c.decryptionPassword.value = "pw12345678"
-
-		// The re-pick is queued from the parse of the decrypted body, after the open's own stale
-		// check: only the check after the earlier-passkey read, the last before any write, keeps it.
-		const realParse = JSON.parse
-		const parse = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) => {
-			if (text === innerJson) {
-				queueMicrotask(() => {
-					c.selectedBackup.value = replacement
-				})
-			}
-			return realParse(text, reviver)
+		const spy = hook(() => {
+			c.selectedBackup.value = replacement
 		})
 
 		await c.decryptBackup()
-		parse.mockRestore()
+		spy.mockRestore()
 
-		// The replacement selection must survive (structural: the ref stores a reactive
-		// proxy of the assigned object); the decrypted publication must not land.
+		// The ref stores a reactive proxy of the assigned object, hence the structural compare.
 		expect(c.selectedBackup.value).toStrictEqual(replacement)
 		expect(c.parsedBackupName.value).not.toBe("RaceName")
+		expect(opts.clearError).not.toHaveBeenCalled()
 	})
 })
 

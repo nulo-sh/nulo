@@ -339,9 +339,9 @@ const ACCOUNT_EXPORT = cite("src/wallet/services/account/service.ts", 681, "publ
 const ACCOUNT_IMPORT = cite("src/wallet/services/account/service.ts", 765, "public async importAccount(")
 const ACCOUNT_DUPLICATE = cite("src/wallet/services/account/service.ts", 837, "This account is already in your wallet")
 const ACCOUNT_HELD = cite("src/popup/pages/settings/accounts/import.vue", 310, 'data-testid="import-account-held"')
-const BACKUP_UNREADABLE = cite(SELECTION, 99, "DECRYPTION_FAILED.title, DECRYPTION_FAILED.message")
-const BACKUP_INTEGRITY = cite(GATE, 114, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
-const BACKUP_UNPARSED = cite(SELECTION, 59, "title: parseError.title, message: parseError.tooltip")
+const BACKUP_UNREADABLE = cite(SELECTION, 96, "DECRYPTION_FAILED.title, DECRYPTION_FAILED.message")
+const BACKUP_INTEGRITY = cite(GATE, 106, "if (checksum !== comparisonChecksum) return INTEGRITY_REFUSAL")
+const BACKUP_UNPARSED = cite(SELECTION, 57, "title: parseError.title, message: parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
 	140,
@@ -349,7 +349,7 @@ const RESTORE_ASKS_PASSWORD = cite(
 )
 const RESTORE_ROLLS_BACK = cite(
 	"src/composables/full-backup-restore.ts",
-	952,
+	951,
 	"scratch.createdProfileId !== undefined && !scratch.finalizeStarted",
 )
 const RESTORE_FINALIZES = cite(IMPORT, 337, "restoreRun = await finalizeWithReminder(")
@@ -373,8 +373,8 @@ const ONBOARDING = "src/onboarding/pages/create.vue"
 const ONBOARDING_PHRASE = cite(ONBOARDING, 152, 'stage.value = "phrase"')
 const ONBOARDING_SAVED = cite(ONBOARDING, 176, "if (isMounted()) leavePhrase()")
 const ONBOARDING_LATER = cite(ONBOARDING, 196, '@later="leavePhrase"')
-const EARLIER_AT_PICK = cite(SELECTION, 57, "refusal: EARLIER_PASSKEY_BACKUP")
-const EARLIER_AT_DECRYPT = cite(SELECTION, 92, "refuse(selected, banner, EARLIER_PASSKEY_BACKUP")
+const EARLIER_AT_PICK = cite(SELECTION, 55, "refusal: EARLIER_PASSKEY_BACKUP")
+const EARLIER_AT_DECRYPT = cite(SELECTION, 89, "refuse(selected, banner, EARLIER_PASSKEY_BACKUP")
 const EARLIER_SHAPE = cite(GATE, 75, 'typeof (fullBackup as Record<string, unknown>).entropy !== "string"')
 const IMPORT_FLOW = "src/composables/useProfileImportFlow.ts"
 const PHRASE_IMPORT_CARD = cite(IMPORT_FLOW, 195, 'await deps.unlockFor(admitted, { step: "import", profileName: name }, existing)')
