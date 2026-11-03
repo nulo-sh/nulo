@@ -92,7 +92,7 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[
 		LIVE_LIST_HOST,
-		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its daily alarm",
+		"the signed token list, fetched by a release build when the worker boots with the Terms accepted (a background restart) and on its scheduled alarm",
 	],
 	[new URL(HOW_AZTEC_WORKS_URL).hostname, "Home's How Aztec works row, which a spec opens in a tab"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],

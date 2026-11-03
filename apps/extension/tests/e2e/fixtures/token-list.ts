@@ -152,7 +152,7 @@ export async function serveTokenList(): Promise<ListHost> {
 }
 
 /**
- * The daily refresh, brought forward: the stored deadline moved to now, then the worker's refresh
+ * The scheduled refresh, brought forward: the stored deadline moved to now, then the worker's refresh
  * alarm fired from an extension page. A tick before the deadline fetches nothing.
  */
 export async function requestListRefresh(page: Page): Promise<void> {
