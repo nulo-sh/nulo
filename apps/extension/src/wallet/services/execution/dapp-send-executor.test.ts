@@ -1657,7 +1657,6 @@ describe("DappSendExecutor — the authorizing session", () => {
 		const { executor, deps, proveAndSend } = makeHarness({ operationEstimateReuse: reusing(vi.fn(async () => entry())) })
 		ownSnapshot(deps)
 		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
-		// Listed in the order the arm must call them.
 		const steps = {
 			tryConsume: deps.operationEstimateReuse.tryConsume,
 			getNetwork: deps.getNetwork,

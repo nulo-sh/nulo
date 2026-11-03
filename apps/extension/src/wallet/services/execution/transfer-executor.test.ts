@@ -543,7 +543,6 @@ describe("TransferExecutor: the authorizing session", () => {
 			estimateReuse: { tryConsume: vi.fn(async () => snapshot()), stash: vi.fn() } as never,
 		})
 		await executor.execute(makeReq(), "est-1", fence)
-		// Listed in the order the arm must call them.
 		const steps = {
 			tryConsume: deps.estimateReuse.tryConsume,
 			getNetwork: deps.getNetwork,
