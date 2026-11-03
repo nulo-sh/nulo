@@ -103,6 +103,7 @@ import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
 import { readFeePicks } from "../../../../../tests/helpers/ui-preference-fake"
 import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 
 const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
@@ -597,17 +598,18 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 		})
 		first.unmount()
 
-		// A fresh store has no FPC list to answer early, so only the saved record can name the sponsor.
+		// A fresh store has no FPC list yet: the saved record alone names no sponsor, and none is the payer.
 		config.global.plugins = [createPinia()]
 		const fpcs = deferred<unknown>()
 		mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
 		const next = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-		expect(selector(next).attributes("data-active-title")).toBe("Dev sponsor")
+		expect(selector(next).attributes("data-active-type")).toBeUndefined()
+		expect(lastPayer(next) ?? null).toBeNull()
 
 		fpcs.resolve([NULO, HAND_ADDED])
 		await flushPromises()
-		expect(selector(next).attributes("data-active-type")).toBe("fpc")
+		expect(selector(next).attributes("data-active-title")).toBe("Dev sponsor")
 		expect(lastEmittedSettings(next)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
 		next.unmount()
 	})
@@ -829,12 +831,15 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 	}
 	const SAVED_FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" }
 
+	const ON_TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
+	const activeType = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-method-selector"]').attributes("data-active-type")
+
 	test("every row loads until the FPC list lands, which answers the sponsors before the balances do", async () => {
 		const fpcs = deferred<unknown>()
 		const gas = deferred<unknown>()
 		mocks.getFpcs.mockReturnValue(fpcs.promise)
 		mocks.getGasBalances.mockReturnValue(gas.promise)
-		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		const w = mount(FeeSettingsCard, { props: baseProps(ON_TESTNET), global: { stubs: STUBS } })
 		await flushPromises()
 		expect(rowState(w)).toEqual([
 			{ type: "fj", fpc: null, checking: true, spend: null },
@@ -861,12 +866,13 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 		w.unmount()
 	})
 
-	test("an identity switch never draws the previous identity's FPC rows while the new reads are pending", async () => {
+	test("an identity switch never draws the previous identity's FPC rows or its sponsor while the new reads are pending", async () => {
 		mocks.getFpcs.mockResolvedValue([SPONSOR])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
-		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		const w = mount(FeeSettingsCard, { props: baseProps(ON_TESTNET), global: { stubs: STUBS } })
 		await flushPromises()
 		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s1", checking: false })
+		expect(activeType(w)).toBe("fpc")
 
 		const fpcs = deferred<unknown>()
 		mocks.getFpcs.mockReturnValue(fpcs.promise)
@@ -879,11 +885,76 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 			{ type: "fpc", fpc: null, checking: true, spend: null },
 		])
 
+		expect(activeType(w)).toBeUndefined()
+		expect(w.emitted<unknown[]>("update:payer")?.at(-1)?.[0]).toBeNull()
+
 		fpcs.resolve([{ ...SPONSOR, id: "s9" }])
 		await flushPromises()
 		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s9", checking: false })
+		expect(activeType(w)).toBeUndefined()
 		w.unmount()
 	})
+
+	test.each([
+		{ chain: "Alpha Mainnet", chainId: CHAIN_IDS.MAINNET, rows: ["fj", "private_fpc"] },
+		{ chain: "the local network (id 0)", chainId: CHAIN_IDS.SANDBOX, rows: ["fj", "private_fpc", "fpc"] },
+	])("while the FPC list loads on $chain, the rows are $rows", async ({ chainId, rows }) => {
+		mocks.getFpcs.mockReturnValue(new Promise(() => {}))
+		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+		const w = mount(FeeSettingsCard, { props: baseProps({ network: { id: "n1", chainId } }), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w).map((r) => r.type)).toEqual(rows)
+		w.unmount()
+	})
+
+	test("a saved sponsor deleted while the card loads is neither toasted nor the payer", async () => {
+		const { useToast } = await import("@/composables/toast")
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fpc", title: "Sponsor", fpc: { id: "s1", isProtocol: true } } }
+		mocks.getFpcs.mockReturnValue(new Promise(() => {}))
+		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+		const w = mount(FeeSettingsCard, { props: baseProps(ON_TESTNET), global: { stubs: STUBS } })
+		await flushPromises()
+		const before = useToast().toast.value
+
+		await fpcEvent("onFpcDeleted", { ...SPONSOR })
+		await flushPromises()
+		expect(useToast().toast.value).toBe(before)
+		expect(w.emitted<unknown[]>("update:payer")?.at(-1)?.[0] ?? null).toBeNull()
+		w.unmount()
+	})
+
+	test.each([
+		{
+			mode: "the app windows",
+			over: {},
+			key: FEE_METHOD_LS_KEY,
+			saved: { type: "fpc", title: "Sponsor", fpc: { id: "s1", isProtocol: true } },
+		},
+		{
+			mode: "Send",
+			over: { originPrivacy: "private" },
+			key: sendFeePicksKey("p1"),
+			saved: { private: { type: "fpc", fpc: { id: "s1", name: "Sponsor" } } },
+		},
+	])(
+		"in $mode a saved sponsor names nothing while the FPC read has failed, and shows once a read lists it",
+		async ({ over, key, saved }) => {
+			storageBacking[key] = { [account.address]: saved }
+			mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+			mocks.getFpcs.mockRejectedValue(new Error("fpc read failed"))
+			const failed = mount(FeeSettingsCard, { props: baseProps({ ...ON_TESTNET, ...over }), global: { stubs: STUBS } })
+			await flushPromises()
+			expect(activeType(failed)).toBeUndefined()
+			failed.unmount()
+
+			config.global.plugins = [createPinia()]
+			mocks.getFpcs.mockResolvedValue([SPONSOR])
+			const read = mount(FeeSettingsCard, { props: baseProps({ ...ON_TESTNET, ...over }), global: { stubs: STUBS } })
+			await flushPromises()
+			expect(activeType(read)).toBe("fpc")
+			read.unmount()
+		},
+	)
 
 	test("a snapshot is reconciled against its own rows: a retained FPC list still gives the default sponsor when its refresh fails", async () => {
 		mocks.getFpcs.mockResolvedValue([SPONSOR])
@@ -2039,7 +2110,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 	})
 
 	describe("the loading preview", () => {
-		test("a saved sponsor pick is previewed by its saved label before the FPC list exists, and pays nothing", async () => {
+		test("a saved sponsor pick is previewed as the read FPC list's row before the balances land, and pays nothing", async () => {
 			const gas = deferred<unknown>()
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
 			mocks.getGasBalances.mockReturnValue(gas.promise)

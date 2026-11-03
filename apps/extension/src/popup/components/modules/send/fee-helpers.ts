@@ -190,6 +190,8 @@ export interface FeeMethodsOptions {
 	balancesPending?: boolean
 	/** Its FPC list is unread too: every row is `checking`. */
 	fpcsPending?: boolean
+	/** The live chain offers Nulo's sponsor, so a loading menu holds its place. */
+	offersSponsor?: boolean
 	/** The sponsor whose funding read is in flight: its row is `verifying`. */
 	verifyingSponsorId?: string | null
 }
@@ -232,12 +234,15 @@ const loadingRow = ({ type, title, subtitle, fpc }: FeeMethodOption): FeeMethodO
 /** A Fee Juice row waits on its balance; a list without the PrivateFPC has already answered its row. */
 const waitsOnBalance = (m: FeeMethodOption) => m.type === "fj" || (m.type === "private_fpc" && Boolean(m.fpc))
 
-/** With the FPC list unread every row loads, and Nulo's sponsor, which the wallet registers on every
- *  chain, holds its place until the list names it. With only balances unread, sponsors are answered. */
-function withLoadingRows(methods: FeeMethodOption[], { balancesPending, fpcsPending }: FeeMethodsOptions): FeeMethodOption[] {
+/** With the FPC list unread every row loads, and on a chain that offers it Nulo's sponsor holds its
+ *  place until the list names it. With only balances unread, sponsors are answered. */
+function withLoadingRows(
+	methods: FeeMethodOption[],
+	{ balancesPending, fpcsPending, offersSponsor }: FeeMethodsOptions,
+): FeeMethodOption[] {
 	if (!fpcsPending) return methods.map((m) => (balancesPending && waitsOnBalance(m) ? loadingRow(m) : m))
 	const rows = methods.map(loadingRow)
-	if (!rows.some((m) => m.type === "fpc" && m.fpc?.isProtocol === true)) {
+	if (offersSponsor && !rows.some((m) => m.type === "fpc" && m.fpc?.isProtocol === true)) {
 		rows.push({ type: "fpc", title: SPONSOR_TITLE, subtitle: "sponsored", fpc: null, checking: true })
 	}
 	return rows
