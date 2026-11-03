@@ -50,7 +50,8 @@
 			"classId": "0x2ff0939914ff64bd3f7979926dbe8cf3332bc2fee55928bf3cc9ca802568ea9f",
 			"symbol": "cWETH",
 			"decimals": 18,
-			"name": "cWETH"
+			"name": "cWETH",
+			"priceId": "weth"
 		}
 	],
 	"priceFeeds": {
@@ -68,6 +69,11 @@
 			"min": 0.2,
 			"max": 5,
 			"ticker": "EURC"
+		},
+		"weth": {
+			"min": 100,
+			"max": 20000,
+			"ticker": "WETH"
 		}
 	}
 }
