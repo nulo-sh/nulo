@@ -17,6 +17,8 @@
  *  - all I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
+import { $ } from "bun"
+import { commitPullsText, parsePulls } from "./gh-pulls"
 import { decideSyncPrAction, type Mergeability, syncEligible } from "./open-sync-pr"
 
 export const SYNC_BRANCH_PREFIX = "sync/main-to-dev-v"
@@ -106,28 +108,15 @@ export async function runSync(opts: RunSyncOpts): Promise<RunSyncResult> {
 	return { action: "opened-conflict", reason: mergeable, prNumber: pr, exitCode: 0 }
 }
 
-// CLI entry — the `sync-main-to-dev` release job runs `bun scripts/release/open-sync-pr-run.ts`.
-// Skipped on import (import.meta.main is false in the unit tests, which inject a fake IO).
-if (import.meta.main) {
-	const { $ } = await import("bun")
-	const repo = process.env.GITHUB_REPOSITORY ?? ""
-	const PRERELEASE_MANIFEST = ".release-please-prerelease-manifest.json"
+const PRERELEASE_MANIFEST = ".release-please-prerelease-manifest.json"
 
-	const realIO: SyncIO = {
+export function realSyncIO(repo: string): SyncIO {
+	return {
 		async resolveReleasePrMergeSha(headSha) {
-			const res = await $`gh api ${`repos/${repo}/commits/${headSha}/pulls`} --jq ${".[]"}`.nothrow().quiet()
-			if (res.exitCode !== 0) return null
-			const lines = res.stdout.toString().trim()
-			if (!lines) return null
-			// `gh api --jq '.[]'` prints one JSON object per line.
-			for (const line of lines.split("\n")) {
-				if (!line.trim()) continue
-				const pr = JSON.parse(line) as {
-					merged_at?: string | null
-					base?: { ref?: string }
-					labels?: Array<{ name: string }>
-					merge_commit_sha?: string
-				}
+			// Unlike auto-unstick, a failed lookup reads as "not a Release-PR merge", so the job skips.
+			const text = await commitPullsText(repo, headSha).catch(() => null)
+			if (text === null) return null
+			for (const pr of parsePulls(text)) {
 				const labels = (pr.labels ?? []).map((l) => l.name)
 				const isReleasePr =
 					pr.merged_at != null &&
@@ -211,7 +200,11 @@ if (import.meta.main) {
 		},
 		log: (m) => console.log(m),
 	}
+}
 
+// CLI entry — the `sync-main-to-dev` release job runs `bun scripts/release/open-sync-pr-run.ts`.
+if (import.meta.main) {
+	const realIO = realSyncIO(process.env.GITHUB_REPOSITORY ?? "")
 	const result = await runSync({
 		eventName: process.env.EVENT_NAME ?? "",
 		isPrerelease: (process.env.IS_PRERELEASE ?? "").trim() === "true",
