@@ -23,6 +23,7 @@ const unlockPasskeyProfile = vi.fn()
 const getPasskeyUnlockParams = vi.fn()
 const runCeremony = vi.fn()
 const initTransactionServiceMock = vi.fn()
+const ensureAccountClientMock = vi.fn()
 const setLastActiveProfileIdMock = vi.fn(async () => undefined)
 const openToastMock = vi.fn()
 // Controllable activation wait: defaults to the REAL implementation; the
@@ -74,8 +75,8 @@ vi.mock("@/utils/core", () => ({
 				remove: (listener: (profile: { id: string }) => void) => elsewhere.deletions.delete(listener),
 			},
 		},
-		account: undefined,
 	},
+	ensureAccountClient: () => ensureAccountClientMock(),
 	initTransactionService: (...args: unknown[]) => initTransactionServiceMock(...(args as [])),
 	refreshBalances: vi.fn(async () => undefined),
 }))
@@ -129,6 +130,7 @@ beforeEach(() => {
 	openToastMock.mockReset()
 	useToast().closeToast()
 	initTransactionServiceMock.mockReset()
+	ensureAccountClientMock.mockReset()
 	setLastActiveProfileIdMock.mockReset()
 	setLastActiveProfileIdMock.mockResolvedValue(undefined)
 	waitHolder.mock.mockReset().mockImplementation((...a: unknown[]) => waitHolder.real(...a))
@@ -789,9 +791,7 @@ describe("auth.vue — the profile it shows follows other windows", () => {
 })
 
 describe("auth.vue — the account client survives an unlock", () => {
-	test("a successful unlock keeps the account client the wallet already holds and still runs its continuation", async () => {
-		const existing = { getAccounts: vi.fn() }
-		managers.account = existing as never
+	test("a successful unlock ensures the account client, never replacing it, and still runs its continuation", async () => {
 		unlockProfile.mockResolvedValue({ id: "p1", name: "P", type: "password" })
 		const { wrapper, appStore } = mountAuth()
 		await wrapper.find("[data-stub-input]").setValue("pw")
@@ -799,8 +799,8 @@ describe("auth.vue — the account client survives an unlock", () => {
 		appStore.isLogined = true
 		await flushPromises()
 
+		expect(ensureAccountClientMock).toHaveBeenCalledTimes(1)
 		expect(AccountServiceClient).not.toHaveBeenCalled()
-		expect(managers.account).toBe(existing)
 		expect(initTransactionServiceMock).toHaveBeenCalled()
 	})
 })

@@ -21,7 +21,6 @@ import { useToast } from "@/composables/toast"
 import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 
 /** Utils */
-import { AccountServiceClient } from "@/wallet/services/account/client"
 import { isInvalidProfileIdError } from "@/wallet/services/profile/client"
 import { InvalidPasswordError, RestoreTornError, UserRejectedError } from "@nulo/extension-messaging/errors"
 import { getLastActiveProfileId, onLastActiveProfileChanged, setLastActiveProfileId } from "@/utils/lastActiveProfile"
@@ -29,7 +28,7 @@ import { lockScreenProfile } from "@/popup/lock-screen-profile"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
-import { initTransactionService, managers, refreshBalances } from "@/utils/core"
+import { ensureAccountClient, initTransactionService, managers, refreshBalances } from "@/utils/core"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -229,9 +228,7 @@ const handleUnlockWallet = async () => {
 		// Second identity check: the await above is its own drift window — a
 		// resumed continuation must not replace the winner's managers.
 		if (!appStore.isLogined || appStore.profile?.id !== activeProfile.id) return
-		// Keep an existing client: replacing it abandoned a connected port, and disconnecting it
-		// would reject the calls of any flow still holding it (the network-switch handler does).
-		managers.account ??= new AccountServiceClient()
+		ensureAccountClient()
 
 		initTransactionService(appStore.onTxAdded, appStore.onTxUpdated)
 
