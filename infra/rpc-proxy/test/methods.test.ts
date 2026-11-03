@@ -5,7 +5,6 @@ import { join, resolve } from "node:path"
 const WORKSPACE = resolve(import.meta.dir, "..")
 const pin = (path: string, field: string) => JSON.parse(readFileSync(resolve(WORKSPACE, path), "utf8"))[field]?.["@aztec-labs/stdlib"]
 
-/** The real node client, driven through the handler in `test/node-client.ts`. */
 function runClient(): Record<string, unknown> {
 	const run = Bun.spawnSync([process.execPath, "--no-install", join(import.meta.dir, "node-client.ts")], {
 		cwd: WORKSPACE,

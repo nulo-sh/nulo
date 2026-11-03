@@ -1,6 +1,6 @@
 import type { HeaderMap } from "./respond"
 
-// Chrome's id is 32 letters a-p; Firefox's is a per-install UUID, so neither store id can be pinned.
+// Shapes, not ids: an unpacked Chrome build gets its own 32 letters a-p, and Firefox a UUID per install.
 const EXTENSION_ORIGIN = /^(chrome-extension:\/\/[a-p]{32}|moz-extension:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/
 
 /**

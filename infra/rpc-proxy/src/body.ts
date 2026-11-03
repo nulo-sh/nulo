@@ -9,10 +9,7 @@ export const BODY_CAP_BYTES = 1024 * 1024 + 1024
 /** The client's own batch ceiling: no request needs more. */
 export const MAX_CALLS = 100
 
-/**
- * Reads at most `cap` bytes and stops pulling past it, so a body that lies about its
- * `Content-Length`, or sends none, costs the Worker no more than the cap.
- */
+/** Cancels on the first chunk past `cap`, whatever `Content-Length` claims. */
 export async function readCapped(
 	body: ReadableStream<Uint8Array> | null,
 	cap: number,

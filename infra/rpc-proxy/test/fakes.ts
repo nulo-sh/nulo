@@ -40,7 +40,6 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { IP_LIMITER: Retur
 	}
 }
 
-/** A fake provider: answers each request through `answer` and records it as it arrived. */
 export function fakeUpstream(answer: (request: Recorded) => Response | Promise<Response> = () => rpcResult()) {
 	const requests: Recorded[] = []
 	const fetch: Fetch = async (input, init) => {

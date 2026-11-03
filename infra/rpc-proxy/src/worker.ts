@@ -52,12 +52,25 @@ function answer(upstream: Response, cors: HeaderMap): Response {
 	return new Response(upstream.body, { status: upstream.status, headers })
 }
 
+/** An IPv6 client counts by its /64, the block one host is given; IPv4 by its address. */
+export function limiterKey(ip: string): string {
+	if (!ip.includes(":") || ip.includes(".")) return ip
+	const [head, tail] = ip.toLowerCase().split("::")
+	const left = head ? head.split(":") : []
+	const right = tail ? tail.split(":") : []
+	const groups = tail === undefined ? left : [...left, ...Array(8 - left.length - right.length).fill("0"), ...right]
+	return `${groups
+		.slice(0, 4)
+		.map((group) => group.replace(/^0+(?=.)/, ""))
+		.join(":")}::/64`
+}
+
 async function admit(request: Request, env: Env, cors: HeaderMap): Promise<Response | null> {
 	if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, ...cors, ...PREFLIGHT } })
 	if (request.method !== "POST") return refuse(405, SERVER_ERROR, "method not allowed", cors, { allow: "POST" })
 	const ip = request.headers.get("cf-connecting-ip")
 	if (!ip) return refuse(400, SERVER_ERROR, "no client address", cors)
-	if (!(await env.IP_LIMITER.limit({ key: ip })).success) return refuse(429, SERVER_ERROR, "rate limited", cors)
+	if (!(await env.IP_LIMITER.limit({ key: limiterKey(ip) })).success) return refuse(429, SERVER_ERROR, "rate limited", cors)
 	return null
 }
 

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
-import { BODY_CAP_BYTES, MAX_CALLS } from "../src/body"
-import { createHandler, type Env, type Fetch } from "../src/worker"
+import { createHandler, type Env, type Fetch, limiterKey } from "../src/worker"
 import {
 	CHROME_ORIGIN,
 	call,
@@ -73,6 +72,9 @@ function expectCors(answer: Answer, origin: string | null) {
 }
 
 const BATCH = [call("aztec_getNodeInfo", 1), call("aztec_getBlockNumber", 2)]
+// Literal, not imported: a test that read the source's ceilings would follow them anywhere.
+const BODY_CAP_BYTES = 1_049_600
+const MAX_CALLS = 100
 
 describe("routing", () => {
 	test.each([
@@ -215,7 +217,7 @@ describe("the body", () => {
 		const pad = 1024 * 1024 - 1 - lengths.reduce((a, b) => a + b, 0)
 		entries[0].params = ["a".repeat(pad)]
 		const body = JSON.stringify(entries)
-		expect(body.length).toBe(1024 * 1024 - 1 + MAX_CALLS + 1)
+		expect(body.length).toBe(1_048_676)
 		expect((await run(post(body), makeEnv(), upstream.fetch)).status).toBe(200)
 		expect(upstream.requests).toHaveLength(1)
 	})
@@ -373,6 +375,25 @@ describe("admission", () => {
 		})
 		expectRefusal(await run(request, makeEnv(), upstream.fetch), 400)
 		expect(upstream.requests).toEqual([])
+	})
+
+	test.each([
+		["an IPv4 address, whole", IP, IP],
+		["a full IPv6 address, by its /64", "2001:0DB8:0000:0042:0000:8a2e:0370:7334", "2001:db8:0:42::/64"],
+		["a compressed one, the same /64", "2001:db8:0:42::1", "2001:db8:0:42::/64"],
+		["one compressed inside its prefix", "2001:db8::1", "2001:db8:0:0::/64"],
+		["the loopback", "::1", "0:0:0:0::/64"],
+	])("the limiter counts %s", (_, ip, key) => {
+		expect(limiterKey(ip)).toBe(key)
+	})
+
+	test("two IPv6 addresses in one /64 share a budget; another /64 has its own", async () => {
+		const env = makeEnv()
+		const from = (ip: string) => json(BATCH, { headers: { "cf-connecting-ip": ip } })
+		const { limit } = WRANGLER.ratelimits[0].simple
+		for (let i = 0; i < limit; i++) expect((await run(from(`2001:db8:0:42::${(i + 1).toString(16)}`), env)).status).toBe(200)
+		expectRefusal(await run(from("2001:db8:0:42:ffff::1"), env), 429)
+		expect((await run(from("2001:db8:0:43::1"), env)).status).toBe(200)
 	})
 
 	test("the limiter is keyed on the client address, and a request over it is a 429 that calls nothing", async () => {

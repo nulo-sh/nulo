@@ -1,8 +1,4 @@
-/**
- * Every method a node client sends: `aztec_` and a name of stdlib's `AztecNodeApiSchema`.
- * `test/methods.test.ts` reds when the schema gains a name this list lacks; a name the schema
- * dropped may stay, since an older wallet still sends it.
- */
+// `aztec_` and every `AztecNodeApiSchema` name; a name the schema drops stays for older wallets.
 export const NODE_METHODS: ReadonlySet<string> = new Set(
 	[
 		"findLeavesIndexes",

@@ -6,7 +6,6 @@ import { NODE_METHODS } from "../src/methods"
 import { createHandler } from "../src/worker"
 import { CHROME_ORIGIN, fakeUpstream, IP, makeEnv } from "./fakes"
 
-/** Routes the real node client's HTTP through the handler, as an extension page's fetch would. */
 function throughProxy(env = makeEnv(), upstream = fakeUpstream()): string[] {
 	const bodies: string[] = []
 	const handle = createHandler(upstream.fetch)
