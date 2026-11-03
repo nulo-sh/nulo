@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL } from "./auto-unstick"
-import { type MergedPrRef, parseAutoUnstickFlag, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
+import { type MergedPrRef, parseAutoUnstickFlag, type RunUnstickOpts, realUnstickIO, runUnstick, type UnstickIO } from "./auto-unstick-run"
+import { fakeGh } from "./fake-gh"
 
 const MERGE = "abc123def456abc123def456abc123def456abcd"
 
@@ -246,5 +247,32 @@ describe("runUnstick — no launch with a blank in the legal documents", () => {
 		const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8")
 		expect(read("auto-unstick-run.ts")).toContain('from "../../packages/legal/src/launch"')
 		expect(read("../../packages/legal/src/launch.ts")).not.toMatch(/^\s*import\b|\brequire\(|\bimport\(|\bfrom\s*["']/m)
+	})
+})
+
+describe("the gh lookup", () => {
+	test("a failed lookup throws, an empty answer is no PR, and only the PR this commit merged counts", async () => {
+		const pr = (number: number, mergeSha: string) =>
+			JSON.stringify({
+				number,
+				merged_at: "2026-11-01T00:00:00Z",
+				base: { ref: "main" },
+				labels: [{ name: "x" }],
+				merge_commit_sha: mergeSha,
+			})
+		const gh = fakeGh([
+			{ when: "commits/f00/pulls", stderr: "HTTP 502\n", exit: 4 },
+			{ when: "commits/m00/pulls", stdout: `${pr(3, "other")}\n\n${pr(7, "m00")}\n` },
+		])
+		try {
+			const io = realUnstickIO("o/r")
+			expect(await io.resolveMergedPr("f00").catch((e: Error) => e.message)).toBe(
+				"gh api commits/f00/pulls failed (exit 4): HTTP 502",
+			)
+			expect(await io.resolveMergedPr("e00")).toBeNull()
+			expect(await io.resolveMergedPr("m00")).toEqual({ number: 7, merged: true, baseRef: "main", labels: ["x"], mergeSha: "m00" })
+		} finally {
+			gh.restore()
+		}
 	})
 })

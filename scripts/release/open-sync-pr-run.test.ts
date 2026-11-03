@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { NEEDS_RESOLUTION_LABEL } from "./open-sync-pr"
-import { type RunSyncOpts, runSync, type SyncIO } from "./open-sync-pr-run"
+import { fakeGh } from "./fake-gh"
+import { type RunSyncOpts, realSyncIO, runSync, type SyncIO } from "./open-sync-pr-run"
 
 const SHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
@@ -132,5 +133,28 @@ describe("runSync — opening the sync PR", () => {
 		const { io, calls } = fakeIO({ mergeable: "MERGEABLE" })
 		await runSync(opts({ io, version: "1.2.3" }))
 		expect(calls.prepareSyncBranch).toEqual([{ branch: "sync/main-to-dev-v1.2.3", baseSha: SHA, version: "1.2.3" }])
+	})
+})
+
+describe("the gh lookup", () => {
+	test("a failed lookup reads as no release merge, and the release PR is picked past an unrelated one", async () => {
+		const unrelated = JSON.stringify({ merged_at: "2026-11-01T00:00:00Z", base: { ref: "dev" }, labels: [], merge_commit_sha: "u00" })
+		const release = JSON.stringify({
+			merged_at: "2026-11-01T00:00:00Z",
+			base: { ref: "main" },
+			labels: [{ name: "autorelease: tagged" }],
+			merge_commit_sha: "m00",
+		})
+		const gh = fakeGh([
+			{ when: "commits/f00/pulls", stderr: "HTTP 502\n", exit: 4 },
+			{ when: "commits/m00/pulls", stdout: `${unrelated}\n${release}\n` },
+		])
+		try {
+			const io = realSyncIO("o/r")
+			expect(await io.resolveReleasePrMergeSha("f00")).toBeNull()
+			expect(await io.resolveReleasePrMergeSha("m00")).toBe("m00")
+		} finally {
+			gh.restore()
+		}
 	})
 })
