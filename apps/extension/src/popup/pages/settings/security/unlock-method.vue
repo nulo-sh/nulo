@@ -12,7 +12,7 @@
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
 import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
-import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
+import CurrentPasswordField from "@/components/composite/CurrentPasswordField.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 
 /** Services */
@@ -273,32 +273,19 @@ onBeforeUnmount(() => {
 		</div>
 
 		<div v-if="step === 'enterPassword'" class="export_section_last">
-			<div :class="[isWrongPassword && $style.shake]">
-				<Input
-					v-model="password"
-					:type="isPasswordHidden ? 'password' : 'text'"
-					:error="isWrongPassword"
-					:ariaInvalid="isWrongPassword"
-					placeholder="Enter password"
-					autocomplete="current-password"
-					autofocus
-					data-testid="unlock-method-password-input"
-					@input="isWrongPassword = false"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isPasswordHidden"
-							data-testid="unlock-method-password-input-visibility-toggle"
-							@toggle="isPasswordHidden = !isPasswordHidden"
-						/>
-					</template>
-				</Input>
-			</div>
-			<Transition name="fade">
-				<span v-if="isWrongPassword" :class="$style.error_text" role="alert" data-testid="unlock-method-error-text">
-					Wrong password
-				</span>
-			</Transition>
+			<CurrentPasswordField
+				v-model="password"
+				:error="isWrongPassword"
+				:hidden="isPasswordHidden"
+				placeholder="Enter password"
+				autocomplete="current-password"
+				autofocus
+				data-testid="unlock-method-password-input"
+				errorTestid="unlock-method-error-text"
+				toggleTestid="unlock-method-password-input-visibility-toggle"
+				@input="isWrongPassword = false"
+				@toggle="isPasswordHidden = !isPasswordHidden"
+			/>
 		</div>
 
 		<div v-if="isNewPasswordStep" class="export_section_last">
@@ -353,16 +340,3 @@ onBeforeUnmount(() => {
 
 	<PasskeyCeremonyDialog v-if="ceremonyRequest" :request="ceremonyRequest" @resolve="onCeremonyResolve" @reject="onCeremonyReject" />
 </template>
-
-<style module>
-.error_text {
-	composes: type--body from global;
-	color: var(--txt-danger);
-	margin-top: 4px;
-	display: block;
-}
-
-.shake {
-	composes: shake_password from "@/components/composite/shake.module.css";
-}
-</style>

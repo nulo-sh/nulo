@@ -13,3 +13,4 @@
 - 2026-11-03 arc 2 phase 4: lint, typecheck:all, tests (151 files, 2839 passed), the cap grep green; the cap is one constant. Phase 5 next (before pictures first).
 - 2026-11-03 arc 2 base `aaaf9278c` (armed builds): before pictures captured, 20 screens x 2 themes, two runs pixel-identical; smoke 7 files Chrome 21 passed (158 s), Firefox 21 passed (215 s); audit:dup production 175 / 8751.
 - 2026-11-03 arc 2 phase 5: lint, typecheck:all, tests (308 files, 5286 passed) green; head capture pixel-identical to base. Phase 6 next.
+- 2026-11-03 arc 2 phase 6: lint, typecheck:all, tests (309 files, 5294 passed) green; head capture pixel-identical to base. Arc 2 end gate next.

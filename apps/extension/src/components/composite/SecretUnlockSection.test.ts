@@ -28,16 +28,6 @@ describe("composite/SecretUnlockSection", () => {
 		expect(w.find("input").attributes("value")).toBe("secret")
 	})
 
-	test("'Wrong password' indicator is hidden by default", () => {
-		const w = factory()
-		expect(w.text()).not.toContain("Wrong password")
-	})
-
-	test("'Wrong password' indicator appears when error is true", () => {
-		const w = factory({ error: true })
-		expect(w.text()).toContain("Wrong password")
-	})
-
 	test("typing emits update:modelValue + clearError", async () => {
 		const w = factory({ error: true })
 		await w.find("input").setValue("new-pwd")
@@ -74,17 +64,5 @@ describe("composite/SecretUnlockSection", () => {
 		expect(errEl.exists()).toBe(true)
 		expect(errEl.attributes("role")).toBe("alert")
 		expect(errEl.text()).toContain("Wrong password")
-	})
-})
-
-describe("composite/SecretUnlockSection — the shake", () => {
-	test("the input's wrapper carries the shake class exactly while error is set", async () => {
-		const w = factory({ error: false })
-		const shaker = () => w.get("[data-input-stub]").element.parentElement as HTMLElement
-		expect(shaker().className).not.toMatch(/shake/)
-		await w.setProps({ error: true })
-		expect(shaker().className).toMatch(/shake/)
-		await w.setProps({ error: false })
-		expect(shaker().className).not.toMatch(/shake/)
 	})
 })

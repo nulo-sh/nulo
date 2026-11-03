@@ -21,8 +21,8 @@ const { openToast } = useToast()
 
 /** Components */
 import CollapsingHeroLayout from "@/components/composite/CollapsingHeroLayout.vue"
+import CurrentPasswordField from "@/components/composite/CurrentPasswordField.vue"
 import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
-import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -137,37 +137,20 @@ onBeforeUnmount(() => {
 		<!-- Current password -->
 		<div :class="$style.section">
 			<span :class="$style.section_label">Current password</span>
-			<div :class="[isWrongCurrentPassword && $style.shake]">
-				<Input
-					v-model="currentPassword"
-					:error="isWrongCurrentPassword"
-					:ariaInvalid="isWrongCurrentPassword"
-					:type="isCurrentPasswordHidden ? 'password' : 'text'"
-					@input="handlePasswordInput"
-					placeholder="Enter current password"
-					autocomplete="current-password"
-					autofocus
-					data-testid="current-password-input"
-				>
-					<template #suffix>
-						<PasswordVisibilityToggle
-							:hidden="isCurrentPasswordHidden"
-							data-testid="current-password-input-visibility-toggle"
-							@toggle="isCurrentPasswordHidden = !isCurrentPasswordHidden"
-						/>
-					</template>
-				</Input>
-			</div>
-			<Transition name="fade">
-				<span
-					v-if="isWrongCurrentPassword"
-					:class="$style.error_text"
-					role="alert"
-					data-testid="error-text"
-				>
-					Wrong current password
-				</span>
-			</Transition>
+			<CurrentPasswordField
+				v-model="currentPassword"
+				:error="isWrongCurrentPassword"
+				:hidden="isCurrentPasswordHidden"
+				placeholder="Enter current password"
+				autocomplete="current-password"
+				autofocus
+				data-testid="current-password-input"
+				errorText="Wrong current password"
+				errorTestid="error-text"
+				toggleTestid="current-password-input-visibility-toggle"
+				@input="handlePasswordInput"
+				@toggle="isCurrentPasswordHidden = !isCurrentPasswordHidden"
+			/>
 		</div>
 
 		<!-- New password -->
@@ -240,16 +223,5 @@ onBeforeUnmount(() => {
 .section_label {
 	composes: type--label-section from global;
 	color: var(--nulo-secondary);
-}
-
-.error_text {
-	composes: type--body from global;
-	color: var(--txt-danger);
-	margin-top: 4px;
-	display: block;
-}
-
-.shake {
-	composes: shake_password from "../../../../components/composite/shake.module.css";
 }
 </style>
