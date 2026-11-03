@@ -9,3 +9,4 @@
 - 2026-11-03 Phase 2 gate green: infra/token-list check and test (91), test:ci-gating (747), test:release (359, with a local `zip`), lint:actions, lint.
 - 2026-11-03 Phase 3 docs (SECURITY, ARCHITECTURE, e2e-testing skill); test:all green; smoke on the armed source builds: Chrome 44 pass + 1 Firefox-only skip in 313 s, Firefox 45 pass in 510 s, both at retry 0.
 - 2026-11-03 Network e2e green (fiat-send, register-token: 3 pass, 117 s with boot). Phases 1–3 ✓. Codex R1 and an Opus diff review running.
+- 2026-11-03 OA-1 = A and OA-2 = the proposed wording (owner, recorded on #1605); Privacy 1.2.8 added; packages/legal and apps/landing tests green.

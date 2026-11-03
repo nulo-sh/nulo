@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.7 — effective 27 October 2026**
+**Version 1.2.8 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -134,8 +134,8 @@ past 3 days by error, method and network.
 
 ### 5.2 Price data (CoinGecko)
 
-**What it is:** with fiat values enabled, Nulo requests prices for the token-ID list bundled with
-that extension version.
+**What it is:** with fiat values enabled, Nulo requests prices for the price identifiers the
+signed token list names (§ 5.11), and for AZTEC, which prices Fee Juice.
 
 **What it reveals:** the list is not selected from your holdings, and requests do not include your
 balances, account addresses or transaction contents. The request carries no cookies and no
@@ -467,3 +467,4 @@ described in § 5.
 | 1.2.5 | 25 October 2026 | Only the default Testnet endpoint uses the Developer's provider account (§ 5.1). |
 | 1.2.6 | 27 October 2026 | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
+| 1.2.8 | «FILL: effective date» | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |

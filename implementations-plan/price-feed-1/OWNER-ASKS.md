@@ -38,3 +38,8 @@ No wallet surface changes here. The new text is the `prepare` step summary the o
 - A "## Price feeds against CoinGecko (advisory)" table with columns `| price id | band | result |`, results `inside`, `outside the band ($<quote>)`, `unknown to CoinGecko`, `not checked: <reason>`, under one line saying a keyless request from a shared runner is often rate-limited, so `not checked` proves nothing.
 
 Change any of it with a one-line edit; nothing else depends on the words.
+
+## Answers (recorded by the orchestrator on #1605, 2026-11-03)
+
+- **OA-1 = A.** The owner: "OA-1 if it's backwards compatible, then yes, A." The first list with feeds is published right after this change merges, before the release that carries it; that publish is a later token-list PR.
+- **OA-2 = the proposed wording, patch 1.2.8.** The owner: "OA-2: ok no problem." It landed in this arc's PR: `legal/privacy.md` 1.2.8 (effective date filled at the promote that publishes it, as for Terms 1.2.1), 1.2.7 archived, the manifest entry and the `BEFORE-LAUNCH.md` step.

@@ -132,6 +132,7 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 | D13 | No refresh on list change | brief: fetching unchanged |
 | D14 | No new e2e scenario; the source-run list carries its two feeds | unit and composable tests prove a new id prices; the existing priced specs prove the path end to end. Artifact runs (release and nightly smoke, `nightly.yml:327,354`, `release.yml:399,416`) hold the published list and skip their fiat specs until the feeds publish (`fixtures/token-list.ts:218-222`) |
 | D15 | As built: `inBand` sits in `price-map.ts`; the feed diff's tests sit in `test/publish.test.ts` beside the token and flag diffs; invariant 6 is proved in the parse, service and composable tests, with no `price-map.test.ts`; a try/catch per record in `checkPriceFeeds` in place of `feedFault` | the file placement above (`lessons/phase-1.md`, `phase-2.md`) |
+| D16 | OA-2 answered before the PR opened, so Privacy 1.2.8 (§ 5.2, the owner's wording) ships in this arc: 1.2.7 archived, `effective: null` until the promote that publishes it, a `BEFORE-LAUNCH.md` step | its own PR (the plan's fallback, for an answer after the merge) |
 
 ## Security & Adversarial Considerations
 
