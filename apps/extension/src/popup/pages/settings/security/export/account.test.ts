@@ -55,10 +55,17 @@ vi.mock("vue-router", () => ({
 	useRoute: () => ({ path: "/popup/settings/security/export/account", query: route.query, meta: {} }),
 }))
 vi.mock("@/composables/toast.js", () => ({ useToast: () => ({ openToast }) }))
-const surface = vi.hoisted(() => ({ toolbar: false }))
+const surface = vi.hoisted(() => ({ toolbar: false, panel: false }))
 vi.mock("@/utils/browser-surface", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/browser-surface")>()),
 	isToolbarPopup: () => surface.toolbar,
+	closesOnFocusLoss: () => surface.panel,
+}))
+const moveToOwnWindow = vi.hoisted(() => vi.fn(async (_route: string) => true))
+vi.mock("@/utils/own-window", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/utils/own-window")>()),
+	moveToOwnWindow,
+	leavePanelFor: async (route: string) => surface.panel && (await moveToOwnWindow(route)),
 }))
 
 import { Icon } from "@nulo/design"
@@ -129,6 +136,7 @@ const download = (w: VueWrapper) => w.get('[data-testid="account-download-btn"]'
 beforeEach(() => {
 	vi.clearAllMocks()
 	surface.toolbar = false
+	surface.panel = false
 	route.query = { address: ADDRESS }
 	installChromeStorage({}, { persist: false })
 })
@@ -507,6 +515,69 @@ describe("a passkey profile's account file", () => {
 		await flushPromises()
 		expect(passkey.runCeremony).not.toHaveBeenCalled()
 		expect(ceremonyReject).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		["another chain id", 8, 0],
+		["(control) the same chain id", 7, 1],
+	] as const)(
+		"a lookup that settles with %s in the store asks the passkey only for the scope it began on",
+		async (_label, chainId, asks) => {
+			let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+			passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+			const w = mountPage("passkey")
+			await flushPromises()
+			await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+			await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+			// One synchronous block: the lookup's continuation runs before the page's network watcher.
+			answerLookup({ credentialId: "cred", prfSalt: "salt" })
+			useAppStore().network = { id: "n1", chainId } as never
+			await flushPromises()
+			expect(passkey.runCeremony).toHaveBeenCalledTimes(asks)
+		},
+	)
+
+	test("a lookup that settles on another chain id asks nothing, though the chain id is back before the page resumes", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const w = mountPage("passkey")
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		const app = useAppStore()
+		answerLookup({ credentialId: "cred", prfSalt: "salt" })
+		// Queued before the switch, so the chain id is back before the page's watcher reads it.
+		queueMicrotask(() => {
+			app.network = { id: "n1", chainId: 7 } as never
+		})
+		app.network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
+		expect(passkey.verifyExportCredential).not.toHaveBeenCalled()
+	})
+
+	test.each<[string, "password" | "passkey", boolean, Record<string, string>, string[][]]>([
+		[
+			"a passkey profile in the toolbar panel moves with its address",
+			"passkey",
+			true,
+			{ address: ADDRESS },
+			[[`/popup/settings/security/export/account?address=${ADDRESS}`]],
+		],
+		[
+			"a passkey profile in the toolbar panel with no address moves to the page alone",
+			"passkey",
+			true,
+			{},
+			[["/popup/settings/security/export/account"]],
+		],
+		["a passkey profile outside the panel stays", "passkey", false, { address: ADDRESS }, []],
+		["a password profile in the panel stays", "password", true, { address: ADDRESS }, []],
+	])("%s", async (_label, type, inPanel, query, moves) => {
+		surface.panel = inPanel
+		route.query = query
+		mountPage(type)
+		expect(moveToOwnWindow.mock.calls).toEqual(moves)
 	})
 
 	test("a profile switch drops the approval: the next file asks its passkey again", async () => {

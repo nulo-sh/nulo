@@ -22,8 +22,12 @@ vi.mock("@/composables/usePasskeyCeremony", () => ({
 }))
 const surface = vi.hoisted(() => ({ inPanel: false }))
 vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.inPanel }))
-const moveToOwnWindow = vi.hoisted(() => vi.fn(async () => true))
-vi.mock("@/utils/own-window", async (original) => ({ ...(await original<typeof import("@/utils/own-window")>()), moveToOwnWindow }))
+const moveToOwnWindow = vi.hoisted(() => vi.fn(async (_route: string) => true))
+vi.mock("@/utils/own-window", async (original) => ({
+	...(await original<typeof import("@/utils/own-window")>()),
+	moveToOwnWindow,
+	leavePanelFor: async (route: string) => surface.inPanel && (await moveToOwnWindow(route)),
+}))
 
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { createRouter, createWebHashHistory, type Router } from "vue-router"
@@ -376,6 +380,17 @@ describe("recovery phrase — a passkey profile", () => {
 		expect(exportMnemonic).toHaveBeenCalledWith("p1", undefined, ANSWER)
 		expect(w.findComponent({ name: "RecoveryPhraseGrid" }).props("words")).toEqual(["alpha", "bravo", "charlie"])
 		expect(storageSet()).toHaveBeenCalledWith({ "nulo:ui:getStartedPhraseSaved@p1": true })
+	})
+
+	test("the prompt names the profile as it was named at the press, whatever a rename during the lookup says", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const w = await mountAgreed("passkey")
+		await passkeyButton(w).trigger("click")
+		useAppStore().profile = { id: "p1", name: "Renamed", type: "passkey" } as never
+		answerLookup({ credentialId: "Y3JlZA==", prfSalt: "c2FsdA==" })
+		await flushPromises()
+		expect(runCeremony).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ step: "reveal", profileName: "Main" }))
 	})
 
 	test("a cancelled prompt says nothing, opens nothing and keeps the button", async () => {

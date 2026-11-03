@@ -22,10 +22,11 @@ import { managers } from "@/utils/core"
 import { downloadFile, profileFileNameSegment } from "@/utils"
 import { trimAddress } from "@/utils/string"
 import { isNewPasswordValid } from "@/utils/password"
-import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
+import { isToolbarPopup } from "@/utils/browser-surface"
 import { logCredentialFailure } from "@/utils/credential-refusal"
 import { goBack } from "@/utils/page-back"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { watchLockStart } from "@/popup/locked-state"
 
@@ -216,13 +217,17 @@ const handleConfirmPasskey = async () => {
 	const scope = approvalScope()
 	const { id: profileId, name } = appStore.profile
 	try {
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
-		if (!isCurrent() || scope !== approvalScope()) return
-		const answer = await runCeremony({ mode: "get", credentialId, prfSalt, step: "accountFile", profileName: name })
-		if (!isCurrent() || scope !== approvalScope()) return
+		const inScope = () => isCurrent() && scope === approvalScope()
+		const answer = await askProfilePasskey(
+			runCeremony,
+			managers.profile,
+			{ profileId, step: "accountFile", profileName: () => name },
+			inScope,
+		)
+		if (answer === undefined || !inScope()) return
 		// An answer that cannot open the profile is refused here, never held until Save.
 		await managers.profile.verifyExportCredential(profileId, { passkey: answer })
-		if (!isCurrent() || scope !== approvalScope()) return
+		if (!inScope()) return
 		approval.value = { answer, scope }
 	} catch (error) {
 		if (!isCurrent() || handleCancelOrUnconfirmed(error, openToast)) return
@@ -362,9 +367,9 @@ watch(fileStatus, async (status) => {
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // account file moves to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (!isPasskeyProfile.value || !closesOnFocusLoss()) return
+	if (!isPasskeyProfile.value) return
 	const address = typeof route.query.address === "string" ? `?address=${encodeURIComponent(route.query.address)}` : ""
-	void moveToOwnWindow(`${OWN_WINDOW_ROUTES.accountExport}${address}`)
+	void leavePanelFor(`${OWN_WINDOW_ROUTES.accountExport}${address}`)
 })
 onMounted(() => {
 	document.addEventListener("keydown", onKeydown)

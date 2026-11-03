@@ -22,6 +22,7 @@ import { logCredentialFailure } from "@/utils/credential-refusal"
 import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, fullBackupFileName, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { markGetStarted } from "@/utils/get-started"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { isNewPasswordValid } from "@/utils/password"
 import { createRunFence, type RunFence } from "@/composables/runFence"
 import { useToast } from "@/composables/toast.js"
@@ -160,15 +161,13 @@ function buildBackupServices(): NamedClient[] {
 async function acquirePasskeyCredential(ctx: ExportCtx, isCurrent: () => boolean) {
 	const { state } = ctx
 	try {
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(ctx.profile().id)
-		if (!isCurrent()) return "handled"
-		const credentialData = await ctx.opts.runCeremony({
-			mode: "get",
-			credentialId,
-			prfSalt,
-			step: "export",
-			profileName: ctx.profile().name,
-		})
+		const credentialData = await askProfilePasskey(
+			ctx.opts.runCeremony,
+			managers.profile,
+			{ profileId: ctx.profile().id, step: "export", profileName: () => ctx.profile().name },
+			isCurrent,
+		)
+		if (credentialData === undefined) return "handled"
 		return { credentialData }
 	} catch (err) {
 		if (!isCurrent()) return "handled"

@@ -28,6 +28,7 @@ import { lockScreenProfile } from "@/popup/lock-screen-profile"
 import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { postAuthRoute } from "@/utils/own-window"
 import { PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { ensureAccountClient, initTransactionService, managers, refreshBalances } from "@/utils/core"
 
 /** Store */
@@ -120,10 +121,13 @@ const unlockActiveProfile = async (attemptId) => {
 	const moved = () => appStore.profile?.id !== attemptId
 	if (isPasskeyProfile.value) {
 		if (closesOnFocusLoss()) return managers.profile.unlockPasskeyProfile(attemptId)
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(attemptId)
-		if (moved()) return
-		const credData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "unlock", profileName: appStore.profile.name })
-		if (moved()) return
+		const credData = await askProfilePasskey(
+			runCeremony,
+			managers.profile,
+			{ profileId: attemptId, step: "unlock", profileName: () => appStore.profile.name },
+			() => !moved(),
+		)
+		if (credData === undefined || moved()) return
 		return managers.profile.unlockPasskeyProfile(attemptId, credData)
 	}
 	return managers.profile.unlockProfile(attemptId, password.value)
