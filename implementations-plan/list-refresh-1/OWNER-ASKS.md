@@ -40,4 +40,7 @@ The two "Could not" lines are in the danger text colour; the others are grey. On
 
 **Privacy policy**: § 5.11 says "Once you have accepted the Terms, you can also ask for it in Settings → Tokens". It names the page, not the control, so it holds for every option.
 
-**Captures**: added when the arc is built (Chrome, light): A as built, with tokens and with none, then B and C.
+**Captures** (Chrome, light, the arc's smoke build, two seeded tokens unless named):
+- A as built: [before a press](screenshots/oa1-a-idle.png); [with no tokens](screenshots/oa1-a-no-tokens.png); [after a newer list](screenshots/oa1-a-updated.png); [host not reached](screenshots/oa1-a-unreachable.png).
+- B: [after a newer list](screenshots/oa1-b-updated.png). Before a press it shows the button alone.
+- C: [after a newer list](screenshots/oa1-c-updated.png). Before a press it shows the header icon alone.
