@@ -49,7 +49,6 @@ export function useReaskReview(deps: ReaskReviewDeps) {
 		isTop: () => order.value === popupStore.len - 1,
 	})
 
-	/** The fee a queued send asks again with, while its record still asks. */
 	const askedFee = (op: OperationRecord | undefined) => (isQueuedTransfer(op) ? op.progress.reask?.fee : undefined)
 
 	function open(jobId: string) {

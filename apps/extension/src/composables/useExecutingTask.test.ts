@@ -229,6 +229,7 @@ describe("useExecutingTask — dispose", () => {
 
 		const shown = harness()
 		shown.events.created.invoke(transferTask("t1"))
+		shown.rows.value = [record("own", { createdAt: 12 })]
 		shown.executing.dispose()
 		shown.events.updated.invoke(transferTask("t1", { finishedAt: 1 }))
 		shown.events.deleted.invoke(transferTask("t1"))

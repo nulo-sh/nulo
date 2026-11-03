@@ -1,8 +1,5 @@
 <script setup>
-/**
- * One settled activity row's card: a chain tx, a received transfer or a terminal journal record.
- * A journal record no card can draw renders nothing.
- */
+/** A journal record no card can draw renders nothing. */
 import TransactionCard from "./TransactionCard.vue"
 import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
 import TransactionIncomingCard from "@/components/composite/activity/TransactionIncomingCard.vue"
@@ -16,7 +13,6 @@ const props = defineProps({
 	/** The current profile and chain's tokens: a row shows an amount only for a token in this list. */
 	tokens: { type: Array, default: () => [] },
 	tokenById: { type: Function, required: true },
-	/** The fiat line for a token amount, or `undefined` when there is no quote. */
 	fiatLabel: { type: Function, required: true },
 	/** Whether an incoming row's receipt is arriving now; judged when the row renders. */
 	isArriving: { type: Function, default: undefined },

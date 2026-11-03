@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test } from "vitest"
+import { sendEvent } from "../../../../../tests/helpers/send-event"
 import DetailAddressCard from "./DetailAddressCard.vue"
 
 const ADDRESS = `0x${"1a".repeat(32)}`
@@ -60,7 +61,7 @@ describe("DetailAddressCard", () => {
 		expect(label.text()).toBe("From")
 		expect(link.attributes()).toMatchObject({ href: "https://x.test/a", target: "_blank", "aria-label": "View on Aztecscan" })
 		link.element.addEventListener("click", (e) => e.preventDefault())
-		click(link.element)
+		sendEvent(link.element, "click")
 		expect(w.emitted("copy")).toBeUndefined()
 	})
 

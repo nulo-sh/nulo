@@ -7,7 +7,7 @@ import { type Task, TaskStatus } from "@/wallet/services/task/spec"
 
 interface ExecutingTaskDeps {
 	taskService: Pick<TaskServiceClient, "getTasks">
-	/** Whether a task belongs in this view; judged on every event and on each snapshot's tasks. */
+	/** Whether a created or snapshotted task belongs in this view; updates and deletes match by id. */
 	accept: (task: Task) => boolean
 	/** The active account's address: a snapshot lands only while it is unchanged. */
 	account: () => string | undefined
