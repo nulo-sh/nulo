@@ -202,7 +202,6 @@ export function realSyncIO(repo: string): SyncIO {
 	}
 }
 
-// CLI entry — the `sync-main-to-dev` release job runs `bun scripts/release/open-sync-pr-run.ts`.
 if (import.meta.main) {
 	const realIO = realSyncIO(process.env.GITHUB_REPOSITORY ?? "")
 	const result = await runSync({

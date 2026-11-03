@@ -137,7 +137,9 @@ describe("runSync — opening the sync PR", () => {
 })
 
 describe("the gh lookup", () => {
-	test("a failed lookup reads as no release merge, and the release PR is picked past an unrelated one", async () => {
+	const lookup = (sha: string) => `api repos/o/r/commits/${sha}/pulls --jq .[]`
+
+	test("a failed lookup reads as no release merge, an unreadable answer throws, and the release PR is picked past an unrelated one, reading no further", async () => {
 		const unrelated = JSON.stringify({ merged_at: "2026-11-01T00:00:00Z", base: { ref: "dev" }, labels: [], merge_commit_sha: "u00" })
 		const release = JSON.stringify({
 			merged_at: "2026-11-01T00:00:00Z",
@@ -146,12 +148,14 @@ describe("the gh lookup", () => {
 			merge_commit_sha: "m00",
 		})
 		const gh = fakeGh([
-			{ when: "commits/f00/pulls", stderr: "HTTP 502\n", exit: 4 },
-			{ when: "commits/m00/pulls", stdout: `${unrelated}\n${release}\n` },
+			{ args: lookup("f00"), stderr: "HTTP 502\n", exit: 4 },
+			{ args: lookup("b00"), stdout: "not json\n" },
+			{ args: lookup("m00"), stdout: `${unrelated}\n${release}\nnot json\n` },
 		])
 		try {
 			const io = realSyncIO("o/r")
 			expect(await io.resolveReleasePrMergeSha("f00")).toBeNull()
+			expect(await io.resolveReleasePrMergeSha("b00").catch((e: Error) => e.name)).toBe("SyntaxError")
 			expect(await io.resolveReleasePrMergeSha("m00")).toBe("m00")
 		} finally {
 			gh.restore()

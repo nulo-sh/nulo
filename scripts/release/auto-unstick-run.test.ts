@@ -251,7 +251,9 @@ describe("runUnstick — no launch with a blank in the legal documents", () => {
 })
 
 describe("the gh lookup", () => {
-	test("a failed lookup throws, an empty answer is no PR, and only the PR this commit merged counts", async () => {
+	const lookup = (sha: string) => `api repos/o/r/commits/${sha}/pulls --jq .[]`
+
+	test("a failed lookup throws, an empty answer is no PR, and only the PR this commit merged counts, reading no further", async () => {
 		const pr = (number: number, mergeSha: string) =>
 			JSON.stringify({
 				number,
@@ -261,8 +263,9 @@ describe("the gh lookup", () => {
 				merge_commit_sha: mergeSha,
 			})
 		const gh = fakeGh([
-			{ when: "commits/f00/pulls", stderr: "HTTP 502\n", exit: 4 },
-			{ when: "commits/m00/pulls", stdout: `${pr(3, "other")}\n\n${pr(7, "m00")}\n` },
+			{ args: lookup("f00"), stderr: "HTTP 502\n", exit: 4 },
+			{ args: lookup("e00") },
+			{ args: lookup("m00"), stdout: `${pr(3, "other")}\n\n${pr(7, "m00")}\nnot json\n` },
 		])
 		try {
 			const io = realUnstickIO("o/r")

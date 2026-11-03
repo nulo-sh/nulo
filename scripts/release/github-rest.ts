@@ -1,9 +1,6 @@
-/**
- * What every release runner sends to the GitHub REST API, and the error a refused answer becomes.
- * Status, redirect and timeout policy stay with each caller, beside its `fetch`.
- */
+/** The GitHub REST headers and refusal text the release runners share; status, redirect and timeout policy stay with each caller's `fetch`. */
 
-/** The token, `accept` and the pinned API version. The token goes wherever the caller's URL points: pass GitHub hosts only. */
+/** The token goes wherever the caller's URL points: pass GitHub hosts only. */
 export function githubHeaders(token: string, accept = "application/vnd.github+json"): Record<string, string> {
 	return { Authorization: `Bearer ${token}`, Accept: accept, "X-GitHub-Api-Version": "2022-11-28" }
 }

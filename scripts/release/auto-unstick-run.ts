@@ -136,7 +136,6 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 	}
 }
 
-/** The real IO: `gh` for GitHub, `git` for the checkout the job runs in. */
 export function realUnstickIO(repo: string): UnstickIO {
 	return {
 		async resolveMergedPr(headSha) {
@@ -183,7 +182,6 @@ export function realUnstickIO(repo: string): UnstickIO {
 	}
 }
 
-// CLI entry — the `auto-unstick` release job runs `bun scripts/release/auto-unstick-run.ts`.
 if (import.meta.main) {
 	const realIO = realUnstickIO(process.env.GITHUB_REPOSITORY ?? "")
 	const version = process.env.VERSION?.trim() || ((await Bun.file("package.json").json()) as { version: string }).version
