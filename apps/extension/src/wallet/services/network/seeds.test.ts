@@ -13,9 +13,9 @@ const remoteSeedUrls = (["mainnet", "testnet"] as const).map((kind) => {
 })
 
 describe("maxBatchSizeFor", () => {
-	test("caps both remote defaults at 3, also when the URL is typed with a trailing slash", () => {
+	test("caps both remote defaults at 25, also when the URL is typed with a trailing slash", () => {
 		for (const url of [...remoteSeedUrls, "https://aztec-mainnet.drpc.org/", "https://aztec-testnet.drpc.org/"]) {
-			expect(maxBatchSizeFor(url)).toBe(3)
+			expect(maxBatchSizeFor(url)).toBe(25)
 		}
 	})
 

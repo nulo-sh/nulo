@@ -1,0 +1,17 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nulo-rpc-proxy",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-09-01",
+	"account_id": "0f1688fc6a4b6acf3fa55cf71e1bed26",
+	// The two hosts are Custom Domains attached in the dashboard (the build token has no zone
+	// permission). No workers.dev origin and no preview URL: a preview version sees the secrets.
+	"workers_dev": false,
+	"preview_urls": false,
+	// Workers Logs would keep each caller's IP and request metadata on a dashboard.
+	"observability": { "enabled": false },
+	"vars": { "PROXY_OFF": "0" },
+	// Counted per Cloudflare location and approximate: a ceiling on bursts, not a quota. The spend
+	// ceiling is each provider key's own daily cap. Namespace ids are account-wide.
+	"ratelimits": [{ "name": "IP_LIMITER", "namespace_id": "1003", "simple": { "limit": 100, "period": 10 } }]
+}

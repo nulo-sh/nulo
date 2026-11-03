@@ -375,6 +375,23 @@ explicit and per-Network.
   the wire).
 - Trigger storage writes outside the network/endpoint surface.
 
+### Provider keys and the RPC proxy
+
+No wallet build holds a provider key: the default endpoints are dRPC's keyless ones. The paid
+dRPC endpoints, whose key sits in the URL path, are reached only through `nulo-rpc-proxy`
+(`infra/rpc-proxy/`, at `rpc.nulo.sh` and `testnet.rpc.nulo.sh`), which no wallet build
+references yet. The keys are Worker secrets set by the owner in the dashboard, in no file, CI
+job or agent. Each hostname is bound to one secret, so no caller picks the upstream; a web
+page's Origin is refused server-side (only Chrome and Firefox extension origins, or none, pass);
+every call must name an Aztec node method; the body is capped while streaming; nothing is
+retried, logged or followed through a redirect; and the request reaches the provider with a fresh
+`content-type` header only, so the caller's IP, cookies and user agent stay with Cloudflare. The
+bundle holds no dependency, Workers Logs, `workers.dev` and preview URLs are off, and it deploys
+from `main` on a build token narrowed to it. The spend ceiling is each key's daily cap at dRPC: a
+scripted caller from many addresses can spend a key up to it, denying the proxy to everyone until
+the next day. The handler contract, the owner's checklist and the rotation runbook are in
+`infra/rpc-proxy/README.md`.
+
 ## Storage privacy
 
 Encrypted at rest:
@@ -595,7 +612,7 @@ What is acknowledged today (35 advisories; the ack file holds each one):
 |---|---|---|---|
 | `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
 | `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 10 (7 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
-| `undici` 7.29.0, `sharp` 0.35.2 | 20 (8 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/subscribe`, `infra/token-list`) | the next wrangler bump |
+| `undici` 7.29.0, `sharp` 0.35.2 | 20 (8 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`, `infra/rpc-proxy`, `infra/subscribe`, `infra/token-list`) | the next wrangler bump |
 | `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
 | `follow-redirects` 1.16.1 | 1 (high) | axios, under `@aztec-labs/aztec.js` and `@aztec-labs/stdlib` | 1.16.2 clearing the age gate on 2026-11-01 |
 | `glob` 10.5.0 and 13.0.6, `minimatch` 9.0.9 and 10.2.6 | 2 | js-beautify (`@vue/test-utils`) and `@aztec-foundation/noir-noir_codegen` | the next `@vue/test-utils` or Aztec bump |

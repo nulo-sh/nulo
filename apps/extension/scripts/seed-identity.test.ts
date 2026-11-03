@@ -52,15 +52,15 @@ describe("checkSeed's batch at the seed's cap", () => {
 		if (!mainnet) throw new Error("this build seeds no Mainnet network")
 		const fetch = vi.fn(
 			async (_url: string, _init: RequestInit) =>
-				new Response(JSON.stringify({ error: { message: "Batch of more than 2 requests are not allowed" } }), { status: 500 }),
+				new Response(JSON.stringify({ error: { message: "Batch of more than 24 requests are not allowed" } }), { status: 500 }),
 		)
 		vi.stubGlobal("fetch", fetch)
 		const result = await checkSeed(mainnet, createPreflightNodeClient(mainnet.rpcUrl))
 		expect(result.ok).toBe(false)
-		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([3])
+		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25])
 	})
 
-	test("the preflight client sends the Mainnet seed no request of more than 3 entries", async () => {
+	test("the preflight client sends the Mainnet seed no request of more than 25 entries", async () => {
 		const mainnet = seedForKind("mainnet")
 		if (!mainnet) throw new Error("this build seeds no Mainnet network")
 		const fetch = vi.fn(async (_url: string, init: RequestInit) => {
@@ -69,7 +69,7 @@ describe("checkSeed's batch at the seed's cap", () => {
 		})
 		vi.stubGlobal("fetch", fetch)
 		const node = createPreflightNodeClient(mainnet.rpcUrl)
-		await Promise.all(Array.from({ length: 8 }, () => node.getBlockNumber()))
-		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([3, 3, 2])
+		await Promise.all(Array.from({ length: 60 }, () => node.getBlockNumber()))
+		expect(fetch.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)).toEqual([25, 25, 10])
 	})
 })
