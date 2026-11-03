@@ -15,10 +15,8 @@ interface ExecutingTaskDeps {
 	journalRows: () => readonly OperationRecord[]
 }
 
-/**
- * A snapshot ends no earlier record: one that ended within this window is the task's own when a popup
- * closed mid-cancel reopens, an older one never is.
- */
+/** A journal snapshot clears the task only for its own record ended this recently (a popup closed
+ *  mid-cancel and reopened); an older record is never its own. */
 const SNAPSHOT_TERMINAL_WINDOW_MS = 30_000
 
 /**
@@ -76,7 +74,8 @@ export function useExecutingTask(deps: ExecutingTaskDeps) {
 		if (task.value && deleted.id === task.value.id) clear()
 	}
 
-	/** The newest accepted task of the snapshot, or none; a stale run or another account lands nothing. */
+	/** Lands the newest accepted task; an empty snapshot keeps one an event landed meanwhile. A stale
+	 *  run or another account lands nothing. */
 	async function snapshot(): Promise<void> {
 		if (disposed) return
 		const isCurrent = fence.begin()
@@ -92,7 +91,7 @@ export function useExecutingTask(deps: ExecutingTaskDeps) {
 			// The journal snapshot may land first; whichever lands second reconciles the two.
 			onJournalSnapshot()
 		} catch {
-			// Non-fatal; a later task event or reconnect re-snapshots.
+			// Non-fatal; the next accepted task event lands the task.
 		}
 	}
 

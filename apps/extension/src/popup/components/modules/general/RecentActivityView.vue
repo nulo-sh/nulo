@@ -40,7 +40,6 @@ import {
 	journalCardOriginLabel,
 	journalCardTitle,
 	journalCardTransferTypeLabel,
-	journalTerminalDisplay,
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
 import { callTitle } from "@/utils/tx-enrichment"
@@ -144,9 +143,8 @@ const awaitingAccountTxs = computed(() => {
 })
 const showFallbackAwaiting = computed(() => (props.token ? isTokenAwaitingTx.value : awaitingAccountTxs.value.length > 0))
 
-/** Unified in-flight task: covers both dapp-initiated (ExecuteOperation) and
- *  UI-initiated (Transfer) sends. The backend emits task+subtasks with progress
- *  labels; we surface them through a single awaiting card with live subtitle. */
+/** The UI transfer in flight (a dApp task names no account, so it is refused); its running step
+ *  decorates the matching journal card, or an orphan card. */
 const taskService = new TaskServiceClient()
 const executing = useExecutingTask({
 	taskService,
@@ -261,22 +259,17 @@ const syncHealth = useIncomingSyncHealth({
 const showStalledLine = computed(() => !props.token && syncHealth.stalled.value)
 const executionService = new ExecutionServiceClient()
 
-/** Cancel handler for the awaiting card's `@cancel` emit.
- *  Built from a pure module so the wire is unit-testable without mounting
- *  the full Vue component. The card emits `cancel(jobId)`; the handler
- *  cancels exactly that record. With multiple in-flight cards on screen
- *  (concurrent transfers / dapp ops), each card cancels its own op — the
- *  previous closure-over-top-op API would have cross-fired. The job is marked
- *  so its record ending clears the task by id, not by the kind+tokenId match. */
+/** Each card cancels its own record; the job is marked so its record ending clears the task by id,
+ *  not by the kind+tokenId match. */
 const onCancelInFlight = buildCancelHandler(executionService, executing.markCancelling)
 
 const dappInteractionService = new DappInteractionServiceClient()
 const onFocusInFlight = buildFocusHandler(dappInteractionService)
 
 /** Whether a record belongs to the active account, profile and network.
- *  Journal state holds only such records, and only they run a journal side effect: the clears
- *  below match on account and token alone, so another scope's terminal record would remove this
- *  scope's card. The scope watcher empties the state synchronously on a switch. */
+ *  Journal state holds only such records, and only they run a journal side effect: the task's and
+ *  the fallback's clears match on account and token alone, so another scope's terminal record
+ *  would remove this scope's card. The scope watcher empties the state synchronously on a switch. */
 function journalRecordInActiveScope(op) {
 	return journalRecordInScope(op, {
 		accountAddress: appStore.account?.address,
@@ -377,7 +370,6 @@ function cardSubtitleFor(op) {
 			if (matches.length === 1 && executing.activeStepLabel.value) return executing.activeStepLabel.value
 		}
 	}
-	// The executingTask subtask decoration above stays inline because it consumes Vue reactive state.
 	return journalProgressWord(op)
 }
 
