@@ -15,7 +15,7 @@ vi.mock("./content-message-relay", () => ({ attachContentListener: () => {} }))
 vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
-import { handleWalletMessage } from "./background"
+import { handleWalletMessage } from "./wallet-message"
 import { bindLiveSession } from "./live-session"
 import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_ENVELOPE } from "./error-envelope"
 import { tryCreateQueuedJournal } from "./queued-journal"

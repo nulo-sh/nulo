@@ -174,7 +174,7 @@ const REVIEWED: Reviewed[] = [
 		why: "journal box only",
 	},
 	{
-		file: "apps/extension/src/wallet/services/wallet-sdk/background.ts",
+		file: "apps/extension/src/wallet/services/wallet-sdk/wallet-message.ts",
 		text: "Session no longer valid — reconnect",
 		why: "journal box only",
 	},

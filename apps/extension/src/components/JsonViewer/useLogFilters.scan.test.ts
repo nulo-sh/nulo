@@ -295,6 +295,7 @@ const OWNED: [string, string][] = [
 	[owner("token-balance/service.ts"), "token-balance"],
 	[owner("wallet-sdk/background.ts"), "wallet-sdk"],
 	[owner("wallet-sdk/content-admission.ts"), "wallet-sdk"],
+	[owner("wallet-sdk/wallet-message.ts"), "wallet-sdk"],
 	[owner("wallet-sdk/discovery-flow.ts"), "wallet-sdk"],
 	[owner("wallet-sdk/session-established.ts"), "wallet-sdk"],
 	[owner("wallet-sdk/session-revocation.ts"), "wallet-sdk"],

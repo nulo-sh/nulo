@@ -732,7 +732,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// top of the method, a throw in `materializeRequest` /
 		// `refreshSession` / profile-check would leave the record stranded
 		// at `pending` — the `handleWalletMessage` safety net only
-		// terminalizes records still at `queued` (background.ts), so the UI
+		// terminalizes records still at `queued` (wallet-message.ts), so the UI
 		// would show "Preparing..." until the reaper's `pending` grace
 		// expires (~2 min). Keeping the transition here ensures that any
 		// pre-execute throw leaves the record at `queued` for the safety

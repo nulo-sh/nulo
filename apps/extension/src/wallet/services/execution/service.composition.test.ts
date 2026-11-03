@@ -365,7 +365,7 @@ describe("ExecutionService composition — cancel during queued-wait (in-process
 		// its controller (acquireSlot:230) and is parked on the mutex (acquireSlot:246).
 		const controllers = (lane as unknown as { activeControllers: Map<string, unknown> }).activeControllers
 
-		// Pre-allocate a QUEUED dapp_execute record (what background.ts allocates on
+		// Pre-allocate a QUEUED dapp_execute record (what wallet-message.ts allocates on
 		// message arrival, before the silent/popup path claims it). queued is gated on
 		// kind=dapp_execute + origin="dapp" + non-empty sessionId (NewOperationInputSchema).
 		const queued = await journal.createOperation({

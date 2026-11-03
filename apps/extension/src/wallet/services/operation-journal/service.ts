@@ -578,7 +578,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	/**
 	 * Lightweight count query for callers that just need a number (cap
 	 * enforcement) without materializing full records. Used by
-	 * `background.ts:tryCreateQueuedJournal` for the per-session and global
+	 * `queued-journal.ts:tryCreateQueuedJournal` for the per-session and global
 	 * queued-record caps.
 	 *
 	 * Sessionless records (`sessionId === undefined`) are excluded whenever
