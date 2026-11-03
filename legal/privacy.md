@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.2.8 — effective «FILL: effective date»**
+**Version 1.2.9 — effective «FILL: effective date»**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -287,9 +287,10 @@ node, are not Nulo's, and this policy does not describe them.
 
 **What it is:** the tokens a wallet shows by default, and the price each one uses, come from one list
 I publish at `https://tokens.nulo.sh/v1/list.json`, signed with a key I hold. The extension downloads
-it once you have accepted the Terms, then about once a day, and again sooner after a failed attempt.
-It keeps a list only if the signature checks out against a key built into the extension and the list
-is newer than the one it holds; otherwise it keeps what it had.
+it once you have accepted the Terms, then about every six hours. After a failed attempt it tries again
+within minutes, then less often, at most a day apart. Once you have accepted the Terms, you can also
+ask for it in Settings → Tokens. It keeps a list only if the signature checks out against a key built
+into the extension and the list is newer than the one it holds; otherwise it keeps what it had.
 
 **What it reveals:** every wallet requests the same file. The request carries no account address,
 balance, network, token or other wallet data, no cookies and no referrer. The request bypasses the
@@ -303,7 +304,7 @@ requests of §§ 5.1 and 5.2 may carry it too.
 the past 30 days, a sample of individual requests, which can include requests for this file.
 
 **Your control:** no request is made until you accept the Terms. While the extension is installed and
-the Terms accepted, the daily download cannot be turned off; the default tokens depend on it, and a
+the Terms accepted, the regular download cannot be turned off; the default tokens depend on it, and a
 token you remove stays removed.
 
 **Legal basis (GDPR):** legitimate interests — delivering a verified list of default tokens and keeping
@@ -314,7 +315,7 @@ its host available and secure — under Article 6(1)(f).
 | Permission | Why |
 |---|---|
 | `storage`, `unlimitedStorage` | To keep your wallet data on your device; proving data is large |
-| `alarms` | To schedule background refreshes: prices while unlocked, the token list about daily |
+| `alarms` | To schedule background refreshes: prices while unlocked, the token list about every six hours |
 | `offscreen` (Chrome only) | To run the private execution environment in a hidden document; Firefox uses a fallback |
 | `sidePanel` | The optional side-panel view |
 | `downloads` | To save backups, account exports, contacts and diagnostic logs when **you** request an export |
@@ -468,3 +469,4 @@ described in § 5.
 | 1.2.6 | 27 October 2026 | Passkey profiles have a recovery phrase, and a passkey-profile backup restores with its file password alone (§§ 3, 5.4, 9). |
 | 1.2.7 | 27 October 2026 | The website and its mailing list are described in a separate Website Privacy Notice; § 5.5 keeps the hosts the wallet's functions involve. |
 | 1.2.8 | «FILL: effective date» | Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2). |
+| 1.2.9 | «FILL: effective date» | The token list is downloaded about every six hours, retried within minutes then less often after a failure, and on request in Settings → Tokens (§§ 5.11, 6). |

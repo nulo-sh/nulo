@@ -14,10 +14,20 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { FAILURE_BACKOFF_MS, type FetchLike, TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService, type TokenListSnapshot } from "./service"
+import {
+	FAILURE_BACKOFF_MS,
+	type FetchLike,
+	type RefreshOutcome,
+	TOKEN_LIST_REFRESH_ALARM_NAME,
+	TokenListService,
+	type TokenListSnapshot,
+	decodeTokenListState,
+	nextAttemptAt,
+} from "./service"
 
 const URL = "https://tokens.example/v1/list.json"
-const HOUR = 3_600_000
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
 const T0 = 1_760_000_000_000
 const aboveFloor = (n: number) => SEQUENCE_FLOOR + n
 const FLAGGED = [{ chainId: 7, address: `0x${"2".padStart(64, "0")}` }]
@@ -107,7 +117,7 @@ describe("TokenListService admission", () => {
 		const { pinned, sign } = await signer()
 		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(aboveFloor(10)) }] })
 		await h.service.onAlarmTick()
-		await h.service.refresh()
+		expect(await h.service.refresh()).toBe("terms-not-current")
 		expect(h.calls).toEqual([])
 		expect(await h.alarm()).toBeUndefined()
 
@@ -142,7 +152,9 @@ describe("TokenListService commit", () => {
 		})
 		expect(h.service.getSnapshot()?.sequence).toBe(aboveFloor(10))
 		const kept = (await h.stored()).envelope
-		for (let i = 0; i < 3; i++) await h.service.refresh()
+		const results = []
+		for (let i = 0; i < 3; i++) results.push(await h.service.refresh())
+		expect(results).toEqual(["unchanged", "older-sequence", "refused"])
 
 		expect((await h.stored()).envelope).toBe(kept)
 		expect(h.service.getSnapshot()?.entries[0].symbol).toBe("USDC")
@@ -223,20 +235,20 @@ describe("TokenListService commit", () => {
 })
 
 describe("TokenListService timing", () => {
-	test("one deadline: daily plus jitter after a list, the backoff ladder after failures", async () => {
+	test("one deadline: six hours plus jitter after a list, the backoff ladder after failures", async () => {
 		const { pinned, sign } = await signer()
 		const h = await makeHarness({
 			keys: [pinned],
 			accepted: true,
 			answers: [{ body: await sign(aboveFloor(10)) }, new TypeError("offline"), { body: "", status: 503 }],
 		})
-		const daily = T0 + 24 * HOUR + HOUR
-		expect((await h.stored()).nextAttemptAt).toBe(daily)
-		expect((await h.alarm())?.scheduledTime).toBe(daily)
+		const regular = T0 + 6 * HOUR + 15 * MINUTE
+		expect((await h.stored()).nextAttemptAt).toBe(regular)
+		expect((await h.alarm())?.scheduledTime).toBe(regular)
 
-		await h.service.refresh()
+		expect(await h.service.refresh()).toBe("network")
 		expect((await h.stored()).nextAttemptAt).toBe(T0 + FAILURE_BACKOFF_MS[0])
-		await h.service.refresh()
+		expect(await h.service.refresh()).toBe("http-status")
 		expect(await h.stored()).toMatchObject({ failures: 2, nextAttemptAt: T0 + FAILURE_BACKOFF_MS[1] })
 		expect((await h.alarm())?.scheduledTime).toBe(T0 + FAILURE_BACKOFF_MS[1])
 	})
@@ -281,21 +293,44 @@ describe("TokenListService timing", () => {
 		expect(await h.stored()).toMatchObject({ failures: 1, nextAttemptAt: T0 + FAILURE_BACKOFF_MS[0] })
 	})
 
-	test("a runtime without Ed25519 backs off to daily instead of retrying", async () => {
+	test("a usable answer waits six hours plus up to half an hour", () => {
+		expect(nextAttemptAt("accepted", 0, T0, () => 0)).toBe(T0 + 6 * HOUR)
+		expect(nextAttemptAt("unchanged", 0, T0, () => 1 - Number.EPSILON)).toBe(T0 + 6 * HOUR + 30 * MINUTE - 1)
+	})
+
+	test("a stored deadline up to 26 hours away reads as written, one past it reads as due", () => {
+		const read = (due: number) => decodeTokenListState({ nextAttemptAt: due, failures: 0 }, T0).nextAttemptAt
+		expect(read(T0 + 26 * HOUR)).toBe(T0 + 26 * HOUR)
+		expect(read(T0 + 26 * HOUR + 1)).toBeUndefined()
+	})
+
+	test("every deadline the service writes reads back as written", () => {
+		const failed: RefreshOutcome[] = ["older-sequence", "refused", "oversize", "http-status", "network"]
+		const written = [
+			...(["accepted", "unchanged", "verify-unsupported"] as const).map((outcome) =>
+				nextAttemptAt(outcome, 0, T0, () => 1 - Number.EPSILON),
+			),
+			...failed.flatMap((outcome) => [1, 2, 3, 4, 5, 6].map((failures) => nextAttemptAt(outcome, failures, T0, () => 0))),
+		]
+		for (const due of written) expect(decodeTokenListState({ nextAttemptAt: due, failures: 0 }, T0).nextAttemptAt).toBe(due)
+	})
+
+	test("a runtime without Ed25519 waits the regular six hours instead of retrying", async () => {
 		const { pinned, sign } = await signer()
 		const body = await sign(aboveFloor(10))
 		vi.spyOn(crypto.subtle, "importKey").mockRejectedValue(Object.assign(new Error("no Ed25519"), { name: "NotSupportedError" }))
 		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body }] })
 		expect(h.service.getSnapshot()).toBeUndefined()
-		expect(await h.stored()).toMatchObject({ failures: 0, nextAttemptAt: T0 + 24 * HOUR + HOUR })
+		expect(await h.stored()).toMatchObject({ failures: 0, nextAttemptAt: T0 + 6 * HOUR + 15 * MINUTE })
 	})
 
-	test("overlapping triggers share one request", async () => {
+	test("overlapping triggers share one request and its result", async () => {
 		const { pinned, sign } = await signer()
 		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(aboveFloor(10)) }] })
 		await h.legal.accept("onboarding")
-		await Promise.all([h.service.refresh(), h.service.onAlarmTick(), h.service.refresh()])
+		const [first, , second] = await Promise.all([h.service.refresh(), h.service.onAlarmTick(), h.service.refresh()])
 		expect(h.calls).toHaveLength(1)
+		expect([first, second]).toEqual(["accepted", "accepted"])
 	})
 })
 
@@ -337,7 +372,7 @@ describe("TokenListService — a failed state read never feeds a write", () => {
 		const reads = stateReads(h.api)
 
 		reads.arm()
-		await h.service.refresh()
+		expect(await h.service.refresh()).toBe("error")
 		expect(h.calls).toHaveLength(1)
 		expect((await h.stored()).envelope).toBe(kept)
 
