@@ -19,7 +19,7 @@
 import { isComposing } from "@/composables/usePopupEntity"
 import { pluralize } from "@/utils/plural"
 import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
-import { isValidAztecAddress } from "@/utils/aztec-address"
+import { bareAztecAddress, isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
 
 const props = defineProps({
@@ -66,6 +66,11 @@ const activeIndex = computed(() => (showSuggestions.value ? shownContacts.value.
 const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 /** Keyed by candidate and address, so a row a held press is on is never rebound to another destination. */
 const rowKey = (c) => (c.id === undefined ? `account:${c.address}` : `contact:${c.id}:${c.address}`)
+/** A pasted address keeps nothing at its two ends; any other text keeps its spaces, as a name may hold one. */
+const normalizeRecipient = (text) => {
+	const kept = stripBidiAndZeroWidth(text)
+	return bareAztecAddress(kept) ?? kept
+}
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
 const handleSelectContact = (contact) => {
@@ -249,7 +254,7 @@ onBeforeUnmount(() => {
 			<template v-else>
 				<AddressInput
 					v-model="searchTerm"
-					:normalize="stripBidiAndZeroWidth"
+					:normalize="normalizeRecipient"
 					:autofocus="justCleared"
 					role="combobox"
 					:ariaLabelledby="labelId"

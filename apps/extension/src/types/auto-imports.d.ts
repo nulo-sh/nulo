@@ -137,6 +137,7 @@ declare global {
   const awaitingFirstPriceAnswer: typeof import('../utils/token-aggregate').awaitingFirstPriceAnswer
   const backCtaBlocked: typeof import('../utils/full-backup-ctas').backCtaBlocked
   const balanceFormatted: typeof import('../utils/amount').balanceFormatted
+  const bareAztecAddress: typeof import('../utils/aztec-address').bareAztecAddress
   const boundedString: typeof import('../utils/bounded-string').boundedString
   const browser: typeof import('webextension-polyfill')
   const buildActivityRows: typeof import('../utils/activity-rows').buildActivityRows
@@ -1057,6 +1058,7 @@ declare module 'vue' {
     readonly awaitingFirstPriceAnswer: UnwrapRef<typeof import('../utils/token-aggregate')['awaitingFirstPriceAnswer']>
     readonly backCtaBlocked: UnwrapRef<typeof import('../utils/full-backup-ctas')['backCtaBlocked']>
     readonly balanceFormatted: UnwrapRef<typeof import('../utils/amount')['balanceFormatted']>
+    readonly bareAztecAddress: UnwrapRef<typeof import('../utils/aztec-address')['bareAztecAddress']>
     readonly boundedString: UnwrapRef<typeof import('../utils/bounded-string')['boundedString']>
     readonly browser: UnwrapRef<typeof import('webextension-polyfill')>
     readonly buildActivityRows: UnwrapRef<typeof import('../utils/activity-rows')['buildActivityRows']>
