@@ -1,7 +1,7 @@
 ---
 plan: quality-popup-2
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: approved by the final Codex pass; arc 1 implementing; phase 5 waits on OA-1
+status: approved by the final Codex pass; arc 1 in review; phase 5 waits on OA-1
 issues: "#1469, #1476, #1445 (arc 1, Closes); #1468, #1473 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
@@ -79,7 +79,7 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 - [x] **Phase 1.** Tests `src/utils src/popup/pages/journal src/popup/pages/tx src/popup/pages/received src/popup/components/modules/activity src/components/composite/activity`; `bun run lint`; `bun run typecheck:all`.
 - [x] **Phase 2.** Phase 1's tests plus `src/popup/pages/activity.test.ts src/popup/incoming-row-parity.test.ts src/popup/app-wiring.test.ts src/popup/components/modules/general src/popup/components/modules/tx scripts/type-roles`; lint; typecheck; the screenshots in `lessons/phase-2.md`.
 - [x] **Phase 3.** Tests `src/composables/useExecutingTask.test.ts src/composables/useReaskReview.test.ts src/popup/components/modules/general src/popup/incoming-row-parity.test.ts`; lint; typecheck.
-- [ ] **Arc 1 end.** `bun run audit:vue`; `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than 177 / 8775); smoke `cd apps/extension && bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/received-fee-privacy.test.ts tests/e2e/navigation.test.ts --retry=0` on Chrome and with `NULO_E2E_BROWSER=firefox`; network `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/cancel-mid-prove.test.ts tests/e2e/network/account-switch-isolation.test.ts tests/e2e/network/account-switch-live-session.test.ts` on Chrome; `bun run check:plans` after staging.
+- [x] **Arc 1 end.** `bun run audit:vue`; `bun run test:all`; `bun run audit:dup` (production clones and dup lines no worse than 177 / 8775); smoke `cd apps/extension && bun run test:e2e -- tests/e2e/rows.test.ts tests/e2e/type-roles.test.ts tests/e2e/send-outcome-rows.test.ts tests/e2e/received-fee-privacy.test.ts tests/e2e/navigation.test.ts --retry=0` on Chrome and with `NULO_E2E_BROWSER=firefox`; network `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/cancel-mid-prove.test.ts tests/e2e/network/account-switch-isolation.test.ts tests/e2e/network/account-switch-live-session.test.ts` on Chrome; `bun run check:plans` after staging.
 - [ ] **Phase 4.** Tests `src/utils/profile-passkey.test.ts src/utils/own-window.test.ts src/popup/pages/settings/security src/popup/pages/auth.test.ts src/composables/useFullBackupExport.test.ts`; lint; typecheck.
 - [ ] **Phase 5 (on OA-1).** Tests `src/popup/components/modules/general/BalanceView.test.ts src/popup/pages/holdings.test.ts src/composables/useConfigRead.test.ts`; lint; typecheck.
 - [ ] **Arc 2 end.** After merging `origin/dev`: arc 1's end gate, with smoke `security.test.ts security-backup.test.ts passkey-paths.test.ts fiat-display.test.ts sw-resilience.test.ts` on both browsers and `toolbar-panel.test.ts` on Firefox; no network file (no service path moves).
@@ -100,8 +100,8 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 - D12. The page tests keep mocking `moveToOwnWindow` and add a delegating `leavePanelFor` (Opus O6): every assertion stays as written, the new account pin passes before and after the move, and a bare `leavePanelFor` mock would flip the two "no move off the panel" assertions.
 - D13. `BalanceView`'s and holdings' move to `useConfigRead` changes what a person can see after a missed update, so it is OA-1 (Codex C6), not a panel call.
 - D14. `PopupManager` stays: it seeds `useIncomingTrustPrompts`, which fails open and registers its listener after the seed; moving it would change that hook's contract, not remove a copy.
-- D15. The journal gate keeps each caller's parse (Codex C6, Opus Ask 1): unifying on `parseSide` would hide hex and negative amounts the terminal card and the journal page now show, on rows only an outside writer stores. The divergence is a known limit, filed closed with the arc 1 PR.
-- D16. A re-ask send that settles after a scope switch closes the next scope's sheet (Codex C5; `RecentActivityView.vue:417-428`): it needs a switch from another window inside one RPC, and costs one tap. The hook preserves it verbatim under a `(BUG PIN)`; a known limit, filed closed with the arc 1 PR.
+- D15. The journal gate keeps each caller's parse (Codex C6, Opus Ask 1): unifying on `parseSide` would hide hex and negative amounts the terminal card and the journal page now show, on rows only an outside writer stores. The divergence is a known limit, filed closed with the arc 1 PR: #1593.
+- D16. A re-ask send that settles after a scope switch closes the next scope's sheet (Codex C5; `RecentActivityView.vue:417-428`): it needs a switch from another window inside one RPC, and costs one tap. The hook preserves it verbatim under a `(BUG PIN)`; a known limit, filed closed with the arc 1 PR: #1594.
 
 ## Audit verdicts
 
