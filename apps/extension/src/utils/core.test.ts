@@ -27,6 +27,91 @@ vi.mock("@/wallet/services/token-balance/client", () => ({
 	}),
 }))
 
+/** Each construction of a lazy slot's client yields a fresh stub, so a test can tell them apart. */
+const slotClients = vi.hoisted(() => {
+	const stub = () =>
+		vi.fn(function SlotClient() {
+			return { connect: vi.fn(), disconnect: vi.fn(), onTransactionAdded: { add: vi.fn() }, onTransactionUpdated: { add: vi.fn() } }
+		})
+	return { account: stub(), network: stub(), transaction: stub() }
+})
+vi.mock("@/wallet/services/account/client", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	AccountServiceClient: slotClients.account,
+}))
+vi.mock("@/wallet/services/network/client", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	NetworkServiceClient: slotClients.network,
+}))
+vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	TransactionServiceClient: slotClients.transaction,
+}))
+
+/** A registry no test has written yet: the lazy slots start unset. */
+async function freshCore(): Promise<typeof import("@/utils/core")> {
+	vi.resetModules()
+	return await import("@/utils/core")
+}
+
+type SlotStub = { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }
+const stub = (client: unknown) => client as SlotStub
+
+describe("the lazy slots' owned writers", () => {
+	beforeEach(() => {
+		for (const client of Object.values(slotClients)) client.mockClear()
+	})
+
+	test("replace disconnects the slot's client, then installs and returns a new one", async () => {
+		const core = await freshCore()
+		for (const [replace, read, constructed] of [
+			[core.replaceNetworkClient, core.requireNetwork, slotClients.network],
+			[core.replaceAccountClient, core.requireAccount, slotClients.account],
+		] as const) {
+			const first = replace()
+			expect(read()).toBe(first)
+			const next = replace()
+			expect(next).not.toBe(first)
+			expect(read()).toBe(next)
+			expect(stub(first).disconnect).toHaveBeenCalledTimes(1)
+			expect(stub(first).disconnect.mock.invocationCallOrder[0]).toBeLessThan(constructed.mock.invocationCallOrder[1])
+			expect(stub(next).disconnect).not.toHaveBeenCalled()
+		}
+	})
+
+	test("ensure creates the account client only while the slot is unset and keeps an existing one", async () => {
+		const core = await freshCore()
+		const created = core.ensureAccountClient()
+		expect(core.requireAccount()).toBe(created)
+		expect(core.ensureAccountClient()).toBe(created)
+		expect(slotClients.account).toHaveBeenCalledTimes(1)
+		expect(stub(created).disconnect).not.toHaveBeenCalled()
+
+		const replaced = core.replaceAccountClient()
+		expect(core.ensureAccountClient()).toBe(replaced)
+		expect(slotClients.account).toHaveBeenCalledTimes(2)
+	})
+
+	test("the transaction service disconnects its predecessor and installs a connected client with both listeners", async () => {
+		const core = await freshCore()
+		const added = vi.fn()
+		const updated = vi.fn()
+		core.initTransactionService(added, updated)
+		const first = core.getTransaction()
+		core.initTransactionService(added, updated)
+		const next = core.getTransaction() as unknown as SlotStub & {
+			onTransactionAdded: { add: ReturnType<typeof vi.fn> }
+			onTransactionUpdated: { add: ReturnType<typeof vi.fn> }
+		}
+		expect(next).not.toBe(first)
+		expect(stub(first).disconnect).toHaveBeenCalledTimes(1)
+		expect(next.connect).toHaveBeenCalledTimes(1)
+		expect(next.onTransactionAdded.add).toHaveBeenCalledWith(added)
+		expect(next.onTransactionUpdated.add).toHaveBeenCalledWith(updated)
+		expect(next.disconnect).not.toHaveBeenCalled()
+	})
+})
+
 /**
  * The 3 lazy clients are typed `| null`. require*() asserts non-null with a
  * clear error (the safety net replacing the prior silent `null.foo()` TypeError);

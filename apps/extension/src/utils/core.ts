@@ -20,10 +20,10 @@
  * clients can still call the init explicitly.
  */
 
-import type { AccountServiceClient } from "@/wallet/services/account/client"
+import { AccountServiceClient } from "@/wallet/services/account/client"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { LegalAcceptanceServiceClient } from "@/wallet/services/legal/client"
-import type { NetworkServiceClient } from "@/wallet/services/network/client"
+import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { NetworkResetServiceClient } from "@/wallet/services/network-reset/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
@@ -203,11 +203,43 @@ export async function refreshBalances(accounts: Array<{ address: string }>): Pro
 	}
 }
 
+type LazySlot = "network" | "account" | "transaction"
+
+/** Disconnects the slot's client, if any, then installs the one `create` builds. */
+function replaceSlot<Slot extends LazySlot>(slot: Slot, create: () => NonNullable<AppServices[Slot]>): NonNullable<AppServices[Slot]> {
+	const services = initAppServiceContext()
+	services[slot]?.disconnect()
+	const client = create()
+	services[slot] = client
+	return client
+}
+
+/** Installs a new network client in place of the current one, which is disconnected. */
+export function replaceNetworkClient(): NetworkServiceClient {
+	return replaceSlot("network", () => new NetworkServiceClient())
+}
+
+/** Installs a new account client in place of the current one, which is disconnected. */
+export function replaceAccountClient(): AccountServiceClient {
+	return replaceSlot("account", () => new AccountServiceClient())
+}
+
+/**
+ * The account client, created only while the slot is unset. An existing one is kept: replacing it
+ * abandoned a connected port, and disconnecting it would reject the calls of any flow still holding it.
+ */
+export function ensureAccountClient(): AccountServiceClient {
+	const services = initAppServiceContext()
+	services.account ??= new AccountServiceClient()
+	return services.account
+}
+
 export function initTransactionService(onTransactionAdded: (tx: Tx) => void, onTransactionUpdated: (tx: Tx) => void): void {
-	if (managers.transaction) managers.transaction.disconnect()
-	const transactionService = new TransactionServiceClient()
-	transactionService.onTransactionAdded.add(onTransactionAdded)
-	transactionService.onTransactionUpdated.add(onTransactionUpdated)
-	transactionService.connect()
-	managers.transaction = transactionService
+	replaceSlot("transaction", () => {
+		const transactionService = new TransactionServiceClient()
+		transactionService.onTransactionAdded.add(onTransactionAdded)
+		transactionService.onTransactionUpdated.add(onTransactionUpdated)
+		transactionService.connect()
+		return transactionService
+	})
 }
