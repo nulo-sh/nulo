@@ -1,0 +1,7 @@
+# Phase 4: one stored-passkey ask, `leavePanelFor` on the four pages
+
+- 2026-11-03 pins first, all green on the base code: account export's approval-scope check (a parked lookup settles and the chain id changes in one synchronous block, so the lookup's continuation runs before the page's pre-flush network watcher and only the scope check can refuse); account export's move with and without `?address=`; the prompt's name at the press (reveal) and after the lookup (unlock). Each mutation-checked red: the scope check dropped, and each page's name read moved to the other side of the lookup.
+- The account test mocked `isToolbarPopup` on a spread copy, so its real `closesOnFocusLoss` called the module's own copy and stayed false: the move pin needed its own `closesOnFocusLoss` mock as well as the delegating `leavePanelFor` (D12).
+- Seams (D19): `useFullBackupExport.test.ts` pins the composable's await count against its park table; the lookup's await now lives in the helper, so the pin counts both files. `scripts/e2e/profile-chaos-model.test.ts` (in `bun run test`) failed on 21 shifted citations; re-cited by a `difflib` line map from the base files, every fragment unchanged except the two ceremony calls the helper absorbed.
+- Typecheck caught the helper test's answer literal: `PasskeyCredentialData` has branded strings, so a test literal needs the type.
+- Gate: 14 test files / 662 tests; lint exit 0 (no warning in a touched file); typecheck:all exit 0. The armed build regenerated `auto-imports.d.ts` and `.eslintrc-auto-import.json` for the new export.
