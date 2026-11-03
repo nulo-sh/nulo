@@ -263,7 +263,7 @@ describe("the opener's buffers", () => {
 		await write({ ...stored, dekSealed: "AAAA" })
 		await wiped("exportImportedKeysDek", () => service.exportImportedKeysDek(id, PASSWORD), "Imported-keys key unrecoverable")
 
-		// Success control: the row as stored opens, and what it opened is zero once the path returns.
+		// Success control.
 		await write(stored)
 		held.length = 0
 		await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
