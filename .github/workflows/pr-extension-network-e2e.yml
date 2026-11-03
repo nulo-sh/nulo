@@ -96,6 +96,7 @@ jobs:
               - 'bun.lock'
               - 'bunfig.toml'
               - 'tsconfig.json'
+              - 'tsconfig.base.json'
               - 'patches/**'
               # CI files the lane runs, exactly (derived and pinned by behavior-gating.test.ts):
               - '.github/workflows/_extension-network-e2e.yml'

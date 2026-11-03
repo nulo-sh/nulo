@@ -8,4 +8,4 @@
   - **A (today)**: keep the green skip. A person learns of the missing sync PR only when they look for it.
   - **B**: fail the job with the `gh` error, as `auto-unstick` does. A red job names the failure; a rerun opens the PR.
 - **Recommendation**: B. A release step that silently does nothing is the failure `auto-unstick` already guards against.
-- **What ships now**: A, unchanged. Arc 1's shared lookup throws, and `open-sync-pr-run.ts` catches it at its call site, so B becomes a one-line change there once decided.
+- **Answered B by the orchestrator on 2026-11-03, owner to confirm.** Arc 1 shipped A; arc 2 builds B at the call site in `open-sync-pr-run.ts` (the lookup's rejection is no longer caught), pinned by its lookup test, with one sentence in the `release` skill's troubleshooting table. An A from the owner restores the call site's catch, the pin's `null` and that sentence.

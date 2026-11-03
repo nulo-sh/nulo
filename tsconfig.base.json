@@ -1,0 +1,14 @@
+{
+	// Bun resolves imports through this chain at run time, in jobs that hold secrets, so `paths` and
+	// `baseUrl` stay out. `target` sets the class-field default Vite and esbuild emit wherever a
+	// config leaves `useDefineForClassFields` unset, and no Workers Build watches this file.
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"noEmit": true,
+		"isolatedModules": true,
+		"skipLibCheck": true
+	}
+}
