@@ -54,6 +54,7 @@ import { type OpenedSlots, ProfileSecretCodec, type RowSeal, type SlotKey, unloc
 import { ExpiringStash } from "./expiring-stash"
 import { classifyProfileRow, envelopeMacFor, newPasskeyRow, newPasswordRow, newRowFor, replacementRow, sameStoredRow } from "./profile-row"
 import {
+	INVALID_PROFILE_ID,
 	PROFILE_SERVICE_NAME,
 	type ProfileInfo,
 	type Profile,
@@ -349,7 +350,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// it does for a deletion it sees itself.
 		if (!this.deletionState.isCurrent(profile.id, epoch)) {
 			this.dropRowKeys(profile.id)
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		if (filled) this.unannouncedRowKeys.add(profile.id)
 	}
@@ -381,7 +382,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private async getProfileOrThrowHoldingLock(id: string): Promise<Profile> {
 		const profile = await this.repo.get(id)
 		if (!profile) {
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		return profile
 	}
@@ -392,7 +393,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private async liveRowHoldingLock(id: string): Promise<Profile> {
 		const profile = await this.getProfileOrThrowHoldingLock(id)
 		if (this.deletionState.isReserved(id)) {
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		return profile
 	}
@@ -830,7 +831,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				})
 		return await this.reportToPasskeyWindow(answer, async () => {
 			if (answer.credential.id !== snapshot.credentialId) {
-				throw new Error("Invalid profile id")
+				throw new Error(INVALID_PROFILE_ID)
 			}
 			let dek: ImportedKeysDek | null = null
 			try {
@@ -870,7 +871,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			current.secret === snapshot.secret &&
 			current.entropy === snapshot.entropy
 		if (!unchanged) {
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		return current
 	}
@@ -1220,7 +1221,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 			await this.runExclusive(async () => {
-				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error("Invalid profile id")
+				if (!(await this.rowUnchangedHoldingLock(profile, capturedEpoch))) throw new Error(INVALID_PROFILE_ID)
 				if (requireTrustedDek) zeroize(await this.trustedDekForRekeyHoldingLock(profile, opened.secret, opened, "unlock method"))
 			})
 		})
@@ -1265,10 +1266,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  gone or was otherwise rewritten, and a retry may succeed. */
 	private async movedRowRefusal(id: string, capturedEpoch: number, key: SlotKey): Promise<Error> {
 		const live = await this.repo.get(id)
-		if (!live || (await this.profileFenceBroken(id, capturedEpoch))) return new Error("Invalid profile id")
+		if (!live || (await this.profileFenceBroken(id, capturedEpoch))) return new Error(INVALID_PROFILE_ID)
 		const kind = classifyProfileRow(live).kind
 		const resealed = (kind === "password" || kind === "passkey") && !unlocksWith(live, key)
-		return resealed ? new StaleUnlockCredentialError() : new Error("Invalid profile id")
+		return resealed ? new StaleUnlockCredentialError() : new Error(INVALID_PROFILE_ID)
 	}
 
 	private async unlockCredentialKey(credential: UnlockCredential): Promise<SlotKey> {
@@ -1304,7 +1305,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// The lock's watchdog may have admitted a successor during the slow steps above or this read,
 			// so ownership is checked last, with no await before the write.
 			if (!(await unchanged())) throw await this.movedRowRefusal(id, capturedEpoch, key)
-			if (!isCurrent()) throw new Error("Invalid profile id")
+			if (!isCurrent()) throw new Error(INVALID_PROFILE_ID)
 			if (!(await this.writeReplacementHoldingLock(snapshot, replacement))) {
 				await this.closeAfterUnlockChangeHoldingLock(id)
 				throw new UnlockMethodChangedError()
@@ -1494,21 +1495,21 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// reserved→purged→released entirely while the open ran) — so a deleted profile can never be
 		// resurrected.
 		if (this.deletionState.isReserved(profile.id)) {
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		await this.sessionManager.open(profile, secret, dek)
 		if (this.deletionState.isReserved(profile.id) || !this.deletionState.isCurrent(profile.id, deletionEpoch)) {
 			if (this.sessionManager.isActive(profile.id)) {
 				await this.sessionManager.close()
 			}
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 		// Post-open invariant. open() is memory-first, so a persistence
 		// failure degrades to in-memory success (still active). But a genuine
 		// in-memory commit failure (e.g. Fr.fromBuffer / wrap throw) would leave
 		// the session inactive while this method returned success — surface it.
 		if (!this.sessionManager.isActive(profile.id)) {
-			throw new Error("Invalid profile id")
+			throw new Error(INVALID_PROFILE_ID)
 		}
 	}
 
@@ -1928,7 +1929,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				// derivation — even fully (row gone, reservation released) — must
 				// not still hand back the now-erased profile's master secret.
 				if (await this.profileFenceBroken(id, capturedEpoch)) {
-					throw new Error("Invalid profile id")
+					throw new Error(INVALID_PROFILE_ID)
 				}
 				// Pairing check at every entropy-decryption reveal site: this master feeds
 				// `exportAccount` (which derives real signing keys), so a corrupted/transplanted
@@ -1970,7 +1971,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		try {
 			return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 				if (await this.profileFenceBroken(id, capturedEpoch)) {
-					throw new Error("Invalid profile id")
+					throw new Error(INVALID_PROFILE_ID)
 				}
 				// Pairing check before EXPORT: a backup built from a tampered/
 				// transplanted row would otherwise report success with an unrestorable pair.
@@ -2007,7 +2008,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Authenticate via the guard round-trip (full unseal), THEN open the DEK slot.
 		return await this.codec.withOpenedSlots(profile, key, invalidPassword, async (opened) => {
 			if (await this.profileFenceBroken(id, capturedEpoch)) {
-				throw new Error("Invalid profile id")
+				throw new Error(INVALID_PROFILE_ID)
 			}
 			const dek = await opened.openDek(profile.dekSealed)
 			// No MAC gate here either, for `openBackupTransfer`'s reason: a foreign DEK cannot
@@ -2027,7 +2028,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public async getProfileDek(id: string): Promise<ImportedKeysDek | undefined> {
 		await this.ensureInitialized()
 		return this.runExclusive(() => {
-			if (this.deletionState.isReserved(id)) throw new Error("Invalid profile id")
+			if (this.deletionState.isReserved(id)) throw new Error(INVALID_PROFILE_ID)
 			return this.sessionManager.getDek(id)
 		})
 	}
@@ -2047,7 +2048,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// during them must not let the erased profile's words escape.
 			await this.runExclusive(async () => {
 				if (await this.profileFenceBroken(id, capturedEpoch)) {
-					throw new Error("Invalid profile id")
+					throw new Error(INVALID_PROFILE_ID)
 				}
 			})
 			return mnemonic
@@ -2079,7 +2080,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return this.runExclusive(() => {
 			// A profile queued for deletion must not hand out its secret — a half-
 			// deleted profile (tombstoned but not yet purged) is being erased.
-			if (this.deletionState.isReserved(id)) throw new Error("Invalid profile id")
+			if (this.deletionState.isReserved(id)) throw new Error(INVALID_PROFILE_ID)
 			return this.sessionManager.getSecret(id)
 		})
 	}
