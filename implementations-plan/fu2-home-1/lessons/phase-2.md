@@ -10,3 +10,11 @@
 - Firefox refuses `captureScreenshot` on an extension page (FIREFOX.md, #1329); the header capture drew the tab's `<browser>` with `drawSnapshot` from `session.chromeScript`, as FIREFOX.md does for the toolbar panel, in the scratch spec only.
 - `e2e:agent` proverless booted, ran one capture spec and tore down in 96 to 107 s; the network type-role sweep took 245 s. Nothing of the run stayed alive after it.
 - The identifier inventory needs a site's selector to name its own element: the review's address sat inside a `<template v-if>`, so it gained its own `type--meta` span with a testid.
+
+## Codex fix loop (gpt-6.1-sol, high) and the Opus diff review
+
+- Round 1, approve: one pre-existing Home defect (#1574) and the visible extras for the PR. Opus beside it: no high or medium finding, seven lows; six folded, one a closed known limit (#1575).
+- The first round 2 resume passed the worktree as `resume-codex.sh`'s third argument, which is the session's output directory, not a cwd: the script wrote its trailer files into the worktree and, finding no `model` file there, resumed on its default model and effort. The files were moved out before any commit and that answer discarded; round 2 ran again from the round 1 directory on `gpt-6.1-sol`, high.
+- Round 2, conditional approve: the column by testid, a case name that claimed more than it showed. Round 3: approve.
+- The fold's new Holdings case passed vitest and lint but not `typecheck:all` (an `EventHandler.invoke` with no argument): run the typecheck after every test edit, not only after source edits.
+- Merging `dev` brought #1567's phrase check, which the 240 px walk then crossed: its four chips per row ran 41 px past the view in Chrome, 16 in Firefox; reflowed to two columns below 333 px.
