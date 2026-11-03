@@ -208,6 +208,8 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 | Codex final R2 (resume) | approve | — | — |
 | Impl Codex R1 (fresh, over the arc diff) | approve; two Low comment findings | both: `price-map.ts`'s header no longer claims an out-of-band row cannot stay stored; two restating comments dropped | — |
 | Impl Opus (diff review, beside R1) | conditional approve: pin the write and merge refusal against the stored row; the stale `PriceQuote.usd` comment | both; also the shared `FEED_ID` spelling, wallet mode's whole-map refusal stated in `parse.ts` and FORMAT.md, the `feedFault` deviation logged, the fixtures' comments | — |
+| Impl Codex R2 (resume) | approve | — | — |
+| Impl Codex R3 (resume, over the Privacy 1.2.8 patch) | approve | — | — |
 
 ## Delivery
 
