@@ -26,7 +26,7 @@
  */
 
 import { JobCancelledSentinel, type JobError, type JobProgress, normalizeError } from "@nulo/wallet-core/jobs"
-import { deferred } from "@nulo/wallet-core/utils"
+import { deferred, raceAbort } from "@nulo/wallet-core/utils"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { pickPrimaryIndex } from "@/utils/primary-method"
 import type { LocalTxOrigin } from "@/wallet/services/transaction/service"
@@ -399,7 +399,9 @@ export class ExecutionLane {
 		return {
 			behind: () => !left && line.indexOf(entry) > 0,
 			earlierDone: (signal) =>
-				untilOrAborted(Promise.all(line.slice(0, Math.max(0, line.indexOf(entry))).map((e) => e.done)), signal),
+				raceAbort(Promise.all(line.slice(0, Math.max(0, line.indexOf(entry))).map((e) => e.done)), signal).then(
+					(outcome) => outcome === "settled",
+				),
 			leave: () => {
 				if (left) return
 				left = true
@@ -705,17 +707,4 @@ export class ExecutionLane {
 		if (!journalId) return
 		await this.deps.operationJournal.clearPublicAuthwits(journalId, txHash, () => true)
 	}
-}
-
-/** `true` once `promise` fulfills, `false` if `signal` aborts first. */
-function untilOrAborted(promise: Promise<unknown>, signal: AbortSignal): Promise<boolean> {
-	if (signal.aborted) return Promise.resolve(false)
-	return new Promise<boolean>((resolve) => {
-		const onAbort = () => resolve(false)
-		signal.addEventListener("abort", onAbort, { once: true })
-		promise.then(() => {
-			signal.removeEventListener("abort", onAbort)
-			resolve(true)
-		})
-	})
 }

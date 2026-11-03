@@ -31,6 +31,7 @@ import { EthAddress } from "@aztec-labs/foundation/eth-address"
 import { AztecSQLiteOPFSStore } from "@aztec-labs/kv-store/sqlite-opfs"
 import { SqliteEncryptionError } from "@aztec-labs/kv-store/sqlite-opfs"
 import { DatabaseVersion } from "@aztec-labs/stdlib/database-version/version"
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import { chainDataDir, PXE_DATA_DIR_ROOT, type ChainCoordinates } from "./chain-coordinates"
 
 /** The store key did not decrypt the existing store — a wrong/rotated per-profile key, NOT
@@ -122,18 +123,11 @@ export async function openChainStore({ network, rollupAddress, storeKey, log }: 
 	const entry: { state: OpenState } = { state: "opening" }
 	inFlightOpens.set(dir, entry)
 
-	let timer: ReturnType<typeof setTimeout> | undefined
 	let store: AztecSQLiteOPFSStore
 	try {
-		store = await Promise.race([
-			openPromise,
-			new Promise<never>((_, reject) => {
-				timer = setTimeout(
-					() => reject(new ChainStoreOpenTimeoutError(`openChainStore: sqlite worker did not answer init within 30s for ${dir}`)),
-					OPEN_TIMEOUT_MS,
-				)
-			}),
-		])
+		store = await raceTimeout(openPromise, OPEN_TIMEOUT_MS, () => {
+			throw new ChainStoreOpenTimeoutError(`openChainStore: sqlite worker did not answer init within 30s for ${dir}`)
+		})
 	} catch (err) {
 		if (err instanceof ChainStoreOpenTimeoutError) {
 			// The open may STILL resolve later with a live worker holding the
@@ -166,8 +160,6 @@ export async function openChainStore({ network, rollupAddress, storeKey, log }: 
 			throw new WrongStoreKeyError(`openChainStore: wrong store key for ${dir} (${err.message})`)
 		}
 		throw err
-	} finally {
-		clearTimeout(timer)
 	}
 
 	// Normal resolution: this caller owns the store — free the dir for the next open.

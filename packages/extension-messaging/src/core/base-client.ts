@@ -1,6 +1,6 @@
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
 import { jsonSanitize, errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import type { EventsMap, MethodsMap } from "@nulo/wallet-core/base"
 import { decodeResult } from "./decode"
 import { wrapParams } from "../utils"
@@ -301,15 +301,9 @@ export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents ex
 	): Promise<void> {
 		const remainingMs = deadline - Date.now()
 		if (remainingMs <= 0) throw this.makeTimeoutError({ requestId, methodName, timeoutMs })
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const timeout = new Promise<never>((_resolve, reject) => {
-			timer = setTimeout(() => reject(this.makeTimeoutError({ requestId, methodName, timeoutMs })), remainingMs)
+		await raceTimeout(ready, remainingMs, () => {
+			throw this.makeTimeoutError({ requestId, methodName, timeoutMs })
 		})
-		try {
-			await Promise.race([ready, timeout])
-		} finally {
-			if (timer) clearTimeout(timer)
-		}
 	}
 
 	// ── Transport hooks (subclass-owned) ────────────────────────────────

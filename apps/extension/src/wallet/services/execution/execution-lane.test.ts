@@ -18,6 +18,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { SessionEndedError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { trackAbortListeners } from "@nulo/wallet-core/testing"
 import { deferred } from "@nulo/wallet-core/utils"
 import { journalCallTitle } from "@/utils/journal-state"
 import { getTxTitle } from "@/utils/tx-enrichment"
@@ -914,6 +915,24 @@ describe("ExecutionLane.joinOriginLine", () => {
 		abort.abort()
 		expect(await waited).toBe(false)
 		expect(second.behind()).toBe(true)
+		first.leave()
+		second.leave()
+	})
+
+	test.each([
+		["the earlier sends finish", false],
+		["it is aborted", true],
+	])("the wait for earlier sends leaves no abort listener once %s", async (_label, abortIt) => {
+		const { lane } = makeLane()
+		const first = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const second = lane.joinOriginLine(FENCE, 7, ORIGIN)
+		const abort = new AbortController()
+		const listeners = trackAbortListeners(abort.signal)
+		const waited = second.earlierDone(abort.signal)
+		if (abortIt) abort.abort()
+		else first.leave()
+		expect(await waited).toBe(!abortIt)
+		expect(listeners()).toBe(0)
 		first.leave()
 		second.leave()
 	})

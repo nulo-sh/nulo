@@ -12,6 +12,7 @@ import { searchKeymap } from "@codemirror/search"
 import LogsToolbar from "./LogsToolbar.vue"
 
 /** Utils */
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import { defaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { LogViewerServiceClient } from "@/wallet/services/log-viewer/client"
@@ -225,18 +226,10 @@ async function getLogs() {
 }
 
 async function fetchLogs(cnt, fromId) {
-	let timer
 	try {
-		const fetch = logViewerService.getLogs(cnt, fromId)
-		const timeout = new Promise((_, reject) => {
-			timer = setTimeout(() => reject("Logs fetch timeout"), 500)
+		return await raceTimeout(logViewerService.getLogs(cnt, fromId), 500, () => {
+			throw new Error("Logs fetch timeout")
 		})
-		try {
-			await Promise.race([fetch, timeout])
-		} finally {
-			clearTimeout(timer)
-		}
-		return await fetch
 	} catch {
 		if (cnt === 1) throw new Error("Failed to fetch logs")
 		return await fetchLogs(cnt / 4, fromId)
