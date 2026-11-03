@@ -18,8 +18,8 @@ const TOGGLE = "np-toggle"
 const TESTIDS = { input: FIELD, confirm: CONFIRM, toggle: TOGGLE, hint: "np-hint" }
 
 /** Mounted under a host that owns both password models, as every page does; `hidden` stays the
- *  pair's own unless `ownHidden` binds it to a host ref. */
-function mountOwned(props: Record<string, unknown> = {}, { ownHidden = false, slot = "" } = {}) {
+ *  pair's own unless `ownHidden` binds it to a host ref. `heading` fills `#repeatLabel`. */
+function mountOwned(props: Record<string, unknown> = {}, { ownHidden = false, slot = "", heading = "" } = {}) {
 	const password = ref("")
 	const repeated = ref("")
 	const hidden = ref(true)
@@ -38,7 +38,12 @@ function mountOwned(props: Record<string, unknown> = {}, { ownHidden = false, sl
 					...(ownHidden ? { hidden: hidden.value, "onUpdate:hidden": (v: boolean) => (hidden.value = v) } : {}),
 					onInput: (e: Event) => inputs.push(e),
 				},
-				slot ? { default: () => h("p", { "data-testid": "np-note" }, slot) } : undefined,
+				{
+					...(slot ? { default: () => h("p", { "data-testid": "np-note" }, slot) } : {}),
+					...(heading
+						? { repeatLabel: ({ id }: { id: string }) => h("span", { id, "data-testid": "np-heading" }, heading) }
+						: {}),
+				},
 			),
 	)
 	const w = mount(Host, { attachTo: document.body, global: { components: { Flex, Icon, Input, Text } } })
@@ -136,6 +141,20 @@ describe("NewPasswordPair", () => {
 		expect(follows(nativeInput(w, FIELD), label) && follows(label, nativeInput(w, CONFIRM))).toBe(true)
 		expect(nativeInput(w, CONFIRM).getAttribute("aria-labelledby")).toBe(label.id)
 		expect(label.id).not.toBe("")
+		expect(label.parentElement).toBe(w.element)
+	})
+
+	it("a host's repeat heading sits in the repeat field's 8 px column and labels it", () => {
+		const { w } = mountOwned({}, { heading: "Confirm password" })
+		const heading = w.get('[data-testid="np-heading"]').element
+		const field = w.get(`[data-testid="${CONFIRM}"]`).element
+		expect(heading.textContent).toBe("Confirm password")
+		expect(heading.parentElement).toBe(field.parentElement)
+		expect(heading.parentElement?.classList).toContain("gap--8")
+		expect(follows(nativeInput(w, FIELD), heading) && follows(heading, nativeInput(w, CONFIRM))).toBe(true)
+		expect(nativeInput(w, CONFIRM).getAttribute("aria-labelledby")).toBe(heading.id)
+		expect(heading.id).not.toBe("")
+		expect(w.find(".export_section_label").exists()).toBe(false)
 	})
 
 	it("names each control with the exact testid given, and the hint only when a hint id is given", () => {
@@ -144,6 +163,16 @@ describe("NewPasswordPair", () => {
 		const bare = mountOwned({ testids: { input: FIELD, confirm: CONFIRM, toggle: TOGGLE } }).w
 		expect(bare.findAll("[data-testid]").map((el) => el.attributes("data-testid"))).toEqual([FIELD, TOGGLE, CONFIRM])
 		expect(bare.text()).toContain(NEW_PASSWORD_HINTS.short)
+		const named = mountOwned({ testids: { ...TESTIDS, confirmInput: "np-confirm-native" } }).w
+		expect(named.get('[data-testid="np-confirm-native"]').element).toBe(nativeInput(named, CONFIRM))
+	})
+
+	it("hideHint drops the hint row, which shows by default", () => {
+		const shown = mountOwned().w
+		expect(shown.get('[data-testid="np-hint"]').text()).toBe(NEW_PASSWORD_HINTS.short)
+		const hidden = mountOwned({ hideHint: true }).w
+		expect(hidden.find('[data-testid="np-hint"]').exists()).toBe(false)
+		expect(hidden.text()).not.toContain(NEW_PASSWORD_HINTS.short)
 	})
 
 	it("the slot follows the repeat field, inside the pair", () => {

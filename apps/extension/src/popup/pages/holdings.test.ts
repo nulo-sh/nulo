@@ -65,15 +65,28 @@ vi.mock("@/wallet/services/task/client", async (importOriginal) => ({
 		}
 	}),
 }))
-const configEvents = { update: new EventHandler(), connected: new EventHandler() }
+/** The newest page's config events: a page an earlier case left mounted hears none of them. */
+let configEvents = { update: new EventHandler(), connected: new EventHandler() }
 let configValues: Record<string, unknown> = { showFiatValues: true, incomingDustUsdThreshold: 0 }
+/** A read answers the value stored when it was asked; a case that parks reads replaces this. */
+let answerConfig: (key: string, stored: unknown) => Promise<unknown> = async (_key, stored) => stored
 vi.mock("@/wallet/services/config/client", () => ({
 	ConfigServiceClient: vi.fn(function () {
+		const events = { update: new EventHandler(), connected: new EventHandler() }
+		configEvents = events
+		let opened = false
 		return {
 			disconnect: vi.fn(),
-			onUpdate: configEvents.update,
-			onConnected: configEvents.connected,
-			getValue: vi.fn().mockImplementation(async (key: string) => configValues[key]),
+			onUpdate: events.update,
+			onConnected: events.connected,
+			// The first read opens the port, as the real client's does.
+			getValue: vi.fn().mockImplementation((key: string) => {
+				if (!opened) {
+					opened = true
+					events.connected.invoke(undefined as never)
+				}
+				return answerConfig(key, configValues[key])
+			}),
 		}
 	}),
 }))
@@ -93,6 +106,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
 import Holdings from "./holdings.vue"
+import TokenList from "../components/modules/holdings/TokenList.vue"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
 const STUBS = {
@@ -143,6 +157,7 @@ afterEach(() => {
 	mockQuotes = {}
 	answerQuotes = ANSWER
 	configValues = { showFiatValues: true, incomingDustUsdThreshold: 0 }
+	answerConfig = async (_key, stored) => stored
 	vi.clearAllMocks()
 })
 
@@ -226,6 +241,64 @@ describe("holdings page", () => {
 		configEvents.connected.invoke(undefined as never)
 		await flushPromises()
 		expect(w.find('[data-testid="holdings-summary"]').text()).not.toContain("$")
+	})
+
+	describe("a change during the mount's reads wins over their older answers", () => {
+		function parkReads() {
+			const reads: Record<string, PromiseWithResolvers<unknown>> = {}
+			answerConfig = (key) => {
+				reads[key] = Promise.withResolvers<unknown>()
+				return reads[key].promise
+			}
+			return reads
+		}
+		const fiatShown = (w: Awaited<ReturnType<typeof mountPage>>) => w.get('[data-testid="holdings-summary"]').text().includes("$")
+		const dustThreshold = (w: Awaited<ReturnType<typeof mountPage>>) => w.getComponent(TokenList).props("dustThresholdUsd")
+
+		test("a fiat change wins, and the dust read lands what was stored", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			configEvents.update.invoke({ key: "showFiatValues", value: false })
+			reads.showFiatValues.resolve(true)
+			reads.incomingDustUsdThreshold.resolve(5)
+			await flushPromises()
+			expect(fiatShown(w)).toBe(false)
+			expect(dustThreshold(w)).toBe(5)
+		})
+
+		test("a dust change wins, and the fiat read lands what was stored", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			configEvents.update.invoke({ key: "incomingDustUsdThreshold", value: 7 })
+			reads.incomingDustUsdThreshold.resolve(0)
+			reads.showFiatValues.resolve(false)
+			await flushPromises()
+			expect(dustThreshold(w)).toBe(7)
+			expect(fiatShown(w)).toBe(false)
+		})
+
+		test("each key settles alone: the fiat read lands while the dust read hangs, then fails", async () => {
+			installChromeStorage()
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+			const reads = parkReads()
+			const w = await mountPage()
+
+			reads.showFiatValues.resolve(false)
+			await flushPromises()
+			expect(fiatShown(w)).toBe(false)
+			reads.incomingDustUsdThreshold.reject(new Error("port closed"))
+			await flushPromises()
+			expect(dustThreshold(w)).toBe(0)
+		})
 	})
 
 	test("rejected config reads keep the defaults and never surface as an error", async () => {
