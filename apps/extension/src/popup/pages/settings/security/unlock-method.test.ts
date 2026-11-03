@@ -58,6 +58,7 @@ vi.mock("@/utils/browser-surface", () => ({ closesOnFocusLoss: () => surface.pan
 vi.mock("@/utils/own-window", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/utils/own-window")>()),
 	moveToOwnWindow: (route: string) => surface.move(route),
+	leavePanelFor: async (route: string) => surface.panel && (await surface.move(route)),
 }))
 
 import { useAppStore } from "@/stores/app.store"

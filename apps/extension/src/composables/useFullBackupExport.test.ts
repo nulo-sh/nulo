@@ -674,7 +674,10 @@ describe("useFullBackupExport — a current run", () => {
 
 	// A new await is a new place a run can be superseded: add its row to the table, then this count.
 	it("every await in the composable has a row above", () => {
-		const code = readFileSync(resolve(__dirname, "useFullBackupExport.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
-		expect(code.match(/\bawait\b/g)).toHaveLength(18)
+		const awaits = (file: string) =>
+			readFileSync(resolve(__dirname, file), "utf8")
+				.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
+				.match(/\bawait\b/g)?.length
+		expect((awaits("useFullBackupExport.ts") ?? 0) + (awaits("../utils/profile-passkey.ts") ?? 0)).toBe(18)
 	})
 })

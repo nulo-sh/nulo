@@ -32,8 +32,8 @@ const { openToast } = useToast()
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
 import { RECOVERY_PHRASE_AUTO_CLOSE_MS, RECOVERY_PHRASE_WARNINGS } from "@/utils/recovery-phrase-warnings"
-import { closesOnFocusLoss } from "@/utils/browser-surface"
-import { OWN_WINDOW_ROUTES, closeOwnWindow, moveToOwnWindow } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, closeOwnWindow, leavePanelFor } from "@/utils/own-window"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, PASSKEY_COPY, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { watchLockStart } from "@/popup/locked-state"
@@ -119,9 +119,12 @@ const handlePasskeyReveal = async () => {
 	const isCurrent = revealFence.begin()
 	const { id: profileId, name } = appStore.profile
 	try {
-		const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(profileId)
-		if (!isCurrent()) return
-		const credentialData = await runCeremony({ mode: "get", credentialId, prfSalt, step: "reveal", profileName: name })
+		const credentialData = await askProfilePasskey(
+			runCeremony,
+			managers.profile,
+			{ profileId, step: "reveal", profileName: () => name },
+			isCurrent,
+		)
 		if (!isCurrent()) return
 		const mnemonic = await managers.profile.exportMnemonic(profileId, undefined, credentialData)
 		if (isCurrent()) showWords(profileId, mnemonic)
@@ -149,7 +152,7 @@ watchLockStart(() => appStore.isLogined, resetReveal)
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey profile's
 // reveal moves to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.reveal)
+	if (isPasskeyProfile.value) void leavePanelFor(OWN_WINDOW_ROUTES.reveal)
 })
 
 onBeforeUnmount(() => {

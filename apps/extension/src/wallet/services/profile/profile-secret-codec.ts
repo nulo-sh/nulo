@@ -1,6 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { array_equals, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
-import { RetiredProfileError } from "@nulo/extension-messaging/errors"
+import { PasskeyNotOpenedError, RetiredProfileError } from "@nulo/extension-messaging/errors"
 import {
 	asBase64Ciphertext,
 	asImportedKeysDek,
@@ -51,7 +51,7 @@ export type OpenedSlots = {
 }
 
 /** Whether `key` is for the unlock `row` stores: the same kind and, for a passkey, the row's own
- *  credential at its own input. A key that is still has to open the slots. */
+ *  credential at its own input. A key that is for it still has to open the slots. */
 export function unlocksWith(row: Profile, key: SlotKey): boolean {
 	const classified = classifyProfileRow(row)
 	if (classified.kind === "password") return "password" in key
@@ -87,6 +87,34 @@ export class ProfileSecretCodec {
 		if (classified.kind === "password" && "password" in key) return this.openPasswordSlots(classified.slots, key.password)
 		if (classified.kind === "passkey" && "passkey" in key) return this.openPasskeyRowSlots(classified, key.passkey)
 		return null
+	}
+
+	/**
+	 * Runs `body` over `row`'s slots opened under `key`, and wipes them once `body` settles, a
+	 * rejection included; nothing else `body` allocates is wiped here. The slots are lent: `body`
+	 * finishes with them before it settles and returns nothing that aliases them. When the slots do
+	 * not open, throws the path's refusal ({@link notOpened}) and never runs `body`. Takes no lock:
+	 * the caller places it, and runs its fence and checks inside `body` in its own order.
+	 */
+	public async withOpenedSlots<T>(
+		row: Profile,
+		key: SlotKey,
+		passwordRefusal: () => Error,
+		body: (opened: OpenedSlots) => Promise<T>,
+	): Promise<T> {
+		const opened = await this.openSlots(row, key)
+		if (!opened) throw this.notOpened(key, passwordRefusal)
+		try {
+			return await body(opened)
+		} finally {
+			opened.wipe()
+		}
+	}
+
+	/** What a path throws when `key` did not open the row: its own wrong-password refusal, or the
+	 *  passkey's, which no screen may read as a wrong password. */
+	private notOpened(key: SlotKey, passwordRefusal: () => Error): Error {
+		return "passkey" in key ? new PasskeyNotOpenedError() : passwordRefusal()
 	}
 
 	private async openPasswordSlots(
@@ -196,7 +224,7 @@ export class ProfileSecretCodec {
 	 * the master: the stored recovery words MUST still derive the stored master. A mismatch means
 	 * a tampered or cross-profile-transplanted ciphertext (the backup checksum is integrity-not-
 	 * auth; purpose-AAD stops slot-swaps but not same-slot moves between same-password profiles).
-	 * Throws before any secret is revealed, persisted, or exported. Zeroizes its own scratch.
+	 * Throws before any secret is revealed, persisted, or exported.
 	 */
 	public async assertEntropyMasterPair(secret: MasterSecretBytes, entropy: Uint8Array<ArrayBuffer>): Promise<void> {
 		if (!(await entropyDerivesMaster(secret, entropy))) {

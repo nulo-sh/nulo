@@ -830,6 +830,37 @@ describe("auth.vue — passkey unlock", () => {
 		expect(unlockPasskeyProfile).toHaveBeenCalledWith("p1", { id: "cred-1", prfSalt: "c2FsdA==" })
 	})
 
+	test("the prompt names the profile as the store names it once the lookup settles", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		runCeremony.mockResolvedValue({ id: "cred-1", prfSalt: "c2FsdA==" })
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		appStore.profile = { id: "p1", name: "Renamed", type: "passkey" } as never
+		answerLookup({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		await flushPromises()
+		expect(runCeremony).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ step: "unlock", profileName: "Renamed" }))
+	})
+
+	test("a lookup that settles on another selection asks nothing, though the selection is back before the page resumes", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const { wrapper, appStore } = mountAuth()
+		appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		await flushPromises()
+		await wrapper.find("form").trigger("submit")
+		appStore.profile = { id: "p2", name: "Q", type: "passkey" } as never
+		answerLookup({ credentialId: "cred-1", prfSalt: "c2FsdA==" })
+		queueMicrotask(() => {
+			appStore.profile = { id: "p1", name: "P", type: "passkey" } as never
+		})
+		await flushPromises()
+		expect(runCeremony).not.toHaveBeenCalled()
+		expect(unlockPasskeyProfile).not.toHaveBeenCalled()
+	})
+
 	test("in Firefox's toolbar panel, the background runs the step and the page runs no ceremony", async () => {
 		vi.mocked(closesOnFocusLoss).mockReturnValue(true)
 		await submitPasskeyUnlock()
