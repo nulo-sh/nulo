@@ -12,3 +12,5 @@
 - 2026-11-02: arc 1 phase 2: armed chaos green, Chrome seeds 1-10 (committed exports in 7 seeds; seed 10's `short` refused), Firefox seeds 1-10 (committed exports in 4 seeds; seeds 8 and 9 `short` refused); full smoke Chrome green, 1850 s (62 files, 275 tests).
 - 2026-11-02: arc 1 phase 2: full smoke Firefox green, 2791 s (66 files, 279 tests); after pictures captured from the head build, the scratch specs deleted, 16 pictures in `screenshots/`.
 - 2026-11-02: arc 1 rebased onto `dev` at 6509f2ff1 (an index-line conflict only); `audit:vue`, `test:all`, `lint` green; touched smoke files on the rebased armed build green, Chrome 279 s, Firefox 532 s; final gates green.
+- 2026-11-03: arc 2 started off `dev` at 67c1ac545 (arc 1 merged as #1559); scope: P93-22/40/72, page 96's P96-04 D and P96-05 D, page 100's five answers; § Arc 2 written.
+- 2026-11-03: arc 2 plan round: Codex and Opus conditional approve, folded (D15 at 500 ms, `isReconnect` out end to end, the network list, R5-R7 pictures).
