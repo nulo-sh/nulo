@@ -51,6 +51,13 @@ const checks = reactive({
 
 const confirmText = ref("")
 
+/** Text that can still become the name is unfinished, not wrong; only the explanation waits for a pause. */
+const MISMATCH_PAUSE_MS = 500
+const cannotBecomeName = computed(() => !!target && confirmText.value !== "" && !target.name.startsWith(confirmText.value))
+const mismatchSettled = ref(false)
+let mismatchTimer = null
+const showMismatch = computed(() => mismatchSettled.value && cannotBecomeName.value)
+
 /** Unlocked, the imported accounts the delete removes, which the recovery phrase cannot restore: null
  *  while the read runs or after it failed. Locked, nothing is read, so the page shows none of them. */
 const imported = ref(null)
@@ -253,6 +260,12 @@ const finishDeletion = (deletedId) => {
 }
 
 watch(() => [appStore.isLogined, appStore.profile?.id], readImported, { immediate: true })
+// A shown line stays through further wrong keys, so it is announced once; any key restarts a pending pause.
+watch(confirmText, () => {
+	clearTimeout(mismatchTimer)
+	if (!cannotBecomeName.value) mismatchSettled.value = false
+	else if (!mismatchSettled.value) mismatchTimer = setTimeout(() => (mismatchSettled.value = true), MISMATCH_PAUSE_MS)
+})
 // A change of the window's selection or session moves the profile the agreements were given for, so
 // they lapse. Unlocked, the page goes where an unlock goes; locked, the change is a lock or this
 // profile's deletion, and each lands the window itself. A deletion that returned routes by itself.
@@ -271,6 +284,7 @@ onBeforeUnmount(() => {
 	managers.networkReset.onStaleNetworkChanged.remove(readImported)
 	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
+	clearTimeout(mismatchTimer)
 })
 </script>
 
@@ -320,7 +334,7 @@ onBeforeUnmount(() => {
 					<Text variant="body" color="secondary" height="140">I understand this action cannot be undone</Text>
 				</Checkbox>
 				<Checkbox v-model="checks.sure" data-testid="reset-checkbox-sure">
-					<Text variant="body" color="secondary" height="140">I'm sure there's no assets left in my profile</Text>
+					<Text variant="body" color="secondary" height="140">I have my recovery phrase or a full backup</Text>
 				</Checkbox>
 			</Flex>
 		</div>
@@ -334,8 +348,10 @@ onBeforeUnmount(() => {
 				type="text"
 				label="Profile name"
 				:placeholder="`Type &quot;${target?.name}&quot; to confirm`"
+				:ariaInvalid="showMismatch"
 				data-testid="reset-confirm-input"
 			/>
+			<Text v-if="showMismatch" variant="body" color="txt-danger" height="150" role="alert" data-testid="reset-confirm-mismatch">Doesn't match {{ target.name }}</Text>
 			<Text variant="body" color="tertiary" height="150" data-testid="reset-recovery-note">
 				{{
 					target?.retired

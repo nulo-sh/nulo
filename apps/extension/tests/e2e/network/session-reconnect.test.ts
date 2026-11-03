@@ -43,9 +43,9 @@ test.skipIf(!hasConfig)(
 		await check.waitForSelector('[data-testid="verify-emoji-grid"]', { visible: true, timeout: 30_000 })
 		const shown = await check.evaluate(async () => ({
 			window: (await chrome.windows.getCurrent()).id,
-			isReconnect: new URLSearchParams(location.hash.split("?")[1]).get("isReconnect"),
+			query: [...new URLSearchParams(location.hash.split("?")[1]).keys()],
 		}))
-		expect(shown).toEqual({ window: expect.any(Number), isReconnect: "true" })
+		expect(shown).toEqual({ window: expect.any(Number), query: ["sessionId", "verificationHash"] })
 
 		await approveVerify(check)
 		await dappPage.waitForSelector(CONNECTED, { timeout: 20_000 })

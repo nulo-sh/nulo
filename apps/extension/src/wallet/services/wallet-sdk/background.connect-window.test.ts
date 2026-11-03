@@ -661,7 +661,7 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		await flush()
 
 		expect(h.windows.events).toEqual(["create:100"])
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
+		expect(h.windows.created[0].url).toMatch(new RegExp(`verificationHash=${hashOf("f1")}$`))
 		expect(terminated()).toEqual([])
 	})
 
@@ -675,7 +675,7 @@ describe("an approved connection whose key exchange does not follow at once", ()
 		await discoveryRun("r2")
 		await h.establish("r2")
 		expect(h.windows.created).toHaveLength(1)
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=false`)
+		expect(h.windows.created[0].url).toMatch(new RegExp(`verificationHash=${hashOf("r2")}$`))
 
 		await h.establish("f1")
 		await h.establish("f1")
@@ -709,15 +709,15 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 
 		expect(h.windows.events).toEqual(["create:100"])
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
+		expect(h.windows.created[0].url).toMatch(new RegExp(`verificationHash=${hashOf("f1")}$`))
 		expect(terminated()).toEqual([])
 		expect(markers().has("f1")).toBe(false)
 	})
 
 	test.each([
-		["a row an earlier connection reached reads as a reconnection", PRIOR_HASH, true],
-		["a row allowed but never connected reads as a first connection", undefined, false],
-	])("the check answered from a saved row: %s", async (_name, verificationHash, isReconnect) => {
+		["a row an earlier connection reached", PRIOR_HASH],
+		["a row allowed but never connected", undefined],
+	])("the check answered from a saved row: %s", async (_name, verificationHash) => {
 		const h = boot()
 		h.rows.set(`${ORIGIN}|${chainInfoToChainId(chain(1))}`, {
 			id: "row-1",
@@ -731,7 +731,7 @@ describe("establishment opens the check in a window of its own", () => {
 		await flush()
 
 		expect(h.windows.events).toEqual(["create:100"])
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r1")}&isReconnect=${isReconnect}`)
+		expect(h.windows.created[0].url).toMatch(new RegExp(`verificationHash=${hashOf("r1")}$`))
 		expect(h.rows.get(`${ORIGIN}|${chainInfoToChainId(chain(1))}`)?.verificationHash).toBe(hashOf("r1"))
 	})
 
@@ -763,7 +763,7 @@ describe("establishment opens the check in a window of its own", () => {
 		await h.establish("twin")
 		await flush()
 		expect(h.windows.events).toEqual(["create:100", "create:101"])
-		expect(h.windows.created[1].url).toContain(`verificationHash=${hashOf("twin")}&isReconnect=true`)
+		expect(h.windows.created[1].url).toMatch(new RegExp(`verificationHash=${hashOf("twin")}$`))
 		expect(terminated()).toEqual([])
 	})
 
@@ -788,7 +788,7 @@ describe("establishment opens the check in a window of its own", () => {
 		await h.establish("f1", chain(2))
 		await flush()
 		expect(h.windows.created).toHaveLength(1)
-		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
+		expect(h.windows.created[0].url).toMatch(new RegExp(`verificationHash=${hashOf("f1")}$`))
 	})
 
 	test("two exchanges on one id that overlap open no window: the session ends", async () => {

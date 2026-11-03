@@ -223,7 +223,9 @@ describe("auth.vue — the recovery link asks the question the person has", () =
 		["password", "Forgot your password?"],
 		["passkey", "Lost your passkey?"],
 	])("a %s profile's link reads %j and opens the recovery card", async (type, words) => {
-		const { wrapper } = mountAuth({}, { id: "p1", name: "P", type } as ProfileInfo)
+		const { wrapper, appStore } = mountAuth()
+		await flushPromises()
+		appStore.profile = { id: "p1", name: "P", type } as never
 		await flushPromises()
 		expect(link(wrapper).text()).toBe(words)
 		await link(wrapper).trigger("click")

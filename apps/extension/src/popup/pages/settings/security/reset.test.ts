@@ -556,7 +556,7 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 describe("Delete Profile's checks say what they ask", () => {
 	const MISMATCH = '[data-testid="reset-confirm-mismatch"]'
 
-	function mountChecks(profile: ProfileInfo | undefined = main) {
+	function mountChecks(profile: ProfileInfo | null = main) {
 		const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile, profiles: [main, other] } } })
 		const w = mount(Reset, {
 			global: {
@@ -654,13 +654,17 @@ describe("Delete Profile's checks say what they ask", () => {
 		expect(shown.line().exists()).toBe(false)
 
 		const pending = mountChecks()
+		const set = vi.spyOn(globalThis, "setTimeout")
+		const clear = vi.spyOn(globalThis, "clearTimeout")
 		await pending.type("Mx")
+		const pause = set.mock.results[set.mock.calls.findIndex(([, ms]) => ms === 500)]?.value
+		expect(pause).toBeDefined()
 		pending.w.unmount()
-		expect(vi.getTimerCount()).toBe(0)
+		expect(clear).toHaveBeenCalledWith(pause)
 	})
 
 	test("a page opened with no profile shows no line", async () => {
-		const { type, line } = mountChecks(undefined)
+		const { type, line } = mountChecks(null)
 		await type("anything")
 		await vi.advanceTimersByTimeAsync(5_000)
 		expect(line().exists()).toBe(false)

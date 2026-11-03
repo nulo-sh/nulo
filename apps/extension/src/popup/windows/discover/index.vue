@@ -3,7 +3,7 @@
 import { onMounted, onUnmounted } from "vue"
 
 /** Components */
-import DappStatusStrip from "@/components/composite/DappStatusStrip.vue"
+import IdentityStrip from "@/components/composite/IdentityStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import DappCancelledOverlay from "@/components/composite/DappCancelledOverlay.vue"
 import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
@@ -134,11 +134,7 @@ onUnmounted(disposeWindow)
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
-		<DappStatusStrip
-			:accountName="appStore.account?.name"
-			:networkName="appStore.network?.name"
-			:status="stripStatus"
-		/>
+		<IdentityStrip :accountLabel="appStore.network?.name ?? ''" :status="stripStatus" />
 
 		<Flex direction="column" :class="$style.scroll_area">
 			<DappIdentityBlock
@@ -150,6 +146,9 @@ onUnmounted(disposeWindow)
 			/>
 
 			<Flex direction="column" gap="8" :class="$style.body">
+				<Text variant="body" color="primary" :style="{ lineHeight: '1.5' }" data-testid="discover-scope">
+					Allowing lets this site ask Nulo for things and know that Nulo is running. It sees no account or balance until you approve a request.
+				</Text>
 				<Text variant="body" color="tertiary" :style="{ lineHeight: '1.5' }">
 					Make sure you trust the site you're connecting to. You can revoke this connection any time from Settings → Connected Apps.
 				</Text>

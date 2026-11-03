@@ -1,12 +1,5 @@
 <script setup>
-/**
- * Top identity strip for the discover + capabilities windows. Thin caller
- * over the shared `IdentityStrip` frame; owns only the no-account fallback
- * label. The status dot color is driven by `status`:
- * - `ready`   → green (idle)
- * - `loading` → orange (request in flight)
- * - `cancelled` → red (interaction cancelled by the dApp)
- */
+/** The identity strip naming the active account beside the wallet's network; owns only the no-account fallback. */
 import IdentityStrip from "./IdentityStrip.vue"
 
 defineProps({
