@@ -6,3 +6,5 @@
 - 2026-11-03 final: fresh Codex pass conditional approve (F1-F3 accepted); resumed pass approve. Arc 1 next under auto-continue (OA-1 concerns arc 2's phase 5 only).
 - 2026-11-03 phase 1 green: 141 test files / 2308 tests pass (1 skip, the type-role report writer, skipped on base too), lint, typecheck:all
 - 2026-11-03 phase 2 green: 154 test files / 2448 tests pass (1 skip, as on base), lint, typecheck:all; before/after screenshots show no visible change (lessons/phase-2.md)
+- 2026-11-03 phase 3 green: 21 test files / 486 tests pass, lint, typecheck; both pins green before the move; useExecutingTask 15 cases, useReaskReview 11
+- 2026-11-03 arc 1 review loop converged: Codex R1 changes (4 accepted), Opus approve (comments folded), Codex R2 approve; audit:vue green; audit:dup production 176/8768 (base 177/8775); smoke Chrome 5 files green
