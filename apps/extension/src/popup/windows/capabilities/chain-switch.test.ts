@@ -171,10 +171,10 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		expect(banner()?.attributes("data-variant")).toBe("info")
 		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe("Connecting on Local Network")
 		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(
-			"Your wallet is on Testnet. Connect as is, or switch to see Local Network balances.",
+			"Your wallet is on Testnet. Grant access as is, or switch to see Local Network balances.",
 		)
 		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').text()).toBe("Switch wallet to Local Network")
-		expect(w?.find('[data-testid="identity-block"]').attributes("data-action-label")).toBe("wants to connect on Local Network")
+		expect(w?.find('[data-testid="identity-block"]').attributes("data-action-label")).toBe("asks for access")
 		expect(approveBtn()?.attributes("disabled")).toBeUndefined()
 	})
 

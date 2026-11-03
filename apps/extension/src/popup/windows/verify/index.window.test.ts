@@ -98,10 +98,7 @@ const getCurrent = vi.fn((_options: unknown, cb: (w: { id?: number }) => void) =
 const remove = vi.fn((id: number) => callLog.push(`remove:${id}`))
 
 const wrappers: Array<ReturnType<typeof mount>> = []
-const mountVerify = (
-	query: Record<string, string> = { sessionId: "row-1", verificationHash: URL_HASH, isReconnect: "false" },
-	errors?: unknown[],
-) => {
+const mountVerify = (query: Record<string, string> = { sessionId: "row-1", verificationHash: URL_HASH }, errors?: unknown[]) => {
 	routeQuery = query
 	const config = errors ? { errorHandler: (err: unknown) => errors.push(err) } : {}
 	const w = mount(Verify, { global: { stubs: STUBS, components: { DappIdentityBlock }, config } })
@@ -159,8 +156,14 @@ describe("windows/verify — the origin the user is asked to trust", () => {
 	})
 })
 
-describe.each(["false", "true"])("windows/verify — the check with isReconnect=%s", (isReconnect) => {
-	const open = () => mountVerify({ sessionId: "row-1", verificationHash: URL_HASH, isReconnect })
+describe.each([
+	["a new connection's", []],
+	["a reconnect's", [`aztec:0:${ADDRESS}`]],
+])("windows/verify — %s check", (_, accounts) => {
+	const open = () => {
+		sessionRow = { ...(sessionRow as object), accounts }
+		return mountVerify()
+	}
 	const press = async (w: ReturnType<typeof mountVerify>, testid: string) => {
 		await w.get(`[data-testid="${testid}"]`).trigger("click")
 		await flushPromises()
@@ -233,7 +236,7 @@ describe("windows/verify — They match releases the app's calls", () => {
 	}
 
 	test("a window opened without a hash closes on They match without reporting the row's", async () => {
-		const w = mountVerify({ sessionId: "row-1", isReconnect: "false" })
+		const w = mountVerify({ sessionId: "row-1" })
 		await flushPromises()
 		await press(w, "verify-confirm-btn")
 		expect(confirmVerification).not.toHaveBeenCalled()

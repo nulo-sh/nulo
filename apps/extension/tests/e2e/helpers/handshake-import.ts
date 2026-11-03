@@ -208,7 +208,7 @@ export async function exportBackup(page: Page, credential: Credential, account: 
 	return file
 }
 
-/** Deletes the unlocked profile; the lock view reaches the same reset page through "Delete profile". */
+/** Deletes the unlocked profile; the lock view reaches the same reset page through its recovery link. */
 export async function deleteProfile(page: Page, from: DeleteFrom): Promise<void> {
 	if (from === "settings") {
 		await resetProfile(page)

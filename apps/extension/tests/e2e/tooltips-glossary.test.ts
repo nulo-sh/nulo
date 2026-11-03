@@ -233,7 +233,7 @@ test("a dotted term's tooltip in the 360×600 popup: inside the window, reachabl
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("pressing Delete profile closes its tooltip, and the popup it opens takes the first Escape", async ({
+test("pressing the lock screen's recovery link opens its popup, which takes the first Escape and gives focus back", async ({
 	registeredExtensionPerTest,
 }) => {
 	const home = await openPopup(registeredExtensionPerTest)
@@ -245,18 +245,15 @@ test("pressing Delete profile closes its tooltip, and the popup it opens takes t
 	await waitForHash(page, "#/popup/auth", 10_000)
 	await page.waitForSelector(sel("auth-reset"), { visible: true, timeout: 5_000 })
 	await page.focus(sel("auth-reset"))
-	await settledBubble(page)
 
 	await page.keyboard.press(" ")
 	await page.waitForSelector(sel("forgot-reset-btn"), { visible: true, timeout: 5_000 })
 	expect(await page.$$eval(sel("forgot-reset-btn"), (els) => els.length)).toBe(1)
-	expect(await page.$(BUBBLE)).toBeNull()
 
 	expect(await pressEscape(page)).toBe(true)
 	const forced = await settleClosedPopup(page, "forgot-reset-btn")
 	if (forced) console.log("[tooltips-glossary] the forgot-password popup's leave transition stuck; finished by hand")
 	await waitForFocus(page, "auth-reset")
-	expect(await holds(page, false)).toBe(true)
 
 	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])

@@ -379,8 +379,7 @@ export async function changePassword(page: Page, oldPwd: string, newPwd: string)
 	await clickByTestId(page, "change-password-submit-btn")
 }
 
-/** From the auth screen, click "Reset Profile" to open the
- *  ForgotPasswordPopup. Resolves once the popup is mounted. */
+/** From the lock screen, press the recovery link to open the ForgotPasswordPopup; resolves once it is mounted. */
 export async function openForgotPasswordFromAuth(page: Page): Promise<void> {
 	await clickByTestId(page, "auth-reset")
 	await page.waitForSelector('[data-testid="forgot-reset-btn"]', { visible: true, timeout: 5_000 })

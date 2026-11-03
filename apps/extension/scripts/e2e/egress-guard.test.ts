@@ -20,6 +20,7 @@ import {
 	startEgressGuard,
 	undeclared,
 } from "../../tests/e2e/fixtures/egress-guard"
+import { RELEASE_TRAITS } from "../../tests/e2e/fixtures/update/release"
 
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-egress-guard-test-"))
 const REGISTRY = path.join(ROOT, "ports.md")
@@ -201,6 +202,12 @@ describe("undeclared", () => {
 
 	test("a declared wallet host and a listed browser host pass", () => {
 		expect(undeclared([attempt(LIVE_NODE_HOST), attempt("update.googleapis.com")], ownHosts)).toEqual([])
+	})
+
+	test("every pinned release's Testnet host passes", () => {
+		const hosts = Object.values(RELEASE_TRAITS).map(({ testnetHost }) => attempt(testnetHost))
+		expect(hosts.length).toBeGreaterThan(0)
+		expect(undeclared(hosts, ownHosts)).toEqual([])
 	})
 
 	test("an unlisted host under a listed host's domain fails, and so does a malformed request", () => {

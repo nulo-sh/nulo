@@ -12,7 +12,7 @@ describe("isRestartEndedUrl", () => {
 		["connect", `${POPUP}#/windows/discover?requestId=0x01`],
 		["connect, expired", `${POPUP}#/windows/discover?requestId=0x01&expired=1`],
 		["capabilities", `${POPUP}#/windows/capabilities?requestId=0x01`],
-		["emoji check", `${POPUP}#/windows/verify?sessionId=s&verificationHash=h&isReconnect=false`],
+		["emoji check", `${POPUP}#/windows/verify?sessionId=s&verificationHash=h`],
 		["send or sign", `${POPUP}#/windows/execute?requestId=0x01`],
 		["fee question", `${POPUP}#/windows/fee?requestId=0x01`],
 		["network notice", `${POPUP}#/windows/network-unavailable?requestId=0x01`],
