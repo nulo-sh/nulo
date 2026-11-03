@@ -30,6 +30,7 @@ import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
 import { useBalanceTasks } from "@/composables/useBalanceTasks"
+import { useConfigRead } from "@/composables/useConfigRead"
 import { pinScopeOf, usePinnedTokens } from "@/composables/usePinnedTokens"
 import { usePrices } from "@/composables/usePrices"
 import { type TokenBalanceSnapshotState, useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
@@ -84,24 +85,23 @@ function onConfigUpdate(prop: { key: string; value: unknown }) {
 	if (prop.key === "showFiatValues") showFiatValues.value = prop.value !== false
 	if (prop.key === "incomingDustUsdThreshold") dustThresholdUsd.value = Number(prop.value) || 0
 }
-// Leaving the page rejects any read still in flight; the defaults stand in that case. A reconnect
-// may have dropped an update, so the values are read again on every connect.
-function readConfig() {
-	configService
-		.getValue("showFiatValues")
-		.then((v) => {
-			showFiatValues.value = v !== false
-		})
-		.catch(() => undefined)
-	configService
-		.getValue("incomingDustUsdThreshold")
-		.then((v) => {
-			dustThresholdUsd.value = Number(v) || 0
-		})
-		.catch(() => undefined)
-}
-readConfig()
-configService.onConnected.add(readConfig)
+// One reader per key, so a dust read that hangs or fails never holds the fiat switch back.
+const fiatRead = useConfigRead(
+	configService,
+	() => configService.getValue("showFiatValues"),
+	(v, updatedSince) => {
+		if (!updatedSince("showFiatValues")) showFiatValues.value = v !== false
+	},
+)
+const dustRead = useConfigRead(
+	configService,
+	() => configService.getValue("incomingDustUsdThreshold"),
+	(v, updatedSince) => {
+		if (!updatedSince("incomingDustUsdThreshold")) dustThresholdUsd.value = Number(v) || 0
+	},
+)
+void fiatRead.read()
+void dustRead.read()
 
 const pins = usePinnedTokens({
 	preferences: managers.uiPreference,
@@ -194,8 +194,9 @@ onBeforeUnmount(() => {
 	taskService.disconnect()
 	prices.dispose()
 	priceService.disconnect()
-	configService.onConnected.remove(readConfig)
 	configService.disconnect()
+	fiatRead.dispose()
+	dustRead.dispose()
 	pins.dispose()
 })
 </script>
