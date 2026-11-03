@@ -63,6 +63,7 @@ import { PinMismatchError, type SeedMarkerState, type SeedPreview, SEED_ATTEMPT_
 import { CONTRACT, CHAIN_ID, disposeSeeders, makeSeeder, readMarker, skipBackoff } from "@/wallet/services/token/seeder.harness"
 import { type FetchLike, TokenListService, type TokenListStoredState } from "@/wallet/services/token-list/service"
 import { TOKEN_LIST_STORAGE_KEY } from "@/wallet/services/token-list/spec"
+import { TEST_LIST_ENTRIES, TEST_PRICE_FEEDS } from "@/wallet/services/token-list/list.fixture"
 import { startUiPreferences } from "@/wallet/services/ui-preference/service.harness"
 import {
 	BASELINE_VERSION,
@@ -219,7 +220,7 @@ describe("what each writer stores parses back to itself", () => {
 				peekLiveSerial: () => 1,
 			}),
 		)
-		services.add(tokenListStub())
+		services.add(tokenListStub({ sequence: 1, keyId: "k", entries: TEST_LIST_ENTRIES, flagged: [], priceFeeds: TEST_PRICE_FEEDS }))
 		const service = new PriceService(logger(), api, { fetchFn, now: () => now })
 		services.add(service)
 		await services.start()

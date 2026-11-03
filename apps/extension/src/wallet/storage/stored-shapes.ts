@@ -38,7 +38,7 @@ import { decodeRegistrationCounts, RegistrationCountsSchema } from "@/wallet/ser
 import { AccountIntegrityBlockedSchema, VerifiedStampSchema } from "@/wallet/services/account-integrity/types"
 import { SEED_OFFERS_ROOT, SeedOffersSchema } from "@/wallet/services/network/seed-offers"
 import { ACTIVE_NETWORK_STORAGE_ROOT, decodeActiveNetworkId } from "@/wallet/services/network/spec"
-import { usableQuotes } from "@/wallet/services/price/service"
+import { freshQuotes } from "@/wallet/services/price/service"
 import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { RESTORE_PENDING_ROOT, RestorePendingSchema } from "@/wallet/services/profile/restore-pending-repository"
 import { PROFILE_TOMBSTONE_ROOT, TombstoneSchema } from "@/wallet/services/profile/tombstone-repository"
@@ -238,7 +238,7 @@ export const STORED_SHAPES = {
 	// No profile codec: a row the service cannot fully check still opens derived-only.
 	profiles: described("profiles", ProfileRowSchema, asStored),
 	config: described("config", ConfigSchema, (v) => decodeStoredConfig(v)),
-	tokenPrices: described("tokenPrices", PriceStateSchema, usableQuotes),
+	tokenPrices: described("tokenPrices", PriceStateSchema, freshQuotes),
 	tokenList: described("tokenList", TokenListStateSchema, decodeTokenListState),
 	tokenSeeded: sealedDescribed("tokenSeeded", SeedMarkersSchema, decodeSeedMarkers),
 	dappRegistrations: sealedDescribed("dappRegistrations", RegistrationCountsSchema, decodeRegistrationCounts),

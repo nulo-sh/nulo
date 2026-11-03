@@ -274,8 +274,8 @@ export class TokenListService extends Service<Methods, Events> implements Servic
 	}
 }
 
-function toSnapshot({ sequence, keyId, entries, flagged }: VerifiedTokenList): TokenListSnapshot {
-	return { sequence, keyId, entries, flagged }
+function toSnapshot({ sequence, keyId, entries, flagged, priceFeeds }: VerifiedTokenList): TokenListSnapshot {
+	return { sequence, keyId, entries, flagged, priceFeeds }
 }
 
 function refusalOutcome(error: unknown): RefreshOutcome {

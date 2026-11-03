@@ -109,6 +109,14 @@ export const LEGAL_MANIFEST: Readonly<Record<LegalDocument, readonly LegalVersio
 			material: false,
 			changes: ["The website nulo.sh and its mailing list are now described in a separate Website Privacy Notice (§ 5.5)."],
 		},
+		{
+			version: "1.2.8",
+			effective: null,
+			material: false,
+			changes: [
+				"Prices are requested for the price identifiers the signed token list names, and for AZTEC, which prices Fee Juice (§ 5.2).",
+			],
+		},
 	],
 }
 
