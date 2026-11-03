@@ -80,7 +80,7 @@ function exceptionProblem(
 	return undefined
 }
 
-/** One line per surface and shared header that breaks the rule; empty when every surface holds it. */
+/** One line per break of the rule; empty when every surface holds it. */
 function disagreements(surfaces: Readonly<Record<Surface, HeaderMap>>, exceptions: Exceptions): string[] {
 	const names = Object.keys(surfaces) as Surface[]
 	return SHARED.flatMap((header) => {

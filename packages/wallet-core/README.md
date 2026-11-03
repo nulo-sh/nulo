@@ -22,6 +22,7 @@ wallet-core  →  wallet-crypto  →  extension-messaging  →  aztec-runtime  �
 | `src/utils/rw-guard.ts` | Reader/writer guard. Multiple parallel reads; writers drain readers then run exclusively. Writers have FIFO priority. |
 | `src/utils/event-handler.ts` | The `EventHandler<T>` primitive every service emits through. |
 | `src/utils/serial.ts` | `createSerialQueue`: a promise-chain queue whose `run` adds no hop of its own, either propagating each op's outcome or reporting rejections to `onError`. Use it where a site's await shape must not move; use `Lock` where an `async` hold and its watchdog are wanted. |
+| `src/utils/race.ts` | `raceTimeout` (work against a timer whose expiry value or throw comes from `onTimeout`) and `raceAbort` (a promise against an `AbortSignal`, answering `"settled"` or `"aborted"`, never rejecting). Both clear their timer or listener on either outcome and keep the losing promise observed; `raceTimeout` returns the bare `Promise.race`, so no cleanup adds continuation turns before its caller resumes. |
 | `src/utils/guards.ts` | `isRecord` (non-null, non-array object) and `isObjectLike` (any non-null object) for untrusted values; neither checks the prototype. |
 | `src/utils/mnemonic.ts`, `random.ts`, `serialization.ts`, `arrays.ts`, `queue.ts`, `sleep.ts`, `errors.ts`, `chain-id.ts`, `rpc-url.ts`, `read-capped.ts`, `field.ts`, `private-fetch.ts` | Pure helpers. `field.ts` is the 32-byte hex shape (`isHex32`) and the BN254 field modulus, checked without bb.js. `chain-id.ts` is the wallet's composite chain id, frozen because persisted keys carry it, and `LOCAL_L1_CHAIN_ID`, the only L1 of chain 0; it is its own entry point, `@nulo/wallet-core/chain-id`, outside the `utils` barrel. `rpc-url.ts` is the RPC transport rule the extension's URL schema and the node-factory adapter share. `read-capped.ts` reads a fetch body under a byte budget; `private-fetch.ts` is the `RequestInit` of the remote data the wallet fetches on its own (no cookies, referrer, HTTP cache or redirect). |
 | `src/base/index.ts` | `ServiceCollection` + `ServiceSpec<Methods, Events>` — the typed service-spec contract used across the codebase. |
@@ -29,6 +30,7 @@ wallet-core  →  wallet-crypto  →  extension-messaging  →  aztec-runtime  �
 | `src/logger/interfaces.ts` | `ILogger` interface + `LogLevel`. The concrete chrome-backed `LoggerStore` lives in `@nulo/extension`. |
 | `src/testing/fake-browser-api.ts` | In-memory `BrowserApi` implementation for unit tests. |
 | `src/testing/mock-clock.ts`, `fake-background-ticker.ts` | Deterministic time control for tests. |
+| `src/testing/abort-listeners.ts`, `unhandled-rejections.ts` | `trackAbortListeners` counts the abort listeners left on a signal; `collectUnhandledRejections` returns the unhandled rejections raised while a callback runs. |
 
 ## Scripts
 

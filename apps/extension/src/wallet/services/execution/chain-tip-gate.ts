@@ -11,6 +11,7 @@
  * emits no update, so a backup can never hold a send.
  */
 
+import { raceAbort } from "@nulo/wallet-core/utils"
 import type { Tx } from "@/wallet/services/transaction/spec"
 import { scopeId, type SequenceScope } from "./send-sequencer"
 import { keysIntersect, recordedTxKeys, type SequenceKey } from "./transfer-sequence-keys"
@@ -108,7 +109,8 @@ export class ChainTipGate {
 			if (signal.aborted) return "aborted"
 			if (!this.unconfirmed(scope, keys, networkId)) return "confirmed"
 			if (this.deps.now() >= until) return "expired"
-			await settledOrAborted(this.refresh(networkId), signal)
+			// A cancel never waits out a tip read.
+			await raceAbort(this.refresh(networkId), signal)
 			if (signal.aborted) continue
 			if (this.unconfirmed(scope, keys, networkId))
 				await this.deps.sleep(Math.min(RECHECK_MS, Math.max(0, until - this.deps.now())), signal)
@@ -127,17 +129,4 @@ export class ChainTipGate {
 			timer.abort()
 		}
 	}
-}
-
-/** Resolves once `promise` settles or `signal` aborts; a cancel never waits out a tip read. */
-function settledOrAborted(promise: Promise<void>, signal: AbortSignal): Promise<void> {
-	if (signal.aborted) return Promise.resolve()
-	return new Promise((resolve) => {
-		const done = () => {
-			signal.removeEventListener("abort", done)
-			resolve()
-		}
-		signal.addEventListener("abort", done, { once: true })
-		void promise.finally(done)
-	})
 }

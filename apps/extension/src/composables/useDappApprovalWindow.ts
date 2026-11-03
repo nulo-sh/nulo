@@ -21,6 +21,7 @@
  * unmount hook.
  */
 
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRouter } from "vue-router"
 import { useAppStore } from "@/stores/app.store"
@@ -121,16 +122,10 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 
 	const endAndClose = async (send: () => Promise<unknown>) => {
 		detachUnload()
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const bound = new Promise<void>((resolve) => {
-			timer = setTimeout(resolve, END_ACK_TIMEOUT_MS)
-		})
 		try {
-			await Promise.race([send(), bound])
+			await raceTimeout(send(), END_ACK_TIMEOUT_MS, () => undefined)
 		} catch {
 			// A refused send still closes: the close then ends the request.
-		} finally {
-			clearTimeout(timer)
 		}
 		closeCurrentWindow()
 	}

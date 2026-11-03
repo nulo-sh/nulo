@@ -1,3 +1,4 @@
+import { raceTimeout } from "@nulo/wallet-core/utils"
 import { useConfirm } from "@/composables/useConfirm"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -60,15 +61,11 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 	}
 
 	const readForLock = (): Promise<LockRead> => {
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const expired = new Promise<LockRead>((resolve) => {
-			timer = setTimeout(() => resolve({ answered: false }), LOCK_READ_BUDGET_MS)
-		})
 		const read = Promise.all([profile.getSessionHandle(), appStore.refreshInFlight()]).then(
 			([handle]): LockRead => ({ answered: true, handle }),
 			(): LockRead => ({ answered: false }),
 		)
-		return Promise.race([read, expired]).finally(() => clearTimeout(timer))
+		return raceTimeout(read, LOCK_READ_BUDGET_MS, (): LockRead => ({ answered: false }))
 	}
 
 	const closeOwnConfirm = () => {
