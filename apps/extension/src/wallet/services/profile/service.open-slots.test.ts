@@ -227,4 +227,47 @@ describe("the opener's buffers", () => {
 			}
 		}
 	}, 120_000)
+
+	// Each refusal here comes after the slots opened, so only a wipe that covers the whole body
+	// zeroes them.
+	test("the passhash, master and entropy it opens are zero once a path refuses after opening them", async () => {
+		const { service, id, stored, read, write, writeTo } = await lockedPasswordProfile()
+		const other = await read(await sibling(service))
+		const restoring = await restored(service, 0x31)
+		await write({ ...stored, entropy: other.entropy })
+		await writeTo(restoring, { ...(await read(restoring)), entropy: other.entropy })
+		const passhashOf = EncryptionKey.getPasshash.bind(EncryptionKey)
+		const unsealWith = PasswordSecretBox.prototype.unsealWithPasshash
+		const held: (Uint8Array | ArrayBuffer)[] = []
+		vi.spyOn(EncryptionKey, "getPasshash").mockImplementation(async (password) => {
+			const passhash = await passhashOf(password)
+			if (password !== NEW_PASSWORD) held.push(passhash)
+			return passhash
+		})
+		vi.spyOn(PasswordSecretBox.prototype, "unsealWithPasshash").mockImplementation(async function (this: PasswordSecretBox, ...args) {
+			const opened = await unsealWith.apply(this, args)
+			if (opened) held.push(opened.secret, opened.entropy)
+			return opened
+		})
+		const wiped = async (path: string, call: () => Promise<unknown>, refusal: string) => {
+			held.length = 0
+			await expect(call(), path).rejects.toThrow(refusal)
+			expect(held.length, path).toBeGreaterThanOrEqual(3)
+			expect(held.map(allZero), path).toStrictEqual(held.map(() => true))
+		}
+		for (const [path, call] of PAIRED_PATHS) await wiped(path, () => call(service, id), "Profile storage corrupted")
+		await wiped("verifyUnlockCredential", () => service.verifyUnlockCredential(id, { password: PASSWORD }), "Profile storage corrupted")
+		await wiped("verifyExportCredential", () => service.verifyExportCredential(id, { password: PASSWORD }), "Profile storage corrupted")
+		await wiped("finalizeRestore", () => service.finalizeRestore(restoring, PASSWORD), "Profile storage corrupted")
+		// Opens its slots intact, then refuses a DEK slot that does not open.
+		await write({ ...stored, dekSealed: "AAAA" })
+		await wiped("exportImportedKeysDek", () => service.exportImportedKeysDek(id, PASSWORD), "Imported-keys key unrecoverable")
+
+		// Success control: the row as stored opens, and what it opened is zero once the path returns.
+		await write(stored)
+		held.length = 0
+		await expect(service.exportMnemonic(id, PASSWORD)).resolves.toHaveLength(24)
+		expect(held.length).toBeGreaterThanOrEqual(3)
+		expect(held.map(allZero)).toStrictEqual(held.map(() => true))
+	}, 120_000)
 })
