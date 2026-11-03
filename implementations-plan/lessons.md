@@ -11,7 +11,7 @@
 - Vue unit tests (3.5.42, VTU 2.4.11, 2026-10): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; a 2nd `mount` strips the 1st's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check that accepts a wrong state passes broken code: pair a never-happens test with a success control; match a captured identity exactly (whole `textContent`: `innerText` follows `text-transform`); stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 - CodeQL's ReDoS query fails a PR on any regex it reaches, tests' too: never put a free-form group beside `\s*`; split on the delimiter (2026-10). [Evidence](archive/forms-and-contacts/lessons/phase-3.md)
-- Moving code the chaos model cites reds `profile-chaos-model.test.ts`: re-cite by a line diff from base. [Evidence](quality-popup-2/lessons/phase-4.md)
+- Moving code the chaos model cites reds `profile-chaos-model.test.ts`: re-cite by a line diff from base. [Evidence](archive/quality-popup-2/lessons/phase-4.md)
 
 ## Git & GitHub
 
