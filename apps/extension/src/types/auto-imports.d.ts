@@ -91,6 +91,7 @@ declare global {
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
+  const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
   const SEED_STATUS_RETRY_MS: typeof import('../composables/useSeedStatus').SEED_STATUS_RETRY_MS
   const SENDS_IN_PROGRESS_KEY: typeof import('../composables/useSendsInProgress').SENDS_IN_PROGRESS_KEY
   const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
@@ -114,6 +115,7 @@ declare global {
   const accountStateNetworkIds: typeof import('../composables/full-backup-restore').accountStateNetworkIds
   const activateNetworkGuarded: typeof import('../utils/guarded-network-activation').activateNetworkGuarded
   const activationFailureReason: typeof import('../composables/unlockWait').activationFailureReason
+  const activeAccountScope: typeof import('../utils/active-scope').activeAccountScope
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const addressEnds: typeof import('../utils/string').addressEnds
@@ -316,6 +318,7 @@ declare global {
   const journalProgressWord: typeof import('../utils/journal-state').journalProgressWord
   const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
+  const journalTransferAmount: typeof import('../utils/journal-state').journalTransferAmount
   const journalUpdated: typeof import('../utils/journal-mirror').journalUpdated
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
   const landingRoute: typeof import('../utils/panel-handback').landingRoute
@@ -547,6 +550,7 @@ declare global {
   const useDappOrigin: typeof import('../composables/useDappOrigin').useDappOrigin
   const useEntityCrud: typeof import('../composables/useEntityCrud').useEntityCrud
   const useEvent: typeof import('../composables/outside.js').useEvent
+  const useExecutingTask: typeof import('../composables/useExecutingTask').useExecutingTask
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
   const useFeeEstimationMap: typeof import('../composables/useFeeEstimationMap').useFeeEstimationMap
   const useFeeSnapshot: typeof import('../composables/useFeeSnapshot').useFeeSnapshot
@@ -584,6 +588,7 @@ declare global {
   const useProfileImportFlow: typeof import('../composables/useProfileImportFlow').useProfileImportFlow
   const useProfileNameDefault: typeof import('../composables/useProfileNameDefault').useProfileNameDefault
   const useProfileNameField: typeof import('../composables/useProfileNameField').useProfileNameField
+  const useReaskReview: typeof import('../composables/useReaskReview').useReaskReview
   const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
   const useRoute: typeof import('vue-router').useRoute
@@ -739,6 +744,9 @@ declare global {
   export type { ProfileNameFieldOptions, ValidateOptions, ProfileNameField } from '../composables/useProfileNameField'
   import('../composables/useProfileNameField')
   // @ts-ignore
+  export type { OpenedReask } from '../composables/useReaskReview'
+  import('../composables/useReaskReview')
+  // @ts-ignore
   export type { ReceiptFeeState, ReceiptFeeService, UseReceiptFeeResult } from '../composables/useReceiptFee'
   import('../composables/useReceiptFee')
   // @ts-ignore
@@ -789,6 +797,9 @@ declare global {
   // @ts-ignore
   export type { AccountRowTarget } from '../utils/account-rows'
   import('../utils/account-rows')
+  // @ts-ignore
+  export type { ActiveAccountScope } from '../utils/active-scope'
+  import('../utils/active-scope')
   // @ts-ignore
   export type { ActivityRowTx, ActivityRowJournal, ActivityRowIncoming, ActivityRow, BuildActivityRowsParams, MinimalChainTx } from '../utils/activity-rows'
   import('../utils/activity-rows')
@@ -999,6 +1010,7 @@ declare module 'vue' {
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
+    readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
     readonly SEED_STATUS_RETRY_MS: UnwrapRef<typeof import('../composables/useSeedStatus')['SEED_STATUS_RETRY_MS']>
     readonly SENDS_IN_PROGRESS_KEY: UnwrapRef<typeof import('../composables/useSendsInProgress')['SENDS_IN_PROGRESS_KEY']>
     readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
@@ -1022,6 +1034,7 @@ declare module 'vue' {
     readonly accountStateNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['accountStateNetworkIds']>
     readonly activateNetworkGuarded: UnwrapRef<typeof import('../utils/guarded-network-activation')['activateNetworkGuarded']>
     readonly activationFailureReason: UnwrapRef<typeof import('../composables/unlockWait')['activationFailureReason']>
+    readonly activeAccountScope: UnwrapRef<typeof import('../utils/active-scope')['activeAccountScope']>
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly addressEnds: UnwrapRef<typeof import('../utils/string')['addressEnds']>
@@ -1224,6 +1237,7 @@ declare module 'vue' {
     readonly journalProgressWord: UnwrapRef<typeof import('../utils/journal-state')['journalProgressWord']>
     readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
+    readonly journalTransferAmount: UnwrapRef<typeof import('../utils/journal-state')['journalTransferAmount']>
     readonly journalUpdated: UnwrapRef<typeof import('../utils/journal-mirror')['journalUpdated']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly landingRoute: UnwrapRef<typeof import('../utils/panel-handback')['landingRoute']>
@@ -1455,6 +1469,7 @@ declare module 'vue' {
     readonly useDappOrigin: UnwrapRef<typeof import('../composables/useDappOrigin')['useDappOrigin']>
     readonly useEntityCrud: UnwrapRef<typeof import('../composables/useEntityCrud')['useEntityCrud']>
     readonly useEvent: UnwrapRef<typeof import('../composables/outside.js')['useEvent']>
+    readonly useExecutingTask: UnwrapRef<typeof import('../composables/useExecutingTask')['useExecutingTask']>
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
     readonly useFeeEstimationMap: UnwrapRef<typeof import('../composables/useFeeEstimationMap')['useFeeEstimationMap']>
     readonly useFeeSnapshot: UnwrapRef<typeof import('../composables/useFeeSnapshot')['useFeeSnapshot']>
@@ -1492,6 +1507,7 @@ declare module 'vue' {
     readonly useProfileImportFlow: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useProfileImportFlow']>
     readonly useProfileNameDefault: UnwrapRef<typeof import('../composables/useProfileNameDefault')['useProfileNameDefault']>
     readonly useProfileNameField: UnwrapRef<typeof import('../composables/useProfileNameField')['useProfileNameField']>
+    readonly useReaskReview: UnwrapRef<typeof import('../composables/useReaskReview')['useReaskReview']>
     readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>

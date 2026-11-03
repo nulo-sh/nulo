@@ -24,6 +24,7 @@ import { defaultConfig } from "@/wallet/config"
 import { logCallFailure } from "@/wallet/logger/console-forwarding"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { followAccountRows } from "@/utils/account-rows"
+import { activeAccountScope } from "@/utils/active-scope"
 import { createNetworkSwitchHandler, SWITCH_SETTLED_KEY, settleLatestRun } from "@/popup/network-switch"
 import { createResetCompletion } from "@/popup/reset-completion"
 import { runFencedBootstrap } from "@/popup/profile-bootstrap"
@@ -96,10 +97,7 @@ const arrivals = useArrivals({
 	incomingTransferService: arrivalsIncoming,
 	configService,
 	priceService: arrivalsPrices,
-	scope: () =>
-		appStore.isLogined && appStore.profile?.id && appStore.network?.id && appStore.account?.address
-			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
-			: undefined,
+	scope: () => (appStore.isLogined ? activeAccountScope(appStore) : undefined),
 	epoch: () => appStore.scopeEpoch,
 	routeName: () => route.name,
 	lookupToken: async (record) => {
@@ -119,15 +117,10 @@ void sendsJournal.connect()
 const sends = useSendsInProgress({
 	journalService: sendsJournal,
 	// A dApp window's document reads nothing: its sends are the popup's to show.
-	scope: () =>
-		appStore.isLogined &&
-		appStore.profile?.id &&
-		appStore.network?.id &&
-		appStore.account?.address &&
-		route.name &&
-		!isDappWindow(route.name)
-			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
-			: undefined,
+	scope: () => {
+		const scope = appStore.isLogined ? activeAccountScope(appStore) : undefined
+		return scope && route.name && !isDappWindow(route.name) ? scope : undefined
+	},
 	lookupToken: async (tokenId) => {
 		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(tokenId)
 		return { symbol, decimals, hasDecimals }

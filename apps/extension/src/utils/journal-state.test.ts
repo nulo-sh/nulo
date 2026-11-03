@@ -24,6 +24,7 @@ import {
 	journalCardTitle,
 	type JournalTerminalDisplay,
 	journalTerminalDisplay,
+	journalTransferAmount,
 	type SendOutcome,
 	sanitizeJournalSubtitle,
 	sendOutcome,
@@ -377,6 +378,14 @@ describe("buildJournalTerminalCardProps", () => {
 	test("an empty amount shows no amount and no symbol", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ amountRaw: "" }), TEST_CTX)
 		expect(props).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
+	})
+
+	test("(BUG PIN) a hex amount the in-flight card refuses still formats on the terminal card", () => {
+		// The terminal card hands the stored string to BigInt, which reads hex; only an outside writer stores one.
+		const hex = buildJournalTerminalCardProps(transferRecord({ amountRaw: "0x10" }), TEST_CTX)
+		expect(hex?.amount).toBe(buildJournalTerminalCardProps(transferRecord({ amountRaw: "16" }), TEST_CTX)?.amount)
+		expect(hex?.amount).not.toBeNull()
+		expect(journalCardAmount(transferRecord({ amountRaw: "0x10", terminalAt: null }), TEST_TOKEN_BY_ID)).toBeNull()
 	})
 
 	test("a token whose symbol is empty titles the card 'Transfer' and keeps the empty symbol beside the amount", () => {
@@ -940,5 +949,23 @@ describe("journalCardAmount — an in-flight send's amount, from a sealed row it
 		["a token whose decimals are unknown", "10000000", { ...TST, hasDecimals: false }, null],
 	])("%s", (_, amountRaw, token, shown) => {
 		expect(journalCardAmount(send(amountRaw), () => token)).toBe(shown)
+	})
+})
+
+describe("journalTransferAmount — the one gate a journal transfer's amount passes", () => {
+	const USDC = { symbol: "USDC", decimals: 6, hasDecimals: true }
+	test.each([
+		["a dApp operation", { kind: "dapp_execute" as const, amountRaw: "1500000" }, USDC],
+		["a transfer without an amount", { kind: "transfer" as const, amountRaw: undefined }, USDC],
+		["an empty amount, which would read as a fake 0", { kind: "transfer" as const, amountRaw: "" }, USDC],
+		["a token whose decimals are unknown", { kind: "transfer" as const, amountRaw: "1500000" }, { ...USDC, hasDecimals: false }],
+		["no token", { kind: "transfer" as const, amountRaw: "1500000" }, undefined],
+	])("refuses %s", (_, op, token) => {
+		expect(journalTransferAmount(op, token)).toBeNull()
+	})
+
+	test("returns the stored string unparsed with the token's decimals", () => {
+		expect(journalTransferAmount({ kind: "transfer", amountRaw: "1500000" }, USDC)).toEqual({ raw: "1500000", decimals: 6 })
+		expect(journalTransferAmount({ kind: "transfer", amountRaw: "0x10" }, USDC)).toEqual({ raw: "0x10", decimals: 6 })
 	})
 })

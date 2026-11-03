@@ -1,0 +1,8 @@
+# Phase 3: the task and re-ask hooks; arc 1's review loop
+
+- 2026-11-03 pins first. A parked task snapshot whose scope collapses (network gone, address kept, a task with no networkId) lands nothing: green before the move, and red when the collapse only snapshots the fence instead of ending the run (mutation-checked). The D16 bug pin (a send out across a switch blocks the next scope's send and closes its sheet) green before the move.
+- The move: `isQueuedTransfer` had to become a type guard for the re-ask hook to read `progress.reask` typed; a type-only change. A pre-flush watcher misses a source that changes and changes back inside one tick: a hook test that set the record twice before a tick passed for the wrong reason, so the test awaits between them (the view's watcher behaves the same).
+- Gate: 21 test files, 486 tests; useExecutingTask 15 cases, useReaskReview 11; lint and typecheck.
+- 2026-11-03 Codex R1 (`gpt-6.1-sol`, high, read-only, fresh session, diff from `6c7ba2867`): changes, no production regression. Four findings, all accepted (one in part): `sendEvent` for the corner-link pin (a raw dispatch can skip an ancestor listener by the clock, so a lost `.stop` would pass); the dispose pin needed a record to clear; `accept`'s comment overstated; restating comments. Kept the `isArriving` and `tokens` prop comments, each stating a rule.
+- 2026-11-03 Opus review (`opus`, general-purpose, beside R1): approve, no defect; compared every moved piece with its original. Its comment fixes and one dead import folded.
+- 2026-11-03 Codex R2 (resumed): approve; fixes verified, no regression.

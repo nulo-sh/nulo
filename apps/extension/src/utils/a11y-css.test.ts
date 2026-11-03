@@ -99,7 +99,7 @@ describe("the detail pages' links draw the focus ring on :focus-visible, never o
 			["popup/components/modules/tx/TxHashRow.vue", 1],
 			["popup/components/modules/tx/DetailHeroMeta.vue", 1],
 			["popup/pages/tx/[id].vue", 1],
-			["popup/pages/received/[id].vue", 3],
+			["popup/pages/received/[id].vue", 2],
 			["popup/pages/journal/[id].vue", 1],
 		] as const
 		const unringed = pages.flatMap(([path, count]) => {
