@@ -1,24 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
- * Popup-side service-client registry.
- *
- * Historically this was `core.js` with module-eval side effects — importing
- * it opened `ProfileServiceClient` + `ContactServiceClient` ports eagerly,
- * which made the module impossible to import in tests without a live SW and
- * caused phantom ports when multiple popup surfaces loaded the bundle.
- *
- * The public shape (`managers`, `isServiceReady`, `initTransactionService`,
- * `refreshBalances`) is preserved — every existing consumer keeps working
- * unchanged. Under the hood:
- *   1. `managers` is a read-only Proxy; client construction is deferred until
- *      first access (or until `initAppServiceContext()` is called explicitly).
- *      The lazy slots are written only by their owned writers below.
- *   2. `initAppServiceContext()` is the explicit boot hook. Called from
- *      `popup/index.ts` at startup to preserve the old eager-init timing.
- *
- * Tests that import `@/utils/core` without calling `initAppServiceContext()`
- * and without touching `managers` pay nothing. Tests that want the real
- * clients can still call the init explicitly.
+ * Popup-side service-client registry. Importing it opens no port: `managers` builds the eager
+ * clients on first access, or at the boot hook `initAppServiceContext()`. `managers` is read-only;
+ * the lazy slots change only through their owned writers below.
  */
 
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -111,8 +95,6 @@ function createAppServices(): AppServices {
 	const uiPreferenceService = new UiPreferenceServiceClient()
 	uiPreferenceService.connect()
 
-	// `network`, `transaction`, `account` remain `null` until the popup's unlock
-	// flow sets them (see AppServices jsdoc + the require*/get* accessors).
 	return {
 		profile: profileService,
 		network: null,
