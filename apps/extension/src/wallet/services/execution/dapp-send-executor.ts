@@ -1278,9 +1278,21 @@ export class DappSendExecutor {
 					parentTask,
 				)
 				await finalizeGasLimits(node, txRequest, simulatedTx, { gasPadding: 1, customLimits: feeOpts, feeMultiplier: 1, txsLimits })
-				const submittedEndpointUrl = primaryEndpointUrl(network)
-				// The request carries its own fee payment, so the choice is always the app's.
-				const feeChoice = this.feeChoiceFor("app", network.chainId, txCalls)
+				const recordTransaction = this.sentTxRecorder({
+					origin,
+					network,
+					account,
+					txCalls,
+					nonce: Fr.ZERO,
+					feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+					txRequest,
+					fence,
+					networkId: op.networkId,
+					pendingPublicAuthwits: [],
+					// The request carries its own fee payment, so the choice is always the app's.
+					feeChosenBy: "app",
+					journalId,
+				})
 				leaveLine()
 
 				// Prove with account in scope
@@ -1295,25 +1307,10 @@ export class DappSendExecutor {
 					...fenceChecks(this.deps, fence),
 					markJournal,
 					commitSubmitting,
-					submittedEndpointUrl,
+					submittedEndpointUrl: primaryEndpointUrl(network),
 					onSent: (hash) => this.deps.noteSent(network.chainId, account.address.toString(), hash, txCalls),
 					wantOffchainOutput: offchainOutputOf,
-					recordTransaction: async (hash) =>
-						this.deps.addTransaction({
-							origin,
-							chainId: network.chainId,
-							account: account.address.toString(),
-							calls: txCalls,
-							nonce: Fr.ZERO.toString(),
-							feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
-							hash,
-							submittedEndpointUrl,
-							estimatedFee: getEstimatedFee(txRequest),
-							gasDetails: getGasDetails(txRequest),
-							fence,
-							networkId: op.networkId,
-							feeChoice: await feeChoice,
-						}),
+					recordTransaction,
 				})
 				return { txHash, offchainOutput, node }
 			},

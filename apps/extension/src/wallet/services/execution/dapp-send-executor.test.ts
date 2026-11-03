@@ -2595,11 +2595,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		expect(deps.recordPendingAuthwits).toHaveBeenCalledTimes(1)
 	})
 
-	test.each([
-		["the shared recorder resolves to nothing", false, undefined],
-		["the NO_FROM recorder resolves to addTransaction's own value", true, "the-tx-row"],
-	])("%s", async (_label, noFrom, expected) => {
-		collectOffchainEffectsMock.mockReturnValue([])
+	test("the recorder resolves to nothing", async () => {
 		let recorded: unknown = "unset"
 		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown> }) => {
 			recorded = await ctx.recordTransaction("0xhash")
@@ -2607,8 +2603,8 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		})
 		const h = makeHarness({ addTransaction: vi.fn(async () => "the-tx-row" as never) })
 		Object.assign(h.deps.coordinator, { proveAndSend })
-		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
-		expect(recorded).toBe(expected)
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(recorded).toBeUndefined()
 	})
 
 	const SPONSOR_CALL = { contract: PROTOCOL_SPONSOR, method: "sponsor_unconditionally", args: [] }
