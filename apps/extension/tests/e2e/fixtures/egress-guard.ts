@@ -82,7 +82,6 @@ export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
  */
 export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.aztec-labs.com"]
 
-/** Each pinned release's Testnet host, from its reviewed traits, with why it is tried. */
 function releaseTestnetRefusals(): Array<[string, string]> {
 	const seeding = new Map<string, string[]>()
 	for (const [tag, { testnetHost }] of Object.entries(RELEASE_TRAITS)) {

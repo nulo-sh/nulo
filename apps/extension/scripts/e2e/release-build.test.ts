@@ -49,7 +49,6 @@ describe("releaseBuild", () => {
 		for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 	})
 
-	/** A release cache and an unpack target the test owns, with `files` already cached for `tag`. */
 	function cache(tag: string, files: Record<string, string> = {}): { root: string; into: string } {
 		const root = mkdtempSync(path.join(tmpdir(), "nulo-release-build-test-"))
 		roots.push(root)
