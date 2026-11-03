@@ -134,12 +134,17 @@ describe("PriceService — feeds from the signed list", () => {
 	})
 
 	test("a quote outside the list's band is refused at write, and dropped at read once a list narrows it", async () => {
-		const { service, state } = await harness()
+		const { service, state, browserApi } = await harness()
 		state.list = withWeth()
+		const cached = { coingeckoId: "weth", usd: 3012.5, fetchedAt: state.nowMs - 1000, providerUpdatedAt: null }
+		await browserApi.storage.local.set({ "nulo:core:token-prices": JSON.stringify({ weth: cached }) })
 		state.body = { ...(goodBody(1_000_000) as object), weth: { usd: 50, last_updated_at: 1_000_000 } }
 		const written = await service.refreshIfStale()
-		expect(written.quotes.weth).toBeUndefined()
+		expect(state.fetchCalls).toHaveLength(1)
+		expect(written.quotes.weth).toEqual(cached)
 		expect(written.quotes["usd-coin"]?.usd).toBe(0.9998)
+		const stored = await browserApi.storage.local.get("nulo:core:token-prices")
+		expect(JSON.parse(stored["nulo:core:token-prices"] as string).weth).toEqual(cached)
 
 		state.list = { ...withWeth(), priceFeeds: { ...withWeth().priceFeeds, "usd-coin": { min: 1, max: 5, ticker: "USDC" } } }
 		const narrowed = await service.getQuotes()

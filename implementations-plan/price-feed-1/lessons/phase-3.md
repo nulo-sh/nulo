@@ -9,3 +9,7 @@
 ## Codex R1 (gpt-6.1-sol, high, fresh session): approve
 
 Two Low comment findings, both verified: `price-map.ts`'s header said an out-of-band quote could not survive in the cache, but a row a later list's narrower band excludes stays stored and is only never served; the comments above `isValidQuote` and `withinTable` restated their one-line bodies. Both fixed. No functional or security finding.
+
+## Opus diff review (general-purpose, opus, beside R1): conditional approve
+
+Six Low findings, all verified in the tree and accepted: the write-time refusal test proved only the read side, since `withinTable` would drop the bad quote anyway (now it seeds an in-band stored row and asserts the bad reply leaves it; a mutation dropping `inBand` from `isValidQuote` turns it red); `PriceQuote.usd`'s comment still named a per-id band; `PRICE_ID` and `FEED_ID` were one regex spelled twice (now `FEED_ID`, exported once); wallet mode's refusal of a non-object or over-cap map was unstated in `parse.ts` and FORMAT.md; the `feedFault` deviation was unlogged; two fixture comments named a future publish.

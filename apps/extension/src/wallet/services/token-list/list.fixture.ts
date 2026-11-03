@@ -30,7 +30,7 @@ export const TEST_LIST_ENTRIES: readonly TokenListEntry[] = [
 	entry("GBPC"),
 ]
 
-/** The feeds the first list with feeds carries for today's three priced Testnet tokens. */
+/** Today's bands and tickers for the three priced Testnet tokens, as list feeds. */
 export const TEST_PRICE_FEEDS: PriceFeeds = {
 	"usd-coin": { min: 0.2, max: 5, ticker: "USDC" },
 	tether: { min: 0.2, max: 5, ticker: "USDT" },

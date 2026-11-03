@@ -4,7 +4,8 @@
  *
  * Two modes. `wallet` reads a list a later format revision may have extended: it ignores unknown
  * keys and drops a price feed record it cannot accept, so `selectEntries` leaves that record's
- * entries unpriced and the rest of the list, flags included, still reads. `strict` is what the
+ * entries unpriced and the rest of the list, flags included, still reads; a feed map that is not an
+ * object or holds over `MAX_PRICE_FEEDS` keys refuses the list, as an over-long `tokens` does. `strict` is what the
  * signer and the tree tests demand: known keys only, a bundled class, at most
  * `MAX_ENTRIES_PER_CHAIN` entries per chain, and, when the list carries `priceFeeds`, a record for
  * every price id and an entry for every record. Both refuse a value they would have to normalize:
@@ -15,6 +16,7 @@ import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
 import { PAYLOAD_FORMAT } from "./envelope"
 import {
 	FEE_JUICE_PRICE_ID,
+	FEED_ID,
 	isFeedId,
 	MAX_BAND_RATIO,
 	MAX_FEED_USD,
@@ -32,7 +34,6 @@ const MAX_TOKENS = 1024
 const MAX_UINT32 = 0xffff_ffff
 
 const FIELD_HEX = /^0x[0-9a-f]{64}$/
-const PRICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const TICKER = /^[A-Za-z0-9]{1,12}$/
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/
 /** Control, format (bidi overrides, zero-width joiners) and line/paragraph separators. */
@@ -108,7 +109,7 @@ function isIntIn(value: unknown, min: number, max: number): value is number {
 
 function checkPriceId(value: unknown, path: string): string | undefined {
 	if (value === undefined) return undefined
-	ensure(typeof value === "string" && PRICE_ID.test(value), path)
+	ensure(typeof value === "string" && FEED_ID.test(value), path)
 	return value as string
 }
 
@@ -126,7 +127,8 @@ function checkFeed(value: unknown, path: string, mode: ParseMode): PriceFeed {
 
 /**
  * Validates the feed map. Strict refuses any record it cannot accept; wallet mode drops it, so a
- * record a later revision words differently costs its tokens their price, never the list. A key is
+ * record a later revision words differently costs its tokens their price, never the list. Both
+ * refuse a map that is not an object or holds over `MAX_PRICE_FEEDS` keys. A key is
  * named by its index until it has passed `isFeedId`, and Fee Juice's id is never the list's.
  */
 export function checkPriceFeeds(value: unknown, path: string, mode: ParseMode): PriceFeeds {

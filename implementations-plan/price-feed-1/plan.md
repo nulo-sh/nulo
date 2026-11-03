@@ -131,6 +131,7 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 | D12 | A feed change does not raise the floor; a closed `known-limit` issue at close-out | Opus R1: raise it when a feed is removed or changed (about 10 lines, the existing mechanism). Codex R1: a known limit. Taken: Codex's, because band re-tuning is routine and would raise the floor at most publishes, the floor protects only builds after it, and `floor.ts:12-13` already treats a changed `priceId` so. Reopen when a published feed is corrected because it was wrong |
 | D13 | No refresh on list change | brief: fetching unchanged |
 | D14 | No new e2e scenario; the source-run list carries its two feeds | unit and composable tests prove a new id prices; the existing priced specs prove the path end to end. Artifact runs (release and nightly smoke, `nightly.yml:327,354`, `release.yml:399,416`) hold the published list and skip their fiat specs until the feeds publish (`fixtures/token-list.ts:218-222`) |
+| D15 | As built: `inBand` sits in `price-map.ts`; the feed diff's tests sit in `test/publish.test.ts` beside the token and flag diffs; invariant 6 is proved in the parse, service and composable tests, with no `price-map.test.ts`; a try/catch per record in `checkPriceFeeds` in place of `feedFault` | the file placement above (`lessons/phase-1.md`, `phase-2.md`) |
 
 ## Security & Adversarial Considerations
 
@@ -204,6 +205,8 @@ list fetch → `readTokenList` (verify, parse wallet, select; feeds attached) �
 | Codex R2 (resume) | approve | — | — |
 | Codex final (fresh) | conditional approve: build before each smoke run; qualify D3's accuracy claim; the `prepare` summary's wording in OWNER-ASKS | all three (the wording recorded as the token-list-live-check plan did: no wallet surface, content named by the owner's direction) | — |
 | Codex final R2 (resume) | approve | — | — |
+| Impl Codex R1 (fresh, over the arc diff) | approve; two Low comment findings | both: `price-map.ts`'s header no longer claims an out-of-band row cannot stay stored; two restating comments dropped | — |
+| Impl Opus (diff review, beside R1) | conditional approve: pin the write and merge refusal against the stored row; the stale `PriceQuote.usd` comment | both; also the shared `FEED_ID` spelling, wallet mode's whole-map refusal stated in `parse.ts` and FORMAT.md, the `feedFault` deviation logged, the fixtures' comments | — |
 
 ## Delivery
 

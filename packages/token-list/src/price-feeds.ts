@@ -26,7 +26,8 @@ export const MAX_BAND_RATIO = 1000
 /** 16 entries per chain on the two public networks: the request and its reply stay small. */
 export const MAX_PRICE_FEEDS = 32
 
-const FEED_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+/** A CoinGecko id's spelling, for an entry's `priceId` and a feed's key alike. */
+export const FEED_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 /** A CoinGecko id spelling, and never a name a plain object inherits (`constructor`), so a lookup
  *  keyed by it can only find what was stored under it. */

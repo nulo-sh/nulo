@@ -109,7 +109,9 @@ entry; the publisher never signs a list that breaks either.
 A reader prices an entry only through the record its `priceId` names, and drops any quote outside
 that record's band, whenever it was fetched. A record it cannot accept (a bad key, a field out of
 range, a malformed ticker) leaves the entries naming it unpriced and the rest of the list, flags
-included, in force. A reader that knows no `priceFeeds` ignores the key and keeps its own table.
+included, in force. A `priceFeeds` that is not an object, or holds more than 32 keys, makes the
+whole list unreadable, as an over-long `tokens` does. A reader that knows no `priceFeeds` ignores
+the key and keeps its own table.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
 anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo
