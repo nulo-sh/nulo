@@ -9,7 +9,7 @@
  * instead: the lagging flag stays in the equation only where no better source exists.
  */
 
-import { sleep } from "@nulo/wallet-core/utils"
+import { raceTimeout, sleep } from "@nulo/wallet-core/utils"
 
 export type AuthRequiredGate = "pass" | "auth"
 
@@ -80,13 +80,9 @@ export async function lookupActiveProfileWithBackoff<P>(
 	return { kind: "unreachable" }
 }
 
-/** Races a request against the remaining budget. A request the deadline abandons is still
- *  observed (its late rejection is swallowed) so it can never surface as unhandled. */
+/** Races a request against the remaining budget; a request the deadline abandons stays observed. */
 function withinDeadline<T>(request: Promise<T>, ms: number): Promise<T> {
-	request.catch(() => {})
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const expiry = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => reject(new Error("lookup deadline exhausted")), ms)
+	return raceTimeout(request, ms, () => {
+		throw new Error("lookup deadline exhausted")
 	})
-	return Promise.race([request, expiry]).finally(() => clearTimeout(timer))
 }
