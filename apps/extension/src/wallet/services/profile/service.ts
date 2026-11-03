@@ -96,6 +96,9 @@ type RestoreCommit = Readonly<{
 const DEK_UNRECOVERABLE_MESSAGE =
 	"Imported-keys key unrecoverable. Imported keys and local chain state are lost. Export a full backup (or the recovery phrase) and restore it to repair."
 
+/** A path's refusal of a password that does not open the row. */
+const invalidPassword = (): Error => new InvalidPasswordError()
+
 /** The unlock-type gate of `snapshotForUnlock`: a retired row first, then the other stored type by
  *  name; only the passkey arm requires the row to classify as passkey. */
 function assertUnlockKind(row: Profile, expect: "password" | "passkey"): void {
@@ -698,56 +701,52 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 		// Phase 2 — crypto UNLOCKED. Caller pays ~1s PBKDF2 but the rest of
 		// the RPC surface stays responsive.
-		const opened = await this.codec.openSlots(snapshot, { password })
-		if (!opened) {
-			// Can't tell wrong-password from storage corruption from this single
-			// null, but GUARD catches wrong-password first in practice. Auth UI
-			// matches on InvalidPasswordError (popup/pages/auth.vue:65-74).
-			throw new InvalidPasswordError()
-		}
+		// A wrong password and a corrupted slot both fail to open, but GUARD catches a wrong password
+		// first in practice. Auth UI matches on InvalidPasswordError (popup/pages/auth.vue:65-74).
 		let dek: ImportedKeysDek | null = null
 		try {
-			// Pairing check at the entropy-decryption site: the stored words must still derive
-			// the stored master. A mismatch means a tampered/corrupted/transplanted row whose
-			// exported recovery phrase would point at a DIFFERENT wallet — fail closed before any
-			// session opens. (CORE material — this failure BLOCKS, per the degradation state
-			// machine rule 1; the DEK/MAC checks below degrade instead.)
-			await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
+			return await this.codec.withOpenedSlots(snapshot, { password }, invalidPassword, async (opened) => {
+				// Pairing check at the entropy-decryption site: the stored words must still derive
+				// the stored master. A mismatch means a tampered/corrupted/transplanted row whose
+				// exported recovery phrase would point at a DIFFERENT wallet — fail closed before any
+				// session opens. (CORE material — this failure BLOCKS, per the degradation state
+				// machine rule 1; the DEK/MAC checks below degrade instead.)
+				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
 
-			// Phase 3 — re-enter lock, revalidate, open session.
-			return await this.runExclusive(async () => {
-				const current = await this.repo.get(id)
-				if (!current) {
-					throw new Error("Invalid profile id")
-				}
-				// A deletion that began during the (lock-free) phase-2 unseal must
-				// abort the unlock — the id is now reserved even if the row lingers.
-				if (this.deletionState.isReserved(id)) {
-					throw new Error("Invalid profile id")
-				}
-				if (current.type !== "password") {
-					throw new Error("Profile requires passkey")
-				}
-				if (current.guard !== snapshot.guard || current.secret !== snapshot.secret || current.entropy !== snapshot.entropy) {
-					// Password changed under us. `secret` is for the OLD ciphertext;
-					// the passhash wouldn't unseal the current encrypted blob, so
-					// SessionManager.restore would silently close on the next SW
-					// suspension. Refuse and let the user retry with the new password.
-					throw new InvalidPasswordError()
-				}
-				// Degradation state machine, rule 2: a DEK-unseal failure OR an envelope-MAC
-				// v3 failure opens DERIVED-ONLY — imported accounts quarantine per-account
-				// (imported material must never profile-block derived funds; blocking
-				// here would hand a storage-writer a one-field DoS lever), a user-visible
-				// warning fires (the popup listens on onImportedKeysDegraded — never just a
-				// log), and NO bearer is persisted (open() enforces that from the absent dek).
-				dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "unlock")
-				return await this.openAndWarnIfDegradedHoldingLock(current, opened.secret, dek)
+				// Phase 3 — re-enter lock, revalidate, open session.
+				return await this.runExclusive(async () => {
+					const current = await this.repo.get(id)
+					if (!current) {
+						throw new Error("Invalid profile id")
+					}
+					// A deletion that began during the (lock-free) phase-2 unseal must
+					// abort the unlock — the id is now reserved even if the row lingers.
+					if (this.deletionState.isReserved(id)) {
+						throw new Error("Invalid profile id")
+					}
+					if (current.type !== "password") {
+						throw new Error("Profile requires passkey")
+					}
+					if (current.guard !== snapshot.guard || current.secret !== snapshot.secret || current.entropy !== snapshot.entropy) {
+						// Password changed under us. `secret` is for the OLD ciphertext;
+						// the passhash wouldn't unseal the current encrypted blob, so
+						// SessionManager.restore would silently close on the next SW
+						// suspension. Refuse and let the user retry with the new password.
+						throw new InvalidPasswordError()
+					}
+					// Degradation state machine, rule 2: a DEK-unseal failure OR an envelope-MAC
+					// v3 failure opens DERIVED-ONLY — imported accounts quarantine per-account
+					// (imported material must never profile-block derived funds; blocking
+					// here would hand a storage-writer a one-field DoS lever), a user-visible
+					// warning fires (the popup listens on onImportedKeysDegraded — never just a
+					// log), and NO bearer is persisted (open() enforces that from the absent dek).
+					dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "unlock")
+					return await this.openAndWarnIfDegradedHoldingLock(current, opened.secret, dek)
+				})
 			})
 		} finally {
-			// zero buffers after sessionManager has copied. Runs on
-			// success AND on the revalidate-failure throw path.
-			opened.wipe()
+			// After sessionManager has copied it, on success AND on the revalidate-failure throw path;
+			// the frame wiped the slots first.
 			zeroize(dek)
 		}
 	}
@@ -840,20 +839,19 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (answer.credential.id !== snapshot.credentialId) {
 				throw new Error("Invalid profile id")
 			}
-			const opened = await this.codec.openSlots(snapshot, { passkey: answer.credential })
-			if (!opened) throw new PasskeyNotOpenedError()
 			let dek: ImportedKeysDek | null = null
 			try {
-				// The pairing check runs at every unlock: the stored words must still derive the stored
-				// master (CORE material — this failure BLOCKS; the DEK/MAC checks below degrade instead).
-				await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
-				return await this.runExclusive(async () => {
-					const current = await this.revalidatePasskeyRowHoldingLock(id, snapshot)
-					dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "passkey unlock")
-					return await this.openAndWarnIfDegradedHoldingLock(current, opened.secret, dek)
+				return await this.codec.withOpenedSlots(snapshot, { passkey: answer.credential }, invalidPassword, async (opened) => {
+					// The pairing check runs at every unlock: the stored words must still derive the stored
+					// master (CORE material — this failure BLOCKS; the DEK/MAC checks below degrade instead).
+					await this.codec.assertEntropyMasterPair(opened.secret, opened.entropy)
+					return await this.runExclusive(async () => {
+						const current = await this.revalidatePasskeyRowHoldingLock(id, snapshot)
+						dek = await this.unsealTrustedDekHoldingLock(id, current, opened, "passkey unlock")
+						return await this.openAndWarnIfDegradedHoldingLock(current, opened.secret, dek)
+					})
 				})
 			} finally {
-				opened.wipe()
 				zeroize(dek)
 			}
 		})
