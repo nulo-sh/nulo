@@ -2,9 +2,7 @@ import { journalIdOf } from "@nulo/extension-messaging/errors"
 import type { ToastAction, ToastOptions } from "@/composables/toast"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 import { transferFailureLogLevel, transferFailureSnack } from "@/popup/utils/transfer-failure-copy"
-import { formatSnackAmount } from "@/utils/snack-amount"
-import { trimAddress } from "@/utils/string"
-import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+import { sendSummary } from "@/utils/send-summary"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 
 /** View opens `/popup/tx/<hash>`, so the hash is offered only once it is a 32-byte hex string. */
@@ -90,7 +88,7 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 	)
 		.then((hash) => {
 			if (!deps.isCurrent(snap.epoch)) return
-			deps.openToast({ kind: "success", label: "Transaction submitted", sub: submittedSub(snap), action: viewAction(deps, hash) })
+			deps.openToast({ kind: "success", label: "Transaction submitted", sub: sendSummary(snap), action: viewAction(deps, hash) })
 		})
 		.catch(async (err: unknown) => {
 			deps.awaiting.remove(awaitingId)
@@ -110,12 +108,6 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 		.finally(deps.onSettled)
 
 	return awaitingId
-}
-
-function submittedSub(snap: TransferSnapshot): string {
-	const amount = formatSnackAmount(snap.amount, snap.decimals)
-	const symbol = sanitizeWireString(snap.symbol, 32)
-	return `${amount} ${symbol} to ${trimAddress(snap.destination, 6, 4, "…")}`
 }
 
 function viewAction(deps: SubmitDeps, hash: string): ToastAction | undefined {

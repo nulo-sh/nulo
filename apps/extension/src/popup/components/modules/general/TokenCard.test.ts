@@ -55,6 +55,9 @@ const tokenInfo = {
 	hasDecimals: true,
 }
 
+/** The split line's two figures, private then public. */
+const splitSides = (w: ReturnType<typeof factory>) => w.get('[data-testid="token-split"]').text().trim().split(/\s+/)
+
 const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record<string, unknown> = {}) => {
 	const tokenBalance = {
 		id: 42,
@@ -367,7 +370,7 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		expect(w.text()).toContain("Test Token")
 	})
 
-	test("a holding too long for the row keeps every whole digit: the total at 10 characters, each side at 6", async () => {
+	test("a holding too long for the row keeps every whole digit: the total and each side at 10 characters", async () => {
 		mockQuotes = {}
 		const w = factory({
 			updatedAt: 1,
@@ -376,10 +379,28 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		})
 		await flushPromises()
 		// 123,458,023.62 in total, 123,456,789.12 private, 1,234.5 public.
-		expect(w.text()).toContain("123.45M")
-		expect(w.text()).toContain("123.4M")
-		expect(w.text()).toContain("1,234")
-		expect(w.text()).not.toContain("1,234.")
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("123.45M")
+		expect(splitSides(w)).toEqual(["123.45M", "1,234.5"])
+	})
+
+	test("each side shows the total's decimals: 999.999 all public reads 999.999 on its line", async () => {
+		mockQuotes = {}
+		const w = factory({ updatedAt: 1, publicBalance: (999_999n * 10n ** 15n).toString() })
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
+		expect(splitSides(w)).toEqual(["0", "999.999"])
+	})
+
+	test("sides that differ keep their own digits, cut and never rounded up, as the total is", async () => {
+		mockQuotes = {}
+		const w = factory({
+			updatedAt: 1,
+			privateBalance: (5n * 10n ** 14n).toString(),
+			publicBalance: (9_999_985n * 10n ** 14n).toString(),
+		})
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.999")
+		expect(splitSides(w)).toEqual(["0.0005", "999.9985"])
 	})
 
 	test("a row the signed list flags reads 'Flagged as a scam' in place of its name; an unflagged row keeps its name", async () => {

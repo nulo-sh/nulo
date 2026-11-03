@@ -48,8 +48,11 @@ const isMalformed = computed(
 const decimals = computed(() => (isMalformed.value ? 0 : token.value.decimals))
 const publicRaw = computed(() => (isMalformed.value ? 0n : BigInt(props.tokenBalance.publicBalance || 0)))
 const privateRaw = computed(() => (isMalformed.value ? 0n : BigInt(props.tokenBalance.privateBalance || 0)))
+/** The total and each side share one width: a side never holds more than the total, so it never
+ *  reads fewer of its digits. */
+const FIGURE_WIDTH = 10
 const totalBalance = computed(() =>
-	isMalformed.value ? "—" : balanceFormatted(privateRaw.value + publicRaw.value, decimals.value, 10, { compact: true }).value,
+	isMalformed.value ? "—" : balanceFormatted(privateRaw.value + publicRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value,
 )
 
 /** Holding fiat value between amount and split — absent when unpriced.
@@ -63,8 +66,8 @@ onBeforeUnmount(() => {
 	prices.dispose()
 	priceService.disconnect()
 })
-const privateFormatted = computed(() => balanceFormatted(privateRaw.value, decimals.value, 6, { compact: true }).value)
-const publicFormatted = computed(() => balanceFormatted(publicRaw.value, decimals.value, 6, { compact: true }).value)
+const privateFormatted = computed(() => balanceFormatted(privateRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value)
+const publicFormatted = computed(() => balanceFormatted(publicRaw.value, decimals.value, FIGURE_WIDTH, { compact: true }).value)
 // Treat updatedAt===0 as "balance has never synced" — the projector hasn't run yet
 // so the "0" placeholder in the row would be misleading. Render a skeleton instead.
 const isInitialSync = computed(() => !!props.tokenBalance && props.tokenBalance.updatedAt === 0)
@@ -117,7 +120,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 			</Flex>
 			<Flex v-else direction="column" align="end" gap="2">
 				<span data-testid="token-amount" :class="[$style.amount, syncFailed && $style.amount_stale]" :data-malformed="isMalformed || undefined">{{ totalBalance || 0 }}</span>
-				<span v-if="!isMalformed" :class="$style.detail">
+				<span v-if="!isMalformed" :class="$style.detail" data-testid="token-split">
 					<span :class="$style.icon_private"><Icon name="private" size="12" /></span>
 					{{ privateFormatted }}
 					<span :class="$style.pub_group">
