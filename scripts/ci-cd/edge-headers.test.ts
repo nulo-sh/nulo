@@ -1,7 +1,7 @@
 /**
- * The five public surfaces are separate deployables, each writing its own security headers. Every
+ * The six public surfaces are separate deployables, each writing its own security headers. Every
  * surface without a recorded exception must agree on the shared ones, and every exception names
- * the exact value it keeps, so a change meant for all five fails here until each carries it, and an
+ * the exact value it keeps, so a change meant for all six fails here until each carries it, and an
  * intended difference is told apart from a forgotten one. CSP, CORS and caching stay per surface.
  */
 import { describe, expect, test } from "bun:test"
@@ -10,13 +10,14 @@ import { join } from "node:path"
 import { siteHeaders } from "../../apps/landing/scripts/headers"
 import { OWN_HEADERS } from "../../apps/landing/src/worker"
 import { POLICY } from "../../infra/passkey-rp/src/worker"
+import { SECURITY_HEADERS as RPC_PROXY_HEADERS } from "../../infra/rpc-proxy/src/respond"
 import { SECURITY_HEADERS } from "../../infra/subscribe/src/respond"
 
 const ROOT = join(import.meta.dir, "..", "..")
 
 const SHARED = ["strict-transport-security", "x-content-type-options", "x-frame-options", "referrer-policy", "permissions-policy"] as const
 type Shared = (typeof SHARED)[number]
-type Surface = "landing" | "landing-worker" | "subscribe" | "passkey-rp" | "token-list"
+type Surface = "landing" | "landing-worker" | "subscribe" | "passkey-rp" | "token-list" | "rpc-proxy"
 type HeaderMap = Readonly<Record<string, string>>
 /** The value a surface keeps instead of the others' (`null`: it sets none), and what is known of why. */
 type Exception = { value: string | null; note: string }
@@ -57,6 +58,7 @@ const SURFACES: Readonly<Record<Surface, HeaderMap>> = {
 	subscribe: lowerCased(SECURITY_HEADERS),
 	"passkey-rp": lowerCased(POLICY),
 	"token-list": headersFile("infra/token-list/public/_headers"),
+	"rpc-proxy": lowerCased(RPC_PROXY_HEADERS),
 }
 
 /** The surfaces without an exception for `header` must all set it, to one value. */
@@ -110,7 +112,7 @@ describe("the edge surfaces' shared security headers", () => {
 		[
 			"a surface without an exception that drops a header",
 			withHeader("subscribe", "x-content-type-options", null),
-			"x-content-type-options: landing=nosniff, landing-worker=nosniff, subscribe=null, passkey-rp=nosniff, token-list=nosniff",
+			"x-content-type-options: landing=nosniff, landing-worker=nosniff, subscribe=null, passkey-rp=nosniff, token-list=nosniff, rpc-proxy=nosniff",
 		],
 		[
 			"an excepted surface that drifts to another value",
