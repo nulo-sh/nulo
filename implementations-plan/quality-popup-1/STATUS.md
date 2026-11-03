@@ -8,3 +8,4 @@
 - 2026-11-03 arc 1: phase 3 committed (onboarding import's Decrypt, Import and Continue refuse a repeat Enter). Arc 1 end gate next.
 - 2026-11-03 arc 1 end gate: audit:vue green; test:all green; audit:dup production 179/8794 at phase 3's head, back to 178/8787 after D14; smoke 7 files Chrome 22 passed (234 s, base 221 s), Firefox 18 passed 4 skipped as base (195 s, base 184 s); network restore-again + backup-restore-integrity on Chrome 4 passed. Codex fix loop round 1 next.
 - 2026-11-03 arc 1 fix loop: Codex R1 approve (comment cleanup), Opus conditional approve (F1-F3 folded), Codex R2 approve. Final gates on the head next.
+- 2026-11-03 arc 1 final gates on 34b55d07d: lint, typecheck:all, test:all, check:plans green; audit:dup 178/8787; smoke Chrome 22 passed (221 s), Firefox 18 passed 4 skipped (197 s); network 4 passed. PR next.
