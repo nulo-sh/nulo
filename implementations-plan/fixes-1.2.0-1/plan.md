@@ -1,7 +1,7 @@
 ---
 plan: fixes-1.2.0-1
 tier: light
-status: approved by Codex round 2; arc 1 next
+status: phase 1 ✓; review loop next
 issues: "#1574"
 driver: claude-code
 claude_model: opus
@@ -83,7 +83,7 @@ No change to `useBalanceTasks`, the task service, `TokenCard`, Holdings, storage
 
 Home's Holdings header dot (`tokens-refreshing`) and a failed row's dim on Home: no layout, copy or format change. Both now hold for as long as a refresh runs, the behaviour their code already documents. Sign-off: the lane brief, "None visible beyond the dot staying lit for as long as a refresh runs, which is today's intended behaviour." Holdings, Send and Select token: no change.
 
-## Phase 1 (arc 1): every Home row writer derives the flag from the remaining tasks
+## Phase 1 (arc 1): every Home row writer derives the flag from the remaining tasks ✓
 
 1. Add three tests to `TokensView.test.ts`, describe "TokensView — section refresh dot", rows `[X]`:
    - T1: old task created then finished, new task created, old task deleted: the dot is lit and the card's `tokenBalance.isUpdating` is `true`; then the new task finishes: the dot is out.
