@@ -9,8 +9,8 @@
  */
 
 import { mkdirSync } from "node:fs"
-import { assetNames, parseShasums, type RemoteAsset } from "./attach-assets"
-import { fetchVerified, type PublishedReadIO, readBounded, realIO as releaseIO } from "./attach-assets-run"
+import type { RemoteAsset } from "./attach-assets"
+import { checkShasums, fetchVerified, type PublishedReadIO, readBounded, realIO as releaseIO } from "./attach-assets-run"
 import { AMO_API, GECKO_ID } from "./publish-firefox-amo"
 import { compareCopies, crxPayload, entryListProblem, type Store } from "./store-copy"
 import { command } from "./workflow-command"
@@ -110,12 +110,8 @@ async function releaseZip(io: StoreCopyIO, store: Store, version: string, dir: s
 			: await fetchVerified(io, { tag, tagSha }, release.assets, name, path)
 		if (problem) return { problem }
 	}
-	const sums = parseShasums(await io.readText(`${dir}/SHASUMS256.txt`))
-	const zips = assetNames(version).filter((name) => name.endsWith(".zip"))
-	if (!sums || sums.size !== zips.length || !zips.every((name) => sums.has(name)))
-		return { problem: "SHASUMS256.txt does not list exactly the two zips" }
-	if (sums.get(zip) !== (await io.sha256(`${dir}/${zip}`))) return { problem: `SHASUMS256.txt does not match ${zip}` }
-	return { path: `${dir}/${zip}` }
+	const sums = await checkShasums(io, version, dir, [zip])
+	return sums ? { problem: sums } : { path: `${dir}/${zip}` }
 }
 
 /** Every finding for one store, each already a workflow error line; empty when the copy is the release. */

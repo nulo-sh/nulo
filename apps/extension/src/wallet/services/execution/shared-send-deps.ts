@@ -20,7 +20,5 @@ export interface SharedSendDeps {
 	getPXE(network: Network): IPXE
 	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<IAccountContract>
 	getPendingForAccount(account: string): { hash: string }[]
-	/** Mirrors `TransactionService.addTransaction` — indexed type keeps the
-	 *  seam in sync with the source signature. */
 	addTransaction: TransactionService["addTransaction"]
 }

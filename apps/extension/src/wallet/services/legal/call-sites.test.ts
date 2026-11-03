@@ -33,8 +33,8 @@ describe("the Terms wall", () => {
 		expect(filesMatching(/\.assertCurrent\(\)/).sort()).toEqual([
 			"wallet/services/execution/execution-coordinator.ts",
 			"wallet/services/execution/service.ts",
-			"wallet/services/wallet-sdk/background.ts",
 			"wallet/services/wallet-sdk/discovery-flow.ts",
+			"wallet/services/wallet-sdk/wallet-message.ts",
 		])
 	})
 

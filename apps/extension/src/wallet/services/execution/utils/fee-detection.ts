@@ -1,4 +1,8 @@
-import { type FeeCallLike, classifyFeePayer } from "@nulo/wallet-bridge"
+import { type FeeCallLike, type FeePayerRoute, classifyFeePayer } from "@nulo/wallet-bridge"
+
+export function embeddedPaymentOf(route: FeePayerRoute | undefined): "fjwc" | "fpc" | undefined {
+	return route === "fjwc" || route === "fpc" ? route : undefined
+}
 
 /**
  * The embedded fee payment a payload carries — "fjwc" (the sender claims Fee Juice in setup) or
@@ -8,6 +12,5 @@ import { type FeeCallLike, classifyFeePayer } from "@nulo/wallet-bridge"
  * never end setup.
  */
 export function detectEmbeddedFeePayment(feePayer: unknown, from: unknown, calls?: ReadonlyArray<FeeCallLike>): "fjwc" | "fpc" | undefined {
-	const route = classifyFeePayer(feePayer, from, calls)
-	return route === "fjwc" || route === "fpc" ? route : undefined
+	return embeddedPaymentOf(classifyFeePayer(feePayer, from, calls))
 }

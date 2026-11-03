@@ -59,6 +59,7 @@ async function boot(opts: { api?: FakeBrowserApi; strict?: boolean } = {}) {
 	const write = (id: string, value: Record<string, unknown>) => api.storage.local.set({ [key(id)]: JSON.stringify(value) })
 	const internals = service as unknown as {
 		secretBox: object
+		codec: object
 		sessionManager: SessionManager
 		lock: { withLock: <T>(fn: (isCurrent: () => boolean) => Promise<T>) => Promise<T> }
 	}
@@ -485,7 +486,7 @@ describe("changeUnlockMethod", () => {
 				const answer = await newAnswer("cred-old")
 				const id = (await env.service.createPasskeyProfile("K", answer)).id
 				const other = await EncryptionKey.getPasshash("another-pass")
-				const owner = (sealer === "sealWithPasshash" ? env.internals.secretBox : env.service) as unknown as Record<
+				const owner = (sealer === "sealWithPasshash" ? env.internals.secretBox : env.internals.codec) as unknown as Record<
 					string,
 					(passhash: unknown, ...rest: unknown[]) => Promise<unknown>
 				>
@@ -521,9 +522,9 @@ describe("changeUnlockMethod", () => {
 	test("a DEK its record does not cover is wiped before the refusal", async () => {
 		const env = await boot()
 		const id = (await env.service.createProfile("P", PASSWORD)).id
-		const internals = env.service as unknown as Record<string, (...args: unknown[]) => Promise<boolean>>
+		const codec = env.internals.codec as Record<string, (...args: unknown[]) => Promise<boolean>>
 		let checked: Uint8Array | undefined
-		vi.spyOn(internals, "envelopeMacValid").mockImplementationOnce(async (...args) => {
+		vi.spyOn(codec, "envelopeMacValid").mockImplementationOnce(async (...args) => {
 			checked = args[3] as Uint8Array
 			return false
 		})

@@ -199,6 +199,7 @@ declare global {
   const effectScope: typeof import('vue').effectScope
   const endLanding: typeof import('../utils/panel-handback').endLanding
   const endsSelection: typeof import('../utils/selection').endsSelection
+  const ensureAccountClient: typeof import('../utils/core').ensureAccountClient
   const errorLogWriters: typeof import('../composables/useFullBackupImport').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
   const exportsHeld: typeof import('../composables/useStaleNetwork').exportsHeld
@@ -425,6 +426,8 @@ declare global {
   const remapByMap: typeof import('../utils/full-backup-helpers').remapByMap
   const remapNetworkIdByChain: typeof import('../utils/full-backup-helpers').remapNetworkIdByChain
   const removeHandbackIfUnchanged: typeof import('../utils/panel-handback').removeHandbackIfUnchanged
+  const replaceAccountClient: typeof import('../utils/core').replaceAccountClient
+  const replaceNetworkClient: typeof import('../utils/core').replaceNetworkClient
   const requireAccount: typeof import('../utils/core').requireAccount
   const requireNetwork: typeof import('../utils/core').requireNetwork
   const reseedNetworksStage: typeof import('../composables/full-backup-restore').reseedNetworksStage
@@ -1111,6 +1114,7 @@ declare module 'vue' {
     readonly effectScope: UnwrapRef<typeof import('vue')['effectScope']>
     readonly endLanding: UnwrapRef<typeof import('../utils/panel-handback')['endLanding']>
     readonly endsSelection: UnwrapRef<typeof import('../utils/selection')['endsSelection']>
+    readonly ensureAccountClient: UnwrapRef<typeof import('../utils/core')['ensureAccountClient']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/useFullBackupImport')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
     readonly exportsHeld: UnwrapRef<typeof import('../composables/useStaleNetwork')['exportsHeld']>
@@ -1337,6 +1341,8 @@ declare module 'vue' {
     readonly remapByMap: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapByMap']>
     readonly remapNetworkIdByChain: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapNetworkIdByChain']>
     readonly removeHandbackIfUnchanged: UnwrapRef<typeof import('../utils/panel-handback')['removeHandbackIfUnchanged']>
+    readonly replaceAccountClient: UnwrapRef<typeof import('../utils/core')['replaceAccountClient']>
+    readonly replaceNetworkClient: UnwrapRef<typeof import('../utils/core')['replaceNetworkClient']>
     readonly requireAccount: UnwrapRef<typeof import('../utils/core')['requireAccount']>
     readonly requireNetwork: UnwrapRef<typeof import('../utils/core')['requireNetwork']>
     readonly reseedNetworksStage: UnwrapRef<typeof import('../composables/full-backup-restore')['reseedNetworksStage']>

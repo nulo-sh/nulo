@@ -755,8 +755,10 @@ const editRowDuringUnlock: Drive<"editRowDuringUnlock"> = async (run, p, _step, 
 /** Counts the slot sets `profiles` opens until `restore` runs. */
 function countOpens(profiles: ProfileService): { readonly count: number; restore: () => void } {
 	type Opener = { openSlots: (...args: unknown[]) => Promise<unknown> }
-	const target = profiles as unknown as Opener
+	const target = (profiles as unknown as { codec: Opener }).codec
 	const open = target.openSlots
+	// A count of opens through a method that is gone would stay 0 and pass every check on it.
+	if (typeof open !== "function") throw new Error("countOpens: the profile service has no slot opener to count")
 	let count = 0
 	target.openSlots = async function (this: unknown, ...args) {
 		const opened = await open.apply(this, args)

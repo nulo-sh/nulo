@@ -219,7 +219,7 @@ export type NewOperationInput = {
 	 * Optional initial-stage override. Defaults to `{ stage: "pending" }`.
 	 * Restricted to non-terminal pre-execution stages so callers can't
 	 * mint impossible terminal-stage records by accident. Used by
-	 * `background.ts:onWalletMessage` (via `tryCreateQueuedJournal`) to
+	 * `wallet-message.ts:onWalletMessage` (via `tryCreateQueuedJournal`) to
 	 * surface incoming dApp sendTx requests in the activity feed before
 	 * the handler claims them, and by a popup transfer that must wait for
 	 * an earlier send.
