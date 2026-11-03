@@ -2,7 +2,7 @@ import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import type { BrowserApi, StorageChanges } from "@nulo/wallet-core/ports"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import { LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { sentenceName } from "@/utils/string"
 import { NOOP_RESTORE_GATE, type RestoreGate } from "@/e2e/restore-gate"
@@ -297,12 +297,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 	public async waitForRunEnd(): Promise<void> {
 		const flight = this.flight
 		if (!flight) return
-		let timer: ReturnType<typeof setTimeout> | undefined
-		const cap = new Promise<void>((resolve) => {
-			timer = setTimeout(resolve, RESET_INGRESS_WAIT_MS)
-		})
-		await Promise.race([flight.ended, cap])
-		clearTimeout(timer)
+		await raceTimeout(flight.ended, RESET_INGRESS_WAIT_MS, () => undefined)
 	}
 
 	private endFlight(flight: Flight, outcome: Partial<StaleNetworkChanged>): void {
