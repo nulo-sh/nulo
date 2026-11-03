@@ -1,11 +1,5 @@
-/**
- * Pins the seam between the dApp-send executor and the fee strategies: the observer the executor
- * hands its validated build reaches the strategy's context as an observer, never as the fold's
- * probe, whatever fee kind the settings name. An app-paid send's one validated simulation is then
- * read for the authorizations it consumes, and no settings can turn that read into a stubbed run.
- * The executor and the strategies are each tested with injected seams; only this test sees the
- * production adapter between them.
- */
+/** The executor's and the strategies' tests inject the seam between them; only this one runs the
+ *  production adapter, which must hand the executor's observer over as an observer, never a probe. */
 
 import { describe, expect, test, vi } from "vitest"
 import type { DappSendExecutorDeps } from "./dapp-send-executor"
