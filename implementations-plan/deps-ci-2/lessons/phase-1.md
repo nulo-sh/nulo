@@ -6,3 +6,4 @@
 - G6: base and head builds identical, `THIRD-PARTY-NOTICES.txt` included (sha256 `af2112220d73…` in both trees).
 - G7: `lint`, `lint:actions`, `typecheck:all`, `test` (989 files), `test:all` (every workspace exit 0, 168 s) and `test:ci-gating` (747 pass) green at retry 0. `test:release` first ran 352 pass, 7 fail: every failure is `Executable not found in $PATH: "zip"` in `scripts/release/zip-read.test.ts` and `zip-reproducible.test.ts`, and the same 7 fail at `44d5a7064`. Rerun with Ubuntu's `zip` 3.0 deb unpacked into the lane's scratch directory and prepended to `PATH`: 359 pass, 0 fail.
 - Diff review: Codex r1 clean; Opus review clean, its optional note adopted as D7 (one sentence in the aztec-update skill).
+- Codex diff r2: findings (1), the npm >= 11.17.0 prerequisite in the skill sentence; fixed.

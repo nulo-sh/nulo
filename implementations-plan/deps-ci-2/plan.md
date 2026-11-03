@@ -104,6 +104,7 @@ Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
 - **Codex r2** (resumed): `conditional approve`. D3's argument holds; the round-1 floor condition is withdrawn. Two fallback details, both accepted: read the update's diff before the frozen install, and restore every file it changed, including when it leaves `follow-redirects` unmoved; on the fallback, the mode command prints `report` while the local audit stays `--mode enforce`.
 - **Codex r3** (resumed, verify only): `approve`. Both conditions met; no regression, no new finding.
 - **Diff review, Codex r1** (gpt-6.1-sol, high, fresh session): `clean`. **Opus diff review** beside it: `clean`; its one optional note (the in-place recipe lives only in this plan) accepted as D7.
+- **Diff review, Codex r2** (resumed): `findings (1)`: the skill's recipe left out `lock.sh`'s npm ≥ 11.17.0 prerequisite, without which the age settings do not exist (plausible, local fix). Accepted.
 
 ## Implementation record
 
