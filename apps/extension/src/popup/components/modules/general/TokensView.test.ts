@@ -171,6 +171,8 @@ describe("TokensView — section refresh dot", () => {
 		finishedAt,
 	})
 	const sectionDot = (wrapper: ReturnType<typeof mount>) => wrapper.find('[data-testid="tokens-refreshing"]').exists()
+	const cardRow = (wrapper: ReturnType<typeof mount>) =>
+		wrapper.findComponent(TokenCard).props("tokenBalance") as { isUpdating?: boolean; publicBalance: string }
 
 	test("a BalanceUpdate task in flight shows the SECTION refresh dot; completion clears it", async () => {
 		// The one activity signal for routine refreshes (per-row indication is silent by design).
@@ -223,6 +225,55 @@ describe("TokensView — section refresh dot", () => {
 		expect(sectionDot(wrapper)).toBe(true) // t2 still running — the batch contract
 
 		H.taskUpdated.emit(balanceTask("t2", 2, 124))
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(false)
+	})
+
+	test("a deleted older refresh leaves the row lit while a newer one runs; the newer one's finish puts it out", async () => {
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.taskCreated.emit(balanceTask("old", 1))
+		H.taskUpdated.emit(balanceTask("old", 1, 100))
+		H.taskCreated.emit(balanceTask("new", 1))
+
+		// The task service expires a retained finished task while another reader lists them.
+		H.taskDeleted.emit(balanceTask("old", 1, 100))
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(true)
+		expect(cardRow(wrapper).isUpdating).toBe(true)
+
+		H.taskUpdated.emit(balanceTask("new", 1, 200))
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(false)
+	})
+
+	test("an older refresh finishing after a newer one started leaves the row lit; the last finish puts it out", async () => {
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.taskCreated.emit(balanceTask("old", 1))
+		H.taskCreated.emit(balanceTask("new", 1))
+
+		H.taskUpdated.emit(balanceTask("old", 1, 100))
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(true)
+
+		H.taskUpdated.emit(balanceTask("new", 1, 200))
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(false)
+	})
+
+	test("a balance update during a refresh keeps the row lit; the refresh's finish puts it out", async () => {
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		H.taskCreated.emit(balanceTask("t1", 1))
+
+		// A token's metadata change re-sends its row while the running refresh absorbs the new one.
+		H.balanceUpdated.emit({ ...balanceRow(), publicBalance: "2" })
+		await nextTick()
+		expect(sectionDot(wrapper)).toBe(true)
+		expect(cardRow(wrapper)).toMatchObject({ publicBalance: "2", isUpdating: true })
+
+		H.taskUpdated.emit(balanceTask("t1", 1, 100))
 		await nextTick()
 		expect(sectionDot(wrapper)).toBe(false)
 	})
