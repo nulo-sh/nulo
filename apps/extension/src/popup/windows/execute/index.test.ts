@@ -99,6 +99,7 @@ vi.mock("@/composables/useFeeEstimationMap", () => ({
 const estimateOperationFeeMock = vi.fn(async () => undefined)
 const cancelEstimateMock = vi.fn(async (_token: string): Promise<void> => undefined)
 const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
+const decodeCallsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
 const previewOperationAuthwitsMock = vi.fn(async () => undefined)
 
 const toastMocks = vi.hoisted(() => ({ openToast: vi.fn() }))
@@ -128,7 +129,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 			disconnect: executionServiceDisconnectMock,
 			estimateOperationFee: estimateOperationFeeMock,
 			previewOperationAuthwits: previewOperationAuthwitsMock,
-			decodeCallsForDisplay: vi.fn(async () => []),
+			decodeCallsForDisplay: decodeCallsForDisplayMock,
 			decodeGrantsForDisplay: decodeGrantsForDisplayMock,
 			cancelEstimate: cancelEstimateMock,
 			onEstimateStarted: estimateEvents.onEstimateStarted,
@@ -220,7 +221,7 @@ const STUBS = {
 	},
 	SectionLabel: { template: "<div />" },
 	OperationCard: {
-		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed", "previewFailed"],
+		props: ["refused", "tokenFlagged", "tokenFlagAcknowledged", "isQueued", "estimateFailed", "previewFailed", "decodedCalls"],
 		template: '<div><slot name="fee" /></div>',
 	},
 	SignerIdentityStrip: { template: '<div data-testid="signer-strip" />', props: ["signerAccounts", "signerNetworks", "status"] },
@@ -1589,6 +1590,20 @@ describe("execute window — a public grant", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
+	const memoGrant = (value: string) => ({
+		...DECODED,
+		decoded: { kind: "decoded", contract: "Memos", fn: "set_memo", params: [{ name: "memo", value: { kind: "string", value } }] },
+	})
+	test.each([
+		["UTF-8 text with a euro sign reads and enables", String.fromCharCode(...new TextEncoder().encode("5 €")), false],
+		["U+202E inside refuses and holds", "pay\u202eevil", true],
+	])("a grant whose memo holds %s Confirm", async (_, memo, held) => {
+		decodeGrantsForDisplayMock.mockResolvedValueOnce([memoGrant(memo)])
+		const { confirm, error } = await opened()
+		expect(confirm().attributes("disabled") !== undefined).toBe(held)
+		expect(error().exists()).toBe(held)
+	})
+
 	test("a batch that comes back short refuses the grant it left out", async () => {
 		decodeGrantsForDisplayMock.mockResolvedValueOnce([])
 		const { vm, confirm, error } = await opened()
@@ -1780,6 +1795,25 @@ describe("execute window — a failed fee estimate's retry", () => {
 		}
 		return { vm, fees, cards, fail, confirm: () => w!.find('[data-testid="execute-confirm-btn"]') }
 	}
+
+	test("a call whose string the card cannot print whole reaches the card as decoded, and Confirm still turns on", async () => {
+		const unreadable = {
+			kind: "decoded",
+			contract: "Memos",
+			fn: "set_memo",
+			params: [{ name: "memo", value: { kind: "string", value: "pay\u202eevil" } }],
+		}
+		decodeCallsForDisplayMock.mockResolvedValueOnce([unreadable])
+		const { vm, fees, cards, confirm } = await opened([send])
+		vm.handleFeeUpdate(0, FJ)
+		fees.api.results.value = { 0: { maxFee: "800" } }
+		fees.api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(cards()[0]!.props("decodedCalls")).toEqual([unreadable])
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
 
 	test("Try again asks the same estimate once more; the snack closes once neither failure stands; Confirm turns on once both land", async () => {
 		const { vm, fees, cards, fail, confirm } = await opened([send, send])
