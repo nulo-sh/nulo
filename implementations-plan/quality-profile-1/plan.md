@@ -107,20 +107,20 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 1. Add `entropyDerivesMaster(master, entropy)`; call it from `assertEntropyMasterPair` and `decodeRestoreMaterial`.
 **Gate:** fast gate; `restore-material.test.ts` and `service.open-slots.test.ts` green unedited; `bun run test:all`; `bun run audit:vue`; the smoke set on both browsers.
 
-### Phase 4 (arc 2): the frame and the credential check
+### Phase 4 (arc 2): the frame and the credential check ✓
 
 1. Add `withOpenedSlots`, move `notOpened` into the codec, and add `profile-secret-codec.test.ts` (one test): on a password row sealed by the codec, with a deferred body, the master and entropy stay intact while the body is pending; once it rejects, the master, entropy and passhash are zero and the rejection propagates; success control: a resolving body's value returns and the buffers are zero after.
 2. Adopt it at the ten sites, one commit per group (unlocks; password and unlock-method changes; exports; finalize).
 3. Merge the verify pair into `verifyCredential`.
 **Gate:** fast gate; Phase 1's test and every pin in `service.open-slots.test.ts`, `service.passkey-unlock.test.ts`, `service.integration.test.ts`, `unlock-method.composition.test.ts` and both `profile-chaos*.composition.test.ts` green unedited.
 
-### Phase 5 (arc 2): the small copies
+### Phase 5 (arc 2): the small copies ✓
 
 1. `liveRowHoldingLock` at the six gates.
 2. `INVALID_PROFILE_ID` in `spec.ts`, the remaining sites and `client.ts`.
 **Gate:** fast gate; `client.test.ts` green; from the repo root, `rg -n -F --glob '*.ts' --glob '!*.test.ts' '"Invalid profile id"' apps/extension/src` prints exactly one line, the constant in `profile/spec.ts`.
 
-### Phase 6 (arc 2): the PXE log router
+### Phase 6 (arc 2): the PXE log router ✓
 
 1. `logPublicEvent` in `PxeService`, at both call sites.
 **Gate:** `bun run lint`, `bun run typecheck:all`, `cd packages/aztec-runtime && bun run test`; then the arc's full gate: `bun run test:all`, `bun run audit:vue`, `bun run audit:dup` below the base (production 183 / 8,841; `profile/service.ts` internal 4 / 46), the smoke set on both browsers, and `NULO_E2E_BROWSER=chrome NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-public-transfers.test.ts --retry=0` (every scenario green, none skipped).
@@ -161,6 +161,7 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 - **Codex final r2** (resumed): approve, no new material findings.
 - **Arc 1, Codex r1** (gpt-6.1-sol, high, over the arc's diff): no material findings; one comment trimmed. **r2** (resumed): no new material findings, converged.
 - **Arc 1, Opus** (general-purpose, over the arc's diff): no material findings. Two codec doc trims deferred to arc 2, which edits the codec (`lessons/phase-1.md`).
+- **Arc 2, Codex r1** (gpt-6.1-sol, high, over the arc's diff): approve. Accepted: the codec test's wrong-key arm matches a sentinel refusal by identity; the frame's TSDoc says its slots are lent; three restating comments cut. **Opus** (beside r1): no behaviour drift at any of the ten sites; four comment trims accepted. **r2** (resumed): approve, every fix verified. **Net pass** (fresh session over both arcs): approve; one comment nit accepted. Detail: `lessons/phase-2.md`.
 
 ## Delivery
 
