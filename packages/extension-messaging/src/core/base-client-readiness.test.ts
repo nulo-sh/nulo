@@ -7,6 +7,7 @@
  * request rejects within its configured timeout regardless.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
+import { RpcTimeoutError } from "../errors"
 import { silentLogger } from "../testing/transport-harness"
 import { BaseServiceClient } from "./base-client"
 
@@ -41,12 +42,14 @@ describe("BaseServiceClient — readiness deadline", () => {
 		vi.useFakeTimers()
 		const client = new NeverReadyClient()
 		const rejected = client.callPing().then(
-			() => "resolved",
-			() => "rejected",
+			() => undefined,
+			(error: unknown) => error,
 		)
 		// Advance PAST the 500ms deadline. Pre-fix the request awaited readiness with
 		// no timer, so it never settled; now the deadline fires and rejects it.
 		await vi.advanceTimersByTimeAsync(600)
-		expect(await rejected).toBe("rejected")
+		const error = await rejected
+		expect(error).toBeInstanceOf(RpcTimeoutError)
+		expect(error).toMatchObject({ message: "request timed out", details: { methodName: "ping" } })
 	})
 })

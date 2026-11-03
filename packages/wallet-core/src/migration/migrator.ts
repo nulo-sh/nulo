@@ -48,6 +48,7 @@
 import type { Migration, MigrationContext, MigrationResult, MinimalStorageArea, StorageRef } from "./types"
 import { StagingArea } from "./staging"
 import { errorMessageFromUnknown } from "../utils/errors"
+import { raceTimeout } from "../utils/race"
 
 /** The engine's own durable keys. The whole `nulo:schema:` prefix is reserved:
  *  footprints never include it and migrations may not write into it. */
@@ -80,23 +81,11 @@ const interruptedReason = (version: number): string => `${interruptedMidWrite(ve
 /** The watchdog's error: reported as `interruptedReason` only after its restore succeeds. */
 class UpTimeoutError extends Error {}
 
-/** Awaits `up()`, or revokes `staging` and throws once `ms` pass first. The abandoned promise
- *  keeps a no-op handler, so its later rejection is never unhandled. */
 async function runWithWatchdog(up: () => Promise<void>, staging: StagingArea, ms: number, version: number): Promise<void> {
-	const running = up()
-	running.catch(() => {})
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const expired = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => {
-			staging.revoke()
-			reject(new UpTimeoutError(interruptedMidWrite(version)))
-		}, ms)
+	await raceTimeout(up(), ms, () => {
+		staging.revoke()
+		throw new UpTimeoutError(interruptedMidWrite(version))
 	})
-	try {
-		await Promise.race([running, expired])
-	} finally {
-		clearTimeout(timer)
-	}
 }
 
 /** `counted` marks a retained journal whose failure has already been recorded

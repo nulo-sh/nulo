@@ -29,6 +29,7 @@ import { rowOnToken } from "@/utils/activity-rows"
 import { buildJournalTerminalCardProps } from "@/utils/journal-state"
 import { isSealedText } from "@/wallet/storage/sealed-entity-storage"
 import { rowKeysForEveryProfile, storedText, trackSubtleCrypto } from "@/wallet/storage/sealed-entity-storage.testing"
+import { collectUnhandledRejections } from "../../../../tests/helpers/unhandled-rejections"
 
 /** One key for every profile, as the profile fakes hold it. */
 const ROW_KEY_FAKE = await rowKeysForEveryProfile()
@@ -550,6 +551,28 @@ describe("TokenService.refreshRestoredTokens — the chain's metadata over the b
 		const row = await tokenService.getToken(id)
 		expect(row).toMatchObject({ symbol: "USDT", decimals: 2 })
 		expect(row.classId).toBeUndefined()
+		expect(updated).not.toHaveBeenCalled()
+	})
+
+	test("a deadline that passes before the read starts settles at once, and the read's later rejection stays handled", async () => {
+		const { tokenService, id, preview, updated } = await restored()
+		let rejectLate: (error: Error) => void = () => {}
+		preview.mockImplementation(() => new Promise((_, reject) => (rejectLate = reject)))
+		const deadlineAt = Date.now() + 200
+		const tokens = (tokenService as unknown as { tokens: { getValues: () => Promise<Token[]> } }).tokens
+		const getValues = tokens.getValues.bind(tokens)
+		tokens.getValues = async () => {
+			const rows = await getValues()
+			await new Promise((resolve) => setTimeout(resolve, deadlineAt - Date.now() + 10))
+			return rows
+		}
+		const unhandled = await collectUnhandledRejections(async () => {
+			await tokenService.refreshRestoredTokens(FENCE, deadlineAt)
+			await vi.waitFor(() => expect(preview).toHaveBeenCalledOnce())
+			rejectLate(new Error("node down"))
+		})
+		expect(unhandled).toEqual([])
+		expect(await tokenService.getToken(id)).toMatchObject({ symbol: "USDT", decimals: 2 })
 		expect(updated).not.toHaveBeenCalled()
 	})
 

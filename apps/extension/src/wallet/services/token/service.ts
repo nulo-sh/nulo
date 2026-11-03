@@ -27,7 +27,7 @@ import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { tokenKey } from "@nulo/token-list"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
@@ -1127,11 +1127,7 @@ async function settleBy<T>(
 	)
 	const remaining = deadlineAt - Date.now()
 	if (!(remaining > 0)) return { kind: "late" }
-	let timer: ReturnType<typeof setTimeout> | undefined
-	const late = new Promise<{ kind: "late" }>((resolve) => {
-		timer = setTimeout(() => resolve({ kind: "late" }), remaining)
-	})
-	return await Promise.race([outcome, late]).finally(() => clearTimeout(timer))
+	return await raceTimeout(outcome, remaining, () => ({ kind: "late" as const }))
 }
 
 /** A token's name and symbol are contract or backup text: every row and import title stores them
