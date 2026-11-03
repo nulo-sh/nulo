@@ -1,7 +1,7 @@
 ---
 plan: w3-ci-1
 tier: light
-status: phases 1 and 2 green; Codex loop converged (round 2 clean); PR next
+status: completed
 issues: "#1419, #1493"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at b24357921
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed, one arc as #1583.
+- **Shipped**: #1583 closes two issues.
+  - #1419 (D1, D2): the Docker runner installs Puppeteer's pinned browsers after `bun install`, and the playground binds `127.0.0.1`, keeping the `localhost` origin.
+  - #1493 (D3-D6): each PR e2e lane's CI filter entries are derived from what the lane runs and pinned exactly. `live-labels.sh` and `assert-canary-results.ts` joined the filters, and `_build-extension.yml` left the smoke filters (OA-1).
+- **Known limits**: #1582. What a lane script imports or reads, such as `canary-expectations.json`, is not derived.
+- **Dispositions**:
+  - Inference 2 did not hold: this host keeps `::1`, through a link-local IPv6 address. D7 was revised, so the README keeps its `ipv4first` examples.
+  - Rejected: `.github/` paths in `run:` lines (none are reached); a README change for by-hand playground runs during rollout; moving the draft-flag test onto the derived scripts (D6).
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget. The `ADDRCONFIG` and postinstall findings live at the code they shaped (`apps/playground/vite.config.ts`, `apps/extension/scripts/e2e/docker-ci-like.sh`) and in [recon.md](recon.md).
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # w3-ci-1: the Docker CI-like runner and the e2e lane filters
 
