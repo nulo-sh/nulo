@@ -397,11 +397,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		return profile
 	}
 
-	/** Capture the row + its deletion epoch in ONE critical section. A tombstoned
-	 *  profile (mid-delete: row present, id reserved) is invalid here — `repo.get`
-	 *  alone is blind to the reservation. The epoch survives even a delete FOLLOWED
-	 *  by a same-id restore (it bumps permanently), so a later `profileFenceBroken`
-	 *  check rejects the stale generation. */
+	/** Capture the row + its deletion epoch in ONE critical section. The epoch survives even a
+	 *  delete FOLLOWED by a same-id restore (it bumps permanently), so a later
+	 *  `profileFenceBroken` check rejects the stale generation. */
 	private async captureRowFence(id: string): Promise<{ profile: Profile; capturedEpoch: number }> {
 		return this.runExclusive(async () => {
 			const profile = await this.liveRowHoldingLock(id)
@@ -701,7 +699,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// Phase 2 — crypto UNLOCKED. Caller pays ~1s PBKDF2 but the rest of
 		// the RPC surface stays responsive.
 		// A wrong password and a corrupted slot both fail to open, but GUARD catches a wrong password
-		// first in practice. Auth UI matches on InvalidPasswordError (popup/pages/auth.vue:65-74).
+		// first in practice. Auth UI matches on InvalidPasswordError (popup/pages/auth.vue).
 		let dek: ImportedKeysDek | null = null
 		try {
 			return await this.codec.withOpenedSlots(snapshot, { password }, invalidPassword, async (opened) => {
@@ -738,8 +736,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				})
 			})
 		} finally {
-			// After sessionManager has copied it, on success AND on the revalidate-failure throw path;
-			// the frame wiped the slots first.
+			// After sessionManager has copied it.
 			zeroize(dek)
 		}
 	}
@@ -2361,7 +2358,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				return await this.openAndWarnIfDegradedHoldingLock(profile, opened.secret, dek)
 			})
 		} finally {
-			// After sessionManager has copied it; the frame wiped the slots first.
+			// After sessionManager has copied it.
 			zeroize(dek)
 		}
 	}
