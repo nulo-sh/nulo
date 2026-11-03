@@ -33,17 +33,20 @@ export const RELEASE_DIGESTS: Readonly<Record<string, Readonly<Record<BrowserKin
  * unlocked. `connect`: whether its emoji check replaces the connect window's page or opens a window
  * of its own. `passkey`: whether a passkey profile it made is one the candidate retires, offering
  * only Set up again, or one its passkey still unlocks, as the row its `newPasskeyRow` writes decides.
+ * `testnetHost`: the hostname of the Testnet node it seeds, which its install may request and the
+ * egress guard refuses; the hostname alone, since the seeded URL may carry a provider's key.
  */
 export type ReleaseTraits = {
 	storage: "plaintext" | "sealed"
 	connect: "replaces-page" | "own-window"
 	passkey: "retired" | "unlocks"
+	testnetHost: string
 }
 
 export const RELEASE_TRAITS: Readonly<Record<string, ReleaseTraits>> = {
-	"v0.31.0": { storage: "plaintext", connect: "replaces-page", passkey: "retired" },
-	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired" },
-	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks" },
+	"v0.31.0": { storage: "plaintext", connect: "replaces-page", passkey: "retired", testnetHost: "lb.drpc.live" },
+	"v1.0.0": { storage: "sealed", connect: "own-window", passkey: "retired", testnetHost: "lb.drpc.live" },
+	"v1.1.0": { storage: "sealed", connect: "own-window", passkey: "unlocks", testnetHost: "lb.drpc.live" },
 }
 
 /** `tag`'s traits; throws for a tag with none, as {@link releaseProblem} refuses one with no digest. */
@@ -94,9 +97,11 @@ function run(command: string, args: string[]): void {
 /**
  * The `browser` build of release `tag`, unpacked into `into`: downloaded once with `gh release
  * download`, checked by {@link releaseProblem}, and unpacked from the bytes checked, so neither an
- * earlier unpacking nor a later change to the cached zip is trusted.
+ * earlier unpacking nor a later change to the cached zip is trusted. A tag with no reviewed traits
+ * is refused before the download: the egress guard declares a release's Testnet host from them alone.
  */
 export function releaseBuild(tag: string, browser: BrowserKind, into: string): string {
+	releaseTraits(tag)
 	const dir = path.join(releaseCache(), tag)
 	const name = releaseZipName(tag, browser)
 	const zipPath = path.join(dir, name)
