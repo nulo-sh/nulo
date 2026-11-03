@@ -1,7 +1,7 @@
 ---
 plan: quality-execution-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: arc 1 merged (#1585); arc 2 in review
+status: completed
 issues: "#1442, #1438, #1440 (arc 1, Closes); #1455, #1472 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 93b9a2dfb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed: arc 1 as #1585; arc 2 with this close-out as one PR.
+- **Shipped**: arc 1 closes #1442 (phase 1), #1438 (phase 2) and #1440 (phase 3). Arc 2 closes #1455 (phase 4: one gas projection and one embedded-payment collapse, NO_FROM's history row through the shared recorder, one live-handle resolution for both reuse arms; the `NO_WAIT` rule was already single since #1485) and #1472 (phase 5: one confirm list for the button and `approve()`, one grant-pending rule; the decode helpers had landed in #1501). Each move was pinned first and the pins shown red on deliberate wrong edits. No screen, copy, stored row, wire answer or log line changed.
+- **Known limits**: none.
+- **Dispositions**: kept as is, the fee window's own confirm list (outside #1472) and the execute window's unreachable fee-pick warning (D7). Rejected: a third PR for #1472 (D8); bigint fee caps in the NO_FROM sentinel pin and retiring the shared recorder's return pin (audit verdicts). Accepted without a change: the live-handle helper's return and NO_FROM's empty authwit-index await each add one settlement hop; every later check still runs before the broadcast.
+- **Lessons**: none promoted (`lessons.md` is at its 8 KiB budget). The one gotcha met in both arcs, the type-roles producer digest on `auth-registry/service.ts` and `operation-planner.ts`, names its remedy in its own failure message.
+- **Open items**: none.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-execution-1: one lane surface, one registration home, one copy of each send step
 
