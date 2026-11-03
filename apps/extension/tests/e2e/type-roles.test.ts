@@ -32,6 +32,8 @@ import {
 	navigateToSettings,
 	openHoldings,
 	openNetworkDetail,
+	passPhraseCheck,
+	readRecoveryWords,
 	readSessionRow,
 	setDeveloperMode,
 	unlockAfterBackgroundDeath,
@@ -1130,7 +1132,11 @@ test("onboarding's every page fits the narrow width, and the large CTA on its cr
 	await clickByTestId(page, "onboarding-submit-create")
 	await page.waitForSelector(sel("onboarding-phrase-saved"), { visible: true, timeout: 30_000 })
 	await expectPageClean(page, "onboarding phrase")
+	const words = await readRecoveryWords(page, "onboarding-phrase")
 	await clickByTestId(page, "onboarding-phrase-saved")
+	await page.waitForSelector(sel("onboarding-phrase-check-page"), VISIBLE)
+	await expectPageClean(page, "onboarding phrase check")
+	await passPhraseCheck(page, words)
 	await waitForHash(page, "#/onboarding/done")
 	await page.waitForSelector(sel("onboarding-done-open"), VISIBLE)
 	await expectPageClean(page, "onboarding ready")
