@@ -25,6 +25,7 @@ import { type FeePayerPick, holdsConfirm, personPaysAppPayment } from "./fee-fig
 import { approvalDeltas } from "./approval-deltas"
 import {
 	authwitDisplayCall,
+	awaitsGrantDecode,
 	decodeCallsOrUnavailable,
 	decodeGrantsOrUnavailable,
 	grantContentsOf,
@@ -171,7 +172,7 @@ const tokenFollow = followKnownTokens(tokenService, knownTokens)
  *  Unlike a call's decode, a grant's gates Confirm: what the card shows is what the wallet signs. */
 const decodedGrants = ref<Map<number, readonly DecodedGrant[]>>(new Map())
 const grantsPending = computed(() =>
-	operations.value.some((op, i) => grantContentsOf(op as unknown as UIOperation).length > 0 && !decodedGrants.value.has(i)),
+	operations.value.some((op, i) => awaitsGrantDecode(op as unknown as UIOperation, decodedGrants.value.has(i))),
 )
 /** The footer's error row for a grant the wallet cannot read. Its own state, so the `clearError()` of
  *  a fee change never lifts it. */
@@ -474,22 +475,11 @@ const retryFeeEstimate = (index: number) =>
 	handleFeeUpdate(index, (operations.value[index] as { feeSettings?: FeeSettings } | undefined)?.feeSettings)
 
 const approve = async () => {
-	if (isInteractionCancelled.value || isLoading.value) return
-	// Block approval until init() has finished and at least one operation
-	// exists. Without this guard, a fast click before payload materialization
-	// would approve an empty operations list.
-	if (!initComplete.value || operations.value.length === 0) return
-	if (tokenMetadataUnread.value) return
-	// UX gate: any send-like op still missing user-picked fee?
-	// Cast to DraftOperation works around a pre-existing AztecAddress/Fr
-	// structural mismatch between popup-resolved Operation and wallet-bridge's
-	// — runtime semantics are unaffected (discriminant + feeSettings checks).
-	if (operations.value.some((op) => requiresFeeSelection(op as unknown as import("./types").DraftOperation))) {
+	if (isLoading.value || refusal.value || confirmBlocked.value) return
+	if (needsFeeSelection.value) {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value || awaitsEstimates.value || tokenFlagHold.value) return
-	if (grantsPending.value || grantRefusal.value || refusal.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the completed estimates and previews to
@@ -579,14 +569,24 @@ const scopeFollow = createScopeFollow({
 		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
 	),
 })
-// Mirrors the `requiresFeeSelection` early-return inside approve(): a send-like op
-// with no chosen fee can't execute yet. Gating the Confirm button's disabled state
-// on it (not just approve()'s guard) makes the button authoritative — a click while
-// the fee is still auto-selecting can no longer no-op into the "select a fee"
-// warning. e2e clicks wait for the button to enable, so this also removes the race
-// where approval is clicked before the default fee resolves (slow PXE / cold start).
+// The cast bridges a structural AztecAddress/Fr mismatch with wallet-bridge's type; only the kind
+// and the fee settings are read.
 const needsFeeSelection = computed(() =>
 	operations.value.some((op) => requiresFeeSelection(op as unknown as import("./types").DraftOperation)),
+)
+/** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
+const confirmBlocked = computed(
+	() =>
+		isInteractionCancelled.value ||
+		!initComplete.value ||
+		operations.value.length === 0 ||
+		tokenMetadataUnread.value ||
+		payerShort.value ||
+		awaitsEstimates.value ||
+		tokenFlagHold.value ||
+		grantsPending.value ||
+		grantRefusal.value !== undefined ||
+		processingError.value?.type === "error",
 )
 
 const showJson = () => {
@@ -734,19 +734,7 @@ onUnmounted(() => {
 			:confirm-hidden="refusal !== undefined"
 			:confirm-label="isLoading ? 'EXECUTING' : 'Confirm'"
 			:confirm-loading="isLoading"
-			:confirm-disabled="
-				processingError?.type === 'error' ||
-				tokenMetadataUnread ||
-				!initComplete ||
-				operations.length === 0 ||
-				needsFeeSelection ||
-				payerShort ||
-				awaitsEstimates ||
-				tokenFlagHold ||
-				grantsPending ||
-				grantRefusal !== undefined ||
-				isInteractionCancelled
-			"
+			:confirm-disabled="confirmBlocked || needsFeeSelection"
 			@reject="reject('reject')"
 			@approve="approve"
 		/>

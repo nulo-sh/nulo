@@ -43,6 +43,7 @@ import type { FeeQuestion } from "./models"
 import { feeLimitOf } from "./tx-fee-details"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
+import { callSequence } from "../../../../tests/helpers/call-sequence"
 
 // A pass-through spy: the extraction itself is aztec.js's; its arguments are the executor's.
 const extractOffchainOutputSpy = vi.hoisted(() => vi.fn())
@@ -816,6 +817,57 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		})
 	})
 
+	const NO_FROM_FEE_KEYS = [
+		"embeddedFeePayment",
+		"gasLimits",
+		"teardownGasLimits",
+		"maxFeesPerGas",
+		"maxPriorityFeesPerGas",
+		"gasPadding",
+	]
+	const cappedFeeOptions = () => vi.mocked(applyEmbeddedFpcGasCap).mock.calls.at(-1)?.[1] as Record<string, unknown>
+
+	test("every gas setting reaches the fee options, each in its own field, in the options' key order", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const { executor } = makeHarness()
+		const gasLimits = { daGas: 11, l2Gas: 12 }
+		const teardownGasLimits = { daGas: 13, l2Gas: 14 }
+		const gasSettings = {
+			gasLimits,
+			teardownGasLimits,
+			maxFeesPerGas: { feePerDaGas: "15", feePerL2Gas: "16" },
+			maxPriorityFeesPerGas: { feePerDaGas: "17", feePerL2Gas: "18" },
+		}
+		const op = makeNoFromOp({ opts: { from: addr("0xacct"), additionalScopes: [], wait: "NO_WAIT", fee: { gasSettings } } })
+		await executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)
+		expect(cappedFeeOptions()).toStrictEqual({
+			embeddedFeePayment: "fpc",
+			gasLimits,
+			teardownGasLimits,
+			maxFeesPerGas: { feePerDaGas: "15", feePerL2Gas: "16" },
+			maxPriorityFeesPerGas: { feePerDaGas: "17", feePerL2Gas: "18" },
+			gasPadding: 1,
+		})
+		expect(Object.keys(cappedFeeOptions())).toEqual(NO_FROM_FEE_KEYS)
+		expect(cappedFeeOptions().gasLimits).toBe(gasLimits)
+		expect(cappedFeeOptions().teardownGasLimits).toBe(teardownGasLimits)
+	})
+
+	test("no gas settings leave every gas field unset, keep the padding and default the payer to an FPC", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const { executor } = makeHarness()
+		await executor.executeAztecSendTx(makeNoFromOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(cappedFeeOptions()).toStrictEqual({
+			embeddedFeePayment: "fpc",
+			gasLimits: undefined,
+			teardownGasLimits: undefined,
+			maxFeesPerGas: undefined,
+			maxPriorityFeesPerGas: undefined,
+			gasPadding: 1,
+		})
+		expect(Object.keys(cappedFeeOptions())).toEqual(NO_FROM_FEE_KEYS)
+	})
+
 	test("non-embedded fee payment rejected before any slot work", async () => {
 		const { executor, deps } = makeHarness()
 		const op = makeNoFromOp({ feeSettings: { paymentMethod: { kind: "fj" } } })
@@ -898,6 +950,20 @@ describe("DappSendExecutor.executeNoFromSendTx (via default_entrypoint)", () => 
 		const { executor, account } = makeHarness()
 		await executor.executeAztecSendTx(makeNoFromOp(), ORIGIN, undefined, undefined, FENCE)
 		expect(account.createAuthWit.mock.calls.map((call) => String((call as unknown[])[0]))).toEqual(["mh:ih:first", "mh:ih:second"])
+	})
+
+	test("a history row that fails to write rejects the send with its error and fails the journal", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const failure = new Error("record broke")
+		const { executor, deps, releaseSlot } = makeHarness({ addTransaction: vi.fn(async () => Promise.reject(failure)) as never })
+		await expect(executor.executeAztecSendTx(makeNoFromOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toBe(failure)
+		expect(vi.mocked(deps.lane.markJournal).mock.calls).toEqual([
+			["j1", { stage: "simulating" }],
+			["j1", { stage: "failed" }, expect.objectContaining({ kind: "dapp_execute", message: "record broke" }), undefined],
+		])
+		expect(deps.recordPendingAuthwits).not.toHaveBeenCalled()
+		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
+		expect(releaseSlot).toHaveBeenCalledTimes(1)
 	})
 
 	test("history record: nonce Fr.ZERO, feePaymentMethod EXTERNAL", async () => {
@@ -1585,6 +1651,25 @@ describe("DappSendExecutor — the authorizing session", () => {
 		expect(order(deps.assertFence)).toBeLessThan(order(deps.getAccountContract))
 		expect(deps.getActiveProfile).not.toHaveBeenCalled()
 		expect(proveAndSend).toHaveBeenCalledTimes(1)
+	})
+
+	test("a reused estimate resolves network, node, PXE, fence and account in that order, then re-checks the fence", async () => {
+		const { executor, deps, proveAndSend } = makeHarness({ operationEstimateReuse: reusing(vi.fn(async () => entry())) })
+		ownSnapshot(deps)
+		await executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE, APPROVAL("est-1"))
+		const steps = {
+			tryConsume: deps.operationEstimateReuse.tryConsume,
+			getNetwork: deps.getNetwork,
+			getNode: deps.getNode,
+			getPXE: deps.getPXE,
+			assertFence: deps.assertFence,
+			getAccountContract: deps.getAccountContract,
+			isFenceLive: deps.isFenceLive,
+			recordBuiltCall: deps.lane.recordBuiltCall,
+			proveAndSend,
+		}
+		const sequence = callSequence(steps)
+		expect(sequence.slice(sequence.indexOf("tryConsume"), sequence.indexOf("proveAndSend") + 1)).toEqual(Object.keys(steps))
 	})
 
 	test("the session ending before a reused build resolves its account: no lookup, no send, failed/session_ended", async () => {
@@ -2500,11 +2585,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		expect(deps.recordPendingAuthwits).toHaveBeenCalledTimes(1)
 	})
 
-	test.each([
-		["the shared recorder resolves to nothing", false, undefined],
-		["the NO_FROM recorder resolves to addTransaction's own value", true, "the-tx-row"],
-	])("%s", async (_label, noFrom, expected) => {
-		collectOffchainEffectsMock.mockReturnValue([])
+	test("the recorder resolves to nothing", async () => {
 		let recorded: unknown = "unset"
 		const proveAndSend = vi.fn(async (ctx: { recordTransaction: (h: string) => Promise<unknown> }) => {
 			recorded = await ctx.recordTransaction("0xhash")
@@ -2512,8 +2593,8 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		})
 		const h = makeHarness({ addTransaction: vi.fn(async () => "the-tx-row" as never) })
 		Object.assign(h.deps.coordinator, { proveAndSend })
-		await h.executor.executeAztecSendTx(noFrom ? NO_FROM() : makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
-		expect(recorded).toBe(expected)
+		await h.executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)
+		expect(recorded).toBeUndefined()
 	})
 
 	const SPONSOR_CALL = { contract: PROTOCOL_SPONSOR, method: "sponsor_unconditionally", args: [] }
@@ -2550,6 +2631,15 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		expect(h.deps.protocolSponsorAddress).toHaveBeenCalledWith(7)
 		expect(askedBeforeProve).toBe(true)
 		expect(recordedTx(h.deps).feeChoice).toBe("app_protocol_sponsor")
+	})
+
+	test("NO_FROM asks for the sponsor's address before it leaves its origin's line", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(NO_FROM(), ORIGIN, undefined, undefined, FENCE)
+		const turn = vi.mocked(h.deps.lane.joinOriginLine).mock.results[0]?.value as { leave: unknown } | undefined
+		expect(callSequence({ sponsor: h.deps.protocolSponsorAddress, leave: turn?.leave }).slice(0, 2)).toEqual(["sponsor", "leave"])
 	})
 
 	test("the person's pick records the wallet's and never asks for the sponsor's address, even when its calls name it", async () => {

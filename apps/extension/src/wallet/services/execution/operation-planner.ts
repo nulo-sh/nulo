@@ -30,7 +30,7 @@
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { FunctionCall } from "@aztec-labs/stdlib/abi"
 import { Capsule, type ExecutionPayload, HashedValues } from "@aztec-labs/stdlib/tx"
-import type { InteractionWaitOptions } from "@aztec-labs/aztec.js/contracts"
+import type { GasSettingsOption, InteractionWaitOptions } from "@aztec-labs/aztec.js/contracts"
 import type { ProfileOptions, SendOptions, SimulateOptions } from "@aztec-labs/aztec.js/wallet"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { ProfileService } from "@/wallet/services/profile/service"
@@ -60,6 +60,7 @@ import type {
 	SendTransactionOperation,
 } from "./spec"
 import { type FeePayerRoute, classifyFeePayer, sameFieldAddress } from "@nulo/wallet-bridge"
+import { embeddedPaymentOf } from "./utils/fee-detection"
 
 /** The transfer-request value object used below the RPC seam. The wire
  *  (`spec.ts`) stays positional — RPC entry points construct this at the
@@ -89,20 +90,14 @@ export interface ProcessedAztecJsPayload {
 	feeOptions: FeeOptions
 }
 
-/** The wire fee options of a dApp payload: what its payer route carries (an embedded payment, or a
- *  requested self-pay), and every cap the dApp set. `maxPriorityFeesPerGas` is plumbed through so
- *  the standard path's gas settings match what the dApp requested — it used to be dropped here. */
-function feeOptionsOf(
-	route: FeePayerRoute | undefined,
-	opts: SimulateOptions | ProfileOptions | SendOptions<InteractionWaitOptions>,
-): FeeOptions {
-	const maxFeesUpstream = opts.fee?.gasSettings?.maxFeesPerGas
-	const maxPriorityFeesUpstream = opts.fee?.gasSettings?.maxPriorityFeesPerGas
+/** The gas half of a dApp's fee options: its limits as given, each fee cap (the priority fee
+ *  included) with its two amounts as decimal strings, and no extra padding. */
+export function gasFeeOptionsOf(gasSettings: GasSettingsOption["gasSettings"]) {
+	const maxFeesUpstream = gasSettings?.maxFeesPerGas
+	const maxPriorityFeesUpstream = gasSettings?.maxPriorityFeesPerGas
 	return {
-		embeddedFeePayment: route === "fjwc" || route === "fpc" ? route : undefined,
-		requestedPayment: route === "self-pay" ? "fj" : undefined,
-		gasLimits: opts.fee?.gasSettings?.gasLimits,
-		teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits,
+		gasLimits: gasSettings?.gasLimits,
+		teardownGasLimits: gasSettings?.teardownGasLimits,
 		maxFeesPerGas: maxFeesUpstream
 			? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
 			: undefined,
@@ -110,6 +105,19 @@ function feeOptionsOf(
 			? { feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString() }
 			: undefined,
 		gasPadding: 1,
+	} satisfies FeeOptions
+}
+
+/** The wire fee options of a dApp payload: what its payer route carries (an embedded payment, or a
+ *  requested self-pay), and every cap the dApp set. */
+function feeOptionsOf(
+	route: FeePayerRoute | undefined,
+	opts: SimulateOptions | ProfileOptions | SendOptions<InteractionWaitOptions>,
+): FeeOptions {
+	return {
+		embeddedFeePayment: embeddedPaymentOf(route),
+		requestedPayment: route === "self-pay" ? "fj" : undefined,
+		...gasFeeOptionsOf(opts.fee?.gasSettings),
 	}
 }
 

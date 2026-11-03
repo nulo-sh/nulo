@@ -27,7 +27,7 @@ import { OriginType, type LocalTxOrigin, type Tx } from "@/wallet/services/trans
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType, type FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
+import { type ExecutionCoordinator, fenceChecks, resolveLiveHandles } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
 import { builtCapOf, type ChainIdentity } from "./estimate-reuse-shared"
@@ -661,13 +661,7 @@ export class TransferExecutor {
 		fence: ExecutionFence,
 	): Promise<TransferBuildInputs> {
 		this.deps.logDebug(`executeTransfer: reusing precomputed estimate ${precomputedEstimateId}`)
-		const network = await this.deps.getNetwork(req.networkId)
-		const node = await this.deps.getNode(network.chainId)
-		const pxe = this.deps.getPXE(network)
-		await this.deps.assertFence(fence)
-		const account = await this.deps.getAccountContract(fence.profileId, network.chainId, req.accountAddress)
-		// The lookup reads whichever session is live: re-check the fence before its keys are used.
-		fenceChecks(this.deps, fence).assertLive()
+		const { network, node, pxe, account } = await resolveLiveHandles(this.deps, fence, req.networkId, req.accountAddress)
 		return {
 			txRequest: reused.txRequest,
 			node,
