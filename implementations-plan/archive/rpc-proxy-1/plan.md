@@ -148,7 +148,7 @@ Every local refusal is `{"jsonrpc":"2.0","id":null,"error":{"code":<n>,"message"
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `ff395c3d0`. Specific here:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `ff395c3d0`. Specific here:
 - Step 1 is absent (`code_review: off`). Step 2 runs per arc at its boundary over `git diff <arc base>...HEAD`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; one Opus 5.5 diff review (`general-purpose`) beside round 1. After arc 2, one fresh Codex session over the net diff for cross-arc issues. Prompts under `~/.cache/nulo-backlog/rpc-proxy-1/`. Hard stop at three rounds; each round in `lessons/phase-N.md` and the table below.
 - **Approval boundary (a plan change; stop):** a persisted field on a network row; a rewrite of any row but an endpoint whose URL digest is listed; a retry, timeout, cache or fallback in the proxy; a wallet reference to `rpc.nulo.sh`; any edit under `legal/`; a new workflow or required check; a new e2e scenario.
 - Close-out: the Outcome; OA-1, if still open, filed as one `owner-decision` issue; the owner steps not yet done filed as one `blocked:external` issue; lessons promoted within the 8 KiB budget; `STATUS.md` deleted; `git mv` into `archive/`, index line moved. Teardown after the merge: `agent-worktree done rpc-proxy-1 --merged`, trunk `dev`; the archived plan is `implementations-plan/archive/rpc-proxy-1/plan.md`.
