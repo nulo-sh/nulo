@@ -684,46 +684,6 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "fromDisplay.address",
-			"branch": "received && fromDisplay.kind === 'address'",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"received-from-address\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note from an address"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "received.accountAddress",
-			"branch": "received",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"received-to-address\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "trimAddress(received.txHash, 6, 4)",
-			"branch": "received && explorerUrl",
-			"ordinal": 0,
-			"role": "meta",
-			"selector": "[data-testid=\"tx-explorer-link\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note on the testnet chain with an explorer"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
-			"expression": "trimAddress(received.txHash, 6, 4)",
-			"branch": "received && !(explorerUrl)",
-			"ordinal": 1,
-			"role": "meta",
-			"selector": "[data-testid=\"tx-hash-copy\"]",
-			"surface": "popup-received-id",
-			"state": "a seedReceipt note without an explorer"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/received/[id].vue",
 			"expression": "trimAddress(received.blockHash, 6, 4)",
 			"branch": "received && received.l2BlockNumber && blockUrl && isPublic",
 			"ordinal": 0,
@@ -863,22 +823,12 @@
 			"state": "an imported account"
 		},
 		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "transfer.from",
-			"branch": "tx && transfer",
+			"file": "apps/extension/src/popup/components/modules/tx/DetailAddressCard.vue",
+			"expression": "address",
+			"branch": "hasAddress",
 			"ordinal": 0,
 			"role": "data-lead",
-			"selector": "[data-testid=\"tx-from-address\"]",
-			"surface": "popup-tx-id",
-			"state": "the seedTransaction row"
-		},
-		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "transfer.to",
-			"branch": "tx && transfer",
-			"ordinal": 0,
-			"role": "data-lead",
-			"selector": "[data-testid=\"tx-to-address\"]",
+			"selector": "[data-testid=\"tx-from-address\"], [data-testid=\"tx-to-address\"]",
 			"surface": "popup-tx-id",
 			"state": "the seedTransaction row"
 		},

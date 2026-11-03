@@ -13,7 +13,7 @@ import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
 import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
-import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
+import DetailAddressCard from "@/popup/components/modules/tx/DetailAddressCard.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
 /** Vendor */
@@ -134,8 +134,6 @@ const fromUrl = computed(() =>
 const toUrl = computed(() =>
 	transfer.value ? getAccountExplorerUrl(appStore.network?.chainId, appStore.defaultExplorer, transfer.value.to) : null,
 )
-const fromLabelId = useId()
-const toLabelId = useId()
 
 /** User-facing calls list — excludes fee/entrypoint infrastructure. An ALL-infra tx (e.g. a
  *  sponsored authorization: [sponsor_unconditionally, set_authorized]) falls back to the full list —
@@ -211,53 +209,24 @@ onBeforeUnmount(() => {
 				</div>
 
 				<Flex wide gap="8" :class="$style.address_pair">
-					<Flex
-						wide
-						direction="column"
-						gap="4"
-						:class="$style.address_card"
-						@click="endsSelection($event) || handleCopy(transfer.from)"
-					>
-						<AddressDisplay
-							static
-							data-testid="tx-from-address"
-							lead
-							:address="transfer.from"
-							:formatter="(addr) => trimAddress(addr, 6, 4)"
-						/>
-						<span :id="fromLabelId" :class="$style.address_label">From</span>
-						<AddressCardLink
-							v-if="fromUrl"
-							:href="fromUrl"
-							:label="`View on ${explorerName}`"
-							:aria-describedby="fromLabelId"
-							data-testid="tx-from-explorer-link"
-						/>
-					</Flex>
-
-					<Flex
-						wide
-						direction="column"
-						gap="4"
-						:class="$style.address_card"
-						@click="endsSelection($event) || handleCopy(transfer.to)"
-					>
-						<AddressDisplay
-							static
-							data-testid="tx-to-address"
-							lead
-							:address="transfer.to"
-							:formatter="(addr) => trimAddress(addr, 6, 4)"
-						/>
-						<span :id="toLabelId" :class="$style.address_label">To</span>
-						<AddressCardLink
-							v-if="toUrl"
-							:href="toUrl"
-							:label="`View on ${explorerName}`"
-							:aria-describedby="toLabelId"
-							data-testid="tx-to-explorer-link"
-						/>
-					</Flex>
+					<DetailAddressCard
+						label="From"
+						:address="transfer.from"
+						addressTestid="tx-from-address"
+						:explorerUrl="fromUrl"
+						:explorerName="explorerName"
+						linkTestid="tx-from-explorer-link"
+						@copy="handleCopy"
+					/>
+					<DetailAddressCard
+						label="To"
+						:address="transfer.to"
+						addressTestid="tx-to-address"
+						:explorerUrl="toUrl"
+						:explorerName="explorerName"
+						linkTestid="tx-to-explorer-link"
+						@copy="handleCopy"
+					/>
 				</Flex>
 			</Flex>
 
@@ -386,14 +355,6 @@ onBeforeUnmount(() => {
 
 .address_pair {
 	composes: address_pair from "../detail-page.module.css";
-}
-
-.address_card {
-	composes: address_card from "../detail-page.module.css";
-}
-
-.address_label {
-	composes: caption from "../detail-page.module.css";
 }
 
 .details_box {

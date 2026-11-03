@@ -23,8 +23,9 @@
 
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
-import AddressCardLink from "@/popup/components/modules/tx/AddressCardLink.vue"
+import DetailAddressCard from "@/popup/components/modules/tx/DetailAddressCard.vue"
 import DetailHeroMeta from "@/popup/components/modules/tx/DetailHeroMeta.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import FeeAmount from "@/components/composite/FeeAmount.vue"
 
 /** Vendor */
@@ -173,8 +174,6 @@ const fromUrl = computed(() =>
 const toUrl = computed(() =>
 	received.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, received.value.accountAddress) : null,
 )
-const fromLabelId = useId()
-const toLabelId = useId()
 
 /** Derived — fee at today's rate (mirrors tx/[id].vue's fee valuation). */
 const fee = computed(() => (feeJuiceRaw.value ? feeDisplay(feeJuiceRaw.value, prices.feeJuiceQuote.value?.usd) : null))
@@ -335,83 +334,42 @@ onBeforeUnmount(() => {
 			<div :class="$style.transfer_type_chip" data-testid="tx-incoming-kind-chip">{{ kindLabel }}</div>
 
 			<Flex wide gap="8" :class="$style.address_pair">
-				<Flex
-					wide
-					direction="column"
-					gap="4"
-					:class="[$style.address_card, !fromClickable && $style.card_static]"
+				<DetailAddressCard
+					label="From"
+					:address="fromDisplay.address"
+					addressTestid="received-from-address"
+					:explorerUrl="fromUrl"
+					:explorerName="explorerName"
+					linkTestid="received-from-explorer-link"
 					data-testid="received-from-card"
-					@click="fromClickable && !endsSelection($event) && copy(fromDisplay.address, 'From address')"
+					@copy="(address) => copy(address, 'From address')"
 				>
-					<AddressDisplay
-						v-if="fromDisplay.kind === 'address'"
-						static
-						data-testid="received-from-address"
-						lead
-						:address="fromDisplay.address"
-						:formatter="(addr) => trimAddress(addr, 6, 4)"
-					/>
-					<Text v-else-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
+					<Text v-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
 					<Text v-else-if="fromDisplay.kind === 'mint'" variant="name" color="primary" :class="$style.from_name" data-testid="from-mint">Mint</Text>
 					<Text v-else variant="name" color="primary" :class="$style.from_name" data-testid="from-redacted">Private</Text>
-					<span :id="fromLabelId" :class="$style.address_label">From</span>
-					<AddressCardLink
-						v-if="fromUrl"
-						:href="fromUrl"
-						:label="`View on ${explorerName}`"
-						:aria-describedby="fromLabelId"
-						data-testid="received-from-explorer-link"
-					/>
-				</Flex>
-
-				<Flex
-					wide
-					direction="column"
-					gap="4"
-					:class="$style.address_card"
-					@click="endsSelection($event) || copy(received.accountAddress, 'Account address')"
-				>
-					<AddressDisplay
-						static
-						data-testid="received-to-address"
-						lead
-						:address="received.accountAddress"
-						:formatter="(addr) => trimAddress(addr, 6, 4)"
-					/>
-					<span :id="toLabelId" :class="$style.address_label">To</span>
-					<AddressCardLink
-						v-if="toUrl"
-						:href="toUrl"
-						:label="`View on ${explorerName}`"
-						:aria-describedby="toLabelId"
-						data-testid="received-to-explorer-link"
-					/>
-				</Flex>
+				</DetailAddressCard>
+				<DetailAddressCard
+					label="To"
+					:address="received.accountAddress"
+					addressTestid="received-to-address"
+					:explorerUrl="toUrl"
+					:explorerName="explorerName"
+					linkTestid="received-to-explorer-link"
+					@copy="(address) => copy(address, 'Account address')"
+				/>
 			</Flex>
 
 			<Flex wide direction="column" gap="10">
 				<SectionLabel label="Details" />
 
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
-					<Flex wide justify="between" align="center" gap="12">
-						<span :class="$style.detail_key">Tx hash</span>
-						<a
-							v-if="explorerUrl"
-							:href="explorerUrl"
-							target="_blank"
-							rel="noopener noreferrer"
-							data-testid="tx-explorer-link"
-							:class="[$style.detail_value_mono, $style.detail_link]"
-							>{{ trimAddress(received.txHash, 6, 4) }}</a
-						>
-						<span
-							v-else
-							@click="endsSelection($event) || copy(received.txHash, 'Tx hash')"
-							:class="[$style.detail_value_mono, 'copyable']"
-							data-testid="tx-hash-copy"
-							>{{ trimAddress(received.txHash, 6, 4) }}</span
-						>
-					</Flex>
+					<TxHashRow
+						:hash="received.txHash"
+						:explorerUrl="explorerUrl"
+						linkTestid="tx-explorer-link"
+						copyTestid="tx-hash-copy"
+						@copy="(hash) => copy(hash, 'Tx hash')"
+					/>
 
 					<Flex v-if="isPublic" wide justify="between" align="center" gap="12">
 						<Flex direction="column" gap="2">
@@ -524,23 +482,6 @@ onBeforeUnmount(() => {
 
 .address_pair {
 	composes: address_pair from "../detail-page.module.css";
-}
-
-.address_card {
-	composes: address_card from "../detail-page.module.css";
-}
-
-/* Outranks shared card rules reintroduced by later-loaded detail chunks. */
-.address_card.card_static {
-	cursor: default;
-
-	&:hover {
-		background: transparent;
-	}
-}
-
-.address_label {
-	composes: caption from "../detail-page.module.css";
 }
 
 .from_name {

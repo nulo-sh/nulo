@@ -555,6 +555,7 @@ describe("RecentActivityView — rows link to their detail routes", () => {
 			global: {
 				plugins: [makeRouter()],
 				stubs: {
+					ActivityRowCard: false,
 					TransactionIncomingCard: false,
 					TransactionCardLayout: false,
 					RowTarget: false,
@@ -836,7 +837,7 @@ describe("RecentActivityView — arrivals", () => {
 		mount(RecentActivityView, {
 			shallow: true,
 			props,
-			global: { plugins: [makeRouter()], provide: { [ARRIVALS_KEY as symbol]: arrivals } },
+			global: { plugins: [makeRouter()], provide: { [ARRIVALS_KEY as symbol]: arrivals }, stubs: { ActivityRowCard: false } },
 		})
 	const cards = (w: ReturnType<typeof mountWith>) => w.findAllComponents({ name: "TransactionIncomingCard" })
 	const read = async () => {

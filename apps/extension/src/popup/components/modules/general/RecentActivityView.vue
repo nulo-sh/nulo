@@ -3,9 +3,7 @@
 /** Components */
 import { SectionLabel } from "@nulo/design"
 import TransactionAwaitingCard from "@/components/composite/activity/TransactionAwaitingCard.vue"
-import TransactionTerminalCard from "@/components/composite/activity/TransactionTerminalCard.vue"
-import TransactionIncomingCard from "@/components/composite/activity/TransactionIncomingCard.vue"
-import TransactionCard from "../activity/TransactionCard.vue"
+import ActivityRowCard from "../activity/ActivityRowCard.vue"
 import SendReviewSheet from "../send/SendReviewSheet.vue"
 
 /** Vendor */
@@ -30,10 +28,10 @@ import { balanceFormatted } from "@/utils/amount.js"
 import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { knownDecimals } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
-import { activityRowRoute, filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
+import { activeAccountScope } from "@/utils/active-scope"
+import { filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
-	buildJournalTerminalCardProps,
 	isInFlightActivityOp,
 	isQueuedTransfer,
 	journalCardAmount,
@@ -47,7 +45,6 @@ import {
 	sanitizeJournalSubtitle,
 } from "@/utils/journal-state"
 import { callTitle } from "@/utils/tx-enrichment"
-import { buildIncomingCardProps } from "@/utils/received-display"
 import { buildCancelHandler, buildFocusHandler, isMatchingTask, isOwnTerminalRecord } from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 import { reaskReview } from "./reask-review"
@@ -263,10 +260,7 @@ const { incomingTransfers, dispose: disposeIncomingTransfers } = useIncomingTran
 	incomingTransferService,
 	configService,
 	priceService: incomingPriceService,
-	scope: () =>
-		appStore.profile?.id && appStore.network?.id && appStore.account?.address
-			? { profileId: appStore.profile.id, networkId: appStore.network.id, account: appStore.account.address }
-			: undefined,
+	scope: () => activeAccountScope(appStore),
 	// Rows are assigned under the state that judges them; the token page's never play, so its reads
 	// wait for none.
 	afterRead: arrivals && ((scope) => (props.token ? Promise.resolve() : arrivals.load(scope))),
@@ -281,9 +275,6 @@ const syncHealth = useIncomingSyncHealth({
 			: undefined,
 })
 const showStalledLine = computed(() => !props.token && syncHealth.stalled.value)
-function incomingCardProps(inc) {
-	return buildIncomingCardProps(inc, tokens.value, incomingPrices.tokenFiatLabel)
-}
 const executionService = new ExecutionServiceClient()
 
 /** Cancel handler for the awaiting card's `@cancel` emit.
@@ -427,17 +418,6 @@ async function sendReask() {
 		reaskSending.value = false
 		closeReask()
 	}
-}
-
-/** Compute card props for a terminal journal record. Thin wrapper over
- *  the shared `buildJournalTerminalCardProps` helper — id is spread in
- *  here because the template's `v-bind` propagates it as an attr; the
- *  shared helper deliberately omits `id` so other consumers (e.g.
- *  TransactionsList) don't carry an unused attr through fallthrough. */
-function journalTerminalCardProps(op) {
-	const props = buildJournalTerminalCardProps(op, { tokenById, tokens: tokens.value })
-	if (!props) return null
-	return { id: op.id, ...props }
 }
 
 /** Per-op subtitle. The active executingTask's subtask label decorates
@@ -864,20 +844,15 @@ onBeforeUnmount(() => {
 			<TransactionAwaitingCard v-else-if="!renderedInFlightOps.length && showFallbackAwaiting" />
 			<!-- Chronological merge of terminal journal records + settled chain
 			     txs. Branch by row.type. -->
-			<template v-for="row in recentActivityRows" :key="row.key">
-				<TransactionCard v-if="row.type === 'tx'" :tx="row.tx" :tokens="tokens" :to="activityRowRoute(row)" />
-				<TransactionIncomingCard
-					v-else-if="row.type === 'incoming'"
-					v-bind="incomingCardProps(row.inc)"
-					:to="activityRowRoute(row)"
-					:arriving="!token && (arrivals?.isArriving(row.inc) ?? false)"
-				/>
-				<TransactionTerminalCard
-					v-else-if="row.type === 'journal' && journalTerminalCardProps(row.op)"
-					v-bind="journalTerminalCardProps(row.op)"
-					:to="activityRowRoute(row)"
-				/>
-			</template>
+			<ActivityRowCard
+				v-for="row in recentActivityRows"
+				:key="row.key"
+				:row="row"
+				:tokens="tokens"
+				:tokenById="tokenById"
+				:fiatLabel="incomingPrices.tokenFiatLabel"
+				:isArriving="token ? undefined : arrivals?.isArriving"
+			/>
 		</div>
 	</Flex>
 	<Flex v-else-if="token" direction="column" gap="16" data-testid="activity-feed-root" :data-active-account="appStore.account?.address">
