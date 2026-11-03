@@ -198,14 +198,12 @@ test.skipIf(!aztecConfig)(
 			return {
 				grid: document.querySelector(grid)?.textContent?.replace(/\s/g, "") ?? "",
 				header: { lead: label("identity-account"), network: label("identity-network") },
-				action: label("verify-action"),
 				error: document.querySelector('[data-testid="error-text"]')?.textContent ?? null,
 			}
 		}, GRID)
 		expect(read).toEqual({
 			grid: hashToEmoji((await hash.jsonValue()) as string),
 			header: { lead: "Local Network", network: null },
-			action: null,
 			error: null,
 		})
 		await check.waitForFunction(
@@ -299,9 +297,10 @@ test.skipIf(!aztecConfig)(
 		const shown = await checkShown(check)
 		const read = await check.evaluate(async () => ({
 			window: (await chrome.windows.getCurrent()).id,
-			action: document.querySelector('[data-testid="verify-action"]')?.textContent?.trim() ?? null,
+			lead: document.querySelector('[data-testid="identity-account"]')?.textContent?.trim() ?? null,
+			network: document.querySelector('[data-testid="identity-network"]') !== null,
 		}))
-		expect(read.action).toBeNull()
+		expect([read.lead, read.network]).toEqual(["Local Network", false])
 		await control.waitForFunction(
 			(sel: string) => document.querySelector(sel) === null,
 			{ timeout: 10_000, polling: 100 },

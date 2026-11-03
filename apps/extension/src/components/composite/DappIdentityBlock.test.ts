@@ -126,10 +126,10 @@ describe("composite/DappIdentityBlock", () => {
 
 	test("a block given no action line draws none, its name still under the origin", () => {
 		const w = mount(DappIdentityBlock, {
-			props: { dapp: { url: "https://dapp.example", name: "Playground" }, actionTestId: "verify-action" },
+			props: { dapp: { url: "https://dapp.example", name: "Playground" }, actionTestId: "dapp-action" },
 			global: { stubs: STUBS },
 		})
-		expect(w.find('[data-testid="verify-action"]').exists()).toBe(false)
+		expect(w.find('[data-testid="dapp-action"]').exists()).toBe(false)
 		expect(w.find(".dapp_action, [class*='dapp_action']").exists()).toBe(false)
 		expect(w.text()).toContain("Playground")
 	})

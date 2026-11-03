@@ -631,7 +631,7 @@ describe("Delete Profile's checks say what they ask", () => {
 		expect(line().exists()).toBe(true)
 	})
 
-	test("a shown line stays through further wrong keys and goes on the key that makes it a prefix", async () => {
+	test("a shown line stays through further wrong keys, goes on the key that makes it a prefix, and a new mistake waits again", async () => {
 		const { type, line, invalid } = mountChecks()
 		await type("Mx")
 		await vi.advanceTimersByTimeAsync(500)
@@ -643,6 +643,10 @@ describe("Delete Profile's checks say what they ask", () => {
 		expect(invalid()).toBeUndefined()
 		await vi.advanceTimersByTimeAsync(5_000)
 		expect(line().exists()).toBe(false)
+		await type("Max")
+		expect(line().exists()).toBe(false)
+		await vi.advanceTimersByTimeAsync(500)
+		expect(line().exists()).toBe(true)
 	})
 
 	test("a move of the selection clears the field and its line; a page left mid-pause leaves no timer", async () => {

@@ -1,5 +1,4 @@
 <script setup>
-/** The identity strip naming the active account beside the wallet's network; owns only the no-account fallback. */
 import IdentityStrip from "./IdentityStrip.vue"
 
 defineProps({

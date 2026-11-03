@@ -230,7 +230,7 @@ describe("auth.vue — the recovery link asks the question the person has", () =
 		expect(link(wrapper).text()).toBe(words)
 		await link(wrapper).trigger("click")
 		expect(usePopupStore().open).toHaveBeenCalledWith("forgot_password")
-		expect(wrapper.text()).not.toContain("Delete this profile and re-import")
+		expect(wrapper.findComponent({ name: "Tooltip" }).exists()).toBe(false)
 	})
 
 	test("an unfinished import's link reads Delete profile and opens the same card; another profile asks again", async () => {

@@ -11,7 +11,6 @@ const props = defineProps({
 	/** From useDappInteractionPayload.dapp; reads `url`, `loadingLogo`,
 	 *  `logoBlobUrl`, and `name` keys. */
 	dapp: { type: Object, default: null },
-	/** The line under the app's name; a window with none passes nothing. */
 	actionLabel: { type: String, default: "" },
 	/** Forwarded to the hostname `<span>` so e2e selectors stay scoped
 	 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */

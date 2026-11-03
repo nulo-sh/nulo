@@ -211,7 +211,6 @@ const newGroups = computed(() => groupsOf(rows.value.filter((row) => row.isNew))
 const heldGroups = computed(() => groupsOf(rows.value.filter((row) => !row.isNew)))
 const heldCount = computed(() => rows.value.filter((row) => !row.isNew).length)
 
-/** An app that already holds a row asks for more: "Allow" what's new; a first request is a grant of access. */
 const asksForMore = computed(() => heldCount.value > 0)
 const confirmWord = computed(() => (asksForMore.value ? "Allow" : "Grant access"))
 
