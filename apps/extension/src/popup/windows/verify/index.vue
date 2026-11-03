@@ -47,7 +47,6 @@ const router = useRouter()
 const session = ref<DappSession>()
 const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
-const isReconnect = ref(false)
 /** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
 const checkHash = ref<string>()
 /** One answer per window: either control locks both, released only when that answer fails. */
@@ -165,7 +164,6 @@ onMounted(async () => {
 	// the row's. The row hash is only a legacy fallback for opens without the param.
 	const snapshotHash = router.currentRoute.value.query.verificationHash as string | undefined
 	checkHash.value = snapshotHash
-	isReconnect.value = router.currentRoute.value.query.isReconnect === "true"
 
 	if (!sessionId) {
 		closeCurrentWindow()
@@ -203,15 +201,10 @@ onUnmounted(() => {
 
 <template>
 	<Flex v-if="session" direction="column" :class="$style.wrapper">
-		<!-- Identity strip: anti-phishing trust anchor. Status is always ready on verify. -->
-		<IdentityStrip v-if="header" :accountLabel="header.account" :networkLabel="header.network" :warn="header.warn" />
+		<IdentityStrip v-if="header" :accountLabel="header.lead" :networkLabel="header.network" :warn="header.warn" />
 
 		<Flex direction="column" :class="$style.scroll_area">
-			<DappIdentityBlock
-				:dapp="dapp"
-				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
-				actionTestId="verify-action"
-			/>
+			<DappIdentityBlock :dapp="dapp" />
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
 				<SectionLabel :label="CHECK_LABEL" />
 

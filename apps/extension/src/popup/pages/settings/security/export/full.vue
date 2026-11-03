@@ -311,7 +311,6 @@ onBeforeUnmount(() => {
 					v-model:password="password"
 					v-model:repeatedPassword="repeatedPassword"
 					testid="backup-encrypt-password"
-					labelRepeat
 				/>
 			</template>
 		</template>

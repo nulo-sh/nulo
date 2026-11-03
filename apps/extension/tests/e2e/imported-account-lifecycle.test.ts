@@ -97,7 +97,7 @@ describe("imported account lifecycle", () => {
 
 		// ── Stage 4: password change → the DEK slot reseals to the NEW credential ──
 		await changePassword(page2, TEST_PASSWORD, NEW_PASSWORD)
-		await waitForToast(page2, "Profile password changed")
+		await waitForToast(page2, "Password changed", 5_000, { kind: "success" })
 		await page2.waitForFunction(() => !window.location.hash.includes("change-password"), { timeout: 15_000 })
 		// The export now authenticates with the NEW password — and still decrypts the row.
 		await assertImportedStillDecrypts(page2, importedAddress as string, NEW_PASSWORD)

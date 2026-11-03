@@ -54,7 +54,7 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 	await waitForHash(page, "#/popup/general", 15_000)
 
 	await changePassword(page, ORIGINAL_PASSWORD, NEW_PASSWORD)
-	await waitForToast(page, "Profile password changed")
+	await waitForToast(page, "Password changed", 5_000, { kind: "success" })
 
 	// router.back() returns to whatever was previous; we just need to end up
 	// somewhere outside the change-password page. With longer timeout because
