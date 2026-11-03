@@ -13,7 +13,16 @@ import {
 } from "../fixtures/extension"
 import { reloadExtensionPage, setViewport } from "../fixtures/browser"
 import { navigateByHash } from "../fixtures/navigation"
-import { PLAYGROUND_TEST_URL, requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import {
+	PLAYGROUND_TEST_URL,
+	requestPgBundle,
+	setPgInput,
+	setPgInputs,
+	setPgTextarea,
+	snapshotResultSeq,
+	waitForPgResult,
+} from "../fixtures/playground"
+import { readyAuthwitOwner } from "../fixtures/send"
 import { closeReview, openReviewFromStrip, shotSend } from "../fixtures/send-page"
 import { enterSendForm, setActiveSendType } from "../fixtures/transfers"
 import { readScopeIdentity, seedPendingTrust } from "../helpers/activity-seeds"
@@ -620,6 +629,37 @@ test.skipIf(!hasConfig)(
 			expect(raw!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
 				sel("execute-op-arg-field"),
 			)
+		} finally {
+			await dismiss(win, rejectExecute)
+		}
+		expect((await waitForPgResult(pg, "sendTx", seq, 30_000)).status).toBe("error")
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"the execute window holds its roles on an authorization another account already gave",
+	{ timeout: 600_000 },
+	async ({ dappConnectedExtensionWithFirstTwoAccountsCap: ctx }) => {
+		const pg = ctx.playgroundPage
+		const [owner, sender] = ctx.accountAddresses as [string, string]
+		await readyAuthwitOwner(ctx, pg, aztecConfig!, owner)
+		await setPgInputs(pg, { from: sender, authwitOwner: owner })
+		const seq = await snapshotResultSeq(pg)
+		const signed = waitForPopup(ctx, "execute", { timeout: 60_000 })
+		await clickByTestId(pg, "pg-btn-sendTx-onBehalf")
+		const sign = await signed
+		await waitForExecuteContent(sign)
+		const opened = waitForPopup(ctx, "execute", { timeout: 120_000 })
+		await approveExecute(sign)
+		const win = await opened
+		try {
+			await setViewport(win, WINDOW)
+			await waitForExecuteContent(win, 60_000)
+			await win.waitForSelector(sel("execute-op-summary-authwit-on-behalf-account"), { visible: true, timeout: 180_000 })
+			await win.waitForFunction(feeSettled, { timeout: 60_000, polling: 200 })
+			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit (network)"])
+			await openExecuteDetails(win)
+			await sweepWindow(win, "windows-execute", ["a send consuming another account's authwit, all details open (network)"])
 		} finally {
 			await dismiss(win, rejectExecute)
 		}
