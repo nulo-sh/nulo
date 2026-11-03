@@ -1,7 +1,7 @@
 ---
 plan: fu2-security-1
 tier: light
-status: arc 1 merged (#1559); arc 2 in progress
+status: delivered (arc 1 merged as #1559; arc 2 and this close-out in one PR, merge pending)
 issues: "#1528 #1529 #1530 (arc 2), #1531 #1532 #1533 #1534 (arc 1)"
 arc2_base: origin/dev at 67c1ac545
 driver: claude-code
@@ -17,6 +17,20 @@ post_implementation_hardening: not scheduled
 ---
 
 # fu2-security-1: the lock screen's recovery link, Delete profile's checks, the password toast, and the backup screens
+
+## Outcome
+
+- **Date:** 2026-11-03.
+- **Status:** delivered. Arc 1 merged as #1559; arc 2 and this close-out are the final commits of one PR against `dev`, which merges on the orchestrator's word.
+- **Owner sign-off:** page 93's seven picks (2026-11-02); P96-04 D and P96-05 D (page 96, 2026-11-02 18:55 UTC); OA-1 to OA-5 answered as P100-01 C, P100-02 A, P100-03 B, P100-04 A and P100-05 B (page 100, 2026-11-03 14:02 UTC); all quoted in § UI impact.
+- **Shipped:** arc 1 (#1559): one Download protected backup step, a line under each backup mode, the three-sentence warning, `nulo-backup-<date>.gz`. Arc 2: the lock screen's link reads "Forgot your password?" or "Lost your passkey?" ("Delete profile" on an unfinished import), with no tooltip, hidden in place until the profile is known; Delete profile's third box reads "I have my recovery phrase or a full backup" on every profile, and "Doesn't match <name>" shows 500 ms after the text can no longer become the name; "Password changed"; Account export's "Repeat password"; the connection check's header names the network alone with no action line, and `isReconnect` is gone end to end; Connect says what Allow grants; a first connection's capabilities window asks for access with "Grant access".
+- **Review loop:** plan: Codex and Opus conditional approve, folded, then Codex approve. Arc 1: Codex two rounds and Opus, folded. Arc 2 plan: Codex and Opus conditional approve, folded; Codex round 2 approve. Arc 2: Codex R1 approve and Opus conditional, folded; R2 conditional (a vacuous no-tooltip assertion), fixed; R3 approve. Cross-arc fresh Codex: approve (§ Audit verdicts).
+- **Gates:** lint, `typecheck:all`, the arc's vitest list (71 files, 1617 tests), `test:all` and `audit:vue` exit 0 after the last `dev` merge; at retry 0 on Chrome and Firefox, base and head: the five network files and the seven touched smoke files; armed chaos with committed `changePassword` and `deleteProfile` via the link; the full smoke suite after the first `dev` merge, Chrome 1709 s and Firefox 2649 s, and the touched smoke files again after the second ([lessons/phase-1.md](lessons/phase-1.md)).
+- **Dispositions:** R5 to R8 are readings asked on the PR (a reconnect's shared-account header, the ask-for-more window's "Allow", the chain banner's words, the 500 ms pause). `backup-restore-sw-restart` left arc 2's gate: it reaches the unfinished-import link only on a failed rollback, then throws, and skips Firefox. Comment rewrites on lines arc 2 does not touch: rejected as out of scope. P93-13 B's words for the third box (fu2-copy-1, #1505) are superseded by P93-40 C, recorded on #1529.
+- **Known limits:** none.
+- **Open items:** none.
+- **Lessons:** none promoted. The vacuous no-tooltip assertion is a case of the entry "pair a never-happens test with a success control", and `lessons.md` is at its budget (8174 of 8192 B); the detail stays in [lessons/phase-1.md](lessons/phase-1.md).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; never run them.
 
 Seven signed picks from decision page 93 (First users lab 1, signed 2026-11-02). Arc 1 ships the four backup picks; arc 2 the three security picks, two connect-window picks from decision page 96 and the five answers of decision page 100 (§ Arc 2). Recon: [recon.md](recon.md). Asks: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md). Paths are under `apps/extension/` unless they name a package. Over the light target (150 lines): two arcs and three decision pages, each quoted where it signs.
 
@@ -123,7 +137,7 @@ Sign-off, decision page 93, signed 2026-11-02, quoted:
 
 **Gate:** Phase 1's gate; steps 1 and 3 green at retry 0 on both browsers (a pre-existing chaos red excepted as step 3 says); `bun run check:plans` after staging. Pass: all green, the chaos records show the required steps, and every arc 1 surface has a before and after picture.
 
-## Arc 2
+## Arc 2 ✓
 
 Base `origin/dev` at `67c1ac545`, branch `fu2-security-1-a2`; arc 1 landed as #1559. One paragraph per item: files, the test red before and green after, the capture (light, Chrome, 360 px).
 

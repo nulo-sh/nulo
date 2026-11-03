@@ -19,3 +19,14 @@
 - **A default parameter swallows `undefined`.** `mountChecks(undefined)` mounted with the default profile; the no-profile case passes `null`.
 - **`vi.getTimerCount()` counts every fake timer**, not the page's own: spy on `setTimeout` for the 500 ms call and assert `clearTimeout` receives its id at unmount.
 - **Codex** (gpt-6.1-sol, high, read-only; session `01a1a22d-2b3c-7532-b3cc-71b9bd6eec6c`): round 1 approve with two cleanups; round 2 conditional (the Tooltip assertion, reproduced in memory and here); round 3 approve. **Opus 5.5** beside round 1: conditional approve, four test findings folded.
+
+## Arc 2 runs (retry 0)
+
+Arc 1's runs are in #1559's body.
+
+- **Base `67c1ac545`.** T4, T6-T12 red (29). Network files (`connect-check-window`, `connect-dapp`, `session-reconnect`, `cap-window`, `cap-chain-mismatch`, through `e2e:agent`): Chrome 13 tests, 136.1 s of tests in the touched files; Firefox 10 passed and 1 skipped, wall 242 s. Touched smoke files (`auth-flows`, `tooltips-glossary`, `security`, `security-reset`, `imported-account-lifecycle`, `account-import-export`, `type-roles`; 37 tests, armed build): Chrome 283.6 s, Firefox 439.0 s.
+- **Head.** Network files: Chrome 146.6 s, Firefox wall 320 s (beside a review agent's unit runs). Touched smoke files: Chrome 370.4 s (beside a Codex session), Firefox 512 s.
+- **Armed chaos.** Chrome seeds 1-10: `changePassword` committed in seed 9, `deleteProfile` via the lock screen's link in seeds 1, 3, 7 and 8. Firefox seeds 1-5: `changePassword` committed and a wrong one refused in seed 2, `deleteProfile` via the link in seeds 4 and 5. Seeds 1-5 on Chrome drew no `changePassword`, hence 6-10.
+- **After merging `dev` (`c2257be7f`).** Lint, `typecheck:all`; the vitest list plus `wallet-sdk`, `window-manager` and the chaos model (70 files, 1597 tests); `test:all` 159 s; `audit:vue` 163 s. Full smoke: Chrome 1709 s (62 files, 275 tests; arc 1 1850 s), Firefox 2649 s (66 files, 279 tests; arc 1 2791 s).
+- **After merging `dev` again (`67cf73b0b`; #1621 wraps `NewPasswordPair`'s repeat field, `labelRepeat` kept).** Lint, `typecheck:all`; the vitest list with `NewPasswordPair.test.ts` (71 files, 1617 tests); `test:all` 170 s; `audit:vue` 163 s. Touched smoke files, armed: Chrome 279 s, Firefox 409 s.
+- **`audit:vue` rebuilds `dist/chrome` without the e2e flags,** so an armed suite after it runs on the wrong bundle: rebuild armed first.
