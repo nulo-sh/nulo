@@ -188,12 +188,14 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		fence: ExecutionFence,
 	): Promise<StoredFpc[]> {
 		if (offersSponsoredFpc(chainId)) return rows
-		const stale = rows.find((f) => f.type === FpcType.DefaultSponsoredFpc && f.address === sponsored)
+		const isCanonical = (f: StoredFpc) => f.type === FpcType.DefaultSponsoredFpc && f.address === sponsored
+		const stale = rows.find(isCanonical)
 		if (!stale) return rows
 		const removed = await this.lock.withLock((isCurrent) => this.removeSponsorRow(stale.id, chainId, sponsored, fence, isCurrent))
 		// Outside the lock, as Settings' delete does; nothing retries a forget that fails.
 		if (removed) await this.forgetFeePicks(fence.profileId, removed.id)
-		return this.rowsOn(fence.profileId, chainId)
+		// A removal that stood down (its session or its lock moved on) still offers no sponsor.
+		return (await this.rowsOn(fence.profileId, chainId)).filter((f) => !isCanonical(f))
 	}
 
 	/** Caller holds the lock every row writer holds. The row is read again so an address edit or a
@@ -349,6 +351,12 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		const fence = await this.profileService.captureExecutionFence()
 		const deletion = this.profileService.getDeletionState()
 		const network = await this.networkService.getNetwork(networkId)
+		// No instance is published there, but a PXE that registered one before would answer for it, and
+		// the row would be a protocol row the next read removes.
+		if (type === FpcType.DefaultSponsoredFpc && !offersSponsoredFpc(network.chainId)) {
+			if (address === (await this.getOrComputeProtocolAddresses(network.chainId)).sponsored)
+				throw new Error("Contract instance not found")
+		}
 		const since = await this.networkService.captureLiveness(networkId)
 		if (since === undefined) {
 			throw new Error("network deleted")

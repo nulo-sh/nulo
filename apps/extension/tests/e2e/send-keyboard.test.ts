@@ -51,15 +51,20 @@ async function seedContacts(page: Page, names: string[]): Promise<void> {
 	)
 }
 
-async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = false, contacts = [] as string[] } = {}): Promise<Page> {
+/** The Send page, and the FPC row ids it seeded (`sponsors`). */
+async function openSendPage(
+	ctx: ExtensionContext,
+	{ priced = false, sponsors = false, contacts = [] as string[] } = {},
+): Promise<{ page: Page; seededFpcIds: string[] }> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
 	if (contacts.length) await seedContacts(page, contacts)
 	const scope = priced || sponsors ? await readActivityScope(page, { priced }) : undefined
+	let seededFpcIds: string[] = []
 	if (scope && sponsors) {
 		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
-		const seeded = await seedProtocolFpcs(page, scope)
-		expect(seeded, "the sponsor is offered on the spec's chain").toContain(SEEDED_SPONSOR_FPC_ID)
+		seededFpcIds = await seedProtocolFpcs(page, scope)
+		expect(seededFpcIds, "the sponsor is offered on the spec's chain").toContain(SEEDED_SPONSOR_FPC_ID)
 	}
 	if (scope && priced) {
 		await seedTokenRow(page, scope, 1)
@@ -67,7 +72,7 @@ async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = 
 	}
 	await clickByTestId(page, "actions-send")
 	await page.waitForSelector(sel("send-destination-field"), { visible: true, timeout: 15_000 })
-	return page
+	return { page, seededFpcIds }
 }
 
 async function expectAccentRing(page: Page, testid: string): Promise<void> {
@@ -189,7 +194,7 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	// Three contacts and the profile's own "Account 1" match "Acc": four rows, more than the list shows.
 	// Fifty-one more match "z" alone: one more than the list draws.
 	const zeds = Array.from({ length: 51 }, (_, i) => `Zed ${i + 1}`)
-	const page = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C", ...zeds] })
+	const { page } = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C", ...zeds] })
 	const account = await getAccountAddress(page)
 
 	// A pasted address shows its start; a typed character then brings the caret back into view.
@@ -286,7 +291,7 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	retry: 0,
 }, async ({ listedExtensionPerTest: ctx, skip }) => {
 	skipUnlessListPrices(skip)
-	const page = await openSendPage(ctx, { priced: true })
+	const { page } = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-at-rest", "send-amount-row")
 
@@ -316,7 +321,7 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 
 test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ listedExtensionPerTest: ctx, skip }) => {
 	skipUnlessListPrices(skip)
-	const page = await openSendPage(ctx, { priced: true })
+	const { page } = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
 	await tabTo(page, "send-token-trigger")
 	await expectAccentRing(page, "send-token-trigger")
@@ -324,8 +329,7 @@ test("the token card draws the accent ring when focused", { timeout: 180_000, re
 })
 
 async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
-	const page = await openSendPage(ctx, { priced: true, sponsors: true })
-	const seeded = await fpcRowIds(page)
+	const { page, seededFpcIds } = await openSendPage(ctx, { priced: true, sponsors: true })
 	const account = await getAccountAddress(page)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
@@ -365,7 +369,7 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 	await page.keyboard.press("Escape")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await waitForFocus(page, "send-fee-method-trigger")
-	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual(seeded)
+	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual(seededFpcIds)
 
 	// Only the chosen priority carries the accent border; the level under the pointer does not.
 	await page.waitForSelector(sel("send-fee-priority-fast"), { visible: true, timeout: 10_000 })
@@ -447,7 +451,7 @@ test("an open destination suggestion list covers neither Max nor the fee method 
 	timeout: 120_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
-	const page = await openSendPage(ctx)
+	const { page } = await openSendPage(ctx)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type(await getAccountAddress(page))

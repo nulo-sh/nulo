@@ -59,8 +59,8 @@ export interface FeeSelectionInput {
 	snapshot: CardSnapshot
 	verdicts: SponsorVerdicts
 	knownFpcs: Readonly<Ref<RegisteredFpc[]>>
-	/** The live identity's FPC list as read, null while unread or failed: what a sponsor shows as
-	 *  before the snapshot commits. */
+	/** The live identity's FPC list as read, null while unread, re-read or failed: what a sponsor shows
+	 *  as before the snapshot commits. */
 	readFpcs: Readonly<Ref<RegisteredFpc[] | null>>
 	methods: Readonly<Ref<FeeMethodOption[]>>
 	/** The profile's saved picks, each map re-parsed by the preference service. */

@@ -97,7 +97,7 @@ export function rowForPick(pick: SendPick | AppPick | undefined, methods: FeeMet
 }
 
 /** What the trigger shows before the first snapshot: display only, it never pays. A sponsor pick shows
- *  only as the row the live identity's read FPC list (`readFpcs`, null while unread or failed) holds
+ *  only as the row the live identity's read FPC list (`readFpcs`, null while unread, re-read or failed) holds
  *  for it, so the trigger never names a sponsor the menu cannot offer. */
 export function previewForPick(
 	pick: SendPick | AppPick | undefined,

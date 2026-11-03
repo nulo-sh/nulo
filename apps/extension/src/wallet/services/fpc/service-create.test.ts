@@ -702,6 +702,29 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		expect(await fpcRowCount(h.api)).toBe(2)
 	})
 
+	test("two concurrent reads remove the row once and forget its picks once", async () => {
+		const { h, deleted } = await mainnet()
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+
+		const reads = await Promise.all([h.service.getFpcs(MAINNET), h.service.getFpcs(MAINNET)])
+		for (const fpcs of reads) expect(fpcs.map((f) => f.id)).toEqual(["f-pr"])
+		expect(deleted).toEqual(["f-sp"])
+		expect(h.preference.forgets).toHaveLength(1)
+	})
+
+	test("adding the canonical sponsor's address is refused, where another sponsor is added", async () => {
+		const { h } = await mainnet()
+		await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, "0xsponsored", "Mine")).rejects.toThrow(
+			/^Contract instance not found$/,
+		)
+		expect(await fpcRowCount(h.api)).toBe(0)
+
+		await expect(h.service.addFpc("n1", FpcType.DefaultSponsoredFpc, HAND_ADDRESS, "Mine")).resolves.toMatchObject({
+			isProtocol: false,
+		})
+		expect(await fpcRowCount(h.api)).toBe(1)
+	})
+
 	test.each([
 		{ case: "refused", answer: async () => false },
 		{ case: "failed", answer: async (): Promise<boolean> => Promise.reject(new Error("storage")) },
@@ -755,7 +778,7 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 			await reached.promise
 			vi.advanceTimersByTime(5 * 60_000)
 			gate.resolve()
-			await read
+			expect((await read).map((f) => f.id)).toEqual(["f-pr"])
 		} finally {
 			vi.useRealTimers()
 		}
@@ -777,8 +800,8 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		h.lock()
 		gate.resolve()
 		await held
-		await read
 
+		expect((await read).map((f) => f.id)).toEqual(["f-pr"])
 		expect(deleted).toEqual([])
 		expect(h.preference.forgets).toEqual([])
 		expect(await fpcRowCount(h.api)).toBe(2)

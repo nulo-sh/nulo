@@ -895,15 +895,31 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 		w.unmount()
 	})
 
-	test("on Alpha Mainnet nothing holds a sponsor's place while the FPC list loads", async () => {
+	test.each([
+		{ chain: "Alpha Mainnet", chainId: CHAIN_IDS.MAINNET, rows: ["fj", "private_fpc"] },
+		{ chain: "the local network (id 0)", chainId: CHAIN_IDS.SANDBOX, rows: ["fj", "private_fpc", "fpc"] },
+	])("while the FPC list loads on $chain, the rows are $rows", async ({ chainId, rows }) => {
 		mocks.getFpcs.mockReturnValue(new Promise(() => {}))
 		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
-		const w = mount(FeeSettingsCard, {
-			props: baseProps({ network: { id: "n1", chainId: CHAIN_IDS.MAINNET } }),
-			global: { stubs: STUBS },
-		})
+		const w = mount(FeeSettingsCard, { props: baseProps({ network: { id: "n1", chainId } }), global: { stubs: STUBS } })
 		await flushPromises()
-		expect(rowState(w).map((r) => r.type)).toEqual(["fj", "private_fpc"])
+		expect(rowState(w).map((r) => r.type)).toEqual(rows)
+		w.unmount()
+	})
+
+	test("a saved sponsor deleted while the card loads is neither toasted nor the payer", async () => {
+		const { useToast } = await import("@/composables/toast")
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fpc", title: "Sponsor", fpc: { id: "s1", isProtocol: true } } }
+		mocks.getFpcs.mockReturnValue(new Promise(() => {}))
+		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+		const w = mount(FeeSettingsCard, { props: baseProps(ON_TESTNET), global: { stubs: STUBS } })
+		await flushPromises()
+		const before = useToast().toast.value
+
+		await fpcEvent("onFpcDeleted", { ...SPONSOR })
+		await flushPromises()
+		expect(useToast().toast.value).toBe(before)
+		expect(w.emitted<unknown[]>("update:payer")?.at(-1)?.[0] ?? null).toBeNull()
 		w.unmount()
 	})
 
