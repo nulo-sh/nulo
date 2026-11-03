@@ -1,5 +1,6 @@
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
+import { ValueDecodeError } from "@nulo/wallet-core/storage"
 import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
 import type { IService, ServiceCollection } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
@@ -147,18 +148,34 @@ export class TokenListService implements IService {
 		await this.refresh()
 	}
 
-	/** A stored list that no longer verifies, its key unpinned by a release included, is dropped and refetched. */
+	/** A failed read starts with no list: the first refresh reads again and adopts the stored one
+	 *  before it compares, so the stored sequence still bounds what it accepts. */
 	private async loadStored(): Promise<TokenListSnapshot | undefined> {
-		const state = await this.readState()
 		const source = await this.getSource()
-		if (state.envelope === undefined || !source) return undefined
+		if (!source) return undefined
+		let state: StoredState
 		try {
-			return toSnapshot(await readTokenList(state.envelope, source.keys))
+			state = await this.readState()
+		} catch (error) {
+			this.log(LogLevel.Warn, "stored token list unreadable", { error })
+			return undefined
+		}
+		return (await this.adoptStored(state, source)).list
+	}
+
+	/** The list `state` keeps, verified against `source`, and the state as stored after it. A list
+	 *  that no longer verifies, its key unpinned by a release included, is dropped and refetched. */
+	private async adoptStored(state: StoredState, source: TokenListSource): Promise<{ list?: TokenListSnapshot; state: StoredState }> {
+		if (state.envelope === undefined) return { state }
+		try {
+			return { list: toSnapshot(await readTokenList(state.envelope, source.keys)), state }
 		} catch (error) {
 			const outcome = refusalOutcome(error)
 			this.log(LogLevel.Warn, "stored token list discarded", { outcome })
-			if (outcome !== "verify-unsupported") await this.storage.set({ ...state, envelope: undefined, nextAttemptAt: undefined })
-			return undefined
+			if (outcome === "verify-unsupported") return { state }
+			const dropped: StoredState = { ...state, envelope: undefined, nextAttemptAt: undefined }
+			await this.storage.set(dropped)
+			return { state: dropped }
 		}
 	}
 
@@ -166,8 +183,18 @@ export class TokenListService implements IService {
 		if ((await this.legal.getStatus()) !== "current") return
 		const source = await this.getSource()
 		if (!source) return
+		// Read before the fetch: a failed read fetches and writes nothing. With no list held (the boot
+		// read failed), the stored one is adopted first, so a replayed older list cannot pass.
+		let state = await this.readState()
+		if (!this.snapshot) {
+			const stored = await this.adoptStored(state, source)
+			state = stored.state
+			if (stored.list) {
+				this.snapshot = stored.list
+				this.onListChanged.invoke(stored.list)
+			}
+		}
 		const { outcome, list, envelope } = await this.fetchList(source)
-		const state = await this.readState()
 		const now = this.now()
 		const failures = FAILED.has(outcome) ? state.failures + 1 : 0
 		const usable = outcome === "accepted" || outcome === "unchanged"
@@ -218,11 +245,13 @@ export class TokenListService implements IService {
 		}
 	}
 
+	/** A stored value that does not decode reads as empty; a failed read rejects. */
 	private async readState(): Promise<StoredState> {
 		let raw: unknown
 		try {
 			raw = await this.storage.get()
-		} catch {
+		} catch (error) {
+			if (!(error instanceof ValueDecodeError)) throw error
 			return { failures: 0 }
 		}
 		return decodeTokenListState(raw, this.now())

@@ -11,6 +11,9 @@ export class LoggerStore implements ILoggerStore {
 	private logLevel: LogLevel
 	private logs: CircularBufferIterable<Log>
 	private nextId = 1
+	private rehydration?: Promise<void>
+	/** The highest id `rehydrate()` imported: with retention off, the lines up to it go. */
+	private importedThroughId = 0
 	private flushTimer?: ReturnType<typeof setTimeout>
 	/**
 	 * FIFO chain of every session-storage operation this store performs.
@@ -28,7 +31,7 @@ export class LoggerStore implements ILoggerStore {
 	public constructor(config: IConfig) {
 		this.config = config
 		this.logLevel = config.get("debugMode") ? LogLevel.Debug : LogLevel.Info
-		this.logs = new CircularBufferIterable(this.logLevel === LogLevel.Debug ? 10_000 : 1000)
+		this.logs = new CircularBufferIterable(ringSize(this.logLevel))
 		// The persisted config has NOT loaded at construction — this store is built at module
 		// scope, while `config.load()` runs later inside `runtime.start()` (after migrations, an
 		// ordering that must not change). So this is the schema default, not the user's choice;
@@ -82,26 +85,38 @@ export class LoggerStore implements ILoggerStore {
 	}
 
 	/**
-	 * Rehydrate logs from chrome.storage.session (call on startup before wiring services).
+	 * Rehydrate logs from chrome.storage.session, once per worker. The saved lines go first and this
+	 * worker's lines follow, renumbered after the saved ids (ids rise in buffer order, which paging and
+	 * the log viewer's links rely on), in a ring that holds both.
 	 *
 	 * Deliberately unconditional. It runs BEFORE the persisted config loads, so gating it on
 	 * `persistEnabled` would read the schema default and wipe a developer's logs on every worker
 	 * restart — the exact continuity the retention opt-in exists to preserve.
 	 * `applyRetentionPolicy()` undoes this if the loaded config turns out to disable retention.
 	 */
-	public async rehydrate(): Promise<void> {
+	public rehydrate(): Promise<void> {
+		this.rehydration ??= this.importSaved()
+		return this.rehydration
+	}
+
+	private async importSaved(): Promise<void> {
+		let saved: Log[] | undefined
 		try {
-			const result = await chrome.storage.session.get("nulo:logs")
-			const saved = result["nulo:logs"] as Log[] | undefined
-			if (saved?.length) {
-				for (const log of saved) {
-					this.logs.add(log)
-					this.nextId = Math.max(this.nextId, log.id + 1)
-				}
-			}
+			saved = (await chrome.storage.session.get("nulo:logs"))["nulo:logs"] as Log[] | undefined
 		} catch {
 			// Session storage may not be available (e.g., in tests)
+			return
 		}
+		if (!saved?.length) return
+		// Read after the await: a line logged while the read was in flight is this worker's too.
+		const live = this.logs.items()
+		let id = 0
+		for (const log of saved) id = Math.max(id, log.id)
+		this.importedThroughId = id
+		this.logs.clear(Math.max(ringSize(this.logLevel), saved.length + live.length))
+		for (const log of saved) this.logs.add(log)
+		for (const log of live) this.logs.add({ ...log, id: ++id })
+		this.nextId = id + 1
 	}
 
 	/**
@@ -139,18 +154,25 @@ export class LoggerStore implements ILoggerStore {
 
 	/**
 	 * Settle retention once the persisted config has actually loaded. MUST be called after
-	 * `config.load()` resolves.
+	 * `config.load()` resolves. It first waits for the import in flight: the boot holds its service
+	 * wiring behind this call, so no reader holds an id before the import renumbers this worker's
+	 * lines, and retention never settles before the lines it governs arrive.
 	 *
 	 * Two cases the config-update event alone cannot cover: `apply()` only emits when a value
 	 * CHANGES, so a stored `developerMode: false` matching the default emits nothing; and the flag
 	 * can be turned off while this worker is dead, so the disable-time purge never ran. Either way
 	 * the rehydrated entries and the stored copy must go — retention-off means nothing outlives the
-	 * worker that wrote it.
+	 * worker that wrote it. This worker's own lines stay.
 	 */
 	public async applyRetentionPolicy(): Promise<void> {
+		// A failed import is non-fatal to the boot, as at the entry point.
+		await this.rehydration?.catch(() => {})
 		this.persistEnabled = this.config.get("developerMode") === true
+		this.logs.resize(ringSize(this.logLevel))
 		if (this.persistEnabled) return
+		const kept = this.logs.items().filter((log) => log.id > this.importedThroughId)
 		this.logs.clear()
+		for (const log of kept) this.logs.add(log)
 		// Best effort: this runs inside the boot's config leg, which a rejection would veto.
 		await this.purgePersisted().catch(() => {})
 	}
@@ -174,7 +196,7 @@ export class LoggerStore implements ILoggerStore {
 			const level = prop.value ? LogLevel.Debug : LogLevel.Info
 			const moved = level !== this.logLevel
 			this.logLevel = level
-			this.logs.resize(this.logLevel === LogLevel.Debug ? 10_000 : 1_000)
+			this.logs.resize(ringSize(this.logLevel))
 			if (moved) this.onLevel.invoke(level)
 		}
 		if (prop.key === "developerMode") {
@@ -185,4 +207,8 @@ export class LoggerStore implements ILoggerStore {
 			if (!this.persistEnabled) void this.purgePersisted().catch(() => {})
 		}
 	}
+}
+
+function ringSize(level: LogLevel): number {
+	return level === LogLevel.Debug ? 10_000 : 1000
 }
