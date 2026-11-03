@@ -1,7 +1,7 @@
 ---
 plan: quality-profile-1
 tier: mid (the lane brief names it; competing outline, Codex + Opus dual audit, a fresh Codex final pass)
-status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 next
+status: approved 2026-11-03 (final Codex pass; the orchestrator's auto-continue); arc 1 in review, arc 2 next
 issues: "#1439 (arc 2, Closes); #1446 (closed before building as a known limit: the class declined; arc 2 ships its log router)"
 driver: claude-code
 claude_model: opus
@@ -90,19 +90,19 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 
 **Smoke set** (arcs 1 and 2): `security`, `passkey-paths`, `auth-flows`, `security-backup`, `backup-roundtrip`, `account-import-export` (unlock both kinds, password and unlock-method change, phrase, account and full-backup export, restore and finalize). Per browser `B` in `chrome`, `firefox`: build the armed bundle (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:B`), then `cd apps/extension && NULO_E2E_BROWSER=B NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/<file>.test.ts --retry=0`. Pass: every test green; wall-clock recorded.
 
-### Phase 1 (arc 1): pin the slot wipe on a throwing body
+### Phase 1 (arc 1): pin the slot wipe on a throwing body ✓
 
 1. In `service.open-slots.test.ts` § the opener's buffers, add one table-driven test. Rows: each `PAIRED_PATHS` entry, both verify RPCs with `{ password }`, with a sibling's entropy planted; `finalizeRestore` on a restored row with a sibling's entropy (the fixture at `:174-192`); `exportImportedKeysDek` on a row whose `dekSealed` does not open. In each, the slots open and the body throws. Assert every passhash (spied as at `:208-212`), master and entropy the opener produced is zero after the refusal. Success control: the row's own entropy opens on one path and its buffers are zero after.
 **Gate:** fast gate; the new test green at the base.
 
-### Phase 2 (arc 1): the codec class
+### Phase 2 (arc 1): the codec class ✓
 
 1. Create `profile-secret-codec.ts`; move the bodies byte for byte, comments included.
 2. Repoint `service.ts`; delete the moved members; keep `secretBox` for its three own calls.
 3. Repoint the five seams in the same commit, saying so in its body; `countOpens` throws on a missing method.
 **Gate:** fast gate; `git diff --color-moved=dimmed-zebra 846030f16 -- apps/extension/src/wallet/services/profile` shows every moved body as moved; `profile-chaos.composition.test.ts` green, with `countOpens` wrapping the codec.
 
-### Phase 3 (arc 1): one pairing predicate
+### Phase 3 (arc 1): one pairing predicate ✓
 
 1. Add `entropyDerivesMaster(master, entropy)`; call it from `assertEntropyMasterPair` and `decodeRestoreMaterial`.
 **Gate:** fast gate; `restore-material.test.ts` and `service.open-slots.test.ts` green unedited; `bun run test:all`; `bun run audit:vue`; the smoke set on both browsers.
@@ -156,6 +156,8 @@ Fast gate (every phase): `bun run lint`, `bun run typecheck:all`, `cd apps/exten
 - **Codex r2** (resumed): conditional approve. Accepted: an executable literal-count command; the network gate at retry 0 on a named browser. No other material finding; the nine pin rows, the seam list (no sixth seam found) and D12 verified.
 - **Codex final** (fresh session): conditional approve. Accepted: #1446 is not closed by a PR that leaves its main finding undone; it closes as a known limit with its reopening condition; the stack's PR bases stated. Verified the facts, I1, D2, D4, D9 and the gates.
 - **Codex final r2** (resumed): approve, no new material findings.
+- **Arc 1, Codex r1** (gpt-6.1-sol, high, over the arc's diff): no material findings; one comment trimmed. **r2** (resumed): no new material findings, converged.
+- **Arc 1, Opus** (general-purpose, over the arc's diff): no material findings. Two codec doc trims deferred to arc 2, which edits the codec (`lessons/phase-1.md`).
 
 ## Delivery
 
