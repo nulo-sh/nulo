@@ -46,7 +46,7 @@ import { createReconnectRead } from "@/composables/reconnectRead"
 
 /** Utils */
 import { isClientDisconnectRejection, RpcDisconnectedError } from "@nulo/extension-messaging/errors"
-import { DETAIL_TIME_FORMAT } from "../detail-page"
+import { DETAIL_AMOUNT_LENGTH, DETAIL_TIME_FORMAT } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { copyReceivedValue } from "./received-copy"
 import { endsSelection } from "@/utils/selection"
@@ -132,7 +132,7 @@ const formattedAmount = computed(() => {
 	const inc = received.value
 	const decimals = knownDecimals(token.value)
 	if (!inc || decimals === null) return null
-	return balanceFormatted(inc.amountRaw, decimals, 8, { compact: true }).value
+	return balanceFormatted(inc.amountRaw, decimals, DETAIL_AMOUNT_LENGTH, { compact: true }).value
 })
 const amountFiat = computed(() => {
 	const inc = received.value

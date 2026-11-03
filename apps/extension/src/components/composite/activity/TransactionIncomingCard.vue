@@ -13,6 +13,7 @@ import { STATUS_ICON_FILL } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 import { balanceFormatted } from "@/utils/amount.js"
+import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { isValidDecimals } from "@/utils/token-amount"
 import { dashIfBlank } from "@/utils/string"
 
@@ -39,7 +40,7 @@ const props = defineProps({
 /** `decimals` comes from a contract-fed storage row; an invalid one leaves the amount column out. */
 const formattedAmount = computed(() => {
 	if (!props.amountRaw || !isValidDecimals(props.tokenDecimals)) return null
-	return balanceFormatted(props.amountRaw, props.tokenDecimals, 8, { compact: true }).value
+	return balanceFormatted(props.amountRaw, props.tokenDecimals, ROW_AMOUNT_LENGTH, { compact: true }).value
 })
 
 const hashSlice = computed(() => {

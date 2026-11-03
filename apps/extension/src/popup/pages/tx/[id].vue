@@ -24,7 +24,7 @@ import { TokenServiceClient } from "@/wallet/services/token/client"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Utils */
-import { DETAIL_TIME_FORMAT } from "../detail-page"
+import { DETAIL_AMOUNT_LENGTH, DETAIL_TIME_FORMAT, showsDeveloperFields } from "../detail-page"
 import { balanceFormatted } from "@/utils/amount.js"
 import { displaySymbol, txAmount } from "@/utils/tx-amount"
 import { copyWithToast } from "@/utils/clipboard"
@@ -58,10 +58,6 @@ const router = useRouter()
 const tokenService = new TokenServiceClient()
 const configService = new ConfigServiceClient()
 
-// Debug panel visibility — gated behind either flag so contributors who
-// only ever flip `developerMode` (which gates other internal UI) also see
-// it, and `debugMode` (the narrower "show me the raw tx soup" toggle)
-// works on its own.
 const showDebugPanel = ref(false)
 
 const tx = computed(() => appStore.transactions.find((t) => t.hash === route.params.id))
@@ -90,7 +86,7 @@ const missingTitle = computed(() => {
 
 const amount = computed(() => txAmount(tx.value?.calls, tokens.value))
 const formattedAmount = computed(() =>
-	amount.value ? balanceFormatted(amount.value.units, amount.value.decimals, 8, { compact: true }).value : null,
+	amount.value ? balanceFormatted(amount.value.units, amount.value.decimals, DETAIL_AMOUNT_LENGTH, { compact: true }).value : null,
 )
 
 const showFeeBreakdown = ref(false)
@@ -153,10 +149,7 @@ const callRowTitle = (c) => settledCallTitle(c, tokens.value)
 
 onMounted(async () => {
 	tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
-	const props = await configService.getProps()
-	const debugMode = props.find((p) => p.key === "debugMode")?.value ?? false
-	const developerMode = props.find((p) => p.key === "developerMode")?.value ?? false
-	showDebugPanel.value = Boolean(debugMode || developerMode)
+	showDebugPanel.value = showsDeveloperFields(await configService.getProps())
 })
 
 onBeforeUnmount(() => {

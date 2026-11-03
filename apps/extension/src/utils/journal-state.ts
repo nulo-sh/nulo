@@ -10,6 +10,7 @@ import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
+import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { dashIfBlank } from "@/utils/string"
 import { knownDecimals, parseSide } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
@@ -53,14 +54,28 @@ export function journalProgressWord(op: OperationRecord): string {
 
 type CardToken = { symbol?: string; decimals?: unknown; hasDecimals?: boolean }
 
+/**
+ * A transfer record's stored amount and its token's decimals: null for a dApp operation, a missing or
+ * empty `amountRaw` (it would format as "0", a fake "0 USDC") and a token whose decimals the wallet
+ * does not know. The string comes back as stored, so a caller that must refuse a malformed one parses it.
+ */
+export function journalTransferAmount(
+	op: Pick<OperationRecord, "kind" | "amountRaw">,
+	token: CardToken | null | undefined,
+): { raw: string; decimals: number } | null {
+	if (op.kind !== "transfer") return null
+	const decimals = knownDecimals(token)
+	return op.amountRaw && decimals !== null ? { raw: op.amountRaw, decimals } : null
+}
+
 /** An in-flight send's amount: null for a dApp operation, an empty or unreadable `amountRaw`, and a
  *  token whose decimals the wallet does not know. */
 export function journalCardAmount(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
-	if (op.kind !== "transfer" || !op.amountRaw || op.tokenId === undefined) return null
-	const raw = parseSide(op.amountRaw)
-	const decimals = knownDecimals(tokenById(op.tokenId))
-	if (raw === undefined || decimals === null) return null
-	return balanceFormatted(raw, decimals, 8, { compact: true }).value
+	if (op.kind !== "transfer" || op.tokenId === undefined) return null
+	const amount = journalTransferAmount(op, tokenById(op.tokenId))
+	const units = amount ? parseSide(amount.raw) : undefined
+	if (!amount || units === undefined) return null
+	return balanceFormatted(units, amount.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
 }
 
 /** An in-flight send's symbol, set whenever its token is known, amount or not. */
@@ -437,12 +452,11 @@ type JournalCardFields = Pick<
 function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): JournalCardFields {
 	const token = op.tokenId !== undefined ? ctx.tokenById(op.tokenId) : undefined
 
-	// An empty or missing `amountRaw` would format as "0", a fake "0 USDC" on the card.
 	let amount: string | null = null
 	let amountSymbol: string | null = null
-	const decimals = knownDecimals(token)
-	if (op.amountRaw && token && decimals !== null) {
-		amount = balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
+	const stored = journalTransferAmount(op, token)
+	if (stored && token) {
+		amount = balanceFormatted(stored.raw, stored.decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
 		amountSymbol = token.symbol ?? null
 	}
 

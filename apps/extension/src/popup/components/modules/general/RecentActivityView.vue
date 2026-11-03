@@ -27,6 +27,7 @@ import { useJournalMirror } from "@/composables/useJournalMirror"
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
+import { ROW_AMOUNT_LENGTH } from "@/utils/snack-amount"
 import { knownDecimals } from "@/utils/token-amount"
 import { dashIfBlank, isBlank } from "@/utils/string"
 import { activityRowRoute, filterPendingDoubleRender, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
@@ -211,7 +212,7 @@ const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
 	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
 	if (decimals === null) return null
-	return balanceFormatted(String(executingTask.value.content.amount), decimals, 8, { compact: true }).value
+	return balanceFormatted(String(executingTask.value.content.amount), decimals, ROW_AMOUNT_LENGTH, { compact: true }).value
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
