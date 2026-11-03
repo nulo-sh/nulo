@@ -1,7 +1,7 @@
 ---
 plan: quality-tooling-1
 tier: light
-status: arc 1 merged (#1586); arc 2 in review
+status: completed
 issues: "#1454 (arc 1); #1448, its tsconfig half (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at a0458e21a (recon read 038901c5b; nothing planned changed bet
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed in two arcs: #1586, then arc 2 with this close-out (`build(ts): a root tsconfig base holds the compiler options every workspace shares`).
+- **Shipped**:
+  - #1454 (#1586; D1-D8, Dev1-Dev3): `github-rest.ts`, `gh-pulls.ts`, `store-http.ts` and an exported `checkShasums`, which the eight release runners use; a closure test keeps the runners' imports to relative files, `node:*` and `bun`. The runners went from 1990 to 1935 lines, plus 74 in the three modules.
+  - #1448's tsconfig half (arc 2; D9, D11): a root `tsconfig.base.json` that 18 configs extend. The 27 resolved configs, both extension builds, landing, playground and the staged npm packages are unchanged, except D11's two keys on three configs. The base joined the five PR filters, the tsbuildinfo cache key and CI.md, and a test refuses `paths` or `baseUrl` in any tsconfig the release scripts resolve through.
+  - OA-1 (D12): `sync-main-to-dev` fails with the `gh` error when GitHub cannot say which PR the release commit merged, as `auto-unstick` does.
+- **Known limits**: none.
+- **Dispositions**:
+  - #1448's Bun half and its stale comment shipped earlier, in #1492.
+  - Not done, #1454: `open-publish-pr.ts` keeps its own client and mutation (D3, the token-list signing closure); zip reads stay per runner (D5); the prefix-only `fail` closures and `ensureLabel` (D6); the frozen 0.30.2 digest path (D8).
+  - Not done, #1448: the two token-list configs stay standalone (D9, the signing closure); `apps/extension/tsconfig.node.json` stays as it is (composite, run by no script, fails `tsc -p` today), noted on #1448; the Workers keep `target` ES2022.
+  - Rejected in review: editing `nulo-subscribe`'s documented watch paths, a dashboard setting (the base's comment states the constraint instead); splitting D12 into its own PR.
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget. Biome scoring a function only once it leaves `if (import.meta.main)` is in [lessons/phase-2.md](lessons/phase-2.md); `tsc --showConfig` adding implied options and reordering keys under `extends` is in [lessons/phase-0.md](lessons/phase-0.md).
+- **Open items**: none. D12 ships pending the owner's confirmation ([OWNER-ASKS.md](OWNER-ASKS.md)); an A restores the call site's catch, the pin's `null` and the skill sentence.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-tooling-1: the release runners' shared I/O, and one root tsconfig base
 
@@ -119,6 +137,7 @@ New modules sit in `scripts/release/` beside `workflow-command.ts`, the preceden
 | Arc 2 Codex r1 | conditional approve: `nulo-subscribe`'s Workers Build watches only `infra/subscribe/**`, so a base change redeploys nothing; plan text still says open-sync catches and `parsePulls` returns an array | the plan text; the watch-path gap as a constraint in the base's comment (the Workers keep `target`, so no option of today's base reaches their bundles) | editing the README's watch paths: a dashboard setting only the owner changes |
 | Cross-arc Codex | conditional approve: the plan's Outcome, `gh-pulls` paragraph and arc map predate D12 | all three | none |
 | Arc 2 Opus r1 | conditional approve: the base's no-`paths` invariant has no test; B pinned only at the IO; split B into its own PR; "stuck release" is the wrong symptom; `target` steers class-field emit; the skill row's fallback; plan text predating D12 | a closure test over every tsconfig the release scripts resolve through, a `runSync` rejection pin (each red under its mutation), the TSDoc, the base comment, the fallback sentence, D4 and Delivery | the split: the orchestrator asked for one PR, whose body names D12 under "Decision pending the owner" |
+| Arc 2 Codex r2 (resumed) | approve: every fix verified, the watch-path disposition supported; no new material finding | none | none |
 
 ## Delivery
 

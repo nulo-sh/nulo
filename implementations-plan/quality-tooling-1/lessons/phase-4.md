@@ -8,3 +8,4 @@
 - 2026-11-03: OA-1 answered B by the orchestrator, owner to confirm: open-sync's lookup no longer catches; its pin expects the `gh` error. Mutation: restoring the catch reds that pin (9 pass, 1 fail).
 - 2026-11-03: arc 2 Codex r1 (gpt-6.1-sol, high, read-only): conditional approve, a Workers Build watch-path gap and stale plan text; the cross-arc Codex pass (fresh session): conditional approve, the same plan text. Opus r1: conditional approve, seven items; all but the PR split taken.
 - 2026-11-03: mutations against the review's new pins, each red: a `baseUrl` in the base (the tsconfig-chain test, 1 fail); a `.catch(() => null)` around `runSync`'s lookup (the rejection pin, 1 fail).
+- 2026-11-03: arc 2 Codex r2 (resumed): approve, no new material finding; the loop converged in two rounds.
