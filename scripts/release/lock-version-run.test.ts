@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { ATTEMPTS, type LockIO, movedHead, runLockVersion } from "./lock-version-run"
+import { describe, expect, spyOn, test } from "bun:test"
+import { ATTEMPTS, type LockIO, movedHead, realLockIO, runLockVersion } from "./lock-version-run"
 
 const BRANCH = "release-please--branches--main"
 const PR = JSON.stringify({ headBranchName: BRANCH, baseBranchName: "main", number: 7 })
@@ -92,4 +92,46 @@ test.each([
 	["no errors", [], false],
 ])("movedHead: %s → %p", (_, errors, moved) => {
 	expect(movedHead(errors)).toBe(moved)
+})
+
+describe("the REST transport", () => {
+	test("a file read asks for raw bytes within 60 s and refuses a 404 with GitHub's message", async () => {
+		const timeouts = spyOn(AbortSignal, "timeout")
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () =>
+			Response.json({ message: "Not Found" }, { status: 404 })) as unknown as typeof fetch)
+		try {
+			const error = await realLockIO("o/r", "t")
+				.read("bun.lock", "abc")
+				.catch((e: Error) => e.message)
+			expect(error).toBe("GET repos/o/r/contents/bun.lock: HTTP 404: Not Found")
+			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.redirect, init?.headers])).toEqual([
+				[
+					"https://api.github.com/repos/o/r/contents/bun.lock?ref=abc",
+					undefined,
+					{ Authorization: "Bearer t", Accept: "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" },
+				],
+			])
+			expect(timeouts.mock.calls).toEqual([[60_000]])
+		} finally {
+			fetchSpy.mockRestore()
+			timeouts.mockRestore()
+		}
+	})
+
+	test("a commit refused because the branch moved reads as not written", async () => {
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () =>
+			Response.json({ data: { createCommitOnBranch: null }, errors: [stale] })) as unknown as typeof fetch)
+		try {
+			expect(await realLockIO("o/r", "t").commit("b", "h0", "bun.lock", "text", "chore: x")).toBe(false)
+			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method, init?.headers])).toEqual([
+				[
+					"https://api.github.com/graphql",
+					"POST",
+					{ Authorization: "Bearer t", Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+				],
+			])
+		} finally {
+			fetchSpy.mockRestore()
+		}
+	})
 })
