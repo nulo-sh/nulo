@@ -28,7 +28,7 @@ trunk: dev
 
 # egress-guard-1: the egress guard declares each release's Testnet host for the update scenarios
 
-The live update scenario from v1.1.0 is red on both browsers at the egress guard's close (#1636): the release seeds Testnet on dRPC's keyed load-balancer host, and the guard declares only the candidate's Testnet host, derived from the candidate's constant. This arc declares, as a refusal, the Testnet host of every release the update scenarios can install, read from a reviewed per-release trait beside the digests, then runs both update scenarios from v1.1.0 on both browsers at retry 0. Test fixtures only. Recon: [the archived release-replay-1 plan](../archive/release-replay-1/plan.md) and its [lessons/phase-1.md](../archive/release-replay-1/lessons/phase-1.md), and #1636.
+The live update scenario from v1.1.0 is red on both browsers at the egress guard's close (#1636): the release seeds Testnet on dRPC's keyed load-balancer host, and the guard declares only the candidate's Testnet host, derived from the candidate's constant. This arc declares, as a refusal, the Testnet host of every release the update scenarios can install, read from a reviewed per-release trait beside the digests, then runs both update scenarios from v1.1.0 on both browsers at retry 0. Test fixtures only. Recon: [the archived release-replay-1 plan](../release-replay-1/plan.md) and its [lessons/phase-1.md](../release-replay-1/lessons/phase-1.md), and #1636.
 
 ## Outcome & Quality Bar
 
