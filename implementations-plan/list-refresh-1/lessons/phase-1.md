@@ -13,3 +13,9 @@
 
 - `origin/dev` merged before the privacy step: #1612 had landed privacy 1.2.8 (undated), so this arc takes 1.2.9. One conflict, `ARCHITECTURE.md`'s token-list and price-feed lines: took dev's lines, then reapplied the cadence sentence.
 - OA-1 captures with a scratch smoke spec (deleted after use) on the arc's armed Chrome build: option A as built (idle with two seeded tokens, no tokens, updated, unreachable), then B and C by swapping the template block and rebuilding, then A restored. A first run timed out navigating back to Settings from Settings → Tokens; the spec read the scope from the page instead.
+
+## Gate and review
+
+- Gate run 1: `bun run audit:vue` red in `useLogFilters.scan.test.ts`: every client needs a row in the logs window's source filter, and `token-list` sat in `NO_CLIENT`. Fixed in `06aa99a5c`; run 2 exit 0 (17179 tests). `bun run test:all` exit 0; `bun run check:plans` 0 findings.
+- Focused e2e on the armed builds, retry 0: Chrome `token-list`, `settings-crud`, `legal-acceptance` (25 tests, 166 s); Firefox `token-list`, `settings-crud` (11 tests, 57 s).
+- Review R1: Codex (gpt-6.1-sol, high) clean; Opus (general-purpose) two lows, applied in `51421ed29`. R2: Codex resumed, clean.

@@ -1,7 +1,7 @@
 ---
 plan: list-refresh-1
 tier: mid
-status: plan approved by the panel; phase 1 next; the PR waits on OA-1
+status: phase 1 built, review loop converged; the PR waits on OA-1
 issues: "#1608"
 driver: claude-code
 claude_model: opus
@@ -101,6 +101,7 @@ One arc, one PR, closes #1608. The owner chose B + C on #1608: "I'd still change
 - **Codex R1** (gpt-6.1-sol, high): conditional approve. Accepted: the `http-status` and `unchanged` words (D6), D9's `aria-busy` claim, the armed builds and `audit:vue` in the gate, qualified targets and I2, the About and store surfaces in UI impact, OA-1's "starts or joins" and the failure description. Partly accepted: the full-suite gate (D10).
 - **Opus R1** (Plan leg): conditional approve. Accepted: F-3 and the idle line; D9; the page-test harness (stub with the description slot, hoisted mocks); the empty-state placement; ceiling pins green at the base; fewer tests (extend the existing ones, the `satisfies` table); the conversion details; recon corrections (an e2e does open Settings → Tokens; F1; the client rationale); D7's consequence as a known limit; `wrapDescription`.
 - **Final fresh Codex pass** (gpt-6.1-sol, high, new session): conditional approve, one condition: D10 must keep CLAUDE.md's local full smoke suites (Chrome, and Firefox for the fixture edits). Accepted (D10, the gate). No other material finding; the conversion, the result contract, the 26 h ceiling, D7's known limit and the privacy wording held. Resumed on the change: **approve**.
+- **Post-implementation R1** (net diff against dev `c6eceae22`): Codex clean. Opus (general-purpose) changes requested, two lows, both applied in `51421ed29`: `RefreshResult`'s comment now says `"error"` can follow a request; the page test pins the danger colour on the failed line too. **R2**: Codex resumed on the fix, clean. The loop converged.
 
 ## Security & Adversarial Considerations
 
