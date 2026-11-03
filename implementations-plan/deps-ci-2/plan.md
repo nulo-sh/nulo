@@ -48,7 +48,7 @@ The npm tree runs only in CI jobs and the local Docker runner (`install.sh`, `np
 ## Architecture & Implementation
 
 - **Shape**: two tool-native in-place updates (npm for the CLI tree, Bun for the workspace tree). Then two edits keep the record true: the ack entry and the `SECURITY.md` table.
-- **Files**: `.github/actions/setup-aztec/cli/package-lock.json` (2 entries), `bun.lock` (1 line), `scripts/ci-cd/audit-acks.json` (the `1244003` entry), `SECURITY.md` (the count and one row). No `package.json`, `lock.sh`, test or workflow changes.
+- **Files**: `.github/actions/setup-aztec/cli/package-lock.json` (2 entries), `bun.lock` (1 line), `scripts/ci-cd/audit-acks.json` (the `1244003` entry), `SECURITY.md` (the count and one row). Added in review (D7): one sentence in `.claude/skills/aztec-update/SKILL.md`. No `package.json`, `lock.sh`, test or workflow changes.
 - **Alternative not taken**: a fresh `lock.sh 6.0.0` re-resolve, which moves dozens of unrelated packages (D1).
 
 ## Phase 1 — the lockfiles and the record ✓
@@ -63,7 +63,7 @@ Assumptions: F2–F7. Change map, in this order:
 **Bun fallback** (the brief's own rule). It applies when step 2's update changes a `package.json` or any `bun.lock` line beyond `follow-redirects`, or leaves `follow-redirects` below 1.16.2 (an unchanged `bun.lock` included). Then restore every file the update changed to its content before the update, run `bun install --frozen-lockfile`, and skip steps 3 and 4. G1 then lists only the npm lockfile, and G2 skips its `bun.lock` clause. G5's local audit still runs `--mode enforce` and expects `35 acknowledged, 0 unacknowledged, 0 stale, 0 unreadable`. Its mode command prints `audit mode: report (no dependency file changed)`, since the npm lockfile is outside the gate's set. Say so in the PR body and the report.
 
 Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
-- G1: `git diff --name-only 44d5a7064 HEAD -- ':!implementations-plan'` lists exactly the four files above.
+- G1: `git diff --name-only 44d5a7064 HEAD -- ':!implementations-plan'` lists exactly the four files above (five after review: D7 adds the skill).
 - G2: the keyed compare of recon experiment 1, base against head, differs in exactly `node_modules/follow-redirects` (1.16.2) and `node_modules/node-forge` (1.4.2). Each integrity equals `npm view <pkg>@<version> dist.integrity`. `git diff 44d5a7064 HEAD -- bun.lock` is one removed and one added line, `follow-redirects@1.16.2`.
 - G3: a scratch `npm ci --ignore-scripts` of the new `cli/package.json` and lockfile exits 0. A list of every installed `node_modules/**/package.json` name and version differs from a base-pair install's list in exactly those two packages.
 - G4: in a `git archive HEAD` export with no `node_modules`, `bun install --frozen-lockfile` exits 0.
@@ -90,6 +90,7 @@ Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
 | D4 | Run the local Docker CI-like runner | no | the brief makes it optional for patch moves, and #1419 records that it runs no test; the PR's two network lanes install the new tree cold (F8) |
 | D5 | `SECURITY.md`'s count and row | edit them in the same PR | they restate the ack file; leaving them would make the doc wrong |
 | D6 | The Bun move | `bun update follow-redirects` | the tool's own transitive update, no manifest edit (F4); deleting the lock entry by hand is lockfile surgery |
+| D7 | Record the in-place recipe | one sentence in the `aztec-update` skill's CLI-lockfile bullet | the Opus diff review: `lock.sh` was the only documented way to move this lockfile, and npm's `up to date` message misleads; CLAUDE.md routes a durable procedure to its owning skill |
 
 ## Audit verdicts
 
@@ -102,6 +103,7 @@ Validation gate (scratch files under `~/.cache/nulo-backlog/deps-ci-2/`):
   Rejected: extending the floor test (D3). Codex reads the pattern as "a floor on resolved versions at any path". The floor exists because the override is a fix the repository must remember, and the owner's #1278 rule disposes of an alert a resolve does not fix by dismissal, not by a red bump. Agreed: D1, D2, D4, D5, D6.
 - **Codex r2** (resumed): `conditional approve`. D3's argument holds; the round-1 floor condition is withdrawn. Two fallback details, both accepted: read the update's diff before the frozen install, and restore every file it changed, including when it leaves `follow-redirects` unmoved; on the fallback, the mode command prints `report` while the local audit stays `--mode enforce`.
 - **Codex r3** (resumed, verify only): `approve`. Both conditions met; no regression, no new finding.
+- **Diff review, Codex r1** (gpt-6.1-sol, high, fresh session): `clean`. **Opus diff review** beside it: `clean`; its one optional note (the in-place recipe lives only in this plan) accepted as D7.
 
 ## Implementation record
 
