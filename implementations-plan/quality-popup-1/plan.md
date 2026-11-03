@@ -122,6 +122,8 @@ Every gate runs from the worktree root. A test command is `(cd apps/extension &&
 | Arc 2 Codex fix R1 (`gpt-6.1-sol`, high) | conditional approve | P2 a same-value input pin for D16's forwarding; P3 the cap comment (UTF-16 code units, not a native `maxlength`); P3 five component headers cut to their constraints | none |
 | Arc 2 Opus diff review | approve | P3 the backup form's and Unlock method's D13 bindings and the form's `passwordInput` pinned; P3 the mirror's comment names host writes | none (another lane's citation left to that lane) |
 | Arc 2 Codex fix R2 (resumed) | approve | none: the fixes verified, no regression | none |
+| Net-diff Codex pass (fresh, `gpt-6.1-sol`, high) | conditional approve | P3 D17 recorded; P3 the backup form's header states its constraint; P2's fact (the alert's two spaces) corrected in the lessons | P2's code change (D18) |
+| Net-diff Codex pass R2 (resumed) | approve | none: D17 and the header verified, D18 stands | none |
 
 ## Delivery
 
