@@ -79,7 +79,7 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 
 - [x] **Phase 1.** Pins red on base, green after: `src/popup/components/modules/general/BalanceView.test.ts src/popup/pages/holdings.test.ts src/composables/useConfigRead.test.ts`; `bun run lint`; `bun run typecheck:all`.
 - [x] **Phase 2.** `src/components/composite src/onboarding src/composables/useProfileCreateFlow.test.ts src/popup/pages/profile src/popup/pages/settings/security src/popup/components/modules/settings src/utils scripts/e2e/profile-chaos-model.test.ts` (the pair's callers included); lint; typecheck; the captures.
-- [ ] **Arc end.** `bun run audit:vue`; `bun run test:all`. Smoke, per browser (`chrome`, then `firefox`): build the armed copy, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`, then `cd apps/extension && NULO_E2E_BROWSER=<browser> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/onboarding-tab.test.ts tests/e2e/keyboard-guards.test.ts tests/e2e/legal-acceptance.test.ts tests/e2e/registration.test.ts tests/e2e/fiat-display.test.ts tests/e2e/holdings-add-token.test.ts tests/e2e/type-roles.test.ts --retry=0`. No network file (no service path moves). `bun run check:plans` after staging. No e2e scenario is added; each browser's wall-clock is reported as measured.
+- [x] **Arc end.** `bun run audit:vue`; `bun run test:all`. Smoke, per browser (`chrome`, then `firefox`): build the armed copy, `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`, then `cd apps/extension && NULO_E2E_BROWSER=<browser> NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- tests/e2e/onboarding-tab.test.ts tests/e2e/keyboard-guards.test.ts tests/e2e/legal-acceptance.test.ts tests/e2e/registration.test.ts tests/e2e/fiat-display.test.ts tests/e2e/holdings-add-token.test.ts tests/e2e/type-roles.test.ts --retry=0`. No network file (no service path moves). `bun run check:plans` after staging. No e2e scenario is added; each browser's wall-clock is reported as measured.
 
 ## Decision ledger
 
@@ -103,6 +103,7 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 | Opus Plan lens | conditional approve | Fact 6 (`registration.test.ts` drives New profile); F1: one key per Holdings pin with the other landing, an unrelated-key control in BalanceView, values captured at call; F2 (as Codex 1); F3: the explicit import; F5: the hint's success control; F6: the `test.each` half kept, the header line; F7: the config `onConnected` handle; the callers' tests in the Phase 2 gate; dark captures (free from `shotSend`) | F4 (D8); F2's gap prop or owner question (the group needs neither) |
 | Arc Codex R1 (diff from `67c1ac545`) | approve | the pair's slot comment cut to its contract; `parkReads`'s narrating comment dropped | none |
 | Arc Opus review (beside R1) | approve | the hint counted once on Create; `create.vue`'s hint comment reworded; the pair's comment names no caller; the creating state captured and filed as OA-1 | none |
+| Arc Codex R2 (resumed) | approve | none; fixes verified, no regression | none |
 
 ## Delivery
 

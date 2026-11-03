@@ -7,3 +7,4 @@
 - 2026-11-03 Phase 1 gate: pins red on base (BalanceView 2, Holdings 2; controls green), green after; 113 tests, lint, typecheck:all pass.
 - 2026-11-03 Phase 2 gate: 213 files / 3608 tests pass (1 pre-existing `CompressionStream` skip); lint, typecheck:all pass after the pair became `lang="ts"` (vue-tsc saw no slots on a JS SFC); the cleared-hint pin reds with `hideHint` removed; captures taken on armed Chrome builds of base and head.
 - 2026-11-03 Arc Codex R1: approve (1 low, accepted); Opus review: approve (folded; OA-1 filed, not blocking).
+- 2026-11-03 Arc Codex R2: approve. Arc-end gate: audit:vue pass; test:all pass; smoke 7 files Chrome 43 passed + 1 pre-existing skip (323 s), Firefox 44 passed (551 s).
