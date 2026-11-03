@@ -21,3 +21,7 @@ Verified the eight fixes; the strengthened test separates write-time refusal fro
 ## Codex R3 (resume, over the Privacy 1.2.8 patch): approve
 
 The owner answered OA-1 (A) and OA-2 (the proposed § 5.2 wording) after R2, so the patch landed in this PR. Codex checked it against `legal/README.md`, the archive rule and the Terms 1.2.1 precedent, and the new sentence against the built request (the held list's accepted feeds plus `aztec`). No finding.
+
+## After the PR opened
+
+- CodeQL (`js/incomplete-sanitization`, high) flagged `service.test.ts`'s fixture, which built a `__proto__` row by replacing the first `{` of a JSON string on purpose. It was a false positive, but it would have left an open alert on `dev`. The rows are now joined as literal JSON, and the test still proves an inherited name reads as absent.

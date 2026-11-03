@@ -193,12 +193,8 @@ describe("PriceService — feeds from the signed list", () => {
 
 	test("a stored row under an inherited name reads as absent", () => {
 		const quote = (id: string) => ({ coingeckoId: id, usd: 1, fetchedAt: 1_000, providerUpdatedAt: null })
-		const stored = JSON.parse(
-			JSON.stringify({ constructor: quote("constructor"), "usd-coin": quote("usd-coin") }).replace(
-				"{",
-				`{"__proto__": ${JSON.stringify(quote("__proto__"))},`,
-			),
-		)
+		const rows = ["__proto__", "constructor", "usd-coin"].map((id) => `${JSON.stringify(id)}: ${JSON.stringify(quote(id))}`)
+		const stored = JSON.parse(`{${rows.join(", ")}}`)
 		const fresh = freshQuotes(stored, 2_000)
 		expect(Object.keys(fresh)).toEqual(["usd-coin"])
 		expect(Object.getPrototypeOf(fresh)).toBe(Object.prototype)
