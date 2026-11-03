@@ -1,6 +1,5 @@
 import { type FeeCallLike, type FeePayerRoute, classifyFeePayer } from "@nulo/wallet-bridge"
 
-/** The embedded payment a payer route names, or undefined for a route that embeds none. */
 export function embeddedPaymentOf(route: FeePayerRoute | undefined): "fjwc" | "fpc" | undefined {
 	return route === "fjwc" || route === "fpc" ? route : undefined
 }

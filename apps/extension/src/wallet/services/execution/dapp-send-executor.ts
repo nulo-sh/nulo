@@ -1288,7 +1288,6 @@ export class DappSendExecutor {
 				})
 				leaveLine()
 
-				// Prove with account in scope
 				const { txHash, offchainOutput } = await this.deps.coordinator.proveAndSend({
 					pxe,
 					node,

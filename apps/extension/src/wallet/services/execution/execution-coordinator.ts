@@ -152,9 +152,9 @@ export function fenceChecks(
 	}
 }
 
-/** The network, node, PXE and account a reused estimate sends with, resolved live for the fence's
- *  profile, never cached. The account lookup reads whichever session is live, so the fence is
- *  asserted before it and re-checked after it, before the account's keys are used. */
+/** The network, node, PXE and account a reused estimate sends with, resolved live, never cached. The
+ *  fence is asserted after the network reads and before the account lookup, which reads whichever
+ *  session is live, then re-checked before the account's keys are used. */
 export async function resolveLiveHandles(
 	deps: Pick<SharedSendDeps, "getNetwork" | "getNode" | "getPXE" | "assertFence" | "getAccountContract" | "isFenceLive">,
 	fence: ExecutionFence,

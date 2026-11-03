@@ -569,16 +569,12 @@ const scopeFollow = createScopeFollow({
 		(profileId, address) => managers.uiPreference.setSelectedAccount(profileId, address),
 	),
 })
-// A send-like op with no chosen fee cannot execute. Confirm disables on it too, so neither a click
-// nor an e2e press can land before the default fee resolves and meet approve()'s warning. The cast
-// bridges a structural AztecAddress/Fr mismatch with wallet-bridge's type; only the kind and the
-// fee settings are read.
+// The cast bridges a structural AztecAddress/Fr mismatch with wallet-bridge's type; only the kind
+// and the fee settings are read.
 const needsFeeSelection = computed(() =>
 	operations.value.some((op) => requiresFeeSelection(op as unknown as import("./types").DraftOperation)),
 )
-/** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. Holding
- *  until init has finished and an operation exists keeps a fast click from approving an empty list.
- *  A processing error holds it; a warning never does. */
+/** Every hold on Confirm but the fee pick, which approve() answers with a warning instead. */
 const confirmBlocked = computed(
 	() =>
 		isInteractionCancelled.value ||

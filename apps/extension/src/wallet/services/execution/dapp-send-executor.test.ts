@@ -2643,6 +2643,15 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 		expect(recordedTx(h.deps).feeChoice).toBe("app_protocol_sponsor")
 	})
 
+	test("NO_FROM asks for the sponsor's address before it leaves its origin's line", async () => {
+		collectOffchainEffectsMock.mockReturnValue([])
+		const h = makeHarness()
+		Object.assign(h.built, { txCalls: [{ contract: "0xc", method: "dapp_method", args: [] }, SPONSOR_CALL] })
+		await h.executor.executeAztecSendTx(NO_FROM(), ORIGIN, undefined, undefined, FENCE)
+		const turn = vi.mocked(h.deps.lane.joinOriginLine).mock.results[0]?.value as { leave: unknown } | undefined
+		expect(callSequence({ sponsor: h.deps.protocolSponsorAddress, leave: turn?.leave }).slice(0, 2)).toEqual(["sponsor", "leave"])
+	})
+
 	test("the person's pick records the wallet's and never asks for the sponsor's address, even when its calls name it", async () => {
 		const h = makeHarness()
 		Object.assign(h.built, { txCalls: [SPONSOR_CALL] })
