@@ -136,6 +136,8 @@ describe("a `str<N>` argument as the card reads it, from its wire fields", () =>
 		["a NUL before the padding", sdk("pay\u0000alice")],
 		["a C1 byte that is not UTF-8", [0x61, 0x85, 0x62]],
 		["a character no byte holds", sdk("5 €")],
+		["decomposed Latin-1 text", utf8("Jose\u0301")],
+		["a right-to-left letter between digits", utf8("12\u05d034")],
 	])("%s reads as the raw fields, reason arguments", async (_, units) => {
 		const surface = await memo(units)
 		expect(surface).toMatchObject({ kind: "raw", reason: "arguments", hidden: 0 })

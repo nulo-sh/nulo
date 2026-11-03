@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { trimAddress } from "@/utils/string"
 import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
-import type { DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
+import type { DecodedCall, DecodedGrant, DecodedValue } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import { MAIN, RECIPIENT, USDC as USDC_AT, VAULT } from "./execute.fixture"
 import {
@@ -414,6 +414,22 @@ describe("rowTitle, authwitTitle and authwitLine: the wallet's words only on wha
 	})
 })
 
+describe("a decode holding a string the card cannot print whole", () => {
+	test("reads as the raw fields under its decoded name, never the dApp's label", () => {
+		const call = { name: "claim_rewards", to: TOKEN, selector: "0x1234abcd", args: [field(1n)] }
+		const decoded: DecodedCall = {
+			kind: "decoded",
+			contract: "Vault",
+			fn: "drain",
+			params: [{ name: "memo", value: { kind: "string", value: "x\u202e" } }],
+		}
+		const surface = callSurface(ctx, call, decoded)
+		expect(surface).toMatchObject({ kind: "raw", reason: "arguments", fn: "drain" })
+		expect(rowTitle(call, surface)).toBe(rowTitle(call, { kind: "decoded", fn: "drain", params: [] }))
+		expect(rowTitle(call, surface)).not.toBe(rowTitle(call, { kind: "raw", reason: "arguments", rows: [], hidden: 0 }))
+	})
+})
+
 describe("readableGrants", () => {
 	const TOKEN = `0x${"2f".repeat(32)}`
 	const grantWith = (...params: { name: string; value: DecodedValue }[]): DecodedGrant => ({
@@ -433,6 +449,7 @@ describe("readableGrants", () => {
 		for (const grant of [
 			memo("pay\u0000alice"),
 			memo(`ab${String.fromCharCode(0x202e)}cd`),
+			memo(String.fromCharCode(...new TextEncoder().encode("pay\u202eevil"))),
 			memo("\ud800"),
 			memo("x".repeat(4097)),
 			nested,

@@ -45,7 +45,7 @@ export type CallSurface =
 	| { kind: "mint"; fn: string; to: string; amount: string }
 	| { kind: "decoded"; fn: string; params: readonly DecodedParam[]; labels?: "unchecked" }
 	| { kind: "pending" }
-	| ({ kind: "raw"; reason: UndecodedReason } & RawRows)
+	| ({ kind: "raw"; reason: UndecodedReason; fn?: string } & RawRows)
 
 /** The caller a vocabulary reading names when the call itself omits one; absent for an authwit
  *  intent, where the signer is not the caller and the card claims nothing. */
@@ -144,14 +144,14 @@ export const callSurface = (
 	maxRows = MAX_ARG_ROWS,
 ): CallSurface => {
 	if (decoded === undefined) return { kind: "pending" }
-	const params = decoded.kind === "decoded" ? readNamed(decoded.params) : undefined
-	if (decoded.kind === "decoded" && params) {
-		const corroborated = tokenKnown && corroborates(decoded, call.selector)
-		const known = corroborated ? vocabularySurface(ctx, decoded.fn, call) : undefined
-		const unchecked = tokenKnown && !corroborated && claimsVocabulary(decoded, call.selector)
-		return known ?? { kind: "decoded", fn: decoded.fn, params, ...(unchecked ? { labels: "unchecked" } : {}) }
-	}
-	return { kind: "raw", reason: decoded.kind === "decoded" ? "arguments" : decoded.reason, ...rawRows(call.args, maxRows) }
+	if (decoded.kind === "undecoded") return { kind: "raw", reason: decoded.reason, ...rawRows(call.args, maxRows) }
+	const params = readNamed(decoded.params)
+	// Keeps the decoded name, so the title never falls back to the dApp's own label.
+	if (!params) return { kind: "raw", reason: "arguments", fn: decoded.fn, ...rawRows(call.args, maxRows) }
+	const corroborated = tokenKnown && corroborates(decoded, call.selector)
+	const known = corroborated ? vocabularySurface(ctx, decoded.fn, call) : undefined
+	const unchecked = tokenKnown && !corroborated && claimsVocabulary(decoded, call.selector)
+	return known ?? { kind: "decoded", fn: decoded.fn, params, ...(unchecked ? { labels: "unchecked" } : {}) }
 }
 
 const surfaceName = (call: WireCall, surface: CallSurface): string =>
@@ -324,13 +324,16 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
 const PAST_LATIN1 = /[\u0100-\u{10FFFF}]/u
 /** Draws nothing, yet `safeWire` keeps it: U+034F, the Hangul fillers. */
 const DEFAULT_IGNORABLE = /\p{Default_Ignorable_Code_Point}/u
+/** Right-to-left blocks (UAX #9's R and AL defaults, Arabic digits within): their text reorders the
+ *  digits and words around it on screen with no control character. */
+const RIGHT_TO_LEFT = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u
 
-/** UTF-8 text holding a character past U+00FF. Latin-1-only text stays one character per byte,
- *  because the SDK's encoder writes it one field per character and the two would print alike. */
+/** UTF-8 text holding a character past U+00FF. Latin-1-only text, composed or not, stays one
+ *  character per byte: the SDK's encoder writes it one field per character, and the two would print alike. */
 const utf8Text = (body: string): string | undefined => {
 	try {
 		const text = UTF8.decode(Uint8Array.from(body, (c) => c.charCodeAt(0)))
-		return PAST_LATIN1.test(text) ? text : undefined
+		return PAST_LATIN1.test(text.normalize("NFC")) ? text : undefined
 	} catch {
 		return undefined
 	}
@@ -347,12 +350,12 @@ const readWireString = (decoded: string): string | undefined => {
 	const body = decoded.slice(0, end)
 	if (PAST_LATIN1.test(body)) return undefined
 	const text = utf8Text(body) ?? body
-	return !DEFAULT_IGNORABLE.test(text) && safeWire(text, FULL_TEXT_MAX) === text ? text : undefined
+	if (DEFAULT_IGNORABLE.test(text) || RIGHT_TO_LEFT.test(text)) return undefined
+	return safeWire(text, FULL_TEXT_MAX) === text ? text : undefined
 }
 
 const isShown = (v: DecodedValue | undefined): v is DecodedValue => v !== undefined
 
-/** `v` with every string as `readWireString` prints it, or `undefined` when one cannot print whole. */
 const readValue = (v: DecodedValue): DecodedValue | undefined => {
 	switch (v.kind) {
 		case "string": {
@@ -382,6 +385,7 @@ const readNamed = (entries: readonly DecodedParam[]): DecodedParam[] | undefined
 export const readableGrants = (decoded: readonly DecodedGrant[], count: number): DecodedGrant[] =>
 	Array.from({ length: count }, (_, k): DecodedGrant => {
 		const grant = decoded[k] ?? { kind: "undecoded", reason: "unavailable" }
+		// Returns the decoder's grant: `callSurface` reads its strings, and a reading is not idempotent.
 		return grant.kind === "decoded" && readNamed(grant.decoded.params) === undefined
 			? { kind: "undecoded", reason: "arguments" }
 			: grant
