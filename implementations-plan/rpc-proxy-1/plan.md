@@ -178,6 +178,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 r1 | Codex, gpt-6.1-sol (session 01a1a242) | findings (3 low) | the preflight client's cap and its `[3, 3, 2]` test; the seal-then-move order pinned; two comments reworded | none |
 | arc 1 r1 | Opus 5.5 (diff review) | findings (4 low) | README:99's host; the adapter's lookup required and the dead re-export removed; the other-profile row in the unlock test; the lesson corrected | none (the request-rate limit noted under I4) |
 | arc 1 r2 | Codex, resumed | **clean** | the seven fixes verified; no regression | none |
+| arc 2 r1 | Codex, gpt-6.1-sol (session 01a1a28e) | findings (4 low) | both ceilings pinned as literals; `readCapped`'s and `cors.ts`' comments corrected; three narrating comments cut | none |
+| arc 2 r1 | Opus 5.5 (diff review) | findings (1 medium, 5 low) | an IPv6 caller counted by its /64; step 6 reads dRPC's own refusals; `CI.md:33`'s count; the duplicate-`method` parser differential as a known limit | none |
+| arc 2 r2 | Codex, resumed | **clean** | the fixes verified; `limiterKey` over 2,305 forms | none |
 
 ## Seeds (not run; orchestrator-owned)
 
