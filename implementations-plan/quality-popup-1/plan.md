@@ -117,6 +117,8 @@ Every gate runs from the worktree root. A test command is `(cd apps/extension &&
 | Arc 1 Codex fix R1 (`gpt-6.1-sol`, high) | approve | comment cleanup: `validateAndMigrateBackup`'s doc to two lines, three captions that restate their names removed | none |
 | Arc 1 Opus diff review | conditional approve | F1 a second re-pick race, inside the earlier-passkey read: the parse race could not tell where the last check sits; F2 the read-failure pin reaches the catch after the pick counter; F3 the name reset pinned from a set name; two comments that named their callers reworded; D3, phase 2 and the invariants line updated for D14 | none |
 | Arc 1 Codex fix R2 (resumed) | approve | none: the fixes verified, no regression | none |
+| Arc 2 Codex fix R1 (`gpt-6.1-sol`, high) | conditional approve | P2 a same-value input pin for D16's forwarding; P3 the cap comment (UTF-16 code units, not a native `maxlength`); P3 five component headers cut to their constraints | none |
+| Arc 2 Opus diff review | approve | P3 the backup form's and Unlock method's D13 bindings and the form's `passwordInput` pinned; P3 the mirror's comment names host writes | none (another lane's citation left to that lane) |
 
 ## Delivery
 

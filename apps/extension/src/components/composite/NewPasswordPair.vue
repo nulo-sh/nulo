@@ -24,8 +24,8 @@ const hidden = defineModel("hidden", { type: Boolean, default: true })
 const repeatLabelId = useId()
 const hint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 
-/** The flag as this pair last set it: a bound model reads the host's value only after the host
- *  renders again, and two clicks in one task must cancel out. */
+/** The flag as last written, by this pair or the host: a bound model reads the host's value only
+ *  after the host renders again, and two clicks in one task must cancel out. */
 let latest = hidden.value
 const toggleHidden = () => {
 	latest = !latest
