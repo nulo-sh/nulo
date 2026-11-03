@@ -5,6 +5,7 @@ import { E2E_PROVERLESS, E2E_PROVERLESS_BUILD_STAMP } from "@/e2e/config"
 import { recordCspViolationsInPage } from "@/e2e/csp-report"
 import { consoleMethods, LogLevel } from "@/wallet/logger"
 import { documentLogger } from "@/wallet/services/logger/client"
+import { createWalletNodeFactory } from "@/wallet/services/network/node-factory"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { createPxeOffscreen } from "@nulo/aztec-runtime/offscreen/entry"
 import { ProductionPxeFactory, createProvePhaseSink } from "@nulo/aztec-runtime/pxe"
@@ -83,6 +84,7 @@ const t0 = Date.now()
 // The prover reports each attempt's phases through this sink; PxeService
 // forwards them to the SW, where the coordinator attributes them by proveId.
 const provePhases = createProvePhaseSink()
+const nodeFactory = createWalletNodeFactory()
 await createPxeOffscreen({
 	profiles: new ProfileServiceClient(),
 	logger: frameLogger(documentLogger()),
@@ -93,16 +95,16 @@ await createPxeOffscreen({
 	// PRESTO_REQUIRED (CI builds) adds the plaintext endpoint + the preflight;
 	// production is HTTPS-only Presto with the silent WASM fallback.
 	factory: E2E_PROVERLESS
-		? new ProductionPxeFactory(undefined, { provingMode: "proverless" })
+		? new ProductionPxeFactory(nodeFactory, { provingMode: "proverless" })
 		: PRESTO_REQUIRED
-			? new ProductionPxeFactory(undefined, {
+			? new ProductionPxeFactory(nodeFactory, {
 					provingMode: "required",
 					host: PRESTO_HOST,
 					port: PRESTO_PORT,
 					httpsPort: PRESTO_HTTPS_PORT,
 					onProvePhase: provePhases.emit,
 				})
-			: new ProductionPxeFactory(undefined, { provingMode: "default", onProvePhase: provePhases.emit }),
+			: new ProductionPxeFactory(nodeFactory, { provingMode: "default", onProvePhase: provePhases.emit }),
 	provePhaseSink: provePhases,
 })
 // PXE services are now up — start answering health PINGs with PONG.

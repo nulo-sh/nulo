@@ -66,12 +66,19 @@ export function isAllowedRpcUrl(rpcUrl: string): { ok: true } | { ok: false; rea
 }
 
 export class AztecNodeFactoryAdapter implements NodeFactory {
+	/** @param maxBatchSizeFor The largest JSON-RPC batch the endpoint at a URL accepts, applied to
+	 *  every client built here; `undefined` keeps the client's default of 100. */
+	public constructor(private readonly maxBatchSizeFor: (rpcUrl: string) => number | undefined = () => undefined) {}
+
 	public createNode(rpcUrl: string, options?: RetryOptions): AztecNode {
 		const check = isAllowedRpcUrl(rpcUrl)
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to construct node client — ${check.reason}`)
 		}
-		return createAztecNodeClient(rpcUrl, { fetch: makeFetchWithTimeout(undefined, options) })
+		return createAztecNodeClient(rpcUrl, {
+			fetch: makeFetchWithTimeout(undefined, options),
+			maxBatchSize: this.maxBatchSizeFor(rpcUrl),
+		})
 	}
 
 	public createSingleAttemptNode(rpcUrl: string, timeoutMs: number): AztecNode {
@@ -79,7 +86,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to construct node client — ${check.reason}`)
 		}
-		return silentSingleAttemptNode(rpcUrl, timeoutMs)
+		return silentSingleAttemptNode(rpcUrl, timeoutMs, this.maxBatchSizeFor(rpcUrl))
 	}
 
 	public async probeChainId(rpcUrl: string, timeoutMs: number): Promise<number> {
@@ -89,7 +96,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		}
 		// Single attempt, no retry chain: the probe's whole point is that its
 		// socket dies WITH its budget (see NodeFactory.probeChainId).
-		const node = createAztecNodeClient(rpcUrl, { fetch: makeSingleAttemptFetch(timeoutMs) })
+		const node = createAztecNodeClient(rpcUrl, { fetch: makeSingleAttemptFetch(timeoutMs), maxBatchSize: this.maxBatchSizeFor(rpcUrl) })
 		const info = await node.getNodeInfo()
 		return walletChainId(info.l1ChainId, info.rollupVersion)
 	}
@@ -99,7 +106,11 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to read — ${check.reason}`)
 		}
-		const value = await silentSingleAttemptNode(rpcUrl, timeoutMs).getPublicStorageAt("latest", contract, slot)
+		const value = await silentSingleAttemptNode(rpcUrl, timeoutMs, this.maxBatchSizeFor(rpcUrl)).getPublicStorageAt(
+			"latest",
+			contract,
+			slot,
+		)
 		// The SDK resolves a `null` result as `undefined` rather than rejecting it.
 		if (value === undefined) throw new Error("AztecNodeFactoryAdapter read no value")
 		return value
@@ -107,10 +118,11 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 }
 
 /** `createAztecNodeClient` with no versions to check, plus the `log` option it cannot pass. */
-function silentSingleAttemptNode(rpcUrl: string, timeoutMs: number): AztecNode {
+function silentSingleAttemptNode(rpcUrl: string, timeoutMs: number, maxBatchSize: number | undefined): AztecNode {
 	return createSafeJsonRpcClient<AztecNode>(rpcUrl, AztecNodeApiSchema, {
 		namespaceMethods: "aztec",
 		fetch: makeSingleAttemptFetch(timeoutMs),
 		log: SILENT_RPC_LOG,
+		maxBatchSize,
 	})
 }

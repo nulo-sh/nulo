@@ -370,12 +370,6 @@ describe("NetworkService NodeFactory seam", () => {
 		expect(factory.created[0]!.rpcUrl).toBe("https://rpc.example/a")
 		expect(factory.created[1]!.rpcUrl).toBe("https://rpc.example/b")
 	})
-
-	test("default ctor wires AztecNodeFactoryAdapter — no-arg constructor works", () => {
-		const logger = new LoggerStore(new ConfigStore())
-		// Smoke: constructing without an explicit factory should not throw.
-		expect(() => new NetworkService(logger, new FakeBrowserApi())).not.toThrow()
-	})
 })
 
 describe("NetworkService transient-node cache", () => {
@@ -2057,7 +2051,7 @@ describe("NetworkService.readPublicStorageOnce", () => {
 describe("NetworkService lock configuration", () => {
 	test("the service lock's watchdog is DISABLED — deleteNetwork's 30-min clearChainState drain is a by-design hold", () => {
 		const logger = new LoggerStore(new ConfigStore())
-		const service = new NetworkService(logger, new FakeBrowserApi())
+		const service = new NetworkService(logger, new FakeBrowserApi(), new FakeNodeFactory())
 		// A force-release mid-cascade would admit a concurrent network mutator
 		// into the purge pipeline; queueing behind it is the correct semantic.
 		const lock = (service as unknown as { lock: { maxHoldMs: number | null } }).lock

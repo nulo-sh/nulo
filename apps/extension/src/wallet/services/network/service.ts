@@ -10,7 +10,7 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { validateParams } from "@nulo/extension-messaging/zod"
 import { NodeUnreachableError } from "@nulo/extension-messaging/errors"
-import { AztecNodeFactoryAdapter, isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
+import { isAllowedRpcUrl } from "@nulo/aztec-runtime/adapters"
 import type { NodeFactory } from "@nulo/aztec-runtime/ports"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
 import type { ILogger } from "@/wallet/logger"
@@ -239,7 +239,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public constructor(
 		logger: ILogger,
 		private readonly browserApi: BrowserApi,
-		nodeFactory?: NodeFactory,
+		nodeFactory: NodeFactory,
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
 		this.storage = sealedEntityStorage("networks", browserApi.storage.local, (profileId) => this.profileService?.rowKeys(profileId))
@@ -250,7 +250,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// admit a concurrent network mutator into the middle of that cascade;
 		// queueing behind it is the correct semantic.
 		this.lock = new Lock("network", logger, null)
-		this.nodeFactory = nodeFactory ?? new AztecNodeFactoryAdapter()
+		this.nodeFactory = nodeFactory
 	}
 
 	protected async init(services: ServiceCollection) {

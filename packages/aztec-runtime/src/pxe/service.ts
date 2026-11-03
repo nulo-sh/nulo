@@ -37,7 +37,7 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/offscreen"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { EventHandler, ReadWriteGuard, array_equals, errorMessageFromUnknown, fromBase64 } from "@nulo/wallet-core/utils"
 import type { ChainRuntime, NetworkInfo, ProvePhaseEvent } from "./chain-runtime"
-import { ChainRuntimeRegistry, ProductionPxeFactory, PXE_STORE_KEY_MISSING, type PxeFactory } from "./chain-runtime"
+import { ChainRuntimeRegistry, PXE_STORE_KEY_MISSING, type PxeFactory } from "./chain-runtime"
 import { PXE_DATA_DIR_ROOT, chainRegistryKey, chainRegistryKeyPrefix } from "./chain-coordinates"
 import { listChainStoreDirs, removeChainStoreDir, removeProfileStoreDirs } from "./opfs-store"
 import { SqliteCorruptionError } from "@aztec-labs/kv-store/sqlite-opfs"
@@ -175,12 +175,12 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	 */
 	private readonly profileLifecycles = new Map<string, ProfileLifecycle>()
 
-	public constructor(profiles: IProfileReader, logger: ILogger, factory?: PxeFactory, provePhaseSink?: ProvePhaseSink) {
+	public constructor(profiles: IProfileReader, logger: ILogger, factory: PxeFactory, provePhaseSink?: ProvePhaseSink) {
 		super(PXE_SERVICE_NAME, logger)
 		this.profiles = profiles
 		this.guardLogger = logger
 		this.artifacts = new ArtifactRegistry(loadProductionKnownArtifacts, { logger })
-		this.registry = new ChainRuntimeRegistry(factory ?? new ProductionPxeFactory())
+		this.registry = new ChainRuntimeRegistry(factory)
 		// A dead SW loses the event (the transport swallows the rejection); the
 		// journal only ever goes stale, never wrong, so no retry.
 		provePhaseSink?.subscribe((payload) => this.emit("onProvePhase", payload))

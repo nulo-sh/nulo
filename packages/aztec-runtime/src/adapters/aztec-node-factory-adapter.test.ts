@@ -6,6 +6,7 @@
  */
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { AztecNodeFactoryAdapter, isAllowedRpcUrl, SILENT_RPC_LOG } from "./aztec-node-factory-adapter"
@@ -152,6 +153,31 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 		const printed = consoleText(consoleSpies)
 		expect(printed).not.toContain(URL)
 		expect(printed).not.toContain(SENTINEL)
+	})
+})
+
+describe("the URL's batch cap", () => {
+	const capped = new AztecNodeFactoryAdapter((url) => (url === URL ? 3 : undefined))
+	const entriesPerRequest = (spy: ReturnType<typeof answering>) =>
+		spy.mock.calls.map(([, init]) => (JSON.parse(String(init.body)) as unknown[]).length)
+	const eightReadsInOneTick = (node: AztecNode) =>
+		Promise.all(Array.from({ length: 8 }, (_, i) => node.getPublicStorageAt("latest", CONTRACT, new Fr(BigInt(i)))))
+
+	test.each([
+		["createNode", (factory: AztecNodeFactoryAdapter, url: string) => factory.createNode(url)],
+		["createSingleAttemptNode", (factory: AztecNodeFactoryAdapter, url: string) => factory.createSingleAttemptNode(url, 5_000)],
+	])("%s splits one tick's calls into requests no larger than the cap", async (_label, build) => {
+		const spy = answering(() => new Fr(1n).toString())
+		globalThis.fetch = spy as unknown as typeof fetch
+		await eightReadsInOneTick(build(capped, URL))
+		expect(entriesPerRequest(spy)).toEqual([3, 3, 2])
+	})
+
+	test("a URL with no cap sends one tick's calls as one request", async () => {
+		const spy = answering(() => new Fr(1n).toString())
+		globalThis.fetch = spy as unknown as typeof fetch
+		await eightReadsInOneTick(capped.createNode("https://other.example"))
+		expect(entriesPerRequest(spy)).toEqual([8])
 	})
 })
 

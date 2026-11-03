@@ -84,3 +84,23 @@ export const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
 export function seedForKind(kind: ChainKind | undefined): DefaultSeed | undefined {
 	return kind === undefined ? undefined : DEFAULT_SEEDS.find((s) => s.kind === kind)
 }
+
+/** The largest JSON-RPC batch each provider endpoint accepts, by origin. dRPC's free plan answers a
+ *  batch above 3 entries with HTTP 500, and the prover fans one read out per contract in a single
+ *  tick. Keyed by literal origin, not read off the seeds, so a row seeded on one of these hosts
+ *  keeps its cap after a later build moves the seed. */
+const BATCH_CAPS: Readonly<Record<string, number>> = {
+	"https://aztec-mainnet.drpc.org": 3,
+	"https://aztec-testnet.drpc.org": 3,
+}
+
+/** The batch cap for `rpcUrl`'s origin; `undefined` leaves the client's own default. */
+export function maxBatchSizeFor(rpcUrl: string): number | undefined {
+	let origin: string
+	try {
+		origin = new URL(rpcUrl).origin
+	} catch {
+		return undefined
+	}
+	return Object.hasOwn(BATCH_CAPS, origin) ? BATCH_CAPS[origin] : undefined
+}
