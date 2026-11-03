@@ -3,7 +3,7 @@ import { computed, reactive, ref } from "vue"
 import { type LogEntry, getLogLevelName } from "./logs-format"
 
 /** Services with no popup client, so no `-client` row: the scan test refuses a row nothing logs under. */
-const NO_CLIENT = new Set(["wallet-sdk", "token-list"])
+const NO_CLIENT = new Set(["wallet-sdk"])
 
 export const LOG_SOURCES: string[] = [
 	"account",
