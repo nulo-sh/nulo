@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { TxHash, type TxReceipt } from "@aztec-labs/stdlib/tx"
 import { assertRestoreEpoch, captureRestoreEpochs, requireRestoreProfileId } from "@/wallet/services/restore-fence"
 import { restoreRows } from "@/wallet/services/restore-rows"
@@ -157,7 +158,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		for (const tx of await this.txs.getValues()) {
 			if (tx.profileId === undefined || this.profileService.rowKeys(tx.profileId)) this.arm(tx)
 		}
-		this.profileService.onRowKeysReady.add((profileId) => void this.onRowKeysReady(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing or arming the profile's transactions failed; the next worker retries",
+			(profileId) => this.onRowKeysReady(profileId),
+		)
 
 		this.runWorker()
 	}
@@ -180,16 +186,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private async onRowKeysReady(profileId: string): Promise<void> {
 		const epoch = this.deletionState.capture(profileId)
 		const live = () => !this.deletionState.isReserved(profileId) && this.deletionState.isCurrent(profileId, epoch)
-		try {
-			await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.adoptOwnerless(profileId, live)
-			await this.lock.withLock(async () => {
-				if (!live()) return
-				for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
-			})
-		} catch (error) {
-			this.logWarn("sealing or arming the profile's transactions failed; the next worker retries", { error })
-		}
+		await this.txs.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		await this.adoptOwnerless(profileId, live)
+		await this.lock.withLock(async () => {
+			if (!live()) return
+			for (const tx of await this.txs.getValues()) if (tx.profileId === profileId) this.arm(tx)
+		})
 	}
 
 	/** An ownerless row becomes the profile's when the profile holds its account on its chain and no

@@ -279,7 +279,7 @@ describe("cross-profile isolation (standing gate)", () => {
 			services.add(svc(TransactionService.name, { onTransactionUpdated: new EventHandler() }))
 			services.add(svc(ExecutionService.name, {}))
 			services.add(svc(TaskService.name, {}))
-			tbal = new TokenBalanceService(mkLogger(), api, noopTicker)
+			tbal = new TokenBalanceService(mkLogger(), api, { ticker: noopTicker })
 			services.add(tbal)
 			await services.start()
 			// p1 owns token 1, p2 owns token 2 (balances are FK'd via `token`, no profileId).

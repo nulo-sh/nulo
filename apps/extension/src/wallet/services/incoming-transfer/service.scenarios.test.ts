@@ -377,7 +377,7 @@ async function bootService(
 	// Every boot shares the suite's storage, so a second boot in a test models a service-worker restart.
 	const browserApi = new FakeBrowserApi()
 	const pollIntervalMs = "pollIntervalMs" in opts ? opts.pollIntervalMs : 1_000_000
-	const service = new IncomingTransferService(logger, browserApi, pollIntervalMs, stubs.publicReader)
+	const service = new IncomingTransferService(logger, browserApi, { pollIntervalMs, publicReader: stubs.publicReader })
 	const collection = new ServiceCollection()
 	for (const stub of Object.values(fixture)) collection.add(stub as never)
 	collection.add(service)

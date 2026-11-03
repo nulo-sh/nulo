@@ -91,12 +91,12 @@ jobs:
               - 'bunfig.toml'
               - 'tsconfig.json'
               - 'patches/**'
-              # Smoke workflow + composite actions:
+              # CI files the lane runs, exactly (derived and pinned by behavior-gating.test.ts):
               - '.github/workflows/_extension-smoke-e2e.yml'
-              - '.github/workflows/_build-extension.yml'
               - '.github/workflows/pr-extension-smoke-e2e.yml'
               - 'scripts/ci-cd/e2e-decide.sh'
               - 'scripts/ci-cd/e2e-aggregate.sh'
+              - 'scripts/ci-cd/live-labels.sh'
               - '.github/actions/setup-bun/**'
               - '.github/actions/setup-puppeteer/**'
       - name: Override for manual dispatch

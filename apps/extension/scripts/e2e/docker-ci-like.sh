@@ -89,6 +89,9 @@ echo "::endgroup::"
 
 echo "::group::bun install"
 bun install --frozen-lockfile
+# Puppeteer's postinstall runs only when this install links the package, and downloads into this
+# container's discarded home: a tree that already holds node_modules would have no browser.
+(cd apps/extension && bun --no-install ./node_modules/.bin/puppeteer browsers install)
 echo "::endgroup::"
 
 echo "::group::aztec cli"

@@ -1,0 +1,12 @@
+# w3-ci-1 phase 2: the runner reaches its tests
+
+- Red at `2d11315b6`: the pins test found no browser install after `bun install`, and the playground test received `"localhost"`. Both green at `3d435fbcd`. The playground test ran once with `BUN_RUNTIME_TRANSPILER_CACHE_PATH=0`.
+- Host base run (step 2, at `2d11315b6`, no `NODE_OPTIONS`, retry 0): `connect-dapp` **passed** (68.5 s vitest). Inference 2 did not hold. The host resolves `localhost` to `::1` first, as the container does, but it has a link-local IPv6 address on `docker0`. `ADDRCONFIG` counts any non-loopback address, so Node's client keeps `::1`. Only a host with no non-loopback IPv6 address at all (a default Docker container) drops it. D7 was revised: the README keeps its flag.
+- Host proof after the fix (no `NODE_OPTIONS`, retry 0): Vite printed `http://127.0.0.1:<port>/`; `connect-dapp` passed on Chrome (62.5 s) and Firefox (66.0 s). This is the environment where clients try `::1` first and fall back.
+- Docker proof (`git archive` of `3d435fbcd`, lane-named Bun and Aztec volumes, no browser volume, no `NODE_OPTIONS`, `NULO_E2E_PROVERLESS=1`):
+  - Run 1, fresh tree: `999 packages installed`, then D1 printed `chrome@155.0.8059.79` and `chrome-headless-shell@155.0.8059.79`. The postinstall had already placed them, and D1 returned early. The playground was ready and the test passed. 3 min 07 s wall-clock.
+  - Run 2, the same tree: `Checked 1028 installs … (no changes)`, then D1 downloaded both browsers itself and the test passed. 2 min 09 s wall-clock.
+  - The volumes and both scratch trees were removed afterwards. The trees were root-owned from the container, so a container removed them.
+- Gate: `lint`, `lint:actions`, `typecheck:all`, `test`, `test:all`, `test:ci-gating` (739 pass), and the playground's `test` and `typecheck` all exit 0. `test:release`: the same 7 zip-only reds as in phase 1, which are environmental.
+- Codex loop, round 1 (fresh session) and an Opus diff review in parallel. Both found that the script regex's lookbehind rejected `./scripts/ci-cd/…` and that its character class stopped at a nested `/`. Opus added `$GITHUB_WORKSPACE/`, `../../`, a directory passing `existsSync`, and the untested `${{ }}`/`!=`/case paths in `decided`. Fixed in `2a779dd77`. Each of the two new copy cases was red against its mutation (the old regex; a case-sensitive compare) before the fix was restored.
+- Round 2 (resumed): clean.
