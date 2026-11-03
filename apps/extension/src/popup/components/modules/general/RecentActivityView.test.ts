@@ -494,6 +494,21 @@ describe("RecentActivityView — scope-triple containment", () => {
 		expect(vmOf(wrapper).executingTask).toBeNull()
 	})
 
+	test("a parked task snapshot whose scope collapses lands nothing, even a task that names no network", async () => {
+		const slow = deferred<Array<ReturnType<typeof uiTransferTask>>>()
+		H.getTasks.mockReturnValueOnce(slow.promise) // mount's task load parks
+		const wrapper = mountView()
+		await flushPromises()
+
+		H.store.current.network = null // the scope collapses; the address stays
+		await nextTick()
+		// No networkId and the same sender: the account guard and the task's own check both pass, so
+		// only the collapse ending the run refuses it.
+		slow.resolve([uiTransferTask(ACCT_A)])
+		await flushPromises()
+		expect(vmOf(wrapper).executingTask).toBeNull()
+	})
+
 	test("a standalone journal resnapshot does not starve parked task/token loads", async () => {
 		// Per-loader fences: a journal-only begin() (reconnect resnapshot) must not
 		// supersede task/token loads still in flight. The mount path serializes
@@ -1414,6 +1429,32 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		await flushPromises()
 		expect(sheet(shown).exists()).toBe(false)
 		expect(usePopupStore().isOpened("send_reask_review")).toBe(false)
+	})
+
+	test("(BUG PIN) a send still out across a scope switch blocks the next scope's send, and its answer closes that sheet", async () => {
+		// The sending flag outlives the switch, so B's press makes no call and A's settling closes B's
+		// sheet. It needs a switch from another window inside one RPC and costs one tap; kept as is.
+		const answer = deferred<boolean>()
+		H.acceptQueuedFee.mockReturnValueOnce(answer.promise)
+		const w = await openReview()
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(sheet(w).props("sending")).toBe(true)
+
+		H.getOperations.mockResolvedValue([asking({ accountAddress: ACCT_B })])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		card(w)?.vm.$emit("review", "op-r")
+		await flushPromises()
+		expect(sheet(w).props()).toMatchObject({ show: true, sending: true })
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(H.acceptQueuedFee).toHaveBeenCalledTimes(1)
+
+		answer.resolve(true)
+		await flushPromises()
+		expect(sheet(w).props("show")).toBe(false)
+		expect(sheet(w).props("sending")).toBe(false)
 	})
 
 	test.each([

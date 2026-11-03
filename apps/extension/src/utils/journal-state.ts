@@ -41,7 +41,9 @@ export function isInFlightActivityOp(op: Pick<OperationRecord, "terminalAt" | "k
 }
 
 /** A send held behind an earlier one, which names that wait rather than the queue's stage word. */
-export function isQueuedTransfer(op: OperationRecord | null | undefined): boolean {
+export function isQueuedTransfer(
+	op: OperationRecord | null | undefined,
+): op is OperationRecord & { progress: Extract<OperationRecord["progress"], { stage: "queued" }> } {
 	return op?.kind === "transfer" && op.progress?.stage === "queued"
 }
 

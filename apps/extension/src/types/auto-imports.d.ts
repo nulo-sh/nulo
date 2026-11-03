@@ -545,6 +545,7 @@ declare global {
   const useDappOrigin: typeof import('../composables/useDappOrigin').useDappOrigin
   const useEntityCrud: typeof import('../composables/useEntityCrud').useEntityCrud
   const useEvent: typeof import('../composables/outside.js').useEvent
+  const useExecutingTask: typeof import('../composables/useExecutingTask').useExecutingTask
   const useFeeEstimation: typeof import('../composables/useFeeEstimation').useFeeEstimation
   const useFeeEstimationMap: typeof import('../composables/useFeeEstimationMap').useFeeEstimationMap
   const useFeeSnapshot: typeof import('../composables/useFeeSnapshot').useFeeSnapshot
@@ -582,6 +583,7 @@ declare global {
   const useProfileImportFlow: typeof import('../composables/useProfileImportFlow').useProfileImportFlow
   const useProfileNameDefault: typeof import('../composables/useProfileNameDefault').useProfileNameDefault
   const useProfileNameField: typeof import('../composables/useProfileNameField').useProfileNameField
+  const useReaskReview: typeof import('../composables/useReaskReview').useReaskReview
   const useReceiptFee: typeof import('../composables/useReceiptFee').useReceiptFee
   const useRestoreAgain: typeof import('../composables/useRestoreAgain').useRestoreAgain
   const useRoute: typeof import('vue-router').useRoute
@@ -734,6 +736,9 @@ declare global {
   // @ts-ignore
   export type { ProfileNameFieldOptions, ValidateOptions, ProfileNameField } from '../composables/useProfileNameField'
   import('../composables/useProfileNameField')
+  // @ts-ignore
+  export type { OpenedReask } from '../composables/useReaskReview'
+  import('../composables/useReaskReview')
   // @ts-ignore
   export type { ReceiptFeeState, ReceiptFeeService, UseReceiptFeeResult } from '../composables/useReceiptFee'
   import('../composables/useReceiptFee')
@@ -1452,6 +1457,7 @@ declare module 'vue' {
     readonly useDappOrigin: UnwrapRef<typeof import('../composables/useDappOrigin')['useDappOrigin']>
     readonly useEntityCrud: UnwrapRef<typeof import('../composables/useEntityCrud')['useEntityCrud']>
     readonly useEvent: UnwrapRef<typeof import('../composables/outside.js')['useEvent']>
+    readonly useExecutingTask: UnwrapRef<typeof import('../composables/useExecutingTask')['useExecutingTask']>
     readonly useFeeEstimation: UnwrapRef<typeof import('../composables/useFeeEstimation')['useFeeEstimation']>
     readonly useFeeEstimationMap: UnwrapRef<typeof import('../composables/useFeeEstimationMap')['useFeeEstimationMap']>
     readonly useFeeSnapshot: UnwrapRef<typeof import('../composables/useFeeSnapshot')['useFeeSnapshot']>
@@ -1489,6 +1495,7 @@ declare module 'vue' {
     readonly useProfileImportFlow: UnwrapRef<typeof import('../composables/useProfileImportFlow')['useProfileImportFlow']>
     readonly useProfileNameDefault: UnwrapRef<typeof import('../composables/useProfileNameDefault')['useProfileNameDefault']>
     readonly useProfileNameField: UnwrapRef<typeof import('../composables/useProfileNameField')['useProfileNameField']>
+    readonly useReaskReview: UnwrapRef<typeof import('../composables/useReaskReview')['useReaskReview']>
     readonly useReceiptFee: UnwrapRef<typeof import('../composables/useReceiptFee')['useReceiptFee']>
     readonly useRestoreAgain: UnwrapRef<typeof import('../composables/useRestoreAgain')['useRestoreAgain']>
     readonly useRoute: UnwrapRef<typeof import('vue-router')['useRoute']>
