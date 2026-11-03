@@ -20,7 +20,6 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 /** Utils */
 import { markGetStarted } from "@/utils/get-started"
 import { PASSKEY_COPY } from "@/utils/passkey-copy"
-import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { createFailedNotice } from "@/utils/profile-flow-notices"
 import { buildPhraseCheck, type PhraseQuestion } from "../phrase-check"
@@ -32,6 +31,7 @@ import { useNotificationStore } from "@/stores/notification.store"
 /** Components — the passkey ceremony dialog teleports to #popup, which the onboarding
 	shell declares too. */
 import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
+import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
 import PasskeyReuseLink from "@/components/composite/PasskeyReuseLink.vue"
 import OnboardingPhraseCheck from "../components/OnboardingPhraseCheck.vue"
@@ -113,7 +113,6 @@ const {
 	password,
 	repeatedPassword: confirm,
 	isCreating,
-	strengthHint: passwordStrengthHint,
 	isAllowedToContinue,
 	handleCreate: handleSubmit,
 	handleCreateWithExistingPasskey,
@@ -228,34 +227,26 @@ onBeforeUnmount(() => {
 				/>
 			</Flex>
 
-			<Flex v-if="authMethod === 'password'" direction="column" gap="12">
-				<Flex direction="column" gap="8">
-					<Text variant="label-section" color="secondary">Password</Text>
-					<Input
-						v-model="password"
-						type="password"
-						placeholder="Strong password"
-						autocomplete="new-password"
-						:maxLength="MAX_PASSWORD_LENGTH"
-						autofocus
-						data-testid="onboarding-password-input"
-					/>
-				</Flex>
-				<Flex direction="column" gap="8">
-					<Text variant="label-section" color="secondary">Confirm password</Text>
-					<Input
-						v-model="confirm"
-						type="password"
-						placeholder="Repeat password"
-						autocomplete="new-password"
-						:maxLength="MAX_PASSWORD_LENGTH"
-						data-testid="onboarding-password-confirm"
-						inputTestid="onboarding-password-confirm-input"
-					/>
-				</Flex>
-				<Text v-if="passwordStrengthHint && !isCreating" variant="body" color="secondary" height="150">
-					{{ passwordStrengthHint }}
-				</Text>
+			<!-- The create empties both fields before the profile boots; hiding the hint keeps it from judging the emptied pair. -->
+			<Flex v-if="authMethod === 'password'" direction="column" gap="8">
+				<Text variant="label-section" color="secondary">Password</Text>
+				<NewPasswordPair
+					v-model:password="password"
+					v-model:repeatedPassword="confirm"
+					:testids="{
+						input: 'onboarding-password-input',
+						confirm: 'onboarding-password-confirm',
+						confirmInput: 'onboarding-password-confirm-input',
+						toggle: 'onboarding-password-input-visibility-toggle',
+					}"
+					placeholder="Strong password"
+					autofocus
+					:hideHint="isCreating"
+				>
+					<template #repeatLabel="{ id }">
+						<Text :id="id" variant="label-section" color="secondary">Confirm password</Text>
+					</template>
+				</NewPasswordPair>
 			</Flex>
 
 			<div v-else :class="$style.passkeyInfo">
