@@ -5,3 +5,4 @@
 - 2026-11-03 audit: Codex R1 conditional approve (R1-1..R1-5 accepted); Opus conditional approve (O1-O4 accepted, O5 rejected for R1-4). Final fresh Codex pass next.
 - 2026-11-03 final: fresh Codex pass conditional approve (F1 accepted), resumed (F2 accepted), resumed: approve. Arc 1 next under auto-continue.
 - 2026-11-03 arc 1: phases 1 and 2 committed (trust gate in the wallet layer; one pick and decrypt classifier, one error log). Phase 3 next.
+- 2026-11-03 arc 1: phase 3 committed (onboarding import's Decrypt, Import and Continue refuse a repeat Enter). Arc 1 end gate next.
