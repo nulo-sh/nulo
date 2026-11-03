@@ -27,3 +27,11 @@
 - Round 1, Opus 5.5 diff review (beside it): approve, one nit, accepted: `initNetworks`' doc said it reads the network slot "dynamically here"; the writer does now. It noted a gap older than the diff: no test tells `app.vue`'s replace dependency from ensure (same signature; the old inline arrow had it too). `app.vue` has no harness; not acted on.
 - Round 2, Codex fresh session over both arcs (arc 1's squash `5bb259392` plus this diff): approve, two low comment findings, both verified and accepted. The registry header recounted history and promised every consumer works unchanged, which a write no longer does; now its contract in four lines, and the duplicate null-slot comment is gone. In `sealed-entity-storage.ts`, `adoptOwnerless` said it removes the original "in the same dispatch" (it awaits the set first) and `commitLegacyTogether` said "ONE `set`" (none when every twin is stored); both wordings predate arc 1.
 - Round 3, the net session resumed with the fix diff: approve, no findings; the fixes are comment-only and match the code. Converged.
+
+## Final gate (after the review loop and three `dev` merges)
+
+- Merged `origin/dev` at `cf9ed1e40` (#1585), then `6c7ba2867` (#1581, the popup lane: the generated auto-import files merged cleanly and a rebuild leaves `git status` clean), then `c7413cfa7` (#1586, `scripts/release` only).
+- At `7369124d8`, every command exit 0, retry 0: lint, typecheck:all, `test:all` (extension 975 files / 17029 tests), `audit:vue`, both armed builds; the six smoke files 31 passed on Chrome (152 s) and Firefox (226 s). At `0ca455c52` (`apps/` and `packages/` unchanged since): lint, typecheck:all, `test:all` exit 0.
+- `bun run test:release` (not this arc's gate: the arc touches no `scripts/`): 7 of 368 red, every one `Executable not found in $PATH: "zip"`; this host has no `zip` binary.
+- `audit:dup` against `c7413cfa7`: 1547 clones / 21270 lines, then 1547 / 21267 (production 176 / 8762, then 176 / 8759). A direct `jscpd` diff of the two clone sets finds one change: the `auth.vue` ↔ `unlock-method.vue` clone is 3 lines shorter. Arc 2 adds no clone. One mislabelled pair of runs (taken while `origin/dev` moved under the worktree) was discarded.
+- Line counts, the five production files: 1970 → 1971.

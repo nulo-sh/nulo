@@ -1,7 +1,7 @@
 ---
 plan: quality-services-1
 tier: light
-status: approved (Codex round 3); arc 1 merged, arc 2 in review
+status: completed
 issues: "#1436, #1441, #1447, #1467 (arc 1); #1437 (arc 2)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,20 @@ base: origin/dev at 93b9a2dfb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-11-03
+- **Status**: completed. Arc 1 merged as #1584 (closes #1436, #1441, #1447, #1467); arc 2 and this close-out are one PR (closes #1437).
+- **Shipped**: arc 1 gives one owner each to unlock-time sealing (`seal-on-unlock.ts`, twelve services), the deletion-fenced create (`create-fence.ts`, five sites), the account-scope purge matcher (`accountScopeMatcher`), the sealed `{ k, r }` text and the set-then-remove tail (`keyedRowText`, `setThenRemove`), and options objects for four constructors' optional seams. Arc 2: `replaceNetworkClient`, `replaceAccountClient` and `ensureAccountClient` own the popup registry's client slots beside `initTransactionService`, and `managers` is read-only. No screen, copy, stored byte, wire message or log line changed; no e2e scenario added. `audit:dup` (clones / duplicated lines): 1544 / 21191 → 1543 / 21173 over arc 1, 1547 / 21270 → 1547 / 21267 over arc 2.
+- **Known limits**: none.
+- **Open items**: none.
+- **Dispositions**:
+  - Declined: injecting the slot writers into `useProfileBootstrap` (§ Architecture & Implementation). The composable still reaches the app-scope registry, so CLAUDE.md § Composables' C1 rule stays unmet there; #1437's Decision comment says why.
+  - Not acted on: no test tells `app.vue`'s replace dependency from ensure. The gap predates the plan, and the shell has no harness.
+  - Corrected claims: § The items, checked. #1437's count of seven trap writes held; the recon found six.
+- **Lessons**: none promoted. `lessons.md` is at its 8 KiB budget, and nothing here generalizes past the plan; the detail is in [lessons/phase-4.md](lessons/phase-4.md) and [lessons/phase-6.md](lessons/phase-6.md).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are not to be run.
 
 # quality-services-1: one owner each for the row protocols and the construction seams
 
