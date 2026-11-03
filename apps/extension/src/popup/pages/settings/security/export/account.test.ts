@@ -537,6 +537,25 @@ describe("a passkey profile's account file", () => {
 		},
 	)
 
+	test("a lookup that settles on another chain id asks nothing, though the chain id is back before the page resumes", async () => {
+		let answerLookup: (params: { credentialId: string; prfSalt: string }) => void = () => {}
+		passkey.getPasskeyUnlockParams.mockImplementationOnce(() => new Promise((r) => (answerLookup = r)))
+		const w = mountPage("passkey")
+		await flushPromises()
+		await w.get('[data-testid="agree-continue-btn"]').trigger("click")
+		await w.get('[data-testid="account-file-confirm-passkey-btn"]').trigger("click")
+		const app = useAppStore()
+		answerLookup({ credentialId: "cred", prfSalt: "salt" })
+		// Queued before the switch, so the chain id is back before the page's watcher reads it.
+		queueMicrotask(() => {
+			app.network = { id: "n1", chainId: 7 } as never
+		})
+		app.network = { id: "n2", chainId: 8 } as never
+		await flushPromises()
+		expect(passkey.runCeremony).not.toHaveBeenCalled()
+		expect(passkey.verifyExportCredential).not.toHaveBeenCalled()
+	})
+
 	test.each<[string, "password" | "passkey", boolean, Record<string, string>, string[][]]>([
 		[
 			"a passkey profile in the toolbar panel moves with its address",

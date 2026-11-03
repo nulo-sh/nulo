@@ -134,7 +134,7 @@ const changeUnlockMethod = async (isCurrent, id, current, next) => {
 	}
 }
 
-/** The current passkey's card, asked at the profile's own input, and never once the run is stale. */
+/** The current passkey's card, named as the profile was at the press. */
 async function currentPasskey(isCurrent) {
 	const { id, name } = appStore.profile
 	return askProfilePasskey(runCeremony, managers.profile, { profileId: id, step: "unlockMethod", profileName: () => name }, isCurrent)
