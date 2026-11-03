@@ -10,8 +10,9 @@
  * The public shape (`managers`, `isServiceReady`, `initTransactionService`,
  * `refreshBalances`) is preserved — every existing consumer keeps working
  * unchanged. Under the hood:
- *   1. `managers` is a Proxy; client construction is deferred until first
- *      access (or until `initAppServiceContext()` is called explicitly).
+ *   1. `managers` is a read-only Proxy; client construction is deferred until
+ *      first access (or until `initAppServiceContext()` is called explicitly).
+ *      The lazy slots are written only by their owned writers below.
  *   2. `initAppServiceContext()` is the explicit boot hook. Called from
  *      `popup/index.ts` at startup to preserve the old eager-init timing.
  *
@@ -58,8 +59,9 @@ export function waitForServiceReady(ms: number): Promise<boolean> {
 /**
  * Service-client container. `profile`, `contact`, `legal`, `networkReset` and `uiPreference` are populated eagerly by
  * `initAppServiceContext()` (called at popup boot). `network`, `transaction`,
- * `account` are LAZY: `null` until the popup's unlock flow assigns them (after
- * `bootstrapActiveProfile()` resolves the active profile/network/account).
+ * `account` are LAZY: `null` until the popup's unlock flow installs them through
+ * their owned writers (after `bootstrapActiveProfile()` resolves the active
+ * profile/network/account).
  *
  * The lazy three are typed `| null` (honest) — a bare `managers.network` read is
  * `NetworkServiceClient | null`, so an unchecked `.foo()` is a compile error IN
@@ -123,30 +125,32 @@ function createAppServices(): AppServices {
 	}
 }
 
+function services(): AppServices {
+	appServices ??= createAppServices()
+	return appServices
+}
+
 /**
  * Eagerly create the profile + contact clients. Safe to call multiple times.
  * Call once at popup boot (see `popup/index.ts`) to match the old module-eval
  * init timing.
  */
-export function initAppServiceContext(): AppServices {
-	if (!appServices) appServices = createAppServices()
-	return appServices
+export function initAppServiceContext(): void {
+	services()
 }
 
 /**
  * Public handle. Lazily triggers `initAppServiceContext()` on first access,
  * so any consumer that reads `managers.profile` gets a live client even if
- * the boot hook wasn't called.
+ * the boot hook wasn't called. A write throws: a lazy slot changes only
+ * through its owned writer.
  */
-export const managers: AppServices = new Proxy({} as AppServices, {
+export const managers: Readonly<AppServices> = new Proxy({} as AppServices, {
 	get(_, prop: string | symbol) {
-		const services = appServices ?? initAppServiceContext()
-		return (services as unknown as Record<string | symbol, unknown>)[prop]
+		return (services() as unknown as Record<string | symbol, unknown>)[prop]
 	},
-	set(_, prop: string | symbol, value: unknown) {
-		const services = appServices ?? initAppServiceContext()
-		;(services as unknown as Record<string | symbol, unknown>)[prop] = value
-		return true
+	set(_, prop: string | symbol) {
+		throw new TypeError(`managers is read-only: ${String(prop)} changes only through its owned writer`)
 	},
 })
 
@@ -167,8 +171,7 @@ export function requireAccount(): AccountServiceClient {
 	return client
 }
 
-/** The lazy clients or `null` — for sites that tolerate the unset case (e.g.
- *  `getNetwork()?.disconnect()` before reassigning). */
+/** The lazy clients or `null`, for sites that tolerate the unset case. */
 export const getNetwork = (): NetworkServiceClient | null => managers.network
 export const getTransaction = (): TransactionServiceClient | null => managers.transaction
 export const getAccount = (): AccountServiceClient | null => managers.account
@@ -207,10 +210,10 @@ type LazySlot = "network" | "account" | "transaction"
 
 /** Disconnects the slot's client, if any, then installs the one `create` builds. */
 function replaceSlot<Slot extends LazySlot>(slot: Slot, create: () => NonNullable<AppServices[Slot]>): NonNullable<AppServices[Slot]> {
-	const services = initAppServiceContext()
-	services[slot]?.disconnect()
+	const registry = services()
+	registry[slot]?.disconnect()
 	const client = create()
-	services[slot] = client
+	registry[slot] = client
 	return client
 }
 
@@ -229,9 +232,9 @@ export function replaceAccountClient(): AccountServiceClient {
  * abandoned a connected port, and disconnecting it would reject the calls of any flow still holding it.
  */
 export function ensureAccountClient(): AccountServiceClient {
-	const services = initAppServiceContext()
-	services.account ??= new AccountServiceClient()
-	return services.account
+	const registry = services()
+	registry.account ??= new AccountServiceClient()
+	return registry.account
 }
 
 export function initTransactionService(onTransactionAdded: (tx: Tx) => void, onTransactionUpdated: (tx: Tx) => void): void {

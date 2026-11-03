@@ -1,18 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import type { AccountServiceClient } from "@/wallet/services/account/client"
+import type { AppServices } from "@/utils/core"
 import type { NetworkServiceClient } from "@/wallet/services/network/client"
-import type { TransactionServiceClient } from "@/wallet/services/transaction/client"
-import {
-	getAccount,
-	getNetwork,
-	getTransaction,
-	isServiceReady,
-	managers,
-	refreshBalances,
-	requireAccount,
-	requireNetwork,
-	waitForServiceReady,
-} from "@/utils/core"
+import { initAppServiceContext, isServiceReady, managers, refreshBalances, waitForServiceReady } from "@/utils/core"
 
 const tbMock = vi.hoisted(() => ({
 	getTokenBalances: vi.fn(),
@@ -110,44 +99,48 @@ describe("the lazy slots' owned writers", () => {
 		expect(next.onTransactionUpdated.add).toHaveBeenCalledWith(updated)
 		expect(next.disconnect).not.toHaveBeenCalled()
 	})
+
+	test("the registry refuses a write, and the owned writer still installs its client", async () => {
+		const core = await freshCore()
+		expect(() => {
+			;(core.managers as AppServices).network = {} as NetworkServiceClient
+		}).toThrow(TypeError)
+		expect(core.getNetwork()).toBeNull()
+		const installed = core.replaceNetworkClient()
+		expect(core.requireNetwork()).toBe(installed)
+	})
 })
 
 /**
  * The 3 lazy clients are typed `| null`. require*() asserts non-null with a
  * clear error (the safety net replacing the prior silent `null.foo()` TypeError);
- * get*() returns `| null` for the tolerant disconnect-before-reassign sites.
- * State is module-level + Proxy-backed, so reset all three slots before each test.
+ * get*() returns `| null` for the sites that tolerate the unset case.
  */
 describe("AppServices lazy-client accessors", () => {
-	beforeEach(() => {
-		managers.network = null
-		managers.transaction = null
-		managers.account = null
+	test("(BUG-PIN) require*() throws a clear error when the client is unset", async () => {
+		const core = await freshCore()
+		expect(() => core.requireNetwork()).toThrow("network service not initialized")
+		expect(() => core.requireAccount()).toThrow("account service not initialized")
 	})
 
-	test("(BUG-PIN) require*() throws a clear error when the client is unset", () => {
-		expect(() => requireNetwork()).toThrow("network service not initialized")
-		expect(() => requireAccount()).toThrow("account service not initialized")
+	test("get*() returns null when unset (tolerant path — no throw)", async () => {
+		const core = await freshCore()
+		expect(core.getNetwork()).toBeNull()
+		expect(core.getTransaction()).toBeNull()
+		expect(core.getAccount()).toBeNull()
 	})
 
-	test("get*() returns null when unset (tolerant path — no throw)", () => {
-		expect(getNetwork()).toBeNull()
-		expect(getTransaction()).toBeNull()
-		expect(getAccount()).toBeNull()
-	})
-
-	test("require*()/get*() return the client after the unlock flow assigns it", () => {
-		const net = {} as NetworkServiceClient
-		const txn = {} as TransactionServiceClient
-		const acc = {} as AccountServiceClient
-		managers.network = net
-		managers.transaction = txn
-		managers.account = acc
-		expect(requireNetwork()).toBe(net)
-		expect(getNetwork()).toBe(net)
-		expect(getTransaction()).toBe(txn)
-		expect(requireAccount()).toBe(acc)
-		expect(getAccount()).toBe(acc)
+	test("require*()/get*() return the client its owned writer installed", async () => {
+		const core = await freshCore()
+		const net = core.replaceNetworkClient()
+		const acc = core.replaceAccountClient()
+		core.initTransactionService(vi.fn(), vi.fn())
+		expect(core.requireNetwork()).toBe(net)
+		expect(core.getNetwork()).toBe(net)
+		expect(core.getTransaction()).toBe(slotClients.transaction.mock.results.at(-1)?.value)
+		expect(core.getTransaction()).not.toBeNull()
+		expect(core.requireAccount()).toBe(acc)
+		expect(core.getAccount()).toBe(acc)
 	})
 })
 
@@ -229,6 +222,7 @@ describe("refreshBalances — the disconnect must not cancel its own refresh RPC
 describe("isServiceReady", () => {
 	test("follows the profile port's Ready and its drop; the wait resolves at Ready, or false at its bound", async () => {
 		// Let the real client's own first Ready settle before the clock is faked.
+		initAppServiceContext()
 		await new Promise((resolve) => setTimeout(resolve, 10))
 		vi.useFakeTimers()
 		try {
