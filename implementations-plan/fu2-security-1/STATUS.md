@@ -15,3 +15,10 @@
 - 2026-11-03: arc 2 started off `dev` at 67c1ac545 (arc 1 merged as #1559); scope: P93-22/40/72, page 96's P96-04 D and P96-05 D, page 100's five answers; § Arc 2 written.
 - 2026-11-03: arc 2 plan round: Codex and Opus conditional approve, folded (D15 at 500 ms, `isReconnect` out end to end, the network list, R5-R7 pictures).
 - 2026-11-03: arc 2 plan round 2 (Codex resumed): two plan corrections folded; approved.
+- 2026-11-03: arc 2 base: T4, T6-T12 red on the base (29); network files on Chrome green at retry 0 (5 files + capture spec, 13 tests, vitest 215.6 s, touched files' tests 136.1 s).
+- 2026-11-03: arc 2 base: network files on Firefox green at retry 0 (5 files, 10 passed 1 skipped, vitest 228.7 s, wall 242 s); armed Chrome and Firefox bundles built from the base.
+- 2026-11-03: arc 2 base: touched smoke files on Chrome green at retry 0 (7 files, 37 tests, tests 283.6 s without the capture spec); before pictures captured.
+- 2026-11-03: arc 2 base: touched smoke files on Firefox green at retry 0 (7 files, 37 tests, 439.0 s).
+- 2026-11-03: arc 2 Codex round 1: approve, two cleanups (a stale `isReconnect` URL fixture, three restating comments). Head network files on Chrome green at retry 0 (13 tests, vitest 248.9 s; touched files' tests 146.6 s against 136.1 s at the base); after pictures of the connect windows captured.
+- 2026-11-03: arc 2 head network files on Firefox green at retry 0 (10 passed 1 skipped, vitest 298.4 s, wall 320 s; ran beside a review agent's unit runs). Opus round 1: conditional approve, two weak tests and one e2e line strengthened (b14f31d11).
+- 2026-11-03: arc 2 review loop converged: Codex round 1 approve, round 2 conditional (Tooltip assertion fixed, 9371ff1a7), round 3 approve; Opus conditional approve beside round 1, folded (b14f31d11).
