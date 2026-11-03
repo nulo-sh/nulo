@@ -494,6 +494,24 @@ describe("AuthRegistryService sealing at rest", () => {
 		expect(await h.service.getAuthwits(1, A)).toMatchObject([{ id: 1, hash: "0xh1" }])
 	})
 
+	test("an authwit conversion that fails leaves the profile's flags plaintext too, for the next worker", async () => {
+		const h = await makeHarness()
+		await h.api.storage.local.set({
+			[`${ROOT}1`]: JSON.stringify({ id: 1, profileId: "p1", chainId: 1, account: A, hash: "0xh1", content }),
+			[flagKey("p1", A)]: "false",
+		})
+		const internals = h.service as unknown as {
+			authwits: { sealLegacy(...args: unknown[]): Promise<number> }
+			sealLegacyRows(profileId: string): Promise<void>
+		}
+		vi.spyOn(internals.authwits, "sealLegacy").mockRejectedValueOnce(new Error("quota"))
+
+		await internals.sealLegacyRows("p1").catch(() => {})
+		const all = (await h.api.storage.local.get(null)) as Record<string, string>
+		expect(all[flagKey("p1", A)]).toBe("false")
+		expect(JSON.parse(all[`${ROOT}1`] as string).hash).toBe("0xh1")
+	})
+
 	test("an account purge after the conversion removes that account's sealed authwits and flag only", async () => {
 		const { h, stored } = await converted()
 		await h.service.purgeForAccounts([{ chainId: 1, address: A }], "p1")

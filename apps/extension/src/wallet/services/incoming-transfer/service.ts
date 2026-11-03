@@ -1,3 +1,4 @@
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -156,6 +157,12 @@ function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number |
 	return row
 }
 
+export type IncomingTransferServiceOptions = {
+	pollIntervalMs?: number
+	publicReader?: PublicEventReader
+	incomingPollGate?: IncomingPollGate
+}
+
 /**
  * IncomingTransferService — surfaces decrypted notes that arrived from known
  * fungible-token contracts as "Received" rows in the activity feed.
@@ -312,24 +319,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  key. In memory only: a restart forgets a strike, which only delays the delete by one scan. */
 	private readonly noteStrikes = new Map<string, string>()
 
-	/** E2E-only deterministic race lever. `undefined` in production (the ctor
-	 *  arg is only ever passed inside `if (E2E_PROVERLESS)` in runtime.ts), so
-	 *  every call site is a no-op `?.` in prod. */
+	/** E2E-only race lever; undefined in a production build, so each `?.` call is a no-op. */
 	private readonly incomingPollGate?: IncomingPollGate
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
-		publicReader?: PublicEventReader,
-		incomingPollGate?: IncomingPollGate,
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: IncomingTransferServiceOptions = {}) {
 		super(INCOMING_TRANSFER_SERVICE_NAME, logger)
 		this.repo = new IncomingTransferRepository(browserApi, (profileId) => this.profileService.rowKeys(profileId))
-		this.pollIntervalMs = pollIntervalMs
-		this.injectedPublicReader = publicReader
+		this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
+		this.injectedPublicReader = options.publicReader
 		this.serviceLock = new Lock(INCOMING_TRANSFER_SERVICE_NAME, logger)
-		this.incomingPollGate = incomingPollGate
+		this.incomingPollGate = options.incomingPollGate
 		this.episodes = new ScanEpisodeStore(browserApi.storage.session, (error) =>
 			this.logDebug("scan episode persistence failed", { error }),
 		)
@@ -345,15 +344,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  only while its section still owns the lock and no deleter runs, as a receipt does, so a wipe
 	 *  that a watchdog handoff let in never finds a sealed copy it did not list. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.repo.sealLegacy(
-				profileId,
-				(fn) => this.withServiceLock(fn),
-				() => this.deletersRunning === 0,
-			)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext incoming rows failed; the next worker retries", { error })
-		}
+		await this.repo.sealLegacy(
+			profileId,
+			(fn) => this.withServiceLock(fn),
+			() => this.deletersRunning === 0,
+		)
 	}
 
 	/** Bump the lifecycle epoch — call from clear / delete paths so any
@@ -402,7 +397,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			tasks: services.get<TaskService>(TaskService.name),
 			warn: (...data) => this.logWarn(...data),
 		})
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext incoming rows failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Public-event scan arm: its own PXE client + the injected indexer collaborator.
 		// The reader curries `networkId → NetworkInfo` (via the same `networkInfoFrom` the note arm

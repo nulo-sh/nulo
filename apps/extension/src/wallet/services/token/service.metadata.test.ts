@@ -96,7 +96,9 @@ async function makeFetch(): Promise<Fetch> {
 	collection.add(svc(TaskService.name, {}))
 	collection.add(svc(OperationJournalService.name, {}))
 	collection.add(tokenListStub())
-	const tokenService = new TokenService(new LoggerStore(new ConfigStore()), api, () => ({ getPXE: () => PXE }) as never)
+	const tokenService = new TokenService(new LoggerStore(new ConfigStore()), api, {
+		pxeClientFactory: () => ({ getPXE: () => PXE }) as never,
+	})
 	collection.add(tokenService)
 	await collection.start()
 	// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the private metadata read

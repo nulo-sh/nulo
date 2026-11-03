@@ -148,3 +148,14 @@ describe("docker-ci-like.sh's Bun and Node", () => {
 		expect(problems(script, pinsText, `bun@${otherBun}`)).toEqual([`bun pin is not bun@${otherBun}`])
 	})
 })
+
+describe("docker-ci-like.sh's browser", () => {
+	test("installs Puppeteer's pinned browsers after the dependencies, through the installed launcher", () => {
+		const lines = script.split("\n").map((line) => line.trim())
+		const dependencies = lines.indexOf("bun install --frozen-lockfile")
+		expect(dependencies).toBeGreaterThan(-1)
+		expect(lines.indexOf("(cd apps/extension && bun --no-install ./node_modules/.bin/puppeteer browsers install)")).toBeGreaterThan(
+			dependencies,
+		)
+	})
+})

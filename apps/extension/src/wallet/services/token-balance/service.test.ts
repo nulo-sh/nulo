@@ -137,7 +137,7 @@ async function world(opts: WorldOptions = {}) {
 	services.add(svc(EXECUTION_SERVICE_NAME, {}))
 	services.add(svc(TASK_SERVICE_NAME, opts.task ?? { createNewTask: () => ({ id: "t1" }) }))
 	const noopTicker = { subscribe: () => ({ cancel: () => {} }) } as never
-	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, noopTicker)
+	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { ticker: noopTicker })
 	services.add(service)
 	return { api, repo, service, bus, rowKeysReady, start: () => services.start() }
 }

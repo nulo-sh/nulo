@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
+	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="home-page">
 		<div :class="$style.hero" data-testid="home-hero">
 			<BackupReminderBanner v-if="reminders?.banner" :class="$style.reminder" @save="openPhrase" />
 			<BalanceView
@@ -207,5 +207,22 @@ onBeforeUnmount(() => {
 
 .content {
 	padding: 16px 24px var(--nav-clearance) 24px;
+}
+
+/* A narrow window cannot spare the hero's height: the whole page scrolls, the hero with it. The
+ * shadow follows only the middle's own scroll, so it would stick after a resize. */
+@media (width < 359px) {
+	.wrapper {
+		overflow-y: auto;
+	}
+
+	.scroller {
+		flex: none;
+		overflow: visible;
+	}
+
+	.scroll_shadow {
+		display: none;
+	}
 }
 </style>

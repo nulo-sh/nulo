@@ -219,7 +219,6 @@ function makeHarness(
 			deleteController: vi.fn(),
 			acquireSlot: vi.fn(async () => ({ release: releaseSlot, preController: undefined })),
 			claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: new AbortController() })),
-			beginJournal: vi.fn(async () => "j1"),
 			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			commitJournal: vi.fn(async () => {}),
@@ -318,9 +317,8 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 
 		expect(result).toBe("0xhash")
 		// send_transaction takes the execution slot + journal scaffold
-		// (runInSlot) like the other two dApp-send paths — claimOrCreateJournal, NOT
-		// the old un-slotted beginJournal. Args: (networkId, account, origin, calls,
-		// hooks, preController, fence).
+		// (runInSlot) like the other two dApp-send paths — claimOrCreateJournal. Args: (networkId,
+		// account, origin, calls, hooks, preController, fence).
 		expect(deps.lane.acquireSlot).toHaveBeenCalledTimes(1)
 		expect(deps.lane.claimOrCreateJournal).toHaveBeenCalledWith(
 			"net-1",
@@ -331,7 +329,6 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 			undefined,
 			FENCE,
 		)
-		expect(deps.lane.beginJournal).not.toHaveBeenCalled()
 		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "simulating" })
 		const ctx = (proveAndSend.mock.calls[0] as unknown[])[0] as { scopes: unknown[] }
 		expect(ctx.scopes).toEqual([built.account.address])
@@ -591,7 +588,6 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 				deleteController: vi.fn(),
 				acquireSlot: vi.fn(async () => ({ release: vi.fn(), preController: undefined })),
 				claimOrCreateJournal: vi.fn(async () => ({ journalId: "j1", controller: aborted })),
-				beginJournal: vi.fn(),
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
@@ -1045,7 +1041,6 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 				claimOrCreateJournal: vi.fn(async () => {
 					throw new Error("claim broke")
 				}),
-				beginJournal: vi.fn(),
 				recordBuiltCall: vi.fn(async () => {}),
 				markJournal: vi.fn(async () => {}),
 				commitJournal: vi.fn(async () => {}),
@@ -1088,7 +1083,6 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 				}
 			}),
 			claimOrCreateJournal: vi.fn(async () => claimBehavior(map)),
-			beginJournal: vi.fn(),
 			recordBuiltCall: vi.fn(async () => {}),
 			markJournal: vi.fn(async () => {}),
 			...clearLine(),

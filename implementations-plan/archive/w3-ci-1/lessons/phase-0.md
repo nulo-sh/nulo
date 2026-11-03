@@ -1,0 +1,9 @@
+# w3-ci-1 phase 0: recon and the panel
+
+- Recon: one Sonnet explorer (reuse sweep, six capabilities). Its report put the installed Puppeteer at 25.8.0; the store holds `puppeteer@25.14.0` (checked by path), the version used throughout.
+- Docker run 1 (fresh `git archive` tree, empty Bun cache volume, `ipv4first`): the runner's groups through `bun install` left Chrome 155.0.8059.79 under the container's `~/.cache/puppeteer`. Bun printed nothing about the postinstall.
+- Docker run 2 (same tree): `bun install` printed `(no changes)`, and the container had no `~/.cache/puppeteer`. Cause of #1419's missing browser: the tree's `node_modules` outlives the container, the browser does not.
+- Docker runs 3 and 4 (playground only): without `ipv4first`, Vite answers on `[::1]` only and Node's `http.get("http://localhost:5174/")` attempts `127.0.0.1` alone (its `connectionAttempt` events), refused. With it, both use `127.0.0.1`. `bun`'s `fetch` reached `::1`.
+- The first repro attempt failed on my own harness (the pins file path is relative to the script's directory); the cut-down copy then ran from the tree's own directory.
+- Panel round 1 (2026-11-02). Codex `gpt-6.1-sol` at high (fresh session): conditional approve. Its findings: canary-expectations.json is a real residual of D3 (KL-1); the Docker proof could pass without D1 while a browser volume existed; that volume is persistent state the fix does not need; the red gate is eight lines, not five; the host base run was missing. Opus 5.5 Plan leg: conditional approve, with the same Docker-proof finding. Also: D4 must decide only on bound literal strings; anchor the script regex; fail on a missing action or script; threat-model wording; cite the harness's existing `127.0.0.1` binds. All accepted except moving the draft-flag test onto the derived scripts (out of scope, D6).
+- Final pass (2026-11-02): Codex, same session resumed: approve, no material finding.

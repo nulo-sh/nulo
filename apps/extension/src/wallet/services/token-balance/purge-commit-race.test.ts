@@ -96,7 +96,9 @@ async function world(project: (b: TokenBalanceRaw) => ProjectedBalance = ok) {
 			failTask: (_: string, message: string) => failures.push(message),
 		}),
 	)
-	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { subscribe: () => ({ cancel: () => {} }) } as never)
+	const service = new TokenBalanceService(new LoggerStore(new ConfigStore()), api, {
+		ticker: { subscribe: () => ({ cancel: () => {} }) } as never,
+	})
 	services.add(service)
 	await services.start()
 	const emitted: number[] = []

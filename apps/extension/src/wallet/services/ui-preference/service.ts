@@ -1,3 +1,4 @@
+import { runSealing } from "@/wallet/services/seal-on-unlock"
 import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
@@ -85,11 +86,11 @@ export class UiPreferenceService extends Service<Methods, Events> implements Ser
 
 	private async sealLegacyRows(profileId: string): Promise<void> {
 		for (const store of [this.pins, this.appPicks, this.sendPicks, this.selected]) {
-			try {
-				await store.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			} catch (error) {
-				this.logWarn("sealing a plaintext preference failed; the next worker retries", { error })
-			}
+			await runSealing(
+				(...data) => this.logWarn(...data),
+				"sealing a plaintext preference failed; the next worker retries",
+				() => store.sealLegacy(profileId, (fn) => this.lock.withLock(fn)),
+			)
 		}
 	}
 

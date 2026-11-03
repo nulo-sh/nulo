@@ -30,18 +30,18 @@ describe("general/GetStartedCard", () => {
 		)
 	})
 
-	test("each open step carries the drawn copy and a chevron, but How Aztec works, which opens a website, carries the outside-link mark", () => {
+	test("each open step carries the drawn copy and a chevron, but How Aztec works and Get Fee Juice, which open a website, carry the outside-link mark", () => {
 		const w = mountCard()
 		expect(row(w, "phrase").text()).toBe("1Save your recovery phraseThe 24 words that restore this wallet")
 		expect(row(w, "aztec").text()).toBe("2How Aztec works1 min · website")
-		expect(row(w, "feeJuice").text()).toBe("3Get Fee Juice")
+		expect(row(w, "feeJuice").text()).toBe("3Get Fee JuiceFee Juice pays network fees.website")
 		expect(row(w, "presto").text()).toBe("4Make proofs fasterOptional")
 		const glyphs = (item: GetStartedItem) =>
 			w
 				.findAllComponents(Icon)
 				.filter((icon) => row(w, item).element.contains(icon.element))
 				.map((icon) => icon.props("name"))
-		expect(ALL.map(glyphs)).toEqual([["chevron"], ["open"], ["chevron"], ["chevron"]])
+		expect(ALL.map(glyphs)).toEqual([["chevron"], ["open"], ["open"], ["chevron"]])
 	})
 
 	test("How Aztec works says 1 min · website on its second line, as the first row's words are drawn, and its spoken name says website", () => {
@@ -149,5 +149,20 @@ describe("general/GetStartedCard", () => {
 
 	test("no Hide without canHide", () => {
 		expect(mountCard(open("phrase"), false).find('[data-testid="get-started-hide"]').exists()).toBe(false)
+	})
+
+	test("Get Fee Juice says what Fee Juice is, on a line that wraps, and is marked as a website in the chevron's place", async () => {
+		const w = mountCard()
+		const fee = row(w, "feeJuice")
+		expect(fee.get('[data-testid="setting-description"]').text()).toBe("Fee Juice pays network fees.")
+		expect(fee.get('[data-testid="setting-value"]').text()).toBe("website")
+		const glyphs = w
+			.findAllComponents(Icon)
+			.filter((icon) => fee.element.contains(icon.element))
+			.map((icon) => icon.props("name"))
+		expect(glyphs).toEqual(["open"])
+		expect(w.findAllComponents(SettingItem).map((item) => item.props("wrapDescription"))).toEqual([true, true, true, true])
+		await fee.get("button").trigger("click")
+		expect(w.emitted("select")).toEqual([["feeJuice"]])
 	})
 })

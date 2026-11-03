@@ -1,13 +1,12 @@
 /**
  * F11 pins: `executeRegisterToken` binds the token write to ONE identity chain —
  * the fence captured at dispatch entry, tied to the ownership-checked network
- * row, threaded into `addToken` (no fresh mint at the commit). Prototype-call
- * with a minimal `this`: the method's surface is three service calls, so the
- * full ExecutionService init graph is deliberately not constructed.
+ * row, threaded into `addToken` (no fresh mint at the commit). The executor
+ * runs over three service fakes: the method's whole surface.
  */
 import { describe, expect, test, vi } from "vitest"
 import { PinMismatchError } from "@/wallet/services/token/seeder"
-import { ExecutionService } from "./service"
+import { RegistrationExecutor } from "./registration-executor"
 import type { OperationApprovalEnvelope } from "./models"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/service"
 
@@ -31,24 +30,13 @@ function makeSelf(networkProfileId: string) {
 		profileService: { captureExecutionFence: vi.fn(async () => fence) },
 		networkService: { getNetwork: vi.fn(async () => ({ id: "net1", profileId: networkProfileId, chainId: 1 })) },
 		tokenService: { addTokenAuthorized, parseTokenInterface: vi.fn(async (..._args: unknown[]) => previewed) },
-		logError: () => {},
 	}
 	return { self, fence, addTokenAuthorized }
 }
 
 const invoke = (self: unknown, authorizedFence?: unknown) => invokeWith(self, approved, origin, authorizedFence)
 const invokeWith = (self: unknown, approval: OperationApprovalEnvelope | undefined, from: LocalTxOrigin, authorizedFence?: unknown) =>
-	(
-		ExecutionService.prototype as unknown as {
-			executeRegisterToken: (
-				op: never,
-				origin: LocalTxOrigin,
-				task?: never,
-				fence?: unknown,
-				approval?: OperationApprovalEnvelope,
-			) => Promise<void>
-		}
-	).executeRegisterToken.call(self, op, from, undefined, authorizedFence, approval)
+	new RegistrationExecutor(self as never).executeRegisterToken(op, from, undefined, authorizedFence as never, approval)
 
 describe("executeRegisterToken — F11 identity chain", () => {
 	test("the write receives the ENTRY fence and its profileId, not a live re-read", async () => {

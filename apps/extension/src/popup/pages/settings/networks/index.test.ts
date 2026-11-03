@@ -117,6 +117,24 @@ describe("Settings › Networks list: links, the active row, the Switch buttons"
 		expect(rowLink("Alpha")?.contains(badges[0] ?? null)).toBe(true)
 	})
 
+	test("the active row says the dot's word under its name, and its dot takes the header dot's tone; no other row does", async () => {
+		const { appStore } = await mountList("alpha")
+		const read = () => ({
+			word: rowLink("Alpha")?.querySelector('[data-testid="setting-description"]')?.textContent?.trim(),
+			tone: document.querySelector('[data-testid="network-active-dot"]')?.getAttribute("data-tone"),
+			others: document.querySelectorAll('[data-testid="network-row"] [data-testid="setting-description"]').length,
+		})
+		appStore.networkStatus = "Active"
+		await nextTick()
+		expect(read()).toEqual({ word: "Connected", tone: "connected", others: 1 })
+		appStore.networkStatus = "InvalidChain"
+		await nextTick()
+		expect(read()).toEqual({ word: "Cannot reach the network", tone: "unreachable", others: 1 })
+		appStore.networkStatus = "sync"
+		await nextTick()
+		expect(read()).toEqual({ word: "Waiting for the network", tone: "waiting", others: 1 })
+	})
+
 	test("each inactive row has an outlined Switch named for its network, outside every link; the active row has none", async () => {
 		await mountList("alpha")
 		const switches = [...document.querySelectorAll<HTMLElement>('[data-testid="network-row-switch"]')]
