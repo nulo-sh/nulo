@@ -32,6 +32,7 @@ import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { TaskService } from "@/wallet/services/task/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { OriginType, TransactionService } from "@/wallet/services/transaction/service"
+import { RegistrationExecutor } from "./registration-executor"
 import { ExecutionService } from "./service"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -57,25 +58,20 @@ function makeService() {
 		async (...args: unknown[]) => {
 			writes.push({ method, args })
 		}
-	const service = new ExecutionService(new LoggerStore(new ConfigStore()))
-	const internals = service as unknown as {
-		networkService: unknown
-		pxeService: unknown
-		dappSessionService: unknown
-		executeAztecRegisterContract(op: unknown, registrant: unknown): Promise<void>
-	}
-	internals.networkService = { getNetwork: async () => NETWORK }
-	internals.dappSessionService = { admitDappRegistration: async () => {} }
-	internals.pxeService = {
-		getContractArtifact: async () => FrozenSchnorrAccountArtifact,
-		registerContract: record("registerContract"),
-		registerAccount: record("registerAccount"),
-	}
+	const executor = new RegistrationExecutor({
+		networkService: { getNetwork: async () => NETWORK },
+		dappSessionService: { admitDappRegistration: async () => {} },
+		pxeService: {
+			getContractArtifact: async () => FrozenSchnorrAccountArtifact,
+			registerContract: record("registerContract"),
+			registerAccount: record("registerAccount"),
+		},
+	} as never)
 	const register = (instance: unknown, secretKey: string) =>
-		internals.executeAztecRegisterContract(
-			{ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey },
-			{ origin: "https://app.example", fence: { profileId: "p1", epoch: 0, session: 1 } },
-		)
+		executor.executeAztecRegisterContract({ kind: "aztec_registerContract", networkId: NETWORK.id, instance, secretKey } as never, {
+			origin: "https://app.example",
+			fence: { profileId: "p1", epoch: 0, session: 1 },
+		})
 	return { register, writes }
 }
 

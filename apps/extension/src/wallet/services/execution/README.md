@@ -10,12 +10,14 @@ dispatch, and collaborator wiring; the work lives in focused modules.
 
 | Module | Owns |
 |---|---|
-| `service.ts` | RPC facade, `executeOperations` dispatcher, register-token/contract/sender handlers, `executeAztecCreateAuthWit`, `beginDappExecuteJournal`, collaborator wiring, gas-balance event subscriptions. |
+| `service.ts` | RPC facade, `executeOperations` dispatcher, `executeAztecCreateAuthWit`, collaborator wiring, gas-balance event subscriptions. |
 | `execution-lane.ts` | The execution-lane state machine: cancel-controller registry, each controller tagged with its session serial (`registerInFlight`), per-(profileId, chainId) FIFO `ExecutionMutex`, queued-wait heartbeats, `acquireSlot`, queued-record claim wrapper, `cancelJob`, the ended-session sweep (`abandonDeadSessions`). Frozen invariants documented in its docblock. |
 | `transfer-executor.ts` | Popup transfer flow: `execute` + `estimateFee`, estimate-reuse fast path, transfer-only activity-record shape. Waits on the send sequencer, then takes the execution slot from claim to submit, like a dApp send. |
 | `send-sequencer.ts`, `transfer-sequence-keys.ts` | The order between popup transfers of one account that share chain state: a token's note sequences, the pair handshake, a fee contract's notes, the account's initialization. Tickets for sends, a check-and-hold for estimates, release on receipt settlement. |
 | `dapp-send-executor.ts` | dApp send flows: `executeSendTransaction`, `executeAztecSendTx`, NO_FROM/DefaultEntrypoint path, `estimateOperationFee`. Slot-bearing lane deps; slot-before-claim ordering frozen. |
 | `view-executor.ts` | Read-only dApp RPC family: simulate (fast path + standard), utility, contract/class metadata, chain info, address book; refuses `profileTx`. No lane deps by design. |
+| `registration-executor.ts` | Contract, sender and token registrations: artifact and class-id binding, a dApp's registrant and its admission against the app's per-chain share, the shown-details pin of a token add. No lane deps by design. |
+| `shared-send-deps.ts` | The profile, fence, network and history deps both send executors take, wired once by the facade. |
 | `app-facing-results.ts` | The answers a dApp's `simulateTx` and `executeUtility` get: allowlists rebuilt from the upstream classes, so they still parse as `TxSimulationResultWithAppOffset` and `UtilityExecutionResult`. |
 | `execution-coordinator.ts` | Shared prove → send → record → journal pipeline (`proveAndSend`) + the three task-lifecycle wrappers (`simulateTxTask`, `proveTxTask`, `sendTxTask`). |
 | `tx-request-builder.ts` | `buildStandard` / `buildNoFrom` — payload → `TxExecutionRequest` with account entrypoint wiring. Returns `BuiltStandardTx` / `BuiltNoFromTx`. |
