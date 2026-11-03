@@ -171,6 +171,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 2, round 1 | Opus 5.5 (general-purpose) | conditional approve | a new mistake after a correction waits for the pause again (mutation-checked); the lock-screen test asserts no Tooltip; the late check's e2e reads the header, not the retired `verify-action`; a neutral probe testid | keeping the old URL fixture as "a window opened before the update": route matching ignores the query, so it proves nothing either way |
 | arc 2, round 2 | Codex, resumed | conditional approve | the no-Tooltip assertion passed with the Tooltip restored (unresolved in the test, so no component to find): a named stub, verified both ways | none |
 | arc 2, round 3 | Codex, resumed | **approve** | `9371ff1a7` verified; no regression | none |
+| cross-arc | Codex, gpt-6.1-sol, fresh (session 01a1a23a) | **approve** | none: `labelRepeat`'s retirement consistent across both callers and tests, the copy matches the picks, the backup fences and deletion checks intact | none |
 
 ## Seeds (not run; orchestrator-owned)
 
