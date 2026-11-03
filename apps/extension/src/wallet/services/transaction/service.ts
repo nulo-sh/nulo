@@ -620,8 +620,9 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		await this.lock.withLock(async () => {
 			const key = watchKey(tx)
 			if (this.pending.get(key) !== tx && this.droppedWatch.get(key) !== tx) return
-			applyReceipt(tx, receipt)
-			await this.commit(tx)
+			const next = { ...tx }
+			applyReceipt(next, receipt)
+			await this.commit(next)
 			this.logDebug(`Tx ${tx.hash.slice(0, 8)} ${receipt.status}`)
 		})
 	}
@@ -640,17 +641,19 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		if (proof.kind === "unsettled" || proof.kind === "unknown") return
 		await this.lock.withLock(async () => {
 			if (!watched()) return
-			if (proof.kind === "final") tx.status = TxStatus.Finalized
-			else if (proof.kind === "moved") applyReceipt(tx, proof.receipt)
-			else clearInclusion(tx)
-			await this.commit(tx)
+			const next = { ...tx }
+			if (proof.kind === "final") next.status = TxStatus.Finalized
+			else if (proof.kind === "moved") applyReceipt(next, proof.receipt)
+			else clearInclusion(next)
+			await this.commit(next)
 			this.logDebug("Tx finality settled", { outcome: proof.kind })
 		})
 	}
 
 	/** Persists a row the worker moved and files it under the one watch its new status needs:
 	 *  Pending every tick, Dropped on the resurrection cadence, mined below Finalized until its
-	 *  block is final. Under the tx lock. */
+	 *  block is final. Under the tx lock. `tx` is a copy of the watched row: a rejected write leaves
+	 *  the watch on the unchanged row, so the next read sees the change again. */
 	private async commit(tx: Tx): Promise<void> {
 		const now = Date.now()
 		tx.updatedAt = now

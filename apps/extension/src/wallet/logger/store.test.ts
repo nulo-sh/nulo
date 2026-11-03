@@ -487,6 +487,76 @@ describe("LoggerStore", () => {
 			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
 		})
 
+		const savedRun = (count: number) =>
+			Array.from({ length: count }, (_, i) => ({
+				id: i + 1,
+				timestamp: i,
+				source: "s",
+				level: LogLevel.Info,
+				context: "sw" as const,
+				data: [`saved-${i + 1}`],
+			}))
+
+		test("the saved lines come first and this lifetime's follow them, renumbered after the saved ids", async () => {
+			mockSessionStorage(savedRun(3))
+			const store = new LoggerStore(mutableConfig())
+			store.log("wallet", LogLevel.Info, "Runtime configured")
+
+			await store.rehydrate()
+			store.log("wallet", LogLevel.Info, "Service worker started")
+
+			const logs = store.get(10)
+			expect(logs.map((l) => l.id)).toEqual([1, 2, 3, 4, 5])
+			expect(logs.map((l) => l.data[0])).toEqual(["saved-1", "saved-2", "saved-3", "Runtime configured", "Service worker started"])
+		})
+
+		test("retention off drops only the imported lines; this lifetime's stay", async () => {
+			mockSessionStorage(savedRun(3))
+			const store = new LoggerStore(mutableConfig())
+			store.log("wallet", LogLevel.Warn, "Storage migration: failed")
+			await store.rehydrate()
+			store.log("wallet", LogLevel.Warn, "booting degraded")
+
+			await store.applyRetentionPolicy()
+
+			expect(store.get(10).map((l) => l.data[0])).toEqual(["Storage migration: failed", "booting degraded"])
+		})
+
+		test("a debug window of 2000 saved lines survives the boot", async () => {
+			mockSessionStorage(savedRun(2000))
+			const config = mutableConfig()
+			const store = new LoggerStore(config)
+			await store.rehydrate()
+
+			config.set("debugMode", true)
+			config.set("developerMode", true)
+			config.onUpdate.invoke({ key: "debugMode", value: true })
+			await store.applyRetentionPolicy()
+
+			expect(store.get(10_000)).toHaveLength(2000)
+		})
+
+		test("the import runs once per worker, and retention waits for it", async () => {
+			let land!: (value: unknown) => void
+			const session = mockSessionStorage()
+			session.get.mockReturnValueOnce(new Promise((resolve) => (land = resolve)))
+			const store = new LoggerStore(mutableConfig())
+
+			const importing = store.rehydrate()
+			let settled = false
+			const retention = store.applyRetentionPolicy().then(() => {
+				settled = true
+			})
+			await vi.advanceTimersByTimeAsync(0)
+			expect(settled).toBe(false)
+
+			land({ "nulo:logs": savedRun(2) })
+			await Promise.all([importing, retention, store.rehydrate()])
+			expect(session.get).toHaveBeenCalledTimes(1)
+			expect(store.get(10)).toEqual([])
+			expect(session.remove).toHaveBeenCalledWith("nulo:logs")
+		})
+
 		test("retention stays off after the load, so nothing is written", async () => {
 			const session = mockSessionStorage()
 			const config = mutableConfig()

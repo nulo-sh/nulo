@@ -9,8 +9,9 @@
 import type { GlyphName } from "@nulo/design/core/glyphs.ts"
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { stageSubtitle } from "@/utils/card-subtitle"
 import { dashIfBlank } from "@/utils/string"
-import { knownDecimals } from "@/utils/token-amount"
+import { knownDecimals, parseSide } from "@/utils/token-amount"
 import type { ListedToken } from "@/utils/tx-amount"
 import { DAPP_LABEL, callTitle, formatTransferType, settledCallTitle } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
@@ -32,6 +33,41 @@ import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent
  * than silently inheriting whichever default the next consumer assumes.
  */
 export const ACTIVITY_FEED_KINDS: ReadonlySet<OperationKind> = new Set(["transfer", "dapp_execute"])
+
+/** In flight and of a kind the activity feed lists. */
+export function isInFlightActivityOp(op: Pick<OperationRecord, "terminalAt" | "kind">): boolean {
+	return op.terminalAt === null && ACTIVITY_FEED_KINDS.has(op.kind)
+}
+
+/** A send held behind an earlier one, which names that wait rather than the queue's stage word. */
+export function isQueuedTransfer(op: OperationRecord | null | undefined): boolean {
+	return op?.kind === "transfer" && op.progress?.stage === "queued"
+}
+
+/** The progress word the record alone proves: a held send's wait, or its stage, naming where a proof runs once known. */
+export function journalProgressWord(op: OperationRecord): string {
+	if (isQueuedTransfer(op)) return "Waiting for your earlier send"
+	const { progress } = op
+	return progress.stage === "proving" ? stageSubtitle("proving", progress.backend) : stageSubtitle(progress.stage)
+}
+
+type CardToken = { symbol?: string; decimals?: unknown; hasDecimals?: boolean }
+
+/** An in-flight send's amount: null for a dApp operation, an empty or unreadable `amountRaw`, and a
+ *  token whose decimals the wallet does not know. */
+export function journalCardAmount(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+	if (op.kind !== "transfer" || !op.amountRaw || op.tokenId === undefined) return null
+	const raw = parseSide(op.amountRaw)
+	const decimals = knownDecimals(tokenById(op.tokenId))
+	if (raw === undefined || decimals === null) return null
+	return balanceFormatted(raw, decimals, 8, { compact: true }).value
+}
+
+/** An in-flight send's symbol, set whenever its token is known, amount or not. */
+export function journalCardAmountSymbol(op: OperationRecord, tokenById: (id: number) => CardToken | undefined): string | null {
+	if (op.kind !== "transfer" || op.tokenId === undefined) return null
+	return tokenById(op.tokenId)?.symbol || null
+}
 
 export type JournalTerminalVisualState = "cancelled" | "interrupted" | "failed" | "checking" | "sent" | "unconfirmed"
 

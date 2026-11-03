@@ -79,6 +79,8 @@ const props = defineProps({
 	amountTyped: { type: Boolean, default: false },
 	/** The current input's estimate failed: the cost row offers `retryEstimate`. */
 	estimateFailed: { type: Boolean, default: false },
+	/** The running estimate has run long: the cost row offers `retryEstimate` beside its bar's place. */
+	estimateSlow: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(["retryEstimate"])
@@ -496,6 +498,7 @@ onBeforeUnmount(() => {
 			:payer="feePayer"
 			:queuedCap="queuedCapDisplay"
 			:failed="estimateFailed"
+			:slow="estimateSlow"
 			@retry="onRetryEstimate"
 		/>
 

@@ -180,3 +180,88 @@ describe("ConfigStore — persist before announce", () => {
 		expect(io.writes).toBe(0)
 	})
 })
+
+describe("ConfigStore — a failed read never feeds a write", () => {
+	/** An in-memory `chrome.storage.local` whose next `failReads` reads reject. */
+	function faultyStorage(stored?: Record<string, unknown> | string) {
+		const mem: Record<string, string> = {}
+		if (stored !== undefined) mem["nulo:config"] = typeof stored === "string" ? stored : JSON.stringify(stored)
+		const io = { failReads: 0, writes: 0 }
+		;(chrome.storage as { local: unknown }).local = {
+			get: async (key: string) => {
+				if (io.failReads > 0) {
+					io.failReads--
+					throw new Error("IO error")
+				}
+				return key in mem ? { [key]: mem[key] } : {}
+			},
+			set: async (obj: Record<string, string>) => {
+				io.writes++
+				Object.assign(mem, obj)
+			},
+		}
+		return { io, stored: () => JSON.parse(mem["nulo:config"]) as Record<string, unknown> }
+	}
+
+	const STORED = { theme: "dark", sidePanel: true, showFiatValues: false }
+
+	/** A store whose boot read failed: memory holds the defaults while storage holds `stored`. */
+	async function bootedOnFailedRead(stored: Record<string, unknown> | string = STORED) {
+		const storage = faultyStorage(stored)
+		const store = new ConfigStore()
+		storage.io.failReads = 1
+		await store.load()
+		const emitted: ConfigProp[] = []
+		store.onUpdate.add((p) => emitted.push(p))
+		return { ...storage, store, emitted }
+	}
+
+	test("a set() after a failed boot read keeps every other stored prop and announces only its key", async () => {
+		const { store, stored, emitted } = await bootedOnFailedRead()
+		expect(store.get("sidePanel")).toBe(false)
+
+		await store.set("theme", "light")
+		expect(stored()).toMatchObject({ theme: "light", sidePanel: true, showFiatValues: false })
+		expect(store.get("theme")).toBe("light")
+		expect(emitted).toEqual([{ key: "theme", value: "light" }])
+	})
+
+	test("a set() of the value memory holds writes it over a different stored value", async () => {
+		const { store, stored, emitted } = await bootedOnFailedRead()
+		await store.set("theme", "system")
+		expect(stored()).toMatchObject({ theme: "system", sidePanel: true })
+		expect(emitted).toEqual([])
+	})
+
+	test("a set() of a value storage already holds writes nothing, and memory takes the key once", async () => {
+		const { store, io, emitted } = await bootedOnFailedRead()
+		await store.set("theme", "dark")
+		expect(io.writes).toBe(0)
+		expect(store.get("theme")).toBe("dark")
+		expect(emitted).toEqual([{ key: "theme", value: "dark" }])
+	})
+
+	test("a set() whose read fails rejects and writes nothing; the next one writes", async () => {
+		const { store, io, stored, emitted } = await bootedOnFailedRead()
+		io.failReads = 1
+		await expect(store.set("theme", "light")).rejects.toThrow("IO error")
+		expect(io.writes).toBe(0)
+		expect(store.get("theme")).toBe("system")
+
+		await store.set("theme", "light")
+		expect(stored()).toMatchObject({ theme: "light", sidePanel: true })
+		expect(emitted).toEqual([{ key: "theme", value: "light" }])
+	})
+
+	test("controls: an undecodable stored value resets at the next set(), and reset() writes defaults", async () => {
+		const corrupt = faultyStorage("{not json")
+		const store = new ConfigStore()
+		await store.load()
+		await store.set("theme", "light")
+		expect(corrupt.stored()).toMatchObject({ theme: "light", sidePanel: false })
+
+		const { store: afterFault, stored } = await bootedOnFailedRead()
+		await afterFault.reset()
+		expect(stored()).toMatchObject({ theme: "system", sidePanel: false, showFiatValues: true })
+	})
+})

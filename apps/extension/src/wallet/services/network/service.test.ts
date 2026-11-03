@@ -2700,6 +2700,28 @@ describe("NetworkService in-place reset", () => {
 		expect(record.entries.map((e: { networkId: string }) => e.networkId)).toEqual(["zz"])
 	})
 
+	test("a deleteNetwork whose purge fails keeps the chain quarantined, and its retry takes the journal and the verdict", async () => {
+		const { service, local, pxeStub } = setupServiceWithStorage({})
+		staleTestnet(local, { chainId: CHAIN_IDS.TESTNET })
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		local.store.set("nulo:core:active-network@p1", "ln")
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		const entries = [{ networkId: "tn", chainId: CHAIN_IDS.TESTNET, networkReset: false, addressesMoved: true }]
+		local.store.set("nulo:core:stale-networks@p1", JSON.stringify({ profileId: "p1", accountSetDigest: "d", entries }))
+		pxeStub.mockRejectedValueOnce(new Error("offscreen down"))
+
+		await expect(service.deleteNetwork("tn")).rejects.toThrow(/offscreen down/)
+		expect(local.store.has("nulo:core:networks@tn")).toBe(true)
+		expect(local.store.get("nulo:core:network-reset@p1")).toBe(journalFor("tn"))
+		expect(JSON.parse(local.store.get("nulo:core:stale-networks@p1") as string).entries).toEqual(entries)
+		expect(await service.isChainQuarantined("p1", CHAIN_IDS.TESTNET)).toBe(true)
+
+		await service.deleteNetwork("tn")
+		expect(local.store.has("nulo:core:networks@tn")).toBe(false)
+		expect(local.store.has("nulo:core:network-reset@p1")).toBe(false)
+		expect(local.store.has("nulo:core:stale-networks@p1")).toBe(false)
+	})
+
 	test("deleteNetwork keeps another network's journal", async () => {
 		const { service, local } = setupServiceWithStorage({})
 		storeRow(local, { id: "cn", chainId: 77 })
