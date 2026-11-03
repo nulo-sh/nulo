@@ -38,7 +38,7 @@ const hasConfig = aztecConfig !== undefined
  *   but does NOT exercise the FIFO baton release at `onExecutionEnqueued`
  *   — popup #1 is rejected BEFORE approval, so the wallet's
  *   `buildAndEstimateTxRequest` never runs. The baton-release boundary
- *   (background.ts: queued → pending → baton.release) is unverified at
+ *   (wallet-message.ts: queued → pending → baton.release) is unverified at
  *   e2e level. The approval-path companion is concurrent-sendtx-approve.test.ts.
  */
 test.skipIf(!hasConfig)(
