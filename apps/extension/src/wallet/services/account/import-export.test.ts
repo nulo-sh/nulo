@@ -127,7 +127,11 @@ async function build(withBalances = false) {
 		services.add(svc(TRANSACTION_SERVICE_NAME, { onTransactionUpdated: new EventHandler() }))
 		services.add(svc(EXECUTION_SERVICE_NAME, {}))
 		services.add(svc(TASK_SERVICE_NAME, { createNewTask: () => ({ id: "t1" }) }))
-		services.add(new TokenBalanceService(new LoggerStore(new ConfigStore()), api, { subscribe: () => ({ cancel: () => {} }) } as never))
+		services.add(
+			new TokenBalanceService(new LoggerStore(new ConfigStore()), api, {
+				ticker: { subscribe: () => ({ cancel: () => {} }) } as never,
+			}),
+		)
 	}
 	await services.start()
 	return { api, account, opens }

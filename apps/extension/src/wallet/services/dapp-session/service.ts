@@ -1,11 +1,13 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { CapabilityNotGrantedError, SessionEndedError, ValidationError } from "@nulo/extension-messaging/errors"
 import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
-import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import { commitFencedCreate } from "@/wallet/services/create-fence"
+import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { purgeRows } from "@/wallet/services/purge-rows"
 import { nextRandomId } from "@/wallet/services/id-allocators"
@@ -120,18 +122,19 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
-		this.profileService.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profileService,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext dApp sessions failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 	}
 
 	/** Seals the profile's plaintext sessions and registration counts, each under the lock every
 	 *  writer of it holds, so no write lands between a row's read and its sealed commit. */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
-			await this.registrations.sealLegacy(profileId)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext dApp sessions failed; the next worker retries", { error })
-		}
+		await this.storage.sealLegacy(profileId, (fn) => this.lock.withLock(fn))
+		await this.registrations.sealLegacy(profileId)
 	}
 
 	/** `RegistrationAllowance.admit` under the fence's profile; a fence a deletion overtook writes
@@ -245,16 +248,10 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				confirmationLevel: confirmationLevel,
 				expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
 			}
-			// Signed and sealed before the check, committed with no await after it.
 			const write = await this.storage.prepare(session.id, session)
-			deletion.assertCurrent(fence.profileId, fence.epoch)
-			await write.commit()
-			// The set awaits — compensate before the grant becomes observable.
-			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
-				await this.storage.delete(session.id)
-				throw profileDeletedError(fence.profileId)
-			}
-			this.emit("onDappSessionAdded", session)
+			await commitFencedCreate(deletion, fence, write, () => this.storage.delete(session.id), {
+				landed: () => this.emit("onDappSessionAdded", session),
+			})
 
 			return session
 		})

@@ -5,8 +5,8 @@ import { asMasterSecretBytes, deriveRowKeys, sealRow } from "@nulo/wallet-crypto
 import { type Contact, ContactSchema } from "@/wallet/services/contact/spec"
 import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import { TRANSACTION_STORAGE_ROOT, TxStatus, type Tx } from "@/wallet/services/transaction/service"
-import { type KeyedIds, type RowKeysSource, SealedEntityStorage } from "./sealed-entity-storage"
-import { TestRowKeys, readsKey } from "./sealed-entity-storage.testing"
+import { commitSealedTogether, type KeyedIds, type RowKeysSource, SealedEntityStorage } from "./sealed-entity-storage"
+import { openStoredText, TestRowKeys, readsKey } from "./sealed-entity-storage.testing"
 import { sealedEntityStorage } from "./stores"
 
 const ROOT = "nulo:core:contacts"
@@ -387,6 +387,37 @@ describe("SealedEntityStorage", () => {
 			expect(Object.keys(await raw(area))).toEqual(Object.keys(sealedOnly.items))
 			expect(await keyedStore().get(id, "p")).toEqual(contact(id, "p", "renamed"))
 		})
+
+		test("a write and a pass seal the natural id, then the row text verbatim", async () => {
+			const only = async () => Object.keys(await raw(area))[0] as string
+			const row = contact(id, "p")
+			await keyedStore().set(id, row)
+			expect(await openStoredText(area, await only(), keys.source)).toBe(JSON.stringify({ k: id, r: JSON.stringify(row) }))
+
+			await area.remove(await only())
+			const text = JSON.stringify(row, null, 1)
+			await area.set({ [`${ROOT}@${id}`]: text })
+			expect(await keyedStore().sealLegacy("p", (fn) => fn(() => true))).toBe(1)
+			expect(await openStoredText(area, await only(), keys.source)).toBe(JSON.stringify({ k: id, r: text }))
+		})
+
+		test("a keyed write and a batch dispatch their one set in the call", async () => {
+			await legacy(area, contact(id, "p"))
+			const set = vi.spyOn(area, "set")
+			const write = await keyedStore().prepare(id, contact(id, "p", "renamed"))
+			const committed = write.commit()
+			expect(set).toHaveBeenCalledWith(write.items)
+			await committed
+
+			set.mockClear()
+			const writes = [
+				await keyedStore().prepare("scope:0xother", contact("scope:0xother", "p")),
+				await store().prepare("c-2", contact("c-2", "q")),
+			]
+			const batch = commitSealedTogether(area, writes)
+			expect(set).toHaveBeenCalledExactlyOnceWith({ ...writes[0]?.items, ...writes[1]?.items })
+			await batch
+		})
 	})
 
 	describe("rows that name no profile (the transaction root)", () => {
@@ -433,6 +464,9 @@ describe("SealedEntityStorage", () => {
 			expect(keysNow[0]).not.toContain(HASH.slice(2))
 			expect(await txs().get(HASH, "p")).toEqual({ ...tx(), profileId: "p" })
 			expect(await txs().get(HASH, "q")).toBeUndefined()
+			expect(await openStoredText(area, keysNow[0] as string, keys.source)).toBe(
+				JSON.stringify({ k: HASH, r: JSON.stringify({ ...tx(), profileId: "p" }) }),
+			)
 		})
 
 		test("its adoption keeps a sealed row the profile already holds and drops only the plaintext", async () => {

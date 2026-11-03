@@ -148,14 +148,14 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	services.add(new TransactionService(logger(), api))
 	const shallow = makeShallowPxeFake()
 	services.add(svc(TOKEN_LIST_SERVICE_NAME, { getSnapshot: () => undefined, onListChanged: new EventHandler() }))
-	services.add(new TokenService(logger(), api, () => shallow.client, { getSeeds: async () => [] }))
+	services.add(new TokenService(logger(), api, { pxeClientFactory: () => shallow.client, seederOverrides: { getSeeds: async () => [] } }))
 	services.add(new FpcService(logger(), api))
 	services.add(new AuthRegistryService(logger(), api))
 	const journal = new OperationJournalService(logger(), api)
 	services.add(journal)
 	const sessions = new DappSessionService(logger(), api)
 	services.add(sessions)
-	const incoming = new IncomingTransferService(logger(), api, 1_000_000, reader)
+	const incoming = new IncomingTransferService(logger(), api, { pollIntervalMs: 1_000_000, publicReader: reader })
 	services.add(incoming)
 	services.add(svc(ExecutionService.name, {}))
 	services.add(svc(TaskService.name, { startNewTask: () => task, getTaskSync: () => ({ status: 0 }) }))
@@ -163,7 +163,7 @@ async function harness(hold?: Hold, opts: { balances?: "real" } = {}) {
 	services.add(svc(ConfigService.name, { getValue: async () => undefined }))
 	services.add(
 		opts.balances === "real"
-			? new TokenBalanceService(logger(), api, { subscribe: () => ({ cancel: () => {} }) } as never)
+			? new TokenBalanceService(logger(), api, { ticker: { subscribe: () => ({ cancel: () => {} }) } as never })
 			: svc(TokenBalanceService.name, { requestBalanceRefresh: async () => ({ busy: true }) }),
 	)
 	services.add(svc(PriceService.name, { getQuotes: async () => ({}) }))

@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { sealOnRowKeysReady } from "@/wallet/services/seal-on-unlock"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
@@ -122,6 +123,8 @@ type SeederOverrides = {
 	getSeeds?: () => Promise<readonly DefaultTokenSeed[] | undefined>
 }
 
+export type TokenServiceOptions = { pxeClientFactory?: ShallowPxeClientFactory; seederOverrides?: SeederOverrides }
+
 export class TokenService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getTokens",
@@ -155,6 +158,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 *  watchdog released keeps running, so every admission waits for these before it reads. */
 	private readonly pendingWrites = new Set<Promise<unknown>>()
 	private readonly browserApi: BrowserApi
+	private readonly pxeClientFactory: ShallowPxeClientFactory
 	private readonly seederOverrides?: SeederOverrides
 	private seeder: TokenSeeder = null!
 
@@ -168,15 +172,11 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	/** Stateless; the execution service owns another. Depending on that service for it would be a cycle. */
 	private readonly contractResolver: ContractResolver
 
-	public constructor(
-		logger: ILogger,
-		browserApi: BrowserApi,
-		private readonly pxeClientFactory: ShallowPxeClientFactory = DEFAULT_SHALLOW_PXE_CLIENT_FACTORY,
-		seederOverrides?: SeederOverrides,
-	) {
+	public constructor(logger: ILogger, browserApi: BrowserApi, options: TokenServiceOptions = {}) {
 		super(TOKEN_SERVICE_NAME, logger)
 		this.browserApi = browserApi
-		this.seederOverrides = seederOverrides
+		this.pxeClientFactory = options.pxeClientFactory ?? DEFAULT_SHALLOW_PXE_CLIENT_FACTORY
+		this.seederOverrides = options.seederOverrides
 		this.contractResolver = new ContractResolver(logger)
 		this.tokens = sealedEntityStorage("tokens", browserApi.storage.local, (profileId) => this.profiles?.rowKeys(profileId))
 	}
@@ -191,7 +191,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		this.tokenList = services.get(TokenListService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
 		this.networks.registerChainPurgeSubscriber(async (profileId, chainId) => this.clearChainState(profileId, chainId))
-		this.profiles.onRowKeysReady.add((profileId) => void this.sealLegacyRows(profileId))
+		sealOnRowKeysReady(
+			this.profiles,
+			(...data) => this.logWarn(...data),
+			"sealing the profile's plaintext tokens failed; the next worker retries",
+			(profileId) => this.sealLegacyRows(profileId),
+		)
 
 		// Default-token seeding: lazy, single-flight, TOFU-pinned (see
 		// default-tokens.ts + seeder.ts). Triggered on unlock, on active-network
@@ -234,17 +239,13 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	 * write would otherwise be undone.
 	 */
 	private async sealLegacyRows(profileId: string): Promise<void> {
-		try {
-			await this.tokens.sealLegacy(profileId, (fn) =>
-				this.withTokenLock((ownsLock) => {
-					const sweeps = this.chainSweepEpoch
-					return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
-				}),
-			)
-			await this.seeder.sealLegacyMarker(profileId)
-		} catch (error) {
-			this.logWarn("sealing the profile's plaintext tokens failed; the next worker retries", { error })
-		}
+		await this.tokens.sealLegacy(profileId, (fn) =>
+			this.withTokenLock((ownsLock) => {
+				const sweeps = this.chainSweepEpoch
+				return fn(() => ownsLock() && this.chainSweeps === 0 && this.chainSweepEpoch === sweeps)
+			}),
+		)
+		await this.seeder.sealLegacyMarker(profileId)
 	}
 
 	private readonly onActiveProfileChangedSeed = (profile: ProfileInfo | undefined): void => {
