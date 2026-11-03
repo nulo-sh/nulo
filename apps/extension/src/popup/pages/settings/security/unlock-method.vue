@@ -27,9 +27,9 @@ import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
 const { openToast } = useToast()
 
 /** Utils */
-import { closesOnFocusLoss } from "@/utils/browser-surface"
 import { logCredentialFailure } from "@/utils/credential-refusal"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow } from "@/utils/own-window"
+import { OWN_WINDOW_ROUTES, leavePanelFor } from "@/utils/own-window"
+import { askProfilePasskey } from "@/utils/profile-passkey"
 import { leaveFor } from "@/utils/page-back"
 import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-copy"
 import { isNewPasswordValid } from "@/utils/password"
@@ -137,9 +137,7 @@ const changeUnlockMethod = async (isCurrent, id, current, next) => {
 /** The current passkey's card, asked at the profile's own input, and never once the run is stale. */
 async function currentPasskey(isCurrent) {
 	const { id, name } = appStore.profile
-	const { credentialId, prfSalt } = await managers.profile.getPasskeyUnlockParams(id)
-	if (!isCurrent()) return undefined
-	return runCeremony({ mode: "get", credentialId, prfSalt, step: "unlockMethod", profileName: name })
+	return askProfilePasskey(runCeremony, managers.profile, { profileId: id, step: "unlockMethod", profileName: () => name }, isCurrent)
 }
 
 /** A new passkey's card, at an input minted for this profile. */
@@ -255,7 +253,7 @@ watch(
 // Firefox's toolbar panel closes under the passkey prompt every change runs, so the page moves to its
 // own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (closesOnFocusLoss() && !cannotChange.value) void moveToOwnWindow(OWN_WINDOW_ROUTES.unlockMethod)
+	if (!cannotChange.value) void leavePanelFor(OWN_WINDOW_ROUTES.unlockMethod)
 })
 
 onBeforeUnmount(() => {

@@ -21,8 +21,8 @@ import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vu
 import { managers } from "@/utils/core"
 
 /** Utils */
-import { closesOnFocusLoss, isToolbarPopup } from "@/utils/browser-surface"
-import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
+import { isToolbarPopup } from "@/utils/browser-surface"
+import { OWN_WINDOW_ROUTES, leavePanelFor, ownWindowRoute } from "@/utils/own-window"
 import { goBack } from "@/utils/page-back"
 import { pluralize } from "@/utils/plural"
 import { backupNotice } from "@/components/stale-network/copy"
@@ -165,7 +165,7 @@ watch(
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
-	if (isPasskeyProfile.value && closesOnFocusLoss()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
+	if (isPasskeyProfile.value) void leavePanelFor(OWN_WINDOW_ROUTES.export)
 })
 
 onBeforeUnmount(() => {

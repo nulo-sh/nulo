@@ -128,6 +128,7 @@ declare global {
   const armRestoreOutcome: typeof import('../utils/restore-outcome').armRestoreOutcome
   const arrivalAmount: typeof import('../composables/useArrivals').arrivalAmount
   const arrivalChipLabel: typeof import('../composables/useArrivals').arrivalChipLabel
+  const askProfilePasskey: typeof import('../utils/profile-passkey').askProfilePasskey
   const assembleFullBackup: typeof import('../utils/full-backup-helpers').assembleFullBackup
   const availableName: typeof import('../utils/profile-name').availableName
   const awaitLivenessAdvance: typeof import('../utils/background-liveness').awaitLivenessAdvance
@@ -1046,6 +1047,7 @@ declare module 'vue' {
     readonly armRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['armRestoreOutcome']>
     readonly arrivalAmount: UnwrapRef<typeof import('../composables/useArrivals')['arrivalAmount']>
     readonly arrivalChipLabel: UnwrapRef<typeof import('../composables/useArrivals')['arrivalChipLabel']>
+    readonly askProfilePasskey: UnwrapRef<typeof import('../utils/profile-passkey')['askProfilePasskey']>
     readonly assembleFullBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['assembleFullBackup']>
     readonly availableName: UnwrapRef<typeof import('../utils/profile-name')['availableName']>
     readonly awaitLivenessAdvance: UnwrapRef<typeof import('../utils/background-liveness')['awaitLivenessAdvance']>

@@ -381,6 +381,7 @@
     "armRestoreOutcome": true,
     "arrivalAmount": true,
     "arrivalChipLabel": true,
+    "askProfilePasskey": true,
     "assembleFullBackup": true,
     "availableName": true,
     "awaitLivenessAdvance": true,
