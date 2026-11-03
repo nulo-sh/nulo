@@ -40,7 +40,7 @@ Two owner picks left open by two archived lanes, both signed on 2026-11-03 at he
 **Inferences:**
 - I1. A heading placed as a sibling in the pair's column would sit 12 px above "Confirm password"'s field, not today's 8 px, a layout change no pick names (Codex R1-1, Opus F2). D5's group keeps 8 px, so no owner question arises; the captures prove it.
 
-**Asks:** none open. OWNER-ASKS.md says none: both picks are signed, and nothing below changes what either pick did not name.
+**Asks:** OA-1 (OWNER-ASKS.md), found while building: what moves while "Creating..." shows. It blocks nothing; the as-built behaviour ships.
 
 ## Architecture & Implementation
 
@@ -101,6 +101,8 @@ Every gate runs from the worktree root. A test command is `cd apps/extension && 
 | Codex R2 (resumed) | conditional approve | 1: the captures name their armed Chrome build per revision; 2: the PR body's stale "12 px" line | none |
 | Codex R3 (resumed) | approve | none; both R2 fixes verified, no regression | none |
 | Opus Plan lens | conditional approve | Fact 6 (`registration.test.ts` drives New profile); F1: one key per Holdings pin with the other landing, an unrelated-key control in BalanceView, values captured at call; F2 (as Codex 1); F3: the explicit import; F5: the hint's success control; F6: the `test.each` half kept, the header line; F7: the config `onConnected` handle; the callers' tests in the Phase 2 gate; dark captures (free from `shotSend`) | F4 (D8); F2's gap prop or owner question (the group needs neither) |
+| Arc Codex R1 (diff from `67c1ac545`) | approve | the pair's slot comment cut to its contract; `parkReads`'s narrating comment dropped | none |
+| Arc Opus review (beside R1) | approve | the hint counted once on Create; `create.vue`'s hint comment reworded; the pair's comment names no caller; the creating state captured and filed as OA-1 | none |
 
 ## Delivery
 
