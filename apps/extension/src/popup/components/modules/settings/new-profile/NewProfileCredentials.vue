@@ -1,10 +1,6 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
-/**
- * Credentials section for the create-profile page in `password` mode: the new-password pair under
- * its heading.
- */
 const password = defineModel("password", { type: String, default: "" })
 const repeatedPassword = defineModel("repeatedPassword", { type: String, default: "" })
 </script>

@@ -1,8 +1,5 @@
 <script setup>
-/**
- * "File password" for a file that leaves the wallet sealed under a password of its own: the
- * new-password pair under its heading. `testid` prefixes every control.
- */
+/** The password a file leaving the wallet is sealed under. `testid` prefixes every control. */
 import NewPasswordPair from "@/components/composite/NewPasswordPair.vue"
 
 const props = defineProps({

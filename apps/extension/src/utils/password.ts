@@ -8,7 +8,7 @@ export const characterCount = (text: string): number => {
 
 export const MIN_NEW_PASSWORD_LENGTH = 8
 
-/** The longest password a field takes, as its native `maxlength`. */
+/** The longest password a field keeps, in UTF-16 code units; the minimum counts graphemes. */
 export const MAX_PASSWORD_LENGTH = 128
 
 export function isNewPasswordValid(password: string, repeated: string): boolean {

@@ -14,3 +14,4 @@
 - 2026-11-03 arc 2 base `aaaf9278c` (armed builds): before pictures captured, 20 screens x 2 themes, two runs pixel-identical; smoke 7 files Chrome 21 passed (158 s), Firefox 21 passed (215 s); audit:dup production 175 / 8751.
 - 2026-11-03 arc 2 phase 5: lint, typecheck:all, tests (308 files, 5286 passed) green; head capture pixel-identical to base. Phase 6 next.
 - 2026-11-03 arc 2 phase 6: lint, typecheck:all, tests (309 files, 5294 passed) green; head capture pixel-identical to base. Arc 2 end gate next.
+- 2026-11-03 arc 2 end gate on `b114f1295` (after merging `origin/dev` `422e22932`, clean): audit:vue green, src/types clean; test:all green; audit:dup production 169 / 8282 (dev tip 174 / 8744, base 175 / 8751); smoke 7 files Chrome 21 passed (155 s, base 158 s), Firefox 21 passed (215 s, base 215 s); head pictures byte-identical to base on all 40 shots, two runs. Codex fix loop next.

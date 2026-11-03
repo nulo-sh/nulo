@@ -1,9 +1,6 @@
 <script setup>
-/**
- * The export pages' password gate: the "Unlock" label over the current-password field, with no eye.
- * `v-model` ↔ the page's password; `error` ↔ its wrong-password flag, which an input or a click on
- * the field clears.
- */
+/** The export pages' password gate. `error` is the page's wrong-password flag, which an input or a
+ *  click on the field clears. */
 import CurrentPasswordField from "@/components/composite/CurrentPasswordField.vue"
 
 defineProps({

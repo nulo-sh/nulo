@@ -1,9 +1,8 @@
 <script setup>
 /**
- * A new password and its repeat: one eye reveals both, and the new-password hint sits under the
- * first. `testids` names `input`, `confirm`, `toggle` and an optional `hint` exactly as the host's
- * selectors know them. A host whose visibility state outlives the pair binds `v-model:hidden`, so a
- * pair mounted again keeps what the person revealed. The default slot follows the repeat field.
+ * `testids` names `input`, `confirm`, `toggle` and an optional `hint` exactly as the host's selectors
+ * know them. A host whose visibility state outlives the pair binds `v-model:hidden`, so a pair mounted
+ * again keeps what the person revealed.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"

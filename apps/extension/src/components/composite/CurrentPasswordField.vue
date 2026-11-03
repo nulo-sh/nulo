@@ -1,10 +1,8 @@
 <script setup>
 /**
- * The current-password field: an input that shakes and turns red while `error` holds, and the
- * alert that fades in under it. The host's attributes and listeners, `v-model` included, land on
- * the `Input` as they would on its own; the shake wrapper and the alert stay two siblings in the
- * host's column. The eye renders when `toggleTestid` is given, and the host owns its flag: it
- * negates `hidden` on `toggle`.
+ * `v-model` reaches the `Input` through `$attrs`, not a declared model: a declared model drops an
+ * update whose value did not change, and a host may clear its error on every one. The host owns the
+ * eye's flag and negates `hidden` on `toggle`.
  */
 import PasswordVisibilityToggle from "@/components/composite/PasswordVisibilityToggle.vue"
 

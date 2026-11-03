@@ -1,5 +1,9 @@
+import { Flex, Icon, Input, Text } from "@nulo/design"
 import { describe, expect, test } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
+import { defineComponent, h } from "vue"
+import { nativeInput } from "../../../tests/helpers/credential-pins"
+import { sendEvent } from "../../../tests/helpers/send-event"
 import SecretUnlockSection from "./SecretUnlockSection.vue"
 
 const STUBS = {
@@ -64,5 +68,27 @@ describe("composite/SecretUnlockSection", () => {
 		expect(errEl.exists()).toBe(true)
 		expect(errEl.attributes("role")).toBe("alert")
 		expect(errEl.text()).toContain("Wrong password")
+	})
+})
+
+describe("composite/SecretUnlockSection, real Input", () => {
+	test("an input that leaves the value as it was still updates the model, then clears the error", async () => {
+		const heard: string[] = []
+		const Host = defineComponent(
+			() => () =>
+				h(SecretUnlockSection, {
+					modelValue: "same",
+					error: true,
+					"onUpdate:modelValue": (v: string) => heard.push(`update:${v}`),
+					onClearError: () => heard.push("clearError"),
+				}),
+		)
+		const w = mount(Host, { global: { components: { Flex, Icon, Input, Text } } })
+		const input = nativeInput(w, "unlock-password-input")
+		expect(input.value).toBe("same")
+		sendEvent(input, "input")
+		await flushPromises()
+		expect(heard).toEqual(["update:same", "clearError"])
+		w.unmount()
 	})
 })
