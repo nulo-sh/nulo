@@ -151,7 +151,7 @@ Before you change code, capture the "before": a temporary smoke spec (`tests/e2e
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `ea282b7bc`, with: no diff review (`code_review: off`); the Codex loop per arc over that arc's diff against `origin/dev` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, the README's two rules verbatim, hard stop at three rounds); one Opus review (`Agent`, `model: "opus"`) of each arc's diff beside its first Codex round; after arc 2's loop converges, one fresh Codex session over both final diffs asks for cross-arc issues, in the same loop. Rounds go in Audit verdicts and `lessons/phase-N.md`. Teardown `agent-worktree done fixes-1.2.0-2 --merged` once `implementations-plan/archive/fixes-1.2.0-2/plan.md` is on `dev`.
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `ea282b7bc`, with: no diff review (`code_review: off`); the Codex loop per arc over that arc's diff against `origin/dev` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`, the README's two rules verbatim, hard stop at three rounds); one Opus review (`Agent`, `model: "opus"`) of each arc's diff beside its first Codex round; after arc 2's loop converges, one fresh Codex session over both final diffs asks for cross-arc issues, in the same loop. Rounds go in Audit verdicts and `lessons/phase-N.md`. Teardown `agent-worktree done fixes-1.2.0-2 --merged` once `implementations-plan/archive/fixes-1.2.0-2/plan.md` is on `dev`.
 
 ## Seeds
 
