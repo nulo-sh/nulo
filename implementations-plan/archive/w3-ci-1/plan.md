@@ -201,7 +201,7 @@ The set D3 requires:
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at `b24357921`. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at `b24357921`. Specific to this plan:
 - **Step 1** is absent (`code_review: off`).
 - **Step 2** runs once, after Phase 2's gate, over `git diff b24357921...HEAD`.
   - Start it with `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, and continue it with `resume-codex.sh`.
