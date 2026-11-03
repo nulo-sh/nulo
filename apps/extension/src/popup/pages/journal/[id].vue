@@ -29,15 +29,20 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Utils */
-import { DETAIL_TIME_FORMAT } from "../detail-page"
-import { categoricalLabel, journalCallTitle, journalCardOriginLabel, journalTerminalDisplay } from "@/utils/journal-state"
+import { DETAIL_AMOUNT_LENGTH, DETAIL_TIME_FORMAT, showsDeveloperFields } from "../detail-page"
+import {
+	categoricalLabel,
+	journalCallTitle,
+	journalCardOriginLabel,
+	journalTerminalDisplay,
+	journalTransferAmount,
+} from "@/utils/journal-state"
 import { bindJournalDetailUpdates, readJournalDetail } from "./journal-detail-scope"
 import { formatTransferType } from "@/utils/tx-enrichment"
 import { dashIfBlank } from "@/utils/string"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
-import { knownDecimals } from "@/utils/token-amount"
 import { copyWithToast } from "@/utils/clipboard"
 import { explorerDisplayName, getAccountExplorerUrl, getTransactionExplorerUrl } from "@/wallet/constants/explorers"
 
@@ -81,10 +86,11 @@ const title = computed(() => {
 	return journalCallTitle(op.value, tokens.value)
 })
 
+const storedAmount = computed(() => (op.value ? journalTransferAmount(op.value, token.value) : null))
+
 const amountDisplay = computed(() => {
-	const decimals = knownDecimals(token.value)
-	if (!isTransfer.value || !op.value?.amountRaw || decimals === null) return null
-	return balanceFormatted(op.value.amountRaw, decimals, 8, { compact: true }).value
+	const stored = storedAmount.value
+	return stored ? balanceFormatted(stored.raw, stored.decimals, DETAIL_AMOUNT_LENGTH, { compact: true }).value : null
 })
 
 const transferTypeLabel = computed(() => {
@@ -96,8 +102,8 @@ const transferTypeLabel = computed(() => {
  *  ended early, and the owner wants those priced too: the dollar context of
  *  the transfer's amount. */
 const transferFiat = computed(() => {
-	if (!isTransfer.value || !op.value?.amountRaw || !token.value) return null
-	return prices.tokenFiatLabel(token.value, BigInt(op.value.amountRaw)) ?? null
+	const stored = storedAmount.value
+	return stored ? (prices.tokenFiatLabel(token.value, BigInt(stored.raw)) ?? null) : null
 })
 
 // Method label (when title is set; pre-broadcast records may not have one).
@@ -218,10 +224,7 @@ onMounted(async () => {
 	if (appStore.profile && appStore.network) {
 		tokens.value = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
 	}
-	const props = await configService.getProps()
-	const debugMode = props.find((p) => p.key === "debugMode")?.value ?? false
-	const developerMode = props.find((p) => p.key === "developerMode")?.value ?? false
-	showDevFields.value = Boolean(debugMode || developerMode)
+	showDevFields.value = showsDeveloperFields(await configService.getProps())
 	await loadOp()
 })
 

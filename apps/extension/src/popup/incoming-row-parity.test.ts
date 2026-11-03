@@ -123,6 +123,7 @@ const receipt = {
 const TOKENS = [{ id: 1, chainId: 1, contract: "0xc", name: "Test", symbol: "TST", decimals: 18 }]
 
 const STUBS = {
+	ActivityRowCard: false,
 	TransactionIncomingCard: false,
 	TransactionCardLayout: {
 		props: ["title", "amount", "testId"],
