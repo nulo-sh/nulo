@@ -1,7 +1,7 @@
 ---
 plan: quality-execution-1
 tier: light (the spawn prompt names it; one Codex audit at high on gpt-6.1-sol, plus one Opus Plan lens)
-status: final Codex pass approved; arc 1 next
+status: arc 1 in review; arc 2 next
 issues: "#1442, #1438, #1440 (arc 1, Closes); #1455, #1472 (arc 2, Closes)"
 driver: claude-code
 claude_model: opus
