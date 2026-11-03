@@ -7,12 +7,8 @@ import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { MAX_PASSWORD_LENGTH } from "@/utils/password"
 import { COLLAPSING_HERO } from "../collapsing-hero"
 import { restoreWarningText } from "./restore-warning"
-/**
- * Renders the full-backup-restore form: file picker, error/warning
- * banners, decryption-password section (when the backup is encrypted),
- * and how the new profile will unlock (when restoring into a new one).
- * Visibility toggles for the password fields are local.
- */
+/** The visibility refs outlive the conditional password sections, so a section shown again keeps
+ *  what was revealed. */
 const props = defineProps({
 	selectedBackup: { type: Object, default: null },
 	restoreStatus: { type: [String, null], default: "" },

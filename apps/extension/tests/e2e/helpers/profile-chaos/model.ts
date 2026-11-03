@@ -345,7 +345,7 @@ const BACKUP_INTEGRITY = cite(GATE, 106, "if (checksum !== comparisonChecksum) r
 const BACKUP_UNPARSED = cite(SELECTION, 57, "title: parseError.title, message: parseError.tooltip")
 const RESTORE_ASKS_PASSWORD = cite(
 	"src/components/composite/import/ImportFullBackupForm.vue",
-	140,
+	136,
 	"askNewPassword && selectedBackup?.profileType",
 )
 const RESTORE_ROLLS_BACK = cite(
