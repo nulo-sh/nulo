@@ -190,15 +190,22 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 		if (offersSponsoredFpc(chainId)) return rows
 		const stale = rows.find((f) => f.type === FpcType.DefaultSponsoredFpc && f.address === sponsored)
 		if (!stale) return rows
-		const removed = await this.lock.withLock(() => this.removeSponsorRow(stale.id, chainId, sponsored, fence))
+		const removed = await this.lock.withLock((isCurrent) => this.removeSponsorRow(stale.id, chainId, sponsored, fence, isCurrent))
 		// Outside the lock, as Settings' delete does; nothing retries a forget that fails.
 		if (removed) await this.forgetFeePicks(fence.profileId, removed.id)
 		return this.rowsOn(fence.profileId, chainId)
 	}
 
 	/** Caller holds the lock every row writer holds. The row is read again so an address edit or a
-	 *  purge since the caller's read is never undone, and removed only while the reading session is live. */
-	private async removeSponsorRow(id: string, chainId: number, sponsored: string, fence: ExecutionFence): Promise<StoredFpc | undefined> {
+	 *  purge since the caller's read is never undone, and removed only while the reading session is
+	 *  live and the lock is still this caller's (its watchdog can hand it on mid-read). */
+	private async removeSponsorRow(
+		id: string,
+		chainId: number,
+		sponsored: string,
+		fence: ExecutionFence,
+		holdsLock: () => boolean,
+	): Promise<StoredFpc | undefined> {
 		const row = await this.storage.get(id)
 		const same =
 			row?.profileId === fence.profileId &&
@@ -207,7 +214,7 @@ export class FpcService extends Service<Methods, Events> implements ServiceSpec<
 			row.address === sponsored
 		if (!row || !same) return undefined
 		const removal = await this.storage.prepareDelete(id)
-		if (!this.profileService.isFenceLive(fence)) return undefined
+		if (!holdsLock() || !this.profileService.isFenceLive(fence)) return undefined
 		await removal.commit()
 		this.emit("onFpcDeleted", this.decorate(row, this.protocolAddresses.get(chainId)))
 		return row

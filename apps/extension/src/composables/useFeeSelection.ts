@@ -213,7 +213,7 @@ function reconcileSelection(c: AppCtx, savedRecord: AppPick | undefined, baselin
 	}
 }
 
-/** Shows the last-used method while the fetch is in flight. */
+/** Selects the last-used method while the fetch is in flight; a sponsor shows only as `exposedForApp` allows. */
 function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
 	if (c.lockedMethod()) c.selectedMethod.value = lockedOption(c)
 	// The stored record stands in for its row until the commit resolves it against fresh rows.
@@ -222,9 +222,9 @@ function prefillSelection(c: AppCtx, saved: Record<string, AppPick>) {
 	c.chosenUnasked = false
 }
 
-/** Pre-fills from the saved picks BEFORE the slow fetch, so the trigger shows the last-used method while it
- *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
- *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
+/** Pre-fills from the saved picks BEFORE the slow fetch (the `isInitComplete` gate keeps the pre-fill
+ *  out of settings derivation). Returns the saved map and the reconcile baseline, which a later pick
+ *  moves off. A pick made during the read (an
  *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
  *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
  *  the pre-fill would clobber that run's reconcile. */

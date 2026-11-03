@@ -736,6 +736,35 @@ describe("FpcService.getFpcs on a chain with no sponsor (Alpha Mainnet)", () => 
 		expect(await fpcRowCount(h.api)).toBe(2)
 	})
 
+	test("a removal whose lock the watchdog handed on commits nothing", async () => {
+		const { h, deleted } = await mainnet()
+		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
+		const storage = (h.service as unknown as { storage: { get(id: string): Promise<unknown> } }).storage
+		const get = storage.get.bind(storage)
+		const reached = deferred<void>()
+		const gate = deferred<void>()
+		vi.spyOn(storage, "get").mockImplementationOnce(async (id: string) => {
+			reached.resolve()
+			await gate.promise
+			return get(id)
+		})
+
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const read = h.service.getFpcs(MAINNET)
+			await reached.promise
+			vi.advanceTimersByTime(5 * 60_000)
+			gate.resolve()
+			await read
+		} finally {
+			vi.useRealTimers()
+		}
+
+		expect(deleted).toEqual([])
+		expect(h.preference.forgets).toEqual([])
+		expect(await fpcRowCount(h.api)).toBe(2)
+	})
+
 	test("a session that ends before the removal commits keeps the row", async () => {
 		const { h, deleted } = await mainnet()
 		await plant(h, row("f-sp", FpcType.DefaultSponsoredFpc, "0xsponsored"), row("f-pr", FpcType.PrivateFpc, "0xprivate"))
