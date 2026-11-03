@@ -7,8 +7,8 @@
  * don't justify a prop.
  *
  * Center alignment adds a small gap between the two lines; left alignment
- * has no gap. Three sizes: 48px default, 56px hero (used only on welcome),
- * 32px compact for a title inside a card.
+ * has no gap. Three sizes: 48px default, 56px hero (used only on welcome,
+ * 48px below 359px), 32px compact for a title inside a card.
  *
  * Renders as `<h1>` — every consumer is a page-level hero.
  */
@@ -52,9 +52,13 @@ defineProps<{
 	font-size: 48px;
 }
 
-.hero .main,
-.hero .sub {
-	font-size: 56px;
+/* "Welcome" at 56px is wider than a 240px window: below the popup's width the hero keeps the
+ * default size every other onboarding title has. */
+@media (width >= 359px) {
+	.hero .main,
+	.hero .sub {
+		font-size: 56px;
+	}
 }
 
 .compact .main,

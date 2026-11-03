@@ -116,6 +116,7 @@ declare global {
   const activationFailureReason: typeof import('../composables/unlockWait').activationFailureReason
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
+  const addressEnds: typeof import('../utils/string').addressEnds
   const admitRestoreOutcome: typeof import('../utils/restore-outcome').admitRestoreOutcome
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
   const applyAccountRow: typeof import('../utils/account-rows').applyAccountRow
@@ -330,6 +331,8 @@ declare global {
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
+  const networkStatusTone: typeof import('../utils/network-status').networkStatusTone
+  const networkStatusWord: typeof import('../utils/network-status').networkStatusWord
   const neverOpened: typeof import('../composables/useStaleNetwork').neverOpened
   const newPasswordHint: typeof import('../utils/password-hint').newPasswordHint
   const nextAccountName: typeof import('../utils/account-name').nextAccountName
@@ -530,6 +533,7 @@ declare global {
   const useArrivals: typeof import('../composables/useArrivals').useArrivals
   const useAttrs: typeof import('vue').useAttrs
   const useAuthRegistryStatus: typeof import('../composables/useAuthRegistryStatus').useAuthRegistryStatus
+  const useBalanceTasks: typeof import('../composables/useBalanceTasks').useBalanceTasks
   const useBalancesStore: typeof import('../stores/balances.store').useBalancesStore
   const useCacheStore: typeof import('../stores/cache.store').useCacheStore
   const useConfigRead: typeof import('../composables/useConfigRead').useConfigRead
@@ -848,6 +852,9 @@ declare global {
   export type { LegalSheetContext } from '../utils/legal-sheet'
   import('../utils/legal-sheet')
   // @ts-ignore
+  export type { NetworkStatusTone } from '../utils/network-status'
+  import('../utils/network-status')
+  // @ts-ignore
   export type { HandbackRoute, HandbackSnack, Handback } from '../utils/panel-handback'
   import('../utils/panel-handback')
   // @ts-ignore
@@ -1013,6 +1020,7 @@ declare module 'vue' {
     readonly activationFailureReason: UnwrapRef<typeof import('../composables/unlockWait')['activationFailureReason']>
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
+    readonly addressEnds: UnwrapRef<typeof import('../utils/string')['addressEnds']>
     readonly admitRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['admitRestoreOutcome']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
     readonly applyAccountRow: UnwrapRef<typeof import('../utils/account-rows')['applyAccountRow']>
@@ -1227,6 +1235,8 @@ declare module 'vue' {
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
+    readonly networkStatusTone: UnwrapRef<typeof import('../utils/network-status')['networkStatusTone']>
+    readonly networkStatusWord: UnwrapRef<typeof import('../utils/network-status')['networkStatusWord']>
     readonly neverOpened: UnwrapRef<typeof import('../composables/useStaleNetwork')['neverOpened']>
     readonly newPasswordHint: UnwrapRef<typeof import('../utils/password-hint')['newPasswordHint']>
     readonly nextAccountName: UnwrapRef<typeof import('../utils/account-name')['nextAccountName']>
@@ -1427,6 +1437,7 @@ declare module 'vue' {
     readonly useArrivals: UnwrapRef<typeof import('../composables/useArrivals')['useArrivals']>
     readonly useAttrs: UnwrapRef<typeof import('vue')['useAttrs']>
     readonly useAuthRegistryStatus: UnwrapRef<typeof import('../composables/useAuthRegistryStatus')['useAuthRegistryStatus']>
+    readonly useBalanceTasks: UnwrapRef<typeof import('../composables/useBalanceTasks')['useBalanceTasks']>
     readonly useBalancesStore: UnwrapRef<typeof import('../stores/balances.store')['useBalancesStore']>
     readonly useCacheStore: UnwrapRef<typeof import('../stores/cache.store')['useCacheStore']>
     readonly useConfigRead: UnwrapRef<typeof import('../composables/useConfigRead')['useConfigRead']>
