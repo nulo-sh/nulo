@@ -97,6 +97,7 @@ What an e2e build does instead of each outside host:
 | Host | Tried by | With the guard |
 |---|---|---|
 | `aztec-mainnet.drpc.org`, `aztec-testnet.drpc.org` | the background's node-status read of the active network at popup start (Mainnet on a new profile; Testnet once a spec switches); the offscreen PXE on Home; a full backup or contacts export's status read of every network | answered by that node's stand-in's 400 once the launch settles; refused at the guard before that, during a kill or under a spec's own interception, and a close failure at any other time before the close begins; `aztec-testnet.drpc.org` is direct in the live spec's launch; a spec that needs a node-read value seeds it (the fee picker's sponsors: `helpers/fpc-seeds.ts`) |
+| each pinned release's Testnet node (`lb.drpc.live` for every tag pinned today) | an update scenario's release before its endpoints leave the seed | refused; declared from the tag's `testnetHost` in `RELEASE_TRAITS` (`fixtures/update/release.ts`), never answered |
 | `api.coingecko.com` | the price fetch | refused; a spec that needs a quote seeds one into storage |
 | the browser's own hosts | Chrome's updater and sign-in services, Firefox's remote settings | refused; listed per driver, so not a failure |
 | `crs.aztec-cdn.foundation`, `crs.aztec-labs.com` | bb.js's CRS download for a proof in the browser (a prover-ON network run without Presto) | direct on every guarded launch |
@@ -157,7 +158,9 @@ uncommitted changes a build reads, is refused, so commit before you build it.
   `fixtures/update/release.ts`): whether it stores its rows in plaintext or seals them, whether its
   connect prompt replaces the popup's page or opens its own window, and whether a passkey profile it
   made is one the candidate retires (only Set up again) or one its passkey still unlocks, as the
-  candidate's `profile/profile-row.ts` classifies the row the release wrote. A tag with none is refused.
+  candidate's `profile/profile-row.ts` classifies the row the release wrote, and the hostname alone of
+  the Testnet node it seeds, which the egress guard declares as a refusal. A tag with none is refused
+  before its zip is downloaded.
 - The live scenario populates the release through its own UI: a password profile with a second and
   an imported account and two contacts on Testnet (switched to first, as a release that seeds
   Mainnet opens there), then a network on the run's sandbox with a token it pins, a Send fee pick,

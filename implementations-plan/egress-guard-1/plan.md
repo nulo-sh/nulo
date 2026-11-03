@@ -45,7 +45,7 @@ The live update scenario from v1.1.0 is red on both browsers at the egress guard
 
 **Touched files:** `apps/extension/tests/e2e/fixtures/update/release.ts`, `tests/e2e/fixtures/egress-guard.ts`, `scripts/e2e/update-recording.test.ts`, `scripts/e2e/egress-guard.test.ts`, `scripts/e2e/release-build.test.ts`, `tests/e2e/README.md` (§ In-place update's traits bullet, § Egress guard's host table), and this plan's directory.
 
-### Phase 1: the trait and the declaration
+### Phase 1: the trait and the declaration ✓
 1. Add `testnetHost: "lb.drpc.live"` to each of the three tags and the trait's TSDoc line; `releaseBuild` calls `releaseTraits(tag)` first.
 2. Derive the release entries in `egress-guard.ts` and spread them into `DECLARED_REFUSALS`.
 3. Tests (one per claim, success control beside each refusal):

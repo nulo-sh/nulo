@@ -31,9 +31,24 @@ const recording = (entries: Record<string, unknown>, extra: Partial<Recording> =
 	...extra,
 })
 
+/** Whether `host` is a hostname alone; parsed, never printed, since more could be a keyed URL. */
+function bareHostname(host: string): boolean {
+	try {
+		return new URL(`https://${host}`).hostname === host && !host.endsWith(".")
+	} catch {
+		return false
+	}
+}
+
 describe("release traits", () => {
 	test("every release with reviewed digests has reviewed traits, and none has traits alone", () => {
 		expect(Object.keys(RELEASE_TRAITS).sort()).toEqual(Object.keys(RELEASE_DIGESTS).sort())
+	})
+
+	test("every release's Testnet host is a hostname alone, with no scheme, port, path or trailing dot", () => {
+		expect(bareHostname("lb.drpc.live")).toBe(true)
+		expect(["lb.drpc.live/x", "lb.drpc.live:443", "lb.drpc.live."].filter(bareHostname)).toEqual([])
+		expect(Object.keys(RELEASE_TRAITS).filter((tag) => !bareHostname(releaseTraits(tag).testnetHost))).toEqual([])
 	})
 
 	test("refuses a tag with no reviewed traits", () => {

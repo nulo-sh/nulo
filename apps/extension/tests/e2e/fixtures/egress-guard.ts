@@ -14,6 +14,7 @@ import { HOW_AZTEC_WORKS_URL } from "@/utils/get-started"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
 import { REPO_ROOT } from "../lockfile"
 import { PortClaimConflict, claimPorts, registeredPorts, releasePorts } from "../port-registry"
+import { RELEASE_TRAITS } from "./update/release"
 
 export interface EgressAttempt {
 	host: string
@@ -81,8 +82,24 @@ export const LIVE_LIST_HOST = new URL(TOKEN_LIST_URL).hostname
  */
 export const CRS_HOSTS: readonly string[] = ["crs.aztec-cdn.foundation", "crs.aztec-labs.com"]
 
-/** Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. */
+/** Each pinned release's Testnet host, from its reviewed traits, with why it is tried. */
+function releaseTestnetRefusals(): Array<[string, string]> {
+	const seeding = new Map<string, string[]>()
+	for (const [tag, { testnetHost }] of Object.entries(RELEASE_TRAITS)) {
+		seeding.set(testnetHost, [...(seeding.get(testnetHost) ?? []), tag])
+	}
+	return [...seeding].map(([host, tags]) => [
+		host,
+		`the Testnet node ${tags.join(", ")} seed: an update scenario's release may request it before its endpoints leave the seed`,
+	])
+}
+
+/**
+ * Wallet and spec hosts an e2e build tries and the guard refuses, each with why it is tried. The
+ * releases' entries come first, so a host the candidate also tries keeps the candidate's why.
+ */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
+	...releaseTestnetRefusals(),
 	[
 		LIVE_NODE_HOST,
 		"the seeded Testnet node: the background reads the active network's status at popup start, the offscreen PXE on Home, and a full backup or contacts export reads every network's. The launch's stand-in answers it once settled; a request from before that, from a background kill or while a spec's own interception has the origin is refused here, and one that arrives while the stand-in holds the origin, before the close begins, fails the close",
